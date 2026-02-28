@@ -32,7 +32,10 @@ fn __test_0_container_of_boxes() {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let mut c: Container<Box<i32>> = "Container<Box<i32>>::new"();
+    let mut c: Container<Box<i32>> = Container<Box<i32>> { items: __seq_lit: {
+        let mut __b: Array<Box<i32>> = Array<Box<i32>> { repr: core::builtin::array_new::<Box<i32>>(0), used: 0 };
+        break __seq_lit: *__b;
+    }, size: 0 };
     c."Container<Box<i32>>::add"(Box<i32> { value: 42 });
     __assert_0: {
         let __v0: i32 = c.size;
@@ -45,22 +48,22 @@ fn __test_0_container_of_boxes() {
                 __r.String::append(" at ");
                 __r.String::append("wado-compiler/tests/fixtures/array_of_generic_struct.wado");
                 __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_3: {
+                let mut __f: Formatter = __inline_Formatter__new_4: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_4: {
+                __inline_i32_Display__fmt_5: {
                     let self: Box<i32> = Box<i32> { value: 30 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append("\ncondition: c.size == 1\n");
                 __r.String::append("c.size: ");
-                __f = __inline_Formatter__new_5: {
+                __f = __inline_Formatter__new_6: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_6: {
+                __inline_i32_Display__fmt_7: {
                     let self: Box<i32> = Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -81,22 +84,22 @@ fn __test_0_container_of_boxes() {
                 __r.String::append(" at ");
                 __r.String::append("wado-compiler/tests/fixtures/array_of_generic_struct.wado");
                 __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_8: {
+                let mut __f: Formatter = __inline_Formatter__new_9: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_9: {
+                __inline_i32_Display__fmt_10: {
                     let self: Box<i32> = Box<i32> { value: 31 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append("\ncondition: c.items[0].value == 42\n");
                 __r.String::append("c.items[0].value: ");
-                __f = __inline_Formatter__new_10: {
+                __f = __inline_Formatter__new_11: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_11: {
+                __inline_i32_Display__fmt_12: {
                     let self: Box<i32> = Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -117,13 +120,13 @@ fn __test_1_array_of_boxes() {
         __modules_initialized = true;
     };
     let mut arr: Array<Box<i32>> = __seq_lit: {
-        let mut __b: Array<Box<i32>> = "Array<Box<i32>>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."Array<Box<i32>>^SequenceLiteralBuilder::build"();
+        let mut __b: Array<Box<i32>> = Array<Box<i32>> { repr: core::builtin::array_new::<Box<i32>>(0), used: 0 };
+        break __seq_lit: *__b;
     };
     arr."Array<Box<i32>>::append"(Box<i32> { value: 10 });
     arr."Array<Box<i32>>::append"(Box<i32> { value: 20 });
     __assert_2: {
-        let __v0: i32 = arr."Array<Box<i32>>::len"();
+        let __v0: i32 = arr.used;
         let __cond: bool = (__v0 == 2);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -133,22 +136,22 @@ fn __test_1_array_of_boxes() {
                 __r.String::append(" at ");
                 __r.String::append("wado-compiler/tests/fixtures/array_of_generic_struct.wado");
                 __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_4: {
+                let mut __f: Formatter = __inline_Formatter__new_7: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_5: {
+                __inline_i32_Display__fmt_8: {
                     let self: Box<i32> = Box<i32> { value: 38 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append("\ncondition: arr.len() == 2\n");
                 __r.String::append("arr.len(): ");
-                __f = __inline_Formatter__new_6: {
+                __f = __inline_Formatter__new_9: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_7: {
+                __inline_i32_Display__fmt_10: {
                     let self: Box<i32> = Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -169,22 +172,22 @@ fn __test_1_array_of_boxes() {
                 __r.String::append(" at ");
                 __r.String::append("wado-compiler/tests/fixtures/array_of_generic_struct.wado");
                 __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_9: {
+                let mut __f: Formatter = __inline_Formatter__new_12: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_10: {
+                __inline_i32_Display__fmt_13: {
                     let self: Box<i32> = Box<i32> { value: 39 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append("\ncondition: arr[0].value == 10\n");
                 __r.String::append("arr[0].value: ");
-                __f = __inline_Formatter__new_11: {
+                __f = __inline_Formatter__new_14: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_12: {
+                __inline_i32_Display__fmt_15: {
                     let self: Box<i32> = Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -205,22 +208,22 @@ fn __test_1_array_of_boxes() {
                 __r.String::append(" at ");
                 __r.String::append("wado-compiler/tests/fixtures/array_of_generic_struct.wado");
                 __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_14: {
+                let mut __f: Formatter = __inline_Formatter__new_17: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_15: {
+                __inline_i32_Display__fmt_18: {
                     let self: Box<i32> = Box<i32> { value: 40 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append("\ncondition: arr[1].value == 20\n");
                 __r.String::append("arr[1].value: ");
-                __f = __inline_Formatter__new_16: {
+                __f = __inline_Formatter__new_19: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_19: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_17: {
+                __inline_i32_Display__fmt_20: {
                     let self: Box<i32> = Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -242,10 +245,6 @@ export fn __cm_export____test_1_array_of_boxes() {
     cm_raw_call task-return(0);
 }
 
-pub fn "Array<Box<i32>>::len"(self: &Array<Box<i32>>) -> i32 {
-    return self.used;
-}
-
 pub fn "Array<Box<i32>>::append"(self: &mut Array<Box<i32>>, value: Box<i32>) {
     let used: i32 = self.used;
     let capacity: i32 = core::builtin::array_len(self.repr);
@@ -262,18 +261,6 @@ pub fn "Array<Box<i32>>::append"(self: &mut Array<Box<i32>>, value: Box<i32>) {
     self.used = (used + 1);
 }
 
-fn "Array<Box<i32>>^SequenceLiteralBuilder::build"(self: &Array<Box<i32>>) -> Array<Box<i32>> {
-    return *self;
-}
-
-fn "Array<Box<i32>>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<Box<i32>> {
-    return "Array<Box<i32>>::with_capacity"(capacity);
-}
-
-pub fn "Array<Box<i32>>::with_capacity"(capacity: i32) -> Array<Box<i32>> {
-    return Array<Box<i32>> { repr: core::builtin::array_new::<Box<i32>>(capacity), used: 0 };
-}
-
 fn "Array<Box<i32>>^IndexValue::index_value"(self: &Array<Box<i32>>, index: i32) -> Box<i32> {
     if (index >= self.used) {
         core::internal::panic("index out of bounds");
@@ -284,12 +271,5 @@ fn "Array<Box<i32>>^IndexValue::index_value"(self: &Array<Box<i32>>, index: i32)
 fn "Container<Box<i32>>::add"(self: &mut Container<Box<i32>>, item: Box<i32>) {
     self.items."Array<Box<i32>>::append"(item);
     self.size = (self.size + 1);
-}
-
-fn "Container<Box<i32>>::new"() -> Container<Box<i32>> {
-    return Container<Box<i32>> { items: __seq_lit: {
-        let mut __b: Array<Box<i32>> = "Array<Box<i32>>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."Array<Box<i32>>^SequenceLiteralBuilder::build"();
-    }, size: 0 };
 }
 

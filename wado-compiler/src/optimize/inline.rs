@@ -171,27 +171,6 @@ fn is_inline_eligible(
         return false;
     }
 
-    // TODO: Don't inline functions with parameters that have complex nested generic types
-    // (like Array<&mut BTreeNode<K,V>>). These can have type normalization issues
-    // during monomorphization that cause type mismatches after inlining.
-    // Fix the underlying type normalization issues to allow inlining these functions.
-    for param in &func.params {
-        if type_table.has_nested_generics(param.type_id) {
-            return false;
-        }
-    }
-    // Also check return type for nested generics
-    if type_table.has_nested_generics(func.return_type) {
-        return false;
-    }
-
-    // TODO: Check if any expression in the function body has complex nested generic types.
-    // This catches cases like methods on TreeMap that access fields with nested generics.
-    // Fix the underlying type normalization issues to allow inlining these functions.
-    if body_has_complex_generic_types(body, type_table) {
-        return false;
-    }
-
     // No effects (pure functions only)
     if !func.effects.is_empty() {
         return false;
@@ -214,190 +193,6 @@ fn is_inline_eligible(
 
     // Small enough (based on expression count)
     count_block_exprs(body) < effective_threshold
-}
-
-/// Check if a type has complex nested generics that could cause type normalization issues.
-/// Uses the `TypeTable`'s type metadata to check for nested generic types.
-fn has_complex_nested_generic(type_id: TypeId, type_table: &TypeTable) -> bool {
-    type_table.has_nested_generics(type_id)
-}
-
-/// Check if any expression in the function body has a type with complex nested generics.
-/// This catches cases where the function accesses fields or creates values with deeply nested
-/// generic types that could cause type normalization issues during codegen.
-fn body_has_complex_generic_types(body: &TirBlock, type_table: &TypeTable) -> bool {
-    block_has_complex_generic_types(body, type_table)
-}
-
-fn block_has_complex_generic_types(block: &TirBlock, type_table: &TypeTable) -> bool {
-    for stmt in &block.stmts {
-        if stmt_has_complex_generic_types(stmt, type_table) {
-            return true;
-        }
-    }
-    false
-}
-
-fn stmt_has_complex_generic_types(stmt: &TirStmt, type_table: &TypeTable) -> bool {
-    match &stmt.kind {
-        TirStmtKind::Let { value, type_id, .. } => {
-            // Check the declared type
-            if has_complex_nested_generic(*type_id, type_table) {
-                return true;
-            }
-            expr_has_complex_generic_types(value, type_table)
-        }
-        TirStmtKind::Expr(expr) => expr_has_complex_generic_types(expr, type_table),
-        TirStmtKind::Return { value } => {
-            if let Some(expr) = value {
-                return expr_has_complex_generic_types(expr, type_table);
-            }
-            false
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            expr_has_complex_generic_types(condition, type_table)
-                || block_has_complex_generic_types(then_block, type_table)
-                || else_block
-                    .as_ref()
-                    .is_some_and(|b| block_has_complex_generic_types(b, type_table))
-        }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            block_has_complex_generic_types(body, type_table)
-        }
-        TirStmtKind::IfPattern {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            expr_has_complex_generic_types(scrutinee, type_table)
-                || block_has_complex_generic_types(then_block, type_table)
-                || else_block
-                    .as_ref()
-                    .is_some_and(|b| block_has_complex_generic_types(b, type_table))
-        }
-        TirStmtKind::Break { value, .. } => value
-            .as_ref()
-            .is_some_and(|e| expr_has_complex_generic_types(e, type_table)),
-        TirStmtKind::Continue => false,
-        TirStmtKind::LetPattern { value, .. } => expr_has_complex_generic_types(value, type_table),
-        TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-        }
-    }
-}
-
-fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> bool {
-    // Check the expression's own type
-    if has_complex_nested_generic(expr.type_id, type_table) {
-        return true;
-    }
-
-    // Recursively check subexpressions
-    match &expr.kind {
-        TirExprKind::Call { args, .. }
-        | TirExprKind::MethodCall { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => args
-            .iter()
-            .any(|a| expr_has_complex_generic_types(a, type_table)),
-        TirExprKind::IndirectCall { callee, args } => {
-            expr_has_complex_generic_types(callee, type_table)
-                || args
-                    .iter()
-                    .any(|a| expr_has_complex_generic_types(a, type_table))
-        }
-        TirExprKind::ClosureToCanonical { functor, .. } => {
-            expr_has_complex_generic_types(functor, type_table)
-        }
-        TirExprKind::Binary { left, right, .. }
-        | TirExprKind::Assign {
-            target: left,
-            value: right,
-        } => {
-            expr_has_complex_generic_types(left, type_table)
-                || expr_has_complex_generic_types(right, type_table)
-        }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. } => {
-            expr_has_complex_generic_types(inner, type_table)
-        }
-        TirExprKind::Index { expr: base, index } => {
-            expr_has_complex_generic_types(base, type_table)
-                || expr_has_complex_generic_types(index, type_table)
-        }
-        TirExprKind::StructLiteral { fields, .. } => fields
-            .iter()
-            .any(|f| expr_has_complex_generic_types(&f.value, type_table)),
-        TirExprKind::TupleLiteral { elements } => elements
-            .iter()
-            .any(|e| expr_has_complex_generic_types(e, type_table)),
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            expr_has_complex_generic_types(condition, type_table)
-                || block_has_complex_generic_types(then_branch, type_table)
-                || else_branch
-                    .as_ref()
-                    .is_some_and(|b| block_has_complex_generic_types(b, type_table))
-        }
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            block_has_complex_generic_types(block, type_table)
-        }
-        TirExprKind::Match { expr: inner, arms } => {
-            expr_has_complex_generic_types(inner, type_table)
-                || arms.iter().any(|arm| {
-                    arm.guard
-                        .as_ref()
-                        .is_some_and(|g| expr_has_complex_generic_types(g, type_table))
-                        || expr_has_complex_generic_types(&arm.body, type_table)
-                })
-        }
-        TirExprKind::Closure { body, .. } => expr_has_complex_generic_types(body, type_table),
-        TirExprKind::VariantConstruct { payload, .. } => payload
-            .as_ref()
-            .is_some_and(|p| expr_has_complex_generic_types(p, type_table)),
-        TirExprKind::GlobalVarSet { value, .. } => {
-            expr_has_complex_generic_types(value, type_table)
-        }
-        TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. }
-        | TirExprKind::VariantPayload { expr, .. } => {
-            expr_has_complex_generic_types(expr, type_table)
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            expr_has_complex_generic_types(scrutinee, type_table)
-                || arms
-                    .iter()
-                    .any(|arm| block_has_complex_generic_types(arm, type_table))
-                || block_has_complex_generic_types(default, type_table)
-        }
-        // Leaf nodes
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::EnumConstruct { .. } => false,
-    }
 }
 
 /// Detect recursive functions using call graph analysis
@@ -1245,22 +1040,12 @@ fn try_inline_call_expr(
     _type_table: &TypeTable,
     inline_counter: &mut u32,
 ) -> Option<(TirExpr, (Vec<String>, String))> {
-    let TirExprKind::Call {
-        func,
-        args,
-        type_args,
-    } = &expr.kind
-    else {
+    let TirExprKind::Call { func, args, .. } = &expr.kind else {
         return None;
     };
 
     let module_path = func.module_path();
     let func_name = func.name();
-
-    // Skip generic calls
-    if !type_args.is_empty() {
-        return None;
-    }
 
     // Look up the candidate function.
     let (candidate, inlined_key) =
@@ -1372,7 +1157,7 @@ fn try_inline_method_call_expr(
         receiver,
         func,
         args,
-        type_args,
+        ..
     } = &expr.kind
     else {
         return None;
@@ -1380,11 +1165,6 @@ fn try_inline_method_call_expr(
 
     let module_path = func.module_path();
     let func_name = func.name();
-
-    // Skip generic calls
-    if !type_args.is_empty() {
-        return None;
-    }
 
     // Look up the candidate function.
     let (candidate, inlined_key) =

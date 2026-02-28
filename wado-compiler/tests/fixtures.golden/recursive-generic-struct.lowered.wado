@@ -4,14 +4,7 @@
 
 // Imports
 // mem::realloc
-// wasi::stream-drop-writable
-// wasi::stream-new
-// wasi::stream-write
-// wasi::subtask-drop
 // wasi::task-return
-// wasi::waitable-join
-// wasi::waitable-set-new
-// wasi::waitable-set-wait
 
 global mut __modules_initialized: bool = false;
 
@@ -29,51 +22,22 @@ fn __test_0_create_recursive_node() {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let mut node: Node<i32> = "Node<i32>::new"(42);
-    __assert_0: {
-        let __v0: i32 = node.value;
-        let __cond: bool = (__v0 == 42);
-        if !__cond {
-            core::internal::panic(__tmpl: {
-                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(131), used: 0 };
-                __r.String::append("Assertion failed in ");
-                __r.String::append("__test_0_create_recursive_node");
-                __r.String::append(" at ");
-                __r.String::append("wado-compiler/tests/fixtures/recursive-generic-struct.wado");
-                __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_2: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_3: {
-                    let self: Box<i32> = Box<i32> { value: 22 };
-                    let f: &mut Formatter = &mut __f;
-                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
-                };
-                __r.String::append("\ncondition: node.value == 42\n");
-                __r.String::append("node.value: ");
-                __f = __inline_Formatter__new_4: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_5: {
-                    let self: Box<i32> = Box<i32> { value: __v0 };
-                    let f: &mut Formatter = &mut __f;
-                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
-                };
-                __r.String::append("\n");
-                break __tmpl: __r;
-            });
-        }
-    }
+    let mut __sroa_node_left: Option<&mut Node<i32>> = null;
+    let mut __sroa_node_right: Option<&mut Node<i32>> = null;
 }
 
 export fn __cm_export____test_0_create_recursive_node() {
-    __test_0_create_recursive_node();
+    __inline___test_0_create_recursive_node_0: {
+        __inline___initialize_modules_0: {
+            if __modules_initialized {
+                break __inline___initialize_modules_0;
+            }
+            "core::prelude/fpfmt.wado::__initialize_module"();
+            __modules_initialized = true;
+        };
+        let mut __sroa_node_left: Option<&mut Node<i32>> = null;
+        let mut __sroa_node_right: Option<&mut Node<i32>> = null;
+    };
     cm_raw_call task-return(0);
-}
-
-fn "Node<i32>::new"(value: i32) -> Node<i32> {
-    return Node<i32> { value: value, left: null, right: null };
 }
 

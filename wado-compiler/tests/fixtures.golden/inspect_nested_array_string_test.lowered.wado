@@ -24,37 +24,45 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let arr: Array<Array<String>> = __seq_lit: {
-        let mut __b: Array<Array<String>> = "Array<Array<String>>^SequenceLiteralBuilder::new_literal"(2);
-        __b."Array<Array<String>>^SequenceLiteralBuilder::push_literal"(__seq_lit: {
-            let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(2), used: 0 };
-            __inline_Array_String__SequenceLiteralBuilder__push_literal_2: {
-                let self: &mut Array<String> = &mut __b;
-                let value: String = "a";
-                self."Array<String>::append"(value);
+        let mut __b: Array<Array<String>> = Array<Array<String>> { repr: core::builtin::array_new::<Array<String>>(2), used: 0 };
+        __inline_Array_Array_String___SequenceLiteralBuilder__push_literal_2: {
+            let self: &mut Array<Array<String>> = &mut __b;
+            let value: Array<String> = __seq_lit: {
+                let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(2), used: 0 };
+                __inline_Array_String__SequenceLiteralBuilder__push_literal_4: {
+                    let self: &mut Array<String> = &mut __b;
+                    let value: String = "a";
+                    self."Array<String>::append"(value);
+                };
+                __inline_Array_String__SequenceLiteralBuilder__push_literal_5: {
+                    let self: &mut Array<String> = &mut __b;
+                    let value: String = "b";
+                    self."Array<String>::append"(value);
+                };
+                break __seq_lit: *__b;
             };
-            __inline_Array_String__SequenceLiteralBuilder__push_literal_3: {
-                let self: &mut Array<String> = &mut __b;
-                let value: String = "b";
-                self."Array<String>::append"(value);
+            self."Array<Array<String>>::append"(value);
+        };
+        __inline_Array_Array_String___SequenceLiteralBuilder__push_literal_7: {
+            let self: &mut Array<Array<String>> = &mut __b;
+            let value: Array<String> = __seq_lit: {
+                let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(1), used: 0 };
+                __inline_Array_String__SequenceLiteralBuilder__push_literal_9: {
+                    let self: &mut Array<String> = &mut __b;
+                    let value: String = "c";
+                    self."Array<String>::append"(value);
+                };
+                break __seq_lit: *__b;
             };
-            break __seq_lit: *__b;
-        });
-        __b."Array<Array<String>>^SequenceLiteralBuilder::push_literal"(__seq_lit: {
-            let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(1), used: 0 };
-            __inline_Array_String__SequenceLiteralBuilder__push_literal_6: {
-                let self: &mut Array<String> = &mut __b;
-                let value: String = "c";
-                self."Array<String>::append"(value);
-            };
-            break __seq_lit: *__b;
-        });
-        break __seq_lit: __b."Array<Array<String>>^SequenceLiteralBuilder::build"();
+            self."Array<Array<String>>::append"(value);
+        };
+        break __seq_lit: *__b;
     };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_9: {
+        let mut __f: Formatter = __inline_Formatter__new_13: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_13: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         "__inspect$Array<Array<String>>"(arr, &mut __f);
         break __tmpl: __r;
@@ -65,7 +73,7 @@ fn "__inspect$Array<Array<String>>"(__val: Array<Array<String>>, __fmt: &mut For
     __inline_Formatter__write_char_0: {
         __fmt.buf.String::append_char('[');
     };
-    let __inspect_len: i32 = __val."Array<Array<String>>::len"();
+    let __inspect_len: i32 = __val.used;
     let mut __inspect_i: i32 = 0;
     let _licm_buf: &mut String = __fmt.buf;
     loop {
@@ -73,7 +81,7 @@ fn "__inspect$Array<Array<String>>"(__val: Array<Array<String>>, __fmt: &mut For
             break;
         }
         if (__inspect_i > 0) {
-            __inline_Formatter__write_str_1: {
+            __inline_Formatter__write_str_2: {
                 let s: String = ", ";
                 _licm_buf.String::append(s);
             };
@@ -81,7 +89,7 @@ fn "__inspect$Array<Array<String>>"(__val: Array<Array<String>>, __fmt: &mut For
         "__inspect$Array<String>"(__val[__inspect_i], __fmt);
         __inspect_i = (__inspect_i + 1);
     }
-    __inline_Formatter__write_char_2: {
+    __inline_Formatter__write_char_3: {
         __fmt.buf.String::append_char(']');
     };
 }
@@ -141,18 +149,6 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
     self.used = (used + 1);
 }
 
-pub fn "Array<Array<String>>::len"(self: &Array<Array<String>>) -> i32 {
-    return self.used;
-}
-
-fn "Array<Array<String>>^SequenceLiteralBuilder::build"(self: &Array<Array<String>>) -> Array<Array<String>> {
-    return *self;
-}
-
-fn "Array<Array<String>>^SequenceLiteralBuilder::push_literal"(self: &mut Array<Array<String>>, value: Array<String>) {
-    self."Array<Array<String>>::append"(value);
-}
-
 pub fn "Array<Array<String>>::append"(self: &mut Array<Array<String>>, value: Array<String>) {
     let used: i32 = self.used;
     let capacity: i32 = core::builtin::array_len(self.repr);
@@ -167,13 +163,5 @@ pub fn "Array<Array<String>>::append"(self: &mut Array<Array<String>>, value: Ar
     }
     core::builtin::array_set::<Array<String>>(self.repr, used, value);
     self.used = (used + 1);
-}
-
-fn "Array<Array<String>>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<Array<String>> {
-    return "Array<Array<String>>::with_capacity"(capacity);
-}
-
-pub fn "Array<Array<String>>::with_capacity"(capacity: i32) -> Array<Array<String>> {
-    return Array<Array<String>> { repr: core::builtin::array_new::<Array<String>>(capacity), used: 0 };
 }
 

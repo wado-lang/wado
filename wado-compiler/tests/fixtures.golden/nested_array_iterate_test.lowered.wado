@@ -36,41 +36,49 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let matrix: Array<Array<i32>> = __seq_lit: {
-        let mut __b: Array<Array<i32>> = "Array<Array<i32>>^SequenceLiteralBuilder::new_literal"(2);
-        __b."Array<Array<i32>>^SequenceLiteralBuilder::push_literal"(__seq_lit: {
-            let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(2), used: 0 };
-            __inline_Array_i32__SequenceLiteralBuilder__push_literal_2: {
-                let self: &mut Array<i32> = &mut __b;
-                self."Array<i32>::append"(10);
+        let mut __b: Array<Array<i32>> = Array<Array<i32>> { repr: core::builtin::array_new::<Array<i32>>(2), used: 0 };
+        __inline_Array_Array_i32___SequenceLiteralBuilder__push_literal_2: {
+            let self: &mut Array<Array<i32>> = &mut __b;
+            let value: Array<i32> = __seq_lit: {
+                let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(2), used: 0 };
+                __inline_Array_i32__SequenceLiteralBuilder__push_literal_4: {
+                    let self: &mut Array<i32> = &mut __b;
+                    self."Array<i32>::append"(10);
+                };
+                __inline_Array_i32__SequenceLiteralBuilder__push_literal_5: {
+                    let self: &mut Array<i32> = &mut __b;
+                    self."Array<i32>::append"(20);
+                };
+                break __seq_lit: *__b;
             };
-            __inline_Array_i32__SequenceLiteralBuilder__push_literal_3: {
-                let self: &mut Array<i32> = &mut __b;
-                self."Array<i32>::append"(20);
+            self."Array<Array<i32>>::append"(value);
+        };
+        __inline_Array_Array_i32___SequenceLiteralBuilder__push_literal_7: {
+            let self: &mut Array<Array<i32>> = &mut __b;
+            let value: Array<i32> = __seq_lit: {
+                let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(2), used: 0 };
+                __inline_Array_i32__SequenceLiteralBuilder__push_literal_9: {
+                    let self: &mut Array<i32> = &mut __b;
+                    self."Array<i32>::append"(30);
+                };
+                __inline_Array_i32__SequenceLiteralBuilder__push_literal_10: {
+                    let self: &mut Array<i32> = &mut __b;
+                    self."Array<i32>::append"(40);
+                };
+                break __seq_lit: *__b;
             };
-            break __seq_lit: *__b;
-        });
-        __b."Array<Array<i32>>^SequenceLiteralBuilder::push_literal"(__seq_lit: {
-            let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(2), used: 0 };
-            __inline_Array_i32__SequenceLiteralBuilder__push_literal_6: {
-                let self: &mut Array<i32> = &mut __b;
-                self."Array<i32>::append"(30);
-            };
-            __inline_Array_i32__SequenceLiteralBuilder__push_literal_7: {
-                let self: &mut Array<i32> = &mut __b;
-                self."Array<i32>::append"(40);
-            };
-            break __seq_lit: *__b;
-        });
-        break __seq_lit: __b."Array<Array<i32>>^SequenceLiteralBuilder::build"();
+            self."Array<Array<i32>>::append"(value);
+        };
+        break __seq_lit: *__b;
     };
     let first_row: Array<i32> = matrix."Array<Array<i32>>^IndexValue::index_value"(0);
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_10: {
+        let mut __f: Formatter = __inline_Formatter__new_14: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_11: {
+        __inline_i32_Display__fmt_15: {
             let self: Box<i32> = Box<i32> { value: first_row."Array<i32>^IndexValue::index_value"(0) };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -79,7 +87,7 @@ export fn run() with Stdout {
     });
     let mut buf: String = "";
     __for_of_0: {
-        let mut __iter_0: ArrayIter<Array<i32>> = matrix."Array<Array<i32>>^IntoIterator::into_iter"();
+        let mut __iter_0: ArrayIter<Array<i32>> = ArrayIter<Array<i32>> { repr: matrix.repr, used: matrix.used, index: 0 };
         loop {
             let __pattern_temp_0: Option<Array<i32>> = __iter_0."ArrayIter<Array<i32>>^Iterator::next"();
             if __variant_test(__pattern_temp_0, case=0, name=Some) {
@@ -92,11 +100,11 @@ export fn run() with Stdout {
                             let val: i32 = __variant_payload(__pattern_temp_1, case=0);
                             buf = String::concat(buf, __tmpl: {
                                 let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(17), used: 0 };
-                                let mut __f: Formatter = __inline_Formatter__new_14: {
+                                let mut __f: Formatter = __inline_Formatter__new_19: {
                                     let buf: &mut String = &mut __r;
-                                    break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                                    break __inline_Formatter__new_19: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                                 };
-                                __inline_i32_Display__fmt_15: {
+                                __inline_i32_Display__fmt_20: {
                                     let self: Box<i32> = Box<i32> { value: val };
                                     let f: &mut Formatter = &mut __f;
                                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -142,10 +150,6 @@ fn "ArrayIter<Array<i32>>^Iterator::next"(self: &mut ArrayIter<Array<i32>>) -> O
     return Option<Array<i32>>::Some(item);
 }
 
-fn "Array<Array<i32>>^IntoIterator::into_iter"(self: &Array<Array<i32>>) -> ArrayIter<Array<i32>> {
-    return ArrayIter<Array<i32>> { repr: self.repr, used: self.used, index: 0 };
-}
-
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
     if (index >= self.used) {
         core::internal::panic("index out of bounds");
@@ -158,10 +162,6 @@ fn "Array<Array<i32>>^IndexValue::index_value"(self: &Array<Array<i32>>, index: 
         core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<Array<i32>>(self.repr, index);
-}
-
-fn "Array<Array<i32>>^SequenceLiteralBuilder::build"(self: &Array<Array<i32>>) -> Array<Array<i32>> {
-    return *self;
 }
 
 pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
@@ -180,10 +180,6 @@ pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
     self.used = (used + 1);
 }
 
-fn "Array<Array<i32>>^SequenceLiteralBuilder::push_literal"(self: &mut Array<Array<i32>>, value: Array<i32>) {
-    self."Array<Array<i32>>::append"(value);
-}
-
 pub fn "Array<Array<i32>>::append"(self: &mut Array<Array<i32>>, value: Array<i32>) {
     let used: i32 = self.used;
     let capacity: i32 = core::builtin::array_len(self.repr);
@@ -198,13 +194,5 @@ pub fn "Array<Array<i32>>::append"(self: &mut Array<Array<i32>>, value: Array<i3
     }
     core::builtin::array_set::<Array<i32>>(self.repr, used, value);
     self.used = (used + 1);
-}
-
-fn "Array<Array<i32>>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<Array<i32>> {
-    return "Array<Array<i32>>::with_capacity"(capacity);
-}
-
-pub fn "Array<Array<i32>>::with_capacity"(capacity: i32) -> Array<Array<i32>> {
-    return Array<Array<i32>> { repr: core::builtin::array_new::<Array<i32>>(capacity), used: 0 };
 }
 
