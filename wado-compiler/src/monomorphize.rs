@@ -105,6 +105,25 @@ pub fn monomorphize_modules_indexed(
         })
         .unwrap_or_default();
 
+    // Collect all concrete trait method functions from all modules.
+    // Maps function name (e.g., "i32^Stringify::to_str") → module source.
+    // This enables correct module resolution when monomorphizing type param
+    // receiver calls (e.g., T^Trait::method → ConcreteType^Trait::method).
+    let mut trait_method_locations: IndexMap<String, ModuleSource> = IndexMap::new();
+    for (module_source, module) in &modules {
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            // Only collect non-generic trait methods (concrete impls like "i32^Stringify::to_str")
+            if func.type_params.is_empty()
+                && func.impl_type_params.is_empty()
+                && let Some(ref info) = func.method_info
+                && info.trait_name.is_some()
+            {
+                trait_method_locations.insert(func.name.clone(), module_source.clone());
+            }
+        }
+    }
+
     // Second pass: monomorphize each module using the combined generic functions and structs
     modules
         .into_iter()
@@ -118,6 +137,7 @@ pub fn monomorphize_modules_indexed(
                     &entry_generic_struct_names,
                     &all_generic_functions,
                     &all_generic_structs,
+                    &trait_method_locations,
                 ),
             )
         })
@@ -132,6 +152,7 @@ fn monomorphize_with_externals(
     entry_generic_struct_names: &IndexSet<String>,
     all_generic_functions: &IndexMap<String, Rc<RefCell<TirFunction>>>,
     all_generic_structs_with_sources: &IndexMap<String, Vec<(ModuleSource, TirStruct)>>,
+    trait_method_locations: &IndexMap<String, ModuleSource>,
 ) -> TirModule {
     let is_entry_module = current_module_source == entry_module_source;
 
@@ -201,7 +222,12 @@ fn monomorphize_with_externals(
     }
 
     let mut monomorph = Monomorphizer::new(current_module_source.clone());
-    monomorph.monomorphize_with_externals(module, all_generic_functions, &all_generic_structs)
+    monomorph.monomorphize_with_externals(
+        module,
+        all_generic_functions,
+        &all_generic_structs,
+        trait_method_locations,
+    )
 }
 
 /// Monomorphizer collects generic instantiations and generates concrete types
@@ -224,6 +250,9 @@ struct Monomorphizer {
     mangled_struct_to_key: IndexMap<String, InstantiationKey>,
     /// Reverse lookup: mangled function name -> `InstantiationKey`
     mangled_func_to_key: IndexMap<String, InstantiationKey>,
+    /// Map from concrete trait method function name → module where it's defined.
+    /// Used to resolve the correct module when substituting type param receivers.
+    trait_method_locations: IndexMap<String, ModuleSource>,
 }
 
 impl Monomorphizer {
@@ -238,6 +267,7 @@ impl Monomorphizer {
             function_pending: Vec::new(),
             mangled_struct_to_key: IndexMap::new(),
             mangled_func_to_key: IndexMap::new(),
+            trait_method_locations: IndexMap::new(),
         }
     }
 
@@ -412,7 +442,10 @@ impl Monomorphizer {
         mut module: TirModule,
         external_generic_functions: &IndexMap<String, Rc<RefCell<TirFunction>>>,
         external_generic_structs: &IndexMap<String, TirStruct>,
+        trait_method_locations: &IndexMap<String, ModuleSource>,
     ) -> TirModule {
+        self.trait_method_locations = trait_method_locations.clone();
+
         // Phase 1: Collect all generic struct definitions
         // Include both local structs AND external generic structs from other modules
         let mut generic_structs: IndexMap<String, TirStruct> = external_generic_structs.clone();
@@ -2433,13 +2466,22 @@ impl Monomorphizer {
                             // Type param receiver substitution redirects to a concrete method
                             // (e.g., T^Ord::cmp -> i32^Ord::cmp). The target is not a
                             // monomorphized function - it's a concrete method defined in the
-                            // module where the impl block lives. Derive the correct module_source
-                            // from the concrete type and don't set monomorph_info.
-                            let concrete_type_id = sorted_entries[0].1;
-                            let concrete_module =
-                                module_source_for_trait_impl(type_table, *concrete_type_id);
+                            // module where the impl block lives.
+                            // First, look up the actual module from the trait method locations
+                            // map. This handles user-defined trait impls on primitive types
+                            // (e.g., `impl Stringify for i32` in the entry module).
+                            // Fall back to type-based heuristic for built-in impls.
+                            let concrete_module = self
+                                .trait_method_locations
+                                .get(&new_func_name)
+                                .cloned()
+                                .or_else(|| {
+                                    let concrete_type_id = sorted_entries[0].1;
+                                    module_source_for_trait_impl(type_table, *concrete_type_id)
+                                });
                             *method_func = FunctionRef::External {
-                                module_source: concrete_module.unwrap_or(module_source),
+                                module_source: concrete_module
+                                    .unwrap_or_else(|| module_source.clone()),
                                 name: new_func_name,
                                 monomorph_info: None,
                                 method_info: Some(new_info),
@@ -2585,11 +2627,17 @@ impl Monomorphizer {
 
                     if new_func_name != old_func_name {
                         if info.is_type_param_receiver {
-                            let concrete_type_id = sorted_entries[0].1;
-                            let concrete_module =
-                                module_source_for_trait_impl(type_table, *concrete_type_id);
+                            let concrete_module = self
+                                .trait_method_locations
+                                .get(&new_func_name)
+                                .cloned()
+                                .or_else(|| {
+                                    let concrete_type_id = sorted_entries[0].1;
+                                    module_source_for_trait_impl(type_table, *concrete_type_id)
+                                });
                             *static_func = FunctionRef::External {
-                                module_source: concrete_module.unwrap_or(module_source),
+                                module_source: concrete_module
+                                    .unwrap_or_else(|| module_source.clone()),
                                 name: new_func_name,
                                 monomorph_info: None,
                                 method_info: Some(new_info),

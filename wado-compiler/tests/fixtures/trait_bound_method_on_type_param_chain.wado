@@ -1,0 +1,33 @@
+// Test: chaining trait method calls on type parameters
+use { println, Stdout } from "core:cli";
+
+trait ToNum {
+    fn to_num(&self) -> i32;
+}
+
+impl ToNum for i32 {
+    fn to_num(&self) -> i32 {
+        return *self;
+    }
+}
+
+impl ToNum for bool {
+    fn to_num(&self) -> i32 {
+        if *self {
+            return 1;
+        }
+        return 0;
+    }
+}
+
+fn sum_nums<T: ToNum>(a: T, b: T) -> i32 {
+    return a.to_num() + b.to_num();
+}
+
+export fn run() with Stdout {
+    println(`{sum_nums::<i32>(10, 20)}`);
+    println(`{sum_nums::<bool>(true, false)}`);
+}
+
+__DATA__
+{"stdout": "30\n1\n"}
