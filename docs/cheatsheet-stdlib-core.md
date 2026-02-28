@@ -7,6 +7,47 @@
 
 Auto-imported in every module. Disable with `#![no_prelude]`.
 
+### Enums
+
+```wado
+pub enum Ordering {
+    Less,
+    Equal,
+    Greater,
+}
+```
+
+```wado
+pub enum Alignment {
+    Left,
+    Center,
+    Right,
+}
+```
+
+### Resources
+
+```wado
+pub resource Future<T> {
+    fn new() -> [Future<T>, FutureWritable<T>];
+}
+```
+
+```wado
+pub resource Stream<T> {
+    fn new() -> [Stream<T>, StreamWritable<T>];
+    fn read(&self, max: i32) -> Array<T>;
+    fn close(&self);
+}
+```
+
+```wado
+pub resource StreamWritable<T> {
+    fn write(&self, data: Array<T>);
+    fn close(&self);
+}
+```
+
 ### Traits
 
 ```wado
@@ -146,47 +187,6 @@ pub trait IntoIterator {
 pub trait FromIterator<T> {
     type Iter;
     fn from_iter(iter: Self::Iter) -> Self;
-}
-```
-
-### Enums
-
-```wado
-pub enum Ordering {
-    Less,
-    Equal,
-    Greater,
-}
-```
-
-```wado
-pub enum Alignment {
-    Left,
-    Center,
-    Right,
-}
-```
-
-### Resources
-
-```wado
-pub resource Future<T> {
-    fn new() -> [Future<T>, FutureWritable<T>];
-}
-```
-
-```wado
-pub resource Stream<T> {
-    fn new() -> [Stream<T>, StreamWritable<T>];
-    fn read(&self, max: i32) -> Array<T>;
-    fn close(&self);
-}
-```
-
-```wado
-pub resource StreamWritable<T> {
-    fn write(&self, data: Array<T>);
-    fn close(&self);
 }
 ```
 

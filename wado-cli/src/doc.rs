@@ -264,89 +264,130 @@ fn render_markdown(doc: &DocModule, h_offset: usize) -> String {
         render_md_doc(&mut out, module_doc);
     }
 
-    if !doc.traits.is_empty() {
-        writeln!(out, "\n{h2} Traits").unwrap();
-        for t in &doc.traits {
-            render_md_trait(&mut out, t, h3, h4);
-        }
-    }
-
-    if !doc.types.is_empty() {
-        writeln!(out, "\n{h2} Types").unwrap();
-        for t in &doc.types {
-            writeln!(out, "\n{h3} `{}`", t.signature).unwrap();
-            if let Some(ref d) = t.doc {
-                out.push('\n');
-                render_md_doc(&mut out, d);
-            }
-        }
-    }
-
-    if !doc.globals.is_empty() {
-        writeln!(out, "\n{h2} Globals").unwrap();
-        for g in &doc.globals {
-            writeln!(out, "\n{h3} `{}`", g.signature).unwrap();
-            if let Some(ref d) = g.doc {
-                out.push('\n');
-                render_md_doc(&mut out, d);
-            }
-        }
-    }
-
-    if !doc.flags.is_empty() {
-        writeln!(out, "\n{h2} Flags").unwrap();
-        for f in &doc.flags {
-            render_md_flags(&mut out, f, h3, h4);
-        }
-    }
-
-    if !doc.enums.is_empty() {
-        writeln!(out, "\n{h2} Enums").unwrap();
-        for e in &doc.enums {
-            render_md_enum(&mut out, e, h3, h4);
-        }
-    }
-
-    if !doc.effects.is_empty() {
-        writeln!(out, "\n{h2} Effects").unwrap();
-        for e in &doc.effects {
-            render_md_effect(&mut out, e, h3, h4);
-        }
-    }
-
-    if !doc.resources.is_empty() {
-        writeln!(out, "\n{h2} Resources").unwrap();
-        for r in &doc.resources {
-            render_md_resource(&mut out, r, h3, h4);
-        }
-    }
-
-    if !doc.structs.is_empty() {
-        writeln!(out, "\n{h2} Structs").unwrap();
-        for s in &doc.structs {
-            render_md_struct(&mut out, s, h3, h4);
-        }
-    }
-
-    if !doc.variants.is_empty() {
-        writeln!(out, "\n{h2} Variants").unwrap();
-        for v in &doc.variants {
-            render_md_variant(&mut out, v, h3, h4);
-        }
-    }
-
-    if !doc.functions.is_empty() {
-        writeln!(out, "\n{h2} Functions").unwrap();
-        for f in &doc.functions {
-            writeln!(out, "\n{h3} `{}`", f.signature).unwrap();
-            if let Some(ref d) = f.doc {
-                out.push('\n');
-                render_md_doc(&mut out, d);
-            }
-        }
-    }
+    render_md_types_section(&mut out, doc, &h2, &h3);
+    render_md_globals_section(&mut out, doc, &h2, &h3);
+    render_md_flags_section(&mut out, doc, &h2, &h3, &h4);
+    render_md_enums_section(&mut out, doc, &h2, &h3, &h4);
+    render_md_effects_section(&mut out, doc, &h2, &h3, &h4);
+    render_md_resources_section(&mut out, doc, &h2, &h3, &h4);
+    render_md_traits_section(&mut out, doc, &h2, &h3, &h4);
+    render_md_structs_section(&mut out, doc, &h2, &h3, &h4);
+    render_md_variants_section(&mut out, doc, &h2, &h3, &h4);
+    render_md_functions_section(&mut out, doc, &h2, &h3);
 
     out
+}
+
+fn render_md_types_section(out: &mut String, doc: &DocModule, h2: &str, h3: &str) {
+    if doc.types.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Types").unwrap();
+    for t in &doc.types {
+        writeln!(out, "\n{h3} `{}`", t.signature).unwrap();
+        if let Some(ref d) = t.doc {
+            out.push('\n');
+            render_md_doc(out, d);
+        }
+    }
+}
+
+fn render_md_globals_section(out: &mut String, doc: &DocModule, h2: &str, h3: &str) {
+    if doc.globals.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Globals").unwrap();
+    for g in &doc.globals {
+        writeln!(out, "\n{h3} `{}`", g.signature).unwrap();
+        if let Some(ref d) = g.doc {
+            out.push('\n');
+            render_md_doc(out, d);
+        }
+    }
+}
+
+fn render_md_flags_section(out: &mut String, doc: &DocModule, h2: &str, h3: &str, h4: &str) {
+    if doc.flags.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Flags").unwrap();
+    for f in &doc.flags {
+        render_md_flags(out, f, h3, h4);
+    }
+}
+
+fn render_md_enums_section(out: &mut String, doc: &DocModule, h2: &str, h3: &str, h4: &str) {
+    if doc.enums.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Enums").unwrap();
+    for e in &doc.enums {
+        render_md_enum(out, e, h3, h4);
+    }
+}
+
+fn render_md_effects_section(out: &mut String, doc: &DocModule, h2: &str, h3: &str, h4: &str) {
+    if doc.effects.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Effects").unwrap();
+    for e in &doc.effects {
+        render_md_effect(out, e, h3, h4);
+    }
+}
+
+fn render_md_resources_section(out: &mut String, doc: &DocModule, h2: &str, h3: &str, h4: &str) {
+    if doc.resources.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Resources").unwrap();
+    for r in &doc.resources {
+        render_md_resource(out, r, h3, h4);
+    }
+}
+
+fn render_md_traits_section(out: &mut String, doc: &DocModule, h2: &str, h3: &str, h4: &str) {
+    if doc.traits.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Traits").unwrap();
+    for t in &doc.traits {
+        render_md_trait(out, t, h3, h4);
+    }
+}
+
+fn render_md_structs_section(out: &mut String, doc: &DocModule, h2: &str, h3: &str, h4: &str) {
+    if doc.structs.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Structs").unwrap();
+    for s in &doc.structs {
+        render_md_struct(out, s, h3, h4);
+    }
+}
+
+fn render_md_variants_section(out: &mut String, doc: &DocModule, h2: &str, h3: &str, h4: &str) {
+    if doc.variants.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Variants").unwrap();
+    for v in &doc.variants {
+        render_md_variant(out, v, h3, h4);
+    }
+}
+
+fn render_md_functions_section(out: &mut String, doc: &DocModule, h2: &str, h3: &str) {
+    if doc.functions.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Functions").unwrap();
+    for f in &doc.functions {
+        writeln!(out, "\n{h3} `{}`", f.signature).unwrap();
+        if let Some(ref d) = f.doc {
+            out.push('\n');
+            render_md_doc(out, d);
+        }
+    }
 }
 
 fn render_md_trait(out: &mut String, t: &DocTrait, h3: &str, h4: &str) {
@@ -600,143 +641,184 @@ fn render_simple(doc: &DocModule, h_offset: usize) -> String {
         out.push('\n');
     }
 
-    if !doc.traits.is_empty() {
-        writeln!(out, "\n{h2} Traits\n\n```wado").unwrap();
-        for (i, t) in doc.traits.iter().enumerate() {
-            if i > 0 {
-                out.push('\n');
+    render_simple_types_section(&mut out, doc, &h2);
+    render_simple_globals_section(&mut out, doc, &h2);
+    render_simple_flags_section(&mut out, doc, &h2);
+    render_simple_enums_section(&mut out, doc, &h2);
+    render_simple_effects_section(&mut out, doc, &h2);
+    render_simple_resources_section(&mut out, doc, &h2);
+    render_simple_traits_section(&mut out, doc, &h2);
+    render_simple_structs_section(&mut out, doc, &h2);
+    render_simple_variants_section(&mut out, doc, &h2);
+    render_simple_functions_section(&mut out, doc, &h2);
+
+    out
+}
+
+fn render_simple_types_section(out: &mut String, doc: &DocModule, h2: &str) {
+    if doc.types.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Types\n\n```wado").unwrap();
+    for t in &doc.types {
+        writeln!(out, "{};", t.signature).unwrap();
+    }
+    out.push_str("```\n");
+}
+
+fn render_simple_globals_section(out: &mut String, doc: &DocModule, h2: &str) {
+    if doc.globals.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Globals\n\n```wado").unwrap();
+    for g in &doc.globals {
+        writeln!(out, "{};", g.signature).unwrap();
+    }
+    out.push_str("```\n");
+}
+
+fn render_simple_flags_section(out: &mut String, doc: &DocModule, h2: &str) {
+    if doc.flags.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Flags").unwrap();
+    for f in &doc.flags {
+        writeln!(out, "\n```wado\n{} {{", f.signature).unwrap();
+        for member in &f.members {
+            writeln!(out, "    {member},").unwrap();
+        }
+        out.push_str("}\n```\n");
+    }
+}
+
+fn render_simple_enums_section(out: &mut String, doc: &DocModule, h2: &str) {
+    if doc.enums.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Enums").unwrap();
+    for e in &doc.enums {
+        let name = sig_name_part(&e.signature);
+        writeln!(out, "\n```wado\n{name} {{").unwrap();
+        for case in &e.cases {
+            writeln!(out, "    {case},").unwrap();
+        }
+        out.push_str("}\n```\n");
+    }
+}
+
+fn render_simple_effects_section(out: &mut String, doc: &DocModule, h2: &str) {
+    if doc.effects.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Effects").unwrap();
+    for e in &doc.effects {
+        writeln!(out, "\n```wado\n{} {{", e.signature).unwrap();
+        for m in &e.methods {
+            writeln!(out, "    {};", m.signature).unwrap();
+        }
+        out.push_str("}\n```\n");
+    }
+}
+
+fn render_simple_resources_section(out: &mut String, doc: &DocModule, h2: &str) {
+    if doc.resources.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Resources").unwrap();
+    for r in &doc.resources {
+        if r.methods.is_empty() {
+            writeln!(out, "\n```wado\n{};\n```", r.signature).unwrap();
+        } else {
+            writeln!(out, "\n```wado\n{} {{", r.signature).unwrap();
+            for m in &r.methods {
+                writeln!(out, "    {};", m.signature).unwrap();
             }
-            writeln!(out, "{} {{", t.signature).unwrap();
-            for assoc in &t.associated_types {
-                writeln!(out, "    type {assoc};").unwrap();
+            out.push_str("}\n```\n");
+        }
+    }
+}
+
+fn render_simple_traits_section(out: &mut String, doc: &DocModule, h2: &str) {
+    if doc.traits.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Traits\n\n```wado").unwrap();
+    for (i, t) in doc.traits.iter().enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        writeln!(out, "{} {{", t.signature).unwrap();
+        for assoc in &t.associated_types {
+            writeln!(out, "    type {assoc};").unwrap();
+        }
+        for m in &t.methods {
+            writeln!(out, "    {};", m.signature).unwrap();
+        }
+        out.push_str("}\n");
+    }
+    out.push_str("```\n");
+}
+
+fn render_simple_structs_section(out: &mut String, doc: &DocModule, h2: &str) {
+    if doc.structs.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Structs").unwrap();
+    for s in &doc.structs {
+        out.push_str("\n```wado\n");
+        render_simple_struct(out, s);
+        if !s.methods.is_empty() {
+            let type_name = s
+                .signature
+                .strip_prefix("pub ")
+                .unwrap_or(&s.signature)
+                .strip_prefix("struct ")
+                .and_then(|rest| rest.split([' ', '<', '{']).next())
+                .unwrap_or("?");
+            writeln!(out, "\nimpl {type_name} {{").unwrap();
+            for m in &s.methods {
+                writeln!(out, "    {};", m.signature).unwrap();
             }
-            for m in &t.methods {
+            out.push_str("}\n");
+        }
+        for ti in &s.trait_impls {
+            writeln!(out, "\n{} {{", ti.signature).unwrap();
+            for m in &ti.methods {
                 writeln!(out, "    {};", m.signature).unwrap();
             }
             out.push_str("}\n");
         }
         out.push_str("```\n");
     }
+}
 
-    if !doc.types.is_empty() {
-        writeln!(out, "\n{h2} Types\n\n```wado").unwrap();
-        for t in &doc.types {
-            writeln!(out, "{};", t.signature).unwrap();
-        }
-        out.push_str("```\n");
+fn render_simple_variants_section(out: &mut String, doc: &DocModule, h2: &str) {
+    if doc.variants.is_empty() {
+        return;
     }
-
-    if !doc.globals.is_empty() {
-        writeln!(out, "\n{h2} Globals\n\n```wado").unwrap();
-        for g in &doc.globals {
-            writeln!(out, "{};", g.signature).unwrap();
-        }
-        out.push_str("```\n");
-    }
-
-    if !doc.flags.is_empty() {
-        writeln!(out, "\n{h2} Flags").unwrap();
-        for f in &doc.flags {
-            writeln!(out, "\n```wado\n{} {{", f.signature).unwrap();
-            for member in &f.members {
-                writeln!(out, "    {member},").unwrap();
-            }
-            out.push_str("}\n```\n");
-        }
-    }
-
-    if !doc.enums.is_empty() {
-        writeln!(out, "\n{h2} Enums").unwrap();
-        for e in &doc.enums {
-            let name = sig_name_part(&e.signature);
-            writeln!(out, "\n```wado\n{name} {{").unwrap();
-            for case in &e.cases {
-                writeln!(out, "    {case},").unwrap();
-            }
-            out.push_str("}\n```\n");
-        }
-    }
-
-    if !doc.effects.is_empty() {
-        writeln!(out, "\n{h2} Effects").unwrap();
-        for e in &doc.effects {
-            writeln!(out, "\n```wado\n{} {{", e.signature).unwrap();
-            for m in &e.methods {
-                writeln!(out, "    {};", m.signature).unwrap();
-            }
-            out.push_str("}\n```\n");
-        }
-    }
-
-    if !doc.resources.is_empty() {
-        writeln!(out, "\n{h2} Resources").unwrap();
-        for r in &doc.resources {
-            if r.methods.is_empty() {
-                writeln!(out, "\n```wado\n{};\n```", r.signature).unwrap();
+    writeln!(out, "\n{h2} Variants").unwrap();
+    for v in &doc.variants {
+        writeln!(out, "\n```wado\n{} {{", v.signature).unwrap();
+        for case in &v.cases {
+            if let Some(ref p) = case.payload {
+                writeln!(out, "    {}({p}),", case.name).unwrap();
             } else {
-                writeln!(out, "\n```wado\n{} {{", r.signature).unwrap();
-                for m in &r.methods {
-                    writeln!(out, "    {};", m.signature).unwrap();
-                }
-                out.push_str("}\n```\n");
+                writeln!(out, "    {},", case.name).unwrap();
             }
         }
+        out.push_str("}\n```\n");
     }
+}
 
-    if !doc.structs.is_empty() {
-        writeln!(out, "\n{h2} Structs").unwrap();
-        for s in &doc.structs {
-            out.push_str("\n```wado\n");
-            render_simple_struct(&mut out, s);
-            if !s.methods.is_empty() {
-                let type_name = s
-                    .signature
-                    .strip_prefix("pub ")
-                    .unwrap_or(&s.signature)
-                    .strip_prefix("struct ")
-                    .and_then(|rest| rest.split([' ', '<', '{']).next())
-                    .unwrap_or("?");
-                writeln!(out, "\nimpl {type_name} {{").unwrap();
-                for m in &s.methods {
-                    writeln!(out, "    {};", m.signature).unwrap();
-                }
-                out.push_str("}\n");
-            }
-            for ti in &s.trait_impls {
-                writeln!(out, "\n{} {{", ti.signature).unwrap();
-                for m in &ti.methods {
-                    writeln!(out, "    {};", m.signature).unwrap();
-                }
-                out.push_str("}\n");
-            }
-            out.push_str("```\n");
-        }
+fn render_simple_functions_section(out: &mut String, doc: &DocModule, h2: &str) {
+    if doc.functions.is_empty() {
+        return;
     }
-
-    if !doc.variants.is_empty() {
-        writeln!(out, "\n{h2} Variants").unwrap();
-        for v in &doc.variants {
-            writeln!(out, "\n```wado\n{} {{", v.signature).unwrap();
-            for case in &v.cases {
-                if let Some(ref p) = case.payload {
-                    writeln!(out, "    {}({p}),", case.name).unwrap();
-                } else {
-                    writeln!(out, "    {},", case.name).unwrap();
-                }
-            }
-            out.push_str("}\n```\n");
-        }
+    writeln!(out, "\n{h2} Functions\n\n```wado").unwrap();
+    for f in &doc.functions {
+        writeln!(out, "{};", f.signature).unwrap();
     }
-
-    if !doc.functions.is_empty() {
-        writeln!(out, "\n{h2} Functions\n\n```wado").unwrap();
-        for f in &doc.functions {
-            writeln!(out, "{};", f.signature).unwrap();
-        }
-        out.push_str("```\n");
-    }
-
-    out
+    out.push_str("```\n");
 }
 
 /// Render a struct in simple format with fields on separate lines.

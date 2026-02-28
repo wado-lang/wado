@@ -7,6 +7,79 @@
 
 Auto-imported in every module. Disable with `#![no_prelude]`.
 
+### Enums
+
+#### `pub enum Ordering`
+
+Result of a comparison between two values.
+
+##### `Less`
+
+##### `Equal`
+
+##### `Greater`
+
+#### `pub enum Alignment`
+
+Text alignment for padding.
+
+##### `Left`
+
+##### `Center`
+
+##### `Right`
+
+### Resources
+
+#### `pub resource Future<T>`
+
+Future type - readable end of an async value (WASI Component Model primitive).
+This is an opaque i32 handle managed by the runtime.
+
+Use `Future::<T>::new()` to create a new future pair `[Future<T>, FutureWritable<T>]`.
+The readable end (`Future<T>`) is passed to consumers; the writable end (`FutureWritable<T>`)
+is used by the producer to fulfill the future.
+
+##### `fn new() -> [Future<T>, FutureWritable<T>]`
+
+#### `pub resource Stream<T>`
+
+Stream type - readable end of an async sequence (WASI Component Model primitive).
+This is an opaque i32 handle managed by the runtime.
+
+Use `Stream::<T>::new()` to create a new stream pair `[Stream<T>, StreamWritable<T>]`.
+The readable end (`Stream<T>`) is passed to consumers; the writable end (`StreamWritable<T>`)
+is used by the producer to write data into the stream.
+
+##### `fn new() -> [Stream<T>, StreamWritable<T>]`
+
+##### `fn read(&self, max: i32) -> Array<T>`
+
+Read up to `max` elements from the stream.
+Blocks until data is available or the writer closes.
+Returns an empty array on end-of-stream.
+
+##### `fn close(&self)`
+
+Close the readable end of the stream.
+
+#### `pub resource StreamWritable<T>`
+
+StreamWritable type - writable end of an async sequence (WASI Component Model primitive).
+This is an opaque i32 handle managed by the runtime.
+
+Obtained from `Stream::<T>::new()`. Call `write(data)` to send data,
+or `close()` to signal end-of-stream (maps to `stream.drop-writable`).
+
+##### `fn write(&self, data: Array<T>)`
+
+Write a chunk of data to the stream.
+Can be called multiple times for successive chunks.
+
+##### `fn close(&self)`
+
+Close the writable end, signaling end-of-stream.
+
 ### Traits
 
 #### `pub trait Eq`
@@ -291,79 +364,6 @@ This is a simplified version - the full Rust-style trait requires `impl Iterator
 syntax which is not yet supported.
 
 ##### `fn from_iter(iter: Self::Iter) -> Self`
-
-### Enums
-
-#### `pub enum Ordering`
-
-Result of a comparison between two values.
-
-##### `Less`
-
-##### `Equal`
-
-##### `Greater`
-
-#### `pub enum Alignment`
-
-Text alignment for padding.
-
-##### `Left`
-
-##### `Center`
-
-##### `Right`
-
-### Resources
-
-#### `pub resource Future<T>`
-
-Future type - readable end of an async value (WASI Component Model primitive).
-This is an opaque i32 handle managed by the runtime.
-
-Use `Future::<T>::new()` to create a new future pair `[Future<T>, FutureWritable<T>]`.
-The readable end (`Future<T>`) is passed to consumers; the writable end (`FutureWritable<T>`)
-is used by the producer to fulfill the future.
-
-##### `fn new() -> [Future<T>, FutureWritable<T>]`
-
-#### `pub resource Stream<T>`
-
-Stream type - readable end of an async sequence (WASI Component Model primitive).
-This is an opaque i32 handle managed by the runtime.
-
-Use `Stream::<T>::new()` to create a new stream pair `[Stream<T>, StreamWritable<T>]`.
-The readable end (`Stream<T>`) is passed to consumers; the writable end (`StreamWritable<T>`)
-is used by the producer to write data into the stream.
-
-##### `fn new() -> [Stream<T>, StreamWritable<T>]`
-
-##### `fn read(&self, max: i32) -> Array<T>`
-
-Read up to `max` elements from the stream.
-Blocks until data is available or the writer closes.
-Returns an empty array on end-of-stream.
-
-##### `fn close(&self)`
-
-Close the readable end of the stream.
-
-#### `pub resource StreamWritable<T>`
-
-StreamWritable type - writable end of an async sequence (WASI Component Model primitive).
-This is an opaque i32 handle managed by the runtime.
-
-Obtained from `Stream::<T>::new()`. Call `write(data)` to send data,
-or `close()` to signal end-of-stream (maps to `stream.drop-writable`).
-
-##### `fn write(&self, data: Array<T>)`
-
-Write a chunk of data to the stream.
-Can be called multiple times for successive chunks.
-
-##### `fn close(&self)`
-
-Close the writable end, signaling end-of-stream.
 
 ### Structs
 
