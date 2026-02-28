@@ -105,7 +105,14 @@ pub struct DocGlobal {
 #[derive(Debug, Clone, Serialize)]
 pub struct DocEnum {
     pub signature: String,
-    pub cases: Vec<String>,
+    pub cases: Vec<DocEnumCase>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DocEnumCase {
+    pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
 }
@@ -150,7 +157,14 @@ pub struct DocResource {
 pub struct DocFlags {
     pub name: String,
     pub signature: String,
-    pub members: Vec<String>,
+    pub members: Vec<DocFlagsMember>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DocFlagsMember {
+    pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
 }
@@ -304,9 +318,17 @@ fn build_doc_global(g: &GlobalDecl, comments: &CommentMap) -> DocGlobal {
 }
 
 fn build_doc_enum(e: &EnumDecl, comments: &CommentMap) -> DocEnum {
+    let cases = e
+        .cases
+        .iter()
+        .map(|c| DocEnumCase {
+            name: c.name.clone(),
+            doc: extract_doc_comment_with_attrs(comments, &c.span, &c.attrs),
+        })
+        .collect();
     DocEnum {
         signature: render_enum_signature(e),
-        cases: e.cases.iter().map(|c| c.name.clone()).collect(),
+        cases,
         doc: extract_doc_comment_with_attrs(comments, &e.span, &e.attrs),
     }
 }
@@ -346,10 +368,18 @@ fn build_doc_flags(f: &FlagsDecl, comments: &CommentMap) -> DocFlags {
     sig.push_str("flags ");
     sig.push_str(&f.name);
 
+    let members = f
+        .flags
+        .iter()
+        .map(|m| DocFlagsMember {
+            name: m.name.clone(),
+            doc: extract_doc_comment_with_attrs(comments, &m.span, &m.attrs),
+        })
+        .collect();
     DocFlags {
         name: f.name.clone(),
         signature: sig,
-        members: f.flags.iter().map(|m| m.name.clone()).collect(),
+        members,
         doc: extract_doc_comment_with_attrs(
             comments,
             &f.span,

@@ -434,7 +434,7 @@ fn render_md_enum(out: &mut String, e: &DocEnum, h3: &str, h4: &str) {
         render_md_doc(out, d);
     }
     for case in &e.cases {
-        writeln!(out, "\n{h4} `{case}`").unwrap();
+        render_md_entity(out, &case.name, case.doc.as_deref(), h4);
     }
 }
 
@@ -461,7 +461,7 @@ fn render_md_flags(out: &mut String, f: &DocFlags, h3: &str, h4: &str) {
         render_md_doc(out, d);
     }
     for member in &f.members {
-        writeln!(out, "\n{h4} `{member}`").unwrap();
+        render_md_entity(out, &member.name, member.doc.as_deref(), h4);
     }
 }
 
@@ -685,7 +685,7 @@ fn render_simple_flags_section(out: &mut String, doc: &DocModule, h2: &str) {
     for f in &doc.flags {
         writeln!(out, "\n```wado\n{} {{", f.signature).unwrap();
         for member in &f.members {
-            writeln!(out, "    {member},").unwrap();
+            writeln!(out, "    {},", member.name).unwrap();
         }
         out.push_str("}\n```\n");
     }
@@ -700,7 +700,7 @@ fn render_simple_enums_section(out: &mut String, doc: &DocModule, h2: &str) {
         let name = sig_name_part(&e.signature);
         writeln!(out, "\n```wado\n{name} {{").unwrap();
         for case in &e.cases {
-            writeln!(out, "    {case},").unwrap();
+            writeln!(out, "    {},", case.name).unwrap();
         }
         out.push_str("}\n```\n");
     }

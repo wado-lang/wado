@@ -15,9 +15,15 @@ Result of a comparison between two values.
 
 ##### `Less`
 
+The first value is less than the second.
+
 ##### `Equal`
 
+The two values are equal.
+
 ##### `Greater`
+
+The first value is greater than the second.
 
 #### `pub enum Alignment`
 
@@ -25,9 +31,15 @@ Text alignment for padding.
 
 ##### `Left`
 
+Left-aligned: `{x:<5}` -> "42 "
+
 ##### `Center`
 
+Center-aligned: `{x:^5}` -> " 42 "
+
 ##### `Right`
+
+Right-aligned (default for numbers): `{x:>5}` -> " 42"
 
 ### Resources
 

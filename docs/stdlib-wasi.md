@@ -11,9 +11,15 @@
 
 ##### `Io`
 
+Input/output error
+
 ##### `IllegalByteSequence`
 
+Invalid or incomplete multibyte or wide character
+
 ##### `Pipe`
+
+Broken pipe
 
 ### Effects
 
@@ -164,15 +170,52 @@ Note: This was called `fdflags` in earlier versions of WASI.
 
 ##### `Read`
 
+Read mode: Data can be read.
+
 ##### `Write`
+
+Write mode: Data can be written to.
 
 ##### `FileIntegritySync`
 
+Request that writes be performed according to synchronized I/O file
+integrity completion. The data stored in the file and the file's
+metadata are synchronized. This is similar to `O_SYNC` in POSIX.
+
+The precise semantics of this operation have not yet been defined for
+WASI. At this time, it should be interpreted as a request, and not a
+requirement.
+
 ##### `DataIntegritySync`
+
+Request that writes be performed according to synchronized I/O data
+integrity completion. Only the data stored in the file is
+synchronized. This is similar to `O_DSYNC` in POSIX.
+
+The precise semantics of this operation have not yet been defined for
+WASI. At this time, it should be interpreted as a request, and not a
+requirement.
 
 ##### `RequestedWriteSync`
 
+Requests that reads be performed at the same level of integrity
+requested for writes. This is similar to `O_RSYNC` in POSIX.
+
+The precise semantics of this operation have not yet been defined for
+WASI. At this time, it should be interpreted as a request, and not a
+requirement.
+
 ##### `MutateDirectory`
+
+Mutating directories mode: Directory contents may be mutated.
+
+When this flag is unset on a descriptor, operations using the
+descriptor which would create, rename, delete, modify the data or
+metadata of filesystem objects, or obtain another handle which
+would permit any of those, shall fail with `error-code::read-only` if
+they would otherwise succeed.
+
+This may only be set on directories.
 
 #### `pub flags PathFlags`
 
@@ -180,17 +223,28 @@ Flags determining the method of how paths are resolved.
 
 ##### `SymlinkFollow`
 
+As long as the resolved path corresponds to a symbolic link, it is
+expanded.
+
 #### `pub flags OpenFlags`
 
 Open flags used by `open-at`.
 
 ##### `Create`
 
+Create file if it does not exist, similar to `O_CREAT` in POSIX.
+
 ##### `Directory`
+
+Fail if not a directory, similar to `O_DIRECTORY` in POSIX.
 
 ##### `Exclusive`
 
+Fail if file already exists, similar to `O_EXCL` in POSIX.
+
 ##### `Truncate`
+
+Truncate file to size 0, similar to `O_TRUNC` in POSIX.
 
 ### Enums
 
@@ -202,19 +256,36 @@ Note: This was called `filetype` in earlier versions of WASI.
 
 ##### `Unknown`
 
+The type of the descriptor or file is unknown or is different from
+any of the other types specified.
+
 ##### `BlockDevice`
+
+The descriptor refers to a block device inode.
 
 ##### `CharacterDevice`
 
+The descriptor refers to a character device inode.
+
 ##### `Directory`
+
+The descriptor refers to a directory inode.
 
 ##### `Fifo`
 
+The descriptor refers to a named pipe.
+
 ##### `SymbolicLink`
+
+The file refers to a symbolic link inode.
 
 ##### `RegularFile`
 
+The descriptor refers to a regular file inode.
+
 ##### `Socket`
+
+The descriptor refers to a socket.
 
 #### `pub enum ErrorCode`
 
@@ -225,75 +296,147 @@ merely for alignment with POSIX.
 
 ##### `Access`
 
+Permission denied, similar to `EACCES` in POSIX.
+
 ##### `Already`
+
+Connection already in progress, similar to `EALREADY` in POSIX.
 
 ##### `BadDescriptor`
 
+Bad descriptor, similar to `EBADF` in POSIX.
+
 ##### `Busy`
+
+Device or resource busy, similar to `EBUSY` in POSIX.
 
 ##### `Deadlock`
 
+Resource deadlock would occur, similar to `EDEADLK` in POSIX.
+
 ##### `Quota`
+
+Storage quota exceeded, similar to `EDQUOT` in POSIX.
 
 ##### `Exist`
 
+File exists, similar to `EEXIST` in POSIX.
+
 ##### `FileTooLarge`
+
+File too large, similar to `EFBIG` in POSIX.
 
 ##### `IllegalByteSequence`
 
+Illegal byte sequence, similar to `EILSEQ` in POSIX.
+
 ##### `InProgress`
+
+Operation in progress, similar to `EINPROGRESS` in POSIX.
 
 ##### `Interrupted`
 
+Interrupted function, similar to `EINTR` in POSIX.
+
 ##### `Invalid`
+
+Invalid argument, similar to `EINVAL` in POSIX.
 
 ##### `Io`
 
+I/O error, similar to `EIO` in POSIX.
+
 ##### `IsDirectory`
+
+Is a directory, similar to `EISDIR` in POSIX.
 
 ##### `Loop`
 
+Too many levels of symbolic links, similar to `ELOOP` in POSIX.
+
 ##### `TooManyLinks`
+
+Too many links, similar to `EMLINK` in POSIX.
 
 ##### `MessageSize`
 
+Message too large, similar to `EMSGSIZE` in POSIX.
+
 ##### `NameTooLong`
+
+Filename too long, similar to `ENAMETOOLONG` in POSIX.
 
 ##### `NoDevice`
 
+No such device, similar to `ENODEV` in POSIX.
+
 ##### `NoEntry`
+
+No such file or directory, similar to `ENOENT` in POSIX.
 
 ##### `NoLock`
 
+No locks available, similar to `ENOLCK` in POSIX.
+
 ##### `InsufficientMemory`
+
+Not enough space, similar to `ENOMEM` in POSIX.
 
 ##### `InsufficientSpace`
 
+No space left on device, similar to `ENOSPC` in POSIX.
+
 ##### `NotDirectory`
+
+Not a directory or a symbolic link to a directory, similar to `ENOTDIR` in POSIX.
 
 ##### `NotEmpty`
 
+Directory not empty, similar to `ENOTEMPTY` in POSIX.
+
 ##### `NotRecoverable`
+
+State not recoverable, similar to `ENOTRECOVERABLE` in POSIX.
 
 ##### `Unsupported`
 
+Not supported, similar to `ENOTSUP` and `ENOSYS` in POSIX.
+
 ##### `NoTty`
+
+Inappropriate I/O control operation, similar to `ENOTTY` in POSIX.
 
 ##### `NoSuchDevice`
 
+No such device or address, similar to `ENXIO` in POSIX.
+
 ##### `Overflow`
+
+Value too large to be stored in data type, similar to `EOVERFLOW` in POSIX.
 
 ##### `NotPermitted`
 
+Operation not permitted, similar to `EPERM` in POSIX.
+
 ##### `Pipe`
+
+Broken pipe, similar to `EPIPE` in POSIX.
 
 ##### `ReadOnly`
 
+Read-only file system, similar to `EROFS` in POSIX.
+
 ##### `InvalidSeek`
+
+Invalid seek, similar to `ESPIPE` in POSIX.
 
 ##### `TextFileBusy`
 
+Text file busy, similar to `ETXTBSY` in POSIX.
+
 ##### `CrossDevice`
+
+Cross-device link, similar to `EXDEV` in POSIX.
 
 #### `pub enum Advice`
 
@@ -301,15 +444,33 @@ File or memory access pattern advisory information.
 
 ##### `Normal`
 
+The application has no advice to give on its behavior with respect
+to the specified data.
+
 ##### `Sequential`
+
+The application expects to access the specified data sequentially
+from lower offsets to higher offsets.
 
 ##### `Random`
 
+The application expects to access the specified data in a random
+order.
+
 ##### `WillNeed`
+
+The application expects to access the specified data in the near
+future.
 
 ##### `DontNeed`
 
+The application expects that it will not access the specified data
+in the near future.
+
 ##### `NoReuse`
+
+The application expects to access the specified data once and then
+not reuse it thereafter.
 
 ### Effects
 
@@ -1468,37 +1629,78 @@ See each individual API for what the POSIX equivalents are. They sometimes diffe
 
 ##### `Unknown`
 
+Unknown error
+
 ##### `AccessDenied`
+
+Access denied.
+
+POSIX equivalent: EACCES, EPERM
 
 ##### `NotSupported`
 
+The operation is not supported.
+
+POSIX equivalent: EOPNOTSUPP
+
 ##### `InvalidArgument`
+
+One of the arguments is invalid.
+
+POSIX equivalent: EINVAL
 
 ##### `OutOfMemory`
 
+Not enough memory to complete the operation.
+
+POSIX equivalent: ENOMEM, ENOBUFS, EAI_MEMORY
+
 ##### `Timeout`
+
+The operation timed out before it could finish completely.
 
 ##### `InvalidState`
 
+The operation is not valid in the socket's current state.
+
 ##### `AddressNotBindable`
+
+A bind operation failed because the provided address is not an address that the `network` can bind to.
 
 ##### `AddressInUse`
 
+A bind operation failed because the provided address is already in use or because there are no ephemeral ports available.
+
 ##### `RemoteUnreachable`
+
+The remote address is not reachable
 
 ##### `ConnectionRefused`
 
+The TCP connection was forcefully rejected
+
 ##### `ConnectionReset`
+
+The TCP connection was reset.
 
 ##### `ConnectionAborted`
 
+A TCP connection was aborted.
+
 ##### `DatagramTooLarge`
+
+The size of a datagram sent to a UDP socket exceeded the maximum
+supported size.
 
 #### `pub enum IpAddressFamily`
 
 ##### `Ipv4`
 
+Similar to `AF_INET` in POSIX.
+
 ##### `Ipv6`
+
+Similar to `AF_INET6` in POSIX.
 
 #### `pub enum ErrorCode`
 
@@ -1506,15 +1708,37 @@ Lookup error codes.
 
 ##### `Unknown`
 
+Unknown error
+
 ##### `AccessDenied`
+
+Access denied.
+
+POSIX equivalent: EACCES, EPERM
 
 ##### `InvalidArgument`
 
+`name` is a syntactically invalid domain name or IP address.
+
+POSIX equivalent: EINVAL
+
 ##### `NameUnresolvable`
+
+Name does not exist or has no suitable associated IP addresses.
+
+POSIX equivalent: EAI_NONAME, EAI_NODATA, EAI_ADDRFAMILY
 
 ##### `TemporaryResolverFailure`
 
+A temporary failure in name resolution occurred.
+
+POSIX equivalent: EAI_AGAIN
+
 ##### `PermanentResolverFailure`
+
+A permanent failure in name resolution occurred.
+
+POSIX equivalent: EAI_FAIL
 
 ### Effects
 
