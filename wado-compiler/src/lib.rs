@@ -79,6 +79,7 @@ pub mod comment;
 pub mod compiler_host;
 pub mod component_model;
 pub mod desugar;
+pub mod doc;
 pub mod effect_check;
 pub mod lexer;
 pub mod loader;
@@ -615,6 +616,37 @@ pub fn format(source: &str) -> Result<String, CompileError> {
     // Unparse (no lowering - preserve high-level constructs)
     let unparser = unparse::Unparser::new(&comment_map);
     Ok(unparser.unparse(&ast))
+}
+
+/// Result of parsing a source file (AST + comments, no compilation)
+pub struct ParseResult {
+    pub ast: ast::Module,
+    pub comments: comment::CommentMap,
+}
+
+/// Parse a Wado source file into AST and comment map.
+/// This is a lightweight operation that only lexes and parses.
+pub fn parse(source: &str) -> Result<ParseResult, CompileError> {
+    let mut lexer = Lexer::new(source);
+    let tokens = lexer.tokenize().map_err(|e| CompileError::Lexer {
+        message: e.message,
+        line: e.span.line,
+        column: e.span.column,
+        filename: None,
+    })?;
+    let (data_section, comments, shebang) = lexer.into_parts();
+    let comment_map = comment::CommentMap::from_comments(comments, source);
+    let mut parser = Parser::with_metadata(tokens, shebang, data_section);
+    let ast = parser.parse().map_err(|e| CompileError::Parser {
+        message: e.message,
+        line: e.span.line,
+        column: e.span.column,
+        filename: None,
+    })?;
+    Ok(ParseResult {
+        ast,
+        comments: comment_map,
+    })
 }
 
 /// Compilation error with structured location info

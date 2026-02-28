@@ -24,6 +24,10 @@ pub enum CommentKind {
     Line,
     /// Block comment: `/* ... */`
     Block,
+    /// Doc comment: `/// ...`
+    DocLine,
+    /// Module doc comment: `//! ...`
+    ModuleDoc,
 }
 
 /// Maps byte positions to comments.

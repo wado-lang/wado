@@ -15,6 +15,7 @@
 pub mod args;
 pub mod compile;
 pub mod compiler_host;
+pub mod doc;
 pub mod dump;
 pub mod format;
 pub mod run;

@@ -64,27 +64,27 @@ The `..` signals that the struct cannot be constructed externally (some fields a
 ### CLI Interface
 
 ```sh
-wado doc [file.wado...]
+wado doc [options] <file.wado>...
 
-# Single file
+# Single file (markdown output, default)
 wado doc lib/core/prelude/traits.wado
 
 # Multiple files / glob
 wado doc lib/core/**/*.wado
 
-# Project mode (with wado.toml)
-wado doc
-
 # Simple format (cheatsheet-style pseudo-code)
-wado doc --simple lib/core/**/*.wado
+wado doc --format simple lib/core/**/*.wado
+
+# JSON format (serde DOM, machine-readable)
+wado doc -f json lib/core/**/*.wado
 ```
 
-| Flag       | Description                                            |
-| ---------- | ------------------------------------------------------ |
-| `--simple` | Compact pseudo-code output (for cheatsheet generation) |
-| `--help`   | Show usage                                             |
+| Flag                 | Description                                                      |
+| -------------------- | ---------------------------------------------------------------- |
+| `-f, --format <fmt>` | Output format: `markdown` (default), `simple`, `json`            |
+| `--help`             | Show usage                                                       |
 
-Default output is `full` (structured markdown). Output goes to stdout.
+Output goes to stdout. The compiler returns a serde-serializable DOM (`DocModule`), and the CLI renders it in the chosen format.
 
 ### Extraction Strategy: CommentMap-Based (No AST Changes)
 
@@ -119,9 +119,35 @@ pub enum CommentKind {
 
 The lexer detects `///` and `//!` patterns after the initial `//` and assigns the appropriate kind. This enables the formatter to preserve doc comment style and the doc tool to efficiently filter for doc comments.
 
+### Architecture: Serde DOM
+
+The compiler (`wado-compiler/src/doc.rs`) extracts documentation into a serde-serializable DOM:
+
+```rust
+pub struct DocModule {
+    pub name: String,
+    pub doc: Option<String>,
+    pub traits: Vec<DocTrait>,
+    pub structs: Vec<DocStruct>,
+    pub types: Vec<DocType>,
+    pub globals: Vec<DocGlobal>,
+    pub enums: Vec<DocEnum>,
+    pub variants: Vec<DocVariant>,
+    pub flags: Vec<DocFlags>,
+    pub functions: Vec<DocFunction>,
+}
+```
+
+Each doc type (`DocTrait`, `DocStruct`, etc.) has a `signature` field (rendered string), an optional `doc` field, and type-specific children (methods, fields, cases, etc.). All types derive `Serialize` for JSON output.
+
+The CLI (`wado-cli/src/doc.rs`) renders this DOM in three formats:
+- **markdown**: Structured markdown with headings, doc comments, fields, methods
+- **simple**: Cheatsheet-style pseudo-code in `\`\`\`wado` blocks
+- **json**: Pretty-printed JSON of the DOM (single module or array)
+
 ### Output Formats
 
-Both formats use the same source as input:
+All three formats use the same source as input:
 
 ```wado
 //! Core trait definitions for equality and ordering.
@@ -254,11 +280,17 @@ Rules for full format:
 - Same visibility rules (pub/export only, `..` for private fields)
 - `impl` methods folded into their type's section
 
-#### Simple (`--simple`)
+#### JSON (`--format json`)
+
+Machine-readable output. The DOM is serialized as pretty JSON. For a single file, outputs the `DocModule` object directly. For multiple files, outputs a JSON array of `DocModule` objects.
+
+Fields with `null` values or empty arrays are omitted from the output (`#[serde(skip_serializing_if)]`).
+
+#### Simple (`--format simple`)
 
 Compressed markdown in the style of `docs/cheatsheet.md`. Uses `##` headings and `` ```wado `` code blocks to pack signatures densely. Designed for generating stdlib cheatsheets.
 
-Output (`wado doc --simple file.wado`):
+Output (`wado doc --format simple file.wado`):
 
 ````markdown
 # file
@@ -353,14 +385,17 @@ pub global PI: f64;                                        // no initializer
 
 ### Multi-File Output
 
-When multiple files are given, their outputs are concatenated into a single markdown document. Each file gets a `# module_name` heading, then its items follow.
+When multiple files are given, markdown and simple formats concatenate their outputs. JSON format outputs a JSON array of `DocModule` objects.
 
 ```sh
 # Concatenates all core library docs into one document
 wado doc lib/core/**/*.wado > stdlib-reference.md
 
 # Cheatsheet for the entire stdlib
-wado doc --simple lib/core/**/*.wado > stdlib-cheatsheet.md
+wado doc -f simple lib/core/**/*.wado > stdlib-cheatsheet.md
+
+# Machine-readable output for tooling
+wado doc -f json lib/core/**/*.wado > stdlib-api.json
 ```
 
 Files are output in the order they are given (or glob-expanded).
@@ -375,25 +410,26 @@ Nested items (struct fields, trait methods, enum/variant cases, effect methods) 
 
 ## Implementation Plan
 
-### Phase 1: CommentKind + Lexer (Minimal)
+### Phase 1: CommentKind + Lexer (Minimal) — Done
 
 1. Add `DocLine` and `ModuleDoc` to `CommentKind`
 2. Update lexer's `lex_line_comment()` to detect `///` and `//!`
 3. Update formatter to preserve doc comment style (emit `///` not `//`)
 
-### Phase 2: `wado doc` CLI
+### Phase 2: `wado doc` CLI with Serde DOM — Done
 
-1. Add `Doc` to `Cmd` enum in `main.rs`
-2. Create `wado-cli/src/doc.rs` with `DocOptions`, `parse_args()`, `run()`
-3. Implement doc extraction using `CommentMap::leading_comments()`
-4. Implement full format (default): structured markdown with doc comments
-5. Implement simple format (`--simple`): compact Wado pseudo-code for cheatsheets
+1. Create `wado-compiler/src/doc.rs` with serde-serializable DOM types and `extract_doc()`
+2. Add `parse()` to `wado-compiler/src/lib.rs` for lightweight lex+parse
+3. Add `Doc` to `Cmd` enum in `main.rs`
+4. Create `wado-cli/src/doc.rs` with `--format` flag (markdown/simple/json)
+5. Implement markdown format (default): structured markdown with doc comments
+6. Implement simple format: compact Wado pseudo-code for cheatsheets
+7. Implement JSON format: pretty-printed serde DOM
 
 ### Future
 
 - `--filter <pattern>` to show only items matching a name pattern
 - `-o <file>` to write output to a file
-- JSON output format for programmatic consumption
 - HTML output with cross-references and search
 - `wado doc --serve` for local doc server
 - Integration with package registry for published docs
@@ -405,7 +441,7 @@ Nested items (struct fields, trait methods, enum/variant cases, effect methods) 
 
 - Zero AST changes — the existing `CommentMap` infrastructure handles everything
 - 571 existing `///` lines in the stdlib work immediately
-- Two formats serve different needs: simple for quick API lookup, full for reference docs
+- Three formats serve different needs: markdown for reference docs, simple for quick API lookup, JSON for tooling
 - `//!` module docs establish a file-level documentation convention early
 - `..` for private fields clearly communicates construction constraints
 
@@ -417,5 +453,5 @@ Nested items (struct fields, trait methods, enum/variant cases, effect methods) 
 ### Trade-offs
 
 - **CommentMap vs AST embedding**: CommentMap avoids touching the parser and AST, keeping the change surface minimal. AST embedding would be more robust but requires modifying every item struct. CommentMap is the right choice for Phase 1; AST embedding can be added later if needed.
-- **Full-default vs simple-default**: Full is the expected behavior for a `doc` command — complete documentation. Simple exists for a specific use case (cheatsheet generation) and is opt-in via `--simple`.
+- **Markdown-default vs simple-default**: Markdown is the expected behavior for a `doc` command — complete documentation. Simple exists for a specific use case (cheatsheet generation) and JSON for programmatic consumption; both are opt-in via `--format`.
 - **Source order vs alphabetical**: Source order respects author intent. Alphabetical is better for reference lookup. Source order is the default; alphabetical can be added as `--sort` later.
