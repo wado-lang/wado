@@ -87,7 +87,7 @@ fn encode_impl(data: &Array<u8>, table: &Array<u8>, pad: bool) -> String {
         out.append_char(table[(b0 << 4 | b1 >> 4) & 63] as char);
         out.append_char(table[(b1 << 2 | b2 >> 6) & 63] as char);
         out.append_char(table[b2 & 63] as char);
-        i = i + 3;
+        i += 3;
     }
 
     if remainder == 1 {
@@ -187,7 +187,7 @@ fn decode_impl(input: &Array<u8>, input_len: i32) -> Option<Array<u8>> {
         out.append((v0 << 2 | v1 >> 4) as u8);
         out.append(((v1 & 15) << 4 | v2 >> 2) as u8);
         out.append(((v2 & 3) << 6 | v3) as u8);
-        i = i + 4;
+        i += 4;
     }
 
     if remainder == 2 {
