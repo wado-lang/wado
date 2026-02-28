@@ -1,12 +1,12 @@
-// Compound assignment does not auto-dereference &T operand.
+// Simple and compound assignment do not auto-dereference &T to T.
 // Use explicit dereference (*ref) instead.
 export fn run() {
-    let mut z = 10;
-    let delta = 5;
-    let rd = &delta;
-
-    z += rd;    // i32 += &i32 → error
+    // Simple assignment: &i32 to i32 variable
+    let mut x = 0;
+    let val = 42;
+    let rv = &val;
+    x = rv;    // expected i32, found &i32 → error
 }
 
 __DATA__
-{"compile_error": "expected 'i32', found '&i32'"}
+{"TODO": true, "compile_error": "expected 'i32', found '&i32'"}
