@@ -17,7 +17,7 @@ Languages with first-class doc tooling (Rust's `rustdoc`, Go's `go doc`, Elixir'
 
 ### Doc Comment Syntax
 
-```wado
+````wado
 //! Module-level documentation.
 //! Appears at the top of a file, before any items.
 
@@ -36,13 +36,13 @@ pub struct Point {
     /// The y coordinate.
     y: i32,
 }
-```
+````
 
 **`///` (item doc):** Attaches to the immediately following item. Consecutive `///` lines are joined into a single doc string.
 
 **`//!` (module doc):** Attaches to the enclosing module (file). Must appear before any items.
 
-Doc comment text is extracted with the `/// ` prefix stripped (including the single space after `///`). A line containing only `///` becomes an empty line in the output.
+Doc comment text is extracted with the `///` prefix stripped (including the single space after `///`). A line containing only `///` becomes an empty line in the output.
 
 ### Visibility: Public API Only
 
@@ -79,10 +79,10 @@ wado doc
 wado doc --simple lib/core/**/*.wado
 ```
 
-| Flag       | Description                                        |
-| ---------- | -------------------------------------------------- |
+| Flag       | Description                                            |
+| ---------- | ------------------------------------------------------ |
 | `--simple` | Compact pseudo-code output (for cheatsheet generation) |
-| `--help`   | Show usage                                         |
+| `--help`   | Show usage                                             |
 
 Default output is `full` (structured markdown). Output goes to stdout.
 
@@ -95,10 +95,11 @@ The extraction algorithm:
 1. Parse the source file (get AST + `CommentMap`)
 2. For each top-level item, call `comment_map.leading_comments(&item.span)`
 3. Filter results to consecutive `///` lines immediately before the item
-4. Strip the `/// ` prefix and join into a markdown string
+4. Strip the `///` prefix and join into a markdown string
 5. For `//!` lines, scan comments at the file start (before the first item's span)
 
 This approach:
+
 - Requires **zero changes** to the parser, AST, or any compilation phase
 - Reuses the battle-tested `CommentMap` that the formatter already depends on
 - Works with existing `///` comments in the WASI stdlib without any source changes
@@ -173,7 +174,7 @@ Structured markdown with doc comments, field descriptions, and method documentat
 
 Output (`wado doc file.wado`):
 
-````markdown
+```markdown
 # file
 
 Core trait definitions for equality and ordering.
@@ -243,9 +244,10 @@ A 2D point.
 ## Functions
 
 ### `export fn run()`
-````
+```
 
 Rules for full format:
+
 - Module doc becomes the description under the `#` heading
 - Item doc comments appear as prose under their heading
 - Fields and methods listed with doc if present, without if absent
@@ -254,7 +256,7 @@ Rules for full format:
 
 #### Simple (`--simple`)
 
-Compressed markdown in the style of `docs/cheatsheet.md`. Uses `##` headings and ` ```wado ` code blocks to pack signatures densely. Designed for generating stdlib cheatsheets.
+Compressed markdown in the style of `docs/cheatsheet.md`. Uses `##` headings and `` ```wado `` code blocks to pack signatures densely. Designed for generating stdlib cheatsheets.
 
 Output (`wado doc --simple file.wado`):
 
@@ -325,8 +327,9 @@ export fn run();
 ````
 
 Rules for simple format:
+
 - Same markdown structure as full (`#` module, `##` categories) but no `###` per item
-- All items of the same category grouped into a single ` ```wado ` block
+- All items of the same category grouped into a single `` ```wado `` block
 - Doc comments omitted entirely — signatures only
 - `impl` blocks rendered as separate code blocks under their type's category
 - Function bodies replaced with `;`, globals omit initializers
@@ -394,7 +397,7 @@ Nested items (struct fields, trait methods, enum/variant cases, effect methods) 
 - HTML output with cross-references and search
 - `wado doc --serve` for local doc server
 - Integration with package registry for published docs
-- Intra-doc links: `` [`Point`] `` resolves to the Point section
+- Intra-doc links: ``[`Point`]`` resolves to the Point section
 
 ## Consequences
 
