@@ -18,37 +18,51 @@ pub flags Encoding {
     NoPadding,
 }
 
-// Standard Base64 alphabet (RFC 4648 §4)
-global STANDARD_TABLE: Array<u8> = [65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 43, 47] as Array<u8>;
+global STANDARD_TABLE: Array<u8> = [
+    'A' as u8, 'B' as u8, 'C' as u8, 'D' as u8, 'E' as u8, 'F' as u8, 'G' as u8,
+    'H' as u8, 'I' as u8, 'J' as u8, 'K' as u8, 'L' as u8, 'M' as u8, 'N' as u8,
+    'O' as u8, 'P' as u8, 'Q' as u8, 'R' as u8, 'S' as u8, 'T' as u8, 'U' as u8,
+    'V' as u8, 'W' as u8, 'X' as u8, 'Y' as u8, 'Z' as u8,
+    'a' as u8, 'b' as u8, 'c' as u8, 'd' as u8, 'e' as u8, 'f' as u8, 'g' as u8,
+    'h' as u8, 'i' as u8, 'j' as u8, 'k' as u8, 'l' as u8, 'm' as u8, 'n' as u8,
+    'o' as u8, 'p' as u8, 'q' as u8, 'r' as u8, 's' as u8, 't' as u8, 'u' as u8,
+    'v' as u8, 'w' as u8, 'x' as u8, 'y' as u8, 'z' as u8,
+    '0' as u8, '1' as u8, '2' as u8, '3' as u8, '4' as u8, '5' as u8, '6' as u8,
+    '7' as u8, '8' as u8, '9' as u8,
+    '+' as u8, '/' as u8,
+] as Array<u8>;
 
-// URL-safe Base64 alphabet (RFC 4648 §5)
-global URL_SAFE_TABLE: Array<u8> = [65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 45, 95] as Array<u8>;
+global URL_SAFE_TABLE: Array<u8> = [
+    'A' as u8, 'B' as u8, 'C' as u8, 'D' as u8, 'E' as u8, 'F' as u8, 'G' as u8,
+    'H' as u8, 'I' as u8, 'J' as u8, 'K' as u8, 'L' as u8, 'M' as u8, 'N' as u8,
+    'O' as u8, 'P' as u8, 'Q' as u8, 'R' as u8, 'S' as u8, 'T' as u8, 'U' as u8,
+    'V' as u8, 'W' as u8, 'X' as u8, 'Y' as u8, 'Z' as u8,
+    'a' as u8, 'b' as u8, 'c' as u8, 'd' as u8, 'e' as u8, 'f' as u8, 'g' as u8,
+    'h' as u8, 'i' as u8, 'j' as u8, 'k' as u8, 'l' as u8, 'm' as u8, 'n' as u8,
+    'o' as u8, 'p' as u8, 'q' as u8, 'r' as u8, 's' as u8, 't' as u8, 'u' as u8,
+    'v' as u8, 'w' as u8, 'x' as u8, 'y' as u8, 'z' as u8,
+    '0' as u8, '1' as u8, '2' as u8, '3' as u8, '4' as u8, '5' as u8, '6' as u8,
+    '7' as u8, '8' as u8, '9' as u8,
+    '-' as u8, '_' as u8,
+] as Array<u8>;
 
-// Decode table: maps byte value -> 6-bit value, 255 = invalid, 254 = padding (=)
-// Shared between standard and URL-safe (auto-detected)
 fn build_decode_table() -> Array<u8> {
-    let mut table: Array<u8> = Array::<u8>::filled(256, 255 as u8);
+    let mut table: Array<u8> = Array::<u8>::filled(256, 255);
 
-    // A-Z -> 0-25
     for let mut i = 0; i < 26; i += 1 {
-        table[65 + i] = i as u8;
+        table['A' as i32 + i] = i as u8;
     }
-    // a-z -> 26-51
     for let mut i = 0; i < 26; i += 1 {
-        table[97 + i] = (26 + i) as u8;
+        table['a' as i32 + i] = (26 + i) as u8;
     }
-    // 0-9 -> 52-61
     for let mut i = 0; i < 10; i += 1 {
-        table[48 + i] = (52 + i) as u8;
+        table['0' as i32 + i] = (52 + i) as u8;
     }
-    // Standard: + -> 62, / -> 63
-    table[43] = 62 as u8;
-    table[47] = 63 as u8;
-    // URL-safe: - -> 62, _ -> 63
-    table[45] = 62 as u8;
-    table[95] = 63 as u8;
-    // Padding
-    table[61] = 254 as u8;
+    table['+' as i32] = 62;
+    table['/' as i32] = 63;
+    table['-' as i32] = 62;
+    table['_' as i32] = 63;
+    table['=' as i32] = 254;
 
     return table;
 }
@@ -123,37 +137,30 @@ fn decode_impl(input: &Array<u8>, input_len: i32) -> Option<Array<u8>> {
         return Option::<Array<u8>>::Some([]);
     }
 
-    // Strip trailing padding and detect alphabet
     let mut end = input_len;
-    while end > 0 && input[end - 1] == 61 as u8 {
+    while end > 0 && input[end - 1] == '=' as u8 {
         end = end - 1;
     }
 
-    // Scan for alphabet detection and validation
     let mut has_standard = false;
     let mut has_url_safe = false;
     for let mut i = 0; i < end; i += 1 {
-        let b = input[i] as i32;
-        if b == 43 || b == 47 {
-            // '+' or '/'
+        let b = input[i];
+        if b == '+' as u8 || b == '/' as u8 {
             has_standard = true;
-        } else if b == 45 || b == 95 {
-            // '-' or '_'
+        } else if b == '-' as u8 || b == '_' as u8 {
             has_url_safe = true;
         }
     }
 
-    // Mixed alphabets -> error
     if has_standard && has_url_safe {
         return null;
     }
 
-    // Validate: length mod 4 == 1 is structurally invalid
     if end % 4 == 1 {
         return null;
     }
 
-    // Calculate output length
     let full_groups = end / 4;
     let remainder = end % 4;
     let mut out_len = full_groups * 3;
@@ -166,7 +173,6 @@ fn decode_impl(input: &Array<u8>, input_len: i32) -> Option<Array<u8>> {
     let mut out: Array<u8> = Array::<u8>::with_capacity(out_len);
     let table = &DECODE_TABLE;
 
-    // Decode full 4-char groups
     let mut i = 0;
     while i + 3 < end {
         let v0 = table[input[i] as i32] as i32;
@@ -174,7 +180,6 @@ fn decode_impl(input: &Array<u8>, input_len: i32) -> Option<Array<u8>> {
         let v2 = table[input[i + 2] as i32] as i32;
         let v3 = table[input[i + 3] as i32] as i32;
 
-        // Check for invalid characters (255 = invalid, 254 = padding)
         if v0 >= 254 || v1 >= 254 || v2 >= 254 || v3 >= 254 {
             return null;
         }
@@ -185,7 +190,6 @@ fn decode_impl(input: &Array<u8>, input_len: i32) -> Option<Array<u8>> {
         i = i + 4;
     }
 
-    // Handle remainder
     if remainder == 2 {
         let v0 = table[input[i] as i32] as i32;
         let v1 = table[input[i + 1] as i32] as i32;
