@@ -1692,6 +1692,26 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
 
+            // Check trait bounds on inferred type arguments
+            if let Some(struct_info) = self.struct_fields.get(&struct_name).cloned() {
+                for (i, (param_name, bounds)) in struct_info.type_param_bounds.iter().enumerate() {
+                    if let Some(&type_arg) = type_args.get(i) {
+                        for bound in bounds {
+                            if !self.type_implements_trait(type_arg, bound) {
+                                let type_name = self.type_id_to_string(type_arg);
+                                let _ =
+                                    self.logger.error(TypeError::TraitBoundNotSatisfied {
+                                        type_name,
+                                        trait_name: bound.clone(),
+                                        param_name: param_name.clone(),
+                                        span: struct_lit.span,
+                                    });
+                            }
+                        }
+                    }
+                }
+            }
+
             let struct_type = self.type_table.borrow_mut().make_generic_instance(
                 struct_name.clone(),
                 struct_module_source.clone(),
