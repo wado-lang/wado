@@ -155,46 +155,6 @@ pub struct Formatter {
     precision: i32,
     buf: &mut String,
 }
-
-pub struct u128 {
-    ..
-}
-
-pub struct i128 {
-    ..
-}
-
-pub struct String {
-    ..
-}
-
-pub struct StrUtf8ByteIter {
-    ..
-}
-
-pub struct StrCharIter {
-    ..
-}
-
-pub struct Array<T> {
-    ..
-}
-
-pub struct ArrayIter<T> {
-    ..
-}
-
-pub struct EnumerateIter<T> {
-    ..
-}
-
-pub struct MapIter<T, U> {
-    ..
-}
-
-pub struct FilterIter<T> {
-    ..
-}
 ```
 
 ```wado
@@ -208,6 +168,12 @@ impl Formatter {
     pub fn apply_padding(&mut self, start_pos: i32);
     pub fn write_from_memory(&mut self, ptr: i32, len: i32);
     pub fn prepare_int_write(&mut self, is_negative: bool, prefix: String, digit_count: i32) -> i32;
+}
+```
+
+```wado
+pub struct u128 {
+    ..
 }
 ```
 
@@ -227,24 +193,120 @@ impl u128 {
     pub fn get_bit(&self, i: i32) -> bool;
     pub fn set_bit(&self, i: i32) -> u128;
     pub fn to_string(&self) -> String;
+}
+```
+
+```wado
+impl Display for u128 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+```
+
+```wado
+impl Binary for u128 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+```
+
+```wado
+impl Octal for u128 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+```
+
+```wado
+impl LowerHex for u128 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+```
+
+```wado
+impl UpperHex for u128 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+```
+
+```wado
+impl Eq for u128 {
     pub fn eq(&self, other: &Self) -> bool;
+}
+```
+
+```wado
+impl Ord for u128 {
     pub fn cmp(&self, other: &Self) -> Ordering;
+}
+```
+
+```wado
+impl Add for u128 {
     pub fn add(&self, other: &Self) -> Self::Output;
+}
+```
+
+```wado
+impl Sub for u128 {
     pub fn sub(&self, other: &Self) -> Self::Output;
+}
+```
+
+```wado
+impl Mul for u128 {
     pub fn mul(&self, other: &Self) -> Self::Output;
+}
+```
+
+```wado
+impl BitAnd for u128 {
     pub fn bitand(&self, other: &Self) -> Self::Output;
+}
+```
+
+```wado
+impl BitOr for u128 {
     pub fn bitor(&self, other: &Self) -> Self::Output;
+}
+```
+
+```wado
+impl BitXor for u128 {
     pub fn bitxor(&self, other: &Self) -> Self::Output;
+}
+```
+
+```wado
+impl BitNot for u128 {
     pub fn bitnot(&self) -> Self::Output;
+}
+```
+
+```wado
+impl Shl for u128 {
     pub fn shl(&self, rhs: u32) -> Self::Output;
+}
+```
+
+```wado
+impl Shr for u128 {
     pub fn shr(&self, rhs: u32) -> Self::Output;
+}
+```
+
+```wado
+impl Div for u128 {
     pub fn div(&self, other: &Self) -> Self::Output;
+}
+```
+
+```wado
+impl Rem for u128 {
     pub fn rem(&self, other: &Self) -> Self::Output;
+}
+```
+
+```wado
+pub struct i128 {
+    ..
 }
 ```
 
@@ -265,25 +327,126 @@ impl i128 {
     pub fn from_u128(val: u128) -> i128;
     pub fn div_rem(&self, divisor: &i128) -> [i128, i128];
     pub fn to_string(&self) -> String;
+}
+```
+
+```wado
+impl Display for i128 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+```
+
+```wado
+impl Binary for i128 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+```
+
+```wado
+impl Octal for i128 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+```
+
+```wado
+impl LowerHex for i128 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+```
+
+```wado
+impl UpperHex for i128 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+```
+
+```wado
+impl Eq for i128 {
     pub fn eq(&self, other: &Self) -> bool;
+}
+```
+
+```wado
+impl Ord for i128 {
     pub fn cmp(&self, other: &Self) -> Ordering;
+}
+```
+
+```wado
+impl Add for i128 {
     pub fn add(&self, other: &Self) -> Self::Output;
+}
+```
+
+```wado
+impl Sub for i128 {
     pub fn sub(&self, other: &Self) -> Self::Output;
+}
+```
+
+```wado
+impl Mul for i128 {
     pub fn mul(&self, other: &Self) -> Self::Output;
+}
+```
+
+```wado
+impl Neg for i128 {
     pub fn neg(&self) -> Self::Output;
+}
+```
+
+```wado
+impl BitAnd for i128 {
     pub fn bitand(&self, other: &Self) -> Self::Output;
+}
+```
+
+```wado
+impl BitOr for i128 {
     pub fn bitor(&self, other: &Self) -> Self::Output;
+}
+```
+
+```wado
+impl BitXor for i128 {
     pub fn bitxor(&self, other: &Self) -> Self::Output;
+}
+```
+
+```wado
+impl BitNot for i128 {
     pub fn bitnot(&self) -> Self::Output;
+}
+```
+
+```wado
+impl Shl for i128 {
     pub fn shl(&self, rhs: u32) -> Self::Output;
+}
+```
+
+```wado
+impl Shr for i128 {
     pub fn shr(&self, rhs: u32) -> Self::Output;
+}
+```
+
+```wado
+impl Div for i128 {
     pub fn div(&self, other: &Self) -> Self::Output;
+}
+```
+
+```wado
+impl Rem for i128 {
     pub fn rem(&self, other: &Self) -> Self::Output;
+}
+```
+
+```wado
+pub struct String {
+    ..
 }
 ```
 
@@ -302,8 +465,6 @@ impl String {
     pub fn append_byte_filled(&mut self, byte: u8, n: i32);
     pub fn append(&mut self, other: String);
     pub fn concat(a: String, b: String) -> String;
-    pub fn eq(&self, other: &Self) -> bool;
-    pub fn cmp(&self, other: &Self) -> Ordering;
     pub fn bytes(&self) -> StrUtf8ByteIter;
     pub fn chars(&self) -> StrCharIter;
     pub fn append_char(&mut self, c: char);
@@ -319,14 +480,44 @@ impl String {
 ```
 
 ```wado
-impl StrUtf8ByteIter {
+impl Eq for String {
+    pub fn eq(&self, other: &Self) -> bool;
+}
+```
+
+```wado
+impl Ord for String {
+    pub fn cmp(&self, other: &Self) -> Ordering;
+}
+```
+
+```wado
+pub struct StrUtf8ByteIter {
+    ..
+}
+```
+
+```wado
+impl Iterator for StrUtf8ByteIter {
     pub fn next(&mut self) -> Option<Self::Item>;
 }
 ```
 
 ```wado
-impl StrCharIter {
+pub struct StrCharIter {
+    ..
+}
+```
+
+```wado
+impl Iterator for StrCharIter {
     pub fn next(&mut self) -> Option<Self::Item>;
+}
+```
+
+```wado
+pub struct Array<T> {
+    ..
 }
 ```
 
@@ -339,14 +530,62 @@ impl Array {
     pub fn internal_raw_data(&self) -> builtin::array<T>;
     pub fn append(&mut self, value: T);
     pub fn get(&self, index: i32) -> Option<T>;
-    pub fn eq(&self, other: &Self) -> bool;
-    pub fn cmp(&self, other: &Self) -> Ordering;
     pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T>;
     pub fn iter(&self) -> ArrayIter<T>;
     pub fn sort_by(&mut self, cmp: Fn(&T, &T) -> Ordering);
     pub fn sorted_by(&self, cmp: Fn(&T, &T) -> Ordering) -> Array<T>;
     pub fn sort(&mut self);
     pub fn sorted(&self) -> Array<T>;
+}
+```
+
+```wado
+impl IndexValue<i32> for Array<T> {
+    fn index_value(&self, index: i32) -> Self::Output;
+}
+```
+
+```wado
+impl IndexAssign<i32> for Array<T> {
+    fn index_assign(&mut self, index: i32, value: Self::Input);
+}
+```
+
+```wado
+impl Eq for Array<T> {
+    pub fn eq(&self, other: &Self) -> bool;
+}
+```
+
+```wado
+impl Ord for Array<T> {
+    pub fn cmp(&self, other: &Self) -> Ordering;
+}
+```
+
+```wado
+impl IntoIterator for Array<T> {
+    fn into_iter(&self) -> Self::Iter;
+}
+```
+
+```wado
+impl FromIterator<T> for Array<T> {
+    fn from_iter(iter: ArrayIter<T>) -> Array<T>;
+}
+```
+
+```wado
+impl SequenceLiteralBuilder for Array<T> {
+    fn new_literal(capacity: i32) -> Array<T>;
+    fn push_literal(&mut self, value: T);
+    fn build(&self) -> Array<T>;
+}
+```
+
+```wado
+pub struct ArrayIter<T> {
+    ..
 }
 ```
 
@@ -375,8 +614,44 @@ impl ArrayIter {
 ```
 
 ```wado
+impl Iterator for ArrayIter<T> {
+    fn next(&mut self) -> Option<Self::Item>;
+}
+```
+
+```wado
+pub struct EnumerateIter<T> {
+    ..
+}
+```
+
+```wado
+impl Iterator for EnumerateIter<T> {
+    fn next(&mut self) -> Option<Self::Item>;
+}
+```
+
+```wado
+pub struct MapIter<T, U> {
+    ..
+}
+```
+
+```wado
 impl MapIter {
     pub fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, U) -> Acc) -> Acc;
+}
+```
+
+```wado
+impl Iterator for MapIter<T, U> {
+    fn next(&mut self) -> Option<Self::Item>;
+}
+```
+
+```wado
+pub struct FilterIter<T> {
+    ..
 }
 ```
 
@@ -387,10 +662,19 @@ impl FilterIter {
 }
 ```
 
+```wado
+impl Iterator for FilterIter<T> {
+    fn next(&mut self) -> Option<Self::Item>;
+}
+```
+
 ## Enums
 
 ```wado
 pub enum Ordering { Less, Equal, Greater }
+```
+
+```wado
 pub enum Alignment { Left, Center, Right }
 ```
 
@@ -401,6 +685,9 @@ pub variant Option<T> {
     Some(T),
     None,
 }
+```
+
+```wado
 pub variant Result<T, E> {
     Ok(T),
     Err(E),
@@ -472,6 +759,26 @@ impl TreeMap {
 }
 ```
 
+```wado
+impl IndexAssign<K> for TreeMap<K, V> {
+    fn index_assign(&mut self, key: K, value: Self::Input);
+}
+```
+
+```wado
+impl IndexValue<K> for TreeMap<K, V> {
+    fn index_value(&self, key: K) -> Self::Output;
+}
+```
+
+```wado
+impl KeyValueLiteralBuilder for TreeMap<String, V> {
+    fn new_literal(capacity: i32) -> TreeMap<String, V>;
+    fn insert_literal(&mut self, key: String, value: Self::Value);
+    fn build(&self) -> TreeMap<String, V>;
+}
+```
+
 # core:base64
 
 ## Flags
@@ -501,14 +808,6 @@ pub fn decode_bytes(encoded: &Array<u8>) -> Option<Array<u8>>;
 pub struct GzipHeader {
     ..
 }
-
-pub struct DeflateStream {
-    ..
-}
-
-pub struct InflateStream {
-    ..
-}
 ```
 
 ```wado
@@ -521,6 +820,12 @@ impl GzipHeader {
     pub fn set_name(&mut self, name: String);
     pub fn set_comment(&mut self, comment: String);
     pub fn set_hcrc(&mut self, hcrc: bool);
+}
+```
+
+```wado
+pub struct DeflateStream {
+    ..
 }
 ```
 
@@ -542,6 +847,12 @@ impl DeflateStream {
     pub fn update(&mut self, chunk: &Array<u8>);
     pub fn finish(&mut self) -> Array<u8>;
     pub fn compress(&mut self, input: &Array<u8>) -> Array<u8>;
+}
+```
+
+```wado
+pub struct InflateStream {
+    ..
 }
 ```
 

@@ -129,7 +129,7 @@ pub fn run(opts: DocOptions) {
         if is_stdlib_module(input) {
             // Resolve stdlib module by name (e.g., "core:cli", "wasi:http")
             if let Some(doc) = extract_stdlib_doc(input) {
-                doc_modules.push(doc)
+                doc_modules.push(doc);
             } else {
                 eprintln!("Unknown stdlib module: {input}");
                 process::exit(1);
@@ -390,19 +390,12 @@ fn render_simple(doc: &DocModule) -> String {
     }
 
     if !doc.structs.is_empty() {
-        out.push_str("\n## Structs\n\n```wado\n");
-        for (i, s) in doc.structs.iter().enumerate() {
-            if i > 0 {
-                out.push('\n');
-            }
-            render_simple_struct(&mut out, s);
-        }
-        out.push_str("```\n");
-
+        out.push_str("\n## Structs\n");
         for s in &doc.structs {
-            if s.methods.is_empty() && s.trait_impls.is_empty() {
-                continue;
-            }
+            out.push_str("\n```wado\n");
+            render_simple_struct(&mut out, s);
+            out.push_str("```\n");
+
             if !s.methods.is_empty() {
                 let type_name = s
                     .signature
@@ -444,17 +437,16 @@ fn render_simple(doc: &DocModule) -> String {
     }
 
     if !doc.enums.is_empty() {
-        out.push_str("\n## Enums\n\n```wado\n");
+        out.push_str("\n## Enums\n");
         for e in &doc.enums {
-            writeln!(out, "{}", e.signature).unwrap();
+            writeln!(out, "\n```wado\n{}\n```", e.signature).unwrap();
         }
-        out.push_str("```\n");
     }
 
     if !doc.variants.is_empty() {
-        out.push_str("\n## Variants\n\n```wado\n");
+        out.push_str("\n## Variants\n");
         for v in &doc.variants {
-            writeln!(out, "{} {{", v.signature).unwrap();
+            writeln!(out, "\n```wado\n{} {{", v.signature).unwrap();
             for case in &v.cases {
                 if let Some(ref p) = case.payload {
                     writeln!(out, "    {}({p}),", case.name).unwrap();
@@ -462,21 +454,19 @@ fn render_simple(doc: &DocModule) -> String {
                     writeln!(out, "    {},", case.name).unwrap();
                 }
             }
-            out.push_str("}\n");
+            out.push_str("}\n```\n");
         }
-        out.push_str("```\n");
     }
 
     if !doc.flags.is_empty() {
-        out.push_str("\n## Flags\n\n```wado\n");
+        out.push_str("\n## Flags\n");
         for f in &doc.flags {
-            writeln!(out, "{} {{", f.signature).unwrap();
+            writeln!(out, "\n```wado\n{} {{", f.signature).unwrap();
             for member in &f.members {
                 writeln!(out, "    {member},").unwrap();
             }
-            out.push_str("}\n");
+            out.push_str("}\n```\n");
         }
-        out.push_str("```\n");
     }
 
     if !doc.functions.is_empty() {

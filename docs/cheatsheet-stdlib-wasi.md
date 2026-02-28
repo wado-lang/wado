@@ -19,12 +19,16 @@ pub struct DescriptorStat {
     data_modification_timestamp: Option<Instant>,
     status_change_timestamp: Option<Instant>,
 }
+```
 
+```wado
 pub struct DirectoryEntry {
     type: DescriptorType,
     name: String,
 }
+```
 
+```wado
 pub struct MetadataHashValue {
     lower: u64,
     upper: u64,
@@ -42,7 +46,13 @@ pub type LinkCount = u64;
 
 ```wado
 pub enum DescriptorType { Unknown, BlockDevice, CharacterDevice, Directory, Fifo, SymbolicLink, RegularFile, Socket }
+```
+
+```wado
 pub enum ErrorCode { Access, Already, BadDescriptor, Busy, Deadlock, Quota, Exist, FileTooLarge, IllegalByteSequence, InProgress, Interrupted, Invalid, Io, IsDirectory, Loop, TooManyLinks, MessageSize, NameTooLong, NoDevice, NoEntry, NoLock, InsufficientMemory, InsufficientSpace, NotDirectory, NotEmpty, NotRecoverable, Unsupported, NoTty, NoSuchDevice, Overflow, NotPermitted, Pipe, ReadOnly, InvalidSeek, TextFileBusy, CrossDevice }
+```
+
+```wado
 pub enum Advice { Normal, Sequential, Random, WillNeed, DontNeed, NoReuse }
 ```
 
@@ -67,9 +77,15 @@ pub flags DescriptorFlags {
     RequestedWriteSync,
     MutateDirectory,
 }
+```
+
+```wado
 pub flags PathFlags {
     SymlinkFollow,
 }
+```
+
+```wado
 pub flags OpenFlags {
     Create,
     Directory,
@@ -87,12 +103,16 @@ pub struct DnsErrorPayload {
     rcode: Option<String>,
     info_code: Option<u16>,
 }
+```
 
+```wado
 pub struct TlsAlertReceivedPayload {
     alert_id: Option<u8>,
     alert_message: Option<String>,
 }
+```
 
+```wado
 pub struct FieldSizePayload {
     field_name: Option<String>,
     field_size: Option<u32>,
@@ -124,11 +144,17 @@ pub variant Method {
     Patch,
     Other(String),
 }
+```
+
+```wado
 pub variant Scheme {
     Http,
     Https,
     Other(String),
 }
+```
+
+```wado
 pub variant ErrorCode {
     DnsTimeout,
     DnsError(DnsErrorPayload),
@@ -170,11 +196,17 @@ pub variant ErrorCode {
     ConfigurationError,
     InternalError(Option<String>),
 }
+```
+
+```wado
 pub variant HeaderError {
     InvalidSyntax,
     Forbidden,
     Immutable,
 }
+```
+
+```wado
 pub variant RequestOptionsError {
     NotSupported,
     Immutable,
@@ -210,7 +242,9 @@ pub struct Ipv4SocketAddress {
     port: u16,
     address: Ipv4Address,
 }
+```
 
+```wado
 pub struct Ipv6SocketAddress {
     port: u16,
     flow_info: u32,
@@ -230,7 +264,13 @@ pub type Ipv6Address = [u16, u16, u16, u16, u16, u16, u16, u16];
 
 ```wado
 pub enum ErrorCode { Unknown, AccessDenied, NotSupported, InvalidArgument, OutOfMemory, Timeout, InvalidState, AddressNotBindable, AddressInUse, RemoteUnreachable, ConnectionRefused, ConnectionReset, ConnectionAborted, DatagramTooLarge }
+```
+
+```wado
 pub enum IpAddressFamily { Ipv4, Ipv6 }
+```
+
+```wado
 pub enum ErrorCode { Unknown, AccessDenied, InvalidArgument, NameUnresolvable, TemporaryResolverFailure, PermanentResolverFailure }
 ```
 
@@ -241,6 +281,9 @@ pub variant IpAddress {
     Ipv4(Ipv4Address),
     Ipv6(Ipv6Address),
 }
+```
+
+```wado
 pub variant IpSocketAddress {
     Ipv4(Ipv4SocketAddress),
     Ipv6(Ipv6SocketAddress),
