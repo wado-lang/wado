@@ -623,72 +623,31 @@ Primitive types provide built-in associated constants:
 | `f32`                    | `PI`, `TAU`, `E`, `INFINITY`, `NEG_INFINITY`, `NAN`                                                                                        |
 | `i8`..`i64`, `u8`..`u64` | `MAX`, `MIN`                                                                                                                               |
 
-## char Conversion
+## Primitive Type Methods
+
+For the full API, see [Core Standard Library Reference](./cheatsheet-stdlib-core.md#primitive-types).
 
 ```wado
-// char -> integer (extracts code point, truncated for smaller types)
+// char conversion
 let code = 'A' as i32;              // 65
-let ucode = 'A' as u32;            // 65
-let byte = 'A' as u8;              // 65
-
-// u8 -> char is always valid (all u8 values are valid Unicode)
-let c = (65 as u8) as char;         // 'A'
-
-// integer -> char: use checked conversion (as char is a compile error)
 let c = char::from_u32(65 as u32);  // Option<char>: Some('A')
 let c = char::from_i32(65);         // Option<char>: Some('A')
 
-// Invalid values return null
-char::from_u32(0xD800 as u32);      // null (surrogate)
-char::from_u32(0x110000 as u32);    // null (out of range)
-char::from_i32(-1);                 // null (negative)
-
-// Unchecked conversion (caller must ensure validity)
-let c = char::from_u32_unchecked(65 as u32);  // 'A'
-```
-
-## Math Functions
-
-Math functions are provided as static methods on `f64` and `f32`:
-
-```wado
-// Constants
+// Math (static methods on f64/f32)
 let pi = f64::PI;
-let e = f64::E;
+f64::sin(x)    f64::cos(x)    f64::sqrt(x)
+f64::abs(x)    f64::ceil(x)   f64::floor(x)
+f64::pow(x, y) f64::ln(x)     f64::exp(x)
 
-// Wasm instruction math (single-instruction, fast)
-f64::abs(x)        f64::ceil(x)       f64::floor(x)
-f64::trunc(x)      f64::round(x)      f64::sqrt(x)
-f64::min(x, y)     f64::max(x, y)     f64::copysign(x, y)
+// Float classification
+x.is_nan()     x.is_finite()
 
-// Transcendental math (bundled deterministic libm)
-f64::sin(x)        f64::cos(x)        f64::tan(x)
-f64::asin(x)       f64::acos(x)       f64::atan(x)
-f64::atan2(y, x)   f64::sinh(x)       f64::cosh(x)
-f64::tanh(x)       f64::asinh(x)      f64::acosh(x)
-f64::atanh(x)      f64::exp(x)        f64::exp2(x)
-f64::expm1(x)      f64::ln(x)         f64::log2(x)
-f64::log10(x)      f64::ln1p(x)       f64::pow(x, y)
-f64::cbrt(x)       f64::hypot(x, y)   f64::fmod(x, y)
-
-// Float classification (instance methods)
-x.is_nan()         // true if x is NaN
-x.is_finite()      // true if x is not NaN or infinity
-
-// Parsing from strings
+// Parsing
 f64::parse("3.14")   // Option<f64>: Some(3.14)
-f32::parse("-42")    // Option<f32>: Some(-42.0)
-f64::parse("inf")    // Some(f64::INFINITY)
-f64::parse("nan")    // Some(NaN)
-f64::parse("abc")    // None
 
-// f32 has the same set of functions
-f32::sin(x)        f32::sqrt(x)       f32::PI
-
-// Integer min/max
+// Integer min/max and constants
 i32::min(a, b)     i32::max(a, b)
-i64::min(a, b)     i64::max(a, b)
-// Also available for i8, u8, i16, u16, u32, u64
+i32::MAX           i32::MIN
 ```
 
 ## Traits

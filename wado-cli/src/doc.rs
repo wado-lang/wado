@@ -5,8 +5,8 @@ use std::process;
 
 use lexopt::Arg::Value;
 use wado_compiler::doc::{
-    DocEffect, DocEnum, DocFlags, DocModule, DocResource, DocStruct, DocTrait, DocVariant,
-    extract_doc, extract_stdlib_doc,
+    DocEffect, DocEnum, DocFlags, DocModule, DocPrimitiveType, DocResource, DocStruct, DocTrait,
+    DocVariant, extract_doc, extract_stdlib_doc,
 };
 
 use crate::args::{self, CliExit};
@@ -272,6 +272,7 @@ fn render_markdown(doc: &DocModule, h_offset: usize) -> String {
     render_md_resources_section(&mut out, doc, h2, h3, h4);
     render_md_traits_section(&mut out, doc, h2, h3, h4);
     render_md_structs_section(&mut out, doc, h2, h3, h4);
+    render_md_primitive_types_section(&mut out, doc, h2, h3, h4);
     render_md_variants_section(&mut out, doc, h2, h3, h4);
     render_md_functions_section(&mut out, doc, h2, h3);
 
@@ -363,6 +364,43 @@ fn render_md_structs_section(out: &mut String, doc: &DocModule, h2: &str, h3: &s
     writeln!(out, "\n{h2} Structs").unwrap();
     for s in &doc.structs {
         render_md_struct(out, s, h3, h4);
+    }
+}
+
+fn render_md_primitive_types_section(
+    out: &mut String,
+    doc: &DocModule,
+    h2: &str,
+    h3: &str,
+    h4: &str,
+) {
+    if doc.primitive_types.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Primitive Types").unwrap();
+    for p in &doc.primitive_types {
+        render_md_primitive_impl(out, p, h3, h4);
+    }
+}
+
+fn render_md_primitive_impl(out: &mut String, p: &DocPrimitiveType, h3: &str, h4: &str) {
+    writeln!(out, "\n{h3} `{}`", p.name).unwrap();
+    if let Some(ref d) = p.doc {
+        out.push('\n');
+        render_md_doc(out, d);
+    }
+    for c in &p.constants {
+        render_md_entity(out, &c.signature, c.doc.as_deref(), h4);
+    }
+    for m in &p.methods {
+        render_md_entity(out, &m.signature, m.doc.as_deref(), h4);
+    }
+    for ti in &p.trait_impls {
+        writeln!(out, "\n{h4} `{}`", ti.signature).unwrap();
+        let h5 = h(heading_level(h4) + 1);
+        for m in &ti.methods {
+            render_md_entity(out, &m.signature, m.doc.as_deref(), h5);
+        }
     }
 }
 
@@ -649,6 +687,7 @@ fn render_simple(doc: &DocModule, h_offset: usize) -> String {
     render_simple_resources_section(&mut out, doc, h2);
     render_simple_traits_section(&mut out, doc, h2);
     render_simple_structs_section(&mut out, doc, h2);
+    render_simple_primitive_types_section(&mut out, doc, h2);
     render_simple_variants_section(&mut out, doc, h2);
     render_simple_functions_section(&mut out, doc, h2);
 
@@ -782,6 +821,32 @@ fn render_simple_structs_section(out: &mut String, doc: &DocModule, h2: &str) {
             out.push_str("}\n");
         }
         for ti in &s.trait_impls {
+            writeln!(out, "\n{} {{", ti.signature).unwrap();
+            for m in &ti.methods {
+                writeln!(out, "    {};", m.signature).unwrap();
+            }
+            out.push_str("}\n");
+        }
+        out.push_str("```\n");
+    }
+}
+
+fn render_simple_primitive_types_section(out: &mut String, doc: &DocModule, h2: &str) {
+    if doc.primitive_types.is_empty() {
+        return;
+    }
+    writeln!(out, "\n{h2} Primitive Types").unwrap();
+    for p in &doc.primitive_types {
+        out.push_str("\n```wado\n");
+        writeln!(out, "impl {} {{", p.name).unwrap();
+        for c in &p.constants {
+            writeln!(out, "    {};", c.signature).unwrap();
+        }
+        for m in &p.methods {
+            writeln!(out, "    {};", m.signature).unwrap();
+        }
+        out.push_str("}\n");
+        for ti in &p.trait_impls {
             writeln!(out, "\n{} {{", ti.signature).unwrap();
             for m in &ti.methods {
                 writeln!(out, "    {};", m.signature).unwrap();

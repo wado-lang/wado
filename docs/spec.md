@@ -750,43 +750,7 @@ impl f64 {
 let pi = f64::PI;  // inlined as the literal value
 ```
 
-Primitive types provide built-in associated constants for limits and mathematical constants:
-
-```wado
-// Integer limits
-i32::MAX    // 2147483647
-i32::MIN    // -2147483648
-u8::MAX     // 255
-
-// Float constants
-f64::PI     // 3.14159265358979323846
-f64::E      // 2.71828182845904523536
-f64::TAU    // 2 * PI
-f64::INFINITY
-f64::NEG_INFINITY
-```
-
-### Math Functions
-
-Math functions are static methods on `f64` and `f32`. Functions that map to single Wasm instructions compile to those instructions directly. Transcendental functions use a bundled deterministic libm for cross-platform reproducibility.
-
-```wado
-// Wasm instruction math
-f64::abs(x)    f64::ceil(x)    f64::floor(x)    f64::trunc(x)
-f64::round(x)  f64::sqrt(x)    f64::min(x, y)   f64::max(x, y)
-f64::copysign(x, y)
-
-// Transcendental math (bundled libm)
-f64::sin(x)    f64::cos(x)     f64::tan(x)
-f64::asin(x)   f64::acos(x)    f64::atan(x)     f64::atan2(y, x)
-f64::sinh(x)   f64::cosh(x)    f64::tanh(x)
-f64::asinh(x)  f64::acosh(x)   f64::atanh(x)
-f64::exp(x)    f64::exp2(x)    f64::expm1(x)
-f64::ln(x)     f64::log2(x)    f64::log10(x)    f64::ln1p(x)
-f64::pow(x, y) f64::cbrt(x)    f64::hypot(x, y) f64::fmod(x, y)
-```
-
-All functions are available for both `f64` and `f32` with the same names.
+Primitive types provide built-in associated constants and static methods. See [Core Standard Library Reference](./stdlib-core.md) for the full list.
 
 ### 128-bit Integer Types (i128/u128)
 
@@ -1185,18 +1149,9 @@ Use checked conversion functions instead:
 ```wado
 let c = char::from_u32(65 as u32);  // Option<char>: Some('A')
 let c = char::from_i32(65);         // Option<char>: Some('A')
-
-// Invalid values return null (None)
-char::from_u32(0xD800 as u32);      // null (surrogate)
-char::from_u32(0x110000 as u32);    // null (out of range)
-char::from_i32(-1);                 // null (negative)
 ```
 
-For performance-critical code where validity is already guaranteed, use `from_u32_unchecked`:
-
-```wado
-let c = char::from_u32_unchecked(65 as u32);  // 'A' (no validation)
-```
+See [Core Standard Library Reference](./stdlib-core.md) for the full `char` API.
 
 Casting `char` to non-integer types is a compile error:
 

@@ -2,9 +2,9 @@ use indexmap::IndexSet;
 use serde::Serialize;
 
 use crate::ast::{
-    Attribute, EffectDecl, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl, ImplBlock,
-    Item, Module, Newtype, Param, SelfKind, StructDecl, StructField, TraitDecl, Type, UseItem,
-    VariantDecl,
+    AssociatedConst, Attribute, EffectDecl, EnumDecl, FlagsDecl, Function, GenericParam,
+    GlobalDecl, ImplBlock, Item, Module, Newtype, Param, SelfKind, StructDecl, StructField,
+    TraitDecl, Type, UseItem, VariantDecl,
 };
 use crate::comment::{CommentKind, CommentMap};
 use crate::stdlib;
@@ -35,6 +35,21 @@ pub struct DocModule {
     pub resources: Vec<DocResource>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub functions: Vec<DocFunction>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub primitive_types: Vec<DocPrimitiveType>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DocPrimitiveType {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub constants: Vec<DocFunction>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub methods: Vec<DocFunction>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub trait_impls: Vec<DocTraitImpl>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -223,6 +238,7 @@ pub fn extract_doc(module: &Module, comments: &CommentMap, module_name: &str) ->
         effects,
         resources,
         functions,
+        primitive_types: Vec::new(),
     }
 }
 
@@ -728,6 +744,41 @@ pub fn extract_stdlib_doc(module_name: &str) -> Option<DocModule> {
         }
     }
 
+    // Follow `use _ from "..."` (side-effect imports) to collect impl blocks on primitive types
+    let side_effect_sources = collect_side_effect_import_sources(&parsed.ast);
+    for se_source in &side_effect_sources {
+        if let Some(sub_source) = stdlib::get_stdlib_module(se_source)
+            && let Ok(sub_parsed) = crate::parse(sub_source)
+        {
+            let prim_types =
+                collect_primitive_types_from_module(&sub_parsed.ast, &sub_parsed.comments);
+            merge_primitive_types(&mut doc.primitive_types, prim_types);
+        }
+    }
+
+    // Also collect from any pub use re-export sources that may have primitive impls
+    for reexport_source in &reexport_sources {
+        if let Some(sub_source) = stdlib::get_stdlib_module(reexport_source)
+            && let Ok(sub_parsed) = crate::parse(sub_source)
+        {
+            // Recursively follow side-effect imports from re-exported sub-modules
+            let sub_se_sources = collect_side_effect_import_sources(&sub_parsed.ast);
+            for sub_se in &sub_se_sources {
+                if let Some(se_source) = stdlib::get_stdlib_module(sub_se)
+                    && let Ok(se_parsed) = crate::parse(se_source)
+                {
+                    let prim_types =
+                        collect_primitive_types_from_module(&se_parsed.ast, &se_parsed.comments);
+                    merge_primitive_types(&mut doc.primitive_types, prim_types);
+                }
+            }
+            // Also check the re-exported module itself
+            let prim_types =
+                collect_primitive_types_from_module(&sub_parsed.ast, &sub_parsed.comments);
+            merge_primitive_types(&mut doc.primitive_types, prim_types);
+        }
+    }
+
     Some(doc)
 }
 
@@ -822,6 +873,19 @@ fn merge_reexported_items(parent: &mut DocModule, child: &DocModule, names: &Ind
     }
 }
 
+/// Merge primitive impl entries, combining methods for the same type name.
+fn merge_primitive_types(target: &mut Vec<DocPrimitiveType>, source: Vec<DocPrimitiveType>) {
+    for src in source {
+        if let Some(existing) = target.iter_mut().find(|t| t.name == src.name) {
+            existing.constants.extend(src.constants);
+            existing.methods.extend(src.methods);
+            existing.trait_impls.extend(src.trait_impls);
+        } else {
+            target.push(src);
+        }
+    }
+}
+
 /// Extract the item name from a signature string.
 /// e.g., "pub trait Eq" with keyword "trait " → "Eq"
 fn extract_item_name<'a>(sig: &'a str, keyword: &str) -> &'a str {
@@ -879,4 +943,94 @@ fn collect_impl_methods_for_type(
     }
 
     (inherent_methods, trait_impls)
+}
+
+const PRIMITIVE_TYPE_NAMES: &[&str] = &[
+    "bool", "char", "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64", "f32", "f64",
+];
+
+fn build_doc_const(c: &AssociatedConst, comments: &CommentMap) -> DocFunction {
+    let mut sig = String::new();
+    if c.is_pub {
+        sig.push_str("pub ");
+    }
+    sig.push_str("const ");
+    sig.push_str(&c.name);
+    sig.push_str(": ");
+    unparse_type_into(&c.ty, &mut sig);
+    DocFunction {
+        signature: sig,
+        doc: extract_doc_comment_with_attrs(comments, &c.span, &[]),
+    }
+}
+
+/// Collect `use _ from "..."` (side-effect import) source paths.
+fn collect_side_effect_import_sources(module: &Module) -> Vec<String> {
+    let mut sources = Vec::new();
+    for item in &module.items {
+        if let Item::Use(u) = item
+            && u.items.iter().any(|i| matches!(i, UseItem::Wildcard))
+        {
+            sources.push(u.source.clone());
+        }
+    }
+    sources
+}
+
+/// Collect `impl` blocks on primitive types from a parsed module, grouping by type name.
+fn collect_primitive_types_from_module(
+    module: &Module,
+    comments: &CommentMap,
+) -> Vec<DocPrimitiveType> {
+    use indexmap::IndexMap;
+
+    let mut impls: Vec<&ImplBlock> = Vec::new();
+    for item in &module.items {
+        if let Item::Impl(i) = item {
+            impls.push(i);
+        }
+    }
+
+    let mut by_name: IndexMap<&str, DocPrimitiveType> = IndexMap::new();
+
+    for &prim_name in PRIMITIVE_TYPE_NAMES {
+        let (methods, trait_impls) = collect_impl_methods_for_type(prim_name, &impls, comments);
+
+        // Also collect associated constants
+        let mut constants = Vec::new();
+        for i in &impls {
+            let target_name = match &i.ty {
+                Type::Named(n) => n.name.as_str(),
+                Type::Generic(g) => g.name.as_str(),
+                _ => continue,
+            };
+            if target_name != prim_name || i.trait_type.is_some() {
+                continue;
+            }
+            for c in &i.constants {
+                if c.is_pub {
+                    constants.push(build_doc_const(c, comments));
+                }
+            }
+        }
+
+        if constants.is_empty() && methods.is_empty() && trait_impls.is_empty() {
+            continue;
+        }
+
+        let entry = by_name
+            .entry(prim_name)
+            .or_insert_with(|| DocPrimitiveType {
+                name: prim_name.to_string(),
+                doc: None,
+                constants: Vec::new(),
+                methods: Vec::new(),
+                trait_impls: Vec::new(),
+            });
+        entry.constants.extend(constants);
+        entry.methods.extend(methods);
+        entry.trait_impls.extend(trait_impls);
+    }
+
+    by_name.into_values().collect()
 }

@@ -596,6 +596,457 @@ impl Iterator for FilterIter<T> {
 }
 ```
 
+### Primitive Types
+
+```wado
+impl bool {
+    pub fn to_string(&self) -> String;
+}
+
+impl Display for bool {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Ord for bool {
+    pub fn cmp(&self, other: &Self) -> Ordering;
+}
+```
+
+```wado
+impl char {
+    pub fn from_u32(value: u32) -> Option<char>;
+    pub fn from_i32(value: i32) -> Option<char>;
+    pub fn from_u32_unchecked(value: u32) -> char;
+    pub fn to_string(&self) -> String;
+    pub fn is_ascii_whitespace(&self) -> bool;
+    pub fn is_whitespace(&self) -> bool;
+}
+
+impl Display for char {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Ord for char {
+    pub fn cmp(&self, other: &Self) -> Ordering;
+}
+```
+
+```wado
+impl i8 {
+    pub const MAX: i8;
+    pub const MIN: i8;
+    pub fn max(a: i8, b: i8) -> i8;
+    pub fn min(a: i8, b: i8) -> i8;
+    pub fn to_string(&self) -> String;
+}
+
+impl Display for i8 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Binary for i8 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Octal for i8 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl LowerHex for i8 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl UpperHex for i8 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Ord for i8 {
+    pub fn cmp(&self, other: &Self) -> Ordering;
+}
+```
+
+```wado
+impl u8 {
+    pub const MAX: u8;
+    pub const MIN: u8;
+    pub fn max(a: u8, b: u8) -> u8;
+    pub fn min(a: u8, b: u8) -> u8;
+    pub fn to_string(&self) -> String;
+}
+
+impl Display for u8 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Binary for u8 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Octal for u8 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl LowerHex for u8 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl UpperHex for u8 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Ord for u8 {
+    pub fn cmp(&self, other: &Self) -> Ordering;
+}
+```
+
+```wado
+impl i16 {
+    pub const MAX: i16;
+    pub const MIN: i16;
+    pub fn max(a: i16, b: i16) -> i16;
+    pub fn min(a: i16, b: i16) -> i16;
+    pub fn to_string(&self) -> String;
+}
+
+impl Display for i16 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Binary for i16 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Octal for i16 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl LowerHex for i16 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl UpperHex for i16 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Ord for i16 {
+    pub fn cmp(&self, other: &Self) -> Ordering;
+}
+```
+
+```wado
+impl u16 {
+    pub const MAX: u16;
+    pub const MIN: u16;
+    pub fn max(a: u16, b: u16) -> u16;
+    pub fn min(a: u16, b: u16) -> u16;
+    pub fn to_string(&self) -> String;
+}
+
+impl Display for u16 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Binary for u16 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Octal for u16 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl LowerHex for u16 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl UpperHex for u16 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Ord for u16 {
+    pub fn cmp(&self, other: &Self) -> Ordering;
+}
+```
+
+```wado
+impl i32 {
+    pub const MAX: i32;
+    pub const MIN: i32;
+    pub fn max(a: i32, b: i32) -> i32;
+    pub fn min(a: i32, b: i32) -> i32;
+    pub fn to_string(&self) -> String;
+}
+
+impl Display for i32 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Binary for i32 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Octal for i32 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl LowerHex for i32 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl UpperHex for i32 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Ord for i32 {
+    pub fn cmp(&self, other: &Self) -> Ordering;
+}
+```
+
+```wado
+impl u32 {
+    pub const MAX: u32;
+    pub const MIN: u32;
+    pub fn max(a: u32, b: u32) -> u32;
+    pub fn min(a: u32, b: u32) -> u32;
+    pub fn to_string(&self) -> String;
+}
+
+impl Display for u32 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Binary for u32 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Octal for u32 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl LowerHex for u32 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl UpperHex for u32 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Ord for u32 {
+    pub fn cmp(&self, other: &Self) -> Ordering;
+}
+```
+
+```wado
+impl i64 {
+    pub const MAX: i64;
+    pub const MIN: i64;
+    pub fn max(a: i64, b: i64) -> i64;
+    pub fn min(a: i64, b: i64) -> i64;
+    pub fn to_string(&self) -> String;
+}
+
+impl Display for i64 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Binary for i64 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Octal for i64 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl LowerHex for i64 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl UpperHex for i64 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Ord for i64 {
+    pub fn cmp(&self, other: &Self) -> Ordering;
+}
+```
+
+```wado
+impl u64 {
+    pub const MAX: u64;
+    pub const MIN: u64;
+    pub fn max(a: u64, b: u64) -> u64;
+    pub fn min(a: u64, b: u64) -> u64;
+    pub fn to_string(&self) -> String;
+}
+
+impl Display for u64 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Binary for u64 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Octal for u64 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl LowerHex for u64 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl UpperHex for u64 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Ord for u64 {
+    pub fn cmp(&self, other: &Self) -> Ordering;
+}
+```
+
+```wado
+impl f32 {
+    pub const PI: f32;
+    pub const TAU: f32;
+    pub const E: f32;
+    pub const LN2: f32;
+    pub const LN10: f32;
+    pub const LOG2_E: f32;
+    pub const LOG10_E: f32;
+    pub const SQRT2: f32;
+    pub const FRAC_1_SQRT2: f32;
+    pub const FRAC_PI_2: f32;
+    pub const FRAC_PI_4: f32;
+    pub const INFINITY: f32;
+    pub const NEG_INFINITY: f32;
+    pub const NAN: f32;
+    pub fn to_string(&self) -> String;
+    pub fn abs(x: f32) -> f32;
+    pub fn ceil(x: f32) -> f32;
+    pub fn floor(x: f32) -> f32;
+    pub fn trunc(x: f32) -> f32;
+    pub fn round(x: f32) -> f32;
+    pub fn sqrt(x: f32) -> f32;
+    pub fn min(x: f32, y: f32) -> f32;
+    pub fn max(x: f32, y: f32) -> f32;
+    pub fn copysign(x: f32, y: f32) -> f32;
+    pub fn sin(x: f32) -> f32;
+    pub fn cos(x: f32) -> f32;
+    pub fn tan(x: f32) -> f32;
+    pub fn asin(x: f32) -> f32;
+    pub fn acos(x: f32) -> f32;
+    pub fn atan(x: f32) -> f32;
+    pub fn atan2(y: f32, x: f32) -> f32;
+    pub fn sinh(x: f32) -> f32;
+    pub fn cosh(x: f32) -> f32;
+    pub fn tanh(x: f32) -> f32;
+    pub fn asinh(x: f32) -> f32;
+    pub fn acosh(x: f32) -> f32;
+    pub fn atanh(x: f32) -> f32;
+    pub fn exp(x: f32) -> f32;
+    pub fn exp2(x: f32) -> f32;
+    pub fn expm1(x: f32) -> f32;
+    pub fn ln(x: f32) -> f32;
+    pub fn log2(x: f32) -> f32;
+    pub fn log10(x: f32) -> f32;
+    pub fn ln1p(x: f32) -> f32;
+    pub fn pow(x: f32, y: f32) -> f32;
+    pub fn cbrt(x: f32) -> f32;
+    pub fn hypot(x: f32, y: f32) -> f32;
+    pub fn fmod(x: f32, y: f32) -> f32;
+    pub fn is_nan(&self) -> bool;
+    pub fn is_finite(&self) -> bool;
+    pub fn parse(s: String) -> Option<f32>;
+}
+
+impl Display for f32 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl LowerExp for f32 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl UpperExp for f32 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Ord for f32 {
+    pub fn cmp(&self, other: &Self) -> Ordering;
+}
+```
+
+```wado
+impl f64 {
+    pub const PI: f64;
+    pub const TAU: f64;
+    pub const E: f64;
+    pub const LN2: f64;
+    pub const LN10: f64;
+    pub const LOG2_E: f64;
+    pub const LOG10_E: f64;
+    pub const SQRT2: f64;
+    pub const FRAC_1_SQRT2: f64;
+    pub const FRAC_PI_2: f64;
+    pub const FRAC_PI_4: f64;
+    pub const INFINITY: f64;
+    pub const NEG_INFINITY: f64;
+    pub const NAN: f64;
+    pub fn to_string(&self) -> String;
+    pub fn abs(x: f64) -> f64;
+    pub fn ceil(x: f64) -> f64;
+    pub fn floor(x: f64) -> f64;
+    pub fn trunc(x: f64) -> f64;
+    pub fn round(x: f64) -> f64;
+    pub fn sqrt(x: f64) -> f64;
+    pub fn min(x: f64, y: f64) -> f64;
+    pub fn max(x: f64, y: f64) -> f64;
+    pub fn copysign(x: f64, y: f64) -> f64;
+    pub fn sin(x: f64) -> f64;
+    pub fn cos(x: f64) -> f64;
+    pub fn tan(x: f64) -> f64;
+    pub fn asin(x: f64) -> f64;
+    pub fn acos(x: f64) -> f64;
+    pub fn atan(x: f64) -> f64;
+    pub fn atan2(y: f64, x: f64) -> f64;
+    pub fn sinh(x: f64) -> f64;
+    pub fn cosh(x: f64) -> f64;
+    pub fn tanh(x: f64) -> f64;
+    pub fn asinh(x: f64) -> f64;
+    pub fn acosh(x: f64) -> f64;
+    pub fn atanh(x: f64) -> f64;
+    pub fn exp(x: f64) -> f64;
+    pub fn exp2(x: f64) -> f64;
+    pub fn expm1(x: f64) -> f64;
+    pub fn ln(x: f64) -> f64;
+    pub fn log2(x: f64) -> f64;
+    pub fn log10(x: f64) -> f64;
+    pub fn ln1p(x: f64) -> f64;
+    pub fn pow(x: f64, y: f64) -> f64;
+    pub fn cbrt(x: f64) -> f64;
+    pub fn hypot(x: f64, y: f64) -> f64;
+    pub fn fmod(x: f64, y: f64) -> f64;
+    pub fn is_nan(&self) -> bool;
+    pub fn is_finite(&self) -> bool;
+    pub fn parse(s: String) -> Option<f64>;
+}
+
+impl Display for f64 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl LowerExp for f64 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl UpperExp for f64 {
+    pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Ord for f64 {
+    pub fn cmp(&self, other: &Self) -> Ordering;
+}
+```
+
 ### Variants
 
 ```wado

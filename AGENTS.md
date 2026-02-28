@@ -22,7 +22,7 @@ Internal functions that are used to provide language features are implemented in
 
 ### wasm32 Compatibility
 
-`wado-compiler` must compile for `wasm32-unknown-unknown`. Do not use OS-dependent `std` modules in production code. CI enforces this via `cargo check -p wado-compiler --target wasm32-unknown-unknown`.
+`wado-compiler` must compile for `wasm32-unknown-unknown`. Do not use OS-dependent `std` modules in production code. CI enforces this with a wasm32 build check.
 
 ### E2E Test Specification (Compiler Tests)
 
@@ -181,7 +181,7 @@ It requires a git submodule `vendor/wasmtime` to be initialized.
 
 `wado-manifest/` handles `wado.toml` parsing, validation, and `wado.lock` lock file management. It also defines the `DependencyProvider` trait that abstracts I/O for dependency resolution (registry queries, git operations, path lookups), with an `InMemoryDependencyProvider` for testing.
 
-This crate must compile for `wasm32-unknown-unknown` (same constraint as `wado-compiler`).
+This crate must compile for `wasm32-unknown-unknown` (same constraint as `wado-compiler`). CI enforces this.
 
 ## The CLI
 
@@ -487,4 +487,4 @@ When you have completed a task, make sure everything is up-to-date and tested:
   - docs/spec.md if the language specification is updated.
   - docs/compiler.md if the new features are implemented.
   - docs/cheatsheet.md if the syntax/stdlib is updated.
-- Run `make on-task-done` to format, clippy-fix, update golden fixtures, and test.
+- Run `make on-task-done` to format, clippy-fix, update golden fixtures, regenerate stdlib docs, and test.
