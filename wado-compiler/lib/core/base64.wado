@@ -133,10 +133,6 @@ pub fn encode_with(data: &Array<u8>, encoding: Encoding) -> String {
 }
 
 fn decode_impl(input: &Array<u8>, input_len: i32) -> Option<Array<u8>> {
-    if input_len == 0 {
-        return Option::<Array<u8>>::Some([]);
-    }
-
     let mut end = input_len;
     while end > 0 && input[end - 1] == '=' as u8 {
         end -= 1;
@@ -200,12 +196,8 @@ fn decode_impl(input: &Array<u8>, input_len: i32) -> Option<Array<u8>> {
 /// Accepts both standard (+/) and URL-safe (-_) alphabets, with or without padding.
 /// Returns null on invalid input.
 pub fn decode(encoded: String) -> Option<Array<u8>> {
-    let len = encoded.len();
-    if len == 0 {
-        return Option::<Array<u8>>::Some([]);
-    }
     let bytes = encoded.bytes().collect();
-    return decode_impl(&bytes, len);
+    return decode_impl(&bytes, bytes.len());
 }
 
 /// Decode Base64 from raw bytes (e.g., HTTP body, file content).
