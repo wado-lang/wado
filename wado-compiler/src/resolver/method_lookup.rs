@@ -1824,6 +1824,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn type_implements_trait(&self, type_id: TypeId, trait_name: &str) -> bool {
         let resolved = self.type_table.borrow().get(type_id).clone();
 
+        // Type parameters satisfy bounds declared on them (e.g., T: Describable
+        // means T implements Describable within the scope of that declaration)
+        if let ResolvedType::TypeParam { name, .. } = &resolved {
+            if let Some(bounds) = self.current_type_param_bounds.get(name) {
+                return bounds.iter().any(|b| b == trait_name);
+            }
+            return false;
+        }
+
         // Primitives have built-in implementations for certain traits
         if let ResolvedType::Primitive(prim) = &resolved {
             match trait_name {
