@@ -1,43 +1,12 @@
-// Auto-dereference: using &T as array element where T is expected
-use { println, Stdout } from "core:cli";
-
-export fn run() with Stdout {
-    // &i32 in array literal with type annotation
+// Array literal elements do not auto-dereference &T to T.
+// Use explicit dereference (*ref) instead.
+export fn run() {
     let x = 1;
     let y = 2;
-    let z = 3;
     let rx = &x;
     let ry = &y;
-    let rz = &z;
-    let arr: Array<i32> = [rx, ry, rz];
-    assert arr[0] == 1;
-    assert arr[1] == 2;
-    assert arr[2] == 3;
-
-    // Mixed: some refs, some values
-    let arr2: Array<i32> = [rx, 10, rz];
-    assert arr2[0] == 1;
-    assert arr2[1] == 10;
-    assert arr2[2] == 3;
-
-    // &String in array literal
-    let s1 = "hello";
-    let s2 = "world";
-    let rs1 = &s1;
-    let rs2 = &s2;
-    let strings: Array<String> = [rs1, rs2];
-    assert strings[0] == "hello";
-    assert strings[1] == "world";
-
-    // append with &T
-    let mut nums: Array<i32> = [];
-    let val = 42;
-    let rv = &val;
-    nums.append(rv);
-    assert nums[0] == 42;
-
-    println("ok");
+    let arr: Array<i32> = [rx, ry];    // &i32 in Array<i32> → error
 }
 
 __DATA__
-{"TODO": true, "stdout": "ok\n"}
+{"compile_error": "heterogeneous element of type '&i32'"}

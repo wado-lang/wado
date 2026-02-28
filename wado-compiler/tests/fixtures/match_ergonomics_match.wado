@@ -1,4 +1,4 @@
-// Auto-dereference: using &T in match expressions
+// Match ergonomics: using &T in match expressions
 use { println, Stdout } from "core:cli";
 
 enum Color {
@@ -31,8 +31,8 @@ export fn run() with Stdout {
     let x = 50;
     let rx = &x;
     let label = match rx {
-        _ && rx > 100 => "large",
-        _ && rx > 10 => "medium",
+        _ && *rx > 100 => "large",
+        _ && *rx > 10 => "medium",
         _ => "small",
     };
     assert label == "medium";
