@@ -349,6 +349,15 @@ if let Some(x) = opt {
 }
 ```
 
+**Match Ergonomics:** When the scrutinee of `if let`, `match`, or `matches` is a reference type (`&T` or `&mut T`), references are automatically peeled so patterns match against the underlying type. This is equivalent to Rust's match ergonomics (RFC 2005).
+
+```wado
+let ro = &opt;
+if let Some(x) = ro {       // &Option<i32> → Option<i32>
+    println(`Got: {x}`);
+}
+```
+
 ### While Loop
 
 ```wado
@@ -2582,6 +2591,7 @@ match s {
 - Tuple payload pattern destructuring (`if let Foo([a, b]) = x`): implemented
 - `match` expression/statement: implemented
 - `matches` operator: implemented
+- Match ergonomics (auto-deref `&T` scrutinees in `if let`/`match`/`matches`): implemented
 - Generic custom variant pattern matching (e.g., `Maybe<T>`): not yet implemented
 - `Result<T, E>` pattern matching: not yet implemented
 

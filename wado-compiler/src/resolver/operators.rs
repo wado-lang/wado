@@ -872,6 +872,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // This enables coercion of empty array literals [] to the field's Array<T> type
         let value = self.resolve_expr(&assign.value, ctx, Some(target.type_id));
 
+        // Reject &T assigned where non-ref T expected
+        self.check_ref_type_mismatch(value.type_id, target.type_id, assign.value.span());
+
         // Handle assignment to global variables
         if let TirExprKind::GlobalVarGet {
             module_source,

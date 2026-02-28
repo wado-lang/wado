@@ -654,6 +654,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx: &mut FunctionContext,
         span: Span,
     ) -> TirPattern {
+        // Match ergonomics: peel reference types from scrutinee so patterns
+        // like `if let Some(x) = &opt` work without explicit dereference.
+        let scrutinee_type = {
+            let mut ty = scrutinee_type;
+            loop {
+                match self.type_table.borrow().get(ty).clone() {
+                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => ty = inner,
+                    _ => break,
+                }
+            }
+            ty
+        };
+
         match pattern {
             Pattern::Wildcard => TirPattern::Wildcard,
             Pattern::Ident(name) => {

@@ -908,6 +908,19 @@ if let Some(x) = opt {
     println("None");
 }
 
+// Match ergonomics: patterns auto-deref &T scrutinees
+let ro = &opt;
+if let Some(x) = ro {       // &Option<i32> auto-dereferenced
+    println(`Got: {x}`);
+}
+let c = Color::Red;
+let rc = &c;
+let name = match rc {        // &Color auto-dereferenced
+    Red => "red",
+    Green => "green",
+    Blue => "blue",
+};
+
 // While
 while i < 10 {
     i += 1;

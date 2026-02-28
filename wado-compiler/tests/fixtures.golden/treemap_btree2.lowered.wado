@@ -267,7 +267,7 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
 fn "TreeMap<String,i32>::compact"(self: &mut TreeMap<String,i32>) {
     let __pattern_temp_0: Option<&mut BTreeNode<String,i32>> = self.root;
     if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let root: &mut BTreeNode<String,i32> = __variant_payload(__pattern_temp_0, case=0);
+        let root: BTreeNode<String,i32> = __variant_payload(__pattern_temp_0, case=0);
         root."BTreeNode<String,i32>::compact"();
         self.deleted_count = 0;
     }
@@ -407,7 +407,7 @@ fn "TreeMap<String,i32>::iter"(self: &TreeMap<String,i32>) -> Array<[String, i32
     };
     let __pattern_temp_0: Option<&mut BTreeNode<String,i32>> = self.root;
     if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let root: &mut BTreeNode<String,i32> = __variant_payload(__pattern_temp_0, case=0);
+        let root: BTreeNode<String,i32> = __variant_payload(__pattern_temp_0, case=0);
         self."TreeMap<String,i32>::collect_entries"(root, &mut result);
     }
     return result;
@@ -461,7 +461,7 @@ pub fn "Array<Tuple<String,i32>>::append"(self: &mut Array<[String, i32]>, value
 fn "TreeMap<String,i32>::delete"(self: &mut TreeMap<String,i32>, key: &String) -> bool {
     let __pattern_temp_0: Option<&mut BTreeNode<String,i32>> = self.root;
     if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let root: &mut BTreeNode<String,i32> = __variant_payload(__pattern_temp_0, case=0);
+        let root: BTreeNode<String,i32> = __variant_payload(__pattern_temp_0, case=0);
         return self."TreeMap<String,i32>::delete_in_node"(root, key);
     }
     return false;
@@ -532,7 +532,7 @@ fn "TreeMap<String,i32>^Index::index"(self: &TreeMap<String,i32>, key: String) -
 fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: &String) -> Option<i32> {
     let __pattern_temp_0: Option<&mut BTreeNode<String,i32>> = self.root;
     if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let root: &mut BTreeNode<String,i32> = __variant_payload(__pattern_temp_0, case=0);
+        let root: BTreeNode<String,i32> = __variant_payload(__pattern_temp_0, case=0);
         return self."TreeMap<String,i32>::search_in_node"(root, key);
     }
     return null;
@@ -576,7 +576,7 @@ fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, va
     }
     let __pattern_temp_1: Option<&mut BTreeNode<String,i32>> = self.root;
     if __variant_test(__pattern_temp_1, case=0, name=Some) {
-        let root: &mut BTreeNode<String,i32> = __variant_payload(__pattern_temp_1, case=0);
+        let root: BTreeNode<String,i32> = __variant_payload(__pattern_temp_1, case=0);
         if root."BTreeNode<String,i32>::is_full"(((2 * self.t) - 1)) {
             let mut new_root: BTreeNode<String,i32> = "BTreeNode<String,i32>::new_internal"();
             new_root.children."Array<BTreeNode<String,i32>>::append"(root);
@@ -585,7 +585,7 @@ fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, va
         }
         let __pattern_temp_2: Option<&mut BTreeNode<String,i32>> = self.root;
         if __variant_test(__pattern_temp_2, case=0, name=Some) {
-            let r: &mut BTreeNode<String,i32> = __variant_payload(__pattern_temp_2, case=0);
+            let r: BTreeNode<String,i32> = __variant_payload(__pattern_temp_2, case=0);
             self."TreeMap<String,i32>::insert_non_full"(r, key, value);
         }
     }
