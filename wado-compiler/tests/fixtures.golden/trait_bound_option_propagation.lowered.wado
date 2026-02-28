@@ -26,10 +26,10 @@ export fn run() with Stdout {
     let a: Option<i32> = Option<i32>::Some(42);
     let b: Option<i32> = Option<i32>::Some(42);
     let c: Option<i32> = null;
-    if a."Option<i32>^Eq::eq"(&b) {
+    if Box<Option<i32>> { value: a }."Option<i32>^Eq::eq"(Box<Option<i32>> { value: b }) {
         core::cli::println("a == b");
     }
-    if !a."Option<i32>^Eq::eq"(&c) {
+    if !Box<Option<i32>> { value: a }."Option<i32>^Eq::eq"(Box<Option<i32>> { value: c }) {
         core::cli::println("a != c");
     }
 }
@@ -39,13 +39,13 @@ export fn __cm_export__run() {
     cm_raw_call task-return(0);
 }
 
-pub fn "Option<i32>^Eq::eq"(self: &Option<i32>, other: &Option<i32>) -> bool {
-    return match *self {
-        Some(a) => match *other {
+pub fn "Option<i32>^Eq::eq"(self: Box<Option<i32>>, other: Box<Option<i32>>) -> bool {
+    return match self.value {
+        Some(a) => match other.value {
             Some(b) => (a == b),
             None => false,
         },
-        None => match *other {
+        None => match other.value {
             Some(_) => false,
             None => true,
         },
