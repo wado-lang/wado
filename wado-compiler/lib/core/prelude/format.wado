@@ -69,26 +69,6 @@ impl Formatter {
         self.buf.append_char(c);
     }
 
-    /// Get the width specification (-1 means not specified).
-    pub fn width(&self) -> i32 {
-        return self.width;
-    }
-
-    /// Get the precision specification (-1 means not specified).
-    pub fn precision(&self) -> i32 {
-        return self.precision;
-    }
-
-    /// Check if alternate form (`#`) is requested.
-    pub fn alternate(&self) -> bool {
-        return self.alternate;
-    }
-
-    /// Check if sign display (`+`) is requested.
-    pub fn sign_plus(&self) -> bool {
-        return self.sign_plus;
-    }
-
     /// Write `n` copies of a character to the output buffer.
     pub fn write_char_n(&mut self, c: char, n: i32) {
         for let mut i = 0; i < n; i += 1 {
@@ -129,11 +109,6 @@ impl Formatter {
     /// 3. Call `apply_padding(mark)` to insert padding if needed
     pub fn mark(&self) -> i32 {
         return self.buf.len();
-    }
-
-    /// Return a mutable reference to the output buffer for direct writes.
-    pub fn buf_mut(&mut self) -> &mut String {
-        return self.buf;
     }
 
     /// Apply width/alignment padding to content already written at `start_pos`.
