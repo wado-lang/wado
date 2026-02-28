@@ -306,6 +306,12 @@ fn render_md_struct(out: &mut String, s: &DocStruct) {
             render_md_method_item(out, m);
         }
     }
+    for ti in &s.trait_impls {
+        writeln!(out, "\n#### `{}`\n", ti.signature).unwrap();
+        for m in &ti.methods {
+            render_md_method_item(out, m);
+        }
+    }
 }
 
 fn render_md_method_item(out: &mut String, m: &DocFunction) {
@@ -394,22 +400,30 @@ fn render_simple(doc: &DocModule) -> String {
         out.push_str("```\n");
 
         for s in &doc.structs {
-            if s.methods.is_empty() {
+            if s.methods.is_empty() && s.trait_impls.is_empty() {
                 continue;
             }
-            // Extract type name from signature (after "struct ")
-            let type_name = s
-                .signature
-                .strip_prefix("pub ")
-                .unwrap_or(&s.signature)
-                .strip_prefix("struct ")
-                .and_then(|rest| rest.split([' ', '<', '{']).next())
-                .unwrap_or("?");
-            writeln!(out, "\n```wado\nimpl {type_name} {{").unwrap();
-            for m in &s.methods {
-                writeln!(out, "    {};", m.signature).unwrap();
+            if !s.methods.is_empty() {
+                let type_name = s
+                    .signature
+                    .strip_prefix("pub ")
+                    .unwrap_or(&s.signature)
+                    .strip_prefix("struct ")
+                    .and_then(|rest| rest.split([' ', '<', '{']).next())
+                    .unwrap_or("?");
+                writeln!(out, "\n```wado\nimpl {type_name} {{").unwrap();
+                for m in &s.methods {
+                    writeln!(out, "    {};", m.signature).unwrap();
+                }
+                out.push_str("}\n```\n");
             }
-            out.push_str("}\n```\n");
+            for ti in &s.trait_impls {
+                writeln!(out, "\n```wado\n{} {{", ti.signature).unwrap();
+                for m in &ti.methods {
+                    writeln!(out, "    {};", m.signature).unwrap();
+                }
+                out.push_str("}\n```\n");
+            }
         }
     }
 

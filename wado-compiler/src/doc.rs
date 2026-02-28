@@ -51,6 +51,14 @@ pub struct DocStruct {
     pub has_private_fields: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub methods: Vec<DocFunction>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub trait_impls: Vec<DocTraitImpl>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DocTraitImpl {
+    pub signature: String,
+    pub methods: Vec<DocFunction>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -214,10 +222,7 @@ fn build_doc_struct(s: &StructDecl, impls: &[&ImplBlock], comments: &CommentMap)
         })
         .collect();
 
-    let methods = collect_pub_methods_for_type(&s.name, impls)
-        .into_iter()
-        .map(|m| build_doc_function(m, comments))
-        .collect();
+    let (methods, trait_impls) = collect_impl_methods_for_type(&s.name, impls, comments);
 
     DocStruct {
         signature: render_struct_signature(s),
@@ -225,6 +230,7 @@ fn build_doc_struct(s: &StructDecl, impls: &[&ImplBlock], comments: &CommentMap)
         fields,
         has_private_fields,
         methods,
+        trait_impls,
     }
 }
 
@@ -673,8 +679,14 @@ fn extract_item_name<'a>(sig: &'a str, keyword: &str) -> &'a str {
     &rest[..end]
 }
 
-fn collect_pub_methods_for_type<'a>(type_name: &str, impls: &[&'a ImplBlock]) -> Vec<&'a Function> {
-    let mut methods = Vec::new();
+fn collect_impl_methods_for_type(
+    type_name: &str,
+    impls: &[&ImplBlock],
+    comments: &CommentMap,
+) -> (Vec<DocFunction>, Vec<DocTraitImpl>) {
+    let mut inherent_methods = Vec::new();
+    let mut trait_impls = Vec::new();
+
     for i in impls {
         let target_name = match &i.ty {
             Type::Named(n) => &n.name,
@@ -684,11 +696,30 @@ fn collect_pub_methods_for_type<'a>(type_name: &str, impls: &[&'a ImplBlock]) ->
         if target_name != type_name {
             continue;
         }
-        for m in &i.methods {
-            if m.is_pub || m.is_export {
-                methods.push(m);
+
+        if let Some(ref trait_ty) = i.trait_type {
+            let methods: Vec<DocFunction> = i
+                .methods
+                .iter()
+                .map(|m| build_doc_function(m, comments))
+                .collect();
+            if methods.is_empty() {
+                continue;
+            }
+            let trait_name = render_type(trait_ty);
+            let type_sig = render_type(&i.ty);
+            trait_impls.push(DocTraitImpl {
+                signature: format!("impl {trait_name} for {type_sig}"),
+                methods,
+            });
+        } else {
+            for m in &i.methods {
+                if m.is_pub || m.is_export {
+                    inherent_methods.push(build_doc_function(m, comments));
+                }
             }
         }
     }
-    methods
+
+    (inherent_methods, trait_impls)
 }
