@@ -1,0 +1,53 @@
+// Escape analysis: optimization SHOULD fire.
+// Each template result is only used as a method receiver or via field access.
+// The WIR should contain __tmpl_buf_ for the hoisted buffers.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Case 1: receiver-only usage (.len())
+    let mut total = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let s = `n={i}`;
+        total += s.len();
+    }
+    println(`len={total}`);
+
+    // Case 2: .bytes() iterator (inlined to field access on s.repr, s.used)
+    let mut byte_sum: u64 = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        let s = `v={i}`;
+        for let b of s.bytes() {
+            byte_sum += b as u64;
+        }
+    }
+    println(`bytes={byte_sum}`);
+
+    // Case 3: two independent safe templates in same loop, both hoisted
+    let mut t1 = 0;
+    let mut t2 = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        let a = `a={i}`;
+        let b = `b={i}`;
+        t1 += a.len();
+        t2 += b.len();
+    }
+    println(`t1={t1},t2={t2}`);
+
+    // Case 4: inlinable callee — consume(s) inlined to s.used, so s doesn't escape
+    let mut t3 = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        let s = `c={i}`;
+        t3 += get_len(s);
+    }
+    println(`t3={t3}`);
+}
+
+fn get_len(s: String) -> i32 {
+    return s.len();
+}
+
+__DATA__
+{
+    "stdout": "len=15\nbytes=684\nt1=9,t2=9\nt3=9\n",
+    "wir_expect:O2": ["__tmpl_buf_"]
+}

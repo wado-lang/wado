@@ -6,6 +6,7 @@ use { println } from "core:cli";
 trait KeyValueLiteralBuilder {
     type Value;
     type Output;
+
     fn new_literal(capacity: i32) -> Self;
     fn insert_literal(&mut self, key: String, value: Self::Value);
     fn build(&self) -> Self::Output;
@@ -34,10 +35,12 @@ impl KeyValueLiteralBuilder for Bag<V> {
     fn new_literal(capacity: i32) -> Bag<V> {
         return Bag { keys: [], values: [] };
     }
+
     fn insert_literal(&mut self, key: String, value: V) {
         self.keys.append(key);
         self.values.append(value);
     }
+
     fn build(&self) -> Bag<V> {
         return *self;
     }
