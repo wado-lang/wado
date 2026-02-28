@@ -23,9 +23,8 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let opt: Option<i32> = Option<i32>::Some(42);
-    let ro: &Option<i32> = &opt;
-    let __pattern_temp_0: Option<i32> = *ro;
+    let __sroa_opt_value: Option<i32> = Option<i32>::Some(42);
+    let __pattern_temp_0: Option<i32> = __sroa_opt_value;
     if __variant_test(__pattern_temp_0, case=0, name=Some) {
         let __sroa_x_value: i32 = __variant_payload(__pattern_temp_0, case=0);
         __assert_0: {
@@ -88,13 +87,11 @@ export fn run() with Stdout {
             break __tmpl: __r;
         });
     }
-    let none_opt: Option<i32> = null;
-    let rn: &Option<i32> = &none_opt;
-    let __pattern_temp_1: Option<i32> = *rn;
-    if __variant_test(__pattern_temp_1, case=1, name=None) {
+    let __sroa_none_opt_value: Option<i32> = null;
+    if __variant_test(__sroa_none_opt_value, case=1, name=None) {
         core::cli::println("got none");
     }
-    let is_some: bool = match *ro {
+    let is_some: bool = match __sroa_opt_value {
         Some(_) => true,
         _ => false,
     };
@@ -137,7 +134,7 @@ export fn run() with Stdout {
             });
         }
     }
-    let is_none: bool = match *rn {
+    let is_none: bool = match __sroa_none_opt_value {
         Some(_) => true,
         _ => false,
     };
