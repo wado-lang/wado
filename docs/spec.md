@@ -1904,6 +1904,19 @@ type UserData = struct {
 };
 ```
 
+**Field Visibility:**
+
+Struct fields follow the same visibility rules as other declarations. Fields without `pub` are private to the defining module. Fields marked `pub` are accessible from other modules.
+
+```wado
+pub struct Config {
+    pub name: String,   // accessible from other modules
+    secret: i32,        // private to this module
+}
+```
+
+Within the defining module, all fields (including private ones) are accessible for construction, reading, and mutation. From other modules, accessing or constructing with a private field produces a compile error.
+
 **Struct Construction:**
 
 ```wado
@@ -2640,7 +2653,7 @@ pub export fn shared_entry() { ... }
 | `export fn foo()`     | Yes           | No                 | Yes               |
 | `pub export fn foo()` | Yes           | Yes                | Yes               |
 
-All entity definitions can have `pub` visibility.
+All entity definitions can have `pub` visibility, including struct fields.
 
 ### Module Source Types
 

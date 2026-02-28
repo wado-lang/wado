@@ -296,6 +296,12 @@ struct Box<T> {
     value: T,
 }
 
+// Field visibility (same rules as functions)
+pub struct Config {
+    pub name: String,   // accessible from other modules
+    secret: i32,        // private to this module
+}
+
 // Construction
 let p = Point { x: 10, y: 20 };
 let b = Box { value: 42 };  // T is inferred as i32
@@ -546,7 +552,7 @@ export fn run() { }           // component export (visible to consumers)
 pub export fn both() { }      // both project-internal and component export
 ```
 
-All entity definitions can have `pub` visibility.
+All entity definitions can have `pub` visibility, including struct fields.
 
 `export` defines what is visible when the package is consumed as a dependency or published as a `.wasm` component. `pub` items are accessible within the project but hidden from external consumers.
 
