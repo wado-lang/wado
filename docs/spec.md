@@ -2910,6 +2910,11 @@ wasi            # wasi: namespace for system interfaces
 ├── ...
 ```
 
+For full API documentation, see:
+
+- [Core Standard Library Reference](./stdlib-core.md)
+- [WASI Standard Library Reference](./stdlib-wasi.md)
+
 ### Global Functions defined in `core:prelude`
 
 ```wado
