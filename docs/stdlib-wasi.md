@@ -9,152 +9,138 @@
 
 #### `pub enum ErrorCode`
 
-- `Io`
-- `IllegalByteSequence`
-- `Pipe`
+##### `Io`
+
+##### `IllegalByteSequence`
+
+##### `Pipe`
 
 ### Effects
 
 #### `pub effect Environment`
 
-##### Operations
+##### `fn get_environment() -> Array<[String, String]>`
 
-- `fn get_environment() -> Array<[String, String]>`
+Get the POSIX-style environment variables.
 
-  Get the POSIX-style environment variables.
+Each environment variable is provided as a pair of string variable names
+and string value.
 
-  Each environment variable is provided as a pair of string variable names
-  and string value.
+Morally, these are a value import, but until value imports are available
+in the component model, this import function should return the same
+values each time it is called.
 
-  Morally, these are a value import, but until value imports are available
-  in the component model, this import function should return the same
-  values each time it is called.
-- `fn get_arguments() -> Array<String>`
+##### `fn get_arguments() -> Array<String>`
 
-  Get the POSIX-style arguments to the program.
-- `fn get_initial_cwd() -> Option<String>`
+Get the POSIX-style arguments to the program.
 
-  Return a path that programs should use as their initial current working
-  directory, interpreting `.` as shorthand for this.
+##### `fn get_initial_cwd() -> Option<String>`
+
+Return a path that programs should use as their initial current working
+directory, interpreting `.` as shorthand for this.
 
 #### `pub effect Exit`
 
-##### Operations
+##### `fn exit(status: Result<(), ()>)`
 
-- `fn exit(status: Result<(), ()>)`
+Exit the current instance and any linked instances.
 
-  Exit the current instance and any linked instances.
-- `fn exit_with_code(status_code: u8)`
+##### `fn exit_with_code(status_code: u8)`
 
-  Exit the current instance and any linked instances, reporting the
-  specified status code to the host.
+Exit the current instance and any linked instances, reporting the
+specified status code to the host.
 
-  The meaning of the code depends on the context, with 0 usually meaning
-  "success", and other values indicating various types of failure.
+The meaning of the code depends on the context, with 0 usually meaning
+"success", and other values indicating various types of failure.
 
-  This function does not return; the effect is analogous to a trap, but
-  without the connotation that something bad has happened.
+This function does not return; the effect is analogous to a trap, but
+without the connotation that something bad has happened.
 
 #### `pub effect Run`
 
-##### Operations
+##### `async fn run() -> Result<(), ()>`
 
-- `async fn run() -> Result<(), ()>`
-
-  Run the program.
+Run the program.
 
 #### `pub effect Stdin`
 
-##### Operations
+##### `fn read_via_stream() -> [Stream<u8>, Future<Result<(), ErrorCode>>]`
 
-- `fn read_via_stream() -> [Stream<u8>, Future<Result<(), ErrorCode>>]`
+Return a stream for reading from stdin.
 
-  Return a stream for reading from stdin.
+This function returns a stream which provides data read from stdin,
+and a future to signal read results.
 
-  This function returns a stream which provides data read from stdin,
-  and a future to signal read results.
+If the stream's readable end is dropped the future will resolve to success.
 
-  If the stream's readable end is dropped the future will resolve to success.
+If the stream's writable end is dropped the future will either resolve to
+success if stdin was closed by the writer or to an error-code if reading
+failed for some other reason.
 
-  If the stream's writable end is dropped the future will either resolve to
-  success if stdin was closed by the writer or to an error-code if reading
-  failed for some other reason.
-
-  Multiple streams may be active at the same time. The behavior of concurrent
-  reads is implementation-specific.
+Multiple streams may be active at the same time. The behavior of concurrent
+reads is implementation-specific.
 
 #### `pub effect Stdout`
 
-##### Operations
+##### `async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>`
 
-- `async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>`
+Write the given stream to stdout.
 
-  Write the given stream to stdout.
+If the stream's writable end is dropped this function will either return
+success once the entire contents of the stream have been written or an
+error-code representing a failure.
 
-  If the stream's writable end is dropped this function will either return
-  success once the entire contents of the stream have been written or an
-  error-code representing a failure.
-
-  Otherwise if there is an error the readable end of the stream will be
-  dropped and this function will return an error-code.
+Otherwise if there is an error the readable end of the stream will be
+dropped and this function will return an error-code.
 
 #### `pub effect Stderr`
 
-##### Operations
+##### `async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>`
 
-- `async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>`
+Write the given stream to stderr.
 
-  Write the given stream to stderr.
+If the stream's writable end is dropped this function will either return
+success once the entire contents of the stream have been written or an
+error-code representing a failure.
 
-  If the stream's writable end is dropped this function will either return
-  success once the entire contents of the stream have been written or an
-  error-code representing a failure.
-
-  Otherwise if there is an error the readable end of the stream will be
-  dropped and this function will return an error-code.
+Otherwise if there is an error the readable end of the stream will be
+dropped and this function will return an error-code.
 
 #### `pub effect TerminalStdin`
 
 An interface providing an optional `terminal-input` for stdin as a
 link-time authority.
 
-##### Operations
+##### `fn get_terminal_stdin() -> Option<TerminalInput>`
 
-- `fn get_terminal_stdin() -> Option<TerminalInput>`
-
-  If stdin is connected to a terminal, return a `terminal-input` handle
-  allowing further interaction with it.
+If stdin is connected to a terminal, return a `terminal-input` handle
+allowing further interaction with it.
 
 #### `pub effect TerminalStdout`
 
 An interface providing an optional `terminal-output` for stdout as a
 link-time authority.
 
-##### Operations
+##### `fn get_terminal_stdout() -> Option<TerminalOutput>`
 
-- `fn get_terminal_stdout() -> Option<TerminalOutput>`
-
-  If stdout is connected to a terminal, return a `terminal-output` handle
-  allowing further interaction with it.
+If stdout is connected to a terminal, return a `terminal-output` handle
+allowing further interaction with it.
 
 #### `pub effect TerminalStderr`
 
 An interface providing an optional `terminal-output` for stderr as a
 link-time authority.
 
-##### Operations
+##### `fn get_terminal_stderr() -> Option<TerminalOutput>`
 
-- `fn get_terminal_stderr() -> Option<TerminalOutput>`
-
-  If stderr is connected to a terminal, return a `terminal-output` handle
-  allowing further interaction with it.
+If stderr is connected to a terminal, return a `terminal-output` handle
+allowing further interaction with it.
 
 ### Resources
 
 #### `pub resource TerminalInput`
 
 The input side of a terminal.
-
 
 #### `pub resource TerminalOutput`
 
@@ -176,33 +162,35 @@ Descriptor flags.
 
 Note: This was called `fdflags` in earlier versions of WASI.
 
-##### Members
+##### `Read`
 
-- `Read`
-- `Write`
-- `FileIntegritySync`
-- `DataIntegritySync`
-- `RequestedWriteSync`
-- `MutateDirectory`
+##### `Write`
+
+##### `FileIntegritySync`
+
+##### `DataIntegritySync`
+
+##### `RequestedWriteSync`
+
+##### `MutateDirectory`
 
 #### `pub flags PathFlags`
 
 Flags determining the method of how paths are resolved.
 
-##### Members
-
-- `SymlinkFollow`
+##### `SymlinkFollow`
 
 #### `pub flags OpenFlags`
 
 Open flags used by `open-at`.
 
-##### Members
+##### `Create`
 
-- `Create`
-- `Directory`
-- `Exclusive`
-- `Truncate`
+##### `Directory`
+
+##### `Exclusive`
+
+##### `Truncate`
 
 ### Enums
 
@@ -212,14 +200,21 @@ The type of a filesystem object referenced by a descriptor.
 
 Note: This was called `filetype` in earlier versions of WASI.
 
-- `Unknown`
-- `BlockDevice`
-- `CharacterDevice`
-- `Directory`
-- `Fifo`
-- `SymbolicLink`
-- `RegularFile`
-- `Socket`
+##### `Unknown`
+
+##### `BlockDevice`
+
+##### `CharacterDevice`
+
+##### `Directory`
+
+##### `Fifo`
+
+##### `SymbolicLink`
+
+##### `RegularFile`
+
+##### `Socket`
 
 #### `pub enum ErrorCode`
 
@@ -228,63 +223,101 @@ Not all of these error codes are returned by the functions provided by this
 API; some are used in higher-level library layers, and others are provided
 merely for alignment with POSIX.
 
-- `Access`
-- `Already`
-- `BadDescriptor`
-- `Busy`
-- `Deadlock`
-- `Quota`
-- `Exist`
-- `FileTooLarge`
-- `IllegalByteSequence`
-- `InProgress`
-- `Interrupted`
-- `Invalid`
-- `Io`
-- `IsDirectory`
-- `Loop`
-- `TooManyLinks`
-- `MessageSize`
-- `NameTooLong`
-- `NoDevice`
-- `NoEntry`
-- `NoLock`
-- `InsufficientMemory`
-- `InsufficientSpace`
-- `NotDirectory`
-- `NotEmpty`
-- `NotRecoverable`
-- `Unsupported`
-- `NoTty`
-- `NoSuchDevice`
-- `Overflow`
-- `NotPermitted`
-- `Pipe`
-- `ReadOnly`
-- `InvalidSeek`
-- `TextFileBusy`
-- `CrossDevice`
+##### `Access`
+
+##### `Already`
+
+##### `BadDescriptor`
+
+##### `Busy`
+
+##### `Deadlock`
+
+##### `Quota`
+
+##### `Exist`
+
+##### `FileTooLarge`
+
+##### `IllegalByteSequence`
+
+##### `InProgress`
+
+##### `Interrupted`
+
+##### `Invalid`
+
+##### `Io`
+
+##### `IsDirectory`
+
+##### `Loop`
+
+##### `TooManyLinks`
+
+##### `MessageSize`
+
+##### `NameTooLong`
+
+##### `NoDevice`
+
+##### `NoEntry`
+
+##### `NoLock`
+
+##### `InsufficientMemory`
+
+##### `InsufficientSpace`
+
+##### `NotDirectory`
+
+##### `NotEmpty`
+
+##### `NotRecoverable`
+
+##### `Unsupported`
+
+##### `NoTty`
+
+##### `NoSuchDevice`
+
+##### `Overflow`
+
+##### `NotPermitted`
+
+##### `Pipe`
+
+##### `ReadOnly`
+
+##### `InvalidSeek`
+
+##### `TextFileBusy`
+
+##### `CrossDevice`
 
 #### `pub enum Advice`
 
 File or memory access pattern advisory information.
 
-- `Normal`
-- `Sequential`
-- `Random`
-- `WillNeed`
-- `DontNeed`
-- `NoReuse`
+##### `Normal`
+
+##### `Sequential`
+
+##### `Random`
+
+##### `WillNeed`
+
+##### `DontNeed`
+
+##### `NoReuse`
 
 ### Effects
 
 #### `pub effect Preopens`
 
-##### Operations
+##### `fn get_directories() -> Array<[Descriptor, String]>`
 
-- `fn get_directories() -> Array<[Descriptor, String]>`
-
-  Return the set of preopened directories, and their paths.
+Return the set of preopened directories, and their paths.
 
 ### Resources
 
@@ -294,243 +327,265 @@ A descriptor is a reference to a filesystem object, which may be a file,
 directory, named pipe, special file, or other object on which filesystem
 calls may be made.
 
-##### Methods
+##### `fn read_via_stream(self: &Descriptor, offset: Filesize) -> [Stream<u8>, Future<Result<(), ErrorCode>>]`
 
-- `fn read_via_stream(self: &Descriptor, offset: Filesize) -> [Stream<u8>, Future<Result<(), ErrorCode>>]`
+Return a stream for reading from a file.
 
-  Return a stream for reading from a file.
+Multiple read, write, and append streams may be active on the same open
+file and they do not interfere with each other.
 
-  Multiple read, write, and append streams may be active on the same open
-  file and they do not interfere with each other.
+This function returns a `stream` which provides the data received from the
+file, and a `future` providing additional error information in case an
+error is encountered.
 
-  This function returns a `stream` which provides the data received from the
-  file, and a `future` providing additional error information in case an
-  error is encountered.
+If no error is encountered, `stream.read` on the `stream` will return
+`read-status::closed` with no `error-context` and the future resolves to
+the value `ok`. If an error is encountered, `stream.read` on the
+`stream` returns `read-status::closed` with an `error-context` and the future
+resolves to `err` with an `error-code`.
 
-  If no error is encountered, `stream.read` on the `stream` will return
-  `read-status::closed` with no `error-context` and the future resolves to
-  the value `ok`. If an error is encountered, `stream.read` on the
-  `stream` returns `read-status::closed` with an `error-context` and the future
-  resolves to `err` with an `error-code`.
+Note: This is similar to `pread` in POSIX.
 
-  Note: This is similar to `pread` in POSIX.
-- `async fn write_via_stream(self: &Descriptor, data: Stream<u8>, offset: Filesize) -> Result<(), ErrorCode>`
+##### `async fn write_via_stream(self: &Descriptor, data: Stream<u8>, offset: Filesize) -> Result<(), ErrorCode>`
 
-  Return a stream for writing to a file, if available.
+Return a stream for writing to a file, if available.
 
-  May fail with an error-code describing why the file cannot be written.
+May fail with an error-code describing why the file cannot be written.
 
-  It is valid to write past the end of a file; the file is extended to the
-  extent of the write, with bytes between the previous end and the start of
-  the write set to zero.
+It is valid to write past the end of a file; the file is extended to the
+extent of the write, with bytes between the previous end and the start of
+the write set to zero.
 
-  This function returns once either full contents of the stream are
-  written or an error is encountered.
+This function returns once either full contents of the stream are
+written or an error is encountered.
 
-  Note: This is similar to `pwrite` in POSIX.
-- `async fn append_via_stream(self: &Descriptor, data: Stream<u8>) -> Result<(), ErrorCode>`
+Note: This is similar to `pwrite` in POSIX.
 
-  Return a stream for appending to a file, if available.
+##### `async fn append_via_stream(self: &Descriptor, data: Stream<u8>) -> Result<(), ErrorCode>`
 
-  May fail with an error-code describing why the file cannot be appended.
+Return a stream for appending to a file, if available.
 
-  This function returns once either full contents of the stream are
-  written or an error is encountered.
+May fail with an error-code describing why the file cannot be appended.
 
-  Note: This is similar to `write` with `O_APPEND` in POSIX.
-- `async fn advise(self: &Descriptor, offset: Filesize, length: Filesize, advice: Advice) -> Result<(), ErrorCode>`
+This function returns once either full contents of the stream are
+written or an error is encountered.
 
-  Provide file advisory information on a descriptor.
+Note: This is similar to `write` with `O_APPEND` in POSIX.
 
-  This is similar to `posix_fadvise` in POSIX.
-- `async fn sync_data(self: &Descriptor) -> Result<(), ErrorCode>`
+##### `async fn advise(self: &Descriptor, offset: Filesize, length: Filesize, advice: Advice) -> Result<(), ErrorCode>`
 
-  Synchronize the data of a file to disk.
+Provide file advisory information on a descriptor.
 
-  This function succeeds with no effect if the file descriptor is not
-  opened for writing.
+This is similar to `posix_fadvise` in POSIX.
 
-  Note: This is similar to `fdatasync` in POSIX.
-- `async fn get_flags(self: &Descriptor) -> Result<DescriptorFlags, ErrorCode>`
+##### `async fn sync_data(self: &Descriptor) -> Result<(), ErrorCode>`
 
-  Get flags associated with a descriptor.
+Synchronize the data of a file to disk.
 
-  Note: This returns similar flags to `fcntl(fd, F_GETFL)` in POSIX.
+This function succeeds with no effect if the file descriptor is not
+opened for writing.
 
-  Note: This returns the value that was the `fs_flags` value returned
-  from `fdstat_get` in earlier versions of WASI.
-- `async fn get_type(self: &Descriptor) -> Result<DescriptorType, ErrorCode>`
+Note: This is similar to `fdatasync` in POSIX.
 
-  Get the dynamic type of a descriptor.
+##### `async fn get_flags(self: &Descriptor) -> Result<DescriptorFlags, ErrorCode>`
 
-  Note: This returns the same value as the `type` field of the `fd-stat`
-  returned by `stat`, `stat-at` and similar.
+Get flags associated with a descriptor.
 
-  Note: This returns similar flags to the `st_mode & S_IFMT` value provided
-  by `fstat` in POSIX.
+Note: This returns similar flags to `fcntl(fd, F_GETFL)` in POSIX.
 
-  Note: This returns the value that was the `fs_filetype` value returned
-  from `fdstat_get` in earlier versions of WASI.
-- `async fn set_size(self: &Descriptor, size: Filesize) -> Result<(), ErrorCode>`
+Note: This returns the value that was the `fs_flags` value returned
+from `fdstat_get` in earlier versions of WASI.
 
-  Adjust the size of an open file. If this increases the file's size, the
-  extra bytes are filled with zeros.
+##### `async fn get_type(self: &Descriptor) -> Result<DescriptorType, ErrorCode>`
 
-  Note: This was called `fd_filestat_set_size` in earlier versions of WASI.
-- `async fn set_times(self: &Descriptor, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Result<(), ErrorCode>`
+Get the dynamic type of a descriptor.
 
-  Adjust the timestamps of an open file or directory.
+Note: This returns the same value as the `type` field of the `fd-stat`
+returned by `stat`, `stat-at` and similar.
 
-  Note: This is similar to `futimens` in POSIX.
+Note: This returns similar flags to the `st_mode & S_IFMT` value provided
+by `fstat` in POSIX.
 
-  Note: This was called `fd_filestat_set_times` in earlier versions of WASI.
-- `async fn read_directory(self: &Descriptor) -> [Stream<DirectoryEntry>, Future<Result<(), ErrorCode>>]`
+Note: This returns the value that was the `fs_filetype` value returned
+from `fdstat_get` in earlier versions of WASI.
 
-  Read directory entries from a directory.
+##### `async fn set_size(self: &Descriptor, size: Filesize) -> Result<(), ErrorCode>`
 
-  On filesystems where directories contain entries referring to themselves
-  and their parents, often named `.` and `..` respectively, these entries
-  are omitted.
+Adjust the size of an open file. If this increases the file's size, the
+extra bytes are filled with zeros.
 
-  This always returns a new stream which starts at the beginning of the
-  directory. Multiple streams may be active on the same directory, and they
-  do not interfere with each other.
+Note: This was called `fd_filestat_set_size` in earlier versions of WASI.
 
-  This function returns a future, which will resolve to an error code if
-  reading full contents of the directory fails.
-- `async fn sync(self: &Descriptor) -> Result<(), ErrorCode>`
+##### `async fn set_times(self: &Descriptor, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Result<(), ErrorCode>`
 
-  Synchronize the data and metadata of a file to disk.
+Adjust the timestamps of an open file or directory.
 
-  This function succeeds with no effect if the file descriptor is not
-  opened for writing.
+Note: This is similar to `futimens` in POSIX.
 
-  Note: This is similar to `fsync` in POSIX.
-- `async fn create_directory_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>`
+Note: This was called `fd_filestat_set_times` in earlier versions of WASI.
 
-  Create a directory.
+##### `async fn read_directory(self: &Descriptor) -> [Stream<DirectoryEntry>, Future<Result<(), ErrorCode>>]`
 
-  Note: This is similar to `mkdirat` in POSIX.
-- `async fn stat(self: &Descriptor) -> Result<DescriptorStat, ErrorCode>`
+Read directory entries from a directory.
 
-  Return the attributes of an open file or directory.
+On filesystems where directories contain entries referring to themselves
+and their parents, often named `.` and `..` respectively, these entries
+are omitted.
 
-  Note: This is similar to `fstat` in POSIX, except that it does not return
-  device and inode information. For testing whether two descriptors refer to
-  the same underlying filesystem object, use `is-same-object`. To obtain
-  additional data that can be used do determine whether a file has been
-  modified, use `metadata-hash`.
+This always returns a new stream which starts at the beginning of the
+directory. Multiple streams may be active on the same directory, and they
+do not interfere with each other.
 
-  Note: This was called `fd_filestat_get` in earlier versions of WASI.
-- `async fn stat_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Result<DescriptorStat, ErrorCode>`
+This function returns a future, which will resolve to an error code if
+reading full contents of the directory fails.
 
-  Return the attributes of a file or directory.
+##### `async fn sync(self: &Descriptor) -> Result<(), ErrorCode>`
 
-  Note: This is similar to `fstatat` in POSIX, except that it does not
-  return device and inode information. See the `stat` description for a
-  discussion of alternatives.
+Synchronize the data and metadata of a file to disk.
 
-  Note: This was called `path_filestat_get` in earlier versions of WASI.
-- `async fn set_times_at(self: &Descriptor, path_flags: PathFlags, path: String, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Result<(), ErrorCode>`
+This function succeeds with no effect if the file descriptor is not
+opened for writing.
 
-  Adjust the timestamps of a file or directory.
+Note: This is similar to `fsync` in POSIX.
 
-  Note: This is similar to `utimensat` in POSIX.
+##### `async fn create_directory_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>`
 
-  Note: This was called `path_filestat_set_times` in earlier versions of
-  WASI.
-- `async fn link_at(self: &Descriptor, old_path_flags: PathFlags, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Result<(), ErrorCode>`
+Create a directory.
 
-  Create a hard link.
+Note: This is similar to `mkdirat` in POSIX.
 
-  Fails with `error-code::no-entry` if the old path does not exist,
-  with `error-code::exist` if the new path already exists, and
-  `error-code::not-permitted` if the old path is not a file.
+##### `async fn stat(self: &Descriptor) -> Result<DescriptorStat, ErrorCode>`
 
-  Note: This is similar to `linkat` in POSIX.
-- `async fn open_at(self: &Descriptor, path_flags: PathFlags, path: String, open_flags: OpenFlags, flags: DescriptorFlags) -> Result<Descriptor, ErrorCode>`
+Return the attributes of an open file or directory.
 
-  Open a file or directory.
+Note: This is similar to `fstat` in POSIX, except that it does not return
+device and inode information. For testing whether two descriptors refer to
+the same underlying filesystem object, use `is-same-object`. To obtain
+additional data that can be used do determine whether a file has been
+modified, use `metadata-hash`.
 
-  If `flags` contains `descriptor-flags::mutate-directory`, and the base
-  descriptor doesn't have `descriptor-flags::mutate-directory` set,
-  `open-at` fails with `error-code::read-only`.
+Note: This was called `fd_filestat_get` in earlier versions of WASI.
 
-  If `flags` contains `write` or `mutate-directory`, or `open-flags`
-  contains `truncate` or `create`, and the base descriptor doesn't have
-  `descriptor-flags::mutate-directory` set, `open-at` fails with
-  `error-code::read-only`.
+##### `async fn stat_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Result<DescriptorStat, ErrorCode>`
 
-  Note: This is similar to `openat` in POSIX.
-- `async fn readlink_at(self: &Descriptor, path: String) -> Result<String, ErrorCode>`
+Return the attributes of a file or directory.
 
-  Read the contents of a symbolic link.
+Note: This is similar to `fstatat` in POSIX, except that it does not
+return device and inode information. See the `stat` description for a
+discussion of alternatives.
 
-  If the contents contain an absolute or rooted path in the underlying
-  filesystem, this function fails with `error-code::not-permitted`.
+Note: This was called `path_filestat_get` in earlier versions of WASI.
 
-  Note: This is similar to `readlinkat` in POSIX.
-- `async fn remove_directory_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>`
+##### `async fn set_times_at(self: &Descriptor, path_flags: PathFlags, path: String, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Result<(), ErrorCode>`
 
-  Remove a directory.
+Adjust the timestamps of a file or directory.
 
-  Return `error-code::not-empty` if the directory is not empty.
+Note: This is similar to `utimensat` in POSIX.
 
-  Note: This is similar to `unlinkat(fd, path, AT_REMOVEDIR)` in POSIX.
-- `async fn rename_at(self: &Descriptor, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Result<(), ErrorCode>`
+Note: This was called `path_filestat_set_times` in earlier versions of
+WASI.
 
-  Rename a filesystem object.
+##### `async fn link_at(self: &Descriptor, old_path_flags: PathFlags, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Result<(), ErrorCode>`
 
-  Note: This is similar to `renameat` in POSIX.
-- `async fn symlink_at(self: &Descriptor, old_path: String, new_path: String) -> Result<(), ErrorCode>`
+Create a hard link.
 
-  Create a symbolic link (also known as a "symlink").
+Fails with `error-code::no-entry` if the old path does not exist,
+with `error-code::exist` if the new path already exists, and
+`error-code::not-permitted` if the old path is not a file.
 
-  If `old-path` starts with `/`, the function fails with
-  `error-code::not-permitted`.
+Note: This is similar to `linkat` in POSIX.
 
-  Note: This is similar to `symlinkat` in POSIX.
-- `async fn unlink_file_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>`
+##### `async fn open_at(self: &Descriptor, path_flags: PathFlags, path: String, open_flags: OpenFlags, flags: DescriptorFlags) -> Result<Descriptor, ErrorCode>`
 
-  Unlink a filesystem object that is not a directory.
+Open a file or directory.
 
-  Return `error-code::is-directory` if the path refers to a directory.
-  Note: This is similar to `unlinkat(fd, path, 0)` in POSIX.
-- `async fn is_same_object(self: &Descriptor, other: &Descriptor) -> bool`
+If `flags` contains `descriptor-flags::mutate-directory`, and the base
+descriptor doesn't have `descriptor-flags::mutate-directory` set,
+`open-at` fails with `error-code::read-only`.
 
-  Test whether two descriptors refer to the same filesystem object.
+If `flags` contains `write` or `mutate-directory`, or `open-flags`
+contains `truncate` or `create`, and the base descriptor doesn't have
+`descriptor-flags::mutate-directory` set, `open-at` fails with
+`error-code::read-only`.
 
-  In POSIX, this corresponds to testing whether the two descriptors have the
-  same device (`st_dev`) and inode (`st_ino` or `d_ino`) numbers.
-  wasi-filesystem does not expose device and inode numbers, so this function
-  may be used instead.
-- `async fn metadata_hash(self: &Descriptor) -> Result<MetadataHashValue, ErrorCode>`
+Note: This is similar to `openat` in POSIX.
 
-  Return a hash of the metadata associated with a filesystem object referred
-  to by a descriptor.
+##### `async fn readlink_at(self: &Descriptor, path: String) -> Result<String, ErrorCode>`
 
-  This returns a hash of the last-modification timestamp and file size, and
-  may also include the inode number, device number, birth timestamp, and
-  other metadata fields that may change when the file is modified or
-  replaced. It may also include a secret value chosen by the
-  implementation and not otherwise exposed.
+Read the contents of a symbolic link.
 
-  Implementations are encouraged to provide the following properties:
+If the contents contain an absolute or rooted path in the underlying
+filesystem, this function fails with `error-code::not-permitted`.
 
-   - If the file is not modified or replaced, the computed hash value should
-     usually not change.
-   - If the object is modified or replaced, the computed hash value should
-     usually change.
-   - The inputs to the hash should not be easily computable from the
-     computed hash.
+Note: This is similar to `readlinkat` in POSIX.
 
-  However, none of these is required.
-- `async fn metadata_hash_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Result<MetadataHashValue, ErrorCode>`
+##### `async fn remove_directory_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>`
 
-  Return a hash of the metadata associated with a filesystem object referred
-  to by a directory descriptor and a relative path.
+Remove a directory.
 
-  This performs the same hash computation as `metadata-hash`.
+Return `error-code::not-empty` if the directory is not empty.
+
+Note: This is similar to `unlinkat(fd, path, AT_REMOVEDIR)` in POSIX.
+
+##### `async fn rename_at(self: &Descriptor, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Result<(), ErrorCode>`
+
+Rename a filesystem object.
+
+Note: This is similar to `renameat` in POSIX.
+
+##### `async fn symlink_at(self: &Descriptor, old_path: String, new_path: String) -> Result<(), ErrorCode>`
+
+Create a symbolic link (also known as a "symlink").
+
+If `old-path` starts with `/`, the function fails with
+`error-code::not-permitted`.
+
+Note: This is similar to `symlinkat` in POSIX.
+
+##### `async fn unlink_file_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>`
+
+Unlink a filesystem object that is not a directory.
+
+Return `error-code::is-directory` if the path refers to a directory.
+Note: This is similar to `unlinkat(fd, path, 0)` in POSIX.
+
+##### `async fn is_same_object(self: &Descriptor, other: &Descriptor) -> bool`
+
+Test whether two descriptors refer to the same filesystem object.
+
+In POSIX, this corresponds to testing whether the two descriptors have the
+same device (`st_dev`) and inode (`st_ino` or `d_ino`) numbers.
+wasi-filesystem does not expose device and inode numbers, so this function
+may be used instead.
+
+##### `async fn metadata_hash(self: &Descriptor) -> Result<MetadataHashValue, ErrorCode>`
+
+Return a hash of the metadata associated with a filesystem object referred
+to by a descriptor.
+
+This returns a hash of the last-modification timestamp and file size, and
+may also include the inode number, device number, birth timestamp, and
+other metadata fields that may change when the file is modified or
+replaced. It may also include a secret value chosen by the
+implementation and not otherwise exposed.
+
+Implementations are encouraged to provide the following properties:
+
+ - If the file is not modified or replaced, the computed hash value should
+   usually not change.
+ - If the object is modified or replaced, the computed hash value should
+   usually change.
+ - The inputs to the hash should not be easily computable from the
+   computed hash.
+
+However, none of these is required.
+
+##### `async fn metadata_hash_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Result<MetadataHashValue, ErrorCode>`
+
+Return a hash of the metadata associated with a filesystem object referred
+to by a directory descriptor and a relative path.
+
+This performs the same hash computation as `metadata-hash`.
 
 ### Structs
 
@@ -540,63 +595,64 @@ File attributes.
 
 Note: This was called `filestat` in earlier versions of WASI.
 
-##### Fields
+##### `type: DescriptorType`
 
-- `type: DescriptorType`
+File type.
 
-  File type.
-- `link_count: LinkCount`
+##### `link_count: LinkCount`
 
-  Number of hard links to the file.
-- `size: Filesize`
+Number of hard links to the file.
 
-  For regular files, the file size in bytes. For symbolic links, the
-  length in bytes of the pathname contained in the symbolic link.
-- `data_access_timestamp: Option<Instant>`
+##### `size: Filesize`
 
-  Last data access timestamp.
+For regular files, the file size in bytes. For symbolic links, the
+length in bytes of the pathname contained in the symbolic link.
 
-  If the `option` is none, the platform doesn't maintain an access
-  timestamp for this file.
-- `data_modification_timestamp: Option<Instant>`
+##### `data_access_timestamp: Option<Instant>`
 
-  Last data modification timestamp.
+Last data access timestamp.
 
-  If the `option` is none, the platform doesn't maintain a
-  modification timestamp for this file.
-- `status_change_timestamp: Option<Instant>`
+If the `option` is none, the platform doesn't maintain an access
+timestamp for this file.
 
-  Last file status-change timestamp.
+##### `data_modification_timestamp: Option<Instant>`
 
-  If the `option` is none, the platform doesn't maintain a
-  status-change timestamp for this file.
+Last data modification timestamp.
+
+If the `option` is none, the platform doesn't maintain a
+modification timestamp for this file.
+
+##### `status_change_timestamp: Option<Instant>`
+
+Last file status-change timestamp.
+
+If the `option` is none, the platform doesn't maintain a
+status-change timestamp for this file.
 
 #### `pub struct DirectoryEntry`
 
 A directory entry.
 
-##### Fields
+##### `type: DescriptorType`
 
-- `type: DescriptorType`
+The type of the file referred to by this directory entry.
 
-  The type of the file referred to by this directory entry.
-- `name: String`
+##### `name: String`
 
-  The name of the object.
+The name of the object.
 
 #### `pub struct MetadataHashValue`
 
 A 128-bit hash value, split into parts because wasm doesn't have a
 128-bit integer type.
 
-##### Fields
+##### `lower: u64`
 
-- `lower: u64`
+64 bits of a 128-bit hash value.
 
-  64 bits of a 128-bit hash value.
-- `upper: u64`
+##### `upper: u64`
 
-  Another 64 bits of a 128-bit hash value.
+Another 64 bits of a 128-bit hash value.
 
 ### Variants
 
@@ -604,16 +660,18 @@ A 128-bit hash value, split into parts because wasm doesn't have a
 
 When setting a timestamp, this gives the value to set it to.
 
-- `NoChange`
+##### `NoChange`
 
-  Leave the timestamp set to its previous value.
-- `Now`
+Leave the timestamp set to its previous value.
 
-  Set the timestamp to the current time of the system clock associated
-  with the filesystem.
-- `Timestamp(Instant)`
+##### `Now`
 
-  Set the timestamp to the given value.
+Set the timestamp to the current time of the system clock associated
+with the filesystem.
+
+##### `Timestamp(Instant)`
+
+Set the timestamp to the given value.
 
 ## wasi:http
 
@@ -641,12 +699,10 @@ incoming HTTP Request with a Response.
 In `wasi:http/middleware` this interface is both exported and imported as
 the "downstream" and "upstream" directions of the middleware chain.
 
-##### Operations
+##### `async fn handle(request: Request) -> Result<Response, ErrorCode>`
 
-- `async fn handle(request: Request) -> Result<Response, ErrorCode>`
-
-  This function may be called with either an incoming request read from the
-  network or a request synthesized or forwarded by another component.
+This function may be called with either an incoming request read from the
+network or a request synthesized or forwarded by another component.
 
 #### `pub effect Client`
 
@@ -661,12 +717,10 @@ duplication is currently necessary because some Component Model tooling
 instances of the same interface. A `client.send` import may be linked
 directly to a `handler.handle` export to bypass the network.
 
-##### Operations
+##### `async fn send(request: Request) -> Result<Response, ErrorCode>`
 
-- `async fn send(request: Request) -> Result<Response, ErrorCode>`
-
-  This function may be used to either send an outgoing request over the
-  network or to forward it to another component.
+This function may be used to either send an outgoing request over the
+network or to forward it to another component.
 
 ### Resources
 
@@ -688,178 +742,194 @@ original casing used to construct or mutate the `fields` resource. The `fields`
 resource should use that original casing when serializing the fields for
 transport or when returning them from a method.
 
-##### Methods
+##### `fn new() -> Fields`
 
-- `fn new() -> Fields`
+Construct an empty HTTP Fields.
 
-  Construct an empty HTTP Fields.
+The resulting `fields` is mutable.
 
-  The resulting `fields` is mutable.
-- `fn from_list(entries: Array<[FieldName, FieldValue]>) -> Result<Fields, HeaderError>`
+##### `fn from_list(entries: Array<[FieldName, FieldValue]>) -> Result<Fields, HeaderError>`
 
-  Construct an HTTP Fields.
+Construct an HTTP Fields.
 
-  The resulting `fields` is mutable.
+The resulting `fields` is mutable.
 
-  The list represents each name-value pair in the Fields. Names
-  which have multiple values are represented by multiple entries in this
-  list with the same name.
+The list represents each name-value pair in the Fields. Names
+which have multiple values are represented by multiple entries in this
+list with the same name.
 
-  The tuple is a pair of the field name, represented as a string, and
-  Value, represented as a list of bytes. In a valid Fields, all names
-  and values are valid UTF-8 strings. However, values are not always
-  well-formed, so they are represented as a raw list of bytes.
+The tuple is a pair of the field name, represented as a string, and
+Value, represented as a list of bytes. In a valid Fields, all names
+and values are valid UTF-8 strings. However, values are not always
+well-formed, so they are represented as a raw list of bytes.
 
-  An error result will be returned if any header or value was
-  syntactically invalid, or if a header was forbidden.
-- `fn get(self: &Fields, name: FieldName) -> Array<FieldValue>`
+An error result will be returned if any header or value was
+syntactically invalid, or if a header was forbidden.
 
-  Get all of the values corresponding to a name. If the name is not present
-  in this `fields`, an empty list is returned. However, if the name is
-  present but empty, this is represented by a list with one or more
-  empty field-values present.
-- `fn has(self: &Fields, name: FieldName) -> bool`
+##### `fn get(self: &Fields, name: FieldName) -> Array<FieldValue>`
 
-  Returns `true` when the name is present in this `fields`. If the name is
-  syntactically invalid, `false` is returned.
-- `fn set(self: &Fields, name: FieldName, value: Array<FieldValue>) -> Result<(), HeaderError>`
+Get all of the values corresponding to a name. If the name is not present
+in this `fields`, an empty list is returned. However, if the name is
+present but empty, this is represented by a list with one or more
+empty field-values present.
 
-  Set all of the values for a name. Clears any existing values for that
-  name, if they have been set.
+##### `fn has(self: &Fields, name: FieldName) -> bool`
 
-  Fails with `header-error.immutable` if the `fields` are immutable.
-- `fn delete(self: &Fields, name: FieldName) -> Result<(), HeaderError>`
+Returns `true` when the name is present in this `fields`. If the name is
+syntactically invalid, `false` is returned.
 
-  Delete all values for a name. Does nothing if no values for the name
-  exist.
+##### `fn set(self: &Fields, name: FieldName, value: Array<FieldValue>) -> Result<(), HeaderError>`
 
-  Fails with `header-error.immutable` if the `fields` are immutable.
-- `fn get_and_delete(self: &Fields, name: FieldName) -> Result<Array<FieldValue>, HeaderError>`
+Set all of the values for a name. Clears any existing values for that
+name, if they have been set.
 
-  Delete all values for a name. Does nothing if no values for the name
-  exist.
+Fails with `header-error.immutable` if the `fields` are immutable.
 
-  Returns all values previously corresponding to the name, if any.
+##### `fn delete(self: &Fields, name: FieldName) -> Result<(), HeaderError>`
 
-  Fails with `header-error.immutable` if the `fields` are immutable.
-- `fn append(self: &Fields, name: FieldName, value: FieldValue) -> Result<(), HeaderError>`
+Delete all values for a name. Does nothing if no values for the name
+exist.
 
-  Append a value for a name. Does not change or delete any existing
-  values for that name.
+Fails with `header-error.immutable` if the `fields` are immutable.
 
-  Fails with `header-error.immutable` if the `fields` are immutable.
-- `fn copy_all(self: &Fields) -> Array<[FieldName, FieldValue]>`
+##### `fn get_and_delete(self: &Fields, name: FieldName) -> Result<Array<FieldValue>, HeaderError>`
 
-  Retrieve the full set of names and values in the Fields. Like the
-  constructor, the list represents each name-value pair.
+Delete all values for a name. Does nothing if no values for the name
+exist.
 
-  The outer list represents each name-value pair in the Fields. Names
-  which have multiple values are represented by multiple entries in this
-  list with the same name.
+Returns all values previously corresponding to the name, if any.
 
-  The names and values are always returned in the original casing and in
-  the order in which they will be serialized for transport.
-- `fn clone(self: &Fields) -> Fields`
+Fails with `header-error.immutable` if the `fields` are immutable.
 
-  Make a deep copy of the Fields. Equivalent in behavior to calling the
-  `fields` constructor on the return value of `copy-all`. The resulting
-  `fields` is mutable.
+##### `fn append(self: &Fields, name: FieldName, value: FieldValue) -> Result<(), HeaderError>`
+
+Append a value for a name. Does not change or delete any existing
+values for that name.
+
+Fails with `header-error.immutable` if the `fields` are immutable.
+
+##### `fn copy_all(self: &Fields) -> Array<[FieldName, FieldValue]>`
+
+Retrieve the full set of names and values in the Fields. Like the
+constructor, the list represents each name-value pair.
+
+The outer list represents each name-value pair in the Fields. Names
+which have multiple values are represented by multiple entries in this
+list with the same name.
+
+The names and values are always returned in the original casing and in
+the order in which they will be serialized for transport.
+
+##### `fn clone(self: &Fields) -> Fields`
+
+Make a deep copy of the Fields. Equivalent in behavior to calling the
+`fields` constructor on the return value of `copy-all`. The resulting
+`fields` is mutable.
 
 #### `pub resource Request`
 
 Represents an HTTP Request.
 
-##### Methods
+##### `fn new(headers: Headers, contents: Option<Stream<u8>>, trailers: Future<Result<Option<Trailers>, ErrorCode>>, options: Option<RequestOptions>) -> [Request, Future<Result<(), ErrorCode>>]`
 
-- `fn new(headers: Headers, contents: Option<Stream<u8>>, trailers: Future<Result<Option<Trailers>, ErrorCode>>, options: Option<RequestOptions>) -> [Request, Future<Result<(), ErrorCode>>]`
+Construct a new `request` with a default `method` of `GET`, and
+`none` values for `path-with-query`, `scheme`, and `authority`.
 
-  Construct a new `request` with a default `method` of `GET`, and
-  `none` values for `path-with-query`, `scheme`, and `authority`.
+`headers` is the HTTP Headers for the Request.
 
-  `headers` is the HTTP Headers for the Request.
+`contents` is the optional body content stream with `none`
+representing a zero-length content stream.
+Once it is closed, `trailers` future must resolve to a result.
+If `trailers` resolves to an error, underlying connection
+will be closed immediately.
 
-  `contents` is the optional body content stream with `none`
-  representing a zero-length content stream.
-  Once it is closed, `trailers` future must resolve to a result.
-  If `trailers` resolves to an error, underlying connection
-  will be closed immediately.
+`options` is optional `request-options` resource to be used
+if the request is sent over a network connection.
 
-  `options` is optional `request-options` resource to be used
-  if the request is sent over a network connection.
+It is possible to construct, or manipulate with the accessor functions
+below, a `request` with an invalid combination of `scheme`
+and `authority`, or `headers` which are not permitted to be sent.
+It is the obligation of the `handler.handle` implementation
+to reject invalid constructions of `request`.
 
-  It is possible to construct, or manipulate with the accessor functions
-  below, a `request` with an invalid combination of `scheme`
-  and `authority`, or `headers` which are not permitted to be sent.
-  It is the obligation of the `handler.handle` implementation
-  to reject invalid constructions of `request`.
+The returned future resolves to result of transmission of this request.
 
-  The returned future resolves to result of transmission of this request.
-- `fn get_method(self: &Request) -> Method`
+##### `fn get_method(self: &Request) -> Method`
 
-  Get the Method for the Request.
-- `fn set_method(self: &Request, method: Method) -> Result<(), ()>`
+Get the Method for the Request.
 
-  Set the Method for the Request. Fails if the string present in a
-  `method.other` argument is not a syntactically valid method.
-- `fn get_path_with_query(self: &Request) -> Option<String>`
+##### `fn set_method(self: &Request, method: Method) -> Result<(), ()>`
 
-  Get the combination of the HTTP Path and Query for the Request.  When
-  `none`, this represents an empty Path and empty Query.
-- `fn set_path_with_query(self: &Request, path_with_query: Option<String>) -> Result<(), ()>`
+Set the Method for the Request. Fails if the string present in a
+`method.other` argument is not a syntactically valid method.
 
-  Set the combination of the HTTP Path and Query for the Request.  When
-  `none`, this represents an empty Path and empty Query. Fails is the
-  string given is not a syntactically valid path and query uri component.
-- `fn get_scheme(self: &Request) -> Option<Scheme>`
+##### `fn get_path_with_query(self: &Request) -> Option<String>`
 
-  Get the HTTP Related Scheme for the Request. When `none`, the
-  implementation may choose an appropriate default scheme.
-- `fn set_scheme(self: &Request, scheme: Option<Scheme>) -> Result<(), ()>`
+Get the combination of the HTTP Path and Query for the Request.  When
+`none`, this represents an empty Path and empty Query.
 
-  Set the HTTP Related Scheme for the Request. When `none`, the
-  implementation may choose an appropriate default scheme. Fails if the
-  string given is not a syntactically valid uri scheme.
-- `fn get_authority(self: &Request) -> Option<String>`
+##### `fn set_path_with_query(self: &Request, path_with_query: Option<String>) -> Result<(), ()>`
 
-  Get the authority of the Request's target URI. A value of `none` may be used
-  with Related Schemes which do not require an authority. The HTTP and
-  HTTPS schemes always require an authority.
-- `fn set_authority(self: &Request, authority: Option<String>) -> Result<(), ()>`
+Set the combination of the HTTP Path and Query for the Request.  When
+`none`, this represents an empty Path and empty Query. Fails is the
+string given is not a syntactically valid path and query uri component.
 
-  Set the authority of the Request's target URI. A value of `none` may be used
-  with Related Schemes which do not require an authority. The HTTP and
-  HTTPS schemes always require an authority. Fails if the string given is
-  not a syntactically valid URI authority.
-- `fn get_options(self: &Request) -> Option<RequestOptions>`
+##### `fn get_scheme(self: &Request) -> Option<Scheme>`
 
-  Get the `request-options` to be associated with this request
+Get the HTTP Related Scheme for the Request. When `none`, the
+implementation may choose an appropriate default scheme.
 
-  The returned `request-options` resource is immutable: `set-*` operations
-  will fail if invoked.
+##### `fn set_scheme(self: &Request, scheme: Option<Scheme>) -> Result<(), ()>`
 
-  This `request-options` resource is a child: it must be dropped before
-  the parent `request` is dropped, or its ownership is transferred to
-  another component by e.g. `handler.handle`.
-- `fn get_headers(self: &Request) -> Headers`
+Set the HTTP Related Scheme for the Request. When `none`, the
+implementation may choose an appropriate default scheme. Fails if the
+string given is not a syntactically valid uri scheme.
 
-  Get the headers associated with the Request.
+##### `fn get_authority(self: &Request) -> Option<String>`
 
-  The returned `headers` resource is immutable: `set`, `append`, and
-  `delete` operations will fail with `header-error.immutable`.
-- `fn consume_body(this: Request, res: Future<Result<(), ErrorCode>>) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>]`
+Get the authority of the Request's target URI. A value of `none` may be used
+with Related Schemes which do not require an authority. The HTTP and
+HTTPS schemes always require an authority.
 
-  Get body of the Request.
+##### `fn set_authority(self: &Request, authority: Option<String>) -> Result<(), ()>`
 
-  Stream returned by this method represents the contents of the body.
-  Once the stream is reported as closed, callers should await the returned
-  future to determine whether the body was received successfully.
-  The future will only resolve after the stream is reported as closed.
+Set the authority of the Request's target URI. A value of `none` may be used
+with Related Schemes which do not require an authority. The HTTP and
+HTTPS schemes always require an authority. Fails if the string given is
+not a syntactically valid URI authority.
 
-  This function takes a `res` future as a parameter, which can be used to
-  communicate an error in handling of the request.
+##### `fn get_options(self: &Request) -> Option<RequestOptions>`
 
-  Note that function will move the `request`, but references to headers or
-  request options acquired from it previously will remain valid.
+Get the `request-options` to be associated with this request
+
+The returned `request-options` resource is immutable: `set-*` operations
+will fail if invoked.
+
+This `request-options` resource is a child: it must be dropped before
+the parent `request` is dropped, or its ownership is transferred to
+another component by e.g. `handler.handle`.
+
+##### `fn get_headers(self: &Request) -> Headers`
+
+Get the headers associated with the Request.
+
+The returned `headers` resource is immutable: `set`, `append`, and
+`delete` operations will fail with `header-error.immutable`.
+
+##### `fn consume_body(this: Request, res: Future<Result<(), ErrorCode>>) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>]`
+
+Get body of the Request.
+
+Stream returned by this method represents the contents of the body.
+Once the stream is reported as closed, callers should await the returned
+future to determine whether the body was received successfully.
+The future will only resolve after the stream is reported as closed.
+
+This function takes a `res` future as a parameter, which can be used to
+communicate an error in handling of the request.
+
+Note that function will move the `request`, but references to headers or
+request options acquired from it previously will remain valid.
 
 #### `pub resource RequestOptions`
 
@@ -870,89 +940,96 @@ HTTP protocol.
 These timeouts are separate from any the user may use to bound an
 asynchronous call.
 
-##### Methods
+##### `fn new() -> RequestOptions`
 
-- `fn new() -> RequestOptions`
+Construct a default `request-options` value.
 
-  Construct a default `request-options` value.
-- `fn get_connect_timeout(self: &RequestOptions) -> Option<Duration>`
+##### `fn get_connect_timeout(self: &RequestOptions) -> Option<Duration>`
 
-  The timeout for the initial connect to the HTTP Server.
-- `fn set_connect_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>`
+The timeout for the initial connect to the HTTP Server.
 
-  Set the timeout for the initial connect to the HTTP Server. An error
-  return value indicates that this timeout is not supported or that this
-  handle is immutable.
-- `fn get_first_byte_timeout(self: &RequestOptions) -> Option<Duration>`
+##### `fn set_connect_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>`
 
-  The timeout for receiving the first byte of the Response body.
-- `fn set_first_byte_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>`
+Set the timeout for the initial connect to the HTTP Server. An error
+return value indicates that this timeout is not supported or that this
+handle is immutable.
 
-  Set the timeout for receiving the first byte of the Response body. An
-  error return value indicates that this timeout is not supported or that
-  this handle is immutable.
-- `fn get_between_bytes_timeout(self: &RequestOptions) -> Option<Duration>`
+##### `fn get_first_byte_timeout(self: &RequestOptions) -> Option<Duration>`
 
-  The timeout for receiving subsequent chunks of bytes in the Response
-  body stream.
-- `fn set_between_bytes_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>`
+The timeout for receiving the first byte of the Response body.
 
-  Set the timeout for receiving subsequent chunks of bytes in the Response
-  body stream. An error return value indicates that this timeout is not
-  supported or that this handle is immutable.
-- `fn clone(self: &RequestOptions) -> RequestOptions`
+##### `fn set_first_byte_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>`
 
-  Make a deep copy of the `request-options`.
-  The resulting `request-options` is mutable.
+Set the timeout for receiving the first byte of the Response body. An
+error return value indicates that this timeout is not supported or that
+this handle is immutable.
+
+##### `fn get_between_bytes_timeout(self: &RequestOptions) -> Option<Duration>`
+
+The timeout for receiving subsequent chunks of bytes in the Response
+body stream.
+
+##### `fn set_between_bytes_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>`
+
+Set the timeout for receiving subsequent chunks of bytes in the Response
+body stream. An error return value indicates that this timeout is not
+supported or that this handle is immutable.
+
+##### `fn clone(self: &RequestOptions) -> RequestOptions`
+
+Make a deep copy of the `request-options`.
+The resulting `request-options` is mutable.
 
 #### `pub resource Response`
 
 Represents an HTTP Response.
 
-##### Methods
+##### `fn new(headers: Headers, contents: Option<Stream<u8>>, trailers: Future<Result<Option<Trailers>, ErrorCode>>) -> [Response, Future<Result<(), ErrorCode>>]`
 
-- `fn new(headers: Headers, contents: Option<Stream<u8>>, trailers: Future<Result<Option<Trailers>, ErrorCode>>) -> [Response, Future<Result<(), ErrorCode>>]`
+Construct a new `response`, with a default `status-code` of `200`.
+If a different `status-code` is needed, it must be set via the
+`set-status-code` method.
 
-  Construct a new `response`, with a default `status-code` of `200`.
-  If a different `status-code` is needed, it must be set via the
-  `set-status-code` method.
+`headers` is the HTTP Headers for the Response.
 
-  `headers` is the HTTP Headers for the Response.
+`contents` is the optional body content stream with `none`
+representing a zero-length content stream.
+Once it is closed, `trailers` future must resolve to a result.
+If `trailers` resolves to an error, underlying connection
+will be closed immediately.
 
-  `contents` is the optional body content stream with `none`
-  representing a zero-length content stream.
-  Once it is closed, `trailers` future must resolve to a result.
-  If `trailers` resolves to an error, underlying connection
-  will be closed immediately.
+The returned future resolves to result of transmission of this response.
 
-  The returned future resolves to result of transmission of this response.
-- `fn get_status_code(self: &Response) -> StatusCode`
+##### `fn get_status_code(self: &Response) -> StatusCode`
 
-  Get the HTTP Status Code for the Response.
-- `fn set_status_code(self: &Response, status_code: StatusCode) -> Result<(), ()>`
+Get the HTTP Status Code for the Response.
 
-  Set the HTTP Status Code for the Response. Fails if the status-code
-  given is not a valid http status code.
-- `fn get_headers(self: &Response) -> Headers`
+##### `fn set_status_code(self: &Response, status_code: StatusCode) -> Result<(), ()>`
 
-  Get the headers associated with the Response.
+Set the HTTP Status Code for the Response. Fails if the status-code
+given is not a valid http status code.
 
-  The returned `headers` resource is immutable: `set`, `append`, and
-  `delete` operations will fail with `header-error.immutable`.
-- `fn consume_body(this: Response, res: Future<Result<(), ErrorCode>>) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>]`
+##### `fn get_headers(self: &Response) -> Headers`
 
-  Get body of the Response.
+Get the headers associated with the Response.
 
-  Stream returned by this method represents the contents of the body.
-  Once the stream is reported as closed, callers should await the returned
-  future to determine whether the body was received successfully.
-  The future will only resolve after the stream is reported as closed.
+The returned `headers` resource is immutable: `set`, `append`, and
+`delete` operations will fail with `header-error.immutable`.
 
-  This function takes a `res` future as a parameter, which can be used to
-  communicate an error in handling of the response.
+##### `fn consume_body(this: Response, res: Future<Result<(), ErrorCode>>) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>]`
 
-  Note that function will move the `response`, but references to headers
-  acquired from it previously will remain valid.
+Get body of the Response.
+
+Stream returned by this method represents the contents of the body.
+Once the stream is reported as closed, callers should await the returned
+future to determine whether the body was received successfully.
+The future will only resolve after the stream is reported as closed.
+
+This function takes a `res` future as a parameter, which can be used to
+communicate an error in handling of the response.
+
+Note that function will move the `response`, but references to headers
+acquired from it previously will remain valid.
 
 ### Structs
 
@@ -960,28 +1037,25 @@ Represents an HTTP Response.
 
 Defines the case payload type for `DNS-error` above:
 
-##### Fields
+##### `rcode: Option<String>`
 
-- `rcode: Option<String>`
-- `info_code: Option<u16>`
+##### `info_code: Option<u16>`
 
 #### `pub struct TlsAlertReceivedPayload`
 
 Defines the case payload type for `TLS-alert-received` above:
 
-##### Fields
+##### `alert_id: Option<u8>`
 
-- `alert_id: Option<u8>`
-- `alert_message: Option<String>`
+##### `alert_message: Option<String>`
 
 #### `pub struct FieldSizePayload`
 
 Defines the case payload type for `HTTP-response-{header,trailer}-size` above:
 
-##### Fields
+##### `field_name: Option<String>`
 
-- `field_name: Option<String>`
-- `field_size: Option<u32>`
+##### `field_size: Option<u32>`
 
 ### Variants
 
@@ -989,107 +1063,159 @@ Defines the case payload type for `HTTP-response-{header,trailer}-size` above:
 
 This type corresponds to HTTP standard Methods.
 
-- `Get`
-- `Head`
-- `Post`
-- `Put`
-- `Delete`
-- `Connect`
-- `Options`
-- `Trace`
-- `Patch`
-- `Other(String)`
+##### `Get`
+
+##### `Head`
+
+##### `Post`
+
+##### `Put`
+
+##### `Delete`
+
+##### `Connect`
+
+##### `Options`
+
+##### `Trace`
+
+##### `Patch`
+
+##### `Other(String)`
 
 #### `pub variant Scheme`
 
 This type corresponds to HTTP standard Related Schemes.
 
-- `Http`
-- `Https`
-- `Other(String)`
+##### `Http`
+
+##### `Https`
+
+##### `Other(String)`
 
 #### `pub variant ErrorCode`
 
 These cases are inspired by the IANA HTTP Proxy Error Types:
   <https://www.iana.org/assignments/http-proxy-status/http-proxy-status.xhtml#table-http-proxy-error-types>
 
-- `DnsTimeout`
-- `DnsError(DnsErrorPayload)`
-- `DestinationNotFound`
-- `DestinationUnavailable`
-- `DestinationIpProhibited`
-- `DestinationIpUnroutable`
-- `ConnectionRefused`
-- `ConnectionTerminated`
-- `ConnectionTimeout`
-- `ConnectionReadTimeout`
-- `ConnectionWriteTimeout`
-- `ConnectionLimitReached`
-- `TlsProtocolError`
-- `TlsCertificateError`
-- `TlsAlertReceived(TlsAlertReceivedPayload)`
-- `HttpRequestDenied`
-- `HttpRequestLengthRequired`
-- `HttpRequestBodySize(Option<u64>)`
-- `HttpRequestMethodInvalid`
-- `HttpRequestUriInvalid`
-- `HttpRequestUriTooLong`
-- `HttpRequestHeaderSectionSize(Option<u32>)`
-- `HttpRequestHeaderSize(Option<FieldSizePayload>)`
-- `HttpRequestTrailerSectionSize(Option<u32>)`
-- `HttpRequestTrailerSize(FieldSizePayload)`
-- `HttpResponseIncomplete`
-- `HttpResponseHeaderSectionSize(Option<u32>)`
-- `HttpResponseHeaderSize(FieldSizePayload)`
-- `HttpResponseBodySize(Option<u64>)`
-- `HttpResponseTrailerSectionSize(Option<u32>)`
-- `HttpResponseTrailerSize(FieldSizePayload)`
-- `HttpResponseTransferCoding(Option<String>)`
-- `HttpResponseContentCoding(Option<String>)`
-- `HttpResponseTimeout`
-- `HttpUpgradeFailed`
-- `HttpProtocolError`
-- `LoopDetected`
-- `ConfigurationError`
-- `InternalError(Option<String>)`
+##### `DnsTimeout`
 
-  This is a catch-all error for anything that doesn't fit cleanly into a
-  more specific case. It also includes an optional string for an
-  unstructured description of the error. Users should not depend on the
-  string for diagnosing errors, as it's not required to be consistent
-  between implementations.
+##### `DnsError(DnsErrorPayload)`
+
+##### `DestinationNotFound`
+
+##### `DestinationUnavailable`
+
+##### `DestinationIpProhibited`
+
+##### `DestinationIpUnroutable`
+
+##### `ConnectionRefused`
+
+##### `ConnectionTerminated`
+
+##### `ConnectionTimeout`
+
+##### `ConnectionReadTimeout`
+
+##### `ConnectionWriteTimeout`
+
+##### `ConnectionLimitReached`
+
+##### `TlsProtocolError`
+
+##### `TlsCertificateError`
+
+##### `TlsAlertReceived(TlsAlertReceivedPayload)`
+
+##### `HttpRequestDenied`
+
+##### `HttpRequestLengthRequired`
+
+##### `HttpRequestBodySize(Option<u64>)`
+
+##### `HttpRequestMethodInvalid`
+
+##### `HttpRequestUriInvalid`
+
+##### `HttpRequestUriTooLong`
+
+##### `HttpRequestHeaderSectionSize(Option<u32>)`
+
+##### `HttpRequestHeaderSize(Option<FieldSizePayload>)`
+
+##### `HttpRequestTrailerSectionSize(Option<u32>)`
+
+##### `HttpRequestTrailerSize(FieldSizePayload)`
+
+##### `HttpResponseIncomplete`
+
+##### `HttpResponseHeaderSectionSize(Option<u32>)`
+
+##### `HttpResponseHeaderSize(FieldSizePayload)`
+
+##### `HttpResponseBodySize(Option<u64>)`
+
+##### `HttpResponseTrailerSectionSize(Option<u32>)`
+
+##### `HttpResponseTrailerSize(FieldSizePayload)`
+
+##### `HttpResponseTransferCoding(Option<String>)`
+
+##### `HttpResponseContentCoding(Option<String>)`
+
+##### `HttpResponseTimeout`
+
+##### `HttpUpgradeFailed`
+
+##### `HttpProtocolError`
+
+##### `LoopDetected`
+
+##### `ConfigurationError`
+
+##### `InternalError(Option<String>)`
+
+This is a catch-all error for anything that doesn't fit cleanly into a
+more specific case. It also includes an optional string for an
+unstructured description of the error. Users should not depend on the
+string for diagnosing errors, as it's not required to be consistent
+between implementations.
 
 #### `pub variant HeaderError`
 
 This type enumerates the different kinds of errors that may occur when
 setting or appending to a `fields` resource.
 
-- `InvalidSyntax`
+##### `InvalidSyntax`
 
-  This error indicates that a `field-name` or `field-value` was
-  syntactically invalid when used with an operation that sets headers in a
-  `fields`.
-- `Forbidden`
+This error indicates that a `field-name` or `field-value` was
+syntactically invalid when used with an operation that sets headers in a
+`fields`.
 
-  This error indicates that a forbidden `field-name` was used when trying
-  to set a header in a `fields`.
-- `Immutable`
+##### `Forbidden`
 
-  This error indicates that the operation on the `fields` was not
-  permitted because the fields are immutable.
+This error indicates that a forbidden `field-name` was used when trying
+to set a header in a `fields`.
+
+##### `Immutable`
+
+This error indicates that the operation on the `fields` was not
+permitted because the fields are immutable.
 
 #### `pub variant RequestOptionsError`
 
 This type enumerates the different kinds of errors that may occur when
 setting fields of a `request-options` resource.
 
-- `NotSupported`
+##### `NotSupported`
 
-  Indicates the specified field is not supported by this implementation.
-- `Immutable`
+Indicates the specified field is not supported by this implementation.
 
-  Indicates that the operation on the `request-options` was not permitted
-  because it is immutable.
+##### `Immutable`
+
+Indicates that the operation on the `request-options` was not permitted
+because it is immutable.
 
 ## wasi:clocks
 
@@ -1112,29 +1238,30 @@ Windows.
 A monotonic clock is a clock which has an unspecified initial value, and
 successive reads of the clock will produce non-decreasing values.
 
-##### Operations
+##### `fn now() -> Mark`
 
-- `fn now() -> Mark`
+Read the current value of the clock.
 
-  Read the current value of the clock.
+The clock is monotonic, therefore calling this function repeatedly will
+produce a sequence of non-decreasing values.
 
-  The clock is monotonic, therefore calling this function repeatedly will
-  produce a sequence of non-decreasing values.
+For completeness, this function traps if it's not possible to represent
+the value of the clock in a `mark`. Consequently, implementations
+should ensure that the starting time is low enough to avoid the
+possibility of overflow in practice.
 
-  For completeness, this function traps if it's not possible to represent
-  the value of the clock in a `mark`. Consequently, implementations
-  should ensure that the starting time is low enough to avoid the
-  possibility of overflow in practice.
-- `fn get_resolution() -> Duration`
+##### `fn get_resolution() -> Duration`
 
-  Query the resolution of the clock. Returns the duration of time
-  corresponding to a clock tick.
-- `async fn wait_until(when: Mark)`
+Query the resolution of the clock. Returns the duration of time
+corresponding to a clock tick.
 
-  Wait until the specified mark has occurred.
-- `async fn wait_for(how_long: Duration)`
+##### `async fn wait_until(when: Mark)`
 
-  Wait for the specified duration to elapse.
+Wait until the specified mark has occurred.
+
+##### `async fn wait_for(how_long: Duration)`
+
+Wait for the specified duration to elapse.
 
 #### `pub effect SystemClock`
 
@@ -1149,61 +1276,60 @@ monotonic, making it unsuitable for measuring elapsed time.
 
 It is intended for reporting the current date and time for humans.
 
-##### Operations
+##### `fn now() -> Instant`
 
-- `fn now() -> Instant`
+Read the current value of the clock.
 
-  Read the current value of the clock.
+This clock is not monotonic, therefore calling this function repeatedly
+will not necessarily produce a sequence of non-decreasing values.
 
-  This clock is not monotonic, therefore calling this function repeatedly
-  will not necessarily produce a sequence of non-decreasing values.
+The nanoseconds field of the output is always less than 1000000000.
 
-  The nanoseconds field of the output is always less than 1000000000.
-- `fn get_resolution() -> Duration`
+##### `fn get_resolution() -> Duration`
 
-  Query the resolution of the clock. Returns the smallest duration of time
-  that the implementation permits distinguishing.
+Query the resolution of the clock. Returns the smallest duration of time
+that the implementation permits distinguishing.
 
 #### `pub effect Timezone`
 
-##### Operations
+##### `fn iana_id() -> Option<String>`
 
-- `fn iana_id() -> Option<String>`
+Return the IANA identifier of the currently configured timezone. This
+should be an identifier from the IANA Time Zone Database.
 
-  Return the IANA identifier of the currently configured timezone. This
-  should be an identifier from the IANA Time Zone Database.
+For displaying to a user, the identifier should be converted into a
+localized name by means of an internationalization API.
 
-  For displaying to a user, the identifier should be converted into a
-  localized name by means of an internationalization API.
+If the implementation does not expose an actual timezone, or is unable
+to provide mappings from times to deltas between the configured timezone
+and UTC, or determining the current timezone fails, or the timezone does
+not have an IANA identifier, this returns nothing.
 
-  If the implementation does not expose an actual timezone, or is unable
-  to provide mappings from times to deltas between the configured timezone
-  and UTC, or determining the current timezone fails, or the timezone does
-  not have an IANA identifier, this returns nothing.
-- `fn utc_offset(when: Instant) -> Option<i64>`
+##### `fn utc_offset(when: Instant) -> Option<i64>`
 
-  The number of nanoseconds difference between UTC time and the local
-  time of the currently configured timezone, at the exact time of
-  `instant`.
+The number of nanoseconds difference between UTC time and the local
+time of the currently configured timezone, at the exact time of
+`instant`.
 
-  The magnitude of the returned value will always be less than
-  86,400,000,000,000 which is the number of nanoseconds in a day
-  (24*60*60*1e9).
+The magnitude of the returned value will always be less than
+86,400,000,000,000 which is the number of nanoseconds in a day
+(24*60*60*1e9).
 
-  If the implementation does not expose an actual timezone, or is unable
-  to provide mappings from times to deltas between the configured timezone
-  and UTC, or determining the current timezone fails, this returns
-  nothing.
-- `fn to_debug_string() -> String`
+If the implementation does not expose an actual timezone, or is unable
+to provide mappings from times to deltas between the configured timezone
+and UTC, or determining the current timezone fails, this returns
+nothing.
 
-  Returns a string that is suitable to assist humans in debugging whether
-  any timezone is available, and if so, which. This may be the same string
-  as `iana-id`, or a formatted representation of the UTC offset such as
-  `-04:00`, or something else.
+##### `fn to_debug_string() -> String`
 
-  WARNING: The returned string should not be consumed mechanically! It may
-  change across platforms, hosts, or other implementation details. Parsing
-  this string is a major platform-compatibility hazard.
+Returns a string that is suitable to assist humans in debugging whether
+any timezone is available, and if so, which. This may be the same string
+as `iana-id`, or a formatted representation of the UTC offset such as
+`-04:00`, or something else.
+
+WARNING: The returned string should not be consumed mechanically! It may
+change across platforms, hosts, or other implementation details. Parsing
+this string is a major platform-compatibility hazard.
 
 ### Structs
 
@@ -1226,10 +1352,9 @@ https://tc39.es/proposal-temporal/docs/timezone.html
 [POSIX's Seconds Since the Epoch]: https://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xbd_chap04.html#tag_21_04_16
 [Unix Time]: https://en.wikipedia.org/wiki/Unix_time
 
-##### Fields
+##### `seconds: i64`
 
-- `seconds: i64`
-- `nanoseconds: u32`
+##### `nanoseconds: u32`
 
 ## wasi:random
 
@@ -1242,27 +1367,25 @@ The insecure-seed interface for seeding hash-map DoS resistance.
 It is intended to be portable at least between Unix-family platforms and
 Windows.
 
-##### Operations
+##### `fn get_insecure_seed() -> [u64, u64]`
 
-- `fn get_insecure_seed() -> [u64, u64]`
+Return a 128-bit value that may contain a pseudo-random value.
 
-  Return a 128-bit value that may contain a pseudo-random value.
+The returned value is not required to be computed from a CSPRNG, and may
+even be entirely deterministic. Host implementations are encouraged to
+provide pseudo-random values to any program exposed to
+attacker-controlled content, to enable DoS protection built into many
+languages' hash-map implementations.
 
-  The returned value is not required to be computed from a CSPRNG, and may
-  even be entirely deterministic. Host implementations are encouraged to
-  provide pseudo-random values to any program exposed to
-  attacker-controlled content, to enable DoS protection built into many
-  languages' hash-map implementations.
+This function is intended to only be called once, by a source language
+to initialize Denial Of Service (DoS) protection in its hash-map
+implementation.
 
-  This function is intended to only be called once, by a source language
-  to initialize Denial Of Service (DoS) protection in its hash-map
-  implementation.
+# Expected future evolution
 
-  # Expected future evolution
-
-  This will likely be changed to a value import, to prevent it from being
-  called multiple times and potentially used for purposes other than DoS
-  protection.
+This will likely be changed to a value import, to prevent it from being
+called multiple times and potentially used for purposes other than DoS
+protection.
 
 #### `pub effect Insecure`
 
@@ -1271,24 +1394,23 @@ The insecure interface for insecure pseudo-random numbers.
 It is intended to be portable at least between Unix-family platforms and
 Windows.
 
-##### Operations
+##### `fn get_insecure_random_bytes(len: u64) -> Array<u8>`
 
-- `fn get_insecure_random_bytes(len: u64) -> Array<u8>`
+Return `len` insecure pseudo-random bytes.
 
-  Return `len` insecure pseudo-random bytes.
+This function is not cryptographically secure. Do not use it for
+anything related to security.
 
-  This function is not cryptographically secure. Do not use it for
-  anything related to security.
+There are no requirements on the values of the returned bytes, however
+implementations are encouraged to return evenly distributed values with
+a long period.
 
-  There are no requirements on the values of the returned bytes, however
-  implementations are encouraged to return evenly distributed values with
-  a long period.
-- `fn get_insecure_random_u64() -> u64`
+##### `fn get_insecure_random_u64() -> u64`
 
-  Return an insecure pseudo-random `u64` value.
+Return an insecure pseudo-random `u64` value.
 
-  This function returns the same type of pseudo-random data as
-  `get-insecure-random-bytes`, represented as a `u64`.
+This function returns the same type of pseudo-random data as
+`get-insecure-random-bytes`, represented as a `u64`.
 
 #### `pub effect Random`
 
@@ -1297,28 +1419,27 @@ WASI Random is a random data API.
 It is intended to be portable at least between Unix-family platforms and
 Windows.
 
-##### Operations
+##### `fn get_random_bytes(len: u64) -> Array<u8>`
 
-- `fn get_random_bytes(len: u64) -> Array<u8>`
+Return `len` cryptographically-secure random or pseudo-random bytes.
 
-  Return `len` cryptographically-secure random or pseudo-random bytes.
+This function must produce data at least as cryptographically secure and
+fast as an adequately seeded cryptographically-secure pseudo-random
+number generator (CSPRNG). It must not block, from the perspective of
+the calling program, under any circumstances, including on the first
+request and on requests for numbers of bytes. The returned data must
+always be unpredictable.
 
-  This function must produce data at least as cryptographically secure and
-  fast as an adequately seeded cryptographically-secure pseudo-random
-  number generator (CSPRNG). It must not block, from the perspective of
-  the calling program, under any circumstances, including on the first
-  request and on requests for numbers of bytes. The returned data must
-  always be unpredictable.
+This function must always return fresh data. Deterministic environments
+must omit this function, rather than implementing it with deterministic
+data.
 
-  This function must always return fresh data. Deterministic environments
-  must omit this function, rather than implementing it with deterministic
-  data.
-- `fn get_random_u64() -> u64`
+##### `fn get_random_u64() -> u64`
 
-  Return a cryptographically-secure random or pseudo-random `u64` value.
+Return a cryptographically-secure random or pseudo-random `u64` value.
 
-  This function returns the same type of data as `get-random-bytes`,
-  represented as a `u64`.
+This function returns the same type of data as `get-random-bytes`,
+represented as a `u64`.
 
 ## wasi:sockets
 
@@ -1344,67 +1465,84 @@ combined with a couple of errors that are always possible:
 
 See each individual API for what the POSIX equivalents are. They sometimes differ per API.
 
-- `Unknown`
-- `AccessDenied`
-- `NotSupported`
-- `InvalidArgument`
-- `OutOfMemory`
-- `Timeout`
-- `InvalidState`
-- `AddressNotBindable`
-- `AddressInUse`
-- `RemoteUnreachable`
-- `ConnectionRefused`
-- `ConnectionReset`
-- `ConnectionAborted`
-- `DatagramTooLarge`
+##### `Unknown`
+
+##### `AccessDenied`
+
+##### `NotSupported`
+
+##### `InvalidArgument`
+
+##### `OutOfMemory`
+
+##### `Timeout`
+
+##### `InvalidState`
+
+##### `AddressNotBindable`
+
+##### `AddressInUse`
+
+##### `RemoteUnreachable`
+
+##### `ConnectionRefused`
+
+##### `ConnectionReset`
+
+##### `ConnectionAborted`
+
+##### `DatagramTooLarge`
 
 #### `pub enum IpAddressFamily`
 
-- `Ipv4`
-- `Ipv6`
+##### `Ipv4`
+
+##### `Ipv6`
 
 #### `pub enum ErrorCode`
 
 Lookup error codes.
 
-- `Unknown`
-- `AccessDenied`
-- `InvalidArgument`
-- `NameUnresolvable`
-- `TemporaryResolverFailure`
-- `PermanentResolverFailure`
+##### `Unknown`
+
+##### `AccessDenied`
+
+##### `InvalidArgument`
+
+##### `NameUnresolvable`
+
+##### `TemporaryResolverFailure`
+
+##### `PermanentResolverFailure`
 
 ### Effects
 
 #### `pub effect IpNameLookup`
 
-##### Operations
+##### `async fn resolve_addresses(name: String) -> Result<Array<IpAddress>, ErrorCode>`
 
-- `async fn resolve_addresses(name: String) -> Result<Array<IpAddress>, ErrorCode>`
+Resolve an internet host name to a list of IP addresses.
 
-  Resolve an internet host name to a list of IP addresses.
+Unicode domain names are automatically converted to ASCII using IDNA encoding.
+If the input is an IP address string, the address is parsed and returned
+as-is without making any external requests.
 
-  Unicode domain names are automatically converted to ASCII using IDNA encoding.
-  If the input is an IP address string, the address is parsed and returned
-  as-is without making any external requests.
+See the wasi-socket proposal README.md for a comparison with getaddrinfo.
 
-  See the wasi-socket proposal README.md for a comparison with getaddrinfo.
+The results are returned in connection order preference.
 
-  The results are returned in connection order preference.
+This function never succeeds with 0 results. It either fails or succeeds
+with at least one address. Additionally, this function never returns
+IPv4-mapped IPv6 addresses.
 
-  This function never succeeds with 0 results. It either fails or succeeds
-  with at least one address. Additionally, this function never returns
-  IPv4-mapped IPv6 addresses.
+The returned future will resolve to an error code in case of failure.
+It will resolve to success once the returned stream is exhausted.
 
-  The returned future will resolve to an error code in case of failure.
-  It will resolve to success once the returned stream is exhausted.
-
-  # References:
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getaddrinfo.html>
-  - <https://man7.org/linux/man-pages/man3/getaddrinfo.3.html>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/ws2tcpip/nf-ws2tcpip-getaddrinfo>
-  - <https://man.freebsd.org/cgi/man.cgi?query=getaddrinfo&sektion=3>
+# References:
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getaddrinfo.html>
+- <https://man7.org/linux/man-pages/man3/getaddrinfo.3.html>
+- <https://learn.microsoft.com/en-us/windows/win32/api/ws2tcpip/nf-ws2tcpip-getaddrinfo>
+- <https://man.freebsd.org/cgi/man.cgi?query=getaddrinfo&sektion=3>
 
 ### Resources
 
@@ -1430,593 +1568,629 @@ In addition to the general error codes documented on the
 `types::error-code` type, TCP socket methods may always return
 `error(invalid-state)` when in the `closed` state.
 
-##### Methods
-
-- `fn create(address_family: IpAddressFamily) -> Result<TcpSocket, ErrorCode>`
-
-  Create a new TCP socket.
-
-  Similar to `socket(AF_INET or AF_INET6, SOCK_STREAM, IPPROTO_TCP)` in POSIX.
-  On IPv6 sockets, IPV6_V6ONLY is enabled by default and can't be configured otherwise.
-
-  Unlike POSIX, WASI sockets have no notion of a socket-level
-  `O_NONBLOCK` flag. Instead they fully rely on the Component Model's
-  async support.
-
-  # References
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/socket.html>
-  - <https://man7.org/linux/man-pages/man2/socket.2.html>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasocketw>
-  - <https://man.freebsd.org/cgi/man.cgi?query=socket&sektion=2>
-- `fn bind(self: &TcpSocket, local_address: IpSocketAddress) -> Result<(), ErrorCode>`
-
-  Bind the socket to the provided IP address and port.
-
-  If the IP address is zero (`0.0.0.0` in IPv4, `::` in IPv6), it is left to the implementation to decide which
-  network interface(s) to bind to.
-  If the TCP/UDP port is zero, the socket will be bound to a random free port.
-
-  Bind can be attempted multiple times on the same socket, even with
-  different arguments on each iteration. But never concurrently and
-  only as long as the previous bind failed. Once a bind succeeds, the
-  binding can't be changed anymore.
-
-  # Typical errors
-  - `invalid-argument`:          The `local-address` has the wrong address family. (EAFNOSUPPORT, EFAULT on Windows)
-  - `invalid-argument`:          `local-address` is not a unicast address. (EINVAL)
-  - `invalid-argument`:          `local-address` is an IPv4-mapped IPv6 address. (EINVAL)
-  - `invalid-state`:             The socket is already bound. (EINVAL)
-  - `address-in-use`:            No ephemeral ports available. (EADDRINUSE, ENOBUFS on Windows)
-  - `address-in-use`:            Address is already in use. (EADDRINUSE)
-  - `address-not-bindable`:      `local-address` is not an address that can be bound to. (EADDRNOTAVAIL)
-
-  # Implementors note
-  When binding to a non-zero port, this bind operation shouldn't be affected by the TIME_WAIT
-  state of a recently closed socket on the same local address. In practice this means that the SO_REUSEADDR
-  socket option should be set implicitly on all platforms, except on Windows where this is the default behavior
-  and SO_REUSEADDR performs something different entirely.
-
-  # References
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/bind.html>
-  - <https://man7.org/linux/man-pages/man2/bind.2.html>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind>
-  - <https://man.freebsd.org/cgi/man.cgi?query=bind&sektion=2&format=html>
-- `async fn connect(self: &TcpSocket, remote_address: IpSocketAddress) -> Result<(), ErrorCode>`
-
-  Connect to a remote endpoint.
-
-  On success, the socket is transitioned into the `connected` state and this function returns a connection resource.
-
-  After a failed connection attempt, the socket will be in the `closed`
-  state and the only valid action left is to `drop` the socket. A single
-  socket can not be used to connect more than once.
-
-  # Typical errors
-  - `invalid-argument`:          The `remote-address` has the wrong address family. (EAFNOSUPPORT)
-  - `invalid-argument`:          `remote-address` is not a unicast address. (EINVAL, ENETUNREACH on Linux, EAFNOSUPPORT on MacOS)
-  - `invalid-argument`:          `remote-address` is an IPv4-mapped IPv6 address. (EINVAL, EADDRNOTAVAIL on Illumos)
-  - `invalid-argument`:          The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EADDRNOTAVAIL on Windows)
-  - `invalid-argument`:          The port in `remote-address` is set to 0. (EADDRNOTAVAIL on Windows)
-  - `invalid-state`:             The socket is already in the `connecting` state. (EALREADY)
-  - `invalid-state`:             The socket is already in the `connected` state. (EISCONN)
-  - `invalid-state`:             The socket is already in the `listening` state. (EOPNOTSUPP, EINVAL on Windows)
-  - `timeout`:                   Connection timed out. (ETIMEDOUT)
-  - `connection-refused`:        The connection was forcefully rejected. (ECONNREFUSED)
-  - `connection-reset`:          The connection was reset. (ECONNRESET)
-  - `connection-aborted`:        The connection was aborted. (ECONNABORTED)
-  - `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
-  - `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
-
-  # References
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html>
-  - <https://man7.org/linux/man-pages/man2/connect.2.html>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
-  - <https://man.freebsd.org/cgi/man.cgi?connect>
-- `fn listen(self: &TcpSocket) -> Result<Stream<TcpSocket>, ErrorCode>`
-
-  Start listening and return a stream of new inbound connections.
-
-  Transitions the socket into the `listening` state. This can be called
-  at most once per socket.
-
-  If the socket is not already explicitly bound, this function will
-  implicitly bind the socket to a random free port.
-
-  Normally, the returned sockets are bound, in the `connected` state
-  and immediately ready for I/O. Though, depending on exact timing and
-  circumstances, a newly accepted connection may already be `closed`
-  by the time the server attempts to perform its first I/O on it. This
-  is true regardless of whether the WASI implementation uses
-  "synthesized" sockets or not (see Implementors Notes below).
-
-  The following properties are inherited from the listener socket:
-  - `address-family`
-  - `keep-alive-enabled`
-  - `keep-alive-idle-time`
-  - `keep-alive-interval`
-  - `keep-alive-count`
-  - `hop-limit`
-  - `receive-buffer-size`
-  - `send-buffer-size`
-
-  # Typical errors
-  - `invalid-state`:             The socket is already in the `connected` state. (EISCONN, EINVAL on BSD)
-  - `invalid-state`:             The socket is already in the `listening` state.
-  - `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE)
-
-  # Implementors note
-  This method returns a single perpetual stream that should only close
-  on fatal errors (if any). Yet, the POSIX' `accept` function may also
-  return transient errors (e.g. ECONNABORTED). The exact details differ
-  per operation system. For example, the Linux manual mentions:
-
-  > Linux accept() passes already-pending network errors on the new
-  > socket as an error code from accept(). This behavior differs from
-  > other BSD socket implementations. For reliable operation the
-  > application should detect the network errors defined for the
-  > protocol after accept() and treat them like EAGAIN by retrying.
-  > In the case of TCP/IP, these are ENETDOWN, EPROTO, ENOPROTOOPT,
-  > EHOSTDOWN, ENONET, EHOSTUNREACH, EOPNOTSUPP, and ENETUNREACH.
-  Source: https://man7.org/linux/man-pages/man2/accept.2.html
-
-  WASI implementations have two options to handle this:
-  - Optionally log it and then skip over non-fatal errors returned by
-    `accept`. Guest code never gets to see these failures. Or:
-  - Synthesize a `tcp-socket` resource that exposes the error when
-    attempting to send or receive on it. Guest code then sees these
-    failures as regular I/O errors.
-
-  In either case, the stream returned by this `listen` method remains
-  operational.
-
-  # References
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/listen.html>
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/accept.html>
-  - <https://man7.org/linux/man-pages/man2/listen.2.html>
-  - <https://man7.org/linux/man-pages/man2/accept.2.html>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-listen>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-accept>
-  - <https://man.freebsd.org/cgi/man.cgi?query=listen&sektion=2>
-  - <https://man.freebsd.org/cgi/man.cgi?query=accept&sektion=2>
-- `async fn send(self: &TcpSocket, data: Stream<u8>) -> Result<(), ErrorCode>`
-
-  Transmit data to peer.
-
-  The caller should close the stream when it has no more data to send
-  to the peer. Under normal circumstances this will cause a FIN packet
-  to be sent out. Closing the stream is equivalent to calling
-  `shutdown(SHUT_WR)` in POSIX.
-
-  This function may be called at most once and returns once the full
-  contents of the stream are transmitted or an error is encountered.
-
-  # Typical errors
-  - `invalid-state`:             The socket is not in the `connected` state. (ENOTCONN)
-  - `connection-reset`:          The connection was reset. (ECONNRESET)
-  - `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
-
-   # References
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/send.html>
-  - <https://man7.org/linux/man-pages/man2/send.2.html>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send>
-  - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
-- `fn receive(self: &TcpSocket) -> [Stream<u8>, Future<Result<(), ErrorCode>>]`
-
-  Read data from peer.
-
-  This function returns a `stream` which provides the data received from the
-  socket, and a `future` providing additional error information in case the
-  socket is closed abnormally.
-
-  If the socket is closed normally, `stream.read` on the `stream` will return
-  `read-status::closed` with no `error-context` and the future resolves to
-  the value `ok`. If the socket is closed abnormally, `stream.read` on the
-  `stream` returns `read-status::closed` with an `error-context` and the future
-  resolves to `err` with an `error-code`.
-
-  `receive` is meant to be called only once per socket. If it is called more
-  than once, the subsequent calls return a new `stream` that fails as if it
-  were closed abnormally.
-
-  If the caller is not expecting to receive any data from the peer,
-  they may drop the stream. Any data still in the receive queue
-  will be discarded. This is equivalent to calling `shutdown(SHUT_RD)`
-  in POSIX.
-
-  # Typical errors
-  - `invalid-state`:             The socket is not in the `connected` state. (ENOTCONN)
-  - `connection-reset`:          The connection was reset. (ECONNRESET)
-  - `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
-
-  # References
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recv.html>
-  - <https://man7.org/linux/man-pages/man2/recv.2.html>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recv>
-  - <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
-- `fn get_local_address(self: &TcpSocket) -> Result<IpSocketAddress, ErrorCode>`
-
-  Get the bound local address.
-
-  POSIX mentions:
-  > If the socket has not been bound to a local name, the value
-  > stored in the object pointed to by `address` is unspecified.
-
-  WASI is stricter and requires `get-local-address` to return `invalid-state` when the socket hasn't been bound yet.
-
-  # Typical errors
-  - `invalid-state`: The socket is not bound to any local address.
-
-  # References
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getsockname.html>
-  - <https://man7.org/linux/man-pages/man2/getsockname.2.html>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getsockname>
-  - <https://man.freebsd.org/cgi/man.cgi?getsockname>
-- `fn get_remote_address(self: &TcpSocket) -> Result<IpSocketAddress, ErrorCode>`
-
-  Get the remote address.
-
-  # Typical errors
-  - `invalid-state`: The socket is not connected to a remote address. (ENOTCONN)
-
-  # References
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getpeername.html>
-  - <https://man7.org/linux/man-pages/man2/getpeername.2.html>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getpeername>
-  - <https://man.freebsd.org/cgi/man.cgi?query=getpeername&sektion=2&n=1>
-- `fn get_is_listening(self: &TcpSocket) -> bool`
-
-  Whether the socket is in the `listening` state.
-
-  Equivalent to the SO_ACCEPTCONN socket option.
-- `fn get_address_family(self: &TcpSocket) -> IpAddressFamily`
-
-  Whether this is a IPv4 or IPv6 socket.
-
-  This is the value passed to the constructor.
-
-  Equivalent to the SO_DOMAIN socket option.
-- `fn set_listen_backlog_size(self: &TcpSocket, value: u64) -> Result<(), ErrorCode>`
-
-  Hints the desired listen queue size. Implementations are free to ignore this.
-
-  If the provided value is 0, an `invalid-argument` error is returned.
-  Any other value will never cause an error, but it might be silently clamped and/or rounded.
-
-  # Typical errors
-  - `not-supported`:        (set) The platform does not support changing the backlog size after the initial listen.
-  - `invalid-argument`:     (set) The provided value was 0.
-  - `invalid-state`:        (set) The socket is in the `connecting` or `connected` state.
-- `fn get_keep_alive_enabled(self: &TcpSocket) -> Result<bool, ErrorCode>`
-
-  Enables or disables keepalive.
-
-  The keepalive behavior can be adjusted using:
-  - `keep-alive-idle-time`
-  - `keep-alive-interval`
-  - `keep-alive-count`
-  These properties can be configured while `keep-alive-enabled` is false, but only come into effect when `keep-alive-enabled` is true.
-
-  Equivalent to the SO_KEEPALIVE socket option.
-- `fn set_keep_alive_enabled(self: &TcpSocket, value: bool) -> Result<(), ErrorCode>`
-- `fn get_keep_alive_idle_time(self: &TcpSocket) -> Result<Duration, ErrorCode>`
-
-  Amount of time the connection has to be idle before TCP starts sending keepalive packets.
-
-  If the provided value is 0, an `invalid-argument` error is returned.
-  Any other value will never cause an error, but it might be silently clamped and/or rounded.
-  I.e. after setting a value, reading the same setting back may return a different value.
-
-  Equivalent to the TCP_KEEPIDLE socket option. (TCP_KEEPALIVE on MacOS)
-
-  # Typical errors
-  - `invalid-argument`:     (set) The provided value was 0.
-- `fn set_keep_alive_idle_time(self: &TcpSocket, value: Duration) -> Result<(), ErrorCode>`
-- `fn get_keep_alive_interval(self: &TcpSocket) -> Result<Duration, ErrorCode>`
-
-  The time between keepalive packets.
-
-  If the provided value is 0, an `invalid-argument` error is returned.
-  Any other value will never cause an error, but it might be silently clamped and/or rounded.
-  I.e. after setting a value, reading the same setting back may return a different value.
-
-  Equivalent to the TCP_KEEPINTVL socket option.
-
-  # Typical errors
-  - `invalid-argument`:     (set) The provided value was 0.
-- `fn set_keep_alive_interval(self: &TcpSocket, value: Duration) -> Result<(), ErrorCode>`
-- `fn get_keep_alive_count(self: &TcpSocket) -> Result<u32, ErrorCode>`
-
-  The maximum amount of keepalive packets TCP should send before aborting the connection.
-
-  If the provided value is 0, an `invalid-argument` error is returned.
-  Any other value will never cause an error, but it might be silently clamped and/or rounded.
-  I.e. after setting a value, reading the same setting back may return a different value.
-
-  Equivalent to the TCP_KEEPCNT socket option.
-
-  # Typical errors
-  - `invalid-argument`:     (set) The provided value was 0.
-- `fn set_keep_alive_count(self: &TcpSocket, value: u32) -> Result<(), ErrorCode>`
-- `fn get_hop_limit(self: &TcpSocket) -> Result<u8, ErrorCode>`
-
-  Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
-
-  If the provided value is 0, an `invalid-argument` error is returned.
-
-  # Typical errors
-  - `invalid-argument`:     (set) The TTL value must be 1 or higher.
-- `fn set_hop_limit(self: &TcpSocket, value: u8) -> Result<(), ErrorCode>`
-- `fn get_receive_buffer_size(self: &TcpSocket) -> Result<u64, ErrorCode>`
-
-  The kernel buffer space reserved for sends/receives on this socket.
-
-  If the provided value is 0, an `invalid-argument` error is returned.
-  Any other value will never cause an error, but it might be silently clamped and/or rounded.
-  I.e. after setting a value, reading the same setting back may return a different value.
-
-  Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
-
-  # Typical errors
-  - `invalid-argument`:     (set) The provided value was 0.
-- `fn set_receive_buffer_size(self: &TcpSocket, value: u64) -> Result<(), ErrorCode>`
-- `fn get_send_buffer_size(self: &TcpSocket) -> Result<u64, ErrorCode>`
-- `fn set_send_buffer_size(self: &TcpSocket, value: u64) -> Result<(), ErrorCode>`
+##### `fn create(address_family: IpAddressFamily) -> Result<TcpSocket, ErrorCode>`
+
+Create a new TCP socket.
+
+Similar to `socket(AF_INET or AF_INET6, SOCK_STREAM, IPPROTO_TCP)` in POSIX.
+On IPv6 sockets, IPV6_V6ONLY is enabled by default and can't be configured otherwise.
+
+Unlike POSIX, WASI sockets have no notion of a socket-level
+`O_NONBLOCK` flag. Instead they fully rely on the Component Model's
+async support.
+
+# References
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/socket.html>
+- <https://man7.org/linux/man-pages/man2/socket.2.html>
+- <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasocketw>
+- <https://man.freebsd.org/cgi/man.cgi?query=socket&sektion=2>
+
+##### `fn bind(self: &TcpSocket, local_address: IpSocketAddress) -> Result<(), ErrorCode>`
+
+Bind the socket to the provided IP address and port.
+
+If the IP address is zero (`0.0.0.0` in IPv4, `::` in IPv6), it is left to the implementation to decide which
+network interface(s) to bind to.
+If the TCP/UDP port is zero, the socket will be bound to a random free port.
+
+Bind can be attempted multiple times on the same socket, even with
+different arguments on each iteration. But never concurrently and
+only as long as the previous bind failed. Once a bind succeeds, the
+binding can't be changed anymore.
+
+# Typical errors
+- `invalid-argument`:          The `local-address` has the wrong address family. (EAFNOSUPPORT, EFAULT on Windows)
+- `invalid-argument`:          `local-address` is not a unicast address. (EINVAL)
+- `invalid-argument`:          `local-address` is an IPv4-mapped IPv6 address. (EINVAL)
+- `invalid-state`:             The socket is already bound. (EINVAL)
+- `address-in-use`:            No ephemeral ports available. (EADDRINUSE, ENOBUFS on Windows)
+- `address-in-use`:            Address is already in use. (EADDRINUSE)
+- `address-not-bindable`:      `local-address` is not an address that can be bound to. (EADDRNOTAVAIL)
+
+# Implementors note
+When binding to a non-zero port, this bind operation shouldn't be affected by the TIME_WAIT
+state of a recently closed socket on the same local address. In practice this means that the SO_REUSEADDR
+socket option should be set implicitly on all platforms, except on Windows where this is the default behavior
+and SO_REUSEADDR performs something different entirely.
+
+# References
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/bind.html>
+- <https://man7.org/linux/man-pages/man2/bind.2.html>
+- <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind>
+- <https://man.freebsd.org/cgi/man.cgi?query=bind&sektion=2&format=html>
+
+##### `async fn connect(self: &TcpSocket, remote_address: IpSocketAddress) -> Result<(), ErrorCode>`
+
+Connect to a remote endpoint.
+
+On success, the socket is transitioned into the `connected` state and this function returns a connection resource.
+
+After a failed connection attempt, the socket will be in the `closed`
+state and the only valid action left is to `drop` the socket. A single
+socket can not be used to connect more than once.
+
+# Typical errors
+- `invalid-argument`:          The `remote-address` has the wrong address family. (EAFNOSUPPORT)
+- `invalid-argument`:          `remote-address` is not a unicast address. (EINVAL, ENETUNREACH on Linux, EAFNOSUPPORT on MacOS)
+- `invalid-argument`:          `remote-address` is an IPv4-mapped IPv6 address. (EINVAL, EADDRNOTAVAIL on Illumos)
+- `invalid-argument`:          The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EADDRNOTAVAIL on Windows)
+- `invalid-argument`:          The port in `remote-address` is set to 0. (EADDRNOTAVAIL on Windows)
+- `invalid-state`:             The socket is already in the `connecting` state. (EALREADY)
+- `invalid-state`:             The socket is already in the `connected` state. (EISCONN)
+- `invalid-state`:             The socket is already in the `listening` state. (EOPNOTSUPP, EINVAL on Windows)
+- `timeout`:                   Connection timed out. (ETIMEDOUT)
+- `connection-refused`:        The connection was forcefully rejected. (ECONNREFUSED)
+- `connection-reset`:          The connection was reset. (ECONNRESET)
+- `connection-aborted`:        The connection was aborted. (ECONNABORTED)
+- `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+- `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
+
+# References
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html>
+- <https://man7.org/linux/man-pages/man2/connect.2.html>
+- <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
+- <https://man.freebsd.org/cgi/man.cgi?connect>
+
+##### `fn listen(self: &TcpSocket) -> Result<Stream<TcpSocket>, ErrorCode>`
+
+Start listening and return a stream of new inbound connections.
+
+Transitions the socket into the `listening` state. This can be called
+at most once per socket.
+
+If the socket is not already explicitly bound, this function will
+implicitly bind the socket to a random free port.
+
+Normally, the returned sockets are bound, in the `connected` state
+and immediately ready for I/O. Though, depending on exact timing and
+circumstances, a newly accepted connection may already be `closed`
+by the time the server attempts to perform its first I/O on it. This
+is true regardless of whether the WASI implementation uses
+"synthesized" sockets or not (see Implementors Notes below).
+
+The following properties are inherited from the listener socket:
+- `address-family`
+- `keep-alive-enabled`
+- `keep-alive-idle-time`
+- `keep-alive-interval`
+- `keep-alive-count`
+- `hop-limit`
+- `receive-buffer-size`
+- `send-buffer-size`
+
+# Typical errors
+- `invalid-state`:             The socket is already in the `connected` state. (EISCONN, EINVAL on BSD)
+- `invalid-state`:             The socket is already in the `listening` state.
+- `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE)
+
+# Implementors note
+This method returns a single perpetual stream that should only close
+on fatal errors (if any). Yet, the POSIX' `accept` function may also
+return transient errors (e.g. ECONNABORTED). The exact details differ
+per operation system. For example, the Linux manual mentions:
+
+> Linux accept() passes already-pending network errors on the new
+> socket as an error code from accept(). This behavior differs from
+> other BSD socket implementations. For reliable operation the
+> application should detect the network errors defined for the
+> protocol after accept() and treat them like EAGAIN by retrying.
+> In the case of TCP/IP, these are ENETDOWN, EPROTO, ENOPROTOOPT,
+> EHOSTDOWN, ENONET, EHOSTUNREACH, EOPNOTSUPP, and ENETUNREACH.
+Source: https://man7.org/linux/man-pages/man2/accept.2.html
+
+WASI implementations have two options to handle this:
+- Optionally log it and then skip over non-fatal errors returned by
+  `accept`. Guest code never gets to see these failures. Or:
+- Synthesize a `tcp-socket` resource that exposes the error when
+  attempting to send or receive on it. Guest code then sees these
+  failures as regular I/O errors.
+
+In either case, the stream returned by this `listen` method remains
+operational.
+
+# References
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/listen.html>
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/accept.html>
+- <https://man7.org/linux/man-pages/man2/listen.2.html>
+- <https://man7.org/linux/man-pages/man2/accept.2.html>
+- <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-listen>
+- <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-accept>
+- <https://man.freebsd.org/cgi/man.cgi?query=listen&sektion=2>
+- <https://man.freebsd.org/cgi/man.cgi?query=accept&sektion=2>
+
+##### `async fn send(self: &TcpSocket, data: Stream<u8>) -> Result<(), ErrorCode>`
+
+Transmit data to peer.
+
+The caller should close the stream when it has no more data to send
+to the peer. Under normal circumstances this will cause a FIN packet
+to be sent out. Closing the stream is equivalent to calling
+`shutdown(SHUT_WR)` in POSIX.
+
+This function may be called at most once and returns once the full
+contents of the stream are transmitted or an error is encountered.
+
+# Typical errors
+- `invalid-state`:             The socket is not in the `connected` state. (ENOTCONN)
+- `connection-reset`:          The connection was reset. (ECONNRESET)
+- `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+
+ # References
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/send.html>
+- <https://man7.org/linux/man-pages/man2/send.2.html>
+- <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send>
+- <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
+
+##### `fn receive(self: &TcpSocket) -> [Stream<u8>, Future<Result<(), ErrorCode>>]`
+
+Read data from peer.
+
+This function returns a `stream` which provides the data received from the
+socket, and a `future` providing additional error information in case the
+socket is closed abnormally.
+
+If the socket is closed normally, `stream.read` on the `stream` will return
+`read-status::closed` with no `error-context` and the future resolves to
+the value `ok`. If the socket is closed abnormally, `stream.read` on the
+`stream` returns `read-status::closed` with an `error-context` and the future
+resolves to `err` with an `error-code`.
+
+`receive` is meant to be called only once per socket. If it is called more
+than once, the subsequent calls return a new `stream` that fails as if it
+were closed abnormally.
+
+If the caller is not expecting to receive any data from the peer,
+they may drop the stream. Any data still in the receive queue
+will be discarded. This is equivalent to calling `shutdown(SHUT_RD)`
+in POSIX.
+
+# Typical errors
+- `invalid-state`:             The socket is not in the `connected` state. (ENOTCONN)
+- `connection-reset`:          The connection was reset. (ECONNRESET)
+- `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+
+# References
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recv.html>
+- <https://man7.org/linux/man-pages/man2/recv.2.html>
+- <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recv>
+- <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
+
+##### `fn get_local_address(self: &TcpSocket) -> Result<IpSocketAddress, ErrorCode>`
+
+Get the bound local address.
+
+POSIX mentions:
+> If the socket has not been bound to a local name, the value
+> stored in the object pointed to by `address` is unspecified.
+
+WASI is stricter and requires `get-local-address` to return `invalid-state` when the socket hasn't been bound yet.
+
+# Typical errors
+- `invalid-state`: The socket is not bound to any local address.
+
+# References
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getsockname.html>
+- <https://man7.org/linux/man-pages/man2/getsockname.2.html>
+- <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getsockname>
+- <https://man.freebsd.org/cgi/man.cgi?getsockname>
+
+##### `fn get_remote_address(self: &TcpSocket) -> Result<IpSocketAddress, ErrorCode>`
+
+Get the remote address.
+
+# Typical errors
+- `invalid-state`: The socket is not connected to a remote address. (ENOTCONN)
+
+# References
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getpeername.html>
+- <https://man7.org/linux/man-pages/man2/getpeername.2.html>
+- <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getpeername>
+- <https://man.freebsd.org/cgi/man.cgi?query=getpeername&sektion=2&n=1>
+
+##### `fn get_is_listening(self: &TcpSocket) -> bool`
+
+Whether the socket is in the `listening` state.
+
+Equivalent to the SO_ACCEPTCONN socket option.
+
+##### `fn get_address_family(self: &TcpSocket) -> IpAddressFamily`
+
+Whether this is a IPv4 or IPv6 socket.
+
+This is the value passed to the constructor.
+
+Equivalent to the SO_DOMAIN socket option.
+
+##### `fn set_listen_backlog_size(self: &TcpSocket, value: u64) -> Result<(), ErrorCode>`
+
+Hints the desired listen queue size. Implementations are free to ignore this.
+
+If the provided value is 0, an `invalid-argument` error is returned.
+Any other value will never cause an error, but it might be silently clamped and/or rounded.
+
+# Typical errors
+- `not-supported`:        (set) The platform does not support changing the backlog size after the initial listen.
+- `invalid-argument`:     (set) The provided value was 0.
+- `invalid-state`:        (set) The socket is in the `connecting` or `connected` state.
+
+##### `fn get_keep_alive_enabled(self: &TcpSocket) -> Result<bool, ErrorCode>`
+
+Enables or disables keepalive.
+
+The keepalive behavior can be adjusted using:
+- `keep-alive-idle-time`
+- `keep-alive-interval`
+- `keep-alive-count`
+These properties can be configured while `keep-alive-enabled` is false, but only come into effect when `keep-alive-enabled` is true.
+
+Equivalent to the SO_KEEPALIVE socket option.
+
+##### `fn set_keep_alive_enabled(self: &TcpSocket, value: bool) -> Result<(), ErrorCode>`
+
+##### `fn get_keep_alive_idle_time(self: &TcpSocket) -> Result<Duration, ErrorCode>`
+
+Amount of time the connection has to be idle before TCP starts sending keepalive packets.
+
+If the provided value is 0, an `invalid-argument` error is returned.
+Any other value will never cause an error, but it might be silently clamped and/or rounded.
+I.e. after setting a value, reading the same setting back may return a different value.
+
+Equivalent to the TCP_KEEPIDLE socket option. (TCP_KEEPALIVE on MacOS)
+
+# Typical errors
+- `invalid-argument`:     (set) The provided value was 0.
+
+##### `fn set_keep_alive_idle_time(self: &TcpSocket, value: Duration) -> Result<(), ErrorCode>`
+
+##### `fn get_keep_alive_interval(self: &TcpSocket) -> Result<Duration, ErrorCode>`
+
+The time between keepalive packets.
+
+If the provided value is 0, an `invalid-argument` error is returned.
+Any other value will never cause an error, but it might be silently clamped and/or rounded.
+I.e. after setting a value, reading the same setting back may return a different value.
+
+Equivalent to the TCP_KEEPINTVL socket option.
+
+# Typical errors
+- `invalid-argument`:     (set) The provided value was 0.
+
+##### `fn set_keep_alive_interval(self: &TcpSocket, value: Duration) -> Result<(), ErrorCode>`
+
+##### `fn get_keep_alive_count(self: &TcpSocket) -> Result<u32, ErrorCode>`
+
+The maximum amount of keepalive packets TCP should send before aborting the connection.
+
+If the provided value is 0, an `invalid-argument` error is returned.
+Any other value will never cause an error, but it might be silently clamped and/or rounded.
+I.e. after setting a value, reading the same setting back may return a different value.
+
+Equivalent to the TCP_KEEPCNT socket option.
+
+# Typical errors
+- `invalid-argument`:     (set) The provided value was 0.
+
+##### `fn set_keep_alive_count(self: &TcpSocket, value: u32) -> Result<(), ErrorCode>`
+
+##### `fn get_hop_limit(self: &TcpSocket) -> Result<u8, ErrorCode>`
+
+Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
+
+If the provided value is 0, an `invalid-argument` error is returned.
+
+# Typical errors
+- `invalid-argument`:     (set) The TTL value must be 1 or higher.
+
+##### `fn set_hop_limit(self: &TcpSocket, value: u8) -> Result<(), ErrorCode>`
+
+##### `fn get_receive_buffer_size(self: &TcpSocket) -> Result<u64, ErrorCode>`
+
+The kernel buffer space reserved for sends/receives on this socket.
+
+If the provided value is 0, an `invalid-argument` error is returned.
+Any other value will never cause an error, but it might be silently clamped and/or rounded.
+I.e. after setting a value, reading the same setting back may return a different value.
+
+Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
+
+# Typical errors
+- `invalid-argument`:     (set) The provided value was 0.
+
+##### `fn set_receive_buffer_size(self: &TcpSocket, value: u64) -> Result<(), ErrorCode>`
+
+##### `fn get_send_buffer_size(self: &TcpSocket) -> Result<u64, ErrorCode>`
+
+##### `fn set_send_buffer_size(self: &TcpSocket, value: u64) -> Result<(), ErrorCode>`
 
 #### `pub resource UdpSocket`
 
 A UDP socket handle.
 
-##### Methods
+##### `fn create(address_family: IpAddressFamily) -> Result<UdpSocket, ErrorCode>`
 
-- `fn create(address_family: IpAddressFamily) -> Result<UdpSocket, ErrorCode>`
+Create a new UDP socket.
 
-  Create a new UDP socket.
+Similar to `socket(AF_INET or AF_INET6, SOCK_DGRAM, IPPROTO_UDP)` in POSIX.
+On IPv6 sockets, IPV6_V6ONLY is enabled by default and can't be configured otherwise.
 
-  Similar to `socket(AF_INET or AF_INET6, SOCK_DGRAM, IPPROTO_UDP)` in POSIX.
-  On IPv6 sockets, IPV6_V6ONLY is enabled by default and can't be configured otherwise.
+Unlike POSIX, WASI sockets have no notion of a socket-level
+`O_NONBLOCK` flag. Instead they fully rely on the Component Model's
+async support.
 
-  Unlike POSIX, WASI sockets have no notion of a socket-level
-  `O_NONBLOCK` flag. Instead they fully rely on the Component Model's
-  async support.
+# References:
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/socket.html>
+- <https://man7.org/linux/man-pages/man2/socket.2.html>
+- <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasocketw>
+- <https://man.freebsd.org/cgi/man.cgi?query=socket&sektion=2>
 
-  # References:
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/socket.html>
-  - <https://man7.org/linux/man-pages/man2/socket.2.html>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasocketw>
-  - <https://man.freebsd.org/cgi/man.cgi?query=socket&sektion=2>
-- `fn bind(self: &UdpSocket, local_address: IpSocketAddress) -> Result<(), ErrorCode>`
+##### `fn bind(self: &UdpSocket, local_address: IpSocketAddress) -> Result<(), ErrorCode>`
 
-  Bind the socket to the provided IP address and port.
+Bind the socket to the provided IP address and port.
 
-  If the IP address is zero (`0.0.0.0` in IPv4, `::` in IPv6), it is left to the implementation to decide which
-  network interface(s) to bind to.
-  If the port is zero, the socket will be bound to a random free port.
+If the IP address is zero (`0.0.0.0` in IPv4, `::` in IPv6), it is left to the implementation to decide which
+network interface(s) to bind to.
+If the port is zero, the socket will be bound to a random free port.
 
-  # Typical errors
-  - `invalid-argument`:          The `local-address` has the wrong address family. (EAFNOSUPPORT, EFAULT on Windows)
-  - `invalid-state`:             The socket is already bound. (EINVAL)
-  - `address-in-use`:            No ephemeral ports available. (EADDRINUSE, ENOBUFS on Windows)
-  - `address-in-use`:            Address is already in use. (EADDRINUSE)
-  - `address-not-bindable`:      `local-address` is not an address that can be bound to. (EADDRNOTAVAIL)
+# Typical errors
+- `invalid-argument`:          The `local-address` has the wrong address family. (EAFNOSUPPORT, EFAULT on Windows)
+- `invalid-state`:             The socket is already bound. (EINVAL)
+- `address-in-use`:            No ephemeral ports available. (EADDRINUSE, ENOBUFS on Windows)
+- `address-in-use`:            Address is already in use. (EADDRINUSE)
+- `address-not-bindable`:      `local-address` is not an address that can be bound to. (EADDRNOTAVAIL)
 
-  # References
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/bind.html>
-  - <https://man7.org/linux/man-pages/man2/bind.2.html>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind>
-  - <https://man.freebsd.org/cgi/man.cgi?query=bind&sektion=2&format=html>
-- `fn connect(self: &UdpSocket, remote_address: IpSocketAddress) -> Result<(), ErrorCode>`
+# References
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/bind.html>
+- <https://man7.org/linux/man-pages/man2/bind.2.html>
+- <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind>
+- <https://man.freebsd.org/cgi/man.cgi?query=bind&sektion=2&format=html>
 
-  Associate this socket with a specific peer address.
+##### `fn connect(self: &UdpSocket, remote_address: IpSocketAddress) -> Result<(), ErrorCode>`
 
-  On success, the `remote-address` of the socket is updated.
-  The `local-address` may be updated as well, based on the best network
-  path to `remote-address`. If the socket was not already explicitly
-  bound, this function will implicitly bind the socket to a random
-  free port.
+Associate this socket with a specific peer address.
 
-  When a UDP socket is "connected", the `send` and `receive` methods
-  are limited to communicating with that peer only:
-  - `send` can only be used to send to this destination.
-  - `receive` will only return datagrams sent from the provided `remote-address`.
+On success, the `remote-address` of the socket is updated.
+The `local-address` may be updated as well, based on the best network
+path to `remote-address`. If the socket was not already explicitly
+bound, this function will implicitly bind the socket to a random
+free port.
 
-  The name "connect" was kept to align with the existing POSIX
-  terminology. Other than that, this function only changes the local
-  socket configuration and does not generate any network traffic.
-  The peer is not aware of this "connection".
+When a UDP socket is "connected", the `send` and `receive` methods
+are limited to communicating with that peer only:
+- `send` can only be used to send to this destination.
+- `receive` will only return datagrams sent from the provided `remote-address`.
 
-  This method may be called multiple times on the same socket to change
-  its association, but only the most recent one will be effective.
+The name "connect" was kept to align with the existing POSIX
+terminology. Other than that, this function only changes the local
+socket configuration and does not generate any network traffic.
+The peer is not aware of this "connection".
 
-  # Typical errors
-  - `invalid-argument`:          The `remote-address` has the wrong address family. (EAFNOSUPPORT)
-  - `invalid-argument`:          The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
-  - `invalid-argument`:          The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
-  - `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
+This method may be called multiple times on the same socket to change
+its association, but only the most recent one will be effective.
 
-  # Implementors note
-  If the socket is already connected, some platforms (e.g. Linux)
-  require a disconnect before connecting to a different peer address.
+# Typical errors
+- `invalid-argument`:          The `remote-address` has the wrong address family. (EAFNOSUPPORT)
+- `invalid-argument`:          The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
+- `invalid-argument`:          The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
+- `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
 
-  # References
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html>
-  - <https://man7.org/linux/man-pages/man2/connect.2.html>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
-  - <https://man.freebsd.org/cgi/man.cgi?connect>
-- `fn disconnect(self: &UdpSocket) -> Result<(), ErrorCode>`
+# Implementors note
+If the socket is already connected, some platforms (e.g. Linux)
+require a disconnect before connecting to a different peer address.
 
-  Dissociate this socket from its peer address.
+# References
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html>
+- <https://man7.org/linux/man-pages/man2/connect.2.html>
+- <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
+- <https://man.freebsd.org/cgi/man.cgi?connect>
 
-  After calling this method, `send` & `receive` are free to communicate
-  with any address again.
+##### `fn disconnect(self: &UdpSocket) -> Result<(), ErrorCode>`
 
-  The POSIX equivalent of this is calling `connect` with an `AF_UNSPEC` address.
+Dissociate this socket from its peer address.
 
-  # Typical errors
-  - `invalid-state`:           The socket is not connected.
+After calling this method, `send` & `receive` are free to communicate
+with any address again.
 
-  # References
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html>
-  - <https://man7.org/linux/man-pages/man2/connect.2.html>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
-  - <https://man.freebsd.org/cgi/man.cgi?connect>
-- `async fn send(self: &UdpSocket, data: Array<u8>, remote_address: Option<IpSocketAddress>) -> Result<(), ErrorCode>`
+The POSIX equivalent of this is calling `connect` with an `AF_UNSPEC` address.
 
-  Send a message on the socket to a particular peer.
+# Typical errors
+- `invalid-state`:           The socket is not connected.
 
-  If the socket is connected, the peer address may be left empty. In
-  that case this is equivalent to `send` in POSIX. Otherwise it is
-  equivalent to `sendto`.
+# References
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html>
+- <https://man7.org/linux/man-pages/man2/connect.2.html>
+- <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
+- <https://man.freebsd.org/cgi/man.cgi?connect>
 
-  Additionally, if the socket is connected, a `remote-address` argument
-  _may_ be provided but then it must be identical to the address
-  passed to `connect`.
+##### `async fn send(self: &UdpSocket, data: Array<u8>, remote_address: Option<IpSocketAddress>) -> Result<(), ErrorCode>`
 
-  Implementations may trap if the `data` length exceeds 64 KiB.
+Send a message on the socket to a particular peer.
 
-  # Typical errors
-  - `invalid-argument`:        The `remote-address` has the wrong address family. (EAFNOSUPPORT)
-  - `invalid-argument`:        The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
-  - `invalid-argument`:        The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
-  - `invalid-argument`:        The socket is in "connected" mode and `remote-address` is `some` value that does not match the address passed to `connect`. (EISCONN)
-  - `invalid-argument`:        The socket is not "connected" and no value for `remote-address` was provided. (EDESTADDRREQ)
-  - `remote-unreachable`:      The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
-  - `connection-refused`:      The connection was refused. (ECONNREFUSED)
-  - `datagram-too-large`:      The datagram is too large. (EMSGSIZE)
+If the socket is connected, the peer address may be left empty. In
+that case this is equivalent to `send` in POSIX. Otherwise it is
+equivalent to `sendto`.
 
-  # References
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendto.html>
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendmsg.html>
-  - <https://man7.org/linux/man-pages/man2/send.2.html>
-  - <https://man7.org/linux/man-pages/man2/sendmmsg.2.html>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-sendto>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendmsg>
-  - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
-- `async fn receive(self: &UdpSocket) -> Result<[Array<u8>, IpSocketAddress], ErrorCode>`
+Additionally, if the socket is connected, a `remote-address` argument
+_may_ be provided but then it must be identical to the address
+passed to `connect`.
 
-  Receive a message on the socket.
+Implementations may trap if the `data` length exceeds 64 KiB.
 
-  On success, the return value contains a tuple of the received data
-  and the address of the sender. Theoretical maximum length of the
-  data is 64 KiB. Though in practice, it will typically be less than
-  1500 bytes.
+# Typical errors
+- `invalid-argument`:        The `remote-address` has the wrong address family. (EAFNOSUPPORT)
+- `invalid-argument`:        The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
+- `invalid-argument`:        The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
+- `invalid-argument`:        The socket is in "connected" mode and `remote-address` is `some` value that does not match the address passed to `connect`. (EISCONN)
+- `invalid-argument`:        The socket is not "connected" and no value for `remote-address` was provided. (EDESTADDRREQ)
+- `remote-unreachable`:      The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+- `connection-refused`:      The connection was refused. (ECONNREFUSED)
+- `datagram-too-large`:      The datagram is too large. (EMSGSIZE)
 
-  If the socket is connected, the sender address is guaranteed to
-  match the remote address passed to `connect`.
+# References
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendto.html>
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendmsg.html>
+- <https://man7.org/linux/man-pages/man2/send.2.html>
+- <https://man7.org/linux/man-pages/man2/sendmmsg.2.html>
+- <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send>
+- <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-sendto>
+- <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendmsg>
+- <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
 
-  # Typical errors
-  - `invalid-state`:        The socket has not been bound yet.
-  - `remote-unreachable`:   The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
-  - `connection-refused`:   The connection was refused. (ECONNREFUSED)
+##### `async fn receive(self: &UdpSocket) -> Result<[Array<u8>, IpSocketAddress], ErrorCode>`
 
-  # References
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvfrom.html>
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvmsg.html>
-  - <https://man7.org/linux/man-pages/man2/recv.2.html>
-  - <https://man7.org/linux/man-pages/man2/recvmmsg.2.html>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/mswsock/nc-mswsock-lpfn_wsarecvmsg>
-  - <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
-- `fn get_local_address(self: &UdpSocket) -> Result<IpSocketAddress, ErrorCode>`
+Receive a message on the socket.
 
-  Get the current bound address.
+On success, the return value contains a tuple of the received data
+and the address of the sender. Theoretical maximum length of the
+data is 64 KiB. Though in practice, it will typically be less than
+1500 bytes.
 
-  POSIX mentions:
-  > If the socket has not been bound to a local name, the value
-  > stored in the object pointed to by `address` is unspecified.
+If the socket is connected, the sender address is guaranteed to
+match the remote address passed to `connect`.
 
-  WASI is stricter and requires `get-local-address` to return `invalid-state` when the socket hasn't been bound yet.
+# Typical errors
+- `invalid-state`:        The socket has not been bound yet.
+- `remote-unreachable`:   The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+- `connection-refused`:   The connection was refused. (ECONNREFUSED)
 
-  # Typical errors
-  - `invalid-state`: The socket is not bound to any local address.
+# References
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvfrom.html>
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvmsg.html>
+- <https://man7.org/linux/man-pages/man2/recv.2.html>
+- <https://man7.org/linux/man-pages/man2/recvmmsg.2.html>
+- <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom>
+- <https://learn.microsoft.com/en-us/windows/win32/api/mswsock/nc-mswsock-lpfn_wsarecvmsg>
+- <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
 
-  # References
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getsockname.html>
-  - <https://man7.org/linux/man-pages/man2/getsockname.2.html>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getsockname>
-  - <https://man.freebsd.org/cgi/man.cgi?getsockname>
-- `fn get_remote_address(self: &UdpSocket) -> Result<IpSocketAddress, ErrorCode>`
+##### `fn get_local_address(self: &UdpSocket) -> Result<IpSocketAddress, ErrorCode>`
 
-  Get the address the socket is currently "connected" to.
+Get the current bound address.
 
-  # Typical errors
-  - `invalid-state`: The socket is not "connected" to a specific remote address. (ENOTCONN)
+POSIX mentions:
+> If the socket has not been bound to a local name, the value
+> stored in the object pointed to by `address` is unspecified.
 
-  # References
-  - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getpeername.html>
-  - <https://man7.org/linux/man-pages/man2/getpeername.2.html>
-  - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getpeername>
-  - <https://man.freebsd.org/cgi/man.cgi?query=getpeername&sektion=2&n=1>
-- `fn get_address_family(self: &UdpSocket) -> IpAddressFamily`
+WASI is stricter and requires `get-local-address` to return `invalid-state` when the socket hasn't been bound yet.
 
-  Whether this is a IPv4 or IPv6 socket.
+# Typical errors
+- `invalid-state`: The socket is not bound to any local address.
 
-  This is the value passed to the constructor.
+# References
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getsockname.html>
+- <https://man7.org/linux/man-pages/man2/getsockname.2.html>
+- <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getsockname>
+- <https://man.freebsd.org/cgi/man.cgi?getsockname>
 
-  Equivalent to the SO_DOMAIN socket option.
-- `fn get_unicast_hop_limit(self: &UdpSocket) -> Result<u8, ErrorCode>`
+##### `fn get_remote_address(self: &UdpSocket) -> Result<IpSocketAddress, ErrorCode>`
 
-  Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
+Get the address the socket is currently "connected" to.
 
-  If the provided value is 0, an `invalid-argument` error is returned.
+# Typical errors
+- `invalid-state`: The socket is not "connected" to a specific remote address. (ENOTCONN)
 
-  # Typical errors
-  - `invalid-argument`:     (set) The TTL value must be 1 or higher.
-- `fn set_unicast_hop_limit(self: &UdpSocket, value: u8) -> Result<(), ErrorCode>`
-- `fn get_receive_buffer_size(self: &UdpSocket) -> Result<u64, ErrorCode>`
+# References
+- <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getpeername.html>
+- <https://man7.org/linux/man-pages/man2/getpeername.2.html>
+- <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getpeername>
+- <https://man.freebsd.org/cgi/man.cgi?query=getpeername&sektion=2&n=1>
 
-  The kernel buffer space reserved for sends/receives on this socket.
+##### `fn get_address_family(self: &UdpSocket) -> IpAddressFamily`
 
-  If the provided value is 0, an `invalid-argument` error is returned.
-  Any other value will never cause an error, but it might be silently clamped and/or rounded.
-  I.e. after setting a value, reading the same setting back may return a different value.
+Whether this is a IPv4 or IPv6 socket.
 
-  Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
+This is the value passed to the constructor.
 
-  # Typical errors
-  - `invalid-argument`:     (set) The provided value was 0.
-- `fn set_receive_buffer_size(self: &UdpSocket, value: u64) -> Result<(), ErrorCode>`
-- `fn get_send_buffer_size(self: &UdpSocket) -> Result<u64, ErrorCode>`
-- `fn set_send_buffer_size(self: &UdpSocket, value: u64) -> Result<(), ErrorCode>`
+Equivalent to the SO_DOMAIN socket option.
+
+##### `fn get_unicast_hop_limit(self: &UdpSocket) -> Result<u8, ErrorCode>`
+
+Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
+
+If the provided value is 0, an `invalid-argument` error is returned.
+
+# Typical errors
+- `invalid-argument`:     (set) The TTL value must be 1 or higher.
+
+##### `fn set_unicast_hop_limit(self: &UdpSocket, value: u8) -> Result<(), ErrorCode>`
+
+##### `fn get_receive_buffer_size(self: &UdpSocket) -> Result<u64, ErrorCode>`
+
+The kernel buffer space reserved for sends/receives on this socket.
+
+If the provided value is 0, an `invalid-argument` error is returned.
+Any other value will never cause an error, but it might be silently clamped and/or rounded.
+I.e. after setting a value, reading the same setting back may return a different value.
+
+Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
+
+# Typical errors
+- `invalid-argument`:     (set) The provided value was 0.
+
+##### `fn set_receive_buffer_size(self: &UdpSocket, value: u64) -> Result<(), ErrorCode>`
+
+##### `fn get_send_buffer_size(self: &UdpSocket) -> Result<u64, ErrorCode>`
+
+##### `fn set_send_buffer_size(self: &UdpSocket, value: u64) -> Result<(), ErrorCode>`
 
 ### Structs
 
 #### `pub struct Ipv4SocketAddress`
 
-##### Fields
+##### `port: u16`
 
-- `port: u16`
+sin_port
 
-  sin_port
-- `address: Ipv4Address`
+##### `address: Ipv4Address`
 
-  sin_addr
+sin_addr
 
 #### `pub struct Ipv6SocketAddress`
 
-##### Fields
+##### `port: u16`
 
-- `port: u16`
+sin6_port
 
-  sin6_port
-- `flow_info: u32`
+##### `flow_info: u32`
 
-  sin6_flowinfo
-- `address: Ipv6Address`
+sin6_flowinfo
 
-  sin6_addr
-- `scope_id: u32`
+##### `address: Ipv6Address`
 
-  sin6_scope_id
+sin6_addr
+
+##### `scope_id: u32`
+
+sin6_scope_id
 
 ### Variants
 
 #### `pub variant IpAddress`
 
-- `Ipv4(Ipv4Address)`
-- `Ipv6(Ipv6Address)`
+##### `Ipv4(Ipv4Address)`
+
+##### `Ipv6(Ipv6Address)`
 
 #### `pub variant IpSocketAddress`
 
-- `Ipv4(Ipv4SocketAddress)`
-- `Ipv6(Ipv6SocketAddress)`
+##### `Ipv4(Ipv4SocketAddress)`
+
+##### `Ipv6(Ipv6SocketAddress)`

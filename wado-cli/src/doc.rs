@@ -5,8 +5,8 @@ use std::process;
 
 use lexopt::Arg::Value;
 use wado_compiler::doc::{
-    DocEffect, DocEnum, DocFlags, DocFunction, DocModule, DocResource, DocStruct, DocTrait,
-    DocVariant, extract_doc, extract_stdlib_doc,
+    DocEffect, DocEnum, DocFlags, DocModule, DocResource, DocStruct, DocTrait, DocVariant,
+    extract_doc, extract_stdlib_doc,
 };
 
 use crate::args::{self, CliExit};
@@ -303,7 +303,7 @@ fn render_markdown(doc: &DocModule, h_offset: usize) -> String {
     if !doc.enums.is_empty() {
         writeln!(out, "\n{h2} Enums").unwrap();
         for e in &doc.enums {
-            render_md_enum(&mut out, e, h3);
+            render_md_enum(&mut out, e, h3, h4);
         }
     }
 
@@ -331,7 +331,7 @@ fn render_markdown(doc: &DocModule, h_offset: usize) -> String {
     if !doc.variants.is_empty() {
         writeln!(out, "\n{h2} Variants").unwrap();
         for v in &doc.variants {
-            render_md_variant(&mut out, v, h3);
+            render_md_variant(&mut out, v, h3, h4);
         }
     }
 
@@ -350,89 +350,58 @@ fn render_markdown(doc: &DocModule, h_offset: usize) -> String {
 }
 
 fn render_md_trait(out: &mut String, t: &DocTrait, h3: &str, h4: &str) {
-    writeln!(out, "\n{h3} `{}`\n", t.signature).unwrap();
+    writeln!(out, "\n{h3} `{}`", t.signature).unwrap();
     if let Some(ref d) = t.doc {
-        render_md_doc(out, d);
         out.push('\n');
+        render_md_doc(out, d);
     }
-    if !t.methods.is_empty() {
-        writeln!(out, "{h4} Methods\n").unwrap();
-        for m in &t.methods {
-            render_md_method_item(out, m);
-        }
+    for m in &t.methods {
+        render_md_entity(out, &m.signature, m.doc.as_deref(), h4);
     }
 }
 
 fn render_md_struct(out: &mut String, s: &DocStruct, h3: &str, h4: &str) {
     let name = sig_name_part(&s.signature);
-    writeln!(out, "\n{h3} `{name}`\n").unwrap();
+    writeln!(out, "\n{h3} `{name}`").unwrap();
     if let Some(ref d) = s.doc {
-        render_md_doc(out, d);
         out.push('\n');
+        render_md_doc(out, d);
     }
-    if !s.fields.is_empty() {
-        writeln!(out, "{h4} Fields\n").unwrap();
-        for f in &s.fields {
-            writeln!(out, "- `{}: {}`", f.name, f.ty).unwrap();
-            if let Some(ref d) = f.doc {
-                render_md_list_doc(out, d);
-            }
-        }
-    } else if s.has_private_fields {
-        writeln!(out, "*Fields are private.*\n").unwrap();
+    if s.fields.is_empty() && s.has_private_fields {
+        writeln!(out, "\n*Fields are private.*").unwrap();
     }
-    if !s.methods.is_empty() {
-        writeln!(out, "\n{h4} Methods\n").unwrap();
-        for m in &s.methods {
-            render_md_method_item(out, m);
-        }
+    for f in &s.fields {
+        render_md_entity(out, &format!("{}: {}", f.name, f.ty), f.doc.as_deref(), h4);
+    }
+    for m in &s.methods {
+        render_md_entity(out, &m.signature, m.doc.as_deref(), h4);
     }
     for ti in &s.trait_impls {
-        writeln!(out, "\n{h4} `{}`\n", ti.signature).unwrap();
+        writeln!(out, "\n{h4} `{}`", ti.signature).unwrap();
+        let h5 = h(heading_level(h4) + 1);
         for m in &ti.methods {
-            render_md_method_item(out, m);
+            render_md_entity(out, &m.signature, m.doc.as_deref(), &h5);
         }
     }
 }
 
-fn render_md_method_item(out: &mut String, m: &DocFunction) {
-    writeln!(out, "- `{}`", m.signature).unwrap();
-    if let Some(ref d) = m.doc {
-        render_md_list_doc(out, d);
-    }
-}
-
-fn render_md_list_doc(out: &mut String, doc: &str) {
-    out.push('\n');
-    for line in doc.lines() {
-        if line.trim().is_empty() {
-            out.push('\n');
-        } else {
-            write!(out, "  {line}\n").unwrap();
-        }
-    }
-}
-
-fn render_md_enum(out: &mut String, e: &DocEnum, h3: &str) {
+fn render_md_enum(out: &mut String, e: &DocEnum, h3: &str, h4: &str) {
     let name = sig_name_part(&e.signature);
     writeln!(out, "\n{h3} `{name}`").unwrap();
     if let Some(ref d) = e.doc {
         out.push('\n');
         render_md_doc(out, d);
     }
-    if !e.cases.is_empty() {
-        out.push('\n');
-        for case in &e.cases {
-            writeln!(out, "- `{case}`").unwrap();
-        }
+    for case in &e.cases {
+        writeln!(out, "\n{h4} `{case}`").unwrap();
     }
 }
 
-fn render_md_variant(out: &mut String, v: &DocVariant, h3: &str) {
-    writeln!(out, "\n{h3} `{}`\n", v.signature).unwrap();
+fn render_md_variant(out: &mut String, v: &DocVariant, h3: &str, h4: &str) {
+    writeln!(out, "\n{h3} `{}`", v.signature).unwrap();
     if let Some(ref d) = v.doc {
-        render_md_doc(out, d);
         out.push('\n');
+        render_md_doc(out, d);
     }
     for case in &v.cases {
         let case_repr = if let Some(ref p) = case.payload {
@@ -440,51 +409,53 @@ fn render_md_variant(out: &mut String, v: &DocVariant, h3: &str) {
         } else {
             case.name.clone()
         };
-        writeln!(out, "- `{case_repr}`").unwrap();
-        if let Some(ref d) = case.doc {
-            render_md_list_doc(out, d);
-        }
+        render_md_entity(out, &case_repr, case.doc.as_deref(), h4);
     }
 }
 
 fn render_md_flags(out: &mut String, f: &DocFlags, h3: &str, h4: &str) {
-    writeln!(out, "\n{h3} `{}`\n", f.signature).unwrap();
+    writeln!(out, "\n{h3} `{}`", f.signature).unwrap();
     if let Some(ref d) = f.doc {
-        render_md_doc(out, d);
         out.push('\n');
+        render_md_doc(out, d);
     }
-    writeln!(out, "{h4} Members\n").unwrap();
     for member in &f.members {
-        writeln!(out, "- `{member}`").unwrap();
+        writeln!(out, "\n{h4} `{member}`").unwrap();
     }
 }
 
 fn render_md_effect(out: &mut String, e: &DocEffect, h3: &str, h4: &str) {
-    writeln!(out, "\n{h3} `{}`\n", e.signature).unwrap();
+    writeln!(out, "\n{h3} `{}`", e.signature).unwrap();
     if let Some(ref d) = e.doc {
-        render_md_doc(out, d);
         out.push('\n');
+        render_md_doc(out, d);
     }
-    if !e.methods.is_empty() {
-        writeln!(out, "{h4} Operations\n").unwrap();
-        for m in &e.methods {
-            render_md_method_item(out, m);
-        }
+    for m in &e.methods {
+        render_md_entity(out, &m.signature, m.doc.as_deref(), h4);
     }
 }
 
 fn render_md_resource(out: &mut String, r: &DocResource, h3: &str, h4: &str) {
-    writeln!(out, "\n{h3} `{}`\n", r.signature).unwrap();
+    writeln!(out, "\n{h3} `{}`", r.signature).unwrap();
     if let Some(ref d) = r.doc {
-        render_md_doc(out, d);
         out.push('\n');
+        render_md_doc(out, d);
     }
-    if !r.methods.is_empty() {
-        writeln!(out, "{h4} Methods\n").unwrap();
-        for m in &r.methods {
-            render_md_method_item(out, m);
-        }
+    for m in &r.methods {
+        render_md_entity(out, &m.signature, m.doc.as_deref(), h4);
     }
+}
+
+fn render_md_entity(out: &mut String, sig: &str, doc: Option<&str>, h: &str) {
+    writeln!(out, "\n{h} `{sig}`").unwrap();
+    if let Some(d) = doc {
+        out.push('\n');
+        render_md_doc(out, d);
+    }
+}
+
+fn heading_level(h: &str) -> usize {
+    h.chars().take_while(|&c| c == '#').count()
 }
 
 fn sig_name_part(sig: &str) -> &str {

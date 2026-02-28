@@ -14,33 +14,27 @@ Auto-imported in every module. Disable with `#![no_prelude]`.
 Trait for equality comparisons.
 Types implementing this trait can be compared with `==` and `!=` operators.
 
-##### Methods
+##### `fn eq(&self, other: &Self) -> bool`
 
-- `fn eq(&self, other: &Self) -> bool`
-
-  Returns true if self equals other.
+Returns true if self equals other.
 
 #### `pub trait Ord`
 
 Trait for ordering comparisons.
 Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.
 
-##### Methods
+##### `fn cmp(&self, other: &Self) -> Ordering`
 
-- `fn cmp(&self, other: &Self) -> Ordering`
-
-  Compares self with other and returns an Ordering.
+Compares self with other and returns an Ordering.
 
 #### `pub trait Index<IndexType>`
 
 Trait for immutable indexing operations.
 Types implementing this trait can be indexed with the `[]` operator for reading.
 
-##### Methods
+##### `fn index(&self, index: IndexType) -> &Self::Output`
 
-- `fn index(&self, index: IndexType) -> &Self::Output`
-
-  Returns a reference to the element at the given index.
+Returns a reference to the element at the given index.
 
 #### `pub trait IndexMut<IndexType>`
 
@@ -49,11 +43,9 @@ Types implementing this trait can be indexed with the `[]` operator to get
 a mutable reference: `container[i].mutating_method()`.
 Note: Requires Index to be implemented (supertrait relationship).
 
-##### Methods
+##### `fn index_mut(&mut self, index: IndexType) -> &mut Self::Output`
 
-- `fn index_mut(&mut self, index: IndexType) -> &mut Self::Output`
-
-  Returns a mutable reference to the element at the given index.
+Returns a mutable reference to the element at the given index.
 
 #### `pub trait IndexAssign<IndexType>`
 
@@ -62,11 +54,9 @@ Types implementing this trait can be assigned via the `[]` operator: `arr[i] = v
 This is separate from `IndexMut` because in Wasm GC, you cannot get a mutable reference
 to primitive array elements - reading and writing are fundamentally different operations.
 
-##### Methods
+##### `fn index_assign(&mut self, index: IndexType, value: Self::Input)`
 
-- `fn index_assign(&mut self, index: IndexType, value: Self::Input)`
-
-  Assigns a value to the element at the given index.
+Assigns a value to the element at the given index.
 
 #### `pub trait IndexValue<IndexType>`
 
@@ -74,137 +64,111 @@ Trait for value-returning indexing operations.
 Use this for containers of primitives where references cannot be returned.
 Unlike `Index` which returns `&Output`, this returns `Output` by value (copy).
 
-##### Methods
+##### `fn index_value(&self, index: IndexType) -> Self::Output`
 
-- `fn index_value(&self, index: IndexType) -> Self::Output`
-
-  Returns a copy of the element at the given index.
+Returns a copy of the element at the given index.
 
 #### `pub trait Add`
 
 Trait for the `+` operator.
 Types implementing this trait can use the `+` operator for addition.
 
-##### Methods
+##### `fn add(&self, rhs: &Self) -> Self::Output`
 
-- `fn add(&self, rhs: &Self) -> Self::Output`
-
-  Adds two values and returns the result.
+Adds two values and returns the result.
 
 #### `pub trait Sub`
 
 Trait for the `-` operator (binary subtraction).
 Types implementing this trait can use the `-` operator for subtraction.
 
-##### Methods
+##### `fn sub(&self, rhs: &Self) -> Self::Output`
 
-- `fn sub(&self, rhs: &Self) -> Self::Output`
-
-  Subtracts rhs from self and returns the result.
+Subtracts rhs from self and returns the result.
 
 #### `pub trait Mul`
 
 Trait for the `*` operator.
 Types implementing this trait can use the `*` operator for multiplication.
 
-##### Methods
+##### `fn mul(&self, rhs: &Self) -> Self::Output`
 
-- `fn mul(&self, rhs: &Self) -> Self::Output`
-
-  Multiplies two values and returns the result.
+Multiplies two values and returns the result.
 
 #### `pub trait Div`
 
 Trait for the `/` operator.
 Types implementing this trait can use the `/` operator for division.
 
-##### Methods
+##### `fn div(&self, rhs: &Self) -> Self::Output`
 
-- `fn div(&self, rhs: &Self) -> Self::Output`
-
-  Divides self by rhs and returns the result.
+Divides self by rhs and returns the result.
 
 #### `pub trait Rem`
 
 Trait for the `%` operator.
 Types implementing this trait can use the `%` operator for remainder.
 
-##### Methods
+##### `fn rem(&self, rhs: &Self) -> Self::Output`
 
-- `fn rem(&self, rhs: &Self) -> Self::Output`
-
-  Returns the remainder of dividing self by rhs.
+Returns the remainder of dividing self by rhs.
 
 #### `pub trait Neg`
 
 Trait for the unary `-` operator (negation).
 Types implementing this trait can use the `-` prefix operator.
 
-##### Methods
+##### `fn neg(&self) -> Self::Output`
 
-- `fn neg(&self) -> Self::Output`
-
-  Returns the negation of self.
+Returns the negation of self.
 
 #### `pub trait BitAnd`
 
 Trait for the `&` operator (bitwise AND).
 
-##### Methods
+##### `fn bitand(&self, rhs: &Self) -> Self::Output`
 
-- `fn bitand(&self, rhs: &Self) -> Self::Output`
-
-  Returns the bitwise AND of self and rhs.
+Returns the bitwise AND of self and rhs.
 
 #### `pub trait BitOr`
 
 Trait for the `|` operator (bitwise OR).
 
-##### Methods
+##### `fn bitor(&self, rhs: &Self) -> Self::Output`
 
-- `fn bitor(&self, rhs: &Self) -> Self::Output`
-
-  Returns the bitwise OR of self and rhs.
+Returns the bitwise OR of self and rhs.
 
 #### `pub trait BitXor`
 
 Trait for the `^` operator (bitwise XOR).
 
-##### Methods
+##### `fn bitxor(&self, rhs: &Self) -> Self::Output`
 
-- `fn bitxor(&self, rhs: &Self) -> Self::Output`
-
-  Returns the bitwise XOR of self and rhs.
+Returns the bitwise XOR of self and rhs.
 
 #### `pub trait BitNot`
 
 Trait for the `~` operator (bitwise NOT).
 
-##### Methods
+##### `fn bitnot(&self) -> Self::Output`
 
-- `fn bitnot(&self) -> Self::Output`
-
-  Returns the bitwise NOT of self.
+Returns the bitwise NOT of self.
 
 #### `pub trait Shl`
 
 Trait for the `<<` operator (left shift).
 
-##### Methods
+##### `fn shl(&self, rhs: u32) -> Self::Output`
 
-- `fn shl(&self, rhs: u32) -> Self::Output`
-
-  Returns self shifted left by rhs bits.
+Returns self shifted left by rhs bits.
 
 #### `pub trait Shr`
 
 Trait for the `>>` operator (right shift).
 
-##### Methods
+##### `fn shr(&self, rhs: u32) -> Self::Output`
 
-- `fn shr(&self, rhs: u32) -> Self::Output`
-
-  Returns self shifted right by rhs bits.
+Returns self shifted right by rhs bits.
 
 #### `pub trait Display`
 
@@ -212,77 +176,63 @@ Trait for user-facing display formatting.
 Types implementing this trait can be formatted with `{x}` in template strings.
 All format traits write to a `Formatter` that wraps `&mut String`.
 
-##### Methods
+##### `fn fmt(&self, f: &mut Formatter)`
 
-- `fn fmt(&self, f: &mut Formatter)`
-
-  Formats the value and writes to the given formatter.
+Formats the value and writes to the given formatter.
 
 #### `pub trait Binary`
 
 Trait for formatting values as binary integers.
 Used with the `{x:b}` format specifier.
 
-##### Methods
+##### `fn fmt(&self, f: &mut Formatter)`
 
-- `fn fmt(&self, f: &mut Formatter)`
-
-  Formats the value as binary and writes to the given formatter.
+Formats the value as binary and writes to the given formatter.
 
 #### `pub trait Octal`
 
 Trait for formatting values as octal integers.
 Used with the `{x:o}` format specifier.
 
-##### Methods
+##### `fn fmt(&self, f: &mut Formatter)`
 
-- `fn fmt(&self, f: &mut Formatter)`
-
-  Formats the value as octal and writes to the given formatter.
+Formats the value as octal and writes to the given formatter.
 
 #### `pub trait LowerHex`
 
 Trait for formatting values as lowercase hexadecimal.
 Used with the `{x:x}` format specifier.
 
-##### Methods
+##### `fn fmt(&self, f: &mut Formatter)`
 
-- `fn fmt(&self, f: &mut Formatter)`
-
-  Formats the value as lowercase hex and writes to the given formatter.
+Formats the value as lowercase hex and writes to the given formatter.
 
 #### `pub trait UpperHex`
 
 Trait for formatting values as uppercase hexadecimal.
 Used with the `{x:X}` format specifier.
 
-##### Methods
+##### `fn fmt(&self, f: &mut Formatter)`
 
-- `fn fmt(&self, f: &mut Formatter)`
-
-  Formats the value as uppercase hex and writes to the given formatter.
+Formats the value as uppercase hex and writes to the given formatter.
 
 #### `pub trait LowerExp`
 
 Trait for formatting values in lowercase exponential notation.
 Used with the `{x:e}` format specifier.
 
-##### Methods
+##### `fn fmt(&self, f: &mut Formatter)`
 
-- `fn fmt(&self, f: &mut Formatter)`
-
-  Formats the value in lowercase exponential notation and writes to the given formatter.
+Formats the value in lowercase exponential notation and writes to the given formatter.
 
 #### `pub trait UpperExp`
 
 Trait for formatting values in uppercase exponential notation.
 Used with the `{x:E}` format specifier.
 
-##### Methods
+##### `fn fmt(&self, f: &mut Formatter)`
 
-- `fn fmt(&self, f: &mut Formatter)`
-
-  Formats the value in uppercase exponential notation and writes to the given formatter.
+Formats the value in uppercase exponential notation and writes to the given formatter.
 
 #### `pub trait Fn<Args, Ret, Effects>`
 
@@ -300,41 +250,37 @@ Examples:
 - `Fn<[i32, String], ()>` - takes i32 and String, returns unit, pure
 - `Fn<[i32], (), [Stdout]>` - takes i32, returns unit, has Stdout effect
 
-##### Methods
+##### `fn call(&self, args: Args) -> Ret with Effects`
 
-- `fn call(&self, args: Args) -> Ret with Effects`
-
-  Call the function with the given arguments.
+Call the function with the given arguments.
 
 #### `pub trait Iterator`
 
 The core iterator trait for sequences of values.
 Types implementing this trait can be iterated over using `for-of` loops.
 
-##### Methods
+##### `fn next(&mut self) -> Option<Self::Item>`
 
-- `fn next(&mut self) -> Option<Self::Item>`
+Advances the iterator and returns the next value.
+Returns None when iteration is complete.
 
-  Advances the iterator and returns the next value.
-  Returns None when iteration is complete.
-- `fn collect(&mut self) -> Array<Self::Item>`
+##### `fn collect(&mut self) -> Array<Self::Item>`
 
-  Collects remaining elements into an Array.
-- `fn count(&mut self) -> i32`
+Collects remaining elements into an Array.
 
-  Counts the number of remaining elements in the iterator.
+##### `fn count(&mut self) -> i32`
+
+Counts the number of remaining elements in the iterator.
 
 #### `pub trait IntoIterator`
 
 Conversion into an Iterator.
 Types implementing this trait can be used in `for-of` loops directly.
 
-##### Methods
+##### `fn into_iter(&self) -> Self::Iter`
 
-- `fn into_iter(&self) -> Self::Iter`
-
-  Creates an iterator from a value.
-  Note: Uses &self due to parser limitation (self by value not yet supported in traits).
+Creates an iterator from a value.
+Note: Uses &self due to parser limitation (self by value not yet supported in traits).
 
 #### `pub trait FromIterator<T>`
 
@@ -342,9 +288,7 @@ Trait for creating a collection from an iterator.
 This is a simplified version - the full Rust-style trait requires `impl Iterator`
 syntax which is not yet supported.
 
-##### Methods
-
-- `fn from_iter(iter: Self::Iter) -> Self`
+##### `fn from_iter(iter: Self::Iter) -> Self`
 
 ### Enums
 
@@ -352,17 +296,21 @@ syntax which is not yet supported.
 
 Result of a comparison between two values.
 
-- `Less`
-- `Equal`
-- `Greater`
+##### `Less`
+
+##### `Equal`
+
+##### `Greater`
 
 #### `pub enum Alignment`
 
 Text alignment for padding.
 
-- `Left`
-- `Center`
-- `Right`
+##### `Left`
+
+##### `Center`
+
+##### `Right`
 
 ### Resources
 
@@ -375,9 +323,7 @@ Use `Future::<T>::new()` to create a new future pair `[Future<T>, FutureWritable
 The readable end (`Future<T>`) is passed to consumers; the writable end (`FutureWritable<T>`)
 is used by the producer to fulfill the future.
 
-##### Methods
-
-- `fn new() -> [Future<T>, FutureWritable<T>]`
+##### `fn new() -> [Future<T>, FutureWritable<T>]`
 
 #### `pub resource Stream<T>`
 
@@ -388,17 +334,17 @@ Use `Stream::<T>::new()` to create a new stream pair `[Stream<T>, StreamWritable
 The readable end (`Stream<T>`) is passed to consumers; the writable end (`StreamWritable<T>`)
 is used by the producer to write data into the stream.
 
-##### Methods
+##### `fn new() -> [Stream<T>, StreamWritable<T>]`
 
-- `fn new() -> [Stream<T>, StreamWritable<T>]`
-- `fn read(&self, max: i32) -> Array<T>`
+##### `fn read(&self, max: i32) -> Array<T>`
 
-  Read up to `max` elements from the stream.
-  Blocks until data is available or the writer closes.
-  Returns an empty array on end-of-stream.
-- `fn close(&self)`
+Read up to `max` elements from the stream.
+Blocks until data is available or the writer closes.
+Returns an empty array on end-of-stream.
 
-  Close the readable end of the stream.
+##### `fn close(&self)`
+
+Close the readable end of the stream.
 
 #### `pub resource StreamWritable<T>`
 
@@ -408,15 +354,14 @@ This is an opaque i32 handle managed by the runtime.
 Obtained from `Stream::<T>::new()`. Call `write(data)` to send data,
 or `close()` to signal end-of-stream (maps to `stream.drop-writable`).
 
-##### Methods
+##### `fn write(&self, data: Array<T>)`
 
-- `fn write(&self, data: Array<T>)`
+Write a chunk of data to the stream.
+Can be called multiple times for successive chunks.
 
-  Write a chunk of data to the stream.
-  Can be called multiple times for successive chunks.
-- `fn close(&self)`
+##### `fn close(&self)`
 
-  Close the writable end, signaling end-of-stream.
+Close the writable end, signaling end-of-stream.
 
 ### Structs
 
@@ -431,75 +376,86 @@ Format specification fields match Rust's format syntax:
 
 Width and precision use -1 as sentinel for "not specified".
 
-##### Fields
+##### `fill: char`
 
-- `fill: char`
+Fill character for padding (default: ' ')
 
-  Fill character for padding (default: ' ')
-- `align: Alignment`
+##### `align: Alignment`
 
-  Text alignment mode
-- `sign_plus: bool`
+Text alignment mode
 
-  Whether to always show `+` sign for positive numbers
-- `alternate: bool`
+##### `sign_plus: bool`
 
-  Whether to use alternate form (`#` flag: 0x, 0b, 0o prefixes)
-- `zero_pad: bool`
+Whether to always show `+` sign for positive numbers
 
-  Whether to use zero-padding (`0` flag)
-- `width: i32`
+##### `alternate: bool`
 
-  Minimum field width (-1 = no minimum)
-- `precision: i32`
+Whether to use alternate form (`#` flag: 0x, 0b, 0o prefixes)
 
-  Precision for floats (decimal places) or strings (max width) (-1 = default)
-- `buf: &mut String`
+##### `zero_pad: bool`
 
-  Reference to the output buffer
+Whether to use zero-padding (`0` flag)
 
-##### Methods
+##### `width: i32`
 
-- `pub fn new(buf: &mut String) -> Formatter`
+Minimum field width (-1 = no minimum)
 
-  Create a new Formatter with default format spec that writes into the given buffer.
-- `pub fn write_str(&mut self, s: String)`
+##### `precision: i32`
 
-  Write a string to the output buffer.
-- `pub fn write_char(&mut self, c: char)`
+Precision for floats (decimal places) or strings (max width) (-1 = default)
 
-  Write a single character to the output buffer.
-- `pub fn write_char_n(&mut self, c: char, n: i32)`
+##### `buf: &mut String`
 
-  Write `n` copies of a character to the output buffer.
-- `pub fn pad(&mut self, content: String)`
+Reference to the output buffer
 
-  Pad a pre-formatted content string to the configured width.
-  If no width is set or content is already at least as wide, writes content as-is.
-- `pub fn mark(&self) -> i32`
+##### `pub fn new(buf: &mut String) -> Formatter`
 
-  Return the current byte position in the output buffer.
-  Used with `apply_padding` for the speculative-write pattern:
-  1. Call `mark()` to record the start position
-  2. Write content directly to `buf_mut()`
-  3. Call `apply_padding(mark)` to insert padding if needed
-- `pub fn apply_padding(&mut self, start_pos: i32)`
+Create a new Formatter with default format spec that writes into the given buffer.
 
-  Apply width/alignment padding to content already written at `start_pos`.
-  Content bytes in `buf[start_pos..]` are shifted in-place if padding is needed.
-  The fill character must be ASCII (single byte); non-ASCII fill is not supported.
-- `pub fn write_from_memory(&mut self, ptr: i32, len: i32)`
+##### `pub fn write_str(&mut self, s: String)`
 
-  Write raw bytes from linear memory, applying width/alignment padding.
-  Used only for values produced by bundled Wasm functions (e.g., f64_to_buffer).
-- `pub fn prepare_int_write(&mut self, is_negative: bool, prefix: String, digit_count: i32) -> i32`
+Write a string to the output buffer.
 
-  Prepare the output buffer for integer digits.
+##### `pub fn write_char(&mut self, c: char)`
 
-  Writes sign, prefix, and any padding/fill, then reserves `digit_count`
-  uninitialised bytes and returns their byte-offset inside `buf`.
-  The caller **must** fill exactly `digit_count` bytes (backwards) via
-  `buf.internal_raw_bytes()` at the returned offset.
+Write a single character to the output buffer.
+
+##### `pub fn write_char_n(&mut self, c: char, n: i32)`
+
+Write `n` copies of a character to the output buffer.
+
+##### `pub fn pad(&mut self, content: String)`
+
+Pad a pre-formatted content string to the configured width.
+If no width is set or content is already at least as wide, writes content as-is.
+
+##### `pub fn mark(&self) -> i32`
+
+Return the current byte position in the output buffer.
+Used with `apply_padding` for the speculative-write pattern:
+1. Call `mark()` to record the start position
+2. Write content directly to `buf_mut()`
+3. Call `apply_padding(mark)` to insert padding if needed
+
+##### `pub fn apply_padding(&mut self, start_pos: i32)`
+
+Apply width/alignment padding to content already written at `start_pos`.
+Content bytes in `buf[start_pos..]` are shifted in-place if padding is needed.
+The fill character must be ASCII (single byte); non-ASCII fill is not supported.
+
+##### `pub fn write_from_memory(&mut self, ptr: i32, len: i32)`
+
+Write raw bytes from linear memory, applying width/alignment padding.
+Used only for values produced by bundled Wasm functions (e.g., f64_to_buffer).
+
+##### `pub fn prepare_int_write(&mut self, is_negative: bool, prefix: String, digit_count: i32) -> i32`
+
+Prepare the output buffer for integer digits.
+
+Writes sign, prefix, and any padding/fill, then reserves `digit_count`
+uninitialised bytes and returns their byte-offset inside `buf`.
+The caller **must** fill exactly `digit_count` bytes (backwards) via
+`buf.internal_raw_bytes()` at the returned offset.
 
 #### `pub struct u128`
 
@@ -508,127 +464,137 @@ Stored as two 64-bit parts: low (bits 0-63) and high (bits 64-127)
 
 *Fields are private.*
 
+##### `pub fn from_u64(value: u64) -> u128`
 
-##### Methods
+Create a u128 from a u64 value (zero-extended)
 
-- `pub fn from_u64(value: u64) -> u128`
+##### `pub fn from_pair(low: u64, high: u64) -> u128`
 
-  Create a u128 from a u64 value (zero-extended)
-- `pub fn from_pair(low: u64, high: u64) -> u128`
+Create a u128 from low and high 64-bit parts
+Used by the compiler for efficient large literal construction
 
-  Create a u128 from low and high 64-bit parts
-  Used by the compiler for efficient large literal construction
-- `pub fn from_string(s: String) -> u128`
+##### `pub fn from_string(s: String) -> u128`
 
-  Create a u128 from a string (decimal representation)
-  Used for literal coercion: `let x: u128 = "12345678901234567890"`
-- `pub fn zero() -> u128`
+Create a u128 from a string (decimal representation)
+Used for literal coercion: `let x: u128 = "12345678901234567890"`
 
-  Create a zero u128
-- `pub fn one() -> u128`
+##### `pub fn zero() -> u128`
 
-  Create a u128 with value 1
-- `pub fn low(&self) -> u64`
+Create a zero u128
 
-  Get the low 64 bits
-- `pub fn high(&self) -> u64`
+##### `pub fn one() -> u128`
 
-  Get the high 64 bits
-- `pub fn mul_u64(&self, multiplier: u64) -> u128`
+Create a u128 with value 1
 
-  Multiply u128 by a u64 value
-- `pub fn add(&self, other: &u128) -> u128`
+##### `pub fn low(&self) -> u64`
 
-  Add two u128 values
-- `pub fn sub(&self, other: &u128) -> u128`
+Get the low 64 bits
 
-  Subtract two u128 values (self - other)
-- `pub fn div_rem(&self, divisor: &u128) -> [u128, u128]`
+##### `pub fn high(&self) -> u64`
 
-  Divide self by divisor, returning (quotient, remainder)
-  Uses binary long division algorithm (shift-subtract)
-  Panics if divisor is zero
-- `pub fn get_bit(&self, i: i32) -> bool`
+Get the high 64 bits
 
-  Get the bit at position i (0 = LSB, 127 = MSB)
-- `pub fn set_bit(&self, i: i32) -> u128`
+##### `pub fn mul_u64(&self, multiplier: u64) -> u128`
 
-  Set the bit at position i to 1, returning a new u128
-- `pub fn to_string(&self) -> String`
+Multiply u128 by a u64 value
 
-  Convert u128 to String (for template string interpolation)
+##### `pub fn add(&self, other: &u128) -> u128`
+
+Add two u128 values
+
+##### `pub fn sub(&self, other: &u128) -> u128`
+
+Subtract two u128 values (self - other)
+
+##### `pub fn div_rem(&self, divisor: &u128) -> [u128, u128]`
+
+Divide self by divisor, returning (quotient, remainder)
+Uses binary long division algorithm (shift-subtract)
+Panics if divisor is zero
+
+##### `pub fn get_bit(&self, i: i32) -> bool`
+
+Get the bit at position i (0 = LSB, 127 = MSB)
+
+##### `pub fn set_bit(&self, i: i32) -> u128`
+
+Set the bit at position i to 1, returning a new u128
+
+##### `pub fn to_string(&self) -> String`
+
+Convert u128 to String (for template string interpolation)
 
 ##### `impl Display for u128`
 
-- `pub fn fmt(&self, f: &mut Formatter)`
+###### `pub fn fmt(&self, f: &mut Formatter)`
 
 ##### `impl Binary for u128`
 
-- `pub fn fmt(&self, f: &mut Formatter)`
+###### `pub fn fmt(&self, f: &mut Formatter)`
 
 ##### `impl Octal for u128`
 
-- `pub fn fmt(&self, f: &mut Formatter)`
+###### `pub fn fmt(&self, f: &mut Formatter)`
 
 ##### `impl LowerHex for u128`
 
-- `pub fn fmt(&self, f: &mut Formatter)`
+###### `pub fn fmt(&self, f: &mut Formatter)`
 
 ##### `impl UpperHex for u128`
 
-- `pub fn fmt(&self, f: &mut Formatter)`
+###### `pub fn fmt(&self, f: &mut Formatter)`
 
 ##### `impl Eq for u128`
 
-- `pub fn eq(&self, other: &Self) -> bool`
+###### `pub fn eq(&self, other: &Self) -> bool`
 
 ##### `impl Ord for u128`
 
-- `pub fn cmp(&self, other: &Self) -> Ordering`
+###### `pub fn cmp(&self, other: &Self) -> Ordering`
 
 ##### `impl Add for u128`
 
-- `pub fn add(&self, other: &Self) -> Self::Output`
+###### `pub fn add(&self, other: &Self) -> Self::Output`
 
 ##### `impl Sub for u128`
 
-- `pub fn sub(&self, other: &Self) -> Self::Output`
+###### `pub fn sub(&self, other: &Self) -> Self::Output`
 
 ##### `impl Mul for u128`
 
-- `pub fn mul(&self, other: &Self) -> Self::Output`
+###### `pub fn mul(&self, other: &Self) -> Self::Output`
 
 ##### `impl BitAnd for u128`
 
-- `pub fn bitand(&self, other: &Self) -> Self::Output`
+###### `pub fn bitand(&self, other: &Self) -> Self::Output`
 
 ##### `impl BitOr for u128`
 
-- `pub fn bitor(&self, other: &Self) -> Self::Output`
+###### `pub fn bitor(&self, other: &Self) -> Self::Output`
 
 ##### `impl BitXor for u128`
 
-- `pub fn bitxor(&self, other: &Self) -> Self::Output`
+###### `pub fn bitxor(&self, other: &Self) -> Self::Output`
 
 ##### `impl BitNot for u128`
 
-- `pub fn bitnot(&self) -> Self::Output`
+###### `pub fn bitnot(&self) -> Self::Output`
 
 ##### `impl Shl for u128`
 
-- `pub fn shl(&self, rhs: u32) -> Self::Output`
+###### `pub fn shl(&self, rhs: u32) -> Self::Output`
 
 ##### `impl Shr for u128`
 
-- `pub fn shr(&self, rhs: u32) -> Self::Output`
+###### `pub fn shr(&self, rhs: u32) -> Self::Output`
 
 ##### `impl Div for u128`
 
-- `pub fn div(&self, other: &Self) -> Self::Output`
+###### `pub fn div(&self, other: &Self) -> Self::Output`
 
 ##### `impl Rem for u128`
 
-- `pub fn rem(&self, other: &Self) -> Self::Output`
+###### `pub fn rem(&self, other: &Self) -> Self::Output`
 
 #### `pub struct i128`
 
@@ -637,136 +603,147 @@ Stored as two 64-bit parts: low (bits 0-63, unsigned) and high (bits 64-127, sig
 
 *Fields are private.*
 
+##### `pub fn from_i64(value: i64) -> i128`
 
-##### Methods
+Create an i128 from an i64 value (sign-extended)
 
-- `pub fn from_i64(value: i64) -> i128`
+##### `pub fn from_pair(low: u64, high: i64) -> i128`
 
-  Create an i128 from an i64 value (sign-extended)
-- `pub fn from_pair(low: u64, high: i64) -> i128`
+Create an i128 from low and high 64-bit parts
+Used by the compiler for efficient large literal construction
 
-  Create an i128 from low and high 64-bit parts
-  Used by the compiler for efficient large literal construction
-- `pub fn from_string(s: String) -> i128`
+##### `pub fn from_string(s: String) -> i128`
 
-  Create an i128 from a string (decimal representation, optionally prefixed with '-')
-  Used for literal coercion: `let x: i128 = "-12345678901234567890"`
-- `pub fn zero() -> i128`
+Create an i128 from a string (decimal representation, optionally prefixed with '-')
+Used for literal coercion: `let x: i128 = "-12345678901234567890"`
 
-  Create a zero i128
-- `pub fn one() -> i128`
+##### `pub fn zero() -> i128`
 
-  Create an i128 with value 1
-- `pub fn low(&self) -> u64`
+Create a zero i128
 
-  Get the low 64 bits (unsigned)
-- `pub fn high(&self) -> i64`
+##### `pub fn one() -> i128`
 
-  Get the high 64 bits (signed)
-- `pub fn is_negative(&self) -> bool`
+Create an i128 with value 1
 
-  Check if this i128 is negative
-- `pub fn add(&self, other: &i128) -> i128`
+##### `pub fn low(&self) -> u64`
 
-  Add two i128 values
-- `pub fn sub(&self, other: &i128) -> i128`
+Get the low 64 bits (unsigned)
 
-  Subtract two i128 values (self - other)
-- `pub fn neg(&self) -> i128`
+##### `pub fn high(&self) -> i64`
 
-  Negate this i128 value
-- `pub fn abs_u128(&self) -> u128`
+Get the high 64 bits (signed)
 
-  Get absolute value as u128
-- `pub fn from_u128(val: u128) -> i128`
+##### `pub fn is_negative(&self) -> bool`
 
-  Create i128 from u128 (reinterpret bits)
-- `pub fn div_rem(&self, divisor: &i128) -> [i128, i128]`
+Check if this i128 is negative
 
-  Divide self by divisor, returning (quotient, remainder)
-  Uses signed division semantics:
-  - quotient is negative if signs differ
-  - remainder has the same sign as dividend
-  Panics if divisor is zero
-- `pub fn to_string(&self) -> String`
+##### `pub fn add(&self, other: &i128) -> i128`
 
-  Convert i128 to String (for template string interpolation)
+Add two i128 values
+
+##### `pub fn sub(&self, other: &i128) -> i128`
+
+Subtract two i128 values (self - other)
+
+##### `pub fn neg(&self) -> i128`
+
+Negate this i128 value
+
+##### `pub fn abs_u128(&self) -> u128`
+
+Get absolute value as u128
+
+##### `pub fn from_u128(val: u128) -> i128`
+
+Create i128 from u128 (reinterpret bits)
+
+##### `pub fn div_rem(&self, divisor: &i128) -> [i128, i128]`
+
+Divide self by divisor, returning (quotient, remainder)
+Uses signed division semantics:
+- quotient is negative if signs differ
+- remainder has the same sign as dividend
+Panics if divisor is zero
+
+##### `pub fn to_string(&self) -> String`
+
+Convert i128 to String (for template string interpolation)
 
 ##### `impl Display for i128`
 
-- `pub fn fmt(&self, f: &mut Formatter)`
+###### `pub fn fmt(&self, f: &mut Formatter)`
 
 ##### `impl Binary for i128`
 
-- `pub fn fmt(&self, f: &mut Formatter)`
+###### `pub fn fmt(&self, f: &mut Formatter)`
 
 ##### `impl Octal for i128`
 
-- `pub fn fmt(&self, f: &mut Formatter)`
+###### `pub fn fmt(&self, f: &mut Formatter)`
 
 ##### `impl LowerHex for i128`
 
-- `pub fn fmt(&self, f: &mut Formatter)`
+###### `pub fn fmt(&self, f: &mut Formatter)`
 
 ##### `impl UpperHex for i128`
 
-- `pub fn fmt(&self, f: &mut Formatter)`
+###### `pub fn fmt(&self, f: &mut Formatter)`
 
 ##### `impl Eq for i128`
 
-- `pub fn eq(&self, other: &Self) -> bool`
+###### `pub fn eq(&self, other: &Self) -> bool`
 
 ##### `impl Ord for i128`
 
-- `pub fn cmp(&self, other: &Self) -> Ordering`
+###### `pub fn cmp(&self, other: &Self) -> Ordering`
 
 ##### `impl Add for i128`
 
-- `pub fn add(&self, other: &Self) -> Self::Output`
+###### `pub fn add(&self, other: &Self) -> Self::Output`
 
 ##### `impl Sub for i128`
 
-- `pub fn sub(&self, other: &Self) -> Self::Output`
+###### `pub fn sub(&self, other: &Self) -> Self::Output`
 
 ##### `impl Mul for i128`
 
-- `pub fn mul(&self, other: &Self) -> Self::Output`
+###### `pub fn mul(&self, other: &Self) -> Self::Output`
 
 ##### `impl Neg for i128`
 
-- `pub fn neg(&self) -> Self::Output`
+###### `pub fn neg(&self) -> Self::Output`
 
 ##### `impl BitAnd for i128`
 
-- `pub fn bitand(&self, other: &Self) -> Self::Output`
+###### `pub fn bitand(&self, other: &Self) -> Self::Output`
 
 ##### `impl BitOr for i128`
 
-- `pub fn bitor(&self, other: &Self) -> Self::Output`
+###### `pub fn bitor(&self, other: &Self) -> Self::Output`
 
 ##### `impl BitXor for i128`
 
-- `pub fn bitxor(&self, other: &Self) -> Self::Output`
+###### `pub fn bitxor(&self, other: &Self) -> Self::Output`
 
 ##### `impl BitNot for i128`
 
-- `pub fn bitnot(&self) -> Self::Output`
+###### `pub fn bitnot(&self) -> Self::Output`
 
 ##### `impl Shl for i128`
 
-- `pub fn shl(&self, rhs: u32) -> Self::Output`
+###### `pub fn shl(&self, rhs: u32) -> Self::Output`
 
 ##### `impl Shr for i128`
 
-- `pub fn shr(&self, rhs: u32) -> Self::Output`
+###### `pub fn shr(&self, rhs: u32) -> Self::Output`
 
 ##### `impl Div for i128`
 
-- `pub fn div(&self, other: &Self) -> Self::Output`
+###### `pub fn div(&self, other: &Self) -> Self::Output`
 
 ##### `impl Rem for i128`
 
-- `pub fn rem(&self, other: &Self) -> Self::Output`
+###### `pub fn rem(&self, other: &Self) -> Self::Output`
 
 #### `pub struct String`
 
@@ -774,104 +751,124 @@ UTF-8 encoded string type with O(1) amortized append
 
 *Fields are private.*
 
+##### `pub fn with_capacity(capacity: i32) -> String`
 
-##### Methods
+Create a new empty string with the specified capacity
+The string starts empty but has space for `capacity` bytes
 
-- `pub fn with_capacity(capacity: i32) -> String`
+##### `pub fn len(&self) -> i32`
 
-  Create a new empty string with the specified capacity
-  The string starts empty but has space for `capacity` bytes
-- `pub fn len(&self) -> i32`
+Get the length of the string in bytes
 
-  Get the length of the string in bytes
-- `pub fn is_empty(&self) -> bool`
+##### `pub fn is_empty(&self) -> bool`
 
-  Check if the string is empty
-- `pub fn get_byte(&self, index: i32) -> u8`
+Check if the string is empty
 
-  Get a byte at the given index (low-level - prefer bytes() iterator)
-- `pub fn set_byte(&mut self, index: i32, value: u8)`
+##### `pub fn get_byte(&self, index: i32) -> u8`
 
-  Set a byte at the given index (low-level)
-- `pub fn internal_raw_bytes(&self) -> builtin::array<u8>`
+Get a byte at the given index (low-level - prefer bytes() iterator)
 
-  Internal: Get raw bytes array (stdlib use only)
-  Returns the underlying byte array. Caller must respect `len()` boundary.
-- `pub fn internal_from_utf8_raw(bytes: builtin::array<u8>, len: i32) -> String`
+##### `pub fn set_byte(&mut self, index: i32, value: u8)`
 
-  Internal: Create String from raw UTF-8 bytes (stdlib use only)
-  The bytes must be valid UTF-8. No validation is performed.
-- `pub fn grow(&mut self, min_capacity: i32)`
+Set a byte at the given index (low-level)
 
-  Ensure the string has capacity for at least `min_capacity` bytes.
-  If the current capacity is less than `min_capacity`, grows the buffer.
-  Uses amortized doubling strategy for efficiency.
-- `pub fn internal_append_from_memory(&mut self, ptr: i32, len: i32)`
+##### `pub fn internal_raw_bytes(&self) -> builtin::array<u8>`
 
-  Internal: Append bytes from linear memory to this string (stdlib use only)
-  Copies `len` bytes starting at `ptr` in linear memory into the string.
-  The bytes must be valid UTF-8. No validation is performed.
-- `pub fn internal_reserve_uninit(&mut self, n: i32) -> i32`
+Internal: Get raw bytes array (stdlib use only)
+Returns the underlying byte array. Caller must respect `len()` boundary.
 
-  Internal: Reserve `n` uninitialised bytes at the end of the string (stdlib use only).
-  Returns the byte offset where the caller must write exactly `n` valid UTF-8 bytes
-  into `internal_raw_bytes()`. The string's length is advanced immediately, so the
-  caller MUST fill all `n` bytes before the string is observed.
-- `pub fn append_byte_filled(&mut self, byte: u8, n: i32)`
+##### `pub fn internal_from_utf8_raw(bytes: builtin::array<u8>, len: i32) -> String`
 
-  Append `n` copies of `byte` to this string using array.fill.
-  Much faster than a loop for large n (e.g., trailing zeros in large integers).
-- `pub fn append(&mut self, other: String)`
+Internal: Create String from raw UTF-8 bytes (stdlib use only)
+The bytes must be valid UTF-8. No validation is performed.
 
-  Append another string to this string
-  Grows the string if necessary (O(1) amortized)
-- `pub fn concat(a: String, b: String) -> String`
+##### `pub fn grow(&mut self, min_capacity: i32)`
 
-  Concatenate two strings into a new string
-  This is a static method: String::concat(a, b)
-- `pub fn bytes(&self) -> StrUtf8ByteIter`
+Ensure the string has capacity for at least `min_capacity` bytes.
+If the current capacity is less than `min_capacity`, grows the buffer.
+Uses amortized doubling strategy for efficiency.
 
-  Returns an iterator over the UTF-8 bytes of the string.
-- `pub fn chars(&self) -> StrCharIter`
+##### `pub fn internal_append_from_memory(&mut self, ptr: i32, len: i32)`
 
-  Returns an iterator over the Unicode scalar values (chars) of the string.
-- `pub fn append_char(&mut self, c: char)`
+Internal: Append bytes from linear memory to this string (stdlib use only)
+Copies `len` bytes starting at `ptr` in linear memory into the string.
+The bytes must be valid UTF-8. No validation is performed.
 
-  Append a Unicode scalar value (char) to this string.
-- `pub fn truncate_bytes(&mut self, byte_len: i32)`
+##### `pub fn internal_reserve_uninit(&mut self, n: i32) -> i32`
 
-  Truncate the string to the given byte length.
-  Panics if `byte_len` is not on a UTF-8 character boundary.
-- `pub fn truncate_chars(&mut self, char_count: i32)`
+Internal: Reserve `n` uninitialised bytes at the end of the string (stdlib use only).
+Returns the byte offset where the caller must write exactly `n` valid UTF-8 bytes
+into `internal_raw_bytes()`. The string's length is advanced immediately, so the
+caller MUST fill all `n` bytes before the string is observed.
 
-  Truncate the string to the given number of characters.
-  If `char_count` >= number of characters, the string is unchanged.
-- `pub fn trim_ascii_start(&self) -> String`
+##### `pub fn append_byte_filled(&mut self, byte: u8, n: i32)`
 
-  Returns a new string with leading ASCII whitespace removed.
-- `pub fn trim_ascii_end(&self) -> String`
+Append `n` copies of `byte` to this string using array.fill.
+Much faster than a loop for large n (e.g., trailing zeros in large integers).
 
-  Returns a new string with trailing ASCII whitespace removed.
-- `pub fn trim_ascii(&self) -> String`
+##### `pub fn append(&mut self, other: String)`
 
-  Returns a new string with leading and trailing ASCII whitespace removed.
-- `pub fn trim_start(&self) -> String`
+Append another string to this string
+Grows the string if necessary (O(1) amortized)
 
-  Returns a new string with leading Unicode whitespace removed.
-- `pub fn trim_end(&self) -> String`
+##### `pub fn concat(a: String, b: String) -> String`
 
-  Returns a new string with trailing Unicode whitespace removed.
-- `pub fn trim(&self) -> String`
+Concatenate two strings into a new string
+This is a static method: String::concat(a, b)
 
-  Returns a new string with leading and trailing Unicode whitespace removed.
+##### `pub fn bytes(&self) -> StrUtf8ByteIter`
+
+Returns an iterator over the UTF-8 bytes of the string.
+
+##### `pub fn chars(&self) -> StrCharIter`
+
+Returns an iterator over the Unicode scalar values (chars) of the string.
+
+##### `pub fn append_char(&mut self, c: char)`
+
+Append a Unicode scalar value (char) to this string.
+
+##### `pub fn truncate_bytes(&mut self, byte_len: i32)`
+
+Truncate the string to the given byte length.
+Panics if `byte_len` is not on a UTF-8 character boundary.
+
+##### `pub fn truncate_chars(&mut self, char_count: i32)`
+
+Truncate the string to the given number of characters.
+If `char_count` >= number of characters, the string is unchanged.
+
+##### `pub fn trim_ascii_start(&self) -> String`
+
+Returns a new string with leading ASCII whitespace removed.
+
+##### `pub fn trim_ascii_end(&self) -> String`
+
+Returns a new string with trailing ASCII whitespace removed.
+
+##### `pub fn trim_ascii(&self) -> String`
+
+Returns a new string with leading and trailing ASCII whitespace removed.
+
+##### `pub fn trim_start(&self) -> String`
+
+Returns a new string with leading Unicode whitespace removed.
+
+##### `pub fn trim_end(&self) -> String`
+
+Returns a new string with trailing Unicode whitespace removed.
+
+##### `pub fn trim(&self) -> String`
+
+Returns a new string with leading and trailing Unicode whitespace removed.
 
 ##### `impl Eq for String`
 
-- `pub fn eq(&self, other: &Self) -> bool`
+###### `pub fn eq(&self, other: &Self) -> bool`
 
 ##### `impl Ord for String`
 
-- `pub fn cmp(&self, other: &Self) -> Ordering`
+###### `pub fn cmp(&self, other: &Self) -> Ordering`
 
 #### `pub struct StrUtf8ByteIter`
 
@@ -880,10 +877,9 @@ Yields each byte as u8.
 
 *Fields are private.*
 
-
 ##### `impl Iterator for StrUtf8ByteIter`
 
-- `pub fn next(&mut self) -> Option<Self::Item>`
+###### `pub fn next(&mut self) -> Option<Self::Item>`
 
 #### `pub struct StrCharIter`
 
@@ -892,130 +888,149 @@ Decodes UTF-8 and yields each character.
 
 *Fields are private.*
 
-
 ##### `impl Iterator for StrCharIter`
 
-- `pub fn next(&mut self) -> Option<Self::Item>`
+###### `pub fn next(&mut self) -> Option<Self::Item>`
 
 #### `pub struct Array<T>`
 
 *Fields are private.*
 
+##### `pub fn with_capacity(capacity: i32) -> Array<T>`
 
-##### Methods
+##### `pub fn filled(n: i32, element: T) -> Array<T>`
 
-- `pub fn with_capacity(capacity: i32) -> Array<T>`
-- `pub fn filled(n: i32, element: T) -> Array<T>`
-- `pub fn len(&self) -> i32`
-- `pub fn is_empty(&self) -> bool`
-- `pub fn internal_raw_data(&self) -> builtin::array<T>`
-- `pub fn append(&mut self, value: T)`
-- `pub fn get(&self, index: i32) -> Option<T>`
-- `pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T>`
-- `pub fn iter(&self) -> ArrayIter<T>`
-- `pub fn sort_by(&mut self, cmp: Fn(&T, &T) -> Ordering)`
+##### `pub fn len(&self) -> i32`
 
-  In-place sort with comparator. Stable, O(n log n) worst case.
-- `pub fn sorted_by(&self, cmp: Fn(&T, &T) -> Ordering) -> Array<T>`
-- `pub fn sort(&mut self)`
-- `pub fn sorted(&self) -> Array<T>`
+##### `pub fn is_empty(&self) -> bool`
+
+##### `pub fn internal_raw_data(&self) -> builtin::array<T>`
+
+##### `pub fn append(&mut self, value: T)`
+
+##### `pub fn get(&self, index: i32) -> Option<T>`
+
+##### `pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T>`
+
+##### `pub fn iter(&self) -> ArrayIter<T>`
+
+##### `pub fn sort_by(&mut self, cmp: Fn(&T, &T) -> Ordering)`
+
+In-place sort with comparator. Stable, O(n log n) worst case.
+
+##### `pub fn sorted_by(&self, cmp: Fn(&T, &T) -> Ordering) -> Array<T>`
+
+##### `pub fn sort(&mut self)`
+
+##### `pub fn sorted(&self) -> Array<T>`
 
 ##### `impl IndexValue<i32> for Array<T>`
 
-- `fn index_value(&self, index: i32) -> Self::Output`
+###### `fn index_value(&self, index: i32) -> Self::Output`
 
 ##### `impl IndexAssign<i32> for Array<T>`
 
-- `fn index_assign(&mut self, index: i32, value: Self::Input)`
+###### `fn index_assign(&mut self, index: i32, value: Self::Input)`
 
 ##### `impl Eq for Array<T>`
 
-- `pub fn eq(&self, other: &Self) -> bool`
+###### `pub fn eq(&self, other: &Self) -> bool`
 
 ##### `impl Ord for Array<T>`
 
-- `pub fn cmp(&self, other: &Self) -> Ordering`
+###### `pub fn cmp(&self, other: &Self) -> Ordering`
 
 ##### `impl IntoIterator for Array<T>`
 
-- `fn into_iter(&self) -> Self::Iter`
+###### `fn into_iter(&self) -> Self::Iter`
 
 ##### `impl FromIterator<T> for Array<T>`
 
-- `fn from_iter(iter: ArrayIter<T>) -> Array<T>`
+###### `fn from_iter(iter: ArrayIter<T>) -> Array<T>`
 
 ##### `impl SequenceLiteralBuilder for Array<T>`
 
-- `fn new_literal(capacity: i32) -> Array<T>`
-- `fn push_literal(&mut self, value: T)`
-- `fn build(&self) -> Array<T>`
+###### `fn new_literal(capacity: i32) -> Array<T>`
+
+###### `fn push_literal(&mut self, value: T)`
+
+###### `fn build(&self) -> Array<T>`
 
 #### `pub struct ArrayIter<T>`
 
 *Fields are private.*
 
+##### `pub fn collect(&mut self) -> Array<T>`
 
-##### Methods
+##### `pub fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, T) -> Acc) -> Acc`
 
-- `pub fn collect(&mut self) -> Array<T>`
-- `pub fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, T) -> Acc) -> Acc`
-- `pub fn enumerate(&self) -> EnumerateIter<T>`
-- `pub fn map<U>(&self, f: Fn(T) -> U) -> MapIter<T, U>`
-- `pub fn filter(&self, pred: Fn(T) -> bool) -> FilterIter<T>`
-- `pub fn find(&mut self, pred: Fn(T) -> bool) -> Option<T>`
-- `pub fn any(&mut self, pred: Fn(T) -> bool) -> bool`
-- `pub fn all(&mut self, pred: Fn(T) -> bool) -> bool`
-- `pub fn last(&mut self) -> Option<T>`
-- `pub fn nth(&mut self, n: i32) -> Option<T>`
-- `pub fn position(&mut self, pred: Fn(T) -> bool) -> Option<i32>`
-- `pub fn reduce(&mut self, f: Fn(T, T) -> T) -> Option<T>`
-- `pub fn take(&self, n: i32) -> TakeIter<T>`
-- `pub fn skip(&self, n: i32) -> ArrayIter<T>`
-- `pub fn chain(&self, other: ArrayIter<T>) -> ChainIter<T>`
-- `pub fn zip<U>(&self, other: ArrayIter<U>) -> ZipIter<T, U>`
-- `pub fn sum(&mut self) -> Option<T>`
-- `pub fn min(&mut self) -> Option<T>`
-- `pub fn max(&mut self) -> Option<T>`
+##### `pub fn enumerate(&self) -> EnumerateIter<T>`
+
+##### `pub fn map<U>(&self, f: Fn(T) -> U) -> MapIter<T, U>`
+
+##### `pub fn filter(&self, pred: Fn(T) -> bool) -> FilterIter<T>`
+
+##### `pub fn find(&mut self, pred: Fn(T) -> bool) -> Option<T>`
+
+##### `pub fn any(&mut self, pred: Fn(T) -> bool) -> bool`
+
+##### `pub fn all(&mut self, pred: Fn(T) -> bool) -> bool`
+
+##### `pub fn last(&mut self) -> Option<T>`
+
+##### `pub fn nth(&mut self, n: i32) -> Option<T>`
+
+##### `pub fn position(&mut self, pred: Fn(T) -> bool) -> Option<i32>`
+
+##### `pub fn reduce(&mut self, f: Fn(T, T) -> T) -> Option<T>`
+
+##### `pub fn take(&self, n: i32) -> TakeIter<T>`
+
+##### `pub fn skip(&self, n: i32) -> ArrayIter<T>`
+
+##### `pub fn chain(&self, other: ArrayIter<T>) -> ChainIter<T>`
+
+##### `pub fn zip<U>(&self, other: ArrayIter<U>) -> ZipIter<T, U>`
+
+##### `pub fn sum(&mut self) -> Option<T>`
+
+##### `pub fn min(&mut self) -> Option<T>`
+
+##### `pub fn max(&mut self) -> Option<T>`
 
 ##### `impl Iterator for ArrayIter<T>`
 
-- `fn next(&mut self) -> Option<Self::Item>`
+###### `fn next(&mut self) -> Option<Self::Item>`
 
 #### `pub struct EnumerateIter<T>`
 
 *Fields are private.*
 
-
 ##### `impl Iterator for EnumerateIter<T>`
 
-- `fn next(&mut self) -> Option<Self::Item>`
+###### `fn next(&mut self) -> Option<Self::Item>`
 
 #### `pub struct MapIter<T, U>`
 
 *Fields are private.*
 
-
-##### Methods
-
-- `pub fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, U) -> Acc) -> Acc`
+##### `pub fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, U) -> Acc) -> Acc`
 
 ##### `impl Iterator for MapIter<T, U>`
 
-- `fn next(&mut self) -> Option<Self::Item>`
+###### `fn next(&mut self) -> Option<Self::Item>`
 
 #### `pub struct FilterIter<T>`
 
 *Fields are private.*
 
+##### `pub fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, T) -> Acc) -> Acc`
 
-##### Methods
-
-- `pub fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, T) -> Acc) -> Acc`
-- `pub fn map<U>(&self, f: Fn(T) -> U) -> FilterMapIter<T, U>`
+##### `pub fn map<U>(&self, f: Fn(T) -> U) -> FilterMapIter<T, U>`
 
 ##### `impl Iterator for FilterIter<T>`
 
-- `fn next(&mut self) -> Option<Self::Item>`
+###### `fn next(&mut self) -> Option<Self::Item>`
 
 ### Variants
 
@@ -1023,15 +1038,17 @@ Decodes UTF-8 and yields each character.
 
 Optional value - either Some(T) or None
 
-- `Some(T)`
-- `None`
+##### `Some(T)`
+
+##### `None`
 
 #### `pub variant Result<T, E>`
 
 Result type - either Ok(T) or Err(E)
 
-- `Ok(T)`
-- `Err(E)`
+##### `Ok(T)`
+
+##### `Err(E)`
 
 ### Functions
 
@@ -1047,73 +1064,68 @@ CLI helpers: `println`, `eprintln`, `args`, `env`, `exit`, etc.
 
 #### `pub effect Environment`
 
-##### Operations
+##### `fn get_environment() -> Array<[String, String]>`
 
-- `fn get_environment() -> Array<[String, String]>`
+Get the POSIX-style environment variables.
 
-  Get the POSIX-style environment variables.
+Each environment variable is provided as a pair of string variable names
+and string value.
 
-  Each environment variable is provided as a pair of string variable names
-  and string value.
+Morally, these are a value import, but until value imports are available
+in the component model, this import function should return the same
+values each time it is called.
 
-  Morally, these are a value import, but until value imports are available
-  in the component model, this import function should return the same
-  values each time it is called.
-- `fn get_arguments() -> Array<String>`
+##### `fn get_arguments() -> Array<String>`
 
-  Get the POSIX-style arguments to the program.
-- `fn get_initial_cwd() -> Option<String>`
+Get the POSIX-style arguments to the program.
 
-  Return a path that programs should use as their initial current working
-  directory, interpreting `.` as shorthand for this.
+##### `fn get_initial_cwd() -> Option<String>`
+
+Return a path that programs should use as their initial current working
+directory, interpreting `.` as shorthand for this.
 
 #### `pub effect Exit`
 
-##### Operations
+##### `fn exit(status: Result<(), ()>)`
 
-- `fn exit(status: Result<(), ()>)`
+Exit the current instance and any linked instances.
 
-  Exit the current instance and any linked instances.
-- `fn exit_with_code(status_code: u8)`
+##### `fn exit_with_code(status_code: u8)`
 
-  Exit the current instance and any linked instances, reporting the
-  specified status code to the host.
+Exit the current instance and any linked instances, reporting the
+specified status code to the host.
 
-  The meaning of the code depends on the context, with 0 usually meaning
-  "success", and other values indicating various types of failure.
+The meaning of the code depends on the context, with 0 usually meaning
+"success", and other values indicating various types of failure.
 
-  This function does not return; the effect is analogous to a trap, but
-  without the connotation that something bad has happened.
+This function does not return; the effect is analogous to a trap, but
+without the connotation that something bad has happened.
 
 #### `pub effect Stdout`
 
-##### Operations
+##### `async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>`
 
-- `async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>`
+Write the given stream to stdout.
 
-  Write the given stream to stdout.
+If the stream's writable end is dropped this function will either return
+success once the entire contents of the stream have been written or an
+error-code representing a failure.
 
-  If the stream's writable end is dropped this function will either return
-  success once the entire contents of the stream have been written or an
-  error-code representing a failure.
-
-  Otherwise if there is an error the readable end of the stream will be
-  dropped and this function will return an error-code.
+Otherwise if there is an error the readable end of the stream will be
+dropped and this function will return an error-code.
 
 #### `pub effect Stderr`
 
-##### Operations
+##### `async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>`
 
-- `async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>`
+Write the given stream to stderr.
 
-  Write the given stream to stderr.
+If the stream's writable end is dropped this function will either return
+success once the entire contents of the stream have been written or an
+error-code representing a failure.
 
-  If the stream's writable end is dropped this function will either return
-  success once the entire contents of the stream have been written or an
-  error-code representing a failure.
-
-  Otherwise if there is an error the readable end of the stream will be
-  dropped and this function will return an error-code.
+Otherwise if there is an error the readable end of the stream will be
+dropped and this function will return an error-code.
 
 ### Functions
 
@@ -1187,29 +1199,30 @@ Windows.
 A monotonic clock is a clock which has an unspecified initial value, and
 successive reads of the clock will produce non-decreasing values.
 
-##### Operations
+##### `fn now() -> Mark`
 
-- `fn now() -> Mark`
+Read the current value of the clock.
 
-  Read the current value of the clock.
+The clock is monotonic, therefore calling this function repeatedly will
+produce a sequence of non-decreasing values.
 
-  The clock is monotonic, therefore calling this function repeatedly will
-  produce a sequence of non-decreasing values.
+For completeness, this function traps if it's not possible to represent
+the value of the clock in a `mark`. Consequently, implementations
+should ensure that the starting time is low enough to avoid the
+possibility of overflow in practice.
 
-  For completeness, this function traps if it's not possible to represent
-  the value of the clock in a `mark`. Consequently, implementations
-  should ensure that the starting time is low enough to avoid the
-  possibility of overflow in practice.
-- `fn get_resolution() -> Duration`
+##### `fn get_resolution() -> Duration`
 
-  Query the resolution of the clock. Returns the duration of time
-  corresponding to a clock tick.
-- `async fn wait_until(when: Mark)`
+Query the resolution of the clock. Returns the duration of time
+corresponding to a clock tick.
 
-  Wait until the specified mark has occurred.
-- `async fn wait_for(how_long: Duration)`
+##### `async fn wait_until(when: Mark)`
 
-  Wait for the specified duration to elapse.
+Wait until the specified mark has occurred.
+
+##### `async fn wait_for(how_long: Duration)`
+
+Wait for the specified duration to elapse.
 
 ### Functions
 
@@ -1236,54 +1249,62 @@ of a hash table for key lookups.
 
 *Fields are private.*
 
+##### `pub fn new() -> TreeMap<K, V>`
 
-##### Methods
+Creates a new empty TreeMap
 
-- `pub fn new() -> TreeMap<K, V>`
+##### `pub fn len(&self) -> i32`
 
-  Creates a new empty TreeMap
-- `pub fn len(&self) -> i32`
+Returns the number of key-value pairs in the map
 
-  Returns the number of key-value pairs in the map
-- `pub fn is_empty(&self) -> bool`
+##### `pub fn is_empty(&self) -> bool`
 
-  Returns true if the map contains no elements
-- `pub fn contains_key(&self, key: K) -> bool`
+Returns true if the map contains no elements
 
-  Returns true if the map contains a value for the specified key
-- `pub fn get(&self, key: K) -> Option<V>`
+##### `pub fn contains_key(&self, key: K) -> bool`
 
-  Returns the value corresponding to the key, or null if not found
-- `pub fn remove(&mut self, key: K) -> bool`
+Returns true if the map contains a value for the specified key
 
-  Removes a key from the map. Returns true if the key was present.
-  This is a "shift remove" that preserves insertion order of remaining elements.
-- `pub fn keys(&self) -> Array<K>`
+##### `pub fn get(&self, key: K) -> Option<V>`
 
-  Returns all keys in insertion order
-- `pub fn values(&self) -> Array<V>`
+Returns the value corresponding to the key, or null if not found
 
-  Returns all values in insertion order
-- `pub fn entries(&self) -> Array<[K, V]>`
+##### `pub fn remove(&mut self, key: K) -> bool`
 
-  Returns all key-value pairs in insertion order
-- `pub fn clear(&mut self)`
+Removes a key from the map. Returns true if the key was present.
+This is a "shift remove" that preserves insertion order of remaining elements.
 
-  Removes all key-value pairs from the map
+##### `pub fn keys(&self) -> Array<K>`
+
+Returns all keys in insertion order
+
+##### `pub fn values(&self) -> Array<V>`
+
+Returns all values in insertion order
+
+##### `pub fn entries(&self) -> Array<[K, V]>`
+
+Returns all key-value pairs in insertion order
+
+##### `pub fn clear(&mut self)`
+
+Removes all key-value pairs from the map
 
 ##### `impl IndexAssign<K> for TreeMap<K, V>`
 
-- `fn index_assign(&mut self, key: K, value: Self::Input)`
+###### `fn index_assign(&mut self, key: K, value: Self::Input)`
 
 ##### `impl IndexValue<K> for TreeMap<K, V>`
 
-- `fn index_value(&self, key: K) -> Self::Output`
+###### `fn index_value(&self, key: K) -> Self::Output`
 
 ##### `impl KeyValueLiteralBuilder for TreeMap<String, V>`
 
-- `fn new_literal(capacity: i32) -> TreeMap<String, V>`
-- `fn insert_literal(&mut self, key: String, value: Self::Value)`
-- `fn build(&self) -> TreeMap<String, V>`
+###### `fn new_literal(capacity: i32) -> TreeMap<String, V>`
+
+###### `fn insert_literal(&mut self, key: String, value: Self::Value)`
+
+###### `fn build(&self) -> TreeMap<String, V>`
 
 ## core:base64
 
@@ -1293,10 +1314,9 @@ Base64 encoding and decoding (RFC 4648).
 
 #### `pub flags Encoding`
 
-##### Members
+##### `UrlSafe`
 
-- `UrlSafe`
-- `NoPadding`
+##### `NoPadding`
 
 ### Functions
 
@@ -1404,60 +1424,83 @@ zlib compression and decompression (RFC 1950/1951/1952).
 
 *Fields are private.*
 
+##### `pub fn new() -> GzipHeader`
 
-##### Methods
+##### `pub fn set_text(&mut self, text: bool)`
 
-- `pub fn new() -> GzipHeader`
-- `pub fn set_text(&mut self, text: bool)`
-- `pub fn set_time(&mut self, time: u32)`
-- `pub fn set_os(&mut self, os: i32)`
-- `pub fn set_extra(&mut self, extra: &Array<u8>)`
-- `pub fn set_name(&mut self, name: String)`
-- `pub fn set_comment(&mut self, comment: String)`
-- `pub fn set_hcrc(&mut self, hcrc: bool)`
+##### `pub fn set_time(&mut self, time: u32)`
+
+##### `pub fn set_os(&mut self, os: i32)`
+
+##### `pub fn set_extra(&mut self, extra: &Array<u8>)`
+
+##### `pub fn set_name(&mut self, name: String)`
+
+##### `pub fn set_comment(&mut self, comment: String)`
+
+##### `pub fn set_hcrc(&mut self, hcrc: bool)`
 
 #### `pub struct DeflateStream`
 
 *Fields are private.*
 
+##### `pub fn new(level: i32) -> DeflateStream`
 
-##### Methods
+##### `pub fn new_with_strategy(level: i32, strategy: i32) -> DeflateStream`
 
-- `pub fn new(level: i32) -> DeflateStream`
-- `pub fn new_with_strategy(level: i32, strategy: i32) -> DeflateStream`
-- `pub fn new_with_format(level: i32, format: i32) -> DeflateStream`
-- `pub fn new_full(level: i32, strategy: i32, format: i32) -> DeflateStream`
-- `pub fn set_dictionary(&mut self, dict: &Array<u8>)`
-- `pub fn set_header(&mut self, header: &GzipHeader)`
-- `pub fn params(&mut self, level: i32, strategy: i32)`
-- `pub fn bound(&self, source_len: i32) -> i32`
-- `pub fn pending(&self) -> i32`
-- `pub fn get_total_in(&self) -> i32`
-- `pub fn get_total_out(&self) -> i32`
-- `pub fn reset(&mut self)`
-- `pub fn copy(&self) -> DeflateStream`
-- `pub fn update(&mut self, chunk: &Array<u8>)`
-- `pub fn finish(&mut self) -> Array<u8>`
-- `pub fn compress(&mut self, input: &Array<u8>) -> Array<u8>`
+##### `pub fn new_with_format(level: i32, format: i32) -> DeflateStream`
+
+##### `pub fn new_full(level: i32, strategy: i32, format: i32) -> DeflateStream`
+
+##### `pub fn set_dictionary(&mut self, dict: &Array<u8>)`
+
+##### `pub fn set_header(&mut self, header: &GzipHeader)`
+
+##### `pub fn params(&mut self, level: i32, strategy: i32)`
+
+##### `pub fn bound(&self, source_len: i32) -> i32`
+
+##### `pub fn pending(&self) -> i32`
+
+##### `pub fn get_total_in(&self) -> i32`
+
+##### `pub fn get_total_out(&self) -> i32`
+
+##### `pub fn reset(&mut self)`
+
+##### `pub fn copy(&self) -> DeflateStream`
+
+##### `pub fn update(&mut self, chunk: &Array<u8>)`
+
+##### `pub fn finish(&mut self) -> Array<u8>`
+
+##### `pub fn compress(&mut self, input: &Array<u8>) -> Array<u8>`
 
 #### `pub struct InflateStream`
 
 *Fields are private.*
 
+##### `pub fn new() -> InflateStream`
 
-##### Methods
+##### `pub fn new_with_format(format: i32) -> InflateStream`
 
-- `pub fn new() -> InflateStream`
-- `pub fn new_with_format(format: i32) -> InflateStream`
-- `pub fn set_dictionary(&mut self, dict: &Array<u8>)`
-- `pub fn get_dictionary(&self) -> Array<u8>`
-- `pub fn get_total_in(&self) -> i32`
-- `pub fn get_total_out(&self) -> i32`
-- `pub fn reset(&mut self)`
-- `pub fn copy(&self) -> InflateStream`
-- `pub fn update(&mut self, chunk: &Array<u8>)`
-- `pub fn finish(&mut self) -> Array<u8>`
-- `pub fn decompress(&self, input: &Array<u8>) -> Array<u8>`
+##### `pub fn set_dictionary(&mut self, dict: &Array<u8>)`
+
+##### `pub fn get_dictionary(&self) -> Array<u8>`
+
+##### `pub fn get_total_in(&self) -> i32`
+
+##### `pub fn get_total_out(&self) -> i32`
+
+##### `pub fn reset(&mut self)`
+
+##### `pub fn copy(&self) -> InflateStream`
+
+##### `pub fn update(&mut self, chunk: &Array<u8>)`
+
+##### `pub fn finish(&mut self) -> Array<u8>`
+
+##### `pub fn decompress(&self, input: &Array<u8>) -> Array<u8>`
 
 ### Functions
 
