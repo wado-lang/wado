@@ -44,6 +44,23 @@ pub struct Point {
 
 Doc comment text is extracted with the `/// ` prefix stripped (including the single space after `///`). A line containing only `///` becomes an empty line in the output.
 
+### Visibility: Public API Only
+
+`wado doc` outputs **only `pub` and `export` items**. Private items are implementation details and are excluded — there is no flag to include them.
+
+For structs with private fields, the struct is documented but private fields are represented as `..`:
+
+```wado
+pub struct Config {
+    pub name: String,
+    secret: i32,       // private
+}
+```
+
+Output signature: `pub struct Config { name: String, .. }`
+
+The `..` signals that the struct cannot be constructed externally (some fields are hidden). Public fields are still documented individually.
+
 ### CLI Interface
 
 ```sh
@@ -57,24 +74,13 @@ wado doc lib/core/**/*.wado               # print docs for matching files
 
 # Project mode (with wado.toml)
 wado doc                                  # document all project source files
-
-# Output format
-wado doc --format markdown file.wado      # markdown output (default)
-wado doc --format json file.wado          # structured JSON output
-
-# Filtering
-wado doc --filter "TreeMap" file.wado     # show only items matching pattern
-wado doc --pub-only file.wado             # show only pub/export items
 ```
 
-| Flag                  | Description                                        |
-| --------------------- | -------------------------------------------------- |
-| `--format <fmt>`      | Output format: `markdown` (default), `json`        |
-| `--filter <pattern>`  | Show only items whose name contains the pattern    |
-| `--pub-only`          | Show only `pub` and `export` items                 |
-| `--no-private`        | Alias for `--pub-only`                             |
-| `-o <file>`           | Write output to file instead of stdout             |
-| `--help`              | Show usage                                         |
+| Flag     | Description |
+| -------- | ----------- |
+| `--help` | Show usage  |
+
+Output goes to stdout. Redirect with shell (`> file.md`) for file output.
 
 ### Extraction Strategy: CommentMap-Based (No AST Changes)
 
@@ -127,32 +133,36 @@ Doc comment for run.
 
 ## Structs
 
-### `pub struct Point`
+### `pub struct Point { x: i32, y: i32 }`
 
 Doc comment for Point.
 
 #### Fields
 
-| Field | Type  | Description         |
-| ----- | ----- | ------------------- |
-| `x`   | `i32` | The x coordinate.   |
-| `y`   | `i32` | The y coordinate.   |
+- `x: i32` — The x coordinate.
+- `y: i32` — The y coordinate.
+
+### `pub struct Config { name: String, .. }`
+
+Doc comment for Config. Private fields are hidden with `..`.
+
+#### Fields
+
+- `name: String` — The config name.
 
 ## Traits
 
-### `trait Eq`
+### `pub trait Eq`
 
 Doc comment for Eq.
 
 #### Methods
 
-##### `fn eq(&self, other: &Self) -> bool`
-
-Doc comment for eq.
+- `fn eq(&self, other: &Self) -> bool` — Doc comment for eq.
 
 ## Enums
 
-### `enum Color`
+### `pub enum Color`
 
 Doc comment for Color.
 
@@ -163,7 +173,7 @@ Doc comment for Color.
 
 ## Variants
 
-### `variant Shape`
+### `pub variant Shape`
 
 Doc comment for Shape.
 
@@ -181,7 +191,7 @@ Doc comment for Stdout.
 
 ## Types
 
-### `type Meters = f64`
+### `pub type Meters = f64`
 
 Doc comment for Meters.
 
@@ -194,55 +204,18 @@ Doc comment for PI.
 
 Items without doc comments are still listed (with their signature) but have no description body.
 
-### JSON Output Format
-
-```json
-{
-  "module": "core/prelude/traits",
-  "module_doc": "Core trait definitions.",
-  "items": [
-    {
-      "kind": "trait",
-      "name": "Eq",
-      "visibility": "pub",
-      "signature": "trait Eq",
-      "doc": "Equality comparisons (== and !=).",
-      "methods": [
-        {
-          "name": "eq",
-          "signature": "fn eq(&self, other: &Self) -> bool",
-          "doc": "Returns true if self equals other."
-        }
-      ]
-    },
-    {
-      "kind": "struct",
-      "name": "Point",
-      "visibility": "pub",
-      "signature": "struct Point",
-      "doc": "A 2D point.",
-      "fields": [
-        { "name": "x", "type": "i32", "doc": "The x coordinate." },
-        { "name": "y", "type": "i32", "doc": "The y coordinate." }
-      ]
-    }
-  ]
-}
-```
-
-JSON output enables downstream tools (static site generators, IDE tooltips, search indexes).
-
 ### Signature Rendering
 
 Item signatures are rendered using the existing unparser infrastructure with a "signature-only" mode — function bodies, struct field initializers, and trait method bodies are omitted.
 
 ```
-fn foo(x: i32, y: String) -> Result<i32, String>    // parameters + return type
-struct Point { x: i32, y: i32 }                      // fields with types
-trait Eq                                              // trait name + type params
-enum Color { Red, Green, Blue }                       // all cases
-variant Shape { Circle(f64), Point }                  // cases with payloads
-type Meters = f64                                     // base type
+pub fn foo(x: i32, y: String) -> Result<i32, String>     // parameters + return type
+pub struct Point { x: i32, y: i32 }                       // all fields public
+pub struct Config { name: String, .. }                     // private fields hidden
+pub trait Eq                                               // trait name + type params
+pub enum Color { Red, Green, Blue }                        // all cases
+pub variant Shape { Circle(f64), Point }                   // cases with payloads
+pub type Meters = f64                                      // base type
 ```
 
 ### Scope and Item Ordering
@@ -261,21 +234,18 @@ Nested items (struct fields, trait methods, enum/variant cases, effect methods) 
 2. Update lexer's `lex_line_comment()` to detect `///` and `//!`
 3. Update formatter to preserve doc comment style (emit `///` not `//`)
 
-### Phase 2: `wado doc` CLI (Core)
+### Phase 2: `wado doc` CLI
 
 1. Add `Doc` to `Cmd` enum in `main.rs`
 2. Create `wado-cli/src/doc.rs` with `DocOptions`, `parse_args()`, `run()`
 3. Implement doc extraction using `CommentMap::leading_comments()`
-4. Implement markdown output
-
-### Phase 3: JSON Output + Filtering
-
-1. Add `--format json` output
-2. Add `--filter` and `--pub-only` options
-3. Add `-o` file output
+4. Implement markdown output (pub/export items only, `..` for private fields)
 
 ### Future
 
+- `--filter <pattern>` to show only items matching a name pattern
+- `-o <file>` to write output to a file
+- JSON output format for programmatic consumption
 - HTML output with cross-references and search
 - `wado doc --serve` for local doc server
 - Integration with package registry for published docs
@@ -288,8 +258,8 @@ Nested items (struct fields, trait methods, enum/variant cases, effect methods) 
 - Zero AST changes — the existing `CommentMap` infrastructure handles everything
 - 571 existing `///` lines in the stdlib work immediately
 - Markdown output is both human-readable and pipeline-friendly
-- JSON output enables IDE integration and static site generation
 - `//!` module docs establish a file-level documentation convention early
+- `..` for private fields clearly communicates construction constraints
 
 ### Negative
 
