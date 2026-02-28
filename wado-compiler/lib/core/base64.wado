@@ -19,24 +19,10 @@ pub flags Encoding {
 }
 
 // Standard Base64 alphabet (RFC 4648 §4)
-global STANDARD_TABLE: Array<u8> = [
-    65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77,
-    78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90,
-    97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109,
-    110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122,
-    48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
-    43, 47,
-] as Array<u8>;
+global STANDARD_TABLE: Array<u8> = [65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 43, 47] as Array<u8>;
 
 // URL-safe Base64 alphabet (RFC 4648 §5)
-global URL_SAFE_TABLE: Array<u8> = [
-    65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77,
-    78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90,
-    97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109,
-    110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122,
-    48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
-    45, 95,
-] as Array<u8>;
+global URL_SAFE_TABLE: Array<u8> = [65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 45, 95] as Array<u8>;
 
 // Decode table: maps byte value -> 6-bit value, 255 = invalid, 254 = padding (=)
 // Shared between standard and URL-safe (auto-detected)
@@ -75,64 +61,40 @@ fn encode_impl(data: &Array<u8>, table: &Array<u8>, pad: bool) -> String {
         return "";
     }
 
-    // Calculate output length
-    let full_groups = len / 3;
     let remainder = len % 3;
-    let mut out_len = full_groups * 4;
-    if remainder > 0 {
-        if pad {
-            out_len = out_len + 4;
-        } else {
-            // 1 remainder byte -> 2 chars, 2 remainder bytes -> 3 chars
-            out_len = out_len + remainder + 1;
-        }
-    }
+    let mut out = String::with_capacity((len + 2) / 3 * 4);
 
-    let mut out = String::with_capacity(out_len);
-    let raw = out.internal_raw_bytes();
-    let mut wi = 0;
-
-    // Process full 3-byte groups
     let mut i = 0;
     while i + 2 < len {
         let b0 = data[i] as i32;
         let b1 = data[i + 1] as i32;
         let b2 = data[i + 2] as i32;
-
-        builtin::array_set_u8(raw, wi, table[(b0 >> 2) & 63]);
-        builtin::array_set_u8(raw, wi + 1, table[((b0 << 4) | (b1 >> 4)) & 63]);
-        builtin::array_set_u8(raw, wi + 2, table[((b1 << 2) | (b2 >> 6)) & 63]);
-        builtin::array_set_u8(raw, wi + 3, table[b2 & 63]);
-
+        out.append_char(table[b0 >> 2 & 63] as char);
+        out.append_char(table[(b0 << 4 | b1 >> 4) & 63] as char);
+        out.append_char(table[(b1 << 2 | b2 >> 6) & 63] as char);
+        out.append_char(table[b2 & 63] as char);
         i = i + 3;
-        wi = wi + 4;
     }
 
-    // Handle remainder
     if remainder == 1 {
         let b0 = data[i] as i32;
-        builtin::array_set_u8(raw, wi, table[(b0 >> 2) & 63]);
-        builtin::array_set_u8(raw, wi + 1, table[(b0 << 4) & 63]);
-        wi = wi + 2;
+        out.append_char(table[b0 >> 2 & 63] as char);
+        out.append_char(table[b0 << 4 & 63] as char);
         if pad {
-            builtin::array_set_u8(raw, wi, 61 as u8);     // '='
-            builtin::array_set_u8(raw, wi + 1, 61 as u8); // '='
-            wi = wi + 2;
+            out.append("==");
         }
     } else if remainder == 2 {
         let b0 = data[i] as i32;
         let b1 = data[i + 1] as i32;
-        builtin::array_set_u8(raw, wi, table[(b0 >> 2) & 63]);
-        builtin::array_set_u8(raw, wi + 1, table[((b0 << 4) | (b1 >> 4)) & 63]);
-        builtin::array_set_u8(raw, wi + 2, table[(b1 << 2) & 63]);
-        wi = wi + 3;
+        out.append_char(table[b0 >> 2 & 63] as char);
+        out.append_char(table[(b0 << 4 | b1 >> 4) & 63] as char);
+        out.append_char(table[b1 << 2 & 63] as char);
         if pad {
-            builtin::array_set_u8(raw, wi, 61 as u8); // '='
-            wi = wi + 1;
+            out.append_char('=');
         }
     }
 
-    return String::internal_from_utf8_raw(raw, wi);
+    return out;
 }
 
 /// Standard Base64 encode (RFC 4648 §4, padded).
@@ -217,9 +179,9 @@ fn decode_impl(input: &Array<u8>, input_len: i32) -> Option<Array<u8>> {
             return null;
         }
 
-        out.append(((v0 << 2) | (v1 >> 4)) as u8);
-        out.append((((v1 & 15) << 4) | (v2 >> 2)) as u8);
-        out.append((((v2 & 3) << 6) | v3) as u8);
+        out.append((v0 << 2 | v1 >> 4) as u8);
+        out.append(((v1 & 15) << 4 | v2 >> 2) as u8);
+        out.append(((v2 & 3) << 6 | v3) as u8);
         i = i + 4;
     }
 
@@ -230,7 +192,7 @@ fn decode_impl(input: &Array<u8>, input_len: i32) -> Option<Array<u8>> {
         if v0 >= 254 || v1 >= 254 {
             return null;
         }
-        out.append(((v0 << 2) | (v1 >> 4)) as u8);
+        out.append((v0 << 2 | v1 >> 4) as u8);
     } else if remainder == 3 {
         let v0 = table[input[i] as i32] as i32;
         let v1 = table[input[i + 1] as i32] as i32;
@@ -238,8 +200,8 @@ fn decode_impl(input: &Array<u8>, input_len: i32) -> Option<Array<u8>> {
         if v0 >= 254 || v1 >= 254 || v2 >= 254 {
             return null;
         }
-        out.append(((v0 << 2) | (v1 >> 4)) as u8);
-        out.append((((v1 & 15) << 4) | (v2 >> 2)) as u8);
+        out.append((v0 << 2 | v1 >> 4) as u8);
+        out.append(((v1 & 15) << 4 | v2 >> 2) as u8);
     }
 
     return Option::<Array<u8>>::Some(out);
@@ -254,11 +216,7 @@ pub fn decode(encoded: String) -> Option<Array<u8>> {
     if len == 0 {
         return Option::<Array<u8>>::Some([]);
     }
-    // Convert string bytes to Array<u8>
-    let mut bytes: Array<u8> = Array::<u8>::with_capacity(len);
-    for let mut i = 0; i < len; i += 1 {
-        bytes.append(encoded.get_byte(i));
-    }
+    let bytes = encoded.bytes().collect();
     return decode_impl(&bytes, len);
 }
 

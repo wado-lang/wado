@@ -2,34 +2,26 @@
 use { println } from "core:cli";
 use { encode, encode_url, encode_with, Encoding } from "core:base64";
 
-fn string_to_bytes(s: String) -> Array<u8> {
-    let mut out: Array<u8> = Array::<u8>::with_capacity(s.len());
-    for let mut i = 0; i < s.len(); i += 1 {
-        out.append(s.get_byte(i));
-    }
-    return out;
-}
-
 export fn run() with Stdout {
     // RFC 4648 test vectors
     let empty: Array<u8> = [];
     assert encode(&empty) == "";
 
-    assert encode(&string_to_bytes("f")) == "Zg==";
-    assert encode(&string_to_bytes("fo")) == "Zm8=";
-    assert encode(&string_to_bytes("foo")) == "Zm9v";
-    assert encode(&string_to_bytes("foob")) == "Zm9vYg==";
-    assert encode(&string_to_bytes("fooba")) == "Zm9vYmE=";
-    assert encode(&string_to_bytes("foobar")) == "Zm9vYmFy";
+    assert encode(&"f".bytes().collect()) == "Zg==";
+    assert encode(&"fo".bytes().collect()) == "Zm8=";
+    assert encode(&"foo".bytes().collect()) == "Zm9v";
+    assert encode(&"foob".bytes().collect()) == "Zm9vYg==";
+    assert encode(&"fooba".bytes().collect()) == "Zm9vYmE=";
+    assert encode(&"foobar".bytes().collect()) == "Zm9vYmFy";
 
     // encode_url: no padding
-    assert encode_url(&string_to_bytes("Hello")) == "SGVsbG8";
+    assert encode_url(&"Hello".bytes().collect()) == "SGVsbG8";
 
     // encode_with: NoPadding
-    assert encode_with(&string_to_bytes("Hello"), Encoding::NoPadding) == "SGVsbG8";
+    assert encode_with(&"Hello".bytes().collect(), Encoding::NoPadding) == "SGVsbG8";
 
     // encode_with: default (standard padded)
-    assert encode_with(&string_to_bytes("Hello"), Encoding::none()) == "SGVsbG8=";
+    assert encode_with(&"Hello".bytes().collect(), Encoding::none()) == "SGVsbG8=";
 
     println("ok");
 }
