@@ -186,7 +186,7 @@ pub fn run(opts: DocOptions) {
     }
 
     let multi = opts.title.is_some();
-    let h_offset: usize = if multi { 1 } else { 0 };
+    let h_offset: usize = usize::from(multi);
 
     let format_name = match opts.format {
         OutputFormat::Markdown => "markdown",
@@ -264,16 +264,16 @@ fn render_markdown(doc: &DocModule, h_offset: usize) -> String {
         render_md_doc(&mut out, module_doc);
     }
 
-    render_md_types_section(&mut out, doc, &h2, &h3);
-    render_md_globals_section(&mut out, doc, &h2, &h3);
-    render_md_flags_section(&mut out, doc, &h2, &h3, &h4);
-    render_md_enums_section(&mut out, doc, &h2, &h3, &h4);
-    render_md_effects_section(&mut out, doc, &h2, &h3, &h4);
-    render_md_resources_section(&mut out, doc, &h2, &h3, &h4);
-    render_md_traits_section(&mut out, doc, &h2, &h3, &h4);
-    render_md_structs_section(&mut out, doc, &h2, &h3, &h4);
-    render_md_variants_section(&mut out, doc, &h2, &h3, &h4);
-    render_md_functions_section(&mut out, doc, &h2, &h3);
+    render_md_types_section(&mut out, doc, h2, h3);
+    render_md_globals_section(&mut out, doc, h2, h3);
+    render_md_flags_section(&mut out, doc, h2, h3, h4);
+    render_md_enums_section(&mut out, doc, h2, h3, h4);
+    render_md_effects_section(&mut out, doc, h2, h3, h4);
+    render_md_resources_section(&mut out, doc, h2, h3, h4);
+    render_md_traits_section(&mut out, doc, h2, h3, h4);
+    render_md_structs_section(&mut out, doc, h2, h3, h4);
+    render_md_variants_section(&mut out, doc, h2, h3, h4);
+    render_md_functions_section(&mut out, doc, h2, h3);
 
     out
 }
@@ -421,7 +421,7 @@ fn render_md_struct(out: &mut String, s: &DocStruct, h3: &str, h4: &str) {
         writeln!(out, "\n{h4} `{}`", ti.signature).unwrap();
         let h5 = h(heading_level(h4) + 1);
         for m in &ti.methods {
-            render_md_entity(out, &m.signature, m.doc.as_deref(), &h5);
+            render_md_entity(out, &m.signature, m.doc.as_deref(), h5);
         }
     }
 }
@@ -641,16 +641,16 @@ fn render_simple(doc: &DocModule, h_offset: usize) -> String {
         out.push('\n');
     }
 
-    render_simple_types_section(&mut out, doc, &h2);
-    render_simple_globals_section(&mut out, doc, &h2);
-    render_simple_flags_section(&mut out, doc, &h2);
-    render_simple_enums_section(&mut out, doc, &h2);
-    render_simple_effects_section(&mut out, doc, &h2);
-    render_simple_resources_section(&mut out, doc, &h2);
-    render_simple_traits_section(&mut out, doc, &h2);
-    render_simple_structs_section(&mut out, doc, &h2);
-    render_simple_variants_section(&mut out, doc, &h2);
-    render_simple_functions_section(&mut out, doc, &h2);
+    render_simple_types_section(&mut out, doc, h2);
+    render_simple_globals_section(&mut out, doc, h2);
+    render_simple_flags_section(&mut out, doc, h2);
+    render_simple_enums_section(&mut out, doc, h2);
+    render_simple_effects_section(&mut out, doc, h2);
+    render_simple_resources_section(&mut out, doc, h2);
+    render_simple_traits_section(&mut out, doc, h2);
+    render_simple_structs_section(&mut out, doc, h2);
+    render_simple_variants_section(&mut out, doc, h2);
+    render_simple_functions_section(&mut out, doc, h2);
 
     out
 }
