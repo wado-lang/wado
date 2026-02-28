@@ -454,6 +454,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let (field_index, field_type) =
             self.lookup_field_type(expr.type_id, &field_access.field, field_access.span);
 
+        // Check field visibility: non-pub fields cannot be accessed from other modules
+        self.check_field_visibility(
+            expr.type_id,
+            &field_access.field,
+            field_access.span,
+        );
+
         TirExpr::new(
             TirExprKind::FieldAccess {
                 expr: Box::new(expr),
@@ -486,7 +493,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // source module to get the correct struct definition.
                 if let Some(struct_info) = self.struct_fields.get(&name) {
                     if struct_info.module_source == module_source {
-                        for (index, (fname, ftype)) in struct_info.fields.iter().enumerate() {
+                        for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                             if fname == field_name {
                                 return (index as u32, *ftype);
                             }
@@ -534,7 +541,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Clone fields to avoid borrow issues
                 let fields_clone = self.struct_fields.get(&name).cloned();
                 if let Some(struct_info) = fields_clone {
-                    for (index, (fname, ftype)) in struct_info.fields.iter().enumerate() {
+                    for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
                             // Substitute type parameters with concrete types
                             let concrete_type = self.substitute_type_params(*ftype, &type_args);
@@ -604,6 +611,62 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .insert(module_source.clone(), cached);
 
         result
+    }
+
+    /// Check if a struct field is accessible from the current module.
+    /// Non-pub fields are private to the module that defines them.
+    fn check_field_visibility(
+        &mut self,
+        struct_type: TypeId,
+        field_name: &str,
+        span: Span,
+    ) {
+        let resolved = self.type_table.borrow().get(struct_type).clone();
+        let (struct_name, module_source) = match resolved {
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => (name, module_source),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                self.check_field_visibility(inner, field_name, span);
+                return;
+            }
+            ResolvedType::Newtype { base_type, .. } => {
+                self.check_field_visibility(base_type, field_name, span);
+                return;
+            }
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } => (name, module_source),
+            _ => return,
+        };
+
+        // Same module — always allowed
+        if module_source == self.current_module_source {
+            return;
+        }
+
+        // Look up field visibility
+        if let Some(struct_info) = self.struct_fields.get(&struct_name) {
+            for (fname, _, is_pub) in &struct_info.fields {
+                if fname == field_name && !is_pub {
+                    let _ = self.logger.error(TypeError::TypeMismatch {
+                        expected: format!(
+                            "accessible field (field `{field_name}` of struct `{struct_name}` is private)"
+                        ),
+                        found: format!(
+                            "private field access from module `{}`",
+                            self.current_module_source
+                        ),
+                        span,
+                    });
+                    return;
+                }
+            }
+        }
     }
 
     /// Substitute type parameters in a type with concrete type arguments
@@ -1438,7 +1501,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let struct_field_types: Vec<(String, TypeId)> = self
             .struct_fields
             .get(&struct_name)
-            .map(|info| info.fields.clone())
+            .map(|info| {
+                info.fields
+                    .iter()
+                    .map(|(name, type_id, _)| (name.clone(), *type_id))
+                    .collect()
+            })
             .unwrap_or_default();
 
         // Resolve field expressions, converting tuple literals to arrays when needed.
@@ -1554,6 +1622,26 @@ impl<H: CompilerHost> Resolver<'_, H> {
             self.current_module_source.clone()
         };
 
+        // Check field visibility: non-pub fields cannot be set from other modules
+        if struct_module_source != self.current_module_source {
+            if let Some(struct_info) = self.struct_fields.get(&struct_name) {
+                for (fname, _, is_pub) in &struct_info.fields {
+                    if !is_pub && fields.iter().any(|f| f.name == *fname) {
+                        let _ = self.logger.error(TypeError::TypeMismatch {
+                            expected: format!(
+                                "accessible field (field `{fname}` of struct `{struct_name}` is private)"
+                            ),
+                            found: format!(
+                                "private field in struct literal from module `{}`",
+                                self.current_module_source
+                            ),
+                            span: struct_lit.span,
+                        });
+                    }
+                }
+            }
+        }
+
         // Check if this is a generic struct and infer type arguments
         let (struct_type, mangled_struct_name, fields) = if self
             .generic_struct_names
@@ -1647,7 +1735,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Build a map from type param TypeId to concrete TypeId
         let mut type_param_map: IndexMap<TypeId, TypeId> = IndexMap::new();
 
-        for (struct_field, (_, expected_type_id)) in fields.iter().zip(struct_info.fields.iter()) {
+        for (struct_field, (_, expected_type_id, _)) in fields.iter().zip(struct_info.fields.iter()) {
             let actual_type_id = struct_field.value.type_id;
 
             // Try to unify expected_type with actual_type to extract type params

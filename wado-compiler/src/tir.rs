@@ -1765,6 +1765,7 @@ pub struct TirStruct {
 #[derive(Debug, Clone)]
 pub struct TirField {
     pub name: String,
+    pub is_pub: bool,
     pub type_id: TypeId,
     pub index: u32,
     pub span: Span,

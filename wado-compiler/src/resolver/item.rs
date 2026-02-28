@@ -28,6 +28,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let type_id = self.resolve_type(&field.ty);
             fields.push(crate::tir::TirField {
                 name: field.name.clone(),
+                is_pub: field.is_pub,
                 type_id,
                 index: index as u32,
                 span: field.span,

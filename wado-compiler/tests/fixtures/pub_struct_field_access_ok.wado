@@ -1,0 +1,16 @@
+// Test: pub fields are accessible from another module via field access and struct construction
+use { println, Stdout } from "core:cli";
+use { Config, make_config, get_secret } from "./sub/pub_struct_field_module.wado";
+
+export fn run() with Stdout {
+    // Access pub field via factory function
+    let c = make_config("hello", 42);
+    println(c.name);
+
+    // Access private field via public accessor
+    let s = get_secret(c);
+    println(`{s}`);
+}
+
+__DATA__
+{"stdout": "hello\n42\n"}

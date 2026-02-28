@@ -188,7 +188,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     &type_params,
                                 )
                             };
-                            fields.push((field.name.clone(), type_id));
+                            fields.push((field.name.clone(), type_id, field.is_pub));
                         }
                         // Extract type parameter bounds
                         let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
@@ -715,7 +715,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 continue;
             };
             for (struct_name, info) in name_map {
-                for (_field_name, field_type_id) in &info.fields {
+                for (_field_name, field_type_id, _) in &info.fields {
                     let mut dep_sources = Vec::new();
                     Self::collect_cross_module_deps(*field_type_id, type_table, &mut dep_sources);
                     for (ref_name, ref_module_source) in dep_sources {

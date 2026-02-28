@@ -3,7 +3,6 @@
 // Source files:
 //   - vendor/wasmtime/crates/wasi/src/p3/wit/deps/clocks.wit
 //   - vendor/wasmtime/crates/wasi/src/p3/wit/deps/filesystem.wit
-//   - vendor/wasmtime/crates/wasi/src/p3/wit/deps/random.wit
 
 
 #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#filesize")]
@@ -127,32 +126,32 @@ pub type LinkCount = u64;
 pub struct DescriptorStat {
     /// File type.
     #[wasi("type")]
-    type: DescriptorType,
+    pub type: DescriptorType,
     /// Number of hard links to the file.
     #[wasi("link-count")]
-    link_count: LinkCount,
+    pub link_count: LinkCount,
     /// For regular files, the file size in bytes. For symbolic links, the
     /// length in bytes of the pathname contained in the symbolic link.
     #[wasi("size")]
-    size: Filesize,
+    pub size: Filesize,
     /// Last data access timestamp.
     /// 
     /// If the `option` is none, the platform doesn't maintain an access
     /// timestamp for this file.
     #[wasi("data-access-timestamp")]
-    data_access_timestamp: Option<Instant>,
+    pub data_access_timestamp: Option<Instant>,
     /// Last data modification timestamp.
     /// 
     /// If the `option` is none, the platform doesn't maintain a
     /// modification timestamp for this file.
     #[wasi("data-modification-timestamp")]
-    data_modification_timestamp: Option<Instant>,
+    pub data_modification_timestamp: Option<Instant>,
     /// Last file status-change timestamp.
     /// 
     /// If the `option` is none, the platform doesn't maintain a
     /// status-change timestamp for this file.
     #[wasi("status-change-timestamp")]
-    status_change_timestamp: Option<Instant>,
+    pub status_change_timestamp: Option<Instant>,
 }
 
 /// When setting a timestamp, this gives the value to set it to.
@@ -175,10 +174,10 @@ pub variant NewTimestamp {
 pub struct DirectoryEntry {
     /// The type of the file referred to by this directory entry.
     #[wasi("type")]
-    type: DescriptorType,
+    pub type: DescriptorType,
     /// The name of the object.
     #[wasi("name")]
-    name: String,
+    pub name: String,
 }
 
 /// Error codes returned by functions, similar to `errno` in POSIX.
@@ -332,10 +331,10 @@ pub enum Advice {
 pub struct MetadataHashValue {
     /// 64 bits of a 128-bit hash value.
     #[wasi("lower")]
-    lower: u64,
+    pub lower: u64,
     /// Another 64 bits of a 128-bit hash value.
     #[wasi("upper")]
-    upper: u64,
+    pub upper: u64,
 }
 
 

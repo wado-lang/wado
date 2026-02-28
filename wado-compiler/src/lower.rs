@@ -2876,6 +2876,7 @@ impl BoxLowerer {
             }),
             fields: vec![TirField {
                 name: "value".to_string(),
+                is_pub: false,
                 type_id: inner_type_id,
                 index: 0,
                 span: Span::new(0, 0, 0, 0),
@@ -4361,6 +4362,7 @@ impl ClosureLowerer {
                 .enumerate()
                 .map(|(i, cap)| TirField {
                     name: format!("__capture_{i}"),
+                    is_pub: false,
                     type_id: cap.type_id,
                     index: i as u32,
                     span: collected.span,

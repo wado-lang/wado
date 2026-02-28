@@ -1102,6 +1102,7 @@ pub struct StructDecl {
 #[derive(Debug, Clone)]
 pub struct StructField {
     pub name: String,
+    pub is_pub: bool,
     pub ty: Type,
     /// Attributes like `#[wasi("...")]` for CM name override
     pub attrs: Vec<Attribute>,

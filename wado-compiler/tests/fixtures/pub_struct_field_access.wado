@@ -1,0 +1,10 @@
+// Test: pub fields are accessible from another module, non-pub fields cause compile error
+use { Config, make_config } from "./sub/pub_struct_field_module.wado";
+
+export fn run() {
+    let c = make_config("hello", 42);
+    let x = c.secret;
+}
+
+__DATA__
+{"compile_error": "field `secret` of struct `Config` is private"}
