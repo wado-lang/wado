@@ -1048,6 +1048,722 @@ _Fields are private._
 
 ###### `fn next(&mut self) -> Option<Self::Item>`
 
+### Primitive Types
+
+#### `bool`
+
+##### `pub fn to_string(&self) -> String`
+
+##### `impl Display for bool`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Ord for bool`
+
+###### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `char`
+
+##### `pub fn from_u32(value: u32) -> Option<char>`
+
+Converts a Unicode scalar value (u32) to a char.
+Returns null if the value is not a valid Unicode scalar value
+(i.e., surrogates 0xD800..0xDFFF or values > 0x10FFFF).
+
+##### `pub fn from_i32(value: i32) -> Option<char>`
+
+Converts a signed integer to a char.
+Returns null if the value is negative or not a valid Unicode scalar value.
+
+##### `pub fn from_u32_unchecked(value: u32) -> char`
+
+Converts a u32 to a char without validation.
+The caller must ensure the value is a valid Unicode scalar value
+(0..=0xD7FF or 0xE000..=0x10FFFF). Passing an invalid value
+results in an invalid char, which may cause incorrect behavior
+in string operations.
+
+##### `pub fn to_string(&self) -> String`
+
+##### `pub fn is_ascii_whitespace(&self) -> bool`
+
+Returns true if the character is an ASCII whitespace character:
+SP (0x20), HT (0x09), LF (0x0A), VT (0x0B), FF (0x0C), CR (0x0D).
+Matches POSIX isspace() for the ASCII range.
+
+##### `pub fn is_whitespace(&self) -> bool`
+
+Returns true if the character is a Unicode whitespace character.
+Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
+
+##### `impl Display for char`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Ord for char`
+
+###### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `i8`
+
+##### `pub const MAX: i8`
+
+##### `pub const MIN: i8`
+
+##### `pub fn max(a: i8, b: i8) -> i8`
+
+##### `pub fn min(a: i8, b: i8) -> i8`
+
+##### `pub fn to_string(&self) -> String`
+
+##### `impl Display for i8`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Binary for i8`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Octal for i8`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl LowerHex for i8`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl UpperHex for i8`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Ord for i8`
+
+###### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `u8`
+
+##### `pub const MAX: u8`
+
+##### `pub const MIN: u8`
+
+##### `pub fn max(a: u8, b: u8) -> u8`
+
+##### `pub fn min(a: u8, b: u8) -> u8`
+
+##### `pub fn to_string(&self) -> String`
+
+##### `impl Display for u8`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Binary for u8`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Octal for u8`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl LowerHex for u8`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl UpperHex for u8`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Ord for u8`
+
+###### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `i16`
+
+##### `pub const MAX: i16`
+
+##### `pub const MIN: i16`
+
+##### `pub fn max(a: i16, b: i16) -> i16`
+
+##### `pub fn min(a: i16, b: i16) -> i16`
+
+##### `pub fn to_string(&self) -> String`
+
+##### `impl Display for i16`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Binary for i16`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Octal for i16`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl LowerHex for i16`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl UpperHex for i16`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Ord for i16`
+
+###### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `u16`
+
+##### `pub const MAX: u16`
+
+##### `pub const MIN: u16`
+
+##### `pub fn max(a: u16, b: u16) -> u16`
+
+##### `pub fn min(a: u16, b: u16) -> u16`
+
+##### `pub fn to_string(&self) -> String`
+
+##### `impl Display for u16`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Binary for u16`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Octal for u16`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl LowerHex for u16`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl UpperHex for u16`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Ord for u16`
+
+###### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `i32`
+
+##### `pub const MAX: i32`
+
+##### `pub const MIN: i32`
+
+##### `pub fn max(a: i32, b: i32) -> i32`
+
+##### `pub fn min(a: i32, b: i32) -> i32`
+
+##### `pub fn to_string(&self) -> String`
+
+##### `impl Display for i32`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Binary for i32`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Octal for i32`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl LowerHex for i32`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl UpperHex for i32`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Ord for i32`
+
+###### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `u32`
+
+##### `pub const MAX: u32`
+
+##### `pub const MIN: u32`
+
+##### `pub fn max(a: u32, b: u32) -> u32`
+
+##### `pub fn min(a: u32, b: u32) -> u32`
+
+##### `pub fn to_string(&self) -> String`
+
+##### `impl Display for u32`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Binary for u32`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Octal for u32`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl LowerHex for u32`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl UpperHex for u32`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Ord for u32`
+
+###### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `i64`
+
+##### `pub const MAX: i64`
+
+##### `pub const MIN: i64`
+
+##### `pub fn max(a: i64, b: i64) -> i64`
+
+##### `pub fn min(a: i64, b: i64) -> i64`
+
+##### `pub fn to_string(&self) -> String`
+
+##### `impl Display for i64`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Binary for i64`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Octal for i64`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl LowerHex for i64`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl UpperHex for i64`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Ord for i64`
+
+###### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `u64`
+
+##### `pub const MAX: u64`
+
+##### `pub const MIN: u64`
+
+##### `pub fn max(a: u64, b: u64) -> u64`
+
+##### `pub fn min(a: u64, b: u64) -> u64`
+
+##### `pub fn to_string(&self) -> String`
+
+##### `impl Display for u64`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Binary for u64`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Octal for u64`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl LowerHex for u64`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl UpperHex for u64`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Ord for u64`
+
+###### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `f32`
+
+##### `pub const PI: f32`
+
+##### `pub const TAU: f32`
+
+##### `pub const E: f32`
+
+##### `pub const LN2: f32`
+
+##### `pub const LN10: f32`
+
+##### `pub const LOG2_E: f32`
+
+##### `pub const LOG10_E: f32`
+
+##### `pub const SQRT2: f32`
+
+##### `pub const FRAC_1_SQRT2: f32`
+
+##### `pub const FRAC_PI_2: f32`
+
+##### `pub const FRAC_PI_4: f32`
+
+##### `pub const INFINITY: f32`
+
+##### `pub const NEG_INFINITY: f32`
+
+##### `pub const NAN: f32`
+
+##### `pub fn to_string(&self) -> String`
+
+##### `pub fn abs(x: f32) -> f32`
+
+Absolute value
+
+##### `pub fn ceil(x: f32) -> f32`
+
+Ceiling (round toward +infinity)
+
+##### `pub fn floor(x: f32) -> f32`
+
+Floor (round toward -infinity)
+
+##### `pub fn trunc(x: f32) -> f32`
+
+Truncate toward zero
+
+##### `pub fn round(x: f32) -> f32`
+
+Round to nearest even
+
+##### `pub fn sqrt(x: f32) -> f32`
+
+Square root
+
+##### `pub fn min(x: f32, y: f32) -> f32`
+
+Minimum of two values
+
+##### `pub fn max(x: f32, y: f32) -> f32`
+
+Maximum of two values
+
+##### `pub fn copysign(x: f32, y: f32) -> f32`
+
+Copy sign from y to x
+
+##### `pub fn sin(x: f32) -> f32`
+
+Sine (in radians)
+
+##### `pub fn cos(x: f32) -> f32`
+
+Cosine (in radians)
+
+##### `pub fn tan(x: f32) -> f32`
+
+Tangent (in radians)
+
+##### `pub fn asin(x: f32) -> f32`
+
+Arc sine (returns radians)
+
+##### `pub fn acos(x: f32) -> f32`
+
+Arc cosine (returns radians)
+
+##### `pub fn atan(x: f32) -> f32`
+
+Arc tangent (returns radians)
+
+##### `pub fn atan2(y: f32, x: f32) -> f32`
+
+Arc tangent of y/x (returns radians)
+
+##### `pub fn sinh(x: f32) -> f32`
+
+Hyperbolic sine
+
+##### `pub fn cosh(x: f32) -> f32`
+
+Hyperbolic cosine
+
+##### `pub fn tanh(x: f32) -> f32`
+
+Hyperbolic tangent
+
+##### `pub fn asinh(x: f32) -> f32`
+
+Inverse hyperbolic sine
+
+##### `pub fn acosh(x: f32) -> f32`
+
+Inverse hyperbolic cosine
+
+##### `pub fn atanh(x: f32) -> f32`
+
+Inverse hyperbolic tangent
+
+##### `pub fn exp(x: f32) -> f32`
+
+e raised to the power x
+
+##### `pub fn exp2(x: f32) -> f32`
+
+2 raised to the power x
+
+##### `pub fn expm1(x: f32) -> f32`
+
+e^x - 1 (more accurate for small x)
+
+##### `pub fn ln(x: f32) -> f32`
+
+Natural logarithm (base e)
+
+##### `pub fn log2(x: f32) -> f32`
+
+Logarithm base 2
+
+##### `pub fn log10(x: f32) -> f32`
+
+Logarithm base 10
+
+##### `pub fn ln1p(x: f32) -> f32`
+
+ln(1 + x) (more accurate for small x)
+
+##### `pub fn pow(x: f32, y: f32) -> f32`
+
+x raised to the power y
+
+##### `pub fn cbrt(x: f32) -> f32`
+
+Cube root
+
+##### `pub fn hypot(x: f32, y: f32) -> f32`
+
+Euclidean distance: sqrt(x^2 + y^2)
+
+##### `pub fn fmod(x: f32, y: f32) -> f32`
+
+Floating-point remainder of x/y
+
+##### `pub fn is_nan(&self) -> bool`
+
+##### `pub fn is_finite(&self) -> bool`
+
+##### `pub fn parse(s: String) -> Option<f32>`
+
+##### `impl Display for f32`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl LowerExp for f32`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl UpperExp for f32`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Ord for f32`
+
+###### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `f64`
+
+##### `pub const PI: f64`
+
+##### `pub const TAU: f64`
+
+##### `pub const E: f64`
+
+##### `pub const LN2: f64`
+
+##### `pub const LN10: f64`
+
+##### `pub const LOG2_E: f64`
+
+##### `pub const LOG10_E: f64`
+
+##### `pub const SQRT2: f64`
+
+##### `pub const FRAC_1_SQRT2: f64`
+
+##### `pub const FRAC_PI_2: f64`
+
+##### `pub const FRAC_PI_4: f64`
+
+##### `pub const INFINITY: f64`
+
+##### `pub const NEG_INFINITY: f64`
+
+##### `pub const NAN: f64`
+
+##### `pub fn to_string(&self) -> String`
+
+##### `pub fn abs(x: f64) -> f64`
+
+Absolute value
+
+##### `pub fn ceil(x: f64) -> f64`
+
+Ceiling (round toward +infinity)
+
+##### `pub fn floor(x: f64) -> f64`
+
+Floor (round toward -infinity)
+
+##### `pub fn trunc(x: f64) -> f64`
+
+Truncate toward zero
+
+##### `pub fn round(x: f64) -> f64`
+
+Round to nearest even
+
+##### `pub fn sqrt(x: f64) -> f64`
+
+Square root
+
+##### `pub fn min(x: f64, y: f64) -> f64`
+
+Minimum of two values
+
+##### `pub fn max(x: f64, y: f64) -> f64`
+
+Maximum of two values
+
+##### `pub fn copysign(x: f64, y: f64) -> f64`
+
+Copy sign from y to x
+
+##### `pub fn sin(x: f64) -> f64`
+
+Sine (in radians)
+
+##### `pub fn cos(x: f64) -> f64`
+
+Cosine (in radians)
+
+##### `pub fn tan(x: f64) -> f64`
+
+Tangent (in radians)
+
+##### `pub fn asin(x: f64) -> f64`
+
+Arc sine (returns radians)
+
+##### `pub fn acos(x: f64) -> f64`
+
+Arc cosine (returns radians)
+
+##### `pub fn atan(x: f64) -> f64`
+
+Arc tangent (returns radians)
+
+##### `pub fn atan2(y: f64, x: f64) -> f64`
+
+Arc tangent of y/x (returns radians)
+
+##### `pub fn sinh(x: f64) -> f64`
+
+Hyperbolic sine
+
+##### `pub fn cosh(x: f64) -> f64`
+
+Hyperbolic cosine
+
+##### `pub fn tanh(x: f64) -> f64`
+
+Hyperbolic tangent
+
+##### `pub fn asinh(x: f64) -> f64`
+
+Inverse hyperbolic sine
+
+##### `pub fn acosh(x: f64) -> f64`
+
+Inverse hyperbolic cosine
+
+##### `pub fn atanh(x: f64) -> f64`
+
+Inverse hyperbolic tangent
+
+##### `pub fn exp(x: f64) -> f64`
+
+e raised to the power x
+
+##### `pub fn exp2(x: f64) -> f64`
+
+2 raised to the power x
+
+##### `pub fn expm1(x: f64) -> f64`
+
+e^x - 1 (more accurate for small x)
+
+##### `pub fn ln(x: f64) -> f64`
+
+Natural logarithm (base e)
+
+##### `pub fn log2(x: f64) -> f64`
+
+Logarithm base 2
+
+##### `pub fn log10(x: f64) -> f64`
+
+Logarithm base 10
+
+##### `pub fn ln1p(x: f64) -> f64`
+
+ln(1 + x) (more accurate for small x)
+
+##### `pub fn pow(x: f64, y: f64) -> f64`
+
+x raised to the power y
+
+##### `pub fn cbrt(x: f64) -> f64`
+
+Cube root
+
+##### `pub fn hypot(x: f64, y: f64) -> f64`
+
+Euclidean distance: sqrt(x^2 + y^2)
+
+##### `pub fn fmod(x: f64, y: f64) -> f64`
+
+Floating-point remainder of x/y
+
+##### `pub fn is_nan(&self) -> bool`
+
+##### `pub fn is_finite(&self) -> bool`
+
+##### `pub fn parse(s: String) -> Option<f64>`
+
+##### `impl Display for f64`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl LowerExp for f64`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl UpperExp for f64`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Ord for f64`
+
+###### `pub fn cmp(&self, other: &Self) -> Ordering`
+
 ### Variants
 
 #### `pub variant Option<T>`
