@@ -1,0 +1,83 @@
+// zlib cross-validation inflate driver
+//
+// Reads a command from stdin as binary bytes and outputs results as text.
+//
+// Protocol: stdin[0] = command, rest depends on command
+//
+// Commands:
+//   0: inflate_zlib - stdin[1..]=compressed → decompressed bytes as space-separated decimal
+//   1: inflate_raw - stdin[1..]=compressed → decompressed bytes
+//   2: inflate_gzip - stdin[1..]=compressed → decompressed bytes
+//   3: inflate_stream_raw - stdin[1..]=compressed → decompressed bytes
+//   4: inflate_stream_gzip - stdin[1..]=compressed → decompressed bytes
+//   5: inflate_stream_auto - stdin[1..]=compressed → decompressed bytes
+
+use { print, println, Stdout } from "core:cli";
+use { Stdin } from "wasi:cli";
+use {
+    inflate_zlib, inflate_raw, inflate_gzip,
+    InflateStream, RAW_FORMAT, GZIP_FORMAT, AUTO_FORMAT
+} from "core:zlib";
+
+fn read_all_stdin() -> Array<u8> with Stdin {
+    let [stdin_stream, _done] = Stdin::read_via_stream();
+    let mut buf: Array<u8> = [];
+    loop {
+        let chunk = stdin_stream.read(65536);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let mut i = 0; i < chunk.len(); i += 1 {
+            buf.append(chunk[i]);
+        }
+    }
+    stdin_stream.close();
+    return buf;
+}
+
+fn print_bytes(data: &Array<u8>) with Stdout {
+    for let mut i = 0; i < data.len(); i += 1 {
+        if i > 0 { print(" "); }
+        print(`{data[i] as i32}`);
+    }
+    println("");
+}
+
+export fn run() with Stdout, Stdin {
+    let input = read_all_stdin();
+    if input.len() == 0 {
+        println("error: empty stdin");
+        return;
+    }
+
+    let cmd = input[0] as i32;
+    let mut data: Array<u8> = [];
+    for let mut i = 1; i < input.len(); i += 1 {
+        data.append(input[i]);
+    }
+
+    if cmd == 0 {
+        let result = inflate_zlib(&data);
+        print_bytes(&result);
+    } else if cmd == 1 {
+        let result = inflate_raw(&data);
+        print_bytes(&result);
+    } else if cmd == 2 {
+        let result = inflate_gzip(&data);
+        print_bytes(&result);
+    } else if cmd == 3 {
+        let is = InflateStream::new_with_format(RAW_FORMAT);
+        let result = is.decompress(&data);
+        print_bytes(&result);
+    } else if cmd == 4 {
+        let is = InflateStream::new_with_format(GZIP_FORMAT);
+        let result = is.decompress(&data);
+        print_bytes(&result);
+    } else if cmd == 5 {
+        let is = InflateStream::new_with_format(AUTO_FORMAT);
+        let result = is.decompress(&data);
+        print_bytes(&result);
+    } else {
+        println(`error: unknown command {cmd}`);
+    }
+}
