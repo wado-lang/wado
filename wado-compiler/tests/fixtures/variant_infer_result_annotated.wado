@@ -1,0 +1,15 @@
+// Test: type inference for Result::Ok/Err with type annotation
+// Backward inference: infer E from the expected type annotation
+
+export fn run() {
+    // Result::Ok with annotation provides E = String
+    let a: Result<i32, String> = Result::Ok(42);
+    assert a matches { Ok(n) && n == 42 };
+
+    // Result::Err with annotation provides T = i32
+    let b: Result<i32, String> = Result::Err("fail");
+    assert b matches { Err(e) && e == "fail" };
+}
+
+__DATA__
+{"stdout": ""}

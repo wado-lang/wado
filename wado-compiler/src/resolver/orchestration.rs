@@ -94,6 +94,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     module_source: module_source.clone(),
                                     type_params,
                                     cases: Vec::new(),
+                                    type_param_type_ids: Vec::new(),
                                 },
                             );
                     }
@@ -281,6 +282,15 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 payload,
                             });
                         }
+                        let type_param_type_ids: Vec<TypeId> = type_params
+                            .iter()
+                            .enumerate()
+                            .map(|(i, name)| {
+                                type_table
+                                    .borrow_mut()
+                                    .make_type_param(name.clone(), i as u32)
+                            })
+                            .collect();
                         all_variant_cases
                             .entry(module_source.clone())
                             .or_default()
@@ -290,6 +300,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     module_source: module_source.clone(),
                                     type_params,
                                     cases,
+                                    type_param_type_ids,
                                 },
                             );
                     }

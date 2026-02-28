@@ -33,11 +33,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Main expression dispatch
         match expr {
             Expr::Literal(lit) => self.resolve_literal(lit, ctx),
-            Expr::Ident(ident) => self.resolve_ident(ident, ctx),
+            Expr::Ident(ident) => self.resolve_ident(ident, ctx, expected_type),
             Expr::Binary(binary) => self.resolve_binary(binary, ctx, expected_type),
             Expr::Unary(unary) => self.resolve_unary(unary, ctx),
             Expr::Assign(assign) => self.resolve_assign(assign, ctx),
-            Expr::Call(call) => self.resolve_call(call, ctx),
+            Expr::Call(call) => self.resolve_call(call, ctx, expected_type),
             Expr::MethodCall(method_call) => self.resolve_method_call(method_call, ctx),
             Expr::StaticMethodCall(static_call) => {
                 self.resolve_static_method_call(static_call, ctx)
@@ -229,6 +229,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         &mut self,
         ident: &ast::IdentExpr,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> TirExpr {
         // Check local variables, including captures from outer scope
         if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
@@ -291,13 +292,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let prefix = &ident.name[..pos];
             let suffix = &ident.name[pos + 2..];
 
-            if let Some(variant_info) = self.variant_cases.get(prefix) {
+            if let Some(variant_info) = self.variant_cases.get(prefix).cloned() {
                 // Find the case by name
                 if let Some((case_index, case_data)) = variant_info
                     .cases
                     .iter()
                     .enumerate()
                     .find(|(_, c)| c.name == suffix)
+                    .map(|(i, c)| (i, c.clone()))
                 {
                     // Unit variant - payload must be unit type
                     let payload_is_unit = matches!(
@@ -313,18 +315,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span);
                     }
 
-                    // Create variant type
-                    let variant_type = self
-                        .type_table
-                        .borrow_mut()
-                        .make_variant(prefix.to_string(), variant_info.module_source.clone());
+                    // Infer variant type for generic variants
+                    let variant_type = if variant_info.type_params.is_empty() {
+                        self.type_table
+                            .borrow_mut()
+                            .make_variant(prefix.to_string(), variant_info.module_source.clone())
+                    } else {
+                        self.infer_variant_type_args(
+                            prefix,
+                            &variant_info,
+                            &case_data,
+                            None,
+                            expected_type,
+                        )
+                    };
 
                     return TirExpr::new(
                         TirExprKind::VariantConstruct {
                             variant_type,
                             case_index: case_index as u32,
                             case_name: case_data.name.clone(),
-                            payload: None, // Unit variant has no explicit payload
+                            payload: None,
                         },
                         variant_type,
                         ident.span,
