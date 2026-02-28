@@ -327,7 +327,7 @@ Wado is designed with the following Wasm features:
 - Use `panic!("not yet implemented")` for things that are not yet implemented.
 - YAGNI. Do the simplest thing that could possibly work.
 - Do not use `HashMap` or `HashSet` from `std::collections`. Use `IndexMap` and `IndexSet` from the `indexmap` crate instead, to ensure deterministic iteration order.
-- Do not use comments to separate sections within a file (e.g., `// --- Section Name ---`). Use Rust's natural structure (modules, impl blocks, trait definitions) to organize code instead.
+- Do not use any comment sections to separate or organize code. Use Rust's natural structure (modules, impl blocks, trait definitions) instead.
 
 ### Rules for the Compiler Code Base
 

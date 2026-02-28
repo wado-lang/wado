@@ -1,7 +1,3 @@
-// Tests for iterator methods on ArrayIter<T>
-
-// Tier 1: Consuming methods
-
 test "find returns first matching element" {
     let arr: Array<i32> = [1, 2, 3, 4, 5];
     let found = arr.iter().find(|x: i32| x % 2 == 0);
@@ -117,8 +113,6 @@ test "reduce on empty array" {
     assert arr.iter().reduce(|a: i32, b: i32| a + b) matches { None };
 }
 
-// Tier 2: Adapter iterators
-
 test "take first n elements" {
     let arr: Array<i32> = [1, 2, 3, 4, 5];
     let result = arr.iter().take(3).collect();
@@ -206,8 +200,6 @@ test "zip stops at shorter" {
     assert result == 2;
 }
 
-// Tier 3: Bounded methods
-
 test "sum of integers" {
     let arr: Array<i32> = [1, 2, 3, 4, 5];
     let result = arr.iter().sum();
@@ -268,8 +260,6 @@ test "min and max of f64" {
     assert arr.iter().min() matches { Some(v) && v == 1.41 };
     assert arr.iter().max() matches { Some(v) && v == 3.14 };
 }
-
-// Tier 4: Adapter combinators (map, filter, fold, collect, enumerate)
 
 test "map doubles elements" {
     let arr: Array<i32> = [1, 2, 3, 4, 5];

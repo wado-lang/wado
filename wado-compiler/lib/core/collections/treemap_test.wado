@@ -1,8 +1,4 @@
-// Tests for TreeMap<String, V> standard library
-
 use { TreeMap } from "core:collections";
-
-// --- basic operations ---
 
 test "empty map" {
     let map = TreeMap::<String, i32>::new();
@@ -35,8 +31,6 @@ test "multiple inserts" {
     assert map.len() == 3;
 }
 
-// --- get (fallible) ---
-
 test "get returns Some for existing key" {
     let mut map = TreeMap::<String, i32>::new();
     map["key"] = 42;
@@ -47,8 +41,6 @@ test "get returns None for missing key" {
     let map = TreeMap::<String, i32>::new();
     assert map.get("missing") matches { None };
 }
-
-// --- clear ---
 
 test "clear empties map" {
     let mut map = TreeMap::<String, i32>::new();
@@ -73,8 +65,6 @@ test "insert after clear" {
     assert map.len() == 1;
     assert map.contains_key("new");
 }
-
-// --- entries ---
 
 test "entries returns key-value pairs in insertion order" {
     let mut map = TreeMap::<String, i32>::new();
@@ -117,8 +107,6 @@ test "entries after remove" {
     assert pairs[1].0 == "third";
 }
 
-// --- insertion order ---
-
 test "keys in insertion order" {
     let mut map = TreeMap::<String, i32>::new();
     map["echo"] = 5;
@@ -159,8 +147,6 @@ test "values in insertion order" {
     assert values[4] == 9;
 }
 
-// --- remove ---
-
 test "remove existing key" {
     let mut map = TreeMap::<String, i32>::new();
     map["a"] = 1;
@@ -194,8 +180,6 @@ test "reinsert after remove" {
     assert map["b"] == 999;
     assert map.len() == 3;
 }
-
-// --- remove preserves order ---
 
 test "remove from middle preserves order" {
     let mut map = TreeMap::<String, i32>::new();
@@ -239,8 +223,6 @@ test "remove from end preserves order" {
     assert keys[1] == "second";
 }
 
-// --- reinsert order ---
-
 test "reinsert goes to end" {
     let mut map = TreeMap::<String, i32>::new();
     map["a"] = 1;
@@ -274,8 +256,6 @@ test "multiple removes and reinserts" {
     assert keys[2] == "a";
 }
 
-// --- update preserves order ---
-
 test "update does not change position" {
     let mut map = TreeMap::<String, i32>::new();
     map["a"] = 1;
@@ -295,8 +275,6 @@ test "update does not change position" {
     assert values[1] == 200;
     assert values[2] == 3;
 }
-
-// --- compact ---
 
 test "compact after many deletions preserves order" {
     let mut map = TreeMap::<String, i32>::new();
@@ -364,8 +342,6 @@ test "insert after compact" {
     assert map["d"] == 4;
     assert map["new"] == 100;
 }
-
-// --- large map ---
 
 test "50 items insert and partial remove" {
     let mut map = TreeMap::<String, i32>::new();
