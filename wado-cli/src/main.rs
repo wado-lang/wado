@@ -9,6 +9,7 @@ enum Cmd {
     Serve,
     Test,
     Format,
+    Doc,
     Dump,
     Syntax,
 }
@@ -20,6 +21,7 @@ impl Cmd {
         Self::Serve,
         Self::Test,
         Self::Format,
+        Self::Doc,
         Self::Dump,
         Self::Syntax,
     ];
@@ -31,6 +33,7 @@ impl Cmd {
             Self::Serve => "serve",
             Self::Test => "test",
             Self::Format => "format",
+            Self::Doc => "doc",
             Self::Dump => "dump",
             Self::Syntax => "syntax",
         }
@@ -40,7 +43,7 @@ impl Cmd {
         match self {
             Self::Compile | Self::Run | Self::Serve => "[options] <file.wado>",
             Self::Test => "[options] [files or dirs...]",
-            Self::Format | Self::Dump => "[options] <file.wado>...",
+            Self::Format | Self::Doc | Self::Dump => "[options] <file.wado>...",
             Self::Syntax => "[options]",
         }
     }
@@ -52,6 +55,7 @@ impl Cmd {
             Self::Serve => "Compile and serve a Wado HTTP service",
             Self::Test => "Run tests in Wado source files",
             Self::Format => "Format a Wado source file",
+            Self::Doc => "Generate documentation from source files",
             Self::Dump => "Dump compiler internal state",
             Self::Syntax => "Generate syntax definition files",
         }
@@ -132,6 +136,10 @@ async fn main() {
                         let opts =
                             wado_cli::format::parse_args(parser).unwrap_or_else(|e| e.exit());
                         wado_cli::format::run(opts);
+                    }
+                    Cmd::Doc => {
+                        let opts = wado_cli::doc::parse_args(parser).unwrap_or_else(|e| e.exit());
+                        wado_cli::doc::run(opts);
                     }
                     Cmd::Dump => {
                         let opts = wado_cli::dump::parse_args(parser).unwrap_or_else(|e| e.exit());

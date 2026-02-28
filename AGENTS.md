@@ -402,6 +402,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Tuple Destructuring](./docs/wep-2026-02-22-tuple-destructuring.md)
 - [Base64 Encoding API](./docs/wep-2026-02-27-base64-api.md)
 - [Serialization and Deserialization (Serde)](./docs/wep-2026-02-28-serde.md)
+- [Documentation Generation (`wado doc`)](./docs/wep-2026-02-28-doc-command.md)
 
 ### Structure
 

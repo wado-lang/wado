@@ -1,3 +1,5 @@
+//! CLI helpers: `println`, `eprintln`, `args`, `env`, `exit`, etc.
+
 // Wado CLI Module
 // High-level CLI helpers built on top of wasi:cli
 //
@@ -17,9 +19,9 @@ use { wait_for_subtask } from "core:internal";
 
 // Re-export commonly used effects for convenience
 pub use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
-// Write string to stream tx handle
-// Called AFTER the consumer (write_via_stream) has been started.
-// add_newline: if true, appends '\n' after the message
+/// Writes a string to a stream tx handle.
+/// Called AFTER the consumer (write_via_stream) has been started.
+/// If add_newline is true, appends '\n' after the message.
 pub fn write_to_stream(tx: i32, message: String, add_newline: bool) {
     let len = message.len();
     let msg_bytes = message.internal_raw_bytes();
@@ -35,11 +37,7 @@ pub fn write_to_stream(tx: i32, message: String, add_newline: bool) {
     builtin::stream_write(tx, ptr, alloc_size);
     builtin::stream_drop_writable(tx);
 }
-/// Print a line to stdout (adds newline)
-/// Uses WASI P3 async stream with correct ordering:
-/// 1. Start consumer (write_via_stream) with rx first
-/// 2. Write data to tx + close tx
-/// 3. Wait for consumer to complete
+/// Prints a line to stdout (adds newline).
 pub fn println(message: String) with Stdout {
     let handles = builtin::stream_new();
     let rx = handles as i32;
@@ -50,7 +48,7 @@ pub fn println(message: String) with Stdout {
     wait_for_subtask(subtask);
 }
 
-/// Print a line to stderr (adds newline)
+/// Prints a line to stderr (adds newline).
 pub fn eprintln(message: String) with Stderr {
     let handles = builtin::stream_new();
     let rx = handles as i32;
@@ -61,7 +59,7 @@ pub fn eprintln(message: String) with Stderr {
     wait_for_subtask(subtask);
 }
 
-/// Print to stdout without newline
+/// Prints to stdout without a trailing newline.
 pub fn print(message: String) with Stdout {
     let handles = builtin::stream_new();
     let rx = handles as i32;
@@ -72,7 +70,7 @@ pub fn print(message: String) with Stdout {
     wait_for_subtask(subtask);
 }
 
-/// Print to stderr without newline
+/// Prints to stderr without a trailing newline.
 pub fn eprint(message: String) with Stderr {
     let handles = builtin::stream_new();
     let rx = handles as i32;
@@ -82,30 +80,31 @@ pub fn eprint(message: String) with Stderr {
     write_to_stream(tx, message, false);
     wait_for_subtask(subtask);
 }
-/// Get environment variable by name
-/// TODO: Implement when for-in loops are supported
+/// Returns the value of an environment variable by name.
+/// TODO: Implement when for-in loops are supported.
 pub fn env(name: String) -> Option<String> with Environment;
 
-/// Get all command-line arguments
+/// Returns all command-line arguments.
 pub fn args() -> Array<String> with Environment {
     return Environment::get_arguments();
 }
 
-/// Get current working directory
+/// Returns the current working directory.
 pub fn cwd() -> Option<String> with Environment {
     return Environment::get_initial_cwd();
 }
-/// Exit with success (code 0)
+
+/// Exits with success (code 0).
 pub fn exit_success() -> ! with Exit {
     Exit::exit(Ok(()));
 }
 
-/// Exit with error
+/// Exits with an error.
 pub fn exit_error() -> ! with Exit {
     Exit::exit(Err(()));
 }
 
-/// Exit with specific status code
+/// Exits with a specific status code.
 pub fn exit(code: u8) -> ! with Exit {
     Exit::exit_with_code(code);
 }

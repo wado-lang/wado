@@ -1,3 +1,5 @@
+//! Monotonic clock for time measurement.
+
 // Wado Clocks Module
 // High-level clock helpers built on top of wasi:clocks
 //
@@ -8,8 +10,8 @@ use {MonotonicClock, Mark, Duration} from "wasi:clocks";
 
 // Re-export commonly used effects and types for convenience
 pub use {MonotonicClock, Mark, Duration} from "wasi:clocks";
-/// Get the current monotonic clock time in nanoseconds.
-/// The clock is monotonic, so successive calls will return non-decreasing values.
+/// Returns the current monotonic clock time in nanoseconds.
+/// Successive calls return non-decreasing values.
 pub fn now() -> Mark with MonotonicClock {
     return MonotonicClock::now();
 }

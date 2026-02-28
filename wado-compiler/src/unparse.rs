@@ -1928,13 +1928,21 @@ impl<'a> Unparser<'a> {
                 self.output.push_str(&comment.text);
                 self.output.push_str("*/");
             }
+            CommentKind::DocLine => {
+                self.output.push_str("///");
+                self.output.push_str(&comment.text);
+            }
+            CommentKind::ModuleDoc => {
+                self.output.push_str("//!");
+                self.output.push_str(&comment.text);
+            }
         }
     }
 }
 
 // Helper functions
 
-fn get_item_span(item: &Item) -> Span {
+pub fn get_item_span(item: &Item) -> Span {
     match item {
         Item::Use(u) => u.span,
         Item::Function(f) => f.span,
@@ -2517,7 +2525,7 @@ fn unparse_match_into(m: &MatchExpr, output: &mut String) {
     output.push_str(" }");
 }
 
-fn unparse_type_into(ty: &Type, output: &mut String) {
+pub fn unparse_type_into(ty: &Type, output: &mut String) {
     match ty {
         Type::Named(n) => output.push_str(&n.name),
         Type::Generic(g) => {

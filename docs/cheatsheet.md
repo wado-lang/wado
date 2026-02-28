@@ -1704,5 +1704,7 @@ Wado intentionally does not support macros.
 ## See Also
 
 - [Language Specification](./spec.md) - Full language specification
+- [Core Standard Library Reference](./cheatsheet-stdlib-core.md) - Full core stdlib API
+- [WASI Standard Library Reference](./cheatsheet-stdlib-wasi.md) - Full WASI stdlib API
 - [Wado Evolution Proposals](../CLAUDE.md#wado-evolution-proposals-wep) - Design decisions and rationale
 - [wado-compiler/tests/fixtures/\*.wado](wado-compiler/tests/fixtures) - E2E test fixtures

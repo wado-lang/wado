@@ -463,6 +463,16 @@ impl<'a> Lexer<'a> {
         self.advance(); // first /
         self.advance(); // second /
 
+        // Detect doc comment kinds: `///` or `//!`
+        let kind = match self.peek_char() {
+            // `///` but not `////` (which is a regular comment)
+            Some('/') if self.input.get(self.pos + 1..self.pos + 2) != Some("/") => {
+                CommentKind::DocLine
+            }
+            Some('!') => CommentKind::ModuleDoc,
+            _ => CommentKind::Line,
+        };
+
         let text_start = self.pos;
         while let Some((_, ch)) = self.peek() {
             if ch == '\n' {
@@ -475,7 +485,7 @@ impl<'a> Lexer<'a> {
 
         Comment {
             text,
-            kind: CommentKind::Line,
+            kind,
             span: Span::new(start, self.pos, start_line, start_column),
         }
     }
