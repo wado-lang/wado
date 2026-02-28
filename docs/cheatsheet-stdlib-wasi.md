@@ -86,38 +86,39 @@ pub resource TerminalOutput;
 
 ## wasi:filesystem
 
-### Structs
-
-```wado
-pub struct DescriptorStat {
-    type: DescriptorType,
-    link_count: LinkCount,
-    size: Filesize,
-    data_access_timestamp: Option<Instant>,
-    data_modification_timestamp: Option<Instant>,
-    status_change_timestamp: Option<Instant>,
-}
-```
-
-```wado
-pub struct DirectoryEntry {
-    type: DescriptorType,
-    name: String,
-}
-```
-
-```wado
-pub struct MetadataHashValue {
-    lower: u64,
-    upper: u64,
-}
-```
-
 ### Types
 
 ```wado
 pub type Filesize = u64;
 pub type LinkCount = u64;
+```
+
+### Flags
+
+```wado
+pub flags DescriptorFlags {
+    Read,
+    Write,
+    FileIntegritySync,
+    DataIntegritySync,
+    RequestedWriteSync,
+    MutateDirectory,
+}
+```
+
+```wado
+pub flags PathFlags {
+    SymlinkFollow,
+}
+```
+
+```wado
+pub flags OpenFlags {
+    Create,
+    Directory,
+    Exclusive,
+    Truncate,
+}
 ```
 
 ### Enums
@@ -187,44 +188,6 @@ pub enum Advice {
 }
 ```
 
-### Variants
-
-```wado
-pub variant NewTimestamp {
-    NoChange,
-    Now,
-    Timestamp(Instant),
-}
-```
-
-### Flags
-
-```wado
-pub flags DescriptorFlags {
-    Read,
-    Write,
-    FileIntegritySync,
-    DataIntegritySync,
-    RequestedWriteSync,
-    MutateDirectory,
-}
-```
-
-```wado
-pub flags PathFlags {
-    SymlinkFollow,
-}
-```
-
-```wado
-pub flags OpenFlags {
-    Create,
-    Directory,
-    Exclusive,
-    Truncate,
-}
-```
-
 ### Effects
 
 ```wado
@@ -265,7 +228,125 @@ pub resource Descriptor {
 }
 ```
 
+### Structs
+
+```wado
+pub struct DescriptorStat {
+    type: DescriptorType,
+    link_count: LinkCount,
+    size: Filesize,
+    data_access_timestamp: Option<Instant>,
+    data_modification_timestamp: Option<Instant>,
+    status_change_timestamp: Option<Instant>,
+}
+```
+
+```wado
+pub struct DirectoryEntry {
+    type: DescriptorType,
+    name: String,
+}
+```
+
+```wado
+pub struct MetadataHashValue {
+    lower: u64,
+    upper: u64,
+}
+```
+
+### Variants
+
+```wado
+pub variant NewTimestamp {
+    NoChange,
+    Now,
+    Timestamp(Instant),
+}
+```
+
 ## wasi:http
+
+### Types
+
+```wado
+pub type FieldName = String;
+pub type FieldValue = Array<u8>;
+pub type Headers = Fields;
+pub type Trailers = Fields;
+pub type StatusCode = u16;
+```
+
+### Effects
+
+```wado
+pub effect Handler {
+    async fn handle(request: Request) -> Result<Response, ErrorCode>;
+}
+```
+
+```wado
+pub effect Client {
+    async fn send(request: Request) -> Result<Response, ErrorCode>;
+}
+```
+
+### Resources
+
+```wado
+pub resource Fields {
+    fn new() -> Fields;
+    fn from_list(entries: Array<[FieldName, FieldValue]>) -> Result<Fields, HeaderError>;
+    fn get(self: &Fields, name: FieldName) -> Array<FieldValue>;
+    fn has(self: &Fields, name: FieldName) -> bool;
+    fn set(self: &Fields, name: FieldName, value: Array<FieldValue>) -> Result<(), HeaderError>;
+    fn delete(self: &Fields, name: FieldName) -> Result<(), HeaderError>;
+    fn get_and_delete(self: &Fields, name: FieldName) -> Result<Array<FieldValue>, HeaderError>;
+    fn append(self: &Fields, name: FieldName, value: FieldValue) -> Result<(), HeaderError>;
+    fn copy_all(self: &Fields) -> Array<[FieldName, FieldValue]>;
+    fn clone(self: &Fields) -> Fields;
+}
+```
+
+```wado
+pub resource Request {
+    fn new(headers: Headers, contents: Option<Stream<u8>>, trailers: Future<Result<Option<Trailers>, ErrorCode>>, options: Option<RequestOptions>) -> [Request, Future<Result<(), ErrorCode>>];
+    fn get_method(self: &Request) -> Method;
+    fn set_method(self: &Request, method: Method) -> Result<(), ()>;
+    fn get_path_with_query(self: &Request) -> Option<String>;
+    fn set_path_with_query(self: &Request, path_with_query: Option<String>) -> Result<(), ()>;
+    fn get_scheme(self: &Request) -> Option<Scheme>;
+    fn set_scheme(self: &Request, scheme: Option<Scheme>) -> Result<(), ()>;
+    fn get_authority(self: &Request) -> Option<String>;
+    fn set_authority(self: &Request, authority: Option<String>) -> Result<(), ()>;
+    fn get_options(self: &Request) -> Option<RequestOptions>;
+    fn get_headers(self: &Request) -> Headers;
+    fn consume_body(this: Request, res: Future<Result<(), ErrorCode>>) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>];
+}
+```
+
+```wado
+pub resource RequestOptions {
+    fn new() -> RequestOptions;
+    fn get_connect_timeout(self: &RequestOptions) -> Option<Duration>;
+    fn set_connect_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>;
+    fn get_first_byte_timeout(self: &RequestOptions) -> Option<Duration>;
+    fn set_first_byte_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>;
+    fn get_between_bytes_timeout(self: &RequestOptions) -> Option<Duration>;
+    fn set_between_bytes_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>;
+    fn clone(self: &RequestOptions) -> RequestOptions;
+}
+```
+
+```wado
+pub resource Response {
+    fn new(headers: Headers, contents: Option<Stream<u8>>, trailers: Future<Result<Option<Trailers>, ErrorCode>>) -> [Response, Future<Result<(), ErrorCode>>];
+    fn get_status_code(self: &Response) -> StatusCode;
+    fn set_status_code(self: &Response, status_code: StatusCode) -> Result<(), ()>;
+    fn get_headers(self: &Response) -> Headers;
+    fn consume_body(this: Response, res: Future<Result<(), ErrorCode>>) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>];
+}
+```
 
 ### Structs
 
@@ -288,16 +369,6 @@ pub struct FieldSizePayload {
     field_name: Option<String>,
     field_size: Option<u32>,
 }
-```
-
-### Types
-
-```wado
-pub type FieldName = String;
-pub type FieldValue = Array<u8>;
-pub type Headers = Fields;
-pub type Trailers = Fields;
-pub type StatusCode = u16;
 ```
 
 ### Variants
@@ -384,87 +455,7 @@ pub variant RequestOptionsError {
 }
 ```
 
-### Effects
-
-```wado
-pub effect Handler {
-    async fn handle(request: Request) -> Result<Response, ErrorCode>;
-}
-```
-
-```wado
-pub effect Client {
-    async fn send(request: Request) -> Result<Response, ErrorCode>;
-}
-```
-
-### Resources
-
-```wado
-pub resource Fields {
-    fn new() -> Fields;
-    fn from_list(entries: Array<[FieldName, FieldValue]>) -> Result<Fields, HeaderError>;
-    fn get(self: &Fields, name: FieldName) -> Array<FieldValue>;
-    fn has(self: &Fields, name: FieldName) -> bool;
-    fn set(self: &Fields, name: FieldName, value: Array<FieldValue>) -> Result<(), HeaderError>;
-    fn delete(self: &Fields, name: FieldName) -> Result<(), HeaderError>;
-    fn get_and_delete(self: &Fields, name: FieldName) -> Result<Array<FieldValue>, HeaderError>;
-    fn append(self: &Fields, name: FieldName, value: FieldValue) -> Result<(), HeaderError>;
-    fn copy_all(self: &Fields) -> Array<[FieldName, FieldValue]>;
-    fn clone(self: &Fields) -> Fields;
-}
-```
-
-```wado
-pub resource Request {
-    fn new(headers: Headers, contents: Option<Stream<u8>>, trailers: Future<Result<Option<Trailers>, ErrorCode>>, options: Option<RequestOptions>) -> [Request, Future<Result<(), ErrorCode>>];
-    fn get_method(self: &Request) -> Method;
-    fn set_method(self: &Request, method: Method) -> Result<(), ()>;
-    fn get_path_with_query(self: &Request) -> Option<String>;
-    fn set_path_with_query(self: &Request, path_with_query: Option<String>) -> Result<(), ()>;
-    fn get_scheme(self: &Request) -> Option<Scheme>;
-    fn set_scheme(self: &Request, scheme: Option<Scheme>) -> Result<(), ()>;
-    fn get_authority(self: &Request) -> Option<String>;
-    fn set_authority(self: &Request, authority: Option<String>) -> Result<(), ()>;
-    fn get_options(self: &Request) -> Option<RequestOptions>;
-    fn get_headers(self: &Request) -> Headers;
-    fn consume_body(this: Request, res: Future<Result<(), ErrorCode>>) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>];
-}
-```
-
-```wado
-pub resource RequestOptions {
-    fn new() -> RequestOptions;
-    fn get_connect_timeout(self: &RequestOptions) -> Option<Duration>;
-    fn set_connect_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>;
-    fn get_first_byte_timeout(self: &RequestOptions) -> Option<Duration>;
-    fn set_first_byte_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>;
-    fn get_between_bytes_timeout(self: &RequestOptions) -> Option<Duration>;
-    fn set_between_bytes_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>;
-    fn clone(self: &RequestOptions) -> RequestOptions;
-}
-```
-
-```wado
-pub resource Response {
-    fn new(headers: Headers, contents: Option<Stream<u8>>, trailers: Future<Result<Option<Trailers>, ErrorCode>>) -> [Response, Future<Result<(), ErrorCode>>];
-    fn get_status_code(self: &Response) -> StatusCode;
-    fn set_status_code(self: &Response, status_code: StatusCode) -> Result<(), ()>;
-    fn get_headers(self: &Response) -> Headers;
-    fn consume_body(this: Response, res: Future<Result<(), ErrorCode>>) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>];
-}
-```
-
 ## wasi:clocks
-
-### Structs
-
-```wado
-pub struct Instant {
-    seconds: i64,
-    nanoseconds: u32,
-}
-```
 
 ### Types
 
@@ -499,6 +490,15 @@ pub effect Timezone {
 }
 ```
 
+### Structs
+
+```wado
+pub struct Instant {
+    seconds: i64,
+    nanoseconds: u32,
+}
+```
+
 ## wasi:random
 
 ### Effects
@@ -524,24 +524,6 @@ pub effect Random {
 ```
 
 ## wasi:sockets
-
-### Structs
-
-```wado
-pub struct Ipv4SocketAddress {
-    port: u16,
-    address: Ipv4Address,
-}
-```
-
-```wado
-pub struct Ipv6SocketAddress {
-    port: u16,
-    flow_info: u32,
-    address: Ipv6Address,
-    scope_id: u32,
-}
-```
 
 ### Types
 
@@ -586,22 +568,6 @@ pub enum ErrorCode {
     NameUnresolvable,
     TemporaryResolverFailure,
     PermanentResolverFailure,
-}
-```
-
-### Variants
-
-```wado
-pub variant IpAddress {
-    Ipv4(Ipv4Address),
-    Ipv6(Ipv6Address),
-}
-```
-
-```wado
-pub variant IpSocketAddress {
-    Ipv4(Ipv4SocketAddress),
-    Ipv6(Ipv6SocketAddress),
 }
 ```
 
@@ -662,5 +628,39 @@ pub resource UdpSocket {
     fn set_receive_buffer_size(self: &UdpSocket, value: u64) -> Result<(), ErrorCode>;
     fn get_send_buffer_size(self: &UdpSocket) -> Result<u64, ErrorCode>;
     fn set_send_buffer_size(self: &UdpSocket, value: u64) -> Result<(), ErrorCode>;
+}
+```
+
+### Structs
+
+```wado
+pub struct Ipv4SocketAddress {
+    port: u16,
+    address: Ipv4Address,
+}
+```
+
+```wado
+pub struct Ipv6SocketAddress {
+    port: u16,
+    flow_info: u32,
+    address: Ipv6Address,
+    scope_id: u32,
+}
+```
+
+### Variants
+
+```wado
+pub variant IpAddress {
+    Ipv4(Ipv4Address),
+    Ipv6(Ipv6Address),
+}
+```
+
+```wado
+pub variant IpSocketAddress {
+    Ipv4(Ipv4SocketAddress),
+    Ipv6(Ipv6SocketAddress),
 }
 ```

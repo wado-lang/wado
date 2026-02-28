@@ -149,6 +149,47 @@ pub trait FromIterator<T> {
 }
 ```
 
+### Enums
+
+```wado
+pub enum Ordering {
+    Less,
+    Equal,
+    Greater,
+}
+```
+
+```wado
+pub enum Alignment {
+    Left,
+    Center,
+    Right,
+}
+```
+
+### Resources
+
+```wado
+pub resource Future<T> {
+    fn new() -> [Future<T>, FutureWritable<T>];
+}
+```
+
+```wado
+pub resource Stream<T> {
+    fn new() -> [Stream<T>, StreamWritable<T>];
+    fn read(&self, max: i32) -> Array<T>;
+    fn close(&self);
+}
+```
+
+```wado
+pub resource StreamWritable<T> {
+    fn write(&self, data: Array<T>);
+    fn close(&self);
+}
+```
+
 ### Structs
 
 ```wado
@@ -555,24 +596,6 @@ impl Iterator for FilterIter<T> {
 }
 ```
 
-### Enums
-
-```wado
-pub enum Ordering {
-    Less,
-    Equal,
-    Greater,
-}
-```
-
-```wado
-pub enum Alignment {
-    Left,
-    Center,
-    Right,
-}
-```
-
 ### Variants
 
 ```wado
@@ -586,29 +609,6 @@ pub variant Option<T> {
 pub variant Result<T, E> {
     Ok(T),
     Err(E),
-}
-```
-
-### Resources
-
-```wado
-pub resource Future<T> {
-    fn new() -> [Future<T>, FutureWritable<T>];
-}
-```
-
-```wado
-pub resource Stream<T> {
-    fn new() -> [Stream<T>, StreamWritable<T>];
-    fn read(&self, max: i32) -> Array<T>;
-    fn close(&self);
-}
-```
-
-```wado
-pub resource StreamWritable<T> {
-    fn write(&self, data: Array<T>);
-    fn close(&self);
 }
 ```
 
@@ -762,6 +762,45 @@ pub fn decode_bytes(encoded: &Array<u8>) -> Option<Array<u8>>;
 
 zlib compression and decompression (RFC 1950/1951/1952).
 
+### Globals
+
+```wado
+pub global Z_OK: i32;
+pub global Z_STREAM_END: i32;
+pub global Z_NEED_DICT: i32;
+pub global Z_ERRNO: i32;
+pub global Z_STREAM_ERROR: i32;
+pub global Z_DATA_ERROR: i32;
+pub global Z_MEM_ERROR: i32;
+pub global Z_BUF_ERROR: i32;
+pub global Z_VERSION_ERROR: i32;
+pub global Z_NO_FLUSH: i32;
+pub global Z_PARTIAL_FLUSH: i32;
+pub global Z_SYNC_FLUSH: i32;
+pub global Z_FULL_FLUSH: i32;
+pub global Z_FINISH: i32;
+pub global Z_BLOCK: i32;
+pub global Z_TREES: i32;
+pub global Z_NO_COMPRESSION: i32;
+pub global Z_BEST_SPEED: i32;
+pub global Z_BEST_COMPRESSION: i32;
+pub global Z_DEFAULT_COMPRESSION: i32;
+pub global Z_DEFAULT_STRATEGY: i32;
+pub global Z_FILTERED: i32;
+pub global Z_HUFFMAN_ONLY: i32;
+pub global Z_RLE: i32;
+pub global Z_FIXED: i32;
+pub global Z_BINARY: i32;
+pub global Z_TEXT: i32;
+pub global Z_UNKNOWN: i32;
+pub global Z_DEFLATED: i32;
+pub global MAX_WBITS: i32;
+pub global ZLIB_FORMAT: i32;
+pub global RAW_FORMAT: i32;
+pub global GZIP_FORMAT: i32;
+pub global AUTO_FORMAT: i32;
+```
+
 ### Structs
 
 ```wado
@@ -824,45 +863,6 @@ impl InflateStream {
     pub fn finish(&mut self) -> Array<u8>;
     pub fn decompress(&self, input: &Array<u8>) -> Array<u8>;
 }
-```
-
-### Globals
-
-```wado
-pub global Z_OK: i32;
-pub global Z_STREAM_END: i32;
-pub global Z_NEED_DICT: i32;
-pub global Z_ERRNO: i32;
-pub global Z_STREAM_ERROR: i32;
-pub global Z_DATA_ERROR: i32;
-pub global Z_MEM_ERROR: i32;
-pub global Z_BUF_ERROR: i32;
-pub global Z_VERSION_ERROR: i32;
-pub global Z_NO_FLUSH: i32;
-pub global Z_PARTIAL_FLUSH: i32;
-pub global Z_SYNC_FLUSH: i32;
-pub global Z_FULL_FLUSH: i32;
-pub global Z_FINISH: i32;
-pub global Z_BLOCK: i32;
-pub global Z_TREES: i32;
-pub global Z_NO_COMPRESSION: i32;
-pub global Z_BEST_SPEED: i32;
-pub global Z_BEST_COMPRESSION: i32;
-pub global Z_DEFAULT_COMPRESSION: i32;
-pub global Z_DEFAULT_STRATEGY: i32;
-pub global Z_FILTERED: i32;
-pub global Z_HUFFMAN_ONLY: i32;
-pub global Z_RLE: i32;
-pub global Z_FIXED: i32;
-pub global Z_BINARY: i32;
-pub global Z_TEXT: i32;
-pub global Z_UNKNOWN: i32;
-pub global Z_DEFLATED: i32;
-pub global MAX_WBITS: i32;
-pub global ZLIB_FORMAT: i32;
-pub global RAW_FORMAT: i32;
-pub global GZIP_FORMAT: i32;
-pub global AUTO_FORMAT: i32;
 ```
 
 ### Functions

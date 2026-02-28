@@ -162,77 +162,47 @@ The output side of a terminal.
 
 ## wasi:filesystem
 
-### Structs
-
-#### `pub struct DescriptorStat`
-
-File attributes.
-
-Note: This was called `filestat` in earlier versions of WASI.
-
-##### Fields
-
-- `type: DescriptorType`
-
-  File type.
-- `link_count: LinkCount`
-
-  Number of hard links to the file.
-- `size: Filesize`
-
-  For regular files, the file size in bytes. For symbolic links, the
-  length in bytes of the pathname contained in the symbolic link.
-- `data_access_timestamp: Option<Instant>`
-
-  Last data access timestamp.
-
-  If the `option` is none, the platform doesn't maintain an access
-  timestamp for this file.
-- `data_modification_timestamp: Option<Instant>`
-
-  Last data modification timestamp.
-
-  If the `option` is none, the platform doesn't maintain a
-  modification timestamp for this file.
-- `status_change_timestamp: Option<Instant>`
-
-  Last file status-change timestamp.
-
-  If the `option` is none, the platform doesn't maintain a
-  status-change timestamp for this file.
-
-#### `pub struct DirectoryEntry`
-
-A directory entry.
-
-##### Fields
-
-- `type: DescriptorType`
-
-  The type of the file referred to by this directory entry.
-- `name: String`
-
-  The name of the object.
-
-#### `pub struct MetadataHashValue`
-
-A 128-bit hash value, split into parts because wasm doesn't have a
-128-bit integer type.
-
-##### Fields
-
-- `lower: u64`
-
-  64 bits of a 128-bit hash value.
-- `upper: u64`
-
-  Another 64 bits of a 128-bit hash value.
-
 ### Types
 
 #### `pub type Filesize = u64`
 
 #### `pub type LinkCount = u64`
+
+### Flags
+
+#### `pub flags DescriptorFlags`
+
+Descriptor flags.
+
+Note: This was called `fdflags` in earlier versions of WASI.
+
+##### Members
+
+- `Read`
+- `Write`
+- `FileIntegritySync`
+- `DataIntegritySync`
+- `RequestedWriteSync`
+- `MutateDirectory`
+
+#### `pub flags PathFlags`
+
+Flags determining the method of how paths are resolved.
+
+##### Members
+
+- `SymlinkFollow`
+
+#### `pub flags OpenFlags`
+
+Open flags used by `open-at`.
+
+##### Members
+
+- `Create`
+- `Directory`
+- `Exclusive`
+- `Truncate`
 
 ### Enums
 
@@ -305,59 +275,6 @@ File or memory access pattern advisory information.
 - `WillNeed`
 - `DontNeed`
 - `NoReuse`
-
-### Variants
-
-#### `pub variant NewTimestamp`
-
-When setting a timestamp, this gives the value to set it to.
-
-- `NoChange`
-
-  Leave the timestamp set to its previous value.
-- `Now`
-
-  Set the timestamp to the current time of the system clock associated
-  with the filesystem.
-- `Timestamp(Instant)`
-
-  Set the timestamp to the given value.
-
-### Flags
-
-#### `pub flags DescriptorFlags`
-
-Descriptor flags.
-
-Note: This was called `fdflags` in earlier versions of WASI.
-
-##### Members
-
-- `Read`
-- `Write`
-- `FileIntegritySync`
-- `DataIntegritySync`
-- `RequestedWriteSync`
-- `MutateDirectory`
-
-#### `pub flags PathFlags`
-
-Flags determining the method of how paths are resolved.
-
-##### Members
-
-- `SymlinkFollow`
-
-#### `pub flags OpenFlags`
-
-Open flags used by `open-at`.
-
-##### Members
-
-- `Create`
-- `Directory`
-- `Exclusive`
-- `Truncate`
 
 ### Effects
 
@@ -615,36 +532,90 @@ calls may be made.
 
   This performs the same hash computation as `metadata-hash`.
 
-## wasi:http
-
 ### Structs
 
-#### `pub struct DnsErrorPayload`
+#### `pub struct DescriptorStat`
 
-Defines the case payload type for `DNS-error` above:
+File attributes.
 
-##### Fields
-
-- `rcode: Option<String>`
-- `info_code: Option<u16>`
-
-#### `pub struct TlsAlertReceivedPayload`
-
-Defines the case payload type for `TLS-alert-received` above:
+Note: This was called `filestat` in earlier versions of WASI.
 
 ##### Fields
 
-- `alert_id: Option<u8>`
-- `alert_message: Option<String>`
+- `type: DescriptorType`
 
-#### `pub struct FieldSizePayload`
+  File type.
+- `link_count: LinkCount`
 
-Defines the case payload type for `HTTP-response-{header,trailer}-size` above:
+  Number of hard links to the file.
+- `size: Filesize`
+
+  For regular files, the file size in bytes. For symbolic links, the
+  length in bytes of the pathname contained in the symbolic link.
+- `data_access_timestamp: Option<Instant>`
+
+  Last data access timestamp.
+
+  If the `option` is none, the platform doesn't maintain an access
+  timestamp for this file.
+- `data_modification_timestamp: Option<Instant>`
+
+  Last data modification timestamp.
+
+  If the `option` is none, the platform doesn't maintain a
+  modification timestamp for this file.
+- `status_change_timestamp: Option<Instant>`
+
+  Last file status-change timestamp.
+
+  If the `option` is none, the platform doesn't maintain a
+  status-change timestamp for this file.
+
+#### `pub struct DirectoryEntry`
+
+A directory entry.
 
 ##### Fields
 
-- `field_name: Option<String>`
-- `field_size: Option<u32>`
+- `type: DescriptorType`
+
+  The type of the file referred to by this directory entry.
+- `name: String`
+
+  The name of the object.
+
+#### `pub struct MetadataHashValue`
+
+A 128-bit hash value, split into parts because wasm doesn't have a
+128-bit integer type.
+
+##### Fields
+
+- `lower: u64`
+
+  64 bits of a 128-bit hash value.
+- `upper: u64`
+
+  Another 64 bits of a 128-bit hash value.
+
+### Variants
+
+#### `pub variant NewTimestamp`
+
+When setting a timestamp, this gives the value to set it to.
+
+- `NoChange`
+
+  Leave the timestamp set to its previous value.
+- `Now`
+
+  Set the timestamp to the current time of the system clock associated
+  with the filesystem.
+- `Timestamp(Instant)`
+
+  Set the timestamp to the given value.
+
+## wasi:http
 
 ### Types
 
@@ -657,114 +628,6 @@ Defines the case payload type for `HTTP-response-{header,trailer}-size` above:
 #### `pub type Trailers = Fields`
 
 #### `pub type StatusCode = u16`
-
-### Variants
-
-#### `pub variant Method`
-
-This type corresponds to HTTP standard Methods.
-
-- `Get`
-- `Head`
-- `Post`
-- `Put`
-- `Delete`
-- `Connect`
-- `Options`
-- `Trace`
-- `Patch`
-- `Other(String)`
-
-#### `pub variant Scheme`
-
-This type corresponds to HTTP standard Related Schemes.
-
-- `Http`
-- `Https`
-- `Other(String)`
-
-#### `pub variant ErrorCode`
-
-These cases are inspired by the IANA HTTP Proxy Error Types:
-  <https://www.iana.org/assignments/http-proxy-status/http-proxy-status.xhtml#table-http-proxy-error-types>
-
-- `DnsTimeout`
-- `DnsError(DnsErrorPayload)`
-- `DestinationNotFound`
-- `DestinationUnavailable`
-- `DestinationIpProhibited`
-- `DestinationIpUnroutable`
-- `ConnectionRefused`
-- `ConnectionTerminated`
-- `ConnectionTimeout`
-- `ConnectionReadTimeout`
-- `ConnectionWriteTimeout`
-- `ConnectionLimitReached`
-- `TlsProtocolError`
-- `TlsCertificateError`
-- `TlsAlertReceived(TlsAlertReceivedPayload)`
-- `HttpRequestDenied`
-- `HttpRequestLengthRequired`
-- `HttpRequestBodySize(Option<u64>)`
-- `HttpRequestMethodInvalid`
-- `HttpRequestUriInvalid`
-- `HttpRequestUriTooLong`
-- `HttpRequestHeaderSectionSize(Option<u32>)`
-- `HttpRequestHeaderSize(Option<FieldSizePayload>)`
-- `HttpRequestTrailerSectionSize(Option<u32>)`
-- `HttpRequestTrailerSize(FieldSizePayload)`
-- `HttpResponseIncomplete`
-- `HttpResponseHeaderSectionSize(Option<u32>)`
-- `HttpResponseHeaderSize(FieldSizePayload)`
-- `HttpResponseBodySize(Option<u64>)`
-- `HttpResponseTrailerSectionSize(Option<u32>)`
-- `HttpResponseTrailerSize(FieldSizePayload)`
-- `HttpResponseTransferCoding(Option<String>)`
-- `HttpResponseContentCoding(Option<String>)`
-- `HttpResponseTimeout`
-- `HttpUpgradeFailed`
-- `HttpProtocolError`
-- `LoopDetected`
-- `ConfigurationError`
-- `InternalError(Option<String>)`
-
-  This is a catch-all error for anything that doesn't fit cleanly into a
-  more specific case. It also includes an optional string for an
-  unstructured description of the error. Users should not depend on the
-  string for diagnosing errors, as it's not required to be consistent
-  between implementations.
-
-#### `pub variant HeaderError`
-
-This type enumerates the different kinds of errors that may occur when
-setting or appending to a `fields` resource.
-
-- `InvalidSyntax`
-
-  This error indicates that a `field-name` or `field-value` was
-  syntactically invalid when used with an operation that sets headers in a
-  `fields`.
-- `Forbidden`
-
-  This error indicates that a forbidden `field-name` was used when trying
-  to set a header in a `fields`.
-- `Immutable`
-
-  This error indicates that the operation on the `fields` was not
-  permitted because the fields are immutable.
-
-#### `pub variant RequestOptionsError`
-
-This type enumerates the different kinds of errors that may occur when
-setting fields of a `request-options` resource.
-
-- `NotSupported`
-
-  Indicates the specified field is not supported by this implementation.
-- `Immutable`
-
-  Indicates that the operation on the `request-options` was not permitted
-  because it is immutable.
 
 ### Effects
 
@@ -1091,33 +954,144 @@ Represents an HTTP Response.
   Note that function will move the `response`, but references to headers
   acquired from it previously will remain valid.
 
-## wasi:clocks
-
 ### Structs
 
-#### `pub struct Instant`
+#### `pub struct DnsErrorPayload`
 
-An "instant", or "exact time", is a point in time without regard to any
-time zone: just the time since a particular external reference point,
-often called an "epoch".
-
-Here, the epoch is 1970-01-01T00:00:00Z, also known as
-[POSIX's Seconds Since the Epoch], also known as [Unix Time].
-
-Note that even if the seconds field is negative, incrementing
-nanoseconds always represents moving forwards in time.
-For example, `{ -1 seconds, 999999999 nanoseconds }` represents the
-instant one nanosecond before the epoch.
-For more on various different ways to represent time, see
-https://tc39.es/proposal-temporal/docs/timezone.html
-
-[POSIX's Seconds Since the Epoch]: https://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xbd_chap04.html#tag_21_04_16
-[Unix Time]: https://en.wikipedia.org/wiki/Unix_time
+Defines the case payload type for `DNS-error` above:
 
 ##### Fields
 
-- `seconds: i64`
-- `nanoseconds: u32`
+- `rcode: Option<String>`
+- `info_code: Option<u16>`
+
+#### `pub struct TlsAlertReceivedPayload`
+
+Defines the case payload type for `TLS-alert-received` above:
+
+##### Fields
+
+- `alert_id: Option<u8>`
+- `alert_message: Option<String>`
+
+#### `pub struct FieldSizePayload`
+
+Defines the case payload type for `HTTP-response-{header,trailer}-size` above:
+
+##### Fields
+
+- `field_name: Option<String>`
+- `field_size: Option<u32>`
+
+### Variants
+
+#### `pub variant Method`
+
+This type corresponds to HTTP standard Methods.
+
+- `Get`
+- `Head`
+- `Post`
+- `Put`
+- `Delete`
+- `Connect`
+- `Options`
+- `Trace`
+- `Patch`
+- `Other(String)`
+
+#### `pub variant Scheme`
+
+This type corresponds to HTTP standard Related Schemes.
+
+- `Http`
+- `Https`
+- `Other(String)`
+
+#### `pub variant ErrorCode`
+
+These cases are inspired by the IANA HTTP Proxy Error Types:
+  <https://www.iana.org/assignments/http-proxy-status/http-proxy-status.xhtml#table-http-proxy-error-types>
+
+- `DnsTimeout`
+- `DnsError(DnsErrorPayload)`
+- `DestinationNotFound`
+- `DestinationUnavailable`
+- `DestinationIpProhibited`
+- `DestinationIpUnroutable`
+- `ConnectionRefused`
+- `ConnectionTerminated`
+- `ConnectionTimeout`
+- `ConnectionReadTimeout`
+- `ConnectionWriteTimeout`
+- `ConnectionLimitReached`
+- `TlsProtocolError`
+- `TlsCertificateError`
+- `TlsAlertReceived(TlsAlertReceivedPayload)`
+- `HttpRequestDenied`
+- `HttpRequestLengthRequired`
+- `HttpRequestBodySize(Option<u64>)`
+- `HttpRequestMethodInvalid`
+- `HttpRequestUriInvalid`
+- `HttpRequestUriTooLong`
+- `HttpRequestHeaderSectionSize(Option<u32>)`
+- `HttpRequestHeaderSize(Option<FieldSizePayload>)`
+- `HttpRequestTrailerSectionSize(Option<u32>)`
+- `HttpRequestTrailerSize(FieldSizePayload)`
+- `HttpResponseIncomplete`
+- `HttpResponseHeaderSectionSize(Option<u32>)`
+- `HttpResponseHeaderSize(FieldSizePayload)`
+- `HttpResponseBodySize(Option<u64>)`
+- `HttpResponseTrailerSectionSize(Option<u32>)`
+- `HttpResponseTrailerSize(FieldSizePayload)`
+- `HttpResponseTransferCoding(Option<String>)`
+- `HttpResponseContentCoding(Option<String>)`
+- `HttpResponseTimeout`
+- `HttpUpgradeFailed`
+- `HttpProtocolError`
+- `LoopDetected`
+- `ConfigurationError`
+- `InternalError(Option<String>)`
+
+  This is a catch-all error for anything that doesn't fit cleanly into a
+  more specific case. It also includes an optional string for an
+  unstructured description of the error. Users should not depend on the
+  string for diagnosing errors, as it's not required to be consistent
+  between implementations.
+
+#### `pub variant HeaderError`
+
+This type enumerates the different kinds of errors that may occur when
+setting or appending to a `fields` resource.
+
+- `InvalidSyntax`
+
+  This error indicates that a `field-name` or `field-value` was
+  syntactically invalid when used with an operation that sets headers in a
+  `fields`.
+- `Forbidden`
+
+  This error indicates that a forbidden `field-name` was used when trying
+  to set a header in a `fields`.
+- `Immutable`
+
+  This error indicates that the operation on the `fields` was not
+  permitted because the fields are immutable.
+
+#### `pub variant RequestOptionsError`
+
+This type enumerates the different kinds of errors that may occur when
+setting fields of a `request-options` resource.
+
+- `NotSupported`
+
+  Indicates the specified field is not supported by this implementation.
+- `Immutable`
+
+  Indicates that the operation on the `request-options` was not permitted
+  because it is immutable.
+
+## wasi:clocks
 
 ### Types
 
@@ -1231,6 +1205,32 @@ It is intended for reporting the current date and time for humans.
   change across platforms, hosts, or other implementation details. Parsing
   this string is a major platform-compatibility hazard.
 
+### Structs
+
+#### `pub struct Instant`
+
+An "instant", or "exact time", is a point in time without regard to any
+time zone: just the time since a particular external reference point,
+often called an "epoch".
+
+Here, the epoch is 1970-01-01T00:00:00Z, also known as
+[POSIX's Seconds Since the Epoch], also known as [Unix Time].
+
+Note that even if the seconds field is negative, incrementing
+nanoseconds always represents moving forwards in time.
+For example, `{ -1 seconds, 999999999 nanoseconds }` represents the
+instant one nanosecond before the epoch.
+For more on various different ways to represent time, see
+https://tc39.es/proposal-temporal/docs/timezone.html
+
+[POSIX's Seconds Since the Epoch]: https://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xbd_chap04.html#tag_21_04_16
+[Unix Time]: https://en.wikipedia.org/wiki/Unix_time
+
+##### Fields
+
+- `seconds: i64`
+- `nanoseconds: u32`
+
 ## wasi:random
 
 ### Effects
@@ -1322,36 +1322,6 @@ Windows.
 
 ## wasi:sockets
 
-### Structs
-
-#### `pub struct Ipv4SocketAddress`
-
-##### Fields
-
-- `port: u16`
-
-  sin_port
-- `address: Ipv4Address`
-
-  sin_addr
-
-#### `pub struct Ipv6SocketAddress`
-
-##### Fields
-
-- `port: u16`
-
-  sin6_port
-- `flow_info: u32`
-
-  sin6_flowinfo
-- `address: Ipv6Address`
-
-  sin6_addr
-- `scope_id: u32`
-
-  sin6_scope_id
-
 ### Types
 
 #### `pub type Ipv4Address = [u8, u8, u8, u8]`
@@ -1404,18 +1374,6 @@ Lookup error codes.
 - `NameUnresolvable`
 - `TemporaryResolverFailure`
 - `PermanentResolverFailure`
-
-### Variants
-
-#### `pub variant IpAddress`
-
-- `Ipv4(Ipv4Address)`
-- `Ipv6(Ipv6Address)`
-
-#### `pub variant IpSocketAddress`
-
-- `Ipv4(Ipv4SocketAddress)`
-- `Ipv6(Ipv6SocketAddress)`
 
 ### Effects
 
@@ -2020,3 +1978,45 @@ A UDP socket handle.
 - `fn set_receive_buffer_size(self: &UdpSocket, value: u64) -> Result<(), ErrorCode>`
 - `fn get_send_buffer_size(self: &UdpSocket) -> Result<u64, ErrorCode>`
 - `fn set_send_buffer_size(self: &UdpSocket, value: u64) -> Result<(), ErrorCode>`
+
+### Structs
+
+#### `pub struct Ipv4SocketAddress`
+
+##### Fields
+
+- `port: u16`
+
+  sin_port
+- `address: Ipv4Address`
+
+  sin_addr
+
+#### `pub struct Ipv6SocketAddress`
+
+##### Fields
+
+- `port: u16`
+
+  sin6_port
+- `flow_info: u32`
+
+  sin6_flowinfo
+- `address: Ipv6Address`
+
+  sin6_addr
+- `scope_id: u32`
+
+  sin6_scope_id
+
+### Variants
+
+#### `pub variant IpAddress`
+
+- `Ipv4(Ipv4Address)`
+- `Ipv6(Ipv6Address)`
+
+#### `pub variant IpSocketAddress`
+
+- `Ipv4(Ipv4SocketAddress)`
+- `Ipv6(Ipv6SocketAddress)`

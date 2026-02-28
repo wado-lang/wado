@@ -346,6 +346,78 @@ syntax which is not yet supported.
 
 - `fn from_iter(iter: Self::Iter) -> Self`
 
+### Enums
+
+#### `pub enum Ordering`
+
+Result of a comparison between two values.
+
+- `Less`
+- `Equal`
+- `Greater`
+
+#### `pub enum Alignment`
+
+Text alignment for padding.
+
+- `Left`
+- `Center`
+- `Right`
+
+### Resources
+
+#### `pub resource Future<T>`
+
+Future type - readable end of an async value (WASI Component Model primitive).
+This is an opaque i32 handle managed by the runtime.
+
+Use `Future::<T>::new()` to create a new future pair `[Future<T>, FutureWritable<T>]`.
+The readable end (`Future<T>`) is passed to consumers; the writable end (`FutureWritable<T>`)
+is used by the producer to fulfill the future.
+
+##### Methods
+
+- `fn new() -> [Future<T>, FutureWritable<T>]`
+
+#### `pub resource Stream<T>`
+
+Stream type - readable end of an async sequence (WASI Component Model primitive).
+This is an opaque i32 handle managed by the runtime.
+
+Use `Stream::<T>::new()` to create a new stream pair `[Stream<T>, StreamWritable<T>]`.
+The readable end (`Stream<T>`) is passed to consumers; the writable end (`StreamWritable<T>`)
+is used by the producer to write data into the stream.
+
+##### Methods
+
+- `fn new() -> [Stream<T>, StreamWritable<T>]`
+- `fn read(&self, max: i32) -> Array<T>`
+
+  Read up to `max` elements from the stream.
+  Blocks until data is available or the writer closes.
+  Returns an empty array on end-of-stream.
+- `fn close(&self)`
+
+  Close the readable end of the stream.
+
+#### `pub resource StreamWritable<T>`
+
+StreamWritable type - writable end of an async sequence (WASI Component Model primitive).
+This is an opaque i32 handle managed by the runtime.
+
+Obtained from `Stream::<T>::new()`. Call `write(data)` to send data,
+or `close()` to signal end-of-stream (maps to `stream.drop-writable`).
+
+##### Methods
+
+- `fn write(&self, data: Array<T>)`
+
+  Write a chunk of data to the stream.
+  Can be called multiple times for successive chunks.
+- `fn close(&self)`
+
+  Close the writable end, signaling end-of-stream.
+
 ### Structs
 
 #### `pub struct Formatter`
@@ -945,24 +1017,6 @@ Decodes UTF-8 and yields each character.
 
 - `fn next(&mut self) -> Option<Self::Item>`
 
-### Enums
-
-#### `pub enum Ordering`
-
-Result of a comparison between two values.
-
-- `Less`
-- `Equal`
-- `Greater`
-
-#### `pub enum Alignment`
-
-Text alignment for padding.
-
-- `Left`
-- `Center`
-- `Right`
-
 ### Variants
 
 #### `pub variant Option<T>`
@@ -978,60 +1032,6 @@ Result type - either Ok(T) or Err(E)
 
 - `Ok(T)`
 - `Err(E)`
-
-### Resources
-
-#### `pub resource Future<T>`
-
-Future type - readable end of an async value (WASI Component Model primitive).
-This is an opaque i32 handle managed by the runtime.
-
-Use `Future::<T>::new()` to create a new future pair `[Future<T>, FutureWritable<T>]`.
-The readable end (`Future<T>`) is passed to consumers; the writable end (`FutureWritable<T>`)
-is used by the producer to fulfill the future.
-
-##### Methods
-
-- `fn new() -> [Future<T>, FutureWritable<T>]`
-
-#### `pub resource Stream<T>`
-
-Stream type - readable end of an async sequence (WASI Component Model primitive).
-This is an opaque i32 handle managed by the runtime.
-
-Use `Stream::<T>::new()` to create a new stream pair `[Stream<T>, StreamWritable<T>]`.
-The readable end (`Stream<T>`) is passed to consumers; the writable end (`StreamWritable<T>`)
-is used by the producer to write data into the stream.
-
-##### Methods
-
-- `fn new() -> [Stream<T>, StreamWritable<T>]`
-- `fn read(&self, max: i32) -> Array<T>`
-
-  Read up to `max` elements from the stream.
-  Blocks until data is available or the writer closes.
-  Returns an empty array on end-of-stream.
-- `fn close(&self)`
-
-  Close the readable end of the stream.
-
-#### `pub resource StreamWritable<T>`
-
-StreamWritable type - writable end of an async sequence (WASI Component Model primitive).
-This is an opaque i32 handle managed by the runtime.
-
-Obtained from `Stream::<T>::new()`. Call `write(data)` to send data,
-or `close()` to signal end-of-stream (maps to `stream.drop-writable`).
-
-##### Methods
-
-- `fn write(&self, data: Array<T>)`
-
-  Write a chunk of data to the stream.
-  Can be called multiple times for successive chunks.
-- `fn close(&self)`
-
-  Close the writable end, signaling end-of-stream.
 
 ### Functions
 
@@ -1328,67 +1328,6 @@ Same lenient behavior as `decode`.
 
 zlib compression and decompression (RFC 1950/1951/1952).
 
-### Structs
-
-#### `pub struct GzipHeader`
-
-*Fields are private.*
-
-
-##### Methods
-
-- `pub fn new() -> GzipHeader`
-- `pub fn set_text(&mut self, text: bool)`
-- `pub fn set_time(&mut self, time: u32)`
-- `pub fn set_os(&mut self, os: i32)`
-- `pub fn set_extra(&mut self, extra: &Array<u8>)`
-- `pub fn set_name(&mut self, name: String)`
-- `pub fn set_comment(&mut self, comment: String)`
-- `pub fn set_hcrc(&mut self, hcrc: bool)`
-
-#### `pub struct DeflateStream`
-
-*Fields are private.*
-
-
-##### Methods
-
-- `pub fn new(level: i32) -> DeflateStream`
-- `pub fn new_with_strategy(level: i32, strategy: i32) -> DeflateStream`
-- `pub fn new_with_format(level: i32, format: i32) -> DeflateStream`
-- `pub fn new_full(level: i32, strategy: i32, format: i32) -> DeflateStream`
-- `pub fn set_dictionary(&mut self, dict: &Array<u8>)`
-- `pub fn set_header(&mut self, header: &GzipHeader)`
-- `pub fn params(&mut self, level: i32, strategy: i32)`
-- `pub fn bound(&self, source_len: i32) -> i32`
-- `pub fn pending(&self) -> i32`
-- `pub fn get_total_in(&self) -> i32`
-- `pub fn get_total_out(&self) -> i32`
-- `pub fn reset(&mut self)`
-- `pub fn copy(&self) -> DeflateStream`
-- `pub fn update(&mut self, chunk: &Array<u8>)`
-- `pub fn finish(&mut self) -> Array<u8>`
-- `pub fn compress(&mut self, input: &Array<u8>) -> Array<u8>`
-
-#### `pub struct InflateStream`
-
-*Fields are private.*
-
-
-##### Methods
-
-- `pub fn new() -> InflateStream`
-- `pub fn new_with_format(format: i32) -> InflateStream`
-- `pub fn set_dictionary(&mut self, dict: &Array<u8>)`
-- `pub fn get_dictionary(&self) -> Array<u8>`
-- `pub fn get_total_in(&self) -> i32`
-- `pub fn get_total_out(&self) -> i32`
-- `pub fn reset(&mut self)`
-- `pub fn copy(&self) -> InflateStream`
-- `pub fn update(&mut self, chunk: &Array<u8>)`
-- `pub fn finish(&mut self) -> Array<u8>`
-- `pub fn decompress(&self, input: &Array<u8>) -> Array<u8>`
-
 ### Globals
 
 #### `pub global Z_OK: i32`
@@ -1458,6 +1397,67 @@ zlib compression and decompression (RFC 1950/1951/1952).
 #### `pub global GZIP_FORMAT: i32`
 
 #### `pub global AUTO_FORMAT: i32`
+
+### Structs
+
+#### `pub struct GzipHeader`
+
+*Fields are private.*
+
+
+##### Methods
+
+- `pub fn new() -> GzipHeader`
+- `pub fn set_text(&mut self, text: bool)`
+- `pub fn set_time(&mut self, time: u32)`
+- `pub fn set_os(&mut self, os: i32)`
+- `pub fn set_extra(&mut self, extra: &Array<u8>)`
+- `pub fn set_name(&mut self, name: String)`
+- `pub fn set_comment(&mut self, comment: String)`
+- `pub fn set_hcrc(&mut self, hcrc: bool)`
+
+#### `pub struct DeflateStream`
+
+*Fields are private.*
+
+
+##### Methods
+
+- `pub fn new(level: i32) -> DeflateStream`
+- `pub fn new_with_strategy(level: i32, strategy: i32) -> DeflateStream`
+- `pub fn new_with_format(level: i32, format: i32) -> DeflateStream`
+- `pub fn new_full(level: i32, strategy: i32, format: i32) -> DeflateStream`
+- `pub fn set_dictionary(&mut self, dict: &Array<u8>)`
+- `pub fn set_header(&mut self, header: &GzipHeader)`
+- `pub fn params(&mut self, level: i32, strategy: i32)`
+- `pub fn bound(&self, source_len: i32) -> i32`
+- `pub fn pending(&self) -> i32`
+- `pub fn get_total_in(&self) -> i32`
+- `pub fn get_total_out(&self) -> i32`
+- `pub fn reset(&mut self)`
+- `pub fn copy(&self) -> DeflateStream`
+- `pub fn update(&mut self, chunk: &Array<u8>)`
+- `pub fn finish(&mut self) -> Array<u8>`
+- `pub fn compress(&mut self, input: &Array<u8>) -> Array<u8>`
+
+#### `pub struct InflateStream`
+
+*Fields are private.*
+
+
+##### Methods
+
+- `pub fn new() -> InflateStream`
+- `pub fn new_with_format(format: i32) -> InflateStream`
+- `pub fn set_dictionary(&mut self, dict: &Array<u8>)`
+- `pub fn get_dictionary(&self) -> Array<u8>`
+- `pub fn get_total_in(&self) -> i32`
+- `pub fn get_total_out(&self) -> i32`
+- `pub fn reset(&mut self)`
+- `pub fn copy(&self) -> InflateStream`
+- `pub fn update(&mut self, chunk: &Array<u8>)`
+- `pub fn finish(&mut self) -> Array<u8>`
+- `pub fn decompress(&self, input: &Array<u8>) -> Array<u8>`
 
 ### Functions
 
