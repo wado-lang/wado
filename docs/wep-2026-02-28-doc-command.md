@@ -254,13 +254,18 @@ Rules for full format:
 
 #### Simple (`--simple`)
 
-Compact Wado pseudo-code showing the public API surface. No prose, no doc comments — just signatures. Designed for generating cheatsheets (like `docs/cheatsheet.md` stdlib sections).
+Compressed markdown in the style of `docs/cheatsheet.md`. Uses `##` headings and ` ```wado ` code blocks to pack signatures densely. Designed for generating stdlib cheatsheets.
 
 Output (`wado doc --simple file.wado`):
 
-```
-// core trait definitions for equality and ordering.
+````markdown
+# file
 
+Core trait definitions for equality and ordering.
+
+## Traits
+
+```wado
 pub trait Eq {
     fn eq(&self, other: &Self) -> bool;
 }
@@ -268,37 +273,64 @@ pub trait Eq {
 pub trait Ord {
     fn cmp(&self, other: &Self) -> Ordering;
 }
+```
 
+## Structs
+
+```wado
 pub struct Point { x: i32, y: i32 }
 pub struct Config { name: String, .. }
+```
 
+```wado
 impl Point {
     pub fn origin() -> Point;
     pub fn distance(&self, other: &Point) -> f64;
 }
+```
 
+## Types
+
+```wado
 pub type Meters = f64;
+```
+
+## Globals
+
+```wado
 pub global PI: f64;
+```
 
+## Enums
+
+```wado
 pub enum Color { Red, Green, Blue }
+```
 
+## Variants
+
+```wado
 pub variant Shape {
     Circle(f64),
     Rectangle([f64, f64]),
     Point,
 }
-
-export fn run();
 ```
 
+## Functions
+
+```wado
+export fn run();
+```
+````
+
 Rules for simple format:
-- Module doc (`//!`) becomes a `//` comment at the top (lowercased first char)
-- Item doc comments are omitted entirely
-- Function bodies replaced with `;`
-- Private fields replaced with `..`
-- Private items and methods omitted
-- `impl` blocks show only pub/export methods
-- Globals omit initializers
+- Same markdown structure as full (`#` module, `##` categories) but no `###` per item
+- All items of the same category grouped into a single ` ```wado ` block
+- Doc comments omitted entirely — signatures only
+- `impl` blocks rendered as separate code blocks under their type's category
+- Function bodies replaced with `;`, globals omit initializers
+- Private fields replaced with `..`, private items omitted
 - Source order preserved
 
 ### Signature Rendering
@@ -318,17 +350,14 @@ pub global PI: f64;                                        // no initializer
 
 ### Multi-File Output
 
-When multiple files are given, their outputs are concatenated into a single document. Each file becomes a top-level section:
-
-- **Full format**: each file gets a `# module_name` heading, then its items follow. Multiple files produce a single markdown document with multiple `#` sections.
-- **Simple format**: files are separated by a `// --- module_name ---` comment line.
+When multiple files are given, their outputs are concatenated into a single markdown document. Each file gets a `# module_name` heading, then its items follow.
 
 ```sh
 # Concatenates all core library docs into one document
 wado doc lib/core/**/*.wado > stdlib-reference.md
 
 # Cheatsheet for the entire stdlib
-wado doc --simple lib/core/**/*.wado > stdlib-cheatsheet.wado
+wado doc --simple lib/core/**/*.wado > stdlib-cheatsheet.md
 ```
 
 Files are output in the order they are given (or glob-expanded).
