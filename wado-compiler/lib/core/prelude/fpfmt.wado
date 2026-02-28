@@ -893,7 +893,7 @@ pub fn parse_text(s: String) -> Option<f64> {
             && (c2 == 'f' as u8 || c2 == 'F' as u8)
         {
             if remaining == 3 {
-                return Option::<f64>::Some(builtin::f64_copysign(f64::INFINITY, sign));
+                return Option::Some(builtin::f64_copysign(f64::INFINITY, sign));
             }
             if remaining == 8 {
                 let c3 = s.get_byte(i + 3);
@@ -907,7 +907,7 @@ pub fn parse_text(s: String) -> Option<f64> {
                     && (c6 == 't' as u8 || c6 == 'T' as u8)
                     && (c7 == 'y' as u8 || c7 == 'Y' as u8)
                 {
-                    return Option::<f64>::Some(builtin::f64_copysign(f64::INFINITY, sign));
+                    return Option::Some(builtin::f64_copysign(f64::INFINITY, sign));
                 }
             }
         }
@@ -921,7 +921,7 @@ pub fn parse_text(s: String) -> Option<f64> {
         if (c1 == 'a' as u8 || c1 == 'A' as u8)
             && (c2 == 'n' as u8 || c2 == 'N' as u8)
         {
-            return Option::<f64>::Some(f64::NAN);
+            return Option::Some(f64::NAN);
         }
         return null;
     }
@@ -991,19 +991,19 @@ pub fn parse_text(s: String) -> Option<f64> {
 
     // Handle d == 0 (preserve negative zero)
     if d == 0 {
-        return Option::<f64>::Some(builtin::f64_copysign(0.0, sign));
+        return Option::Some(builtin::f64_copysign(0.0, sign));
     }
 
     // Handle overflow/underflow for extreme exponents.
     // The pow10 table supports [-351, 350]; beyond that, result is definitely inf or 0.
     let eff_p = p - frac;
     if eff_p > 350 {
-        return Option::<f64>::Some(builtin::f64_copysign(f64::INFINITY, sign));
+        return Option::Some(builtin::f64_copysign(f64::INFINITY, sign));
     }
     if eff_p < -351 {
-        return Option::<f64>::Some(builtin::f64_copysign(0.0, sign));
+        return Option::Some(builtin::f64_copysign(0.0, sign));
     }
 
     let val = parse(d, eff_p);
-    return Option::<f64>::Some(builtin::f64_copysign(val, sign));
+    return Option::Some(builtin::f64_copysign(val, sign));
 }

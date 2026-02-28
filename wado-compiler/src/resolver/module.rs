@@ -127,6 +127,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 Item::Variant(variant_decl) => {
                     // Set up type parameters in scope for resolving field types
                     let old_type_params = std::mem::take(&mut self.current_type_params);
+                    let mut type_param_type_ids = Vec::new();
                     for (index, param) in variant_decl.type_params.iter().enumerate() {
                         let type_id = self
                             .type_table
@@ -134,6 +135,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .make_type_param(param.name.clone(), index as u32);
                         self.current_type_params
                             .insert(param.name.clone(), (index as u32, type_id));
+                        type_param_type_ids.push(type_id);
                     }
 
                     // Collect type parameters
@@ -165,6 +167,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             module_source: self.current_module_source.clone(),
                             type_params,
                             cases,
+                            type_param_type_ids,
                         },
                     );
 

@@ -1962,6 +1962,47 @@ for let { x, y } of points {
 }
 ```
 
+### Generic Type Inference
+
+Wado infers type arguments for generic type constructors (struct literals and variant constructors) using two complementary mechanisms:
+
+**Forward inference** derives type parameters from the values provided (fields or payload arguments):
+
+```wado
+struct Box<T> { value: T }
+let b = Box { value: 42 };             // Box<i32> — T=i32 from field value
+
+let opt = Option::Some("hello");        // Option<String> — T=String from payload
+let opt2 = Option::Some(42);            // Option<i32> — T=i32 from payload
+```
+
+**Backward inference** derives type parameters from an expected type context (variable annotation, function parameter type, or return type):
+
+```wado
+let none: Option<i32> = Option::None;   // T=i32 from annotation
+let ok: Result<i32, String> = Result::Ok(42);
+// T=i32 from payload (forward), E=String from annotation (backward)
+```
+
+When both mechanisms are available, forward inference takes precedence for type parameters that appear in the payload, and backward inference fills in any remaining parameters.
+
+**Scope of inference:**
+
+| Constructor kind       | Forward | Backward | Status              |
+| ---------------------- | ------- | -------- | ------------------- |
+| Struct literals        | yes     | yes      | implemented         |
+| Variant constructors   | yes     | yes      | implemented         |
+| Generic function calls | —       | —        | not yet implemented |
+| Generic method calls   | —       | —        | not yet implemented |
+
+For generic function and method calls, explicit turbofish syntax is required:
+
+```wado
+fn identity<T>(x: T) -> T { return x; }
+let x = identity::<i32>(42);           // turbofish required (for now)
+// let y = identity(42);               // not yet supported
+```
+
 ### Traits
 
 Traits define shared behavior that types can implement. Wado uses **static dispatch** for trait methods - all calls are resolved at compile time.
@@ -2493,8 +2534,20 @@ let s = Shape::Circle(5.0);
 let r = Shape::Rectangle([10.0, 20.0]);
 let p = Shape::Point;
 
-// Option construction and pattern matching
-let opt: Option<i32> = Option::<i32>::Some(42);
+// Option construction — type inferred from payload (forward inference)
+let opt = Option::Some(42);              // Option<i32> inferred
+let opt_str = Option::Some("hello");     // Option<String> inferred
+
+// Option construction — type inferred from annotation (backward inference)
+let none: Option<i32> = Option::None;    // T=i32 from annotation
+
+// Result construction — combined forward and backward inference
+let ok: Result<i32, String> = Result::Ok(42);      // T from payload, E from annotation
+let err: Result<i32, String> = Result::Err("fail"); // E from payload, T from annotation
+
+// Explicit turbofish syntax (always available)
+let opt2 = Option::<i32>::Some(42);
+
 if let Some(x) = opt {
     println(`Got: {x}`);
 }
@@ -2523,6 +2576,7 @@ match s {
 **Implementation Status**:
 
 - Variant declarations and construction: implemented
+- Generic variant type inference (forward from payload, backward from annotation): implemented
 - `if let` pattern matching for `Option<T>`: implemented
 - `if let` pattern matching for non-generic custom variants: implemented
 - Tuple payload pattern destructuring (`if let Foo([a, b]) = x`): implemented

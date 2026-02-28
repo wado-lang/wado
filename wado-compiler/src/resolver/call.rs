@@ -16,6 +16,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         &mut self,
         call: &ast::CallExpr,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> TirExpr {
         // Check if this is a closure call (calling a local variable with function type)
         if let Expr::Ident(ident) = &call.callee {
@@ -231,13 +232,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // Check if this is a variant case construction (Color::Red)
                     else if let Some(variant_info) = self.variant_cases.get(prefix) {
                         // Clone needed data to release the borrow on self
+                        let variant_info = variant_info.clone();
                         let case_match = variant_info
                             .cases
                             .iter()
                             .enumerate()
                             .find(|(_, c)| c.name == suffix)
                             .map(|(i, c)| (i, c.clone()));
-                        let variant_module_source = variant_info.module_source.clone();
                         let prefix_owned = prefix.to_string();
 
                         // Find the case by name
@@ -263,15 +264,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 );
                             }
 
-                            // Create variant type
-                            let variant_type = self
-                                .type_table
-                                .borrow_mut()
-                                .make_variant(prefix_owned, variant_module_source);
-
-                            // Payload was already resolved with the correct expected type
-                            // (substituted in the param_types computation above).
                             let payload = args.into_iter().next().map(Box::new);
+
+                            // Infer variant type: use GenericInstance for generic variants
+                            let variant_type = if variant_info.type_params.is_empty() {
+                                self.type_table
+                                    .borrow_mut()
+                                    .make_variant(prefix_owned, variant_info.module_source.clone())
+                            } else {
+                                self.infer_variant_type_args(
+                                    &prefix_owned,
+                                    &variant_info,
+                                    &case_data,
+                                    payload.as_deref(),
+                                    expected_type,
+                                )
+                            };
 
                             return TirExpr::new(
                                 TirExprKind::VariantConstruct {
@@ -898,5 +906,83 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .iter()
             .map(|&pt| self.substitute_type_params(pt, type_args))
             .collect()
+    }
+
+    pub(super) fn infer_variant_type_args(
+        &mut self,
+        variant_name: &str,
+        variant_info: &super::types::VariantInfo,
+        case_data: &super::types::VariantCaseData,
+        payload: Option<&TirExpr>,
+        expected_type: Option<TypeId>,
+    ) -> TypeId {
+        let mut type_param_map: IndexMap<TypeId, TypeId> = IndexMap::new();
+        // Track the canonical module_source from expected_type if available.
+        // This ensures the created GenericInstance uses the same module_source
+        // as the type annotation (e.g., ModuleSource::prelude() for Option/Result),
+        // which may differ from variant_info.module_source (e.g., prelude/types.wado).
+        let mut canonical_module_source = None;
+
+        // Forward inference: unify payload type with actual arg type
+        if let Some(payload_expr) = payload {
+            self.unify_types_for_inference(
+                case_data.payload,
+                payload_expr.type_id,
+                &mut type_param_map,
+            );
+        }
+
+        // Backward inference: extract type args from expected_type
+        if let Some(expected) = expected_type {
+            let expected_resolved = self.type_table.borrow().get(expected).clone();
+            if let ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args: expected_args,
+            } = expected_resolved
+                && name == variant_name
+                && expected_args.len() == variant_info.type_param_type_ids.len()
+            {
+                canonical_module_source = Some(module_source);
+                for (i, &expected_arg) in expected_args.iter().enumerate() {
+                    let type_param_id = variant_info.type_param_type_ids[i];
+                    type_param_map.entry(type_param_id).or_insert(expected_arg);
+                }
+            }
+        }
+
+        let module_source =
+            canonical_module_source.unwrap_or_else(|| variant_info.module_source.clone());
+
+        // Build type_args in declaration order
+        let type_args: Vec<TypeId> = variant_info
+            .type_param_type_ids
+            .iter()
+            .enumerate()
+            .map(|(i, &param_id)| {
+                type_param_map
+                    .get(&param_id)
+                    .copied()
+                    .unwrap_or(variant_info.type_param_type_ids[i])
+            })
+            .collect();
+
+        // If unresolved type params remain in concrete code, fall back to bare Variant
+        let has_unresolved = type_args
+            .iter()
+            .any(|&t| self.type_table.borrow().contains_type_param(t));
+
+        if has_unresolved && self.current_type_params.is_empty() {
+            return self
+                .type_table
+                .borrow_mut()
+                .make_variant(variant_name.to_string(), variant_info.module_source.clone());
+        }
+
+        self.type_table.borrow_mut().make_generic_instance(
+            variant_name.to_string(),
+            module_source,
+            type_args,
+        )
     }
 }

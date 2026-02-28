@@ -63,7 +63,7 @@ impl Array<T> {
         if index < 0 || index >= self.used {
             return null;
         }
-        return Option::<T>::Some(builtin::array_get::<T>(self.repr, index));
+        return Option::Some(builtin::array_get::<T>(self.repr, index));
     }
 }
 
@@ -136,7 +136,7 @@ impl ArraySlice<T> {
         if index < 0 || index >= self.end - self.start {
             return null;
         }
-        return Option::<T>::Some(builtin::array_get::<T>(self.repr, self.start + index));
+        return Option::Some(builtin::array_get::<T>(self.repr, self.start + index));
     }
 
     pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T> {
@@ -215,7 +215,7 @@ impl Iterator for ArrayIter<T> {
         }
         let item = builtin::array_get::<T>(self.repr, self.index);
         self.index += 1;
-        return Option::<T>::Some(item);
+        return Option::Some(item);
     }
 }
 
@@ -390,7 +390,7 @@ impl ArrayIter<T> {
     pub fn find(&mut self, pred: fn(T) -> bool) -> Option<T> {
         for let item of *self {
             if pred(item) {
-                return Option::<T>::Some(item);
+                return Option::Some(item);
             }
         }
         return null;
@@ -417,7 +417,7 @@ impl ArrayIter<T> {
     pub fn last(&mut self) -> Option<T> {
         let mut result: Option<T> = null;
         for let item of *self {
-            result = Option::<T>::Some(item);
+            result = Option::Some(item);
         }
         return result;
     }
@@ -426,7 +426,7 @@ impl ArrayIter<T> {
         let mut remaining = n;
         for let item of *self {
             if remaining <= 0 {
-                return Option::<T>::Some(item);
+                return Option::Some(item);
             }
             remaining -= 1;
         }
@@ -437,7 +437,7 @@ impl ArrayIter<T> {
         let mut idx = 0;
         for let item of *self {
             if pred(item) {
-                return Option::<i32>::Some(idx);
+                return Option::Some(idx);
             }
             idx += 1;
         }
@@ -450,7 +450,7 @@ impl ArrayIter<T> {
             for let item of *self {
                 acc = f(acc, item);
             }
-            return Option::<T>::Some(acc);
+            return Option::Some(acc);
         } else {
             return null;
         }
@@ -514,7 +514,7 @@ impl Iterator for EnumerateIter<T> {
         let idx = self.count;
         self.index += 1;
         self.count += 1;
-        return Option::<[i32, T]>::Some([idx, item]);
+        return Option::Some([idx, item]);
     }
 }
 
@@ -535,7 +535,7 @@ impl Iterator for MapIter<T, U> {
         }
         let item = builtin::array_get::<T>(self.repr, self.index);
         self.index += 1;
-        return Option::<U>::Some((self.f)(item));
+        return Option::Some((self.f)(item));
     }
 }
 
@@ -568,7 +568,7 @@ impl Iterator for FilterIter<T> {
             let item = builtin::array_get::<T>(self.repr, self.index);
             self.index += 1;
             if (self.pred)(item) {
-                return Option::<T>::Some(item);
+                return Option::Some(item);
             }
         }
     }
@@ -615,7 +615,7 @@ impl Iterator for FilterMapIter<T, U> {
             let item = builtin::array_get::<T>(self.repr, self.index);
             self.index += 1;
             if (self.pred)(item) {
-                return Option::<U>::Some((self.f)(item));
+                return Option::Some((self.f)(item));
             }
         }
     }
@@ -651,7 +651,7 @@ impl Iterator for TakeIter<T> {
         let item = builtin::array_get::<T>(self.repr, self.index);
         self.index += 1;
         self.remaining -= 1;
-        return Option::<T>::Some(item);
+        return Option::Some(item);
     }
 }
 
@@ -673,12 +673,12 @@ impl Iterator for ChainIter<T> {
         if self.index1 < self.used1 {
             let item = builtin::array_get::<T>(self.repr1, self.index1);
             self.index1 += 1;
-            return Option::<T>::Some(item);
+            return Option::Some(item);
         }
         if self.index2 < self.used2 {
             let item = builtin::array_get::<T>(self.repr2, self.index2);
             self.index2 += 1;
-            return Option::<T>::Some(item);
+            return Option::Some(item);
         }
         return null;
     }
@@ -706,7 +706,7 @@ impl Iterator for ZipIter<T, U> {
         let b = builtin::array_get::<U>(self.repr2, self.index2);
         self.index1 += 1;
         self.index2 += 1;
-        return Option::<[T, U]>::Some([a, b]);
+        return Option::Some([a, b]);
     }
 }
 
@@ -729,7 +729,7 @@ impl ArrayIter<T: Ord> {
                     result = item;
                 }
             }
-            return Option::<T>::Some(result);
+            return Option::Some(result);
         } else {
             return null;
         }
@@ -743,7 +743,7 @@ impl ArrayIter<T: Ord> {
                     result = item;
                 }
             }
-            return Option::<T>::Some(result);
+            return Option::Some(result);
         } else {
             return null;
         }

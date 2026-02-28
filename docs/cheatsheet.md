@@ -484,8 +484,18 @@ let p = Shape::Point;
 // pub variant Result<T, E> { Ok(T), Err(E) }
 
 // Option construction
-let some_val: Option<i32> = Option::<i32>::Some(42);
-let none_val: Option<i32> = null;  // null is equivalent to Option::None
+let some_val = Option::Some(42);          // Option<i32>
+let some_str = Option::Some("hello");     // Option<String>
+let none_val: Option<i32> = Option::None; // T inferred from annotation
+let none_val: Option<i32> = null;         // null = Option::None
+
+// Result construction
+let ok_val: Result<i32, String> = Result::Ok(42);
+let err_val: Result<i32, String> = Result::Err("fail");
+
+// Explicit turbofish (required when inference is insufficient)
+let opt = Option::<i32>::Some(42);
+let res = Result::<i32, String>::Ok(42);
 
 // Pattern matching with if let
 if let Some(x) = some_val {
@@ -1689,7 +1699,7 @@ Wado intentionally does not support macros.
 - `stores[...]` syntax for reference storage
 - postfix `?` operator (error propagation)
 - JSX
-- Generic function/method type inference
+- Generic function/method call type inference (variant and struct literal inference is implemented)
 
 ## See Also
 
