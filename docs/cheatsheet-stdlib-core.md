@@ -558,11 +558,19 @@ impl Iterator for FilterIter<T> {
 ### Enums
 
 ```wado
-pub enum Ordering { Less, Equal, Greater }
+pub enum Ordering {
+    Less,
+    Equal,
+    Greater,
+}
 ```
 
 ```wado
-pub enum Alignment { Left, Center, Right }
+pub enum Alignment {
+    Left,
+    Center,
+    Right,
+}
 ```
 
 ### Variants

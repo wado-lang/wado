@@ -590,7 +590,12 @@ fn render_simple(doc: &DocModule, h_offset: usize) -> String {
     if !doc.enums.is_empty() {
         writeln!(out, "\n{h2} Enums").unwrap();
         for e in &doc.enums {
-            writeln!(out, "\n```wado\n{}\n```", e.signature).unwrap();
+            let name = sig_name_part(&e.signature);
+            writeln!(out, "\n```wado\n{name} {{").unwrap();
+            for case in &e.cases {
+                writeln!(out, "    {case},").unwrap();
+            }
+            out.push_str("}\n```\n");
         }
     }
 

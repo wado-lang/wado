@@ -8,7 +8,11 @@
 ### Enums
 
 ```wado
-pub enum ErrorCode { Io, IllegalByteSequence, Pipe }
+pub enum ErrorCode {
+    Io,
+    IllegalByteSequence,
+    Pipe,
+}
 ```
 
 ### Effects
@@ -119,15 +123,68 @@ pub type LinkCount = u64;
 ### Enums
 
 ```wado
-pub enum DescriptorType { Unknown, BlockDevice, CharacterDevice, Directory, Fifo, SymbolicLink, RegularFile, Socket }
+pub enum DescriptorType {
+    Unknown,
+    BlockDevice,
+    CharacterDevice,
+    Directory,
+    Fifo,
+    SymbolicLink,
+    RegularFile,
+    Socket,
+}
 ```
 
 ```wado
-pub enum ErrorCode { Access, Already, BadDescriptor, Busy, Deadlock, Quota, Exist, FileTooLarge, IllegalByteSequence, InProgress, Interrupted, Invalid, Io, IsDirectory, Loop, TooManyLinks, MessageSize, NameTooLong, NoDevice, NoEntry, NoLock, InsufficientMemory, InsufficientSpace, NotDirectory, NotEmpty, NotRecoverable, Unsupported, NoTty, NoSuchDevice, Overflow, NotPermitted, Pipe, ReadOnly, InvalidSeek, TextFileBusy, CrossDevice }
+pub enum ErrorCode {
+    Access,
+    Already,
+    BadDescriptor,
+    Busy,
+    Deadlock,
+    Quota,
+    Exist,
+    FileTooLarge,
+    IllegalByteSequence,
+    InProgress,
+    Interrupted,
+    Invalid,
+    Io,
+    IsDirectory,
+    Loop,
+    TooManyLinks,
+    MessageSize,
+    NameTooLong,
+    NoDevice,
+    NoEntry,
+    NoLock,
+    InsufficientMemory,
+    InsufficientSpace,
+    NotDirectory,
+    NotEmpty,
+    NotRecoverable,
+    Unsupported,
+    NoTty,
+    NoSuchDevice,
+    Overflow,
+    NotPermitted,
+    Pipe,
+    ReadOnly,
+    InvalidSeek,
+    TextFileBusy,
+    CrossDevice,
+}
 ```
 
 ```wado
-pub enum Advice { Normal, Sequential, Random, WillNeed, DontNeed, NoReuse }
+pub enum Advice {
+    Normal,
+    Sequential,
+    Random,
+    WillNeed,
+    DontNeed,
+    NoReuse,
+}
 ```
 
 ### Variants
@@ -496,15 +553,40 @@ pub type Ipv6Address = [u16, u16, u16, u16, u16, u16, u16, u16];
 ### Enums
 
 ```wado
-pub enum ErrorCode { Unknown, AccessDenied, NotSupported, InvalidArgument, OutOfMemory, Timeout, InvalidState, AddressNotBindable, AddressInUse, RemoteUnreachable, ConnectionRefused, ConnectionReset, ConnectionAborted, DatagramTooLarge }
+pub enum ErrorCode {
+    Unknown,
+    AccessDenied,
+    NotSupported,
+    InvalidArgument,
+    OutOfMemory,
+    Timeout,
+    InvalidState,
+    AddressNotBindable,
+    AddressInUse,
+    RemoteUnreachable,
+    ConnectionRefused,
+    ConnectionReset,
+    ConnectionAborted,
+    DatagramTooLarge,
+}
 ```
 
 ```wado
-pub enum IpAddressFamily { Ipv4, Ipv6 }
+pub enum IpAddressFamily {
+    Ipv4,
+    Ipv6,
+}
 ```
 
 ```wado
-pub enum ErrorCode { Unknown, AccessDenied, InvalidArgument, NameUnresolvable, TemporaryResolverFailure, PermanentResolverFailure }
+pub enum ErrorCode {
+    Unknown,
+    AccessDenied,
+    InvalidArgument,
+    NameUnresolvable,
+    TemporaryResolverFailure,
+    PermanentResolverFailure,
+}
 ```
 
 ### Variants
