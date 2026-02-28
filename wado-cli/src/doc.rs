@@ -5,8 +5,8 @@ use std::process;
 
 use lexopt::Arg::Value;
 use wado_compiler::doc::{
-    DocEnum, DocFlags, DocFunction, DocModule, DocStruct, DocTrait, DocVariant, extract_doc,
-    extract_stdlib_doc,
+    DocEffect, DocEnum, DocFlags, DocFunction, DocModule, DocResource, DocStruct, DocTrait,
+    DocVariant, extract_doc, extract_stdlib_doc,
 };
 
 use crate::args::{self, CliExit};
@@ -321,6 +321,20 @@ fn render_markdown(doc: &DocModule, h_offset: usize) -> String {
         }
     }
 
+    if !doc.effects.is_empty() {
+        writeln!(out, "\n{h2} Effects").unwrap();
+        for e in &doc.effects {
+            render_md_effect(&mut out, e, h3, h4);
+        }
+    }
+
+    if !doc.resources.is_empty() {
+        writeln!(out, "\n{h2} Resources").unwrap();
+        for r in &doc.resources {
+            render_md_resource(&mut out, r, h3, h4);
+        }
+    }
+
     if !doc.functions.is_empty() {
         writeln!(out, "\n{h2} Functions").unwrap();
         for f in &doc.functions {
@@ -442,6 +456,34 @@ fn render_md_flags(out: &mut String, f: &DocFlags, h3: &str, h4: &str) {
     writeln!(out, "{h4} Members\n").unwrap();
     for member in &f.members {
         writeln!(out, "- `{member}`").unwrap();
+    }
+}
+
+fn render_md_effect(out: &mut String, e: &DocEffect, h3: &str, h4: &str) {
+    writeln!(out, "\n{h3} `{}`\n", e.signature).unwrap();
+    if let Some(ref d) = e.doc {
+        render_md_doc(out, d);
+        out.push('\n');
+    }
+    if !e.methods.is_empty() {
+        writeln!(out, "{h4} Operations\n").unwrap();
+        for m in &e.methods {
+            render_md_method_item(out, m);
+        }
+    }
+}
+
+fn render_md_resource(out: &mut String, r: &DocResource, h3: &str, h4: &str) {
+    writeln!(out, "\n{h3} `{}`\n", r.signature).unwrap();
+    if let Some(ref d) = r.doc {
+        render_md_doc(out, d);
+        out.push('\n');
+    }
+    if !r.methods.is_empty() {
+        writeln!(out, "{h4} Methods\n").unwrap();
+        for m in &r.methods {
+            render_md_method_item(out, m);
+        }
     }
 }
 
@@ -575,6 +617,32 @@ fn render_simple(doc: &DocModule, h_offset: usize) -> String {
                 writeln!(out, "    {member},").unwrap();
             }
             out.push_str("}\n```\n");
+        }
+    }
+
+    if !doc.effects.is_empty() {
+        writeln!(out, "\n{h2} Effects").unwrap();
+        for e in &doc.effects {
+            writeln!(out, "\n```wado\n{} {{", e.signature).unwrap();
+            for m in &e.methods {
+                writeln!(out, "    {};", m.signature).unwrap();
+            }
+            out.push_str("}\n```\n");
+        }
+    }
+
+    if !doc.resources.is_empty() {
+        writeln!(out, "\n{h2} Resources").unwrap();
+        for r in &doc.resources {
+            if r.methods.is_empty() {
+                writeln!(out, "\n```wado\n{};\n```", r.signature).unwrap();
+            } else {
+                writeln!(out, "\n```wado\n{} {{", r.signature).unwrap();
+                for m in &r.methods {
+                    writeln!(out, "    {};", m.signature).unwrap();
+                }
+                out.push_str("}\n```\n");
+            }
         }
     }
 

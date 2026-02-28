@@ -979,6 +979,60 @@ Result type - either Ok(T) or Err(E)
 - `Ok(T)`
 - `Err(E)`
 
+### Resources
+
+#### `pub resource Future<T>`
+
+Future type - readable end of an async value (WASI Component Model primitive).
+This is an opaque i32 handle managed by the runtime.
+
+Use `Future::<T>::new()` to create a new future pair `[Future<T>, FutureWritable<T>]`.
+The readable end (`Future<T>`) is passed to consumers; the writable end (`FutureWritable<T>`)
+is used by the producer to fulfill the future.
+
+##### Methods
+
+- `fn new() -> [Future<T>, FutureWritable<T>]`
+
+#### `pub resource Stream<T>`
+
+Stream type - readable end of an async sequence (WASI Component Model primitive).
+This is an opaque i32 handle managed by the runtime.
+
+Use `Stream::<T>::new()` to create a new stream pair `[Stream<T>, StreamWritable<T>]`.
+The readable end (`Stream<T>`) is passed to consumers; the writable end (`StreamWritable<T>`)
+is used by the producer to write data into the stream.
+
+##### Methods
+
+- `fn new() -> [Stream<T>, StreamWritable<T>]`
+- `fn read(&self, max: i32) -> Array<T>`
+
+  Read up to `max` elements from the stream.
+  Blocks until data is available or the writer closes.
+  Returns an empty array on end-of-stream.
+- `fn close(&self)`
+
+  Close the readable end of the stream.
+
+#### `pub resource StreamWritable<T>`
+
+StreamWritable type - writable end of an async sequence (WASI Component Model primitive).
+This is an opaque i32 handle managed by the runtime.
+
+Obtained from `Stream::<T>::new()`. Call `write(data)` to send data,
+or `close()` to signal end-of-stream (maps to `stream.drop-writable`).
+
+##### Methods
+
+- `fn write(&self, data: Array<T>)`
+
+  Write a chunk of data to the stream.
+  Can be called multiple times for successive chunks.
+- `fn close(&self)`
+
+  Close the writable end, signaling end-of-stream.
+
 ### Functions
 
 #### `pub fn panic(message: String) -> !`
@@ -988,6 +1042,78 @@ Result type - either Ok(T) or Err(E)
 ## core:cli
 
 CLI helpers: `println`, `eprintln`, `args`, `env`, `exit`, etc.
+
+### Effects
+
+#### `pub effect Environment`
+
+##### Operations
+
+- `fn get_environment() -> Array<[String, String]>`
+
+  Get the POSIX-style environment variables.
+
+  Each environment variable is provided as a pair of string variable names
+  and string value.
+
+  Morally, these are a value import, but until value imports are available
+  in the component model, this import function should return the same
+  values each time it is called.
+- `fn get_arguments() -> Array<String>`
+
+  Get the POSIX-style arguments to the program.
+- `fn get_initial_cwd() -> Option<String>`
+
+  Return a path that programs should use as their initial current working
+  directory, interpreting `.` as shorthand for this.
+
+#### `pub effect Exit`
+
+##### Operations
+
+- `fn exit(status: Result<(), ()>)`
+
+  Exit the current instance and any linked instances.
+- `fn exit_with_code(status_code: u8)`
+
+  Exit the current instance and any linked instances, reporting the
+  specified status code to the host.
+
+  The meaning of the code depends on the context, with 0 usually meaning
+  "success", and other values indicating various types of failure.
+
+  This function does not return; the effect is analogous to a trap, but
+  without the connotation that something bad has happened.
+
+#### `pub effect Stdout`
+
+##### Operations
+
+- `async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>`
+
+  Write the given stream to stdout.
+
+  If the stream's writable end is dropped this function will either return
+  success once the entire contents of the stream have been written or an
+  error-code representing a failure.
+
+  Otherwise if there is an error the readable end of the stream will be
+  dropped and this function will return an error-code.
+
+#### `pub effect Stderr`
+
+##### Operations
+
+- `async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>`
+
+  Write the given stream to stderr.
+
+  If the stream's writable end is dropped this function will either return
+  success once the entire contents of the stream have been written or an
+  error-code representing a failure.
+
+  Otherwise if there is an error the readable end of the stream will be
+  dropped and this function will return an error-code.
 
 ### Functions
 
@@ -1047,6 +1173,43 @@ Monotonic clock for time measurement.
 #### `pub type Duration = u64`
 
 #### `pub type Mark = u64`
+
+### Effects
+
+#### `pub effect MonotonicClock`
+
+WASI Monotonic Clock is a clock API intended to let users measure elapsed
+time.
+
+It is intended to be portable at least between Unix-family platforms and
+Windows.
+
+A monotonic clock is a clock which has an unspecified initial value, and
+successive reads of the clock will produce non-decreasing values.
+
+##### Operations
+
+- `fn now() -> Mark`
+
+  Read the current value of the clock.
+
+  The clock is monotonic, therefore calling this function repeatedly will
+  produce a sequence of non-decreasing values.
+
+  For completeness, this function traps if it's not possible to represent
+  the value of the clock in a `mark`. Consequently, implementations
+  should ensure that the starting time is low enough to avoid the
+  possibility of overflow in practice.
+- `fn get_resolution() -> Duration`
+
+  Query the resolution of the clock. Returns the duration of time
+  corresponding to a clock tick.
+- `async fn wait_until(when: Mark)`
+
+  Wait until the specified mark has occurred.
+- `async fn wait_for(how_long: Duration)`
+
+  Wait for the specified duration to elapse.
 
 ### Functions
 

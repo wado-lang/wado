@@ -581,6 +581,29 @@ pub variant Result<T, E> {
 }
 ```
 
+### Resources
+
+```wado
+pub resource Future<T> {
+    fn new() -> [Future<T>, FutureWritable<T>];
+}
+```
+
+```wado
+pub resource Stream<T> {
+    fn new() -> [Stream<T>, StreamWritable<T>];
+    fn read(&self, max: i32) -> Array<T>;
+    fn close(&self);
+}
+```
+
+```wado
+pub resource StreamWritable<T> {
+    fn write(&self, data: Array<T>);
+    fn close(&self);
+}
+```
+
 ### Functions
 
 ```wado
@@ -591,6 +614,35 @@ pub fn unreachable() -> !;
 ## core:cli
 
 CLI helpers: `println`, `eprintln`, `args`, `env`, `exit`, etc.
+
+### Effects
+
+```wado
+pub effect Environment {
+    fn get_environment() -> Array<[String, String]>;
+    fn get_arguments() -> Array<String>;
+    fn get_initial_cwd() -> Option<String>;
+}
+```
+
+```wado
+pub effect Exit {
+    fn exit(status: Result<(), ()>);
+    fn exit_with_code(status_code: u8);
+}
+```
+
+```wado
+pub effect Stdout {
+    async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
+}
+```
+
+```wado
+pub effect Stderr {
+    async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
+}
+```
 
 ### Functions
 
@@ -617,6 +669,17 @@ Monotonic clock for time measurement.
 ```wado
 pub type Duration = u64;
 pub type Mark = u64;
+```
+
+### Effects
+
+```wado
+pub effect MonotonicClock {
+    fn now() -> Mark;
+    fn get_resolution() -> Duration;
+    async fn wait_until(when: Mark);
+    async fn wait_for(how_long: Duration);
+}
 ```
 
 ### Functions

@@ -11,6 +11,75 @@
 pub enum ErrorCode { Io, IllegalByteSequence, Pipe }
 ```
 
+### Effects
+
+```wado
+pub effect Environment {
+    fn get_environment() -> Array<[String, String]>;
+    fn get_arguments() -> Array<String>;
+    fn get_initial_cwd() -> Option<String>;
+}
+```
+
+```wado
+pub effect Exit {
+    fn exit(status: Result<(), ()>);
+    fn exit_with_code(status_code: u8);
+}
+```
+
+```wado
+pub effect Run {
+    async fn run() -> Result<(), ()>;
+}
+```
+
+```wado
+pub effect Stdin {
+    fn read_via_stream() -> [Stream<u8>, Future<Result<(), ErrorCode>>];
+}
+```
+
+```wado
+pub effect Stdout {
+    async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
+}
+```
+
+```wado
+pub effect Stderr {
+    async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
+}
+```
+
+```wado
+pub effect TerminalStdin {
+    fn get_terminal_stdin() -> Option<TerminalInput>;
+}
+```
+
+```wado
+pub effect TerminalStdout {
+    fn get_terminal_stdout() -> Option<TerminalOutput>;
+}
+```
+
+```wado
+pub effect TerminalStderr {
+    fn get_terminal_stderr() -> Option<TerminalOutput>;
+}
+```
+
+### Resources
+
+```wado
+pub resource TerminalInput;
+```
+
+```wado
+pub resource TerminalOutput;
+```
+
 ## wasi:filesystem
 
 ### Structs
@@ -96,6 +165,46 @@ pub flags OpenFlags {
     Directory,
     Exclusive,
     Truncate,
+}
+```
+
+### Effects
+
+```wado
+pub effect Preopens {
+    fn get_directories() -> Array<[Descriptor, String]>;
+}
+```
+
+### Resources
+
+```wado
+pub resource Descriptor {
+    fn read_via_stream(self: &Descriptor, offset: Filesize) -> [Stream<u8>, Future<Result<(), ErrorCode>>];
+    async fn write_via_stream(self: &Descriptor, data: Stream<u8>, offset: Filesize) -> Result<(), ErrorCode>;
+    async fn append_via_stream(self: &Descriptor, data: Stream<u8>) -> Result<(), ErrorCode>;
+    async fn advise(self: &Descriptor, offset: Filesize, length: Filesize, advice: Advice) -> Result<(), ErrorCode>;
+    async fn sync_data(self: &Descriptor) -> Result<(), ErrorCode>;
+    async fn get_flags(self: &Descriptor) -> Result<DescriptorFlags, ErrorCode>;
+    async fn get_type(self: &Descriptor) -> Result<DescriptorType, ErrorCode>;
+    async fn set_size(self: &Descriptor, size: Filesize) -> Result<(), ErrorCode>;
+    async fn set_times(self: &Descriptor, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Result<(), ErrorCode>;
+    async fn read_directory(self: &Descriptor) -> [Stream<DirectoryEntry>, Future<Result<(), ErrorCode>>];
+    async fn sync(self: &Descriptor) -> Result<(), ErrorCode>;
+    async fn create_directory_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>;
+    async fn stat(self: &Descriptor) -> Result<DescriptorStat, ErrorCode>;
+    async fn stat_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Result<DescriptorStat, ErrorCode>;
+    async fn set_times_at(self: &Descriptor, path_flags: PathFlags, path: String, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Result<(), ErrorCode>;
+    async fn link_at(self: &Descriptor, old_path_flags: PathFlags, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Result<(), ErrorCode>;
+    async fn open_at(self: &Descriptor, path_flags: PathFlags, path: String, open_flags: OpenFlags, flags: DescriptorFlags) -> Result<Descriptor, ErrorCode>;
+    async fn readlink_at(self: &Descriptor, path: String) -> Result<String, ErrorCode>;
+    async fn remove_directory_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>;
+    async fn rename_at(self: &Descriptor, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Result<(), ErrorCode>;
+    async fn symlink_at(self: &Descriptor, old_path: String, new_path: String) -> Result<(), ErrorCode>;
+    async fn unlink_file_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>;
+    async fn is_same_object(self: &Descriptor, other: &Descriptor) -> bool;
+    async fn metadata_hash(self: &Descriptor) -> Result<MetadataHashValue, ErrorCode>;
+    async fn metadata_hash_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Result<MetadataHashValue, ErrorCode>;
 }
 ```
 
@@ -218,6 +327,77 @@ pub variant RequestOptionsError {
 }
 ```
 
+### Effects
+
+```wado
+pub effect Handler {
+    async fn handle(request: Request) -> Result<Response, ErrorCode>;
+}
+```
+
+```wado
+pub effect Client {
+    async fn send(request: Request) -> Result<Response, ErrorCode>;
+}
+```
+
+### Resources
+
+```wado
+pub resource Fields {
+    fn new() -> Fields;
+    fn from_list(entries: Array<[FieldName, FieldValue]>) -> Result<Fields, HeaderError>;
+    fn get(self: &Fields, name: FieldName) -> Array<FieldValue>;
+    fn has(self: &Fields, name: FieldName) -> bool;
+    fn set(self: &Fields, name: FieldName, value: Array<FieldValue>) -> Result<(), HeaderError>;
+    fn delete(self: &Fields, name: FieldName) -> Result<(), HeaderError>;
+    fn get_and_delete(self: &Fields, name: FieldName) -> Result<Array<FieldValue>, HeaderError>;
+    fn append(self: &Fields, name: FieldName, value: FieldValue) -> Result<(), HeaderError>;
+    fn copy_all(self: &Fields) -> Array<[FieldName, FieldValue]>;
+    fn clone(self: &Fields) -> Fields;
+}
+```
+
+```wado
+pub resource Request {
+    fn new(headers: Headers, contents: Option<Stream<u8>>, trailers: Future<Result<Option<Trailers>, ErrorCode>>, options: Option<RequestOptions>) -> [Request, Future<Result<(), ErrorCode>>];
+    fn get_method(self: &Request) -> Method;
+    fn set_method(self: &Request, method: Method) -> Result<(), ()>;
+    fn get_path_with_query(self: &Request) -> Option<String>;
+    fn set_path_with_query(self: &Request, path_with_query: Option<String>) -> Result<(), ()>;
+    fn get_scheme(self: &Request) -> Option<Scheme>;
+    fn set_scheme(self: &Request, scheme: Option<Scheme>) -> Result<(), ()>;
+    fn get_authority(self: &Request) -> Option<String>;
+    fn set_authority(self: &Request, authority: Option<String>) -> Result<(), ()>;
+    fn get_options(self: &Request) -> Option<RequestOptions>;
+    fn get_headers(self: &Request) -> Headers;
+    fn consume_body(this: Request, res: Future<Result<(), ErrorCode>>) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>];
+}
+```
+
+```wado
+pub resource RequestOptions {
+    fn new() -> RequestOptions;
+    fn get_connect_timeout(self: &RequestOptions) -> Option<Duration>;
+    fn set_connect_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>;
+    fn get_first_byte_timeout(self: &RequestOptions) -> Option<Duration>;
+    fn set_first_byte_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>;
+    fn get_between_bytes_timeout(self: &RequestOptions) -> Option<Duration>;
+    fn set_between_bytes_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>;
+    fn clone(self: &RequestOptions) -> RequestOptions;
+}
+```
+
+```wado
+pub resource Response {
+    fn new(headers: Headers, contents: Option<Stream<u8>>, trailers: Future<Result<Option<Trailers>, ErrorCode>>) -> [Response, Future<Result<(), ErrorCode>>];
+    fn get_status_code(self: &Response) -> StatusCode;
+    fn set_status_code(self: &Response, status_code: StatusCode) -> Result<(), ()>;
+    fn get_headers(self: &Response) -> Headers;
+    fn consume_body(this: Response, res: Future<Result<(), ErrorCode>>) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>];
+}
+```
+
 ## wasi:clocks
 
 ### Structs
@@ -236,7 +416,55 @@ pub type Duration = u64;
 pub type Mark = u64;
 ```
 
+### Effects
+
+```wado
+pub effect MonotonicClock {
+    fn now() -> Mark;
+    fn get_resolution() -> Duration;
+    async fn wait_until(when: Mark);
+    async fn wait_for(how_long: Duration);
+}
+```
+
+```wado
+pub effect SystemClock {
+    fn now() -> Instant;
+    fn get_resolution() -> Duration;
+}
+```
+
+```wado
+pub effect Timezone {
+    fn iana_id() -> Option<String>;
+    fn utc_offset(when: Instant) -> Option<i64>;
+    fn to_debug_string() -> String;
+}
+```
+
 ## wasi:random
+
+### Effects
+
+```wado
+pub effect InsecureSeed {
+    fn get_insecure_seed() -> [u64, u64];
+}
+```
+
+```wado
+pub effect Insecure {
+    fn get_insecure_random_bytes(len: u64) -> Array<u8>;
+    fn get_insecure_random_u64() -> u64;
+}
+```
+
+```wado
+pub effect Random {
+    fn get_random_bytes(len: u64) -> Array<u8>;
+    fn get_random_u64() -> u64;
+}
+```
 
 ## wasi:sockets
 
@@ -292,5 +520,65 @@ pub variant IpAddress {
 pub variant IpSocketAddress {
     Ipv4(Ipv4SocketAddress),
     Ipv6(Ipv6SocketAddress),
+}
+```
+
+### Effects
+
+```wado
+pub effect IpNameLookup {
+    async fn resolve_addresses(name: String) -> Result<Array<IpAddress>, ErrorCode>;
+}
+```
+
+### Resources
+
+```wado
+pub resource TcpSocket {
+    fn create(address_family: IpAddressFamily) -> Result<TcpSocket, ErrorCode>;
+    fn bind(self: &TcpSocket, local_address: IpSocketAddress) -> Result<(), ErrorCode>;
+    async fn connect(self: &TcpSocket, remote_address: IpSocketAddress) -> Result<(), ErrorCode>;
+    fn listen(self: &TcpSocket) -> Result<Stream<TcpSocket>, ErrorCode>;
+    async fn send(self: &TcpSocket, data: Stream<u8>) -> Result<(), ErrorCode>;
+    fn receive(self: &TcpSocket) -> [Stream<u8>, Future<Result<(), ErrorCode>>];
+    fn get_local_address(self: &TcpSocket) -> Result<IpSocketAddress, ErrorCode>;
+    fn get_remote_address(self: &TcpSocket) -> Result<IpSocketAddress, ErrorCode>;
+    fn get_is_listening(self: &TcpSocket) -> bool;
+    fn get_address_family(self: &TcpSocket) -> IpAddressFamily;
+    fn set_listen_backlog_size(self: &TcpSocket, value: u64) -> Result<(), ErrorCode>;
+    fn get_keep_alive_enabled(self: &TcpSocket) -> Result<bool, ErrorCode>;
+    fn set_keep_alive_enabled(self: &TcpSocket, value: bool) -> Result<(), ErrorCode>;
+    fn get_keep_alive_idle_time(self: &TcpSocket) -> Result<Duration, ErrorCode>;
+    fn set_keep_alive_idle_time(self: &TcpSocket, value: Duration) -> Result<(), ErrorCode>;
+    fn get_keep_alive_interval(self: &TcpSocket) -> Result<Duration, ErrorCode>;
+    fn set_keep_alive_interval(self: &TcpSocket, value: Duration) -> Result<(), ErrorCode>;
+    fn get_keep_alive_count(self: &TcpSocket) -> Result<u32, ErrorCode>;
+    fn set_keep_alive_count(self: &TcpSocket, value: u32) -> Result<(), ErrorCode>;
+    fn get_hop_limit(self: &TcpSocket) -> Result<u8, ErrorCode>;
+    fn set_hop_limit(self: &TcpSocket, value: u8) -> Result<(), ErrorCode>;
+    fn get_receive_buffer_size(self: &TcpSocket) -> Result<u64, ErrorCode>;
+    fn set_receive_buffer_size(self: &TcpSocket, value: u64) -> Result<(), ErrorCode>;
+    fn get_send_buffer_size(self: &TcpSocket) -> Result<u64, ErrorCode>;
+    fn set_send_buffer_size(self: &TcpSocket, value: u64) -> Result<(), ErrorCode>;
+}
+```
+
+```wado
+pub resource UdpSocket {
+    fn create(address_family: IpAddressFamily) -> Result<UdpSocket, ErrorCode>;
+    fn bind(self: &UdpSocket, local_address: IpSocketAddress) -> Result<(), ErrorCode>;
+    fn connect(self: &UdpSocket, remote_address: IpSocketAddress) -> Result<(), ErrorCode>;
+    fn disconnect(self: &UdpSocket) -> Result<(), ErrorCode>;
+    async fn send(self: &UdpSocket, data: Array<u8>, remote_address: Option<IpSocketAddress>) -> Result<(), ErrorCode>;
+    async fn receive(self: &UdpSocket) -> Result<[Array<u8>, IpSocketAddress], ErrorCode>;
+    fn get_local_address(self: &UdpSocket) -> Result<IpSocketAddress, ErrorCode>;
+    fn get_remote_address(self: &UdpSocket) -> Result<IpSocketAddress, ErrorCode>;
+    fn get_address_family(self: &UdpSocket) -> IpAddressFamily;
+    fn get_unicast_hop_limit(self: &UdpSocket) -> Result<u8, ErrorCode>;
+    fn set_unicast_hop_limit(self: &UdpSocket, value: u8) -> Result<(), ErrorCode>;
+    fn get_receive_buffer_size(self: &UdpSocket) -> Result<u64, ErrorCode>;
+    fn set_receive_buffer_size(self: &UdpSocket, value: u64) -> Result<(), ErrorCode>;
+    fn get_send_buffer_size(self: &UdpSocket) -> Result<u64, ErrorCode>;
+    fn set_send_buffer_size(self: &UdpSocket, value: u64) -> Result<(), ErrorCode>;
 }
 ```

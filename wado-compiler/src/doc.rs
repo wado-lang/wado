@@ -2,8 +2,9 @@ use indexmap::IndexSet;
 use serde::Serialize;
 
 use crate::ast::{
-    Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl, ImplBlock, Item, Module,
-    Newtype, Param, SelfKind, StructDecl, StructField, TraitDecl, Type, UseItem, VariantDecl,
+    Attribute, EffectDecl, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl, ImplBlock,
+    Item, Module, Newtype, Param, SelfKind, StructDecl, StructField, TraitDecl, Type, UseItem,
+    VariantDecl,
 };
 use crate::comment::{CommentKind, CommentMap};
 use crate::stdlib;
@@ -28,6 +29,10 @@ pub struct DocModule {
     pub variants: Vec<DocVariant>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub flags: Vec<DocFlags>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<DocEffect>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<DocResource>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub functions: Vec<DocFunction>,
 }
@@ -124,6 +129,24 @@ pub struct DocVariantCase {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct DocEffect {
+    pub name: String,
+    pub signature: String,
+    pub methods: Vec<DocFunction>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DocResource {
+    pub name: String,
+    pub signature: String,
+    pub methods: Vec<DocFunction>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct DocFlags {
     pub name: String,
     pub signature: String,
@@ -142,6 +165,8 @@ pub fn extract_doc(module: &Module, comments: &CommentMap, module_name: &str) ->
     let mut enums: Vec<DocEnum> = Vec::new();
     let mut variants: Vec<DocVariant> = Vec::new();
     let mut flags: Vec<DocFlags> = Vec::new();
+    let mut effects: Vec<DocEffect> = Vec::new();
+    let mut resources: Vec<DocResource> = Vec::new();
     let mut functions: Vec<DocFunction> = Vec::new();
     let mut impls: Vec<&ImplBlock> = Vec::new();
 
@@ -164,6 +189,8 @@ pub fn extract_doc(module: &Module, comments: &CommentMap, module_name: &str) ->
             Item::Enum(e) => enums.push(build_doc_enum(e, comments)),
             Item::Variant(v) => variants.push(build_doc_variant(v, comments)),
             Item::Flags(f) => flags.push(build_doc_flags(f, comments)),
+            Item::Effect(e) => effects.push(build_doc_effect(e, comments)),
+            Item::Resource(r) => resources.push(build_doc_resource(r, comments)),
             Item::Function(f) => functions.push(build_doc_function(f, comments)),
             _ => {}
         }
@@ -179,6 +206,8 @@ pub fn extract_doc(module: &Module, comments: &CommentMap, module_name: &str) ->
         enums,
         variants,
         flags,
+        effects,
+        resources,
         functions,
     }
 }
@@ -326,6 +355,57 @@ fn build_doc_flags(f: &FlagsDecl, comments: &CommentMap) -> DocFlags {
             &f.span,
             f.attributes.as_deref().unwrap_or(&[]),
         ),
+    }
+}
+
+fn build_doc_effect(e: &EffectDecl, comments: &CommentMap) -> DocEffect {
+    let mut sig = String::new();
+    if e.is_pub {
+        sig.push_str("pub ");
+    }
+    sig.push_str("effect ");
+    sig.push_str(&e.name);
+
+    let methods: Vec<DocFunction> = e
+        .methods
+        .iter()
+        .map(|m| DocFunction {
+            signature: render_effect_method_signature(m),
+            doc: extract_doc_comment_with_attrs(comments, &m.span, &m.attrs),
+        })
+        .collect();
+
+    DocEffect {
+        name: e.name.clone(),
+        signature: sig,
+        methods,
+        doc: extract_doc_comment_with_attrs(comments, &e.span, &e.attrs),
+    }
+}
+
+fn build_doc_resource(r: &crate::ast::ResourceDecl, comments: &CommentMap) -> DocResource {
+    let mut sig = String::new();
+    if r.is_pub {
+        sig.push_str("pub ");
+    }
+    sig.push_str("resource ");
+    sig.push_str(&r.name);
+    sig.push_str(&render_generic_params(&r.type_params));
+
+    let methods: Vec<DocFunction> = r
+        .methods
+        .iter()
+        .map(|m| DocFunction {
+            signature: render_effect_method_signature(m),
+            doc: extract_doc_comment_with_attrs(comments, &m.span, &m.attrs),
+        })
+        .collect();
+
+    DocResource {
+        name: r.name.clone(),
+        signature: sig,
+        methods,
+        doc: extract_doc_comment_with_attrs(comments, &r.span, &r.attrs),
     }
 }
 
@@ -478,6 +558,28 @@ fn render_param(param: &Param) -> String {
             format!("{}: {}", param.name, render_type(&param.ty))
         }
     }
+}
+
+fn render_effect_method_signature(m: &crate::ast::EffectMethod) -> String {
+    let mut sig = String::new();
+    if m.is_async {
+        sig.push_str("async ");
+    }
+    sig.push_str("fn ");
+    sig.push_str(&m.name);
+    sig.push('(');
+    for (i, param) in m.params.iter().enumerate() {
+        if i > 0 {
+            sig.push_str(", ");
+        }
+        sig.push_str(&render_param(param));
+    }
+    sig.push(')');
+    if let Some(ret) = &m.return_type {
+        sig.push_str(" -> ");
+        sig.push_str(&render_type(ret));
+    }
+    sig
 }
 
 fn render_fn_signature(f: &Function) -> String {
@@ -673,6 +775,16 @@ fn merge_reexported_items(parent: &mut DocModule, child: &DocModule, names: &Ind
     for f in &child.flags {
         if names.contains(&f.name) {
             parent.flags.push(f.clone());
+        }
+    }
+    for e in &child.effects {
+        if names.contains(&e.name) {
+            parent.effects.push(e.clone());
+        }
+    }
+    for r in &child.resources {
+        if names.contains(&r.name) {
+            parent.resources.push(r.clone());
         }
     }
     for f in &child.functions {
