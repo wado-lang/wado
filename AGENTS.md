@@ -163,7 +163,7 @@ Without this, `cargo test` will not detect the new fixture because `datatest_min
 
 ### Standard Library Tests (Library Logic)
 
-Tests for **standard library logic** (e.g., `zlib_test.wado`, `string_test.wado`) live alongside implementations in `wado-compiler/lib/`. These are plain `.wado` files with `test` blocks — no `__DATA__` section — run directly with `wado test`.
+Tests for **standard library logic** (e.g., `zlib_test.wado`, `string_test.wado`) live alongside implementations in `wado-compiler/lib/`. These are `.wado` files with `test` blocks, run with `wado test`.
 
 ### The `wasi:*` Modules
 
