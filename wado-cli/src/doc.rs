@@ -385,8 +385,11 @@ fn render_simple(doc: &DocModule) -> String {
 
     if !doc.structs.is_empty() {
         out.push_str("\n## Structs\n\n```wado\n");
-        for s in &doc.structs {
-            writeln!(out, "{}", s.signature).unwrap();
+        for (i, s) in doc.structs.iter().enumerate() {
+            if i > 0 {
+                out.push('\n');
+            }
+            render_simple_struct(&mut out, s);
         }
         out.push_str("```\n");
 
@@ -471,4 +474,27 @@ fn render_simple(doc: &DocModule) -> String {
     }
 
     out
+}
+
+/// Render a struct in simple format with fields on separate lines.
+fn render_simple_struct(out: &mut String, s: &DocStruct) {
+    // Extract the prefix: "pub struct Name<T>" (everything before " { ")
+    let prefix = s
+        .signature
+        .find(" { ")
+        .map_or(s.signature.as_str(), |i| &s.signature[..i]);
+
+    if s.fields.is_empty() && !s.has_private_fields {
+        // No fields at all: `pub struct Foo {}`
+        writeln!(out, "{prefix} {{}}").unwrap();
+    } else {
+        writeln!(out, "{prefix} {{").unwrap();
+        for f in &s.fields {
+            writeln!(out, "    {}: {},", f.name, f.ty).unwrap();
+        }
+        if s.has_private_fields {
+            out.push_str("    ..\n");
+        }
+        out.push_str("}\n");
+    }
 }

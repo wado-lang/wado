@@ -11,9 +11,24 @@ pub enum ErrorCode { Io, IllegalByteSequence, Pipe }
 ## Structs
 
 ```wado
-pub struct DescriptorStat { type: DescriptorType, link_count: LinkCount, size: Filesize, data_access_timestamp: Option<Instant>, data_modification_timestamp: Option<Instant>, status_change_timestamp: Option<Instant> }
-pub struct DirectoryEntry { type: DescriptorType, name: String }
-pub struct MetadataHashValue { lower: u64, upper: u64 }
+pub struct DescriptorStat {
+    type: DescriptorType,
+    link_count: LinkCount,
+    size: Filesize,
+    data_access_timestamp: Option<Instant>,
+    data_modification_timestamp: Option<Instant>,
+    status_change_timestamp: Option<Instant>,
+}
+
+pub struct DirectoryEntry {
+    type: DescriptorType,
+    name: String,
+}
+
+pub struct MetadataHashValue {
+    lower: u64,
+    upper: u64,
+}
 ```
 
 ## Types
@@ -68,9 +83,20 @@ pub flags OpenFlags {
 ## Structs
 
 ```wado
-pub struct DnsErrorPayload { rcode: Option<String>, info_code: Option<u16> }
-pub struct TlsAlertReceivedPayload { alert_id: Option<u8>, alert_message: Option<String> }
-pub struct FieldSizePayload { field_name: Option<String>, field_size: Option<u32> }
+pub struct DnsErrorPayload {
+    rcode: Option<String>,
+    info_code: Option<u16>,
+}
+
+pub struct TlsAlertReceivedPayload {
+    alert_id: Option<u8>,
+    alert_message: Option<String>,
+}
+
+pub struct FieldSizePayload {
+    field_name: Option<String>,
+    field_size: Option<u32>,
+}
 ```
 
 ## Types
@@ -160,7 +186,10 @@ pub variant RequestOptionsError {
 ## Structs
 
 ```wado
-pub struct Instant { seconds: i64, nanoseconds: u32 }
+pub struct Instant {
+    seconds: i64,
+    nanoseconds: u32,
+}
 ```
 
 ## Types
@@ -177,8 +206,17 @@ pub type Mark = u64;
 ## Structs
 
 ```wado
-pub struct Ipv4SocketAddress { port: u16, address: Ipv4Address }
-pub struct Ipv6SocketAddress { port: u16, flow_info: u32, address: Ipv6Address, scope_id: u32 }
+pub struct Ipv4SocketAddress {
+    port: u16,
+    address: Ipv4Address,
+}
+
+pub struct Ipv6SocketAddress {
+    port: u16,
+    flow_info: u32,
+    address: Ipv6Address,
+    scope_id: u32,
+}
 ```
 
 ## Types

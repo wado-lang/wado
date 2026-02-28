@@ -145,17 +145,56 @@ pub trait FromIterator<T> {
 ## Structs
 
 ```wado
-pub struct Formatter { fill: char, align: Alignment, sign_plus: bool, alternate: bool, zero_pad: bool, width: i32, precision: i32, buf: &mut String }
-pub struct u128 { .. }
-pub struct i128 { .. }
-pub struct String { .. }
-pub struct StrUtf8ByteIter { .. }
-pub struct StrCharIter { .. }
-pub struct Array<T> { .. }
-pub struct ArrayIter<T> { .. }
-pub struct EnumerateIter<T> { .. }
-pub struct MapIter<T, U> { .. }
-pub struct FilterIter<T> { .. }
+pub struct Formatter {
+    fill: char,
+    align: Alignment,
+    sign_plus: bool,
+    alternate: bool,
+    zero_pad: bool,
+    width: i32,
+    precision: i32,
+    buf: &mut String,
+}
+
+pub struct u128 {
+    ..
+}
+
+pub struct i128 {
+    ..
+}
+
+pub struct String {
+    ..
+}
+
+pub struct StrUtf8ByteIter {
+    ..
+}
+
+pub struct StrCharIter {
+    ..
+}
+
+pub struct Array<T> {
+    ..
+}
+
+pub struct ArrayIter<T> {
+    ..
+}
+
+pub struct EnumerateIter<T> {
+    ..
+}
+
+pub struct MapIter<T, U> {
+    ..
+}
+
+pub struct FilterIter<T> {
+    ..
+}
 ```
 
 ```wado
@@ -413,7 +452,9 @@ pub fn now() -> Mark with MonotonicClock;
 ## Structs
 
 ```wado
-pub struct TreeMap<K, V> { .. }
+pub struct TreeMap<K, V> {
+    ..
+}
 ```
 
 ```wado
@@ -457,9 +498,17 @@ pub fn decode_bytes(encoded: &Array<u8>) -> Option<Array<u8>>;
 ## Structs
 
 ```wado
-pub struct GzipHeader { .. }
-pub struct DeflateStream { .. }
-pub struct InflateStream { .. }
+pub struct GzipHeader {
+    ..
+}
+
+pub struct DeflateStream {
+    ..
+}
+
+pub struct InflateStream {
+    ..
+}
 ```
 
 ```wado
