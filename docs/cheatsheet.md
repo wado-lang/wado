@@ -910,16 +910,14 @@ if let Some(x) = opt {
 
 // Match ergonomics: &T scrutinees match against inner type
 // Payload bindings become refs (e.g. Some(x) from &Option<i32> gives x: &i32)
+let opt: Option<i32> = Option::<i32>::Some(42);
 let ro = &opt;
 if let Some(x) = ro {       // ro: &Option<i32>, x: &i32
     println(`Got: {*x}`);   // dereference to use the value
 }
-let c = Color::Red;
-let rc = &c;
-let name = match rc {        // rc: &Color, patterns match Color cases
-    Red => "red",
-    Green => "green",
-    Blue => "blue",
+let val = match ro {         // ro: &Option<i32>
+    Some(x) => *x,           // x: &i32, dereference to get i32
+    None => 0,
 };
 
 // While
