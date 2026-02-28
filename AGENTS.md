@@ -414,7 +414,7 @@ WEPs combine language specification and implementation strategy in a single docu
 
 ### Tool Management
 
-This project uses [mise](https://mise.jdx.dev/) for development tool version management.
+This project uses [mise](https://mise.jdx.dev/) for development tool version management. Project tasks are defined in `mise.toml`. Run `mise tasks ls` to list available tasks.
 
 Run `make on-task-started` to install mise and all required development tools automatically.
 
