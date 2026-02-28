@@ -34,14 +34,16 @@ jobs:
       - run: make update-golden-wir-fixtures
       - run: make format
 
-      - name: Check for uncommitted changes
+      - name: Check working tree is clean
         id: diff
         run: |
-          if git diff --exit-code; then
+          git add -A
+          if git diff --cached --exit-code; then
             echo "clean=true" >> $GITHUB_OUTPUT
           else
             echo "clean=false" >> $GITHUB_OUTPUT
-            echo "::error::Uncommitted changes detected. Run 'make on-task-done' locally and commit the changes."
+            echo "::error::Working tree is dirty. Run 'make on-task-done' locally and commit the changes."
+            git diff --cached --stat
             exit 1
           fi
 
@@ -51,9 +53,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           MARKER="<!-- integrity-check-comment -->"
-          DIFF_STAT=$(git diff --stat)
+          DIFF_STAT=$(git diff --cached --stat)
           BODY="${MARKER}
-          ## Uncommitted changes detected
+          ## Working tree is dirty
 
           Integrity checks produced the following changes:
 
