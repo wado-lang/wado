@@ -4190,7 +4190,7 @@ impl FunctionTranslator<'_, '_> {
 
     /// Emit pattern bindings (local.set for bound variables).
     fn emit_pattern_bindings(
-        &self,
+        &mut self,
         pattern: &TirPattern,
         scrut_local: &str,
         scrut_type: TypeId,
@@ -4248,7 +4248,8 @@ impl FunctionTranslator<'_, '_> {
                 // Try to get the case type for ref.cast + struct.get
                 if let Some(case_type_id) = self.ctx.type_map.get(&case_fq).cloned() {
                     // Use a temp local to hold the cast result (avoids repeated ref.cast)
-                    let cast_local = format!("__cast_{case_fq}");
+                    self.local_counter += 1;
+                    let cast_local = format!("__cast_{}", self.local_counter);
                     instrs.push(WirInstr::DeclareLocal {
                         name: cast_local.clone(),
                         ty: WirType::Ref {
@@ -4286,7 +4287,8 @@ impl FunctionTranslator<'_, '_> {
                             if let Some(tuple_type_id) =
                                 self.get_case_payload_ref_type(&case_type_id, i)
                             {
-                                let tuple_local = format!("__tuple_payload_{case_fq}_{i}");
+                                self.local_counter += 1;
+                                let tuple_local = format!("__tuple_payload_{}", self.local_counter);
                                 instrs.push(WirInstr::DeclareLocal {
                                     name: tuple_local.clone(),
                                     ty: WirType::Ref {
@@ -4359,7 +4361,8 @@ impl FunctionTranslator<'_, '_> {
                             TirPattern::Wildcard => {}
                             _ => {
                                 // Nested pattern: store in temp and recurse
-                                let temp_name = format!("__tuple_elem_{i}");
+                                self.local_counter += 1;
+                                let temp_name = format!("__tuple_elem_{}", self.local_counter);
                                 let elem_type =
                                     element_types.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
                                 let elem_wir_type =
@@ -4405,7 +4408,8 @@ impl FunctionTranslator<'_, '_> {
                             TirPattern::Wildcard => {}
                             _ => {
                                 // For nested patterns, store in a temp and recurse
-                                let temp_name = format!("__struct_field_{}", field.field_name);
+                                self.local_counter += 1;
+                                let temp_name = format!("__struct_field_{}", self.local_counter);
                                 let field_type =
                                     self.resolve_struct_field_type(scrut_type, &field.field_name);
                                 let field_wir_type =
