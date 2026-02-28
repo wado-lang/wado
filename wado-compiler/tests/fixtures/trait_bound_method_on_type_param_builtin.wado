@@ -1,0 +1,24 @@
+// Test: calling built-in trait method (Ord::cmp) on type parameter
+use { println, Stdout } from "core:cli";
+
+fn max_of<T: Ord>(a: T, b: T) -> T {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+fn min_of<T: Ord>(a: T, b: T) -> T {
+    if a < b {
+        return a;
+    }
+    return b;
+}
+
+export fn run() with Stdout {
+    println(`{max_of::<i32>(3, 7)}`);
+    println(`{min_of::<i32>(3, 7)}`);
+}
+
+__DATA__
+{"stdout": "7\n3\n"}

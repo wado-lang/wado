@@ -1658,7 +1658,6 @@ Wado intentionally does not support macros.
 ## Not Yet Implemented
 
 - `resource` (Wasm CM resource handles)
-- Trait bounds: using bounds for method resolution on type params (e.g., calling `T.method()` where `T: Trait`)
 - Effect handlers
 - `reactive` values and `observe()`
 - `stores[...]` syntax for reference storage
