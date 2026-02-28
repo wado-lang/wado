@@ -4248,7 +4248,7 @@ impl FunctionTranslator<'_, '_> {
                 // Try to get the case type for ref.cast + struct.get
                 if let Some(case_type_id) = self.ctx.type_map.get(&case_fq).cloned() {
                     // Use a temp local to hold the cast result (avoids repeated ref.cast)
-                    let cast_local = format!("__cast_{variant_name}");
+                    let cast_local = format!("__cast_{case_fq}");
                     instrs.push(WirInstr::DeclareLocal {
                         name: cast_local.clone(),
                         ty: WirType::Ref {
@@ -4286,7 +4286,7 @@ impl FunctionTranslator<'_, '_> {
                             if let Some(tuple_type_id) =
                                 self.get_case_payload_ref_type(&case_type_id, i)
                             {
-                                let tuple_local = format!("__tuple_payload_{variant_name}_{i}");
+                                let tuple_local = format!("__tuple_payload_{case_fq}_{i}");
                                 instrs.push(WirInstr::DeclareLocal {
                                     name: tuple_local.clone(),
                                     ty: WirType::Ref {

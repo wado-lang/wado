@@ -1300,6 +1300,32 @@ let v = map["key"];       // index access (panics if key not found)
 let opt = map.get("key"); // fallible access returns Option<V>
 let keys = map.keys();    // keys in insertion order
 map.remove("key");
+
+// core:base64 - Base64 encoding/decoding
+use { encode, decode, encode_url, encode_with, decode_bytes, Encoding } from "core:base64";
+
+let data: Array<u8> = [72, 101, 108, 108, 111] as Array<u8>;
+
+// Standard encode (RFC 4648 §4, padded)
+let b64 = encode(&data);             // "SGVsbG8="
+
+// URL-safe encode (RFC 4648 §5, no padding)
+let url = encode_url(&data);         // "SGVsbG8"
+
+// Custom encode with flags
+let no_pad = encode_with(&data, Encoding::NoPadding);  // "SGVsbG8"
+let url_pad = encode_with(&data, Encoding::UrlSafe | Encoding::NoPadding);
+
+// Decode (auto-detects alphabet, lenient on padding)
+if let Some(decoded) = decode("SGVsbG8=") {
+    assert decoded.len() == 5;
+}
+decode("SGVsbG8");                    // works without padding too
+decode("!!!") matches { None };       // invalid input returns null
+
+// Decode from raw bytes
+let raw: Array<u8> = [83, 71, 86, 115, 98, 71, 56, 61] as Array<u8>;
+let decoded = decode_bytes(&raw);     // Option<Array<u8>>
 ```
 
 ### char Conversion

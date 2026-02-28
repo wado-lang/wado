@@ -1,0 +1,63 @@
+// Regression test: variant constructor with literal coercion
+// Previously, `Option::<Array<u8>>::Some([])` resolved `[]` as an empty tuple
+// instead of Array<u8> because the payload argument was resolved without type context.
+use { println } from "core:cli";
+
+fn return_empty() -> Option<Array<u8>> {
+    return Option::<Array<u8>>::Some([]);
+}
+
+fn return_non_empty() -> Option<Array<u8>> {
+    return Option::<Array<u8>>::Some([1 as u8, 2 as u8, 3 as u8]);
+}
+
+fn return_result_array() -> Result<Array<i32>, String> {
+    return Result::<Array<i32>, String>::Ok([10, 20, 30]);
+}
+
+fn return_result_empty() -> Result<Array<i32>, String> {
+    return Result::<Array<i32>, String>::Ok([]);
+}
+
+export fn run() with Stdout {
+    // Empty array in Option
+    if let Some(arr) = return_empty() {
+        assert arr.len() == 0;
+    } else {
+        panic("expected Some");
+    }
+
+    // Non-empty array in Option
+    if let Some(arr) = return_non_empty() {
+        assert arr.len() == 3;
+        assert arr[0] == 1 as u8;
+    } else {
+        panic("expected Some");
+    }
+
+    // Non-empty array in Result
+    if let Ok(arr) = return_result_array() {
+        assert arr.len() == 3;
+        assert arr[0] == 10;
+    } else {
+        panic("expected Ok");
+    }
+
+    // Empty array in Result
+    if let Ok(arr) = return_result_empty() {
+        assert arr.len() == 0;
+    } else {
+        panic("expected Ok");
+    }
+
+    // Multiple Option instantiations in the same file
+    let opt_i32: Option<i32> = Option::<i32>::Some(42);
+    let opt_arr: Option<Array<u8>> = Option::<Array<u8>>::Some([1 as u8, 2 as u8]);
+    assert opt_i32 matches { Some(n) && n == 42 };
+    assert opt_arr matches { Some(a) && a.len() == 2 };
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

@@ -1,0 +1,167 @@
+use { encode, decode, encode_url, encode_with, decode_bytes, Encoding } from "core:base64";
+
+test "encode empty" {
+    let data: Array<u8> = [];
+    assert encode(&data) == "";
+}
+
+test "encode Hello" {
+    let data = "Hello".bytes().collect();
+    assert encode(&data) == "SGVsbG8=";
+}
+
+test "encode Hello World" {
+    let data = "Hello World".bytes().collect();
+    assert encode(&data) == "SGVsbG8gV29ybGQ=";
+}
+
+test "encode single byte" {
+    let data: Array<u8> = [0] as Array<u8>;
+    assert encode(&data) == "AA==";
+}
+
+test "encode two bytes" {
+    let data: Array<u8> = [0, 0] as Array<u8>;
+    assert encode(&data) == "AAA=";
+}
+
+test "encode three bytes" {
+    let data: Array<u8> = [0, 0, 0] as Array<u8>;
+    assert encode(&data) == "AAAA";
+}
+
+test "encode all byte values" {
+    let mut data: Array<u8> = Array::<u8>::with_capacity(256);
+    for let mut i = 0; i < 256; i += 1 {
+        data.append(i as u8);
+    }
+    assert decode(encode(&data)) matches { Some(d) && d == data };
+}
+
+test "encode standard alphabet chars" {
+    let data: Array<u8> = [251, 239, 190] as Array<u8>;
+    assert decode(encode(&data)) matches { Some(d) && d == data };
+}
+
+test "encode_url Hello" {
+    let data = "Hello".bytes().collect();
+    assert encode_url(&data) == "SGVsbG8";
+}
+
+test "encode_url empty" {
+    let data: Array<u8> = [];
+    assert encode_url(&data) == "";
+}
+
+test "encode_with standard padded" {
+    let data = "Hello".bytes().collect();
+    assert encode_with(&data, Encoding::none()) == "SGVsbG8=";
+}
+
+test "encode_with standard no padding" {
+    let data = "Hello".bytes().collect();
+    assert encode_with(&data, Encoding::NoPadding) == "SGVsbG8";
+}
+
+test "encode_with url-safe padded" {
+    let data = "Hello".bytes().collect();
+    assert encode_with(&data, Encoding::UrlSafe) == "SGVsbG8=";
+}
+
+test "encode_with url-safe no padding" {
+    let data = "Hello".bytes().collect();
+    let flags = Encoding::UrlSafe | Encoding::NoPadding;
+    assert encode_with(&data, flags) == "SGVsbG8";
+}
+
+test "decode empty" {
+    assert decode("") matches { Some(d) && d.len() == 0 };
+}
+
+test "decode padded" {
+    let expected = "Hello".bytes().collect();
+    assert decode("SGVsbG8=") matches { Some(d) && d == expected };
+}
+
+test "decode without padding" {
+    let expected = "Hello".bytes().collect();
+    assert decode("SGVsbG8") matches { Some(d) && d == expected };
+}
+
+test "decode url-safe" {
+    let data: Array<u8> = [251, 239, 190] as Array<u8>;
+    assert decode(encode_url(&data)) matches { Some(d) && d == data };
+}
+
+test "decode standard" {
+    let data: Array<u8> = [251, 239, 190] as Array<u8>;
+    assert decode(encode(&data)) matches { Some(d) && d == data };
+}
+
+test "decode_bytes" {
+    let raw = "SGVsbG8=".bytes().collect();
+    let expected = "Hello".bytes().collect();
+    assert decode_bytes(&raw) matches { Some(d) && d == expected };
+}
+
+test "decode_bytes empty" {
+    let raw: Array<u8> = [];
+    assert decode_bytes(&raw) matches { Some(d) && d.len() == 0 };
+}
+
+test "decode invalid chars" {
+    assert decode("!!!") matches { None };
+}
+
+test "decode mixed alphabets" {
+    assert decode("abc+def_ghi") matches { Some(_) };
+}
+
+test "decode structurally invalid length" {
+    assert decode("A") matches { None };
+}
+
+test "decode control chars" {
+    assert decode("SGVs\nbG8=") matches { None };
+}
+
+test "round-trip standard" {
+    let data: Array<u8> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as Array<u8>;
+    assert decode(encode(&data)) matches { Some(d) && d == data };
+}
+
+test "round-trip url-safe" {
+    let data: Array<u8> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as Array<u8>;
+    assert decode(encode_url(&data)) matches { Some(d) && d == data };
+}
+
+test "round-trip various lengths" {
+    for let mut size = 0; size <= 20; size += 1 {
+        let mut data: Array<u8> = Array::<u8>::with_capacity(size);
+        for let mut j = 0; j < size; j += 1 {
+            data.append(((j * 7 + 13) % 256) as u8);
+        }
+
+        if let Some(decoded) = decode(encode(&data)) {
+            assert decoded == data, `round-trip failed for size {size}`;
+        } else {
+            panic(`decode failed for size {size}`);
+        }
+
+        if let Some(url_decoded) = decode(encode_url(&data)) {
+            assert url_decoded == data, `url round-trip failed for size {size}`;
+        } else {
+            panic(`url decode failed for size {size}`);
+        }
+    }
+}
+
+test "RFC 4648 test vectors" {
+    assert encode(&"".bytes().collect()) == "";
+    assert encode(&"f".bytes().collect()) == "Zg==";
+    assert encode(&"fo".bytes().collect()) == "Zm8=";
+    assert encode(&"foo".bytes().collect()) == "Zm9v";
+    assert encode(&"foob".bytes().collect()) == "Zm9vYg==";
+    assert encode(&"fooba".bytes().collect()) == "Zm9vYmE=";
+    assert encode(&"foobar".bytes().collect()) == "Zm9vYmFy";
+}
