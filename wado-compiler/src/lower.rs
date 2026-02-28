@@ -128,13 +128,16 @@ pub fn lower_modules_indexed(
     {
         let mut box_lowerer = BoxLowerer::new();
 
-        // Build struct fields map from all modules for deref assign expansion
+        // Build struct fields map and variant names from all modules
         for module in modules.values() {
             for s in &module.structs {
                 box_lowerer.struct_fields_map.insert(
                     (s.name.clone(), module.module_source.clone()),
                     s.fields.clone(),
                 );
+            }
+            for v in &module.variants {
+                box_lowerer.variant_names.insert(v.name.clone());
             }
         }
 
@@ -2923,6 +2926,9 @@ struct BoxLowerer {
     box_module_source: ModuleSource,
     /// Struct fields indexed by (name, `module_source`) for deref assign expansion.
     struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>>,
+    /// Variant names from all modules, used to identify `GenericInstance` types
+    /// that are variants and need boxing.
+    variant_names: IndexSet<String>,
 }
 
 impl BoxLowerer {
@@ -2935,6 +2941,7 @@ impl BoxLowerer {
                 name: "internal".to_string(),
             },
             struct_fields_map: IndexMap::new(),
+            variant_names: IndexSet::<String>::new(),
         }
     }
 
@@ -2996,6 +3003,17 @@ impl BoxLowerer {
             }
         }
         None
+    }
+
+    /// Check if a type is a variant (either directly or as a `GenericInstance` of a variant).
+    fn is_variant_type(&self, type_id: TypeId, type_table: &TypeTable) -> bool {
+        match type_table.get(type_id) {
+            ResolvedType::Variant { .. } => true,
+            ResolvedType::GenericInstance { name, .. } => {
+                self.variant_names.contains(name.as_str())
+            }
+            _ => false,
+        }
     }
 
     /// Look up struct fields for a given `TypeId` via the type table.
@@ -3279,7 +3297,10 @@ impl BoxLowerer {
 
     /// Scan the type table to find which primitives need Box types.
     fn create_needed_box_types(&mut self, type_table: &mut TypeTable) {
-        // Collect base primitive TypeIds that need boxing, plus newtypes.
+        // Collect base TypeIds that need boxing, plus newtypes.
+        // Boxing is required for:
+        // - Primitives (except i128/u128 which are already GC types)
+        // - Variant types (subtype hierarchy prevents field-by-field deref assignment)
         let mut needs_box_base: IndexSet<TypeId> = IndexSet::new();
         let mut newtype_pairs: Vec<(TypeId, TypeId)> = Vec::new(); // (alias, base)
 
@@ -3287,9 +3308,11 @@ impl BoxLowerer {
             match type_table.get(type_id).clone() {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                     let base = type_table.get_ultimate_base_type(inner);
-                    if matches!(type_table.get(base), ResolvedType::Primitive(p)
-                        if !matches!(p, PrimitiveType::I128 | PrimitiveType::U128))
-                    {
+                    let is_prim = matches!(type_table.get(base), ResolvedType::Primitive(p)
+                        if !matches!(p, PrimitiveType::I128 | PrimitiveType::U128));
+                    let is_variant = self.is_variant_type(base, type_table);
+                    let needs_box = is_prim || is_variant;
+                    if needs_box {
                         needs_box_base.insert(base);
                         if inner != base {
                             newtype_pairs.push((inner, base));
@@ -3300,12 +3323,12 @@ impl BoxLowerer {
             }
         }
 
-        // Create Box<T> struct types for each base primitive
+        // Create Box<T> struct types for each type that needs boxing
         for base_type_id in needs_box_base {
             self.get_or_create_box_type(base_type_id, type_table);
         }
 
-        // Map newtypes to their base primitive's Box type
+        // Map newtypes to their base type's Box type
         // e.g., Radians (newtype of f64) → Box<f64>
         for (alias_id, base_id) in newtype_pairs {
             if let Some(&box_type_id) = self.box_struct_types.get(&base_id) {
