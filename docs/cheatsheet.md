@@ -483,19 +483,17 @@ let p = Shape::Point;
 // pub variant Option<T> { Some(T), None }
 // pub variant Result<T, E> { Ok(T), Err(E) }
 
-// Option construction — type inferred from payload
-let some_val = Option::Some(42);          // Option<i32> inferred
-let some_str = Option::Some("hello");     // Option<String> inferred
+// Option construction
+let some_val = Option::Some(42);          // Option<i32>
+let some_str = Option::Some("hello");     // Option<String>
+let none_val: Option<i32> = Option::None; // T inferred from annotation
+let none_val: Option<i32> = null;         // null = Option::None
 
-// Option construction — type inferred from annotation (backward)
-let none_val: Option<i32> = Option::None; // T=i32 from annotation
-let none_val: Option<i32> = null;         // null is equivalent to Option::None
+// Result construction
+let ok_val: Result<i32, String> = Result::Ok(42);
+let err_val: Result<i32, String> = Result::Err("fail");
 
-// Result construction — type inferred from annotation
-let ok_val: Result<i32, String> = Result::Ok(42);      // T=i32 from payload, E=String from annotation
-let err_val: Result<i32, String> = Result::Err("fail"); // E=String from payload, T=i32 from annotation
-
-// Explicit turbofish syntax (always available, required when inference is insufficient)
+// Explicit turbofish (required when inference is insufficient)
 let opt = Option::<i32>::Some(42);
 let res = Result::<i32, String>::Ok(42);
 
@@ -1430,37 +1428,28 @@ let y = container.transform::<i32, i64>(10, 20 as i64);
 
 ### Generic Type Inference
 
-Type arguments can be inferred for **variant constructors** from:
+Type arguments can be inferred for variant constructors and struct literals:
 
-1. **Forward inference** — payload argument type determines type parameters:
-   ```wado
-   let a = Option::Some("hello");  // inferred as Option<String>
-   let b = Option::Some(42);       // inferred as Option<i32>
-   ```
-
-2. **Backward inference** — expected type annotation fills remaining parameters:
-   ```wado
-   let a: Result<i32, String> = Result::Ok(42);   // E=String from annotation
-   let b: Option<i32> = Option::None;              // T=i32 from annotation
-   ```
-
-3. **Combined** — forward and backward inference work together:
-   ```wado
-   let a: Result<i32, String> = Result::Err("fail"); // T=i32 from annotation, E=String from payload
-   ```
-
-**Struct literal type inference** also works with forward and backward inference:
 ```wado
+// From payload type
+let a = Option::Some("hello");  // Option<String>
+let b = Option::Some(42);       // Option<i32>
+
+// From type annotation
+let c: Option<i32> = Option::None;
+let d: Result<i32, String> = Result::Ok(42);
+let e: Result<i32, String> = Result::Err("fail");
+
+// Struct literals
 struct Box<T> { value: T }
-let b = Box { value: 42 };             // inferred as Box<i32>
-let c: Box<String> = { value: "hi" };  // T=String from annotation
+let f = Box { value: 42 };             // Box<i32>
+let g: Box<String> = { value: "hi" };  // Box<String>
 ```
 
 Generic function/method call type inference is not yet implemented:
 ```wado
-// These require explicit turbofish syntax for now
+// Turbofish required for now
 let x = identity::<i32>(42);     // cannot write: identity(42)
-let y = container.transform::<i32, i64>(10, 20 as i64);
 ```
 
 ## Closures
