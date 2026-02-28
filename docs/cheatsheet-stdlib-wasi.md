@@ -1,14 +1,15 @@
-# wasi:cli
+# WASI Standard Library
 
-## Enums
+## wasi:cli
+
+### Enums
 
 ```wado
 pub enum ErrorCode { Io, IllegalByteSequence, Pipe }
 ```
+## wasi:filesystem
 
-# wasi:filesystem
-
-## Structs
+### Structs
 
 ```wado
 pub struct DescriptorStat {
@@ -35,14 +36,14 @@ pub struct MetadataHashValue {
 }
 ```
 
-## Types
+### Types
 
 ```wado
 pub type Filesize = u64;
 pub type LinkCount = u64;
 ```
 
-## Enums
+### Enums
 
 ```wado
 pub enum DescriptorType { Unknown, BlockDevice, CharacterDevice, Directory, Fifo, SymbolicLink, RegularFile, Socket }
@@ -56,7 +57,7 @@ pub enum ErrorCode { Access, Already, BadDescriptor, Busy, Deadlock, Quota, Exis
 pub enum Advice { Normal, Sequential, Random, WillNeed, DontNeed, NoReuse }
 ```
 
-## Variants
+### Variants
 
 ```wado
 pub variant NewTimestamp {
@@ -66,7 +67,7 @@ pub variant NewTimestamp {
 }
 ```
 
-## Flags
+### Flags
 
 ```wado
 pub flags DescriptorFlags {
@@ -93,10 +94,9 @@ pub flags OpenFlags {
     Truncate,
 }
 ```
+## wasi:http
 
-# wasi:http
-
-## Structs
+### Structs
 
 ```wado
 pub struct DnsErrorPayload {
@@ -119,7 +119,7 @@ pub struct FieldSizePayload {
 }
 ```
 
-## Types
+### Types
 
 ```wado
 pub type FieldName = String;
@@ -129,7 +129,7 @@ pub type Trailers = Fields;
 pub type StatusCode = u16;
 ```
 
-## Variants
+### Variants
 
 ```wado
 pub variant Method {
@@ -212,10 +212,9 @@ pub variant RequestOptionsError {
     Immutable,
 }
 ```
+## wasi:clocks
 
-# wasi:clocks
-
-## Structs
+### Structs
 
 ```wado
 pub struct Instant {
@@ -224,18 +223,16 @@ pub struct Instant {
 }
 ```
 
-## Types
+### Types
 
 ```wado
 pub type Duration = u64;
 pub type Mark = u64;
 ```
+## wasi:random
+## wasi:sockets
 
-# wasi:random
-
-# wasi:sockets
-
-## Structs
+### Structs
 
 ```wado
 pub struct Ipv4SocketAddress {
@@ -253,14 +250,14 @@ pub struct Ipv6SocketAddress {
 }
 ```
 
-## Types
+### Types
 
 ```wado
 pub type Ipv4Address = [u8, u8, u8, u8];
 pub type Ipv6Address = [u16, u16, u16, u16, u16, u16, u16, u16];
 ```
 
-## Enums
+### Enums
 
 ```wado
 pub enum ErrorCode { Unknown, AccessDenied, NotSupported, InvalidArgument, OutOfMemory, Timeout, InvalidState, AddressNotBindable, AddressInUse, RemoteUnreachable, ConnectionRefused, ConnectionReset, ConnectionAborted, DatagramTooLarge }
@@ -274,7 +271,7 @@ pub enum IpAddressFamily { Ipv4, Ipv6 }
 pub enum ErrorCode { Unknown, AccessDenied, InvalidArgument, NameUnresolvable, TemporaryResolverFailure, PermanentResolverFailure }
 ```
 
-## Variants
+### Variants
 
 ```wado
 pub variant IpAddress {

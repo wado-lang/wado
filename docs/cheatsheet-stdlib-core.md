@@ -1,6 +1,8 @@
-# core:prelude
+# Core Standard Library
 
-## Traits
+## core:prelude
+
+### Traits
 
 ```wado
 pub trait Eq {
@@ -142,7 +144,7 @@ pub trait FromIterator<T> {
 }
 ```
 
-## Structs
+### Structs
 
 ```wado
 pub struct Formatter {
@@ -668,7 +670,7 @@ impl Iterator for FilterIter<T> {
 }
 ```
 
-## Enums
+### Enums
 
 ```wado
 pub enum Ordering { Less, Equal, Greater }
@@ -678,7 +680,7 @@ pub enum Ordering { Less, Equal, Greater }
 pub enum Alignment { Left, Center, Right }
 ```
 
-## Variants
+### Variants
 
 ```wado
 pub variant Option<T> {
@@ -694,16 +696,15 @@ pub variant Result<T, E> {
 }
 ```
 
-## Functions
+### Functions
 
 ```wado
 pub fn panic(message: String) -> !;
 pub fn unreachable() -> !;
 ```
+## core:cli
 
-# core:cli
-
-## Functions
+### Functions
 
 ```wado
 pub fn write_to_stream(tx: i32, message: String, add_newline: bool);
@@ -718,25 +719,23 @@ pub fn exit_success() -> ! with Exit;
 pub fn exit_error() -> ! with Exit;
 pub fn exit(code: u8) -> ! with Exit;
 ```
+## core:clocks
 
-# core:clocks
-
-## Types
+### Types
 
 ```wado
 pub type Duration = u64;
 pub type Mark = u64;
 ```
 
-## Functions
+### Functions
 
 ```wado
 pub fn now() -> Mark with MonotonicClock;
 ```
+## core:collections
 
-# core:collections
-
-## Structs
+### Structs
 
 ```wado
 pub struct TreeMap<K, V> {
@@ -778,10 +777,9 @@ impl KeyValueLiteralBuilder for TreeMap<String, V> {
     fn build(&self) -> TreeMap<String, V>;
 }
 ```
+## core:base64
 
-# core:base64
-
-## Flags
+### Flags
 
 ```wado
 pub flags Encoding {
@@ -790,7 +788,7 @@ pub flags Encoding {
 }
 ```
 
-## Functions
+### Functions
 
 ```wado
 pub fn encode(data: &Array<u8>) -> String;
@@ -799,10 +797,9 @@ pub fn encode_with(data: &Array<u8>, encoding: Encoding) -> String;
 pub fn decode(encoded: String) -> Option<Array<u8>>;
 pub fn decode_bytes(encoded: &Array<u8>) -> Option<Array<u8>>;
 ```
+## core:zlib
 
-# core:zlib
-
-## Structs
+### Structs
 
 ```wado
 pub struct GzipHeader {
@@ -872,7 +869,7 @@ impl InflateStream {
 }
 ```
 
-## Globals
+### Globals
 
 ```wado
 pub global Z_OK: i32;
@@ -911,7 +908,7 @@ pub global GZIP_FORMAT: i32;
 pub global AUTO_FORMAT: i32;
 ```
 
-## Functions
+### Functions
 
 ```wado
 pub fn zlib_version() -> String;

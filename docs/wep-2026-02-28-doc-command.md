@@ -79,10 +79,11 @@ wado doc --format simple lib/core/**/*.wado
 wado doc -f json lib/core/**/*.wado
 ```
 
-| Flag                 | Description                                           |
-| -------------------- | ----------------------------------------------------- |
-| `-f, --format <fmt>` | Output format: `markdown` (default), `simple`, `json` |
-| `--help`             | Show usage                                            |
+| Flag                 | Description                                                         |
+| -------------------- | ------------------------------------------------------------------- |
+| `-f, --format <fmt>` | Output format: `markdown` (default), `simple`, `json`               |
+| `--title <title>`    | Document title (required for multiple modules; shifts headings down) |
+| `--help`             | Show usage                                                          |
 
 Output goes to stdout. The compiler returns a serde-serializable DOM (`DocModule`), and the CLI renders it in the chosen format.
 

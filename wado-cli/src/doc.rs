@@ -21,16 +21,18 @@ pub enum OutputFormat {
 pub struct DocOptions {
     pub inputs: Vec<String>,
     pub format: OutputFormat,
+    pub title: Option<String>,
 }
 
 #[derive(Clone, Copy)]
 enum Opt {
     Format,
+    Title,
     Help,
 }
 
 impl Opt {
-    const ALL: &[Self] = &[Self::Format, Self::Help];
+    const ALL: &[Self] = &[Self::Format, Self::Title, Self::Help];
 
     const fn spec(self) -> args::OptSpec {
         match self {
@@ -39,6 +41,12 @@ impl Opt {
                 short: Some('f'),
                 value: Some("<fmt>"),
                 desc: "Output format: markdown (default), simple, json",
+            },
+            Self::Title => args::OptSpec {
+                long: Some("title"),
+                short: None,
+                value: Some("<title>"),
+                desc: "Document title (required for multiple modules)",
             },
             Self::Help => args::HELP_SPEC,
         }
@@ -87,6 +95,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DocOptions, CliExit> {
     let usage = format_usage();
     let mut inputs: Vec<String> = Vec::new();
     let mut format = OutputFormat::Markdown;
+    let mut title: Option<String> = None;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -104,6 +113,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DocOptions, CliExit> {
                         }
                     };
                 }
+                Opt::Title => {
+                    title = Some(args::require_string(&mut parser)?);
+                }
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -115,7 +127,17 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DocOptions, CliExit> {
 
     let inputs = args::require_inputs(inputs, &usage)?;
 
-    Ok(DocOptions { inputs, format })
+    if inputs.len() > 1 && title.is_none() {
+        return Err(CliExit::error(
+            "--title is required when generating docs for multiple modules".to_string(),
+        ));
+    }
+
+    Ok(DocOptions {
+        inputs,
+        format,
+        title,
+    })
 }
 
 fn is_stdlib_module(input: &str) -> bool {
@@ -163,6 +185,9 @@ pub fn run(opts: DocOptions) {
         doc_modules.push(doc);
     }
 
+    let multi = opts.title.is_some();
+    let h_offset: usize = if multi { 1 } else { 0 };
+
     match opts.format {
         OutputFormat::Json => {
             if doc_modules.len() == 1 {
@@ -172,30 +197,46 @@ pub fn run(opts: DocOptions) {
             }
         }
         OutputFormat::Markdown => {
-            let mut first = true;
-            for doc in &doc_modules {
-                if !first {
-                    println!();
-                }
-                print!("{}", render_markdown(doc));
-                first = false;
+            let mut out = String::new();
+            if let Some(ref title) = opts.title {
+                writeln!(out, "# {title}\n").unwrap();
             }
+            for doc in &doc_modules {
+                out.push_str(&render_markdown(doc, h_offset));
+            }
+            print!("{out}");
         }
         OutputFormat::Simple => {
-            let mut first = true;
-            for doc in &doc_modules {
-                if !first {
-                    println!();
-                }
-                print!("{}", render_simple(doc));
-                first = false;
+            let mut out = String::new();
+            if let Some(ref title) = opts.title {
+                writeln!(out, "# {title}\n").unwrap();
             }
+            for doc in &doc_modules {
+                out.push_str(&render_simple(doc, h_offset));
+            }
+            print!("{out}");
         }
     }
 }
 
-fn render_markdown(doc: &DocModule) -> String {
-    let mut out = format!("# {}\n", doc.name);
+fn h(level: usize) -> &'static str {
+    match level {
+        1 => "#",
+        2 => "##",
+        3 => "###",
+        4 => "####",
+        5 => "#####",
+        _ => "######",
+    }
+}
+
+fn render_markdown(doc: &DocModule, h_offset: usize) -> String {
+    let h1 = h(1 + h_offset);
+    let h2 = h(2 + h_offset);
+    let h3 = h(3 + h_offset);
+    let h4 = h(4 + h_offset);
+
+    let mut out = format!("{h1} {}\n", doc.name);
 
     if let Some(ref module_doc) = doc.doc {
         out.push('\n');
@@ -204,23 +245,23 @@ fn render_markdown(doc: &DocModule) -> String {
     }
 
     if !doc.traits.is_empty() {
-        out.push_str("\n## Traits\n");
+        writeln!(out, "\n{h2} Traits").unwrap();
         for t in &doc.traits {
-            render_md_trait(&mut out, t);
+            render_md_trait(&mut out, t, h3, h4);
         }
     }
 
     if !doc.structs.is_empty() {
-        out.push_str("\n## Structs\n");
+        writeln!(out, "\n{h2} Structs").unwrap();
         for s in &doc.structs {
-            render_md_struct(&mut out, s);
+            render_md_struct(&mut out, s, h3, h4);
         }
     }
 
     if !doc.types.is_empty() {
-        out.push_str("\n## Types\n");
+        writeln!(out, "\n{h2} Types").unwrap();
         for t in &doc.types {
-            writeln!(out, "\n### `{}`", t.signature).unwrap();
+            writeln!(out, "\n{h3} `{}`", t.signature).unwrap();
             if let Some(ref d) = t.doc {
                 writeln!(out, "\n{d}").unwrap();
             }
@@ -228,9 +269,9 @@ fn render_markdown(doc: &DocModule) -> String {
     }
 
     if !doc.globals.is_empty() {
-        out.push_str("\n## Globals\n");
+        writeln!(out, "\n{h2} Globals").unwrap();
         for g in &doc.globals {
-            writeln!(out, "\n### `{}`", g.signature).unwrap();
+            writeln!(out, "\n{h3} `{}`", g.signature).unwrap();
             if let Some(ref d) = g.doc {
                 writeln!(out, "\n{d}").unwrap();
             }
@@ -238,30 +279,30 @@ fn render_markdown(doc: &DocModule) -> String {
     }
 
     if !doc.enums.is_empty() {
-        out.push_str("\n## Enums\n");
+        writeln!(out, "\n{h2} Enums").unwrap();
         for e in &doc.enums {
-            render_md_enum(&mut out, e);
+            render_md_enum(&mut out, e, h3);
         }
     }
 
     if !doc.variants.is_empty() {
-        out.push_str("\n## Variants\n");
+        writeln!(out, "\n{h2} Variants").unwrap();
         for v in &doc.variants {
-            render_md_variant(&mut out, v);
+            render_md_variant(&mut out, v, h3);
         }
     }
 
     if !doc.flags.is_empty() {
-        out.push_str("\n## Flags\n");
+        writeln!(out, "\n{h2} Flags").unwrap();
         for f in &doc.flags {
-            render_md_flags(&mut out, f);
+            render_md_flags(&mut out, f, h3, h4);
         }
     }
 
     if !doc.functions.is_empty() {
-        out.push_str("\n## Functions\n");
+        writeln!(out, "\n{h2} Functions").unwrap();
         for f in &doc.functions {
-            writeln!(out, "\n### `{}`", f.signature).unwrap();
+            writeln!(out, "\n{h3} `{}`", f.signature).unwrap();
             if let Some(ref d) = f.doc {
                 writeln!(out, "\n{d}").unwrap();
             }
@@ -271,26 +312,26 @@ fn render_markdown(doc: &DocModule) -> String {
     out
 }
 
-fn render_md_trait(out: &mut String, t: &DocTrait) {
-    writeln!(out, "\n### `{}`", t.signature).unwrap();
+fn render_md_trait(out: &mut String, t: &DocTrait, h3: &str, h4: &str) {
+    writeln!(out, "\n{h3} `{}`", t.signature).unwrap();
     if let Some(ref d) = t.doc {
         writeln!(out, "\n{d}").unwrap();
     }
     if !t.methods.is_empty() {
-        writeln!(out, "\n#### Methods\n").unwrap();
+        writeln!(out, "\n{h4} Methods\n").unwrap();
         for m in &t.methods {
             render_md_method_item(out, m);
         }
     }
 }
 
-fn render_md_struct(out: &mut String, s: &DocStruct) {
-    writeln!(out, "\n### `{}`", s.signature).unwrap();
+fn render_md_struct(out: &mut String, s: &DocStruct, h3: &str, h4: &str) {
+    writeln!(out, "\n{h3} `{}`", s.signature).unwrap();
     if let Some(ref d) = s.doc {
         writeln!(out, "\n{d}").unwrap();
     }
     if !s.fields.is_empty() {
-        writeln!(out, "\n#### Fields\n").unwrap();
+        writeln!(out, "\n{h4} Fields\n").unwrap();
         for f in &s.fields {
             if let Some(ref d) = f.doc {
                 let brief = d.lines().next().unwrap_or("");
@@ -301,13 +342,13 @@ fn render_md_struct(out: &mut String, s: &DocStruct) {
         }
     }
     if !s.methods.is_empty() {
-        writeln!(out, "\n#### Methods\n").unwrap();
+        writeln!(out, "\n{h4} Methods\n").unwrap();
         for m in &s.methods {
             render_md_method_item(out, m);
         }
     }
     for ti in &s.trait_impls {
-        writeln!(out, "\n#### `{}`\n", ti.signature).unwrap();
+        writeln!(out, "\n{h4} `{}`\n", ti.signature).unwrap();
         for m in &ti.methods {
             render_md_method_item(out, m);
         }
@@ -323,19 +364,18 @@ fn render_md_method_item(out: &mut String, m: &DocFunction) {
     }
 }
 
-fn render_md_enum(out: &mut String, e: &DocEnum) {
-    writeln!(out, "\n### `{}`", e.signature).unwrap();
+fn render_md_enum(out: &mut String, e: &DocEnum, h3: &str) {
+    writeln!(out, "\n{h3} `{}`", e.signature).unwrap();
     if let Some(ref d) = e.doc {
         writeln!(out, "\n{d}").unwrap();
     }
 }
 
-fn render_md_variant(out: &mut String, v: &DocVariant) {
-    writeln!(out, "\n### `{}`", v.signature).unwrap();
+fn render_md_variant(out: &mut String, v: &DocVariant, h3: &str) {
+    writeln!(out, "\n{h3} `{}`", v.signature).unwrap();
     if let Some(ref d) = v.doc {
         writeln!(out, "\n{d}").unwrap();
     }
-    writeln!(out, "\n#### Cases\n").unwrap();
     for case in &v.cases {
         let case_repr = if let Some(ref p) = case.payload {
             format!("{}({p})", case.name)
@@ -351,19 +391,22 @@ fn render_md_variant(out: &mut String, v: &DocVariant) {
     }
 }
 
-fn render_md_flags(out: &mut String, f: &DocFlags) {
-    writeln!(out, "\n### `{}`", f.signature).unwrap();
+fn render_md_flags(out: &mut String, f: &DocFlags, h3: &str, h4: &str) {
+    writeln!(out, "\n{h3} `{}`", f.signature).unwrap();
     if let Some(ref d) = f.doc {
         writeln!(out, "\n{d}").unwrap();
     }
-    writeln!(out, "\n#### Members\n").unwrap();
+    writeln!(out, "\n{h4} Members\n").unwrap();
     for member in &f.members {
         writeln!(out, "- `{member}`").unwrap();
     }
 }
 
-fn render_simple(doc: &DocModule) -> String {
-    let mut out = format!("# {}\n", doc.name);
+fn render_simple(doc: &DocModule, h_offset: usize) -> String {
+    let h1 = h(1 + h_offset);
+    let h2 = h(2 + h_offset);
+
+    let mut out = format!("{h1} {}\n", doc.name);
 
     if let Some(ref module_doc) = doc.doc {
         out.push('\n');
@@ -372,7 +415,7 @@ fn render_simple(doc: &DocModule) -> String {
     }
 
     if !doc.traits.is_empty() {
-        out.push_str("\n## Traits\n\n```wado\n");
+        writeln!(out, "\n{h2} Traits\n\n```wado").unwrap();
         for (i, t) in doc.traits.iter().enumerate() {
             if i > 0 {
                 out.push('\n');
@@ -390,7 +433,7 @@ fn render_simple(doc: &DocModule) -> String {
     }
 
     if !doc.structs.is_empty() {
-        out.push_str("\n## Structs\n");
+        writeln!(out, "\n{h2} Structs").unwrap();
         for s in &doc.structs {
             out.push_str("\n```wado\n");
             render_simple_struct(&mut out, s);
@@ -421,7 +464,7 @@ fn render_simple(doc: &DocModule) -> String {
     }
 
     if !doc.types.is_empty() {
-        out.push_str("\n## Types\n\n```wado\n");
+        writeln!(out, "\n{h2} Types\n\n```wado").unwrap();
         for t in &doc.types {
             writeln!(out, "{};", t.signature).unwrap();
         }
@@ -429,7 +472,7 @@ fn render_simple(doc: &DocModule) -> String {
     }
 
     if !doc.globals.is_empty() {
-        out.push_str("\n## Globals\n\n```wado\n");
+        writeln!(out, "\n{h2} Globals\n\n```wado").unwrap();
         for g in &doc.globals {
             writeln!(out, "{};", g.signature).unwrap();
         }
@@ -437,14 +480,14 @@ fn render_simple(doc: &DocModule) -> String {
     }
 
     if !doc.enums.is_empty() {
-        out.push_str("\n## Enums\n");
+        writeln!(out, "\n{h2} Enums").unwrap();
         for e in &doc.enums {
             writeln!(out, "\n```wado\n{}\n```", e.signature).unwrap();
         }
     }
 
     if !doc.variants.is_empty() {
-        out.push_str("\n## Variants\n");
+        writeln!(out, "\n{h2} Variants").unwrap();
         for v in &doc.variants {
             writeln!(out, "\n```wado\n{} {{", v.signature).unwrap();
             for case in &v.cases {
@@ -459,7 +502,7 @@ fn render_simple(doc: &DocModule) -> String {
     }
 
     if !doc.flags.is_empty() {
-        out.push_str("\n## Flags\n");
+        writeln!(out, "\n{h2} Flags").unwrap();
         for f in &doc.flags {
             writeln!(out, "\n```wado\n{} {{", f.signature).unwrap();
             for member in &f.members {
@@ -470,7 +513,7 @@ fn render_simple(doc: &DocModule) -> String {
     }
 
     if !doc.functions.is_empty() {
-        out.push_str("\n## Functions\n\n```wado\n");
+        writeln!(out, "\n{h2} Functions\n\n```wado").unwrap();
         for f in &doc.functions {
             writeln!(out, "{};", f.signature).unwrap();
         }
