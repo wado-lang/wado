@@ -38,3 +38,32 @@ run = """
 grep -l '"TODO": true' wado-compiler/tests/fixtures/*.wado 2>/dev/null | \
   sort
 """
+
+[tasks.doc-stdlib]
+description = "Generate stdlib cheatsheet docs (core + wasi)"
+run = """
+set -e
+cargo build --bin wado --quiet
+
+echo "Generating docs/cheatsheet-stdlib-core.md..."
+cargo run --bin wado --quiet -- doc -f simple \
+  core:prelude \
+  core:cli \
+  core:clocks \
+  core:collections \
+  core:base64 \
+  core:zlib \
+  > docs/cheatsheet-stdlib-core.md
+
+echo "Generating docs/cheatsheet-stdlib-wasi.md..."
+cargo run --bin wado --quiet -- doc -f simple \
+  wasi:cli \
+  wasi:filesystem \
+  wasi:http \
+  wasi:clocks \
+  wasi:random \
+  wasi:sockets \
+  > docs/cheatsheet-stdlib-wasi.md
+
+echo "Done."
+"""

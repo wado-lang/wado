@@ -1,10 +1,12 @@
+use indexmap::IndexSet;
 use serde::Serialize;
 
 use crate::ast::{
     EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl, ImplBlock, Item, Module, Newtype,
-    Param, SelfKind, StructDecl, StructField, TraitDecl, Type, VariantDecl,
+    Param, SelfKind, StructDecl, StructField, TraitDecl, Type, UseItem, VariantDecl,
 };
 use crate::comment::{CommentKind, CommentMap};
+use crate::stdlib;
 use crate::unparse::{get_item_span, unparse_type_into};
 
 #[derive(Debug, Clone, Serialize)]
@@ -538,6 +540,137 @@ fn render_enum_signature(e: &EnumDecl) -> String {
     }
     sig.push_str(" }");
     sig
+}
+
+/// Resolve a stdlib module name (e.g., "core:cli", "wasi:http") to source code.
+///
+/// Returns `None` if the name is not a known stdlib module.
+pub fn resolve_stdlib_source(module_name: &str) -> Option<&'static str> {
+    stdlib::get_stdlib_module(module_name)
+}
+
+/// Extract documentation from a stdlib module by name.
+///
+/// For `core:prelude`, follows `pub use` re-exports and merges items from
+/// the sub-modules into a single `DocModule`. For other modules, extracts
+/// docs directly from the source.
+///
+/// Returns `None` if the module name is not a known stdlib module.
+pub fn extract_stdlib_doc(module_name: &str) -> Option<DocModule> {
+    let source = stdlib::get_stdlib_module(module_name)?;
+    let parsed = crate::parse(source).ok()?;
+    let mut doc = extract_doc(&parsed.ast, &parsed.comments, module_name);
+
+    // For modules with pub use re-exports, follow them to get the actual items
+    let reexport_sources = collect_pub_use_sources(&parsed.ast);
+    if !reexport_sources.is_empty() {
+        let exported_names = collect_pub_use_names(&parsed.ast);
+        for reexport_source in &reexport_sources {
+            if let Some(sub_source) = stdlib::get_stdlib_module(reexport_source)
+                && let Ok(sub_parsed) = crate::parse(sub_source)
+            {
+                let sub_doc = extract_doc(&sub_parsed.ast, &sub_parsed.comments, reexport_source);
+                merge_reexported_items(&mut doc, &sub_doc, &exported_names);
+            }
+        }
+    }
+
+    Some(doc)
+}
+
+/// Collect source paths from `pub use { ... } from "source"` declarations.
+fn collect_pub_use_sources(module: &Module) -> Vec<String> {
+    let mut sources = Vec::new();
+    for item in &module.items {
+        if let Item::Use(u) = item
+            && u.is_pub
+            && !u.items.iter().any(|i| matches!(i, UseItem::Wildcard))
+        {
+            sources.push(u.source.clone());
+        }
+    }
+    sources
+}
+
+/// Collect item names from `pub use { Name1, Name2 } from "..."` declarations.
+fn collect_pub_use_names(module: &Module) -> IndexSet<String> {
+    let mut names = IndexSet::new();
+    for item in &module.items {
+        if let Item::Use(u) = item
+            && u.is_pub
+        {
+            for use_item in &u.items {
+                match use_item {
+                    UseItem::Simple { name, alias, .. } => {
+                        names.insert(alias.as_ref().unwrap_or(name).clone());
+                    }
+                    UseItem::EffectFunctions { effect_name, .. } => {
+                        names.insert(effect_name.clone());
+                    }
+                    UseItem::Wildcard => {}
+                }
+            }
+        }
+    }
+    names
+}
+
+/// Merge items from a sub-module into the parent doc, filtered by re-exported names.
+fn merge_reexported_items(parent: &mut DocModule, child: &DocModule, names: &IndexSet<String>) {
+    for t in &child.traits {
+        if names.contains(extract_item_name(&t.signature, "trait ")) {
+            parent.traits.push(t.clone());
+        }
+    }
+    for s in &child.structs {
+        if names.contains(extract_item_name(&s.signature, "struct ")) {
+            parent.structs.push(s.clone());
+        }
+    }
+    for t in &child.types {
+        if names.contains(&t.name) {
+            parent.types.push(t.clone());
+        }
+    }
+    for g in &child.globals {
+        if names.contains(&g.name) {
+            parent.globals.push(g.clone());
+        }
+    }
+    for e in &child.enums {
+        if names.contains(extract_item_name(&e.signature, "enum ")) {
+            parent.enums.push(e.clone());
+        }
+    }
+    for v in &child.variants {
+        if names.contains(&v.name) {
+            parent.variants.push(v.clone());
+        }
+    }
+    for f in &child.flags {
+        if names.contains(&f.name) {
+            parent.flags.push(f.clone());
+        }
+    }
+    for f in &child.functions {
+        if names.contains(extract_item_name(&f.signature, "fn ")) {
+            parent.functions.push(f.clone());
+        }
+    }
+}
+
+/// Extract the item name from a signature string.
+/// e.g., "pub trait Eq" with keyword "trait " → "Eq"
+fn extract_item_name<'a>(sig: &'a str, keyword: &str) -> &'a str {
+    let rest = sig
+        .find(keyword)
+        .map(|i| &sig[i + keyword.len()..])
+        .unwrap_or(sig);
+    // Take until first non-identifier char
+    let end = rest
+        .find(|c: char| !c.is_alphanumeric() && c != '_')
+        .unwrap_or(rest.len());
+    &rest[..end]
 }
 
 fn collect_pub_methods_for_type<'a>(type_name: &str, impls: &[&'a ImplBlock]) -> Vec<&'a Function> {

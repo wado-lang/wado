@@ -1,0 +1,584 @@
+# core:prelude
+
+## Traits
+
+```wado
+pub trait Eq {
+    fn eq(&self, other: &Self) -> bool;
+}
+
+pub trait Ord {
+    fn cmp(&self, other: &Self) -> Ordering;
+}
+
+pub trait Index<IndexType> {
+    type Output;
+    fn index(&self, index: IndexType) -> &Self::Output;
+}
+
+pub trait IndexMut<IndexType> {
+    type Output;
+    fn index_mut(&mut self, index: IndexType) -> &mut Self::Output;
+}
+
+pub trait IndexAssign<IndexType> {
+    type Input;
+    fn index_assign(&mut self, index: IndexType, value: Self::Input);
+}
+
+pub trait IndexValue<IndexType> {
+    type Output;
+    fn index_value(&self, index: IndexType) -> Self::Output;
+}
+
+pub trait Add {
+    type Output;
+    fn add(&self, rhs: &Self) -> Self::Output;
+}
+
+pub trait Sub {
+    type Output;
+    fn sub(&self, rhs: &Self) -> Self::Output;
+}
+
+pub trait Mul {
+    type Output;
+    fn mul(&self, rhs: &Self) -> Self::Output;
+}
+
+pub trait Div {
+    type Output;
+    fn div(&self, rhs: &Self) -> Self::Output;
+}
+
+pub trait Rem {
+    type Output;
+    fn rem(&self, rhs: &Self) -> Self::Output;
+}
+
+pub trait Neg {
+    type Output;
+    fn neg(&self) -> Self::Output;
+}
+
+pub trait BitAnd {
+    type Output;
+    fn bitand(&self, rhs: &Self) -> Self::Output;
+}
+
+pub trait BitOr {
+    type Output;
+    fn bitor(&self, rhs: &Self) -> Self::Output;
+}
+
+pub trait BitXor {
+    type Output;
+    fn bitxor(&self, rhs: &Self) -> Self::Output;
+}
+
+pub trait BitNot {
+    type Output;
+    fn bitnot(&self) -> Self::Output;
+}
+
+pub trait Shl {
+    type Output;
+    fn shl(&self, rhs: u32) -> Self::Output;
+}
+
+pub trait Shr {
+    type Output;
+    fn shr(&self, rhs: u32) -> Self::Output;
+}
+
+pub trait Display {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+pub trait Binary {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+pub trait Octal {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+pub trait LowerHex {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+pub trait UpperHex {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+pub trait LowerExp {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+pub trait UpperExp {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+pub trait Fn<Args, Ret, Effects> {
+    fn call(&self, args: Args) -> Ret with Effects;
+}
+
+pub trait Iterator {
+    type Item;
+    fn next(&mut self) -> Option<Self::Item>;
+    fn collect(&mut self) -> Array<Self::Item>;
+    fn count(&mut self) -> i32;
+}
+
+pub trait IntoIterator {
+    type Item;
+    type Iter;
+    fn into_iter(&self) -> Self::Iter;
+}
+
+pub trait FromIterator<T> {
+    type Iter;
+    fn from_iter(iter: Self::Iter) -> Self;
+}
+```
+
+## Structs
+
+```wado
+pub struct Formatter { fill: char, align: Alignment, sign_plus: bool, alternate: bool, zero_pad: bool, width: i32, precision: i32, buf: &mut String }
+pub struct u128 { .. }
+pub struct i128 { .. }
+pub struct String { .. }
+pub struct StrUtf8ByteIter { .. }
+pub struct StrCharIter { .. }
+pub struct Array<T> { .. }
+pub struct ArrayIter<T> { .. }
+pub struct EnumerateIter<T> { .. }
+pub struct MapIter<T, U> { .. }
+pub struct FilterIter<T> { .. }
+```
+
+```wado
+impl Formatter {
+    pub fn new(buf: &mut String) -> Formatter;
+    pub fn write_str(&mut self, s: String);
+    pub fn write_char(&mut self, c: char);
+    pub fn write_char_n(&mut self, c: char, n: i32);
+    pub fn pad(&mut self, content: String);
+    pub fn mark(&self) -> i32;
+    pub fn apply_padding(&mut self, start_pos: i32);
+    pub fn write_from_memory(&mut self, ptr: i32, len: i32);
+    pub fn prepare_int_write(&mut self, is_negative: bool, prefix: String, digit_count: i32) -> i32;
+}
+```
+
+```wado
+impl u128 {
+    pub fn from_u64(value: u64) -> u128;
+    pub fn from_pair(low: u64, high: u64) -> u128;
+    pub fn from_string(s: String) -> u128;
+    pub fn zero() -> u128;
+    pub fn one() -> u128;
+    pub fn low(&self) -> u64;
+    pub fn high(&self) -> u64;
+    pub fn mul_u64(&self, multiplier: u64) -> u128;
+    pub fn add(&self, other: &u128) -> u128;
+    pub fn sub(&self, other: &u128) -> u128;
+    pub fn div_rem(&self, divisor: &u128) -> [u128, u128];
+    pub fn get_bit(&self, i: i32) -> bool;
+    pub fn set_bit(&self, i: i32) -> u128;
+    pub fn to_string(&self) -> String;
+    pub fn fmt(&self, f: &mut Formatter);
+    pub fn fmt(&self, f: &mut Formatter);
+    pub fn fmt(&self, f: &mut Formatter);
+    pub fn fmt(&self, f: &mut Formatter);
+    pub fn fmt(&self, f: &mut Formatter);
+    pub fn eq(&self, other: &Self) -> bool;
+    pub fn cmp(&self, other: &Self) -> Ordering;
+    pub fn add(&self, other: &Self) -> Self::Output;
+    pub fn sub(&self, other: &Self) -> Self::Output;
+    pub fn mul(&self, other: &Self) -> Self::Output;
+    pub fn bitand(&self, other: &Self) -> Self::Output;
+    pub fn bitor(&self, other: &Self) -> Self::Output;
+    pub fn bitxor(&self, other: &Self) -> Self::Output;
+    pub fn bitnot(&self) -> Self::Output;
+    pub fn shl(&self, rhs: u32) -> Self::Output;
+    pub fn shr(&self, rhs: u32) -> Self::Output;
+    pub fn div(&self, other: &Self) -> Self::Output;
+    pub fn rem(&self, other: &Self) -> Self::Output;
+}
+```
+
+```wado
+impl i128 {
+    pub fn from_i64(value: i64) -> i128;
+    pub fn from_pair(low: u64, high: i64) -> i128;
+    pub fn from_string(s: String) -> i128;
+    pub fn zero() -> i128;
+    pub fn one() -> i128;
+    pub fn low(&self) -> u64;
+    pub fn high(&self) -> i64;
+    pub fn is_negative(&self) -> bool;
+    pub fn add(&self, other: &i128) -> i128;
+    pub fn sub(&self, other: &i128) -> i128;
+    pub fn neg(&self) -> i128;
+    pub fn abs_u128(&self) -> u128;
+    pub fn from_u128(val: u128) -> i128;
+    pub fn div_rem(&self, divisor: &i128) -> [i128, i128];
+    pub fn to_string(&self) -> String;
+    pub fn fmt(&self, f: &mut Formatter);
+    pub fn fmt(&self, f: &mut Formatter);
+    pub fn fmt(&self, f: &mut Formatter);
+    pub fn fmt(&self, f: &mut Formatter);
+    pub fn fmt(&self, f: &mut Formatter);
+    pub fn eq(&self, other: &Self) -> bool;
+    pub fn cmp(&self, other: &Self) -> Ordering;
+    pub fn add(&self, other: &Self) -> Self::Output;
+    pub fn sub(&self, other: &Self) -> Self::Output;
+    pub fn mul(&self, other: &Self) -> Self::Output;
+    pub fn neg(&self) -> Self::Output;
+    pub fn bitand(&self, other: &Self) -> Self::Output;
+    pub fn bitor(&self, other: &Self) -> Self::Output;
+    pub fn bitxor(&self, other: &Self) -> Self::Output;
+    pub fn bitnot(&self) -> Self::Output;
+    pub fn shl(&self, rhs: u32) -> Self::Output;
+    pub fn shr(&self, rhs: u32) -> Self::Output;
+    pub fn div(&self, other: &Self) -> Self::Output;
+    pub fn rem(&self, other: &Self) -> Self::Output;
+}
+```
+
+```wado
+impl String {
+    pub fn with_capacity(capacity: i32) -> String;
+    pub fn len(&self) -> i32;
+    pub fn is_empty(&self) -> bool;
+    pub fn get_byte(&self, index: i32) -> u8;
+    pub fn set_byte(&mut self, index: i32, value: u8);
+    pub fn internal_raw_bytes(&self) -> builtin::array<u8>;
+    pub fn internal_from_utf8_raw(bytes: builtin::array<u8>, len: i32) -> String;
+    pub fn grow(&mut self, min_capacity: i32);
+    pub fn internal_append_from_memory(&mut self, ptr: i32, len: i32);
+    pub fn internal_reserve_uninit(&mut self, n: i32) -> i32;
+    pub fn append_byte_filled(&mut self, byte: u8, n: i32);
+    pub fn append(&mut self, other: String);
+    pub fn concat(a: String, b: String) -> String;
+    pub fn eq(&self, other: &Self) -> bool;
+    pub fn cmp(&self, other: &Self) -> Ordering;
+    pub fn bytes(&self) -> StrUtf8ByteIter;
+    pub fn chars(&self) -> StrCharIter;
+    pub fn append_char(&mut self, c: char);
+    pub fn truncate_bytes(&mut self, byte_len: i32);
+    pub fn truncate_chars(&mut self, char_count: i32);
+    pub fn trim_ascii_start(&self) -> String;
+    pub fn trim_ascii_end(&self) -> String;
+    pub fn trim_ascii(&self) -> String;
+    pub fn trim_start(&self) -> String;
+    pub fn trim_end(&self) -> String;
+    pub fn trim(&self) -> String;
+}
+```
+
+```wado
+impl StrUtf8ByteIter {
+    pub fn next(&mut self) -> Option<Self::Item>;
+}
+```
+
+```wado
+impl StrCharIter {
+    pub fn next(&mut self) -> Option<Self::Item>;
+}
+```
+
+```wado
+impl Array {
+    pub fn with_capacity(capacity: i32) -> Array<T>;
+    pub fn filled(n: i32, element: T) -> Array<T>;
+    pub fn len(&self) -> i32;
+    pub fn is_empty(&self) -> bool;
+    pub fn internal_raw_data(&self) -> builtin::array<T>;
+    pub fn append(&mut self, value: T);
+    pub fn get(&self, index: i32) -> Option<T>;
+    pub fn eq(&self, other: &Self) -> bool;
+    pub fn cmp(&self, other: &Self) -> Ordering;
+    pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T>;
+    pub fn iter(&self) -> ArrayIter<T>;
+    pub fn sort_by(&mut self, cmp: Fn(&T, &T) -> Ordering);
+    pub fn sorted_by(&self, cmp: Fn(&T, &T) -> Ordering) -> Array<T>;
+    pub fn sort(&mut self);
+    pub fn sorted(&self) -> Array<T>;
+}
+```
+
+```wado
+impl ArrayIter {
+    pub fn collect(&mut self) -> Array<T>;
+    pub fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, T) -> Acc) -> Acc;
+    pub fn enumerate(&self) -> EnumerateIter<T>;
+    pub fn map<U>(&self, f: Fn(T) -> U) -> MapIter<T, U>;
+    pub fn filter(&self, pred: Fn(T) -> bool) -> FilterIter<T>;
+    pub fn find(&mut self, pred: Fn(T) -> bool) -> Option<T>;
+    pub fn any(&mut self, pred: Fn(T) -> bool) -> bool;
+    pub fn all(&mut self, pred: Fn(T) -> bool) -> bool;
+    pub fn last(&mut self) -> Option<T>;
+    pub fn nth(&mut self, n: i32) -> Option<T>;
+    pub fn position(&mut self, pred: Fn(T) -> bool) -> Option<i32>;
+    pub fn reduce(&mut self, f: Fn(T, T) -> T) -> Option<T>;
+    pub fn take(&self, n: i32) -> TakeIter<T>;
+    pub fn skip(&self, n: i32) -> ArrayIter<T>;
+    pub fn chain(&self, other: ArrayIter<T>) -> ChainIter<T>;
+    pub fn zip<U>(&self, other: ArrayIter<U>) -> ZipIter<T, U>;
+    pub fn sum(&mut self) -> Option<T>;
+    pub fn min(&mut self) -> Option<T>;
+    pub fn max(&mut self) -> Option<T>;
+}
+```
+
+```wado
+impl MapIter {
+    pub fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, U) -> Acc) -> Acc;
+}
+```
+
+```wado
+impl FilterIter {
+    pub fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, T) -> Acc) -> Acc;
+    pub fn map<U>(&self, f: Fn(T) -> U) -> FilterMapIter<T, U>;
+}
+```
+
+## Enums
+
+```wado
+pub enum Ordering { Less, Equal, Greater }
+pub enum Alignment { Left, Center, Right }
+```
+
+## Variants
+
+```wado
+pub variant Option<T> {
+    Some(T),
+    None,
+}
+pub variant Result<T, E> {
+    Ok(T),
+    Err(E),
+}
+```
+
+## Functions
+
+```wado
+pub fn panic(message: String) -> !;
+pub fn unreachable() -> !;
+```
+
+# core:cli
+
+## Functions
+
+```wado
+pub fn write_to_stream(tx: i32, message: String, add_newline: bool);
+pub fn println(message: String) with Stdout;
+pub fn eprintln(message: String) with Stderr;
+pub fn print(message: String) with Stdout;
+pub fn eprint(message: String) with Stderr;
+pub fn env(name: String) -> Option<String> with Environment;
+pub fn args() -> Array<String> with Environment;
+pub fn cwd() -> Option<String> with Environment;
+pub fn exit_success() -> ! with Exit;
+pub fn exit_error() -> ! with Exit;
+pub fn exit(code: u8) -> ! with Exit;
+```
+
+# core:clocks
+
+## Types
+
+```wado
+pub type Duration = u64;
+pub type Mark = u64;
+```
+
+## Functions
+
+```wado
+pub fn now() -> Mark with MonotonicClock;
+```
+
+# core:collections
+
+## Structs
+
+```wado
+pub struct TreeMap<K, V> { .. }
+```
+
+```wado
+impl TreeMap {
+    pub fn new() -> TreeMap<K, V>;
+    pub fn len(&self) -> i32;
+    pub fn is_empty(&self) -> bool;
+    pub fn contains_key(&self, key: K) -> bool;
+    pub fn get(&self, key: K) -> Option<V>;
+    pub fn remove(&mut self, key: K) -> bool;
+    pub fn keys(&self) -> Array<K>;
+    pub fn values(&self) -> Array<V>;
+    pub fn entries(&self) -> Array<[K, V]>;
+    pub fn clear(&mut self);
+}
+```
+
+# core:base64
+
+## Flags
+
+```wado
+pub flags Encoding {
+    UrlSafe,
+    NoPadding,
+}
+```
+
+## Functions
+
+```wado
+pub fn encode(data: &Array<u8>) -> String;
+pub fn encode_url(data: &Array<u8>) -> String;
+pub fn encode_with(data: &Array<u8>, encoding: Encoding) -> String;
+pub fn decode(encoded: String) -> Option<Array<u8>>;
+pub fn decode_bytes(encoded: &Array<u8>) -> Option<Array<u8>>;
+```
+
+# core:zlib
+
+## Structs
+
+```wado
+pub struct GzipHeader { .. }
+pub struct DeflateStream { .. }
+pub struct InflateStream { .. }
+```
+
+```wado
+impl GzipHeader {
+    pub fn new() -> GzipHeader;
+    pub fn set_text(&mut self, text: bool);
+    pub fn set_time(&mut self, time: u32);
+    pub fn set_os(&mut self, os: i32);
+    pub fn set_extra(&mut self, extra: &Array<u8>);
+    pub fn set_name(&mut self, name: String);
+    pub fn set_comment(&mut self, comment: String);
+    pub fn set_hcrc(&mut self, hcrc: bool);
+}
+```
+
+```wado
+impl DeflateStream {
+    pub fn new(level: i32) -> DeflateStream;
+    pub fn new_with_strategy(level: i32, strategy: i32) -> DeflateStream;
+    pub fn new_with_format(level: i32, format: i32) -> DeflateStream;
+    pub fn new_full(level: i32, strategy: i32, format: i32) -> DeflateStream;
+    pub fn set_dictionary(&mut self, dict: &Array<u8>);
+    pub fn set_header(&mut self, header: &GzipHeader);
+    pub fn params(&mut self, level: i32, strategy: i32);
+    pub fn bound(&self, source_len: i32) -> i32;
+    pub fn pending(&self) -> i32;
+    pub fn get_total_in(&self) -> i32;
+    pub fn get_total_out(&self) -> i32;
+    pub fn reset(&mut self);
+    pub fn copy(&self) -> DeflateStream;
+    pub fn update(&mut self, chunk: &Array<u8>);
+    pub fn finish(&mut self) -> Array<u8>;
+    pub fn compress(&mut self, input: &Array<u8>) -> Array<u8>;
+}
+```
+
+```wado
+impl InflateStream {
+    pub fn new() -> InflateStream;
+    pub fn new_with_format(format: i32) -> InflateStream;
+    pub fn set_dictionary(&mut self, dict: &Array<u8>);
+    pub fn get_dictionary(&self) -> Array<u8>;
+    pub fn get_total_in(&self) -> i32;
+    pub fn get_total_out(&self) -> i32;
+    pub fn reset(&mut self);
+    pub fn copy(&self) -> InflateStream;
+    pub fn update(&mut self, chunk: &Array<u8>);
+    pub fn finish(&mut self) -> Array<u8>;
+    pub fn decompress(&self, input: &Array<u8>) -> Array<u8>;
+}
+```
+
+## Globals
+
+```wado
+pub global Z_OK: i32;
+pub global Z_STREAM_END: i32;
+pub global Z_NEED_DICT: i32;
+pub global Z_ERRNO: i32;
+pub global Z_STREAM_ERROR: i32;
+pub global Z_DATA_ERROR: i32;
+pub global Z_MEM_ERROR: i32;
+pub global Z_BUF_ERROR: i32;
+pub global Z_VERSION_ERROR: i32;
+pub global Z_NO_FLUSH: i32;
+pub global Z_PARTIAL_FLUSH: i32;
+pub global Z_SYNC_FLUSH: i32;
+pub global Z_FULL_FLUSH: i32;
+pub global Z_FINISH: i32;
+pub global Z_BLOCK: i32;
+pub global Z_TREES: i32;
+pub global Z_NO_COMPRESSION: i32;
+pub global Z_BEST_SPEED: i32;
+pub global Z_BEST_COMPRESSION: i32;
+pub global Z_DEFAULT_COMPRESSION: i32;
+pub global Z_DEFAULT_STRATEGY: i32;
+pub global Z_FILTERED: i32;
+pub global Z_HUFFMAN_ONLY: i32;
+pub global Z_RLE: i32;
+pub global Z_FIXED: i32;
+pub global Z_BINARY: i32;
+pub global Z_TEXT: i32;
+pub global Z_UNKNOWN: i32;
+pub global Z_DEFLATED: i32;
+pub global MAX_WBITS: i32;
+pub global ZLIB_FORMAT: i32;
+pub global RAW_FORMAT: i32;
+pub global GZIP_FORMAT: i32;
+pub global AUTO_FORMAT: i32;
+```
+
+## Functions
+
+```wado
+pub fn zlib_version() -> String;
+pub fn adler32(adler: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32;
+pub fn adler32_init() -> u32;
+pub fn adler32_combine(adler1: u32, adler2: u32, len2: i32) -> u32;
+pub fn crc32(crc: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32;
+pub fn crc32_init() -> u32;
+pub fn crc32_combine(crc1: u32, crc2: u32, len2: i32) -> u32;
+pub fn compress_bound(source_len: i32) -> i32;
+pub fn inflate_raw(input: &Array<u8>) -> Array<u8>;
+pub fn inflate_zlib(input: &Array<u8>) -> Array<u8>;
+pub fn deflate_stored(input: &Array<u8>) -> Array<u8>;
+pub fn zlib_compress_stored(input: &Array<u8>) -> Array<u8>;
+pub fn deflate_huffman(input: &Array<u8>) -> Array<u8>;
+pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>;
+pub fn zlib_compress(input: &Array<u8>) -> Array<u8>;
+pub fn compress2(input: &Array<u8>, level: i32) -> Array<u8>;
+pub fn compress_with_strategy(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>;
+pub fn inflate_gzip(input: &Array<u8>) -> Array<u8>;
+pub fn gzip_compress(input: &Array<u8>) -> Array<u8>;
+pub fn gzip_compress2(input: &Array<u8>, level: i32) -> Array<u8>;
+pub fn uncompress(input: &Array<u8>) -> Array<u8>;
+pub fn deflate_raw(input: &Array<u8>) -> Array<u8>;
+pub fn deflate_raw2(input: &Array<u8>, level: i32) -> Array<u8>;
+pub fn uncompress2(input: &Array<u8>, max_output: i32) -> Array<u8>;
+pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHeader) -> Array<u8>;
+pub fn inflate_get_gzip_header(input: &Array<u8>) -> GzipHeader;
+pub fn inflate_sync_find(input: &Array<u8>, start: i32) -> i32;
+```

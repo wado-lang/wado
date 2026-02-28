@@ -79,10 +79,10 @@ wado doc --format simple lib/core/**/*.wado
 wado doc -f json lib/core/**/*.wado
 ```
 
-| Flag                 | Description                                                      |
-| -------------------- | ---------------------------------------------------------------- |
-| `-f, --format <fmt>` | Output format: `markdown` (default), `simple`, `json`            |
-| `--help`             | Show usage                                                       |
+| Flag                 | Description                                           |
+| -------------------- | ----------------------------------------------------- |
+| `-f, --format <fmt>` | Output format: `markdown` (default), `simple`, `json` |
+| `--help`             | Show usage                                            |
 
 Output goes to stdout. The compiler returns a serde-serializable DOM (`DocModule`), and the CLI renders it in the chosen format.
 
@@ -141,6 +141,7 @@ pub struct DocModule {
 Each doc type (`DocTrait`, `DocStruct`, etc.) has a `signature` field (rendered string), an optional `doc` field, and type-specific children (methods, fields, cases, etc.). All types derive `Serialize` for JSON output.
 
 The CLI (`wado-cli/src/doc.rs`) renders this DOM in three formats:
+
 - **markdown**: Structured markdown with headings, doc comments, fields, methods
 - **simple**: Cheatsheet-style pseudo-code in `\`\`\`wado` blocks
 - **json**: Pretty-printed JSON of the DOM (single module or array)

@@ -6,6 +6,7 @@ use std::process;
 use lexopt::Arg::Value;
 use wado_compiler::doc::{
     DocEnum, DocFlags, DocFunction, DocModule, DocStruct, DocTrait, DocVariant, extract_doc,
+    extract_stdlib_doc,
 };
 
 use crate::args::{self, CliExit};
@@ -46,9 +47,18 @@ impl Opt {
 
 fn format_usage() -> String {
     let mut buf = String::new();
-    writeln!(buf, "Usage: wado doc [options] <file.wado>...").unwrap();
+    writeln!(buf, "Usage: wado doc [options] <file.wado | module>...").unwrap();
     writeln!(buf).unwrap();
-    writeln!(buf, "Generate documentation from Wado source files.").unwrap();
+    writeln!(
+        buf,
+        "Generate documentation from Wado source files or stdlib modules."
+    )
+    .unwrap();
+    writeln!(
+        buf,
+        "Accepts file paths or module names (e.g., core:cli, wasi:http)."
+    )
+    .unwrap();
     writeln!(buf, "Outputs to stdout.").unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Formats:").unwrap();
@@ -108,10 +118,25 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DocOptions, CliExit> {
     Ok(DocOptions { inputs, format })
 }
 
+fn is_stdlib_module(input: &str) -> bool {
+    input.starts_with("core:") || input.starts_with("wasi:")
+}
+
 pub fn run(opts: DocOptions) {
     let mut doc_modules: Vec<DocModule> = Vec::new();
 
     for input in &opts.inputs {
+        if is_stdlib_module(input) {
+            // Resolve stdlib module by name (e.g., "core:cli", "wasi:http")
+            if let Some(doc) = extract_stdlib_doc(input) {
+                doc_modules.push(doc)
+            } else {
+                eprintln!("Unknown stdlib module: {input}");
+                process::exit(1);
+            }
+            continue;
+        }
+
         let path = Path::new(input);
 
         let source = match fs::read_to_string(path) {
