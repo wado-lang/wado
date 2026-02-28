@@ -27,13 +27,13 @@ export fn run() with Stdout {
     let b: Result<i32, String> = Result<i32, String>::Ok(42);
     let c: Result<i32, String> = Result<i32, String>::Err("fail");
     let d: Result<i32, String> = Result<i32, String>::Err("fail");
-    if a."Result<i32,String>^Eq::eq"(&b) {
+    if Box<Result<i32,String>> { value: a }."Result<i32,String>^Eq::eq"(Box<Result<i32,String>> { value: b }) {
         core::cli::println("Ok == Ok");
     }
-    if !a."Result<i32,String>^Eq::eq"(&c) {
+    if !Box<Result<i32,String>> { value: a }."Result<i32,String>^Eq::eq"(Box<Result<i32,String>> { value: c }) {
         core::cli::println("Ok != Err");
     }
-    if c."Result<i32,String>^Eq::eq"(&d) {
+    if Box<Result<i32,String>> { value: c }."Result<i32,String>^Eq::eq"(Box<Result<i32,String>> { value: d }) {
         core::cli::println("Err == Err");
     }
 }
@@ -43,13 +43,13 @@ export fn __cm_export__run() {
     cm_raw_call task-return(0);
 }
 
-pub fn "Result<i32,String>^Eq::eq"(self: &Result<i32, String>, other: &Result<i32, String>) -> bool {
-    return match *self {
-        Ok(a) => match *other {
+pub fn "Result<i32,String>^Eq::eq"(self: Box<Result<i32,String>>, other: Box<Result<i32,String>>) -> bool {
+    return match self.value {
+        Ok(a) => match other.value {
             Ok(b) => (a == b),
             Err(_) => false,
         },
-        Err(a) => match *other {
+        Err(a) => match other.value {
             Ok(_) => false,
             Err(b) => a."String^Eq::eq"(&b),
         },
