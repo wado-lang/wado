@@ -375,3 +375,67 @@ test "trim mixed ASCII and Unicode whitespace" {
     let s = String::concat(String::concat(" ", String::concat(nbsp, "hello")), " ");
     assert s.trim() == "hello";
 }
+
+// String construction and mutation
+
+test "String::concat" {
+    let combined = String::concat(String::concat("Hello", ", "), "World!");
+    assert combined == "Hello, World!";
+}
+
+test "String::append" {
+    let mut builder = String::with_capacity(20);
+    builder.append("Hello");
+    builder.append(", ");
+    builder.append("World!");
+    assert builder == "Hello, World!";
+}
+
+test "String::with_capacity starts empty" {
+    let s = String::with_capacity(10);
+    assert s.len() == 0;
+    assert s.is_empty();
+}
+
+test "append updates len" {
+    let mut s = String::with_capacity(10);
+    assert s.len() == 0;
+    s.append("Hi");
+    assert s.len() == 2;
+}
+
+test "is_empty on empty string" {
+    let empty = String::with_capacity(0);
+    assert empty.is_empty();
+}
+
+test "is_empty on nonempty string" {
+    assert !"test".is_empty();
+}
+
+// String equality
+
+test "equal strings" {
+    let a = "hello";
+    let b = "hello";
+    assert a == b;
+}
+
+test "not equal strings" {
+    let a = "hello";
+    let c = "world";
+    assert a != c;
+    assert !(a == c);
+}
+
+test "empty strings equal" {
+    assert "" == "";
+}
+
+test "different lengths not equal" {
+    assert "hi" != "hello";
+}
+
+test "same prefix different suffix" {
+    assert "hello1" != "hello2";
+}

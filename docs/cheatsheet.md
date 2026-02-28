@@ -192,6 +192,7 @@ let mut arr: Array<i32> = [];
 arr.append(1);                           // add element to end
 arr.append(2);
 let n = arr.len();                       // get length (2)
+let empty = arr.is_empty();              // check if empty (false)
 let first = arr[0];                      // index access (read)
 arr[0] = 100;                            // index assignment (write, requires mut)
 
