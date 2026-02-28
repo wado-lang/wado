@@ -24,9 +24,11 @@ export fn run() with Stdout {
     let raw = "SGVsbG8=".bytes().collect();
     assert decode_bytes(&raw) matches { Some(d) && d == hello };
 
+    // Mixed alphabets accepted (lenient decode)
+    assert decode("abc+def_ghi") matches { Some(_) };
+
     // Error cases
     assert decode("!!!") matches { None };
-    assert decode("abc+def_ghi") matches { None };
     assert decode("A") matches { None };
 
     println("ok");

@@ -3,7 +3,7 @@
 // Implements RFC 4648 Base64 encoding with:
 //   - Standard alphabet (+/) and URL-safe alphabet (-_)
 //   - Configurable padding via Encoding flags
-//   - Lenient decode: auto-detects alphabet and accepts with/without padding
+//   - Lenient decode: accepts both alphabets and with/without padding
 //
 // Usage:
 //   use { encode, decode, encode_url, encode_with, decode_bytes, Encoding } from "core:base64";
@@ -139,22 +139,7 @@ fn decode_impl(input: &Array<u8>, input_len: i32) -> Option<Array<u8>> {
 
     let mut end = input_len;
     while end > 0 && input[end - 1] == '=' as u8 {
-        end = end - 1;
-    }
-
-    let mut has_standard = false;
-    let mut has_url_safe = false;
-    for let mut i = 0; i < end; i += 1 {
-        let b = input[i];
-        if b == '+' as u8 || b == '/' as u8 {
-            has_standard = true;
-        } else if b == '-' as u8 || b == '_' as u8 {
-            has_url_safe = true;
-        }
-    }
-
-    if has_standard && has_url_safe {
-        return null;
+        end -= 1;
     }
 
     if end % 4 == 1 {
@@ -212,9 +197,8 @@ fn decode_impl(input: &Array<u8>, input_len: i32) -> Option<Array<u8>> {
 }
 
 /// Decode Base64 from a string.
-/// Auto-detects standard (+/) vs URL-safe (-_) alphabet.
-/// Accepts with or without padding.
-/// Returns null on invalid input (non-Base64 characters, mixed alphabets).
+/// Accepts both standard (+/) and URL-safe (-_) alphabets, with or without padding.
+/// Returns null on invalid input.
 pub fn decode(encoded: String) -> Option<Array<u8>> {
     let len = encoded.len();
     if len == 0 {
