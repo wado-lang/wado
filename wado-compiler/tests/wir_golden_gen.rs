@@ -12,12 +12,12 @@ use wado_compiler::OptLevel;
 ///
 /// Curated set covering distinct codegen patterns:
 /// - `cli_print`: basic imports/exports, println call
-/// - `array_append`: GC array operations (array.new, array.set)
+/// - `array_bounds_check`: GC array operations (array.new, array.set, array.get)
 /// - `closure_fn_param_capture`: funcref table, closure struct, indirect calls
 /// - `generic_struct_nested`: monomorphized struct types in codegen
 /// - `trait_default_basic`: static dispatch, method table
 /// - `ref_struct_basic`: Box<T> types, ref field access
-/// - `treemap-basic`: recursive types, rec groups
+/// - `treemap_btree`: recursive types, rec groups
 /// - `newtype_basic`: newtype representation (zero-cost)
 /// - `match_variant_basic`: variant type layout, discriminant
 /// - `enum-match-basic`: enum i32 discriminant representation, match on enum
@@ -25,12 +25,12 @@ use wado_compiler::OptLevel;
 /// - `http-200`: wasi:http/service world, CM adapter for HTTP handler
 const FIXTURES: &[(&str, Option<&str>)] = &[
     ("cli_print.wado", None),
-    ("array_append.wado", None),
+    ("array_bounds_check.wado", None),
     ("closure_fn_param_capture.wado", None),
     ("generic_struct_nested.wado", None),
     ("trait_default_basic.wado", None),
     ("ref_struct_basic.wado", None),
-    ("treemap-basic.wado", None),
+    ("treemap_btree.wado", None),
     ("newtype_basic.wado", None),
     ("match_variant_basic.wado", None),
     ("enum-match-basic.wado", None),

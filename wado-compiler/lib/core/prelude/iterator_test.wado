@@ -1,7 +1,3 @@
-// Tests for iterator methods on ArrayIter<T>
-
-// Tier 1: Consuming methods
-
 test "find returns first matching element" {
     let arr: Array<i32> = [1, 2, 3, 4, 5];
     let found = arr.iter().find(|x: i32| x % 2 == 0);
@@ -117,8 +113,6 @@ test "reduce on empty array" {
     assert arr.iter().reduce(|a: i32, b: i32| a + b) matches { None };
 }
 
-// Tier 2: Adapter iterators
-
 test "take first n elements" {
     let arr: Array<i32> = [1, 2, 3, 4, 5];
     let result = arr.iter().take(3).collect();
@@ -206,8 +200,6 @@ test "zip stops at shorter" {
     assert result == 2;
 }
 
-// Tier 3: Bounded methods
-
 test "sum of integers" {
     let arr: Array<i32> = [1, 2, 3, 4, 5];
     let result = arr.iter().sum();
@@ -267,4 +259,132 @@ test "min and max of f64" {
     let arr: Array<f64> = [3.14, 1.41, 2.72];
     assert arr.iter().min() matches { Some(v) && v == 1.41 };
     assert arr.iter().max() matches { Some(v) && v == 3.14 };
+}
+
+test "map doubles elements" {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    let doubled = arr.iter().map(|x: i32| x * 2).collect();
+    assert doubled.len() == 5;
+    assert doubled[0] == 2;
+    assert doubled[1] == 4;
+    assert doubled[2] == 6;
+    assert doubled[3] == 8;
+    assert doubled[4] == 10;
+}
+
+test "map squares elements" {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    let squared = arr.iter().map(|x: i32| x * x).collect();
+    assert squared[0] == 1;
+    assert squared[1] == 4;
+    assert squared[2] == 9;
+    assert squared[3] == 16;
+    assert squared[4] == 25;
+}
+
+test "map on empty array" {
+    let arr: Array<i32> = [];
+    let result = arr.iter().map(|x: i32| x * 2).collect();
+    assert result.len() == 0;
+}
+
+test "filter even numbers" {
+    let arr: Array<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    let evens = arr.iter().filter(|x: i32| x % 2 == 0).collect();
+    assert evens.len() == 5;
+    assert evens[0] == 2;
+    assert evens[1] == 4;
+    assert evens[2] == 6;
+    assert evens[3] == 8;
+    assert evens[4] == 10;
+}
+
+test "filter greater than threshold" {
+    let arr: Array<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    let large = arr.iter().filter(|x: i32| x > 5).collect();
+    assert large.len() == 5;
+    assert large[0] == 6;
+    assert large[4] == 10;
+}
+
+test "filter on empty array" {
+    let arr: Array<i32> = [];
+    let result = arr.iter().filter(|x: i32| x > 0).collect();
+    assert result.len() == 0;
+}
+
+test "fold sum" {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    let sum = arr.iter().fold(0, |acc: i32, x: i32| acc + x);
+    assert sum == 15;
+}
+
+test "fold product" {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    let product = arr.iter().fold(1, |acc: i32, x: i32| acc * x);
+    assert product == 120;
+}
+
+test "fold count" {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    let count = arr.iter().fold(0, |acc: i32, _x: i32| acc + 1);
+    assert count == 5;
+}
+
+test "fold on empty array" {
+    let arr: Array<i32> = [];
+    let result = arr.iter().fold(42, |acc: i32, x: i32| acc + x);
+    assert result == 42;
+}
+
+test "collect roundtrip" {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    let collected = arr.iter().collect();
+    assert collected.len() == 5;
+    assert collected[0] == 1;
+    assert collected[4] == 5;
+}
+
+test "collect empty" {
+    let arr: Array<i32> = [];
+    let collected = arr.iter().collect();
+    assert collected.len() == 0;
+}
+
+test "enumerate yields index-value pairs" {
+    let arr: Array<String> = ["a", "b", "c"];
+    let mut iter = arr.iter().enumerate();
+
+    let first = iter.next();
+    assert first matches { Some(pair) && pair.0 == 0 };
+
+    let second = iter.next();
+    assert second matches { Some(pair) && pair.0 == 1 };
+
+    let third = iter.next();
+    assert third matches { Some(pair) && pair.0 == 2 };
+
+    assert iter.next() matches { None };
+}
+
+test "filter then map chain" {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    let result = arr.iter()
+        .filter(|x: i32| x > 2)
+        .map(|x: i32| x * 10)
+        .collect();
+    assert result.len() == 3;
+    assert result[0] == 30;
+    assert result[1] == 40;
+    assert result[2] == 50;
+}
+
+test "count elements" {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    assert arr.iter().count() == 5;
+}
+
+test "count empty" {
+    let arr: Array<i32> = [];
+    assert arr.iter().count() == 0;
 }

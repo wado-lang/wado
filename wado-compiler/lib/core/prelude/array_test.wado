@@ -1,0 +1,256 @@
+test "append to empty array" {
+    let arr: Array<i32> = [];
+    arr.append(10);
+    arr.append(20);
+    arr.append(30);
+    assert arr.len() == 3;
+    assert arr[0] == 10;
+    assert arr[1] == 20;
+    assert arr[2] == 30;
+}
+
+test "append triggers growth" {
+    let arr: Array<i32> = [];
+    arr.append(10);
+    arr.append(20);
+    arr.append(30);
+    arr.append(40);
+    arr.append(50); // should trigger resize (capacity 4 -> 8)
+    arr.append(60);
+    assert arr.len() == 6;
+    assert arr[3] == 40;
+    assert arr[4] == 50;
+    assert arr[5] == 60;
+}
+
+test "filled creates array with repeated value" {
+    let arr = Array::<i32>::filled(5, 42);
+    assert arr.len() == 5;
+    assert arr[0] == 42;
+    assert arr[4] == 42;
+}
+
+test "filled with booleans" {
+    let arr = Array::<bool>::filled(3, true);
+    assert arr.len() == 3;
+    assert arr[0];
+    assert arr[1];
+    assert arr[2];
+}
+
+test "filled with zero length" {
+    let arr = Array::<i32>::filled(0, 99);
+    assert arr.len() == 0;
+    assert arr.is_empty();
+}
+
+test "is_empty on empty array" {
+    let arr: Array<i32> = [];
+    assert arr.is_empty();
+}
+
+test "is_empty on nonempty array" {
+    let arr: Array<i32> = [1, 2, 3];
+    assert !arr.is_empty();
+}
+
+test "is_empty after append" {
+    let arr: Array<i32> = [];
+    assert arr.is_empty();
+    arr.append(1);
+    assert !arr.is_empty();
+}
+
+test "get returns Some for in-bounds" {
+    let arr: Array<i32> = [10, 20, 30];
+    assert arr.get(0) matches { Some(v) && v == 10 };
+    assert arr.get(2) matches { Some(v) && v == 30 };
+}
+
+test "get returns None for out-of-bounds" {
+    let arr: Array<i32> = [10, 20, 30];
+    assert arr.get(3) matches { None };
+    assert arr.get(-1) matches { None };
+}
+
+test "get on empty array" {
+    let arr: Array<i32> = [];
+    assert arr.get(0) matches { None };
+}
+
+test "basic slice" {
+    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let s = arr.slice(1, 4);
+    assert s.len() == 3;
+    assert s[0] == 20;
+    assert s[1] == 30;
+    assert s[2] == 40;
+}
+
+test "slice get with bounds check" {
+    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let s = arr.slice(1, 4);
+    assert s.get(0) matches { Some(v) && v == 20 };
+    assert s.get(3) matches { None };
+    assert s.get(-1) matches { None };
+}
+
+test "sub-slice" {
+    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let s = arr.slice(1, 4);
+    let ss = s.slice(1, 2);
+    assert ss.len() == 1;
+    assert ss[0] == 30;
+}
+
+test "empty slice" {
+    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let empty = arr.slice(3, 3);
+    assert empty.len() == 0;
+    assert empty.is_empty();
+}
+
+test "slice clamping" {
+    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let clamped = arr.slice(0, 100);
+    assert clamped.len() == 5;
+    let clamped2 = arr.slice(-5, 3);
+    assert clamped2.len() == 3;
+}
+
+test "slice to_array" {
+    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let s = arr.slice(1, 4);
+    let copied = s.to_array();
+    assert copied.len() == 3;
+    assert copied[0] == 20;
+    assert copied[2] == 40;
+}
+
+test "slice iteration" {
+    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let s = arr.slice(1, 4);
+    let mut sum = 0;
+    for let x of s {
+        sum += x;
+    }
+    assert sum == 90;
+}
+
+test "slice iterator combinators" {
+    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let s = arr.slice(1, 4);
+
+    let doubled = s.iter().map(|x: i32| x * 2).collect();
+    assert doubled.len() == 3;
+    assert doubled[0] == 40;
+    assert doubled[1] == 60;
+    assert doubled[2] == 80;
+
+    let total = s.iter().fold(0, |acc: i32, x: i32| acc + x);
+    assert total == 90;
+}
+
+test "sort ascending" {
+    let mut arr: Array<i32> = [42, 17, 99, 3, 55, 1];
+    arr.sort();
+    assert arr[0] == 1;
+    assert arr[1] == 3;
+    assert arr[2] == 17;
+    assert arr[3] == 42;
+    assert arr[4] == 55;
+    assert arr[5] == 99;
+}
+
+test "sort_by ascending" {
+    let mut a: Array<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
+    a.sort_by(|x: &i32, y: &i32| {
+        if *x < *y { return Ordering::Less; }
+        if *x > *y { return Ordering::Greater; }
+        return Ordering::Equal;
+    });
+    assert a[0] == 1;
+    assert a[8] == 9;
+}
+
+test "sort_by descending" {
+    let mut a: Array<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
+    a.sort_by(|x: &i32, y: &i32| {
+        if *x > *y { return Ordering::Less; }
+        if *x < *y { return Ordering::Greater; }
+        return Ordering::Equal;
+    });
+    assert a[0] == 9;
+    assert a[8] == 1;
+}
+
+test "sorted returns new array" {
+    let orig: Array<i32> = [7, 2, 5, 1, 8, 3];
+    let sorted = orig.sorted();
+    // original unchanged
+    assert orig[0] == 7;
+    assert orig[1] == 2;
+    // sorted array is in order
+    assert sorted[0] == 1;
+    assert sorted[1] == 2;
+    assert sorted[2] == 3;
+    assert sorted[3] == 5;
+    assert sorted[4] == 7;
+    assert sorted[5] == 8;
+}
+
+test "sorted_by returns new array" {
+    let c: Array<i32> = [10, 30, 20, 50, 40];
+    let d = c.sorted_by(|x: &i32, y: &i32| {
+        if *x < *y { return Ordering::Less; }
+        if *x > *y { return Ordering::Greater; }
+        return Ordering::Equal;
+    });
+    // original unchanged
+    assert c[0] == 10;
+    assert c[1] == 30;
+    // sorted result
+    assert d[0] == 10;
+    assert d[1] == 20;
+    assert d[2] == 30;
+    assert d[3] == 40;
+    assert d[4] == 50;
+}
+
+test "sort empty array" {
+    let mut empty: Array<i32> = [];
+    empty.sort();
+    assert empty.len() == 0;
+}
+
+test "sort single element" {
+    let mut single: Array<i32> = [42];
+    single.sort();
+    assert single[0] == 42;
+}
+
+test "sort two elements" {
+    let mut two: Array<i32> = [2, 1];
+    two.sort();
+    assert two[0] == 1;
+    assert two[1] == 2;
+}
+
+test "sort stability" {
+    // Sort by absolute value; -1 and 1 should keep relative order
+    let mut g: Array<i32> = [3, -1, -3, 2, -2, 1];
+    g.sort_by(|a: &i32, b: &i32| {
+        let va = if *a < 0 { 0 - *a; } else { *a; };
+        let vb = if *b < 0 { 0 - *b; } else { *b; };
+        if va < vb { return Ordering::Less; }
+        if va > vb { return Ordering::Greater; }
+        return Ordering::Equal;
+    });
+    // -1 comes before 1 in original, so after stable sort by abs value:
+    assert g[0] == -1;
+    assert g[1] == 1;
+    assert g[2] == 2;
+    assert g[3] == -2;
+    assert g[4] == 3;
+    assert g[5] == -3;
+}

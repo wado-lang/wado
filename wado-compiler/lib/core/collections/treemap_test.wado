@@ -1,0 +1,366 @@
+use { TreeMap } from "core:collections";
+
+test "empty map" {
+    let map = TreeMap::<String, i32>::new();
+    assert map.is_empty();
+    assert map.len() == 0;
+    assert !map.contains_key("key");
+}
+
+test "insert and get" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["one"] = 1;
+    assert map.len() == 1;
+    assert map.contains_key("one");
+    assert map["one"] == 1;
+}
+
+test "update existing key" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["one"] = 1;
+    map["one"] = 100;
+    assert map.len() == 1;
+    assert map["one"] == 100;
+}
+
+test "multiple inserts" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["one"] = 1;
+    map["two"] = 2;
+    map["three"] = 3;
+    assert map.len() == 3;
+}
+
+test "get returns Some for existing key" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["key"] = 42;
+    assert map.get("key") matches { Some(v) && v == 42 };
+}
+
+test "get returns None for missing key" {
+    let map = TreeMap::<String, i32>::new();
+    assert map.get("missing") matches { None };
+}
+
+test "clear empties map" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["a"] = 1;
+    map["b"] = 2;
+    map["c"] = 3;
+    assert map.len() == 3;
+
+    map.clear();
+    assert map.is_empty();
+    assert map.len() == 0;
+    assert !map.contains_key("a");
+    assert !map.contains_key("b");
+    assert !map.contains_key("c");
+}
+
+test "insert after clear" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["a"] = 1;
+    map.clear();
+    map["new"] = 42;
+    assert map.len() == 1;
+    assert map.contains_key("new");
+}
+
+test "entries returns key-value pairs in insertion order" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["first"] = 1;
+    map["second"] = 2;
+    map["third"] = 3;
+
+    let pairs = map.entries();
+    assert pairs.len() == 3;
+    assert pairs[0].0 == "first";
+    assert pairs[0].1 == 1;
+    assert pairs[1].0 == "second";
+    assert pairs[1].1 == 2;
+    assert pairs[2].0 == "third";
+    assert pairs[2].1 == 3;
+}
+
+test "entries after update" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["first"] = 1;
+    map["second"] = 2;
+    map["third"] = 3;
+    map["second"] = 200;
+
+    let pairs = map.entries();
+    assert pairs[1].0 == "second";
+    assert pairs[1].1 == 200;
+}
+
+test "entries after remove" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["first"] = 1;
+    map["second"] = 2;
+    map["third"] = 3;
+    map.remove("second");
+
+    let pairs = map.entries();
+    assert pairs.len() == 2;
+    assert pairs[0].0 == "first";
+    assert pairs[1].0 == "third";
+}
+
+test "keys in insertion order" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["echo"] = 5;
+    map["charlie"] = 3;
+    map["golf"] = 7;
+    map["alpha"] = 1;
+    map["india"] = 9;
+    map["delta"] = 4;
+    map["foxtrot"] = 6;
+    map["bravo"] = 2;
+    map["hotel"] = 8;
+
+    let keys = map.keys();
+    assert keys[0] == "echo";
+    assert keys[1] == "charlie";
+    assert keys[2] == "golf";
+    assert keys[3] == "alpha";
+    assert keys[4] == "india";
+    assert keys[5] == "delta";
+    assert keys[6] == "foxtrot";
+    assert keys[7] == "bravo";
+    assert keys[8] == "hotel";
+}
+
+test "values in insertion order" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["echo"] = 5;
+    map["charlie"] = 3;
+    map["golf"] = 7;
+    map["alpha"] = 1;
+    map["india"] = 9;
+
+    let values = map.values();
+    assert values[0] == 5;
+    assert values[1] == 3;
+    assert values[2] == 7;
+    assert values[3] == 1;
+    assert values[4] == 9;
+}
+
+test "remove existing key" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["a"] = 1;
+    map["b"] = 2;
+    map["c"] = 3;
+
+    assert map.remove("b");
+    assert !map.contains_key("b");
+    assert map.len() == 2;
+    assert map.contains_key("a");
+    assert map.contains_key("c");
+}
+
+test "remove nonexistent key" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["a"] = 1;
+    map["b"] = 2;
+    assert !map.remove("z");
+    assert map.len() == 2;
+}
+
+test "reinsert after remove" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["a"] = 1;
+    map["b"] = 2;
+    map["c"] = 3;
+
+    assert map.remove("b");
+    map["b"] = 999;
+    assert map.contains_key("b");
+    assert map["b"] == 999;
+    assert map.len() == 3;
+}
+
+test "remove from middle preserves order" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["first"] = 1;
+    map["second"] = 2;
+    map["third"] = 3;
+    map["fourth"] = 4;
+    map["fifth"] = 5;
+
+    assert map.remove("third");
+    let keys = map.keys();
+    assert keys.len() == 4;
+    assert keys[0] == "first";
+    assert keys[1] == "second";
+    assert keys[2] == "fourth";
+    assert keys[3] == "fifth";
+}
+
+test "remove from beginning preserves order" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["first"] = 1;
+    map["second"] = 2;
+    map["third"] = 3;
+
+    assert map.remove("first");
+    let keys = map.keys();
+    assert keys[0] == "second";
+    assert keys[1] == "third";
+}
+
+test "remove from end preserves order" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["first"] = 1;
+    map["second"] = 2;
+    map["third"] = 3;
+
+    assert map.remove("third");
+    let keys = map.keys();
+    assert keys.len() == 2;
+    assert keys[0] == "first";
+    assert keys[1] == "second";
+}
+
+test "reinsert goes to end" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["a"] = 1;
+    map["b"] = 2;
+    map["c"] = 3;
+
+    assert map.remove("b");
+    map["b"] = 999;
+
+    let keys = map.keys();
+    assert keys.len() == 3;
+    assert keys[0] == "a";
+    assert keys[1] == "c";
+    assert keys[2] == "b"; // reinserted at end
+}
+
+test "multiple removes and reinserts" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["a"] = 1;
+    map["b"] = 2;
+    map["c"] = 3;
+
+    map.remove("b");
+    map["b"] = 999;
+    map.remove("a");
+    map["a"] = 111;
+
+    let keys = map.keys();
+    assert keys[0] == "c";
+    assert keys[1] == "b";
+    assert keys[2] == "a";
+}
+
+test "update does not change position" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["a"] = 1;
+    map["b"] = 2;
+    map["c"] = 3;
+
+    map["a"] = 100;
+    map["b"] = 200;
+
+    let keys = map.keys();
+    assert keys[0] == "a";
+    assert keys[1] == "b";
+    assert keys[2] == "c";
+
+    let values = map.values();
+    assert values[0] == 100;
+    assert values[1] == 200;
+    assert values[2] == 3;
+}
+
+test "compact after many deletions preserves order" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["a"] = 1;
+    map["b"] = 2;
+    map["c"] = 3;
+    map["d"] = 4;
+    map["e"] = 5;
+    map["f"] = 6;
+    map["g"] = 7;
+    map["h"] = 8;
+    map["i"] = 9;
+    map["j"] = 10;
+
+    assert map.len() == 10;
+
+    // Remove 6 items to trigger compaction
+    map.remove("b");
+    map.remove("c");
+    map.remove("e");
+    map.remove("g");
+    map.remove("h");
+    map.remove("i");
+
+    assert map.len() == 4;
+
+    let keys = map.keys();
+    assert keys.len() == 4;
+    assert keys[0] == "a";
+    assert keys[1] == "d";
+    assert keys[2] == "f";
+    assert keys[3] == "j";
+
+    let values = map.values();
+    assert values[0] == 1;
+    assert values[1] == 4;
+    assert values[2] == 6;
+    assert values[3] == 10;
+}
+
+test "insert after compact" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["a"] = 1;
+    map["b"] = 2;
+    map["c"] = 3;
+    map["d"] = 4;
+    map["e"] = 5;
+    map["f"] = 6;
+    map["g"] = 7;
+    map["h"] = 8;
+    map["i"] = 9;
+    map["j"] = 10;
+
+    map.remove("b");
+    map.remove("c");
+    map.remove("e");
+    map.remove("g");
+    map.remove("h");
+    map.remove("i");
+
+    map["new"] = 100;
+    let keys = map.keys();
+    assert keys.len() == 5;
+    assert keys[4] == "new";
+    assert map["d"] == 4;
+    assert map["new"] == 100;
+}
+
+test "50 items insert and partial remove" {
+    let mut map = TreeMap::<String, i32>::new();
+
+    for let mut i = 0; i < 50; i += 1 {
+        map[`item{i}`] = i;
+    }
+    assert map.len() == 50;
+    assert map["item0"] == 0;
+    assert map["item49"] == 49;
+
+    // Remove every other item
+    for let mut i = 0; i < 50; i += 2 {
+        map.remove(`item{i}`);
+    }
+    assert map.len() == 25;
+
+    assert map.contains_key("item1");
+    assert map.contains_key("item3");
+    assert !map.contains_key("item0");
+    assert !map.contains_key("item2");
+}
