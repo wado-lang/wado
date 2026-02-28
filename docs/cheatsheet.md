@@ -909,9 +909,10 @@ if let Some(x) = opt {
 }
 
 // Match ergonomics: patterns auto-deref &T scrutinees
+// Bindings through &T get reference types (Rust-compatible)
 let ro = &opt;
 if let Some(x) = ro {       // &Option<i32> auto-dereferenced
-    println(`Got: {x}`);
+    println(`Got: {*x}`);   // x: &i32 — dereference to use
 }
 let c = Color::Red;
 let rc = &c;

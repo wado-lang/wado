@@ -349,12 +349,13 @@ if let Some(x) = opt {
 }
 ```
 
-**Match Ergonomics:** When the scrutinee of `if let`, `match`, or `matches` is a reference type (`&T` or `&mut T`), references are automatically peeled so patterns match against the underlying type. This is equivalent to Rust's match ergonomics (RFC 2005).
+**Match Ergonomics:** When the scrutinee of `if let`, `match`, or `matches` is a reference type (`&T` or `&mut T`), references are automatically peeled so patterns match against the underlying type. Bindings through a reference get reference types (Rust-compatible, RFC 2005).
 
 ```wado
+let opt: Option<i32> = Option::<i32>::Some(42);
 let ro = &opt;
-if let Some(x) = ro {       // &Option<i32> → Option<i32>
-    println(`Got: {x}`);
+if let Some(x) = ro {       // &Option<i32> auto-dereferenced; x: &i32
+    println(`Got: {*x}`);   // dereference to use the value
 }
 ```
 
