@@ -455,11 +455,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             self.lookup_field_type(expr.type_id, &field_access.field, field_access.span);
 
         // Check field visibility: non-pub fields cannot be accessed from other modules
-        self.check_field_visibility(
-            expr.type_id,
-            &field_access.field,
-            field_access.span,
-        );
+        self.check_field_visibility(expr.type_id, &field_access.field, field_access.span);
 
         TirExpr::new(
             TirExprKind::FieldAccess {
@@ -615,12 +611,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
     /// Check if a struct field is accessible from the current module.
     /// Non-pub fields are private to the module that defines them.
-    fn check_field_visibility(
-        &mut self,
-        struct_type: TypeId,
-        field_name: &str,
-        span: Span,
-    ) {
+    fn check_field_visibility(&mut self, struct_type: TypeId, field_name: &str, span: Span) {
         let resolved = self.type_table.borrow().get(struct_type).clone();
         let (struct_name, module_source) = match resolved {
             ResolvedType::Struct {
@@ -1623,11 +1614,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // Check field visibility: non-pub fields cannot be set from other modules
-        if struct_module_source != self.current_module_source {
-            if let Some(struct_info) = self.struct_fields.get(&struct_name) {
-                for (fname, _, is_pub) in &struct_info.fields {
-                    if !is_pub && fields.iter().any(|f| f.name == *fname) {
-                        let _ = self.logger.error(TypeError::TypeMismatch {
+        if struct_module_source != self.current_module_source
+            && let Some(struct_info) = self.struct_fields.get(&struct_name)
+        {
+            for (fname, _, is_pub) in &struct_info.fields {
+                if !is_pub && fields.iter().any(|f| f.name == *fname) {
+                    let _ = self.logger.error(TypeError::TypeMismatch {
                             expected: format!(
                                 "accessible field (field `{fname}` of struct `{struct_name}` is private)"
                             ),
@@ -1637,7 +1629,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             ),
                             span: struct_lit.span,
                         });
-                    }
                 }
             }
         }
@@ -1735,7 +1726,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Build a map from type param TypeId to concrete TypeId
         let mut type_param_map: IndexMap<TypeId, TypeId> = IndexMap::new();
 
-        for (struct_field, (_, expected_type_id, _)) in fields.iter().zip(struct_info.fields.iter()) {
+        for (struct_field, (_, expected_type_id, _)) in fields.iter().zip(struct_info.fields.iter())
+        {
             let actual_type_id = struct_field.value.type_id;
 
             // Try to unify expected_type with actual_type to extract type params
