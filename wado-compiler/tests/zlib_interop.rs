@@ -12,13 +12,13 @@
 
 mod common;
 
-use flate2::write::{DeflateDecoder, DeflateEncoder, GzDecoder, GzEncoder};
 use flate2::Compression;
+use flate2::write::{DeflateDecoder, DeflateEncoder, GzDecoder, GzEncoder};
 use std::io::Write;
 use std::path::Path;
 use std::sync::OnceLock;
-use wasmtime::component::Component;
 use wasmtime::Store;
+use wasmtime::component::Component;
 use wasmtime_wasi::p2::pipe::{MemoryInputPipe, MemoryOutputPipe};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
 use zlib_rs::{DeflateConfig, InflateConfig, ReturnCode};
@@ -79,8 +79,8 @@ fn run_component(component: &Component, stdin: &[u8]) -> String {
         match run_func.call_async(&mut store, ()).await {
             Ok((result,)) => {
                 if result.is_err() {
-                    let stderr = String::from_utf8(stderr_clone.contents().to_vec())
-                        .unwrap_or_default();
+                    let stderr =
+                        String::from_utf8(stderr_clone.contents().to_vec()).unwrap_or_default();
                     panic!("Wasm component returned error. stderr: {stderr}");
                 }
             }
@@ -166,7 +166,9 @@ fn wado_compress_bound(size: i32) -> i32 {
 
 fn wado_version() -> String {
     let stdin = vec![7u8];
-    run_component(compress_component(), &stdin).trim().to_string()
+    run_component(compress_component(), &stdin)
+        .trim()
+        .to_string()
 }
 
 fn wado_adler32_combine(a1: u32, a2: u32, len2: i32) -> u32 {
