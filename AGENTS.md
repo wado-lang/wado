@@ -163,16 +163,7 @@ Without this, `cargo test` will not detect the new fixture because `datatest_min
 
 ### Standard Library Tests
 
-Logic tests for standard library modules live alongside implementations in `wado-compiler/lib/`, using `test` blocks. No `__DATA__` section is needed — these files are run directly with `wado test`. They test the library's own logic rather than compiler features.
-
-| Module | Test File |
-|--------|-----------|
-| `core:zlib` | `wado-compiler/lib/core/zlib_test.wado` |
-| `core:*` (strings) | `wado-compiler/lib/core/string_test.wado` |
-| prelude (iterators) | `wado-compiler/lib/core/prelude/iterator_test.wado` |
-| prelude (primitives) | `wado-compiler/lib/core/prelude/primitive_test.wado` |
-
-Use this style for new stdlib modules (e.g., `base64_test.wado` for `core:base64`). E2E fixtures in `tests/fixtures/` are for testing **compiler** behavior (codegen, error messages, optimization).
+Logic tests for standard library modules (e.g., `zlib_test.wado`, `string_test.wado`) live alongside implementations in `wado-compiler/lib/`. These are plain `.wado` files with `test` blocks — no `__DATA__` section — run directly with `wado test`. Use this style for library logic tests; use E2E fixtures (`tests/fixtures/`) for compiler behavior tests.
 
 ### The `wasi:*` Modules
 
