@@ -36,6 +36,7 @@ pub const CORE_PRELUDE_ARRAY: &str = include_str!("../lib/core/prelude/array.wad
 pub const CORE_PRELUDE_FPFMT: &str = include_str!("../lib/core/prelude/fpfmt.wado");
 pub const CORE_COLLECTIONS: &str = include_str!("../lib/core/collections.wado");
 pub const CORE_ZLIB: &str = include_str!("../lib/core/zlib.wado");
+pub const CORE_BASE64: &str = include_str!("../lib/core/base64.wado");
 pub const WASI_CLI: &str = include_str!("../lib/wasi/cli.wado");
 pub const WASI_FILESYSTEM: &str = include_str!("../lib/wasi/filesystem.wado");
 pub const WASI_CLOCKS: &str = include_str!("../lib/wasi/clocks.wado");
@@ -69,6 +70,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:builtin" => Some(CORE_BUILTIN),
         "core:clocks" => Some(CORE_CLOCKS),
         "core:zlib" => Some(CORE_ZLIB),
+        "core:base64" => Some(CORE_BASE64),
 
         // WASI library
         "wasi:cli" => Some(WASI_CLI),

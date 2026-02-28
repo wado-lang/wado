@@ -218,6 +218,7 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 | `core:stream`                  | `stream.wado`             | Stream utilities                                   |
 | `core:collections`             | `collections.wado`        | TreeMap and other collections                      |
 | `core:zlib`                    | `zlib.wado`               | Compression (zlib/deflate)                         |
+| `core:base64`                  | `base64.wado`             | Base64 encoding/decoding (RFC 4648)                |
 | `core:internal`                | `internal.wado`           | Compiler-generated code support, panic/unreachable |
 | `core:builtin`                 | `builtin.wado`            | Compiler intrinsics with `#[canonical(...)]` attrs |
 

@@ -1,0 +1,84 @@
+// Test core:base64 decode functions
+use { println } from "core:cli";
+use { encode, decode, encode_url, decode_bytes } from "core:base64";
+
+fn string_to_bytes(s: String) -> Array<u8> {
+    let mut out: Array<u8> = Array::<u8>::with_capacity(s.len());
+    for let mut i = 0; i < s.len(); i += 1 {
+        out.append(s.get_byte(i));
+    }
+    return out;
+}
+
+fn bytes_equal(a: &Array<u8>, b: &Array<u8>) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    for let mut i = 0; i < a.len(); i += 1 {
+        if a[i] != b[i] {
+            return false;
+        }
+    }
+    return true;
+}
+
+export fn run() with Stdout {
+    // Decode padded
+    if let Some(decoded) = decode("SGVsbG8=") {
+        assert decoded.len() == 5;
+        assert bytes_equal(&decoded, &string_to_bytes("Hello"));
+    } else {
+        panic("decode padded failed");
+    }
+
+    // Decode without padding (lenient)
+    if let Some(decoded) = decode("SGVsbG8") {
+        assert bytes_equal(&decoded, &string_to_bytes("Hello"));
+    } else {
+        panic("decode no padding failed");
+    }
+
+    // Decode empty
+    if let Some(decoded) = decode("") {
+        assert decoded.len() == 0;
+    } else {
+        panic("decode empty failed");
+    }
+
+    // Round-trip standard
+    let data: Array<u8> = [1, 2, 3, 4, 5] as Array<u8>;
+    if let Some(decoded) = decode(encode(&data)) {
+        assert bytes_equal(&decoded, &data);
+    } else {
+        panic("round-trip standard failed");
+    }
+
+    // Round-trip URL-safe
+    if let Some(decoded) = decode(encode_url(&data)) {
+        assert bytes_equal(&decoded, &data);
+    } else {
+        panic("round-trip url-safe failed");
+    }
+
+    // decode_bytes
+    let raw: Array<u8> = [83, 71, 86, 115, 98, 71, 56, 61] as Array<u8>;
+    if let Some(decoded) = decode_bytes(&raw) {
+        assert bytes_equal(&decoded, &string_to_bytes("Hello"));
+    } else {
+        panic("decode_bytes failed");
+    }
+
+    // Error: invalid chars
+    assert decode("!!!") matches { None };
+
+    // Error: mixed alphabets
+    assert decode("abc+def_ghi") matches { None };
+
+    // Error: structurally invalid (length mod 4 == 1)
+    assert decode("A") matches { None };
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
