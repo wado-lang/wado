@@ -457,10 +457,49 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // Look up parameter types for coercion
-        let param_types = struct_name_for_lookup
+        let mut param_types = struct_name_for_lookup
             .as_ref()
             .map(|name| self.lookup_static_method_param_types(name, &static_call.method))
             .unwrap_or_default();
+
+        // For generic variant constructors (e.g., Option::<Array<u8>>::Some([])),
+        // compute substituted payload type so literal coercion works on first resolve.
+        if param_types.is_empty() {
+            let generic_data = {
+                let resolved = self.type_table.borrow().get(target_type_id).clone();
+                if let ResolvedType::GenericInstance {
+                    name,
+                    type_args: instance_type_args,
+                    ..
+                } = resolved
+                {
+                    Some((name, instance_type_args))
+                } else {
+                    None
+                }
+            };
+            if let Some((name, instance_type_args)) = generic_data
+                && let Some(variant_info) = self.variant_cases.get(&name).cloned()
+                && let Some((_, case_data)) = variant_info
+                    .cases
+                    .iter()
+                    .enumerate()
+                    .find(|(_, c)| c.name == static_call.method)
+            {
+                let payload_is_unit = matches!(
+                    self.type_table.borrow().get(case_data.payload),
+                    ResolvedType::Unit
+                );
+                if !payload_is_unit {
+                    let mut payload_type = case_data.payload;
+                    if !instance_type_args.is_empty() {
+                        payload_type =
+                            self.substitute_type_params(payload_type, &instance_type_args);
+                    }
+                    param_types.push(payload_type);
+                }
+            }
+        }
 
         // Resolve arguments with expected types for coercion
         let args: Vec<TirExpr> = static_call
@@ -655,22 +694,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Handle generic variant construction: Result::<i32, String>::Ok(42)
-        // Extract GenericInstance data outside the borrow to avoid holding
-        // a Ref across mutable self calls (like resolve_expr).
-        let generic_instance_data = {
-            let resolved = self.type_table.borrow().get(target_type_id).clone();
-            if let ResolvedType::GenericInstance {
-                name,
-                module_source: _,
-                type_args: instance_type_args,
-            } = resolved
-            {
-                Some((name, instance_type_args))
-            } else {
-                None
-            }
-        };
-        if let Some((name, instance_type_args)) = generic_instance_data {
+        if let ResolvedType::GenericInstance {
+            name,
+            module_source: _,
+            type_args: _,
+        } = self.type_table.borrow().get(target_type_id).clone()
+        {
             // Check if the base type is a variant
             if let Some(variant_info) = self.variant_cases.get(&name).cloned() {
                 // This is a generic variant like Result<T, E>
@@ -697,20 +726,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
                     }
 
-                    // Re-resolve payload argument with the substituted payload type
-                    // so that literal coercion (e.g., [] -> Array<u8>) works correctly.
-                    let payload = if payload_is_unit {
-                        None
-                    } else {
-                        let mut payload_type = case_data.payload;
-                        if !instance_type_args.is_empty() {
-                            payload_type =
-                                self.substitute_type_params(payload_type, &instance_type_args);
-                        }
-                        let arg_ast = &static_call.args[0];
-                        let resolved_arg = self.resolve_expr(arg_ast, ctx, Some(payload_type));
-                        Some(Box::new(resolved_arg))
-                    };
+                    // Payload was already resolved with the correct expected type
+                    // (substituted in the param_types computation above).
+                    let payload = args.into_iter().next().map(Box::new);
 
                     // Create VariantConstruct expression
                     return TirExpr::new(

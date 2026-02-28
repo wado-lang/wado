@@ -50,6 +50,12 @@ export fn run() with Stdout {
         panic("expected Ok");
     }
 
+    // Multiple Option instantiations in the same file
+    let opt_i32: Option<i32> = Option::<i32>::Some(42);
+    let opt_arr: Option<Array<u8>> = Option::<Array<u8>>::Some([1 as u8, 2 as u8]);
+    assert opt_i32 matches { Some(n) && n == 42 };
+    assert opt_arr matches { Some(a) && a.len() == 2 };
+
     println("ok");
 }
 

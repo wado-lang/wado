@@ -133,7 +133,42 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // First, determine expected parameter types to handle coercion
-        let param_types = self.lookup_function_param_types(&call.callee);
+        let mut param_types = self.lookup_function_param_types(&call.callee);
+
+        // For variant constructors with type args (e.g., Option::<Array<u8>>::Some([])),
+        // compute substituted payload type so literal coercion works on first resolve.
+        if param_types.is_empty()
+            && let Expr::Ident(ident) = &call.callee
+            && let Some(pos) = ident.name.find("::")
+        {
+            let prefix = &ident.name[..pos];
+            let suffix = &ident.name[pos + 2..];
+            if let Some(variant_info) = self.variant_cases.get(prefix).cloned()
+                && let Some((_, case_data)) = variant_info
+                    .cases
+                    .iter()
+                    .enumerate()
+                    .find(|(_, c)| c.name == suffix)
+            {
+                let payload_is_unit = matches!(
+                    self.type_table.borrow().get(case_data.payload),
+                    ResolvedType::Unit
+                );
+                if !payload_is_unit {
+                    let variant_type_args: Vec<TypeId> = call
+                        .type_args
+                        .iter()
+                        .map(|ty| self.resolve_type(ty))
+                        .collect();
+                    let mut payload_type = case_data.payload;
+                    if !variant_type_args.is_empty() {
+                        payload_type =
+                            self.substitute_type_params(payload_type, &variant_type_args);
+                    }
+                    param_types.push(payload_type);
+                }
+            }
+        }
 
         // Resolve arguments with coercion awareness
         let args: Vec<TirExpr> = call
@@ -234,29 +269,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 .borrow_mut()
                                 .make_variant(prefix_owned, variant_module_source);
 
-                            // If the variant has type args (e.g., Option::<Array<u8>>::Some),
-                            // substitute them into the payload type and re-resolve the argument
-                            // with the correct expected type for proper literal coercion.
-                            let variant_type_args: Vec<TypeId> = call
-                                .type_args
-                                .iter()
-                                .map(|ty| self.resolve_type(ty))
-                                .collect();
-
-                            let payload = if payload_is_unit {
-                                None
-                            } else {
-                                let mut payload_type = case_data.payload;
-                                if !variant_type_args.is_empty() {
-                                    payload_type = self
-                                        .substitute_type_params(payload_type, &variant_type_args);
-                                }
-                                // Re-resolve the argument with the substituted payload type
-                                let arg_ast = &call.args[0];
-                                let resolved_arg =
-                                    self.resolve_expr(arg_ast, ctx, Some(payload_type));
-                                Some(Box::new(resolved_arg))
-                            };
+                            // Payload was already resolved with the correct expected type
+                            // (substituted in the param_types computation above).
+                            let payload = args.into_iter().next().map(Box::new);
 
                             return TirExpr::new(
                                 TirExprKind::VariantConstruct {
