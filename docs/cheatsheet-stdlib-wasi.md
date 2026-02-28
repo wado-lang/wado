@@ -10,6 +10,7 @@
 ```wado
 pub enum ErrorCode { Io, IllegalByteSequence, Pipe }
 ```
+
 ## wasi:filesystem
 
 ### Structs
@@ -97,6 +98,7 @@ pub flags OpenFlags {
     Truncate,
 }
 ```
+
 ## wasi:http
 
 ### Structs
@@ -215,6 +217,7 @@ pub variant RequestOptionsError {
     Immutable,
 }
 ```
+
 ## wasi:clocks
 
 ### Structs
@@ -232,7 +235,9 @@ pub struct Instant {
 pub type Duration = u64;
 pub type Mark = u64;
 ```
+
 ## wasi:random
+
 ## wasi:sockets
 
 ### Structs

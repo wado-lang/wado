@@ -587,6 +587,7 @@ pub variant Result<T, E> {
 pub fn panic(message: String) -> !;
 pub fn unreachable() -> !;
 ```
+
 ## core:cli
 
 CLI helpers: `println`, `eprintln`, `args`, `env`, `exit`, etc.
@@ -606,6 +607,7 @@ pub fn exit_success() -> ! with Exit;
 pub fn exit_error() -> ! with Exit;
 pub fn exit(code: u8) -> ! with Exit;
 ```
+
 ## core:clocks
 
 Monotonic clock for time measurement.
@@ -622,6 +624,7 @@ pub type Mark = u64;
 ```wado
 pub fn now() -> Mark with MonotonicClock;
 ```
+
 ## core:collections
 
 Collection types: `TreeMap<K, V>` (ordered key-value map).
@@ -660,6 +663,7 @@ impl KeyValueLiteralBuilder for TreeMap<String, V> {
     fn build(&self) -> TreeMap<String, V>;
 }
 ```
+
 ## core:base64
 
 Base64 encoding and decoding (RFC 4648).
@@ -682,6 +686,7 @@ pub fn encode_with(data: &Array<u8>, encoding: Encoding) -> String;
 pub fn decode(encoded: String) -> Option<Array<u8>>;
 pub fn decode_bytes(encoded: &Array<u8>) -> Option<Array<u8>>;
 ```
+
 ## core:zlib
 
 zlib compression and decompression (RFC 1950/1951/1952).

@@ -286,7 +286,7 @@ syntax which is not yet supported.
 
 ### Structs
 
-#### `pub struct Formatter { fill: char, align: Alignment, sign_plus: bool, alternate: bool, zero_pad: bool, width: i32, precision: i32, buf: &mut String }`
+#### `pub struct Formatter`
 
 Formatter that writes directly into a referenced output buffer.
 The Formatter does not own its buffer; it writes into the caller's `&mut String`.
@@ -320,10 +320,13 @@ Width and precision use -1 as sentinel for "not specified".
 - `pub fn write_from_memory(&mut self, ptr: i32, len: i32)` — Write raw bytes from linear memory, applying width/alignment padding.
 - `pub fn prepare_int_write(&mut self, is_negative: bool, prefix: String, digit_count: i32) -> i32` — Prepare the output buffer for integer digits.
 
-#### `pub struct u128 { .. }`
+#### `pub struct u128`
 
 Unsigned 128-bit integer
 Stored as two 64-bit parts: low (bits 0-63) and high (bits 64-127)
+
+*Fields are private.*
+
 
 ##### Methods
 
@@ -414,10 +417,13 @@ Stored as two 64-bit parts: low (bits 0-63) and high (bits 64-127)
 
 - `pub fn rem(&self, other: &Self) -> Self::Output`
 
-#### `pub struct i128 { .. }`
+#### `pub struct i128`
 
 Signed 128-bit integer
 Stored as two 64-bit parts: low (bits 0-63, unsigned) and high (bits 64-127, signed)
+
+*Fields are private.*
+
 
 ##### Methods
 
@@ -513,9 +519,12 @@ Stored as two 64-bit parts: low (bits 0-63, unsigned) and high (bits 64-127, sig
 
 - `pub fn rem(&self, other: &Self) -> Self::Output`
 
-#### `pub struct String { .. }`
+#### `pub struct String`
 
 UTF-8 encoded string type with O(1) amortized append
+
+*Fields are private.*
+
 
 ##### Methods
 
@@ -552,25 +561,34 @@ UTF-8 encoded string type with O(1) amortized append
 
 - `pub fn cmp(&self, other: &Self) -> Ordering`
 
-#### `pub struct StrUtf8ByteIter { .. }`
+#### `pub struct StrUtf8ByteIter`
 
 Iterator over UTF-8 bytes of a String.
 Yields each byte as u8.
+
+*Fields are private.*
+
 
 ##### `impl Iterator for StrUtf8ByteIter`
 
 - `pub fn next(&mut self) -> Option<Self::Item>`
 
-#### `pub struct StrCharIter { .. }`
+#### `pub struct StrCharIter`
 
 Iterator over Unicode scalar values (chars) of a String.
 Decodes UTF-8 and yields each character.
+
+*Fields are private.*
+
 
 ##### `impl Iterator for StrCharIter`
 
 - `pub fn next(&mut self) -> Option<Self::Item>`
 
-#### `pub struct Array<T> { .. }`
+#### `pub struct Array<T>`
+
+*Fields are private.*
+
 
 ##### Methods
 
@@ -618,7 +636,10 @@ Decodes UTF-8 and yields each character.
 - `fn push_literal(&mut self, value: T)`
 - `fn build(&self) -> Array<T>`
 
-#### `pub struct ArrayIter<T> { .. }`
+#### `pub struct ArrayIter<T>`
+
+*Fields are private.*
+
 
 ##### Methods
 
@@ -646,13 +667,19 @@ Decodes UTF-8 and yields each character.
 
 - `fn next(&mut self) -> Option<Self::Item>`
 
-#### `pub struct EnumerateIter<T> { .. }`
+#### `pub struct EnumerateIter<T>`
+
+*Fields are private.*
+
 
 ##### `impl Iterator for EnumerateIter<T>`
 
 - `fn next(&mut self) -> Option<Self::Item>`
 
-#### `pub struct MapIter<T, U> { .. }`
+#### `pub struct MapIter<T, U>`
+
+*Fields are private.*
+
 
 ##### Methods
 
@@ -662,7 +689,10 @@ Decodes UTF-8 and yields each character.
 
 - `fn next(&mut self) -> Option<Self::Item>`
 
-#### `pub struct FilterIter<T> { .. }`
+#### `pub struct FilterIter<T>`
+
+*Fields are private.*
+
 
 ##### Methods
 
@@ -675,25 +705,31 @@ Decodes UTF-8 and yields each character.
 
 ### Enums
 
-#### `pub enum Ordering { Less, Equal, Greater }`
+#### `pub enum Ordering`
 
 Result of a comparison between two values.
 
-#### `pub enum Alignment { Left, Center, Right }`
+Cases: `Less`, `Equal`, `Greater`
+
+#### `pub enum Alignment`
 
 Text alignment for padding.
+
+Cases: `Left`, `Center`, `Right`
 
 ### Variants
 
 #### `pub variant Option<T>`
 
 Optional value - either Some(T) or None
+
 - `Some(T)`
 - `None`
 
 #### `pub variant Result<T, E>`
 
 Result type - either Ok(T) or Err(E)
+
 - `Ok(T)`
 - `Err(E)`
 
@@ -702,6 +738,7 @@ Result type - either Ok(T) or Err(E)
 #### `pub fn panic(message: String) -> !`
 
 #### `pub fn unreachable() -> !`
+
 ## core:cli
 
 CLI helpers: `println`, `eprintln`, `args`, `env`, `exit`, etc.
@@ -754,6 +791,7 @@ Exit with error
 #### `pub fn exit(code: u8) -> ! with Exit`
 
 Exit with specific status code
+
 ## core:clocks
 
 Monotonic clock for time measurement.
@@ -770,13 +808,14 @@ Monotonic clock for time measurement.
 
 Get the current monotonic clock time in nanoseconds.
 The clock is monotonic, so successive calls will return non-decreasing values.
+
 ## core:collections
 
 Collection types: `TreeMap<K, V>` (ordered key-value map).
 
 ### Structs
 
-#### `pub struct TreeMap<K, V> { .. }`
+#### `pub struct TreeMap<K, V>`
 
 A map that iterates in insertion order.
 
@@ -785,6 +824,9 @@ are stored in a dense array for fast, insertion-order iteration.
 
 This is similar to Rust's `indexmap::IndexMap` but uses a tree instead
 of a hash table for key lookups.
+
+*Fields are private.*
+
 
 ##### Methods
 
@@ -812,6 +854,7 @@ of a hash table for key lookups.
 - `fn new_literal(capacity: i32) -> TreeMap<String, V>`
 - `fn insert_literal(&mut self, key: String, value: Self::Value)`
 - `fn build(&self) -> TreeMap<String, V>`
+
 ## core:base64
 
 Base64 encoding and decoding (RFC 4648).
@@ -850,13 +893,17 @@ Returns null on invalid input.
 
 Decode Base64 from raw bytes (e.g., HTTP body, file content).
 Same lenient behavior as `decode`.
+
 ## core:zlib
 
 zlib compression and decompression (RFC 1950/1951/1952).
 
 ### Structs
 
-#### `pub struct GzipHeader { .. }`
+#### `pub struct GzipHeader`
+
+*Fields are private.*
+
 
 ##### Methods
 
@@ -869,7 +916,10 @@ zlib compression and decompression (RFC 1950/1951/1952).
 - `pub fn set_comment(&mut self, comment: String)`
 - `pub fn set_hcrc(&mut self, hcrc: bool)`
 
-#### `pub struct DeflateStream { .. }`
+#### `pub struct DeflateStream`
+
+*Fields are private.*
+
 
 ##### Methods
 
@@ -890,7 +940,10 @@ zlib compression and decompression (RFC 1950/1951/1952).
 - `pub fn finish(&mut self) -> Array<u8>`
 - `pub fn compress(&mut self, input: &Array<u8>) -> Array<u8>`
 
-#### `pub struct InflateStream { .. }`
+#### `pub struct InflateStream`
+
+*Fields are private.*
+
 
 ##### Methods
 

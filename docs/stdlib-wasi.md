@@ -7,12 +7,15 @@
 
 ### Enums
 
-#### `pub enum ErrorCode { Io, IllegalByteSequence, Pipe }`
+#### `pub enum ErrorCode`
+
+Cases: `Io`, `IllegalByteSequence`, `Pipe`
+
 ## wasi:filesystem
 
 ### Structs
 
-#### `pub struct DescriptorStat { type: DescriptorType, link_count: LinkCount, size: Filesize, data_access_timestamp: Option<Instant>, data_modification_timestamp: Option<Instant>, status_change_timestamp: Option<Instant> }`
+#### `pub struct DescriptorStat`
 
 ##### Fields
 
@@ -23,14 +26,14 @@
 - `data_modification_timestamp: Option<Instant>`
 - `status_change_timestamp: Option<Instant>`
 
-#### `pub struct DirectoryEntry { type: DescriptorType, name: String }`
+#### `pub struct DirectoryEntry`
 
 ##### Fields
 
 - `type: DescriptorType`
 - `name: String`
 
-#### `pub struct MetadataHashValue { lower: u64, upper: u64 }`
+#### `pub struct MetadataHashValue`
 
 ##### Fields
 
@@ -45,15 +48,64 @@
 
 ### Enums
 
-#### `pub enum DescriptorType { Unknown, BlockDevice, CharacterDevice, Directory, Fifo, SymbolicLink, RegularFile, Socket }`
+#### `pub enum DescriptorType`
 
-#### `pub enum ErrorCode { Access, Already, BadDescriptor, Busy, Deadlock, Quota, Exist, FileTooLarge, IllegalByteSequence, InProgress, Interrupted, Invalid, Io, IsDirectory, Loop, TooManyLinks, MessageSize, NameTooLong, NoDevice, NoEntry, NoLock, InsufficientMemory, InsufficientSpace, NotDirectory, NotEmpty, NotRecoverable, Unsupported, NoTty, NoSuchDevice, Overflow, NotPermitted, Pipe, ReadOnly, InvalidSeek, TextFileBusy, CrossDevice }`
+- `Unknown`
+- `BlockDevice`
+- `CharacterDevice`
+- `Directory`
+- `Fifo`
+- `SymbolicLink`
+- `RegularFile`
+- `Socket`
 
-#### `pub enum Advice { Normal, Sequential, Random, WillNeed, DontNeed, NoReuse }`
+#### `pub enum ErrorCode`
+
+- `Access`
+- `Already`
+- `BadDescriptor`
+- `Busy`
+- `Deadlock`
+- `Quota`
+- `Exist`
+- `FileTooLarge`
+- `IllegalByteSequence`
+- `InProgress`
+- `Interrupted`
+- `Invalid`
+- `Io`
+- `IsDirectory`
+- `Loop`
+- `TooManyLinks`
+- `MessageSize`
+- `NameTooLong`
+- `NoDevice`
+- `NoEntry`
+- `NoLock`
+- `InsufficientMemory`
+- `InsufficientSpace`
+- `NotDirectory`
+- `NotEmpty`
+- `NotRecoverable`
+- `Unsupported`
+- `NoTty`
+- `NoSuchDevice`
+- `Overflow`
+- `NotPermitted`
+- `Pipe`
+- `ReadOnly`
+- `InvalidSeek`
+- `TextFileBusy`
+- `CrossDevice`
+
+#### `pub enum Advice`
+
+Cases: `Normal`, `Sequential`, `Random`, `WillNeed`, `DontNeed`, `NoReuse`
 
 ### Variants
 
 #### `pub variant NewTimestamp`
+
 - `NoChange`
 - `Now`
 - `Timestamp(Instant)`
@@ -85,25 +137,26 @@
 - `Directory`
 - `Exclusive`
 - `Truncate`
+
 ## wasi:http
 
 ### Structs
 
-#### `pub struct DnsErrorPayload { rcode: Option<String>, info_code: Option<u16> }`
+#### `pub struct DnsErrorPayload`
 
 ##### Fields
 
 - `rcode: Option<String>`
 - `info_code: Option<u16>`
 
-#### `pub struct TlsAlertReceivedPayload { alert_id: Option<u8>, alert_message: Option<String> }`
+#### `pub struct TlsAlertReceivedPayload`
 
 ##### Fields
 
 - `alert_id: Option<u8>`
 - `alert_message: Option<String>`
 
-#### `pub struct FieldSizePayload { field_name: Option<String>, field_size: Option<u32> }`
+#### `pub struct FieldSizePayload`
 
 ##### Fields
 
@@ -125,6 +178,7 @@
 ### Variants
 
 #### `pub variant Method`
+
 - `Get`
 - `Head`
 - `Post`
@@ -137,11 +191,13 @@
 - `Other(String)`
 
 #### `pub variant Scheme`
+
 - `Http`
 - `Https`
 - `Other(String)`
 
 #### `pub variant ErrorCode`
+
 - `DnsTimeout`
 - `DnsError(DnsErrorPayload)`
 - `DestinationNotFound`
@@ -183,18 +239,21 @@
 - `InternalError(Option<String>)`
 
 #### `pub variant HeaderError`
+
 - `InvalidSyntax`
 - `Forbidden`
 - `Immutable`
 
 #### `pub variant RequestOptionsError`
+
 - `NotSupported`
 - `Immutable`
+
 ## wasi:clocks
 
 ### Structs
 
-#### `pub struct Instant { seconds: i64, nanoseconds: u32 }`
+#### `pub struct Instant`
 
 ##### Fields
 
@@ -206,19 +265,21 @@
 #### `pub type Duration = u64`
 
 #### `pub type Mark = u64`
+
 ## wasi:random
+
 ## wasi:sockets
 
 ### Structs
 
-#### `pub struct Ipv4SocketAddress { port: u16, address: Ipv4Address }`
+#### `pub struct Ipv4SocketAddress`
 
 ##### Fields
 
 - `port: u16`
 - `address: Ipv4Address`
 
-#### `pub struct Ipv6SocketAddress { port: u16, flow_info: u32, address: Ipv6Address, scope_id: u32 }`
+#### `pub struct Ipv6SocketAddress`
 
 ##### Fields
 
@@ -235,18 +296,44 @@
 
 ### Enums
 
-#### `pub enum ErrorCode { Unknown, AccessDenied, NotSupported, InvalidArgument, OutOfMemory, Timeout, InvalidState, AddressNotBindable, AddressInUse, RemoteUnreachable, ConnectionRefused, ConnectionReset, ConnectionAborted, DatagramTooLarge }`
+#### `pub enum ErrorCode`
 
-#### `pub enum IpAddressFamily { Ipv4, Ipv6 }`
+- `Unknown`
+- `AccessDenied`
+- `NotSupported`
+- `InvalidArgument`
+- `OutOfMemory`
+- `Timeout`
+- `InvalidState`
+- `AddressNotBindable`
+- `AddressInUse`
+- `RemoteUnreachable`
+- `ConnectionRefused`
+- `ConnectionReset`
+- `ConnectionAborted`
+- `DatagramTooLarge`
 
-#### `pub enum ErrorCode { Unknown, AccessDenied, InvalidArgument, NameUnresolvable, TemporaryResolverFailure, PermanentResolverFailure }`
+#### `pub enum IpAddressFamily`
+
+Cases: `Ipv4`, `Ipv6`
+
+#### `pub enum ErrorCode`
+
+- `Unknown`
+- `AccessDenied`
+- `InvalidArgument`
+- `NameUnresolvable`
+- `TemporaryResolverFailure`
+- `PermanentResolverFailure`
 
 ### Variants
 
 #### `pub variant IpAddress`
+
 - `Ipv4(Ipv4Address)`
 - `Ipv6(Ipv6Address)`
 
 #### `pub variant IpSocketAddress`
+
 - `Ipv4(Ipv4SocketAddress)`
 - `Ipv6(Ipv6SocketAddress)`

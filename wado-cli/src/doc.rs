@@ -208,7 +208,14 @@ pub fn run(opts: DocOptions) {
             if let Some(ref title) = opts.title {
                 writeln!(out, "# {title}\n").unwrap();
             }
-            for doc in &doc_modules {
+            for (i, doc) in doc_modules.iter().enumerate() {
+                if i > 0 && !out.ends_with("\n\n") {
+                    if out.ends_with('\n') {
+                        out.push('\n');
+                    } else {
+                        out.push_str("\n\n");
+                    }
+                }
                 match opts.format {
                     OutputFormat::Markdown => out.push_str(&render_markdown(doc, h_offset)),
                     OutputFormat::Simple => out.push_str(&render_simple(doc, h_offset)),
@@ -254,8 +261,7 @@ fn render_markdown(doc: &DocModule, h_offset: usize) -> String {
 
     if let Some(ref module_doc) = doc.doc {
         out.push('\n');
-        out.push_str(module_doc);
-        out.push('\n');
+        render_md_doc(&mut out, module_doc);
     }
 
     if !doc.traits.is_empty() {
@@ -277,7 +283,8 @@ fn render_markdown(doc: &DocModule, h_offset: usize) -> String {
         for t in &doc.types {
             writeln!(out, "\n{h3} `{}`", t.signature).unwrap();
             if let Some(ref d) = t.doc {
-                writeln!(out, "\n{d}").unwrap();
+                out.push('\n');
+                render_md_doc(&mut out, d);
             }
         }
     }
@@ -287,7 +294,8 @@ fn render_markdown(doc: &DocModule, h_offset: usize) -> String {
         for g in &doc.globals {
             writeln!(out, "\n{h3} `{}`", g.signature).unwrap();
             if let Some(ref d) = g.doc {
-                writeln!(out, "\n{d}").unwrap();
+                out.push('\n');
+                render_md_doc(&mut out, d);
             }
         }
     }
@@ -318,7 +326,8 @@ fn render_markdown(doc: &DocModule, h_offset: usize) -> String {
         for f in &doc.functions {
             writeln!(out, "\n{h3} `{}`", f.signature).unwrap();
             if let Some(ref d) = f.doc {
-                writeln!(out, "\n{d}").unwrap();
+                out.push('\n');
+                render_md_doc(&mut out, d);
             }
         }
     }
@@ -327,12 +336,13 @@ fn render_markdown(doc: &DocModule, h_offset: usize) -> String {
 }
 
 fn render_md_trait(out: &mut String, t: &DocTrait, h3: &str, h4: &str) {
-    writeln!(out, "\n{h3} `{}`", t.signature).unwrap();
+    writeln!(out, "\n{h3} `{}`\n", t.signature).unwrap();
     if let Some(ref d) = t.doc {
-        writeln!(out, "\n{d}").unwrap();
+        render_md_doc(out, d);
+        out.push('\n');
     }
     if !t.methods.is_empty() {
-        writeln!(out, "\n{h4} Methods\n").unwrap();
+        writeln!(out, "{h4} Methods\n").unwrap();
         for m in &t.methods {
             render_md_method_item(out, m);
         }
@@ -340,12 +350,14 @@ fn render_md_trait(out: &mut String, t: &DocTrait, h3: &str, h4: &str) {
 }
 
 fn render_md_struct(out: &mut String, s: &DocStruct, h3: &str, h4: &str) {
-    writeln!(out, "\n{h3} `{}`", s.signature).unwrap();
+    let name = sig_name_part(&s.signature);
+    writeln!(out, "\n{h3} `{name}`\n").unwrap();
     if let Some(ref d) = s.doc {
-        writeln!(out, "\n{d}").unwrap();
+        render_md_doc(out, d);
+        out.push('\n');
     }
     if !s.fields.is_empty() {
-        writeln!(out, "\n{h4} Fields\n").unwrap();
+        writeln!(out, "{h4} Fields\n").unwrap();
         for f in &s.fields {
             if let Some(ref d) = f.doc {
                 let brief = d.lines().next().unwrap_or("");
@@ -354,6 +366,8 @@ fn render_md_struct(out: &mut String, s: &DocStruct, h3: &str, h4: &str) {
                 writeln!(out, "- `{}: {}`", f.name, f.ty).unwrap();
             }
         }
+    } else if s.has_private_fields {
+        writeln!(out, "*Fields are private.*\n").unwrap();
     }
     if !s.methods.is_empty() {
         writeln!(out, "\n{h4} Methods\n").unwrap();
@@ -379,16 +393,30 @@ fn render_md_method_item(out: &mut String, m: &DocFunction) {
 }
 
 fn render_md_enum(out: &mut String, e: &DocEnum, h3: &str) {
-    writeln!(out, "\n{h3} `{}`", e.signature).unwrap();
+    let name = sig_name_part(&e.signature);
+    writeln!(out, "\n{h3} `{name}`").unwrap();
     if let Some(ref d) = e.doc {
-        writeln!(out, "\n{d}").unwrap();
+        out.push('\n');
+        render_md_doc(out, d);
+    }
+    if !e.cases.is_empty() {
+        let inline = e.cases.join("`, `");
+        if inline.len() + 10 <= 80 {
+            writeln!(out, "\nCases: `{inline}`").unwrap();
+        } else {
+            out.push('\n');
+            for case in &e.cases {
+                writeln!(out, "- `{case}`").unwrap();
+            }
+        }
     }
 }
 
 fn render_md_variant(out: &mut String, v: &DocVariant, h3: &str) {
-    writeln!(out, "\n{h3} `{}`", v.signature).unwrap();
+    writeln!(out, "\n{h3} `{}`\n", v.signature).unwrap();
     if let Some(ref d) = v.doc {
-        writeln!(out, "\n{d}").unwrap();
+        render_md_doc(out, d);
+        out.push('\n');
     }
     for case in &v.cases {
         let case_repr = if let Some(ref p) = case.payload {
@@ -406,13 +434,38 @@ fn render_md_variant(out: &mut String, v: &DocVariant, h3: &str) {
 }
 
 fn render_md_flags(out: &mut String, f: &DocFlags, h3: &str, h4: &str) {
-    writeln!(out, "\n{h3} `{}`", f.signature).unwrap();
+    writeln!(out, "\n{h3} `{}`\n", f.signature).unwrap();
     if let Some(ref d) = f.doc {
-        writeln!(out, "\n{d}").unwrap();
+        render_md_doc(out, d);
+        out.push('\n');
     }
-    writeln!(out, "\n{h4} Members\n").unwrap();
+    writeln!(out, "{h4} Members\n").unwrap();
     for member in &f.members {
         writeln!(out, "- `{member}`").unwrap();
+    }
+}
+
+fn sig_name_part(sig: &str) -> &str {
+    sig.find(" { ").map_or(sig, |i| &sig[..i])
+}
+
+fn render_md_doc(out: &mut String, doc: &str) {
+    let mut prev_blank = false;
+    for line in doc.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            if !prev_blank {
+                out.push('\n');
+            }
+            prev_blank = true;
+        } else {
+            if !prev_blank && !out.is_empty() && !out.ends_with('\n') {
+                out.push('\n');
+            }
+            out.push_str(line);
+            out.push('\n');
+            prev_blank = false;
+        }
     }
 }
 
