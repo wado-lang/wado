@@ -64,23 +64,27 @@ The `..` signals that the struct cannot be constructed externally (some fields a
 ### CLI Interface
 
 ```sh
-wado doc [options] [file.wado...]
+wado doc [file.wado...]
 
 # Single file
-wado doc lib/core/prelude/traits.wado     # print docs for one file
+wado doc lib/core/prelude/traits.wado
 
 # Multiple files / glob
-wado doc lib/core/**/*.wado               # print docs for matching files
+wado doc lib/core/**/*.wado
 
 # Project mode (with wado.toml)
-wado doc                                  # document all project source files
+wado doc
+
+# Simple format (cheatsheet-style pseudo-code)
+wado doc --simple lib/core/**/*.wado
 ```
 
-| Flag     | Description |
-| -------- | ----------- |
-| `--help` | Show usage  |
+| Flag       | Description                                        |
+| ---------- | -------------------------------------------------- |
+| `--simple` | Compact pseudo-code output (for cheatsheet generation) |
+| `--help`   | Show usage                                         |
 
-Output goes to stdout. Redirect with shell (`> file.md`) for file output.
+Default output is `full` (structured markdown). Output goes to stdout.
 
 ### Extraction Strategy: CommentMap-Based (No AST Changes)
 
@@ -114,109 +118,220 @@ pub enum CommentKind {
 
 The lexer detects `///` and `//!` patterns after the initial `//` and assigns the appropriate kind. This enables the formatter to preserve doc comment style and the doc tool to efficiently filter for doc comments.
 
-### Markdown Output Format
+### Output Formats
 
-```markdown
-# module_name
+Both formats use the same source as input:
 
-Module-level doc from `//!` comments.
+```wado
+//! Core trait definitions for equality and ordering.
 
-## Functions
+/// Equality comparisons (== and !=).
+pub trait Eq {
+    /// Returns true if self equals other.
+    fn eq(&self, other: &Self) -> bool;
+}
 
-### `pub fn foo(x: i32) -> String`
+/// Ordering comparisons (<, <=, >, >=).
+pub trait Ord {
+    fn cmp(&self, other: &Self) -> Ordering;
+}
 
-Doc comment for foo.
+/// A 2D point.
+pub struct Point {
+    pub x: i32,
+    pub y: i32,
+}
 
-### `export fn run()`
+pub struct Config {
+    pub name: String,
+    secret: i32,
+}
 
-Doc comment for run.
+impl Point {
+    pub fn origin() -> Point { ... }
+    pub fn distance(&self, other: &Point) -> f64 { ... }
+    fn internal_helper(&self) { ... }
+}
 
-## Structs
+pub type Meters = f64;
+pub global PI: f64 = 3.14159;
 
-### `pub struct Point { x: i32, y: i32 }`
+pub enum Color { Red, Green, Blue }
 
-Doc comment for Point.
+pub variant Shape {
+    Circle(f64),
+    Rectangle([f64, f64]),
+    Point,
+}
 
-#### Fields
+export fn run() { ... }
+```
 
-- `x: i32` — The x coordinate.
-- `y: i32` — The y coordinate.
+#### Full (default)
 
-### `pub struct Config { name: String, .. }`
+Structured markdown with doc comments, field descriptions, and method documentation. Suitable for reference documentation and static site generation.
 
-Doc comment for Config. Private fields are hidden with `..`.
+Output (`wado doc file.wado`):
 
-#### Fields
+````markdown
+# file
 
-- `name: String` — The config name.
+Core trait definitions for equality and ordering.
 
 ## Traits
 
 ### `pub trait Eq`
 
-Doc comment for Eq.
+Equality comparisons (== and !=).
 
 #### Methods
 
-- `fn eq(&self, other: &Self) -> bool` — Doc comment for eq.
+- `fn eq(&self, other: &Self) -> bool` — Returns true if self equals other.
 
-## Enums
+### `pub trait Ord`
 
-### `pub enum Color`
+Ordering comparisons (<, <=, >, >=).
 
-Doc comment for Color.
+#### Methods
 
-#### Cases
+- `fn cmp(&self, other: &Self) -> Ordering`
 
-- `Red` — Doc for Red.
-- `Green` — Doc for Green.
+## Structs
 
-## Variants
+### `pub struct Point { x: i32, y: i32 }`
 
-### `pub variant Shape`
+A 2D point.
 
-Doc comment for Shape.
+#### Fields
 
-#### Cases
+- `x: i32`
+- `y: i32`
 
-- `Circle(f64)` — radius
-- `Rectangle([f64, f64])` — width, height
-- `Point` — no payload
+#### Methods
 
-## Effects
+- `pub fn origin() -> Point`
+- `pub fn distance(&self, other: &Point) -> f64`
 
-### `pub effect Stdout`
+### `pub struct Config { name: String, .. }`
 
-Doc comment for Stdout.
+#### Fields
+
+- `name: String`
 
 ## Types
 
 ### `pub type Meters = f64`
 
-Doc comment for Meters.
-
 ## Globals
 
 ### `pub global PI: f64`
 
-Doc comment for PI.
+## Enums
+
+### `pub enum Color { Red, Green, Blue }`
+
+## Variants
+
+### `pub variant Shape`
+
+#### Cases
+
+- `Circle(f64)`
+- `Rectangle([f64, f64])`
+- `Point`
+
+## Functions
+
+### `export fn run()`
+````
+
+Rules for full format:
+- Module doc becomes the description under the `#` heading
+- Item doc comments appear as prose under their heading
+- Fields and methods listed with doc if present, without if absent
+- Same visibility rules (pub/export only, `..` for private fields)
+- `impl` methods folded into their type's section
+
+#### Simple (`--simple`)
+
+Compact Wado pseudo-code showing the public API surface. No prose, no doc comments — just signatures. Designed for generating cheatsheets (like `docs/cheatsheet.md` stdlib sections).
+
+Output (`wado doc --simple file.wado`):
+
+```
+// core trait definitions for equality and ordering.
+
+pub trait Eq {
+    fn eq(&self, other: &Self) -> bool;
+}
+
+pub trait Ord {
+    fn cmp(&self, other: &Self) -> Ordering;
+}
+
+pub struct Point { x: i32, y: i32 }
+pub struct Config { name: String, .. }
+
+impl Point {
+    pub fn origin() -> Point;
+    pub fn distance(&self, other: &Point) -> f64;
+}
+
+pub type Meters = f64;
+pub global PI: f64;
+
+pub enum Color { Red, Green, Blue }
+
+pub variant Shape {
+    Circle(f64),
+    Rectangle([f64, f64]),
+    Point,
+}
+
+export fn run();
 ```
 
-Items without doc comments are still listed (with their signature) but have no description body.
+Rules for simple format:
+- Module doc (`//!`) becomes a `//` comment at the top (lowercased first char)
+- Item doc comments are omitted entirely
+- Function bodies replaced with `;`
+- Private fields replaced with `..`
+- Private items and methods omitted
+- `impl` blocks show only pub/export methods
+- Globals omit initializers
+- Source order preserved
 
 ### Signature Rendering
 
-Item signatures are rendered using the existing unparser infrastructure with a "signature-only" mode — function bodies, struct field initializers, and trait method bodies are omitted.
+Both formats share the same signature rendering rules, using the existing unparser infrastructure with a "signature-only" mode:
 
 ```
-pub fn foo(x: i32, y: String) -> Result<i32, String>     // parameters + return type
+pub fn foo(x: i32, y: String) -> Result<i32, String>;    // no body
 pub struct Point { x: i32, y: i32 }                       // all fields public
 pub struct Config { name: String, .. }                     // private fields hidden
-pub trait Eq                                               // trait name + type params
+pub trait Eq { ... }                                       // methods inside
 pub enum Color { Red, Green, Blue }                        // all cases
 pub variant Shape { Circle(f64), Point }                   // cases with payloads
-pub type Meters = f64                                      // base type
+pub type Meters = f64;                                     // base type
+pub global PI: f64;                                        // no initializer
 ```
+
+### Multi-File Output
+
+When multiple files are given, their outputs are concatenated into a single document. Each file becomes a top-level section:
+
+- **Full format**: each file gets a `# module_name` heading, then its items follow. Multiple files produce a single markdown document with multiple `#` sections.
+- **Simple format**: files are separated by a `// --- module_name ---` comment line.
+
+```sh
+# Concatenates all core library docs into one document
+wado doc lib/core/**/*.wado > stdlib-reference.md
+
+# Cheatsheet for the entire stdlib
+wado doc --simple lib/core/**/*.wado > stdlib-cheatsheet.wado
+```
+
+Files are output in the order they are given (or glob-expanded).
 
 ### Scope and Item Ordering
 
@@ -239,7 +354,8 @@ Nested items (struct fields, trait methods, enum/variant cases, effect methods) 
 1. Add `Doc` to `Cmd` enum in `main.rs`
 2. Create `wado-cli/src/doc.rs` with `DocOptions`, `parse_args()`, `run()`
 3. Implement doc extraction using `CommentMap::leading_comments()`
-4. Implement markdown output (pub/export items only, `..` for private fields)
+4. Implement full format (default): structured markdown with doc comments
+5. Implement simple format (`--simple`): compact Wado pseudo-code for cheatsheets
 
 ### Future
 
@@ -257,7 +373,7 @@ Nested items (struct fields, trait methods, enum/variant cases, effect methods) 
 
 - Zero AST changes — the existing `CommentMap` infrastructure handles everything
 - 571 existing `///` lines in the stdlib work immediately
-- Markdown output is both human-readable and pipeline-friendly
+- Two formats serve different needs: simple for quick API lookup, full for reference docs
 - `//!` module docs establish a file-level documentation convention early
 - `..` for private fields clearly communicates construction constraints
 
@@ -269,5 +385,5 @@ Nested items (struct fields, trait methods, enum/variant cases, effect methods) 
 ### Trade-offs
 
 - **CommentMap vs AST embedding**: CommentMap avoids touching the parser and AST, keeping the change surface minimal. AST embedding would be more robust but requires modifying every item struct. CommentMap is the right choice for Phase 1; AST embedding can be added later if needed.
-- **Markdown-first vs HTML-first**: Markdown is simpler to implement, renders well in terminals, and can be converted to HTML later. Starting with HTML would delay the initial release.
+- **Full-default vs simple-default**: Full is the expected behavior for a `doc` command — complete documentation. Simple exists for a specific use case (cheatsheet generation) and is opt-in via `--simple`.
 - **Source order vs alphabetical**: Source order respects author intent. Alphabetical is better for reference lookup. Source order is the default; alphabetical can be added as `--sort` later.
