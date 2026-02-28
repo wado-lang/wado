@@ -1426,31 +1426,6 @@ let x = identity::<i32>(42);
 let y = container.transform::<i32, i64>(10, 20 as i64);
 ```
 
-### Generic Type Inference
-
-Type arguments can be inferred for variant constructors and struct literals:
-
-```wado
-// From payload type
-let a = Option::Some("hello");  // Option<String>
-let b = Option::Some(42);       // Option<i32>
-
-// From type annotation
-let c: Option<i32> = Option::None;
-let d: Result<i32, String> = Result::Ok(42);
-let e: Result<i32, String> = Result::Err("fail");
-
-// Struct literals
-struct Box<T> { value: T }
-let f = Box { value: 42 };             // Box<i32>
-let g: Box<String> = { value: "hi" };  // Box<String>
-```
-
-Generic function/method call type inference is not yet implemented:
-```wado
-// Turbofish required for now
-let x = identity::<i32>(42);     // cannot write: identity(42)
-```
 
 ## Closures
 
