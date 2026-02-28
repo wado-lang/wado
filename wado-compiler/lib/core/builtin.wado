@@ -9,151 +9,151 @@
 //
 // Functions with #[canonical("namespace", "name")] are imported as CM canonical built-ins.
 // Functions without #[canonical(...)] compile to Wasm instructions directly.
-/// Create a new stream, returns (rx, tx) packed in i64
-/// Low 32 bits = rx (readable end), High 32 bits = tx (writable end)
+/// Creates a new stream, returning (rx, tx) packed in i64.
+/// Low 32 bits = rx (readable end), High 32 bits = tx (writable end).
 #[canonical("wasi", "stream-new")]
 fn stream_new() -> i64;
 
-/// Read data from a stream into linear memory
-/// Returns BLOCKED (0xFFFF_FFFF) or copy_result | (count << 4)
-/// copy_result: 0=COMPLETED, 1=DROPPED (writer closed)
+/// Reads data from a stream into linear memory.
+/// Returns BLOCKED (0xFFFF_FFFF) or copy_result | (count << 4).
+/// copy_result: 0=COMPLETED, 1=DROPPED (writer closed).
 #[canonical("wasi", "stream-read")]
 fn stream_read(rx: i32, ptr: i32, len: i32) -> i32;
 
-/// Write data from linear memory to a stream
-/// Returns BLOCKED (0xFFFF_FFFF) or copy_result | (count << 4)
+/// Writes data from linear memory to a stream.
+/// Returns BLOCKED (0xFFFF_FFFF) or copy_result | (count << 4).
 #[canonical("wasi", "stream-write")]
 fn stream_write(tx: i32, ptr: i32, len: i32) -> i32;
 
-/// Drop the writable end of a stream (close for writing)
+/// Drops the writable end of a stream (close for writing).
 #[canonical("wasi", "stream-drop-writable")]
 fn stream_drop_writable(tx: i32);
 
-/// Drop the readable end of a stream (close for reading)
+/// Drops the readable end of a stream (close for reading).
 #[canonical("wasi", "stream-drop-readable")]
 fn stream_drop_readable(rx: i32);
-/// Create a new future, returns (rx, tx) packed in i64
-/// Low 32 bits = rx (readable end), High 32 bits = tx (writable end)
+/// Creates a new future, returning (rx, tx) packed in i64.
+/// Low 32 bits = rx (readable end), High 32 bits = tx (writable end).
 #[canonical("wasi", "future-new")]
 fn future_new() -> i64;
 
-/// Write data from linear memory to a future (fulfill it)
-/// ptr points to the payload value in linear memory
-/// Returns 0 on success, non-zero on error
+/// Writes data from linear memory to a future (fulfills it).
+/// ptr points to the payload value in linear memory.
+/// Returns 0 on success, non-zero on error.
 #[canonical("wasi", "future-write")]
 fn future_write(tx: i32, ptr: i32) -> i32;
 
-/// Drop the writable end of a future (close for writing without fulfilling)
+/// Drops the writable end of a future (closes for writing without fulfilling).
 #[canonical("wasi", "future-drop-writable")]
 fn future_drop_writable(tx: i32);
 
-/// Drop the readable end of a future
+/// Drops the readable end of a future.
 #[canonical("wasi", "future-drop-readable")]
 fn future_drop_readable(rx: i32);
-/// Signal task completion with a result value
-/// Used internally by the compiler to complete async exports
+/// Signals task completion with a result value.
+/// Used internally by the compiler to complete async exports.
 #[canonical("wasi", "task-return")]
 fn task_return(result: i32);
 
-/// Create a new waitable set for async task coordination
+/// Creates a new waitable set for async task coordination.
 #[canonical("wasi", "waitable-set-new")]
 fn waitable_set_new() -> i32;
 
-/// Join a waitable (task/stream/future handle) to a waitable set.
-/// waitable: the handle to join (task, stream, or future)
-/// set: the waitable set to join into (0 = remove from current set)
+/// Joins a waitable (task/stream/future handle) to a waitable set.
+/// waitable: the handle to join (task, stream, or future).
+/// set: the waitable set to join into (0 = remove from current set).
 #[canonical("wasi", "waitable-join")]
 fn waitable_join(waitable: i32, set: i32);
 
-/// Wait on a waitable set, returns event ordinal when any task completes.
+/// Waits on a waitable set and returns the event ordinal when any task completes.
 /// Writes 8 bytes (POINTER_PAIR) to outptr:
-///   outptr+0: handle (u32) - waitable handle or 0
-///   outptr+4: result (u32) - packed status code
+///   outptr+0: handle (u32) - waitable handle or 0.
+///   outptr+4: result (u32) - packed status code.
 /// Caller must allocate 8 bytes with 4-byte alignment.
 #[canonical("wasi", "waitable-set-wait")]
 fn waitable_set_wait(set: i32, outptr: i32) -> i32;
 
-/// Drop a completed subtask handle
+/// Drops a completed subtask handle.
 #[canonical("wasi", "subtask-drop")]
 fn subtask_drop(subtask: i32);
 
-/// Reinterpret an i32 value as a char (no validation, no-op at Wasm level).
+/// Reinterprets an i32 value as a char (no validation, no-op at Wasm level).
 /// Used internally by the stdlib for trusted conversions (e.g., UTF-8 decoding).
 /// User code should use char::from_u32() or char::from_i32() instead.
 fn i32_as_char(value: i32) -> char;
 
-/// Bitwise AND of two i32 values
+/// Returns the bitwise AND of two i32 values.
 fn i32_and(a: i32, b: i32) -> i32;
 
-/// Check if i32 is zero (returns 1 if zero, 0 otherwise)
+/// Checks if an i32 is zero (returns 1 if zero, 0 otherwise).
 fn i32_eqz(a: i32) -> i32;
-/// Select between two values based on a condition, without branching.
+/// Selects between two values based on a condition, without branching.
 /// Returns if_true when cond is true, if_false when cond is false.
 /// Both operands are evaluated eagerly.
 fn select<T>(cond: bool, if_true: T, if_false: T) -> T;
-/// Get the length of a GC array
+/// Returns the length of a GC array.
 fn array_len(arr: builtin::array<u8>) -> i32;
 
-/// Get a byte from a u8 array at the given index
+/// Returns a byte from a u8 array at the given index.
 fn array_get_u8(arr: builtin::array<u8>, idx: i32) -> u8;
 
-/// Set a byte in a u8 array at the given index
+/// Sets a byte in a u8 array at the given index.
 fn array_set_u8(arr: builtin::array<u8>, idx: i32, value: u8);
 
-/// Create a new builtin::array<T> with given length, initialized to default values
+/// Creates a new builtin::array<T> with given length, initialized to default values.
 fn array_new<T>(len: i32) -> builtin::array<T>;
 
-/// Get an element from a builtin::array<T> at the given index
+/// Returns an element from a builtin::array<T> at the given index.
 fn array_get<T>(arr: builtin::array<T>, idx: i32) -> T;
 
-/// Set an element in a builtin::array<T> at the given index
+/// Sets an element in a builtin::array<T> at the given index.
 fn array_set<T>(arr: builtin::array<T>, idx: i32, value: T);
 
-/// Copy elements between builtin::arrays
-/// Copies `len` elements from src[src_offset..] to dst[dst_offset..]
+/// Copies elements between builtin::arrays.
+/// Copies `len` elements from src[src_offset..] to dst[dst_offset..].
 fn array_copy<T>(dst: builtin::array<T>, dst_offset: i32, src: builtin::array<T>, src_offset: i32, len: i32);
 
-/// Fill a builtin::array<T> with a value
-/// Fills `len` elements starting at `offset` with `value`
+/// Fills a builtin::array<T> with a value.
+/// Fills `len` elements starting at `offset` with `value`.
 fn array_fill<T>(arr: builtin::array<T>, offset: i32, value: T, len: i32);
-/// Load i32 from linear memory (Wasm i32.load)
+/// Loads an i32 from linear memory (Wasm i32.load).
 fn i32_load(addr: i32) -> i32;
 
-/// Store i32 to linear memory (Wasm i32.store)
+/// Stores an i32 to linear memory (Wasm i32.store).
 fn i32_store(addr: i32, value: i32);
 
-/// Load i64 from linear memory (Wasm i64.load)
+/// Loads an i64 from linear memory (Wasm i64.load).
 fn i64_load(addr: i32) -> i64;
 
-/// Store i64 to linear memory (Wasm i64.store)
+/// Stores an i64 to linear memory (Wasm i64.store).
 fn i64_store(addr: i32, value: i64);
 
-/// Load f32 from linear memory (Wasm f32.load)
+/// Loads an f32 from linear memory (Wasm f32.load).
 fn f32_load(addr: i32) -> f32;
 
-/// Store f32 to linear memory (Wasm f32.store)
+/// Stores an f32 to linear memory (Wasm f32.store).
 fn f32_store(addr: i32, value: f32);
 
-/// Load f64 from linear memory (Wasm f64.load)
+/// Loads an f64 from linear memory (Wasm f64.load).
 fn f64_load(addr: i32) -> f64;
 
-/// Store f64 to linear memory (Wasm f64.store)
+/// Stores an f64 to linear memory (Wasm f64.store).
 fn f64_store(addr: i32, value: f64);
 
-/// Load byte from linear memory (Wasm i32.load8_u)
+/// Loads a byte from linear memory (Wasm i32.load8_u).
 fn i32_load8_u(addr: i32) -> u8;
 
-/// Load u16 from linear memory (Wasm i32.load16_u)
+/// Loads a u16 from linear memory (Wasm i32.load16_u).
 fn i32_load16_u(addr: i32) -> u16;
 
-/// Store byte to linear memory (Wasm i32.store8)
+/// Stores a byte to linear memory (Wasm i32.store8).
 fn i32_store8(addr: i32, value: u8);
 
-/// Store u16 to linear memory (Wasm i32.store16)
+/// Stores a u16 to linear memory (Wasm i32.store16).
 fn i32_store16(addr: i32, value: u16);
 
-/// Allocate/reallocate memory in linear memory
-/// Standard WASI realloc signature
+/// Allocates or reallocates memory in linear memory.
+/// Standard WASI realloc signature.
 #[canonical("mem", "realloc")]
 fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
 /// Sine of x (in radians)
@@ -347,50 +347,50 @@ fn f32_hypot(x: f32, y: f32) -> f32;
 /// Floating-point remainder of x/y
 #[canonical("bundled", "libm_fmodf")]
 fn f32_fmod(x: f32, y: f32) -> f32;
-/// 128-bit addition: (a_lo, a_hi) + (b_lo, b_hi) = (result_lo, result_hi)
-/// Maps to Wasm i64.add128 instruction
+/// Performs 128-bit addition: (a_lo, a_hi) + (b_lo, b_hi) = (result_lo, result_hi).
+/// Maps to Wasm i64.add128 instruction.
 fn i64_add128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> [i64, i64];
 
-/// 128-bit subtraction: (a_lo, a_hi) - (b_lo, b_hi) = (result_lo, result_hi)
-/// Maps to Wasm i64.sub128 instruction
+/// Performs 128-bit subtraction: (a_lo, a_hi) - (b_lo, b_hi) = (result_lo, result_hi).
+/// Maps to Wasm i64.sub128 instruction.
 fn i64_sub128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> [i64, i64];
 
-/// 64x64 unsigned multiplication producing 128-bit result: a * b = (result_lo, result_hi)
-/// Maps to Wasm i64.mul_wide_u instruction
+/// Performs 64x64 unsigned multiplication producing a 128-bit result.
+/// Maps to Wasm i64.mul_wide_u instruction.
 fn i64_mul_wide_u(a: i64, b: i64) -> [i64, i64];
 
-/// 64x64 signed multiplication producing 128-bit result: a * b = (result_lo, result_hi)
-/// Maps to Wasm i64.mul_wide_s(a: i64, b: i64) -> [i64, i64];
+/// Performs 64x64 signed multiplication producing a 128-bit result.
+/// Maps to Wasm i64.mul_wide_s instruction.
 fn i64_mul_wide_s(a: i64, b: i64) -> [i64, i64];
-/// Count leading zeros in a 32-bit integer
-/// Maps to Wasm i32.clz instruction
+/// Counts the leading zeros in a 32-bit integer.
+/// Maps to Wasm i32.clz instruction.
 fn i32_clz(x: i32) -> i32;
 
-/// Count leading zeros in a 64-bit integer
-/// Maps to Wasm i64.clz instruction
+/// Counts the leading zeros in a 64-bit integer.
+/// Maps to Wasm i64.clz instruction.
 fn i64_clz(x: i64) -> i64;
-/// Reinterpret the bits of an f64 as an i64 (no conversion, just bit cast)
-/// Maps to Wasm i64.reinterpret_f64 instruction
+/// Reinterprets the bits of an f64 as an i64 (no conversion, just bit cast).
+/// Maps to Wasm i64.reinterpret_f64 instruction.
 fn i64_reinterpret_f64(f: f64) -> i64;
 
-/// Reinterpret the bits of an i64 as an f64 (no conversion, just bit cast)
-/// Maps to Wasm f64.reinterpret_i64 instruction
+/// Reinterprets the bits of an i64 as an f64 (no conversion, just bit cast).
+/// Maps to Wasm f64.reinterpret_i64 instruction.
 fn f64_reinterpret_i64(i: i64) -> f64;
 
-/// Reinterpret the bits of an f32 as an i32 (no conversion, just bit cast)
-/// Maps to Wasm i32.reinterpret_f32 instruction
+/// Reinterprets the bits of an f32 as an i32 (no conversion, just bit cast).
+/// Maps to Wasm i32.reinterpret_f32 instruction.
 fn i32_reinterpret_f32(f: f32) -> i32;
 
-/// Reinterpret the bits of an i32 as an f32 (no conversion, just bit cast)
-/// Maps to Wasm f32.reinterpret_i32 instruction
+/// Reinterprets the bits of an i32 as an f32 (no conversion, just bit cast).
+/// Maps to Wasm f32.reinterpret_i32 instruction.
 fn f32_reinterpret_i32(i: i32) -> f32;
-/// Unconditional trap - marks unreachable code
+/// Traps unconditionally, marking unreachable code.
 fn unreachable() -> !;
-/// Call stdout's write_via_stream indirectly (ambient, no effect required)
+/// Calls stdout's write_via_stream indirectly (ambient, no effect required).
 /// Returns the subtask handle for the async operation.
 fn call_indirect_stdout_write_via_stream(rx: i32) -> i32;
 
-/// Call stderr's write_via_stream indirectly (ambient, no effect required)
+/// Calls stderr's write_via_stream indirectly (ambient, no effect required).
 /// Returns the subtask handle for the async operation.
 fn call_indirect_stderr_write_via_stream(rx: i32) -> i32;
 /// Absolute value of f32
@@ -457,22 +457,22 @@ fn f32_max(a: f32, b: f32) -> f32;
 /// Maps to Wasm f64.max instruction
 fn f64_max(a: f64, b: f64) -> f64;
 
-/// Copy sign from second f32 to first
-/// Maps to Wasm f32.copysign instruction
+/// Copies the sign from the second f32 to the first.
+/// Maps to Wasm f32.copysign instruction.
 fn f32_copysign(magnitude: f32, sign: f32) -> f32;
 
-/// Copy sign from second f64 to first
-/// Maps to Wasm f64.copysign instruction
+/// Copies the sign from the second f64 to the first.
+/// Maps to Wasm f64.copysign instruction.
 fn f64_copysign(magnitude: f64, sign: f64) -> f64;
 
-/// Synthesis marker: write inspect (debug) output for a value into a Formatter.
-/// Replaced by inspect synthesis phase with type-specific code.
+/// Writes inspect (debug) output for a value into a Formatter.
+/// This is a synthesis marker replaced by the inspect synthesis phase with type-specific code.
 /// Used for `:?` format specifier in template strings: `{value:?}`.
 /// The Formatter's `alternate` flag controls pretty-printing (e.g., closure source text).
 fn inspect<T>(value: T, fmt: &mut Formatter);
 
-/// Synthesis marker: write display output for a value into a Formatter.
-/// Replaced by inspect synthesis phase: if the concrete type has a Display impl,
-/// calls Type@Display::fmt; otherwise falls back to inspect output.
+/// Writes display output for a value into a Formatter.
+/// This is a synthesis marker replaced by the inspect synthesis phase: if the concrete type
+/// has a Display impl, calls Type@Display::fmt; otherwise falls back to inspect output.
 /// Used for `{value}` format specifier on generic type parameters.
 fn display<T>(value: T, fmt: &mut Formatter);

@@ -41,7 +41,7 @@ pub struct TreeMap<K, V> {
 }
 
 impl TreeMap<K, V> {
-    /// Creates a new empty TreeMap
+    /// Creates a new empty TreeMap.
     pub fn new() -> TreeMap<K, V> {
         return TreeMap {
             root: null,
@@ -51,10 +51,10 @@ impl TreeMap<K, V> {
         };
     }
 
-    /// Returns the number of key-value pairs in the map
+    /// Returns the number of key-value pairs in the map.
     pub fn len(&self) -> i32 { return self.size; }
 
-    /// Returns true if the map contains no elements
+    /// Returns true if the map contains no elements.
     pub fn is_empty(&self) -> bool { return self.size == 0; }
 
     // Skew: right rotation to fix left horizontal link
@@ -161,8 +161,8 @@ impl TreeMap<K, V> {
     }
 
     /// Inserts a key-value pair into the map.
-    /// If the key already exists, the value is updated (preserving insertion order).
-    /// If the key was previously removed, it is re-inserted at the end.
+    /// If the key already exists, updates the value (preserving insertion order).
+    /// If the key was previously removed, re-inserts it at the end.
     fn insert(&mut self, key: K, value: V) {
         // Check if key already exists (non-deleted)
         let existing_index = self.find_index(key);
@@ -185,12 +185,12 @@ impl TreeMap<K, V> {
         self.size = self.size + 1;
     }
 
-    /// Returns true if the map contains a value for the specified key
+    /// Returns true if the map contains a value for the specified key.
     pub fn contains_key(&self, key: K) -> bool {
         return self.find_index(key) >= 0;
     }
 
-    /// Returns the value corresponding to the key, or null if not found
+    /// Returns the value corresponding to the key, or null if not found.
     pub fn get(&self, key: K) -> Option<V> {
         let index = self.find_index(key);
         if index >= 0 {
@@ -199,8 +199,8 @@ impl TreeMap<K, V> {
         return null;
     }
 
-    /// Removes a key from the map. Returns true if the key was present.
-    /// This is a "shift remove" that preserves insertion order of remaining elements.
+    /// Removes a key from the map and returns true if the key was present.
+    /// Preserves insertion order of remaining elements.
     pub fn remove(&mut self, key: K) -> bool {
         let index = self.find_index(key);
         if index < 0 {
@@ -249,7 +249,7 @@ impl TreeMap<K, V> {
         }
     }
 
-    /// Returns all keys in insertion order
+    /// Returns all keys in insertion order.
     pub fn keys(&self) -> Array<K> {
         let mut result: Array<K> = [];
         for let entry of self.entries {
@@ -260,7 +260,7 @@ impl TreeMap<K, V> {
         return result;
     }
 
-    /// Returns all values in insertion order
+    /// Returns all values in insertion order.
     pub fn values(&self) -> Array<V> {
         let mut result: Array<V> = [];
         for let entry of self.entries {
@@ -271,7 +271,7 @@ impl TreeMap<K, V> {
         return result;
     }
 
-    /// Returns all key-value pairs in insertion order
+    /// Returns all key-value pairs in insertion order.
     pub fn entries(&self) -> Array<[K, V]> {
         let mut result: Array<[K, V]> = [];
         for let entry of self.entries {
@@ -282,7 +282,7 @@ impl TreeMap<K, V> {
         return result;
     }
 
-    /// Removes all key-value pairs from the map
+    /// Removes all key-value pairs from the map.
     pub fn clear(&mut self) {
         self.root = null;
         self.entries = [];

@@ -10,7 +10,7 @@
 // Do NOT define Box<T> here — the monomorphizer would create user-type instances
 // in core:internal, conflicting with entry module types.
 
-/// Copy bytes from linear memory to a new GC array
+/// Copies bytes from linear memory to a new GC array.
 pub fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
     let arr = builtin::array_new::<u8>(len);
     for (let mut i = 0; i < len; i += 1) {
@@ -19,20 +19,20 @@ pub fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
     return arr;
 }
 
-/// Copy bytes from linear memory to a new GC String
+/// Copies bytes from linear memory to a new GC String.
 pub fn memory_to_gc_string(ptr: i32, len: i32) -> String {
     let arr = memory_to_gc_array(ptr, len);
     return String::internal_from_utf8_raw(arr, len);
 }
 
-/// Copy bytes from a GC array to linear memory
+/// Copies bytes from a GC array to linear memory.
 pub fn gc_array_to_memory(arr: builtin::array<u8>, ptr: i32, len: i32) {
     for (let mut i = 0; i < len; i += 1) {
         builtin::i32_store8(ptr + i, builtin::array_get_u8(arr, i));
     }
 }
 
-/// Write a string to a stream handle with an optional newline
+/// Writes a string to a stream handle with an optional newline.
 /// Internal helper for log_stdout and log_stderr.
 pub fn write_string_to_stream(tx: i32, message: String, add_newline: bool) {
     let len = message.len();
@@ -51,7 +51,7 @@ pub fn write_string_to_stream(tx: i32, message: String, add_newline: bool) {
     builtin::stream_drop_writable(tx);
 }
 
-/// Wait for a pending async subtask to complete.
+/// Waits for a pending async subtask to complete.
 /// In WASI P3 async calling convention, canon lower async returns (handle << 4) | status:
 ///   status = 0 (Starting): async guest task in flight, handle is nonzero
 ///   status = 1 (Started):  async host task in flight, handle is nonzero
@@ -69,8 +69,8 @@ pub fn wait_for_subtask(packed: i32) {
     }
 }
 
-/// Best-effort logging to stdout (ambient, no effect required)
-/// Writes message with newline to stdout. Waits for completion.
+/// Logs a message with newline to stdout (ambient, no effect required).
+/// Waits for completion.
 pub fn log_stdout(message: String) {
     let handles = builtin::stream_new();
     let rx = handles as i32;
@@ -81,8 +81,8 @@ pub fn log_stdout(message: String) {
     wait_for_subtask(subtask);
 }
 
-/// Best-effort logging to stderr (ambient, no effect required)
-/// Writes message with newline to stderr. Waits for completion.
+/// Logs a message with newline to stderr (ambient, no effect required).
+/// Waits for completion.
 pub fn log_stderr(message: String) {
     let handles = builtin::stream_new();
     let rx = handles as i32;
@@ -93,16 +93,18 @@ pub fn log_stderr(message: String) {
     wait_for_subtask(subtask);
 }
 
+/// Logs a message to stderr and traps.
 pub fn panic(message: String) -> ! {
     log_stderr(message);
     builtin::unreachable();
 }
 
+/// Traps unconditionally, marking unreachable code.
 pub fn unreachable() -> ! {
     builtin::unreachable();
 }
 
-/// Lower a GC String to CM linear memory representation.
+/// Lowers a GC String to CM linear memory representation.
 /// Returns (ptr | (len << 32)) as i64.
 /// The caller must free the allocated memory after the CM call.
 pub fn cm_lower_string(s: String) -> i64 {
@@ -113,7 +115,7 @@ pub fn cm_lower_string(s: String) -> i64 {
     return (ptr as i64) | ((len as i64) << 32);
 }
 
-/// Lower a GC Array<u8> to CM linear memory representation.
+/// Lowers a GC Array<u8> to CM linear memory representation.
 /// Returns (ptr | (len << 32)) as i64.
 /// The caller must free the allocated memory after the CM call.
 pub fn cm_lower_list_u8(data: builtin::array<u8>, len: i32) -> i64 {
@@ -122,7 +124,7 @@ pub fn cm_lower_list_u8(data: builtin::array<u8>, len: i32) -> i64 {
     return (ptr as i64) | ((len as i64) << 32);
 }
 
-/// Lower a GC Array<u8> (e.g., FieldValue) to CM linear memory representation.
+/// Lowers a GC Array<u8> (e.g., FieldValue) to CM linear memory representation.
 /// Returns (ptr | (len << 32)) as i64.
 pub fn cm_lower_array_u8(arr: Array<u8>) -> i64 {
     let data = arr.internal_raw_data();
@@ -130,8 +132,8 @@ pub fn cm_lower_array_u8(arr: Array<u8>) -> i64 {
     return cm_lower_list_u8(data, len);
 }
 
-/// Write escaped string content to a Formatter (for inspect/debug output).
-/// Escapes: " → \", \ → \\, \n → \n, \t → \t, \r → \r
+/// Writes escaped string content to a Formatter (for inspect/debug output).
+/// Escapes: " → \", \ → \\, \n → \n, \t → \t, \r → \r.
 /// Does NOT write the surrounding quotes — caller is responsible for those.
 pub fn write_escaped_string(s: String, f: &mut Formatter) {
     for let c of s.chars() {

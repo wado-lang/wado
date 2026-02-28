@@ -7,52 +7,54 @@
 // - `String` and `Array<u8>` have the same Wasm-level representation: builtin::array<u8>
 // - A String is a single reference value (not a ptr+len pair)
 // - Use `builtin::array_len` to get the length of a String or Array
-/// Create a new stream, returns i64 with rx in low 32 bits, tx in high 32 bits
+/// Creates a new stream, returning i64 with rx in low 32 bits, tx in high 32 bits.
 pub fn stream_new() -> i64 {
     return builtin::stream_new();
 }
 
-/// Write bytes to stream from linear memory, returns status
+/// Writes bytes to a stream from linear memory and returns the status.
 pub fn stream_write(tx: i32, ptr: i32, len: i32) -> i32 {
     return builtin::stream_write(tx, ptr, len);
 }
 
-/// Close the writable end of the stream
+/// Closes the writable end of the stream.
 pub fn stream_drop_writable(tx: i32) {
     builtin::stream_drop_writable(tx);
 }
 
-/// Close the readable end of the stream
+/// Closes the readable end of the stream.
 pub fn stream_drop_readable(rx: i32) {
     builtin::stream_drop_readable(rx);
 }
-/// Get length of an array
-/// Maps to Wasm GC `array.len` instruction
+
+/// Returns the length of an array.
+/// Maps to Wasm GC `array.len` instruction.
 pub fn array_len<T>(arr: Array<T>) -> i32 {
     return builtin::array_len(arr);
 }
 
-/// Get length of a String in bytes (UTF-8)
-/// Maps to Wasm GC `array.len` instruction
+/// Returns the length of a String in bytes (UTF-8).
+/// Maps to Wasm GC `array.len` instruction.
 pub fn string_len(s: String) -> i32 {
     return builtin::array_len(s);
 }
-/// Create a new waitable set for async task management
+
+/// Creates a new waitable set for async task management.
 pub fn waitable_set_new() -> i32 {
     return builtin::waitable_set_new();
 }
 
-/// Join a subtask to a waitable set
+/// Joins a subtask to a waitable set.
 pub fn waitable_join(set: i32, subtask: i32) {
     builtin::waitable_join(set, subtask);
 }
 
-/// Wait for events on a waitable set
+/// Waits for events on a waitable set.
 pub fn waitable_set_wait(set: i32, out_addr: i32) -> i32 {
     return builtin::waitable_set_wait(set, out_addr);
 }
 
-/// Drop a subtask handle
+/// Drops a subtask handle.
 pub fn subtask_drop(subtask: i32) {
     builtin::subtask_drop(subtask);
 }

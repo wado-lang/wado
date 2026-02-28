@@ -26,6 +26,7 @@
 //   let decompressed_gz = inflate_gzip(&gzipped_data);
 
 
+/// Returns the zlib version string.
 pub fn zlib_version() -> String {
     return "1.3.1.wado";
 }
@@ -76,6 +77,7 @@ pub global Z_DEFLATED: i32 = 8;
 pub global MAX_WBITS: i32 = 15;
 
 
+/// Computes an Adler-32 checksum over `buf[offset..offset+len]`, starting from `adler`.
 pub fn adler32(adler: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32 {
     let base: u32 = 65521;
     let nmax = 5552;
@@ -103,12 +105,14 @@ pub fn adler32(adler: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32 {
     return s1 | (s2 << 16);
 }
 
+/// Returns the initial Adler-32 checksum value (1).
 pub fn adler32_init() -> u32 {
     return 1;
 }
 
 // Combine two Adler-32 checksums
 // adler1 = adler32 of first segment, adler2 = adler32 of second segment, len2 = length of second
+/// Combines two Adler-32 checksums into one for concatenated data.
 pub fn adler32_combine(adler1: u32, adler2: u32, len2: i32) -> u32 {
     let base: u32 = 65521;
     let rem = (len2 % 65521) as u32;
@@ -152,6 +156,7 @@ fn build_crc_table() -> Array<u32> {
     return table;
 }
 
+/// Computes a CRC-32 checksum over `buf[offset..offset+len]`, starting from `crc`.
 pub fn crc32(crc: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32 {
     let table = CRC_TABLE;
     let mut c = crc ^ 0xFFFFFFFF as u32;
@@ -162,6 +167,7 @@ pub fn crc32(crc: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32 {
     return c ^ 0xFFFFFFFF as u32;
 }
 
+/// Returns the initial CRC-32 checksum value (0).
 pub fn crc32_init() -> u32 {
     return 0;
 }
@@ -189,6 +195,7 @@ fn gf2_matrix_square(square: &mut Array<u32>, mat: &Array<u32>) {
 
 // Combine two CRC-32 checksums
 // crc1 = crc32 of first segment, crc2 = crc32 of second segment, len2 = length of second
+/// Combines two CRC-32 checksums into one for concatenated data.
 pub fn crc32_combine(crc1: u32, crc2: u32, len2: i32) -> u32 {
     if len2 <= 0 {
         return crc1;
@@ -237,6 +244,7 @@ pub fn crc32_combine(crc1: u32, crc2: u32, len2: i32) -> u32 {
 
 
 // Upper bound on compressed size for compress/compress2
+/// Returns the maximum compressed size for a given source length.
 pub fn compress_bound(source_len: i32) -> i32 {
     // Conservative bound based on deflateBound (stored blocks worst case)
     // stored overhead: 5 bytes per 65535-byte block
@@ -1279,11 +1287,13 @@ fn inflate_raw_from(input: &Array<u8>, input_offset: i32, input_length: i32) -> 
 }
 
 // Decompress raw deflate data (no zlib/gzip header)
+/// Decompresses raw DEFLATE data (no header/checksum).
 pub fn inflate_raw(input: &Array<u8>) -> Array<u8> {
     return inflate_raw_from(input, 0, input.len());
 }
 
 // Decompress zlib-format data (2-byte header + deflate + 4-byte adler32)
+/// Decompresses zlib-wrapped data (RFC 1950).
 pub fn inflate_zlib(input: &Array<u8>) -> Array<u8> {
     // Skip 2-byte zlib header
     if input.len() < 6 {
@@ -1318,6 +1328,7 @@ pub fn inflate_zlib(input: &Array<u8>) -> Array<u8> {
 
 
 // Simple deflate using stored blocks (no compression, for testing)
+/// Compresses data using DEFLATE stored blocks (no compression, raw).
 pub fn deflate_stored(input: &Array<u8>) -> Array<u8> {
     let total = input.len();
     let mut output: Array<u8> = Array::<u8>::with_capacity(total + (total / 65535 + 1) * 5);
@@ -1357,6 +1368,7 @@ pub fn deflate_stored(input: &Array<u8>) -> Array<u8> {
 }
 
 // Wrap raw deflate data in zlib format (stored blocks)
+/// Wraps data in zlib format using stored blocks (no actual compression).
 pub fn zlib_compress_stored(input: &Array<u8>) -> Array<u8> {
     let mut output: Array<u8> = Array::<u8>::with_capacity(input.len() + 12);
 
@@ -1538,6 +1550,7 @@ fn hash3(a: u8, b: u8, c: u8) -> i32 {
 }
 
 // Deflate using fixed Huffman codes with LZ77 matching
+/// Compresses data using DEFLATE with Huffman-only encoding (no LZ77).
 pub fn deflate_huffman(input: &Array<u8>) -> Array<u8> {
     let ltree = build_fixed_ltree();
     let dtree = build_fixed_dtree();
@@ -2274,6 +2287,7 @@ fn get_deflate_config(level: i32) -> DeflateConfig {
 // General deflate with configurable level and strategy
 // level: 0-9 (0=store, 1=fastest, 9=best compression)
 // strategy: Z_DEFAULT_STRATEGY, Z_FILTERED, Z_HUFFMAN_ONLY, Z_RLE, Z_FIXED
+/// Compresses data using DEFLATE with the specified compression level and strategy.
 pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8> {
     let input_len = input.len();
 
@@ -2745,17 +2759,20 @@ fn zlib_wrap(input: &Array<u8>, deflated: &Array<u8>, level: i32) -> Array<u8> {
 }
 
 // Full zlib compression with fixed Huffman codes + LZ77 (default level 6)
+/// Compresses data in zlib format with default compression level.
 pub fn zlib_compress(input: &Array<u8>) -> Array<u8> {
     return compress2(input, Z_DEFAULT_COMPRESSION);
 }
 
 // Compress with specified level (0-9)
+/// Compresses data in zlib format with the specified compression level.
 pub fn compress2(input: &Array<u8>, level: i32) -> Array<u8> {
     let deflated = deflate_with_level(input, level, Z_DEFAULT_STRATEGY);
     return zlib_wrap(input, &deflated, level);
 }
 
 // Compress with level and strategy
+/// Compresses data in zlib format with the specified compression level and strategy.
 pub fn compress_with_strategy(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8> {
     let deflated = deflate_with_level(input, level, strategy);
     return zlib_wrap(input, &deflated, level);
@@ -2824,6 +2841,7 @@ fn gzip_parse_header(input: &Array<u8>, start: i32) -> i32 {
 }
 
 // Decompress gzip-format data (supports multi-member gzip files)
+/// Decompresses gzip-wrapped data (RFC 1952).
 pub fn inflate_gzip(input: &Array<u8>) -> Array<u8> {
     let mut output: Array<u8> = [];
     let mut member_start = 0;
@@ -2888,10 +2906,12 @@ pub fn inflate_gzip(input: &Array<u8>) -> Array<u8> {
 }
 
 // Compress data in gzip format
+/// Compresses data in gzip format with default compression level.
 pub fn gzip_compress(input: &Array<u8>) -> Array<u8> {
     return gzip_compress2(input, Z_DEFAULT_COMPRESSION);
 }
 
+/// Compresses data in gzip format with the specified compression level.
 pub fn gzip_compress2(input: &Array<u8>, level: i32) -> Array<u8> {
     let deflated = deflate_with_level(input, level, Z_DEFAULT_STRATEGY);
     let mut output: Array<u8> = Array::<u8>::with_capacity(deflated.len() + 18);
@@ -2933,6 +2953,7 @@ pub fn gzip_compress2(input: &Array<u8>, level: i32) -> Array<u8> {
 }
 
 // Auto-detect format and decompress (zlib or gzip)
+/// Decompresses zlib-wrapped data (alias for `inflate_zlib`).
 pub fn uncompress(input: &Array<u8>) -> Array<u8> {
     if input.len() < 2 {
         panic("compressed data too short");
@@ -2947,16 +2968,19 @@ pub fn uncompress(input: &Array<u8>) -> Array<u8> {
 
 
 // Deflate raw (no zlib/gzip header or trailer)
+/// Compresses data as raw DEFLATE (no header/checksum) with default level.
 pub fn deflate_raw(input: &Array<u8>) -> Array<u8> {
     return deflate_with_level(input, Z_DEFAULT_COMPRESSION, Z_DEFAULT_STRATEGY);
 }
 
 // Deflate raw with level
+/// Compresses data as raw DEFLATE (no header/checksum) with the specified level.
 pub fn deflate_raw2(input: &Array<u8>, level: i32) -> Array<u8> {
     return deflate_with_level(input, level, Z_DEFAULT_STRATEGY);
 }
 
 // uncompress2: decompress with output size limit
+/// Decompresses zlib-wrapped data with a maximum output size limit.
 pub fn uncompress2(input: &Array<u8>, max_output: i32) -> Array<u8> {
     let result = uncompress(input);
     if result.len() > max_output {
@@ -2966,7 +2990,7 @@ pub fn uncompress2(input: &Array<u8>, max_output: i32) -> Array<u8> {
 }
 
 
-// Gzip header fields for customization (deflateSetHeader / inflateGetHeader)
+/// Represents a gzip header for customization (deflateSetHeader / inflateGetHeader).
 pub struct GzipHeader {
     text: bool,            // true if probably ASCII text
     time: u32,             // modification time (Unix timestamp)
@@ -2979,6 +3003,7 @@ pub struct GzipHeader {
 }
 
 impl GzipHeader {
+    /// Creates a new GzipHeader with default values.
     pub fn new() -> GzipHeader {
         return GzipHeader {
             text: false,
@@ -3025,6 +3050,7 @@ impl GzipHeader {
 }
 
 // Compress to gzip with custom header
+/// Compresses data in gzip format with a custom header and compression level.
 pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHeader) -> Array<u8> {
     let deflated = deflate_with_level(input, level, Z_DEFAULT_STRATEGY);
     let mut output: Array<u8> = Array::<u8>::with_capacity(deflated.len() + 64);
@@ -3122,6 +3148,7 @@ fn bytes_to_string(buf: &Array<u8>, offset: i32, len: i32) -> String {
 }
 
 // Extract gzip header information from compressed data
+/// Extracts the gzip header from compressed data without decompressing.
 pub fn inflate_get_gzip_header(input: &Array<u8>) -> GzipHeader {
     if input.len() < 10 {
         panic("gzip data too short for header");
@@ -3192,7 +3219,7 @@ pub global ZLIB_FORMAT: i32 = 0;    // zlib format (default)
 pub global RAW_FORMAT: i32 = 1;     // raw deflate (no header/trailer)
 pub global GZIP_FORMAT: i32 = 2;    // gzip format
 
-// Deflate stream state — supports chunked input via update()/finish()
+/// Streaming deflate compressor. Supports chunked input via update()/finish().
 pub struct DeflateStream {
     level: i32,
     strategy: i32,
@@ -3208,6 +3235,7 @@ pub struct DeflateStream {
 }
 
 impl DeflateStream {
+    /// Creates a new DeflateStream with the specified compression level.
     pub fn new(level: i32) -> DeflateStream {
         return DeflateStream {
             level,
@@ -3224,6 +3252,7 @@ impl DeflateStream {
         };
     }
 
+    /// Creates a new DeflateStream with the specified level and strategy.
     pub fn new_with_strategy(level: i32, strategy: i32) -> DeflateStream {
         return DeflateStream {
             level,
@@ -3240,7 +3269,7 @@ impl DeflateStream {
         };
     }
 
-    // Create stream with format selection (ZLIB_FORMAT, RAW_FORMAT, GZIP_FORMAT)
+    /// Creates a new DeflateStream with format selection (ZLIB_FORMAT, RAW_FORMAT, GZIP_FORMAT).
     pub fn new_with_format(level: i32, format: i32) -> DeflateStream {
         return DeflateStream {
             level,
@@ -3257,7 +3286,7 @@ impl DeflateStream {
         };
     }
 
-    // Full initialization with all parameters
+    /// Creates a new DeflateStream with all parameters specified.
     pub fn new_full(level: i32, strategy: i32, format: i32) -> DeflateStream {
         return DeflateStream {
             level,
@@ -3274,7 +3303,7 @@ impl DeflateStream {
         };
     }
 
-    // Set preset dictionary for compression
+    /// Sets a preset dictionary for compression.
     pub fn set_dictionary(&mut self, dict: &Array<u8>) {
         self.dict = [];
         for let mut i = 0; i < dict.len(); i += 1 {
@@ -3283,7 +3312,7 @@ impl DeflateStream {
         self.has_dict = true;
     }
 
-    // Set custom gzip header (only for GZIP_FORMAT)
+    /// Sets a custom gzip header (only for GZIP_FORMAT).
     pub fn set_header(&mut self, header: &GzipHeader) {
         self.gzip_header = GzipHeader {
             text: header.text,
@@ -3298,33 +3327,33 @@ impl DeflateStream {
         self.has_gzip_header = true;
     }
 
-    // Change compression level and strategy mid-stream
+    /// Changes the compression level and strategy mid-stream.
     pub fn params(&mut self, level: i32, strategy: i32) {
         self.level = level;
         self.strategy = strategy;
     }
 
-    // Get upper bound on compressed size
+    /// Returns the upper bound on compressed size for the given source length.
     pub fn bound(&self, source_len: i32) -> i32 {
         return compress_bound(source_len);
     }
 
-    // Get number of pending output bytes
+    /// Returns the number of pending output bytes.
     pub fn pending(&self) -> i32 {
         return self.buffer.len();
     }
 
-    // Get total input bytes processed
+    /// Returns the total input bytes processed.
     pub fn get_total_in(&self) -> i32 {
         return self.total_in;
     }
 
-    // Get total output bytes produced
+    /// Returns the total output bytes produced.
     pub fn get_total_out(&self) -> i32 {
         return self.total_out;
     }
 
-    // Reset stream for reuse (same level/strategy)
+    /// Resets the stream for reuse (same level/strategy).
     pub fn reset(&mut self) {
         self.buffer = [];
         self.finished = false;
@@ -3332,7 +3361,7 @@ impl DeflateStream {
         self.total_out = 0;
     }
 
-    // Create a copy of this stream
+    /// Creates a copy of this stream.
     pub fn copy(&self) -> DeflateStream {
         let mut buf_copy: Array<u8> = Array::<u8>::with_capacity(self.buffer.len());
         for let mut i = 0; i < self.buffer.len(); i += 1 {
@@ -3366,7 +3395,7 @@ impl DeflateStream {
         };
     }
 
-    // Add input data to the stream buffer
+    /// Adds input data to the stream buffer.
     pub fn update(&mut self, chunk: &Array<u8>) {
         if self.finished {
             panic("DeflateStream already finished");
@@ -3376,7 +3405,7 @@ impl DeflateStream {
         }
     }
 
-    // Compress all buffered input and produce output
+    /// Compresses all buffered input and returns the result.
     pub fn finish(&mut self) -> Array<u8> {
         if self.finished {
             panic("DeflateStream already finished");
@@ -3388,7 +3417,7 @@ impl DeflateStream {
         return result;
     }
 
-    // Compress input data in one shot
+    /// Compresses input data in one shot and returns the result.
     pub fn compress(&mut self, input: &Array<u8>) -> Array<u8> {
         if self.finished {
             panic("DeflateStream already finished");
@@ -3478,7 +3507,7 @@ impl DeflateStream {
     }
 }
 
-// Inflate stream state — supports chunked input via update()/finish()
+/// Streaming inflate decompressor. Supports chunked input via update()/finish().
 pub struct InflateStream {
     dict: Array<u8>,
     has_dict: bool,
@@ -3492,6 +3521,7 @@ pub struct InflateStream {
 pub global AUTO_FORMAT: i32 = -1;
 
 impl InflateStream {
+    /// Creates a new InflateStream with zlib format (default).
     pub fn new() -> InflateStream {
         return InflateStream {
             dict: [],
@@ -3503,7 +3533,7 @@ impl InflateStream {
         };
     }
 
-    // Create with specific format
+    /// Creates a new InflateStream with the specified format.
     pub fn new_with_format(format: i32) -> InflateStream {
         return InflateStream {
             dict: [],
@@ -3515,7 +3545,7 @@ impl InflateStream {
         };
     }
 
-    // Set preset dictionary for decompression
+    /// Sets a preset dictionary for decompression.
     pub fn set_dictionary(&mut self, dict: &Array<u8>) {
         self.dict = [];
         for let mut i = 0; i < dict.len(); i += 1 {
@@ -3524,7 +3554,7 @@ impl InflateStream {
         self.has_dict = true;
     }
 
-    // Get the preset dictionary
+    /// Returns a copy of the preset dictionary.
     pub fn get_dictionary(&self) -> Array<u8> {
         let mut copy: Array<u8> = Array::<u8>::with_capacity(self.dict.len());
         for let mut i = 0; i < self.dict.len(); i += 1 {
@@ -3533,24 +3563,24 @@ impl InflateStream {
         return copy;
     }
 
-    // Get total input bytes processed
+    /// Returns the total input bytes processed.
     pub fn get_total_in(&self) -> i32 {
         return self.total_in;
     }
 
-    // Get total output bytes produced
+    /// Returns the total output bytes produced.
     pub fn get_total_out(&self) -> i32 {
         return self.total_out;
     }
 
-    // Reset stream for reuse
+    /// Resets the stream for reuse.
     pub fn reset(&mut self) {
         self.buffer = [];
         self.total_in = 0;
         self.total_out = 0;
     }
 
-    // Create a copy of this stream
+    /// Creates a copy of this stream.
     pub fn copy(&self) -> InflateStream {
         let mut buf_copy: Array<u8> = Array::<u8>::with_capacity(self.buffer.len());
         for let mut i = 0; i < self.buffer.len(); i += 1 {
@@ -3570,14 +3600,14 @@ impl InflateStream {
         };
     }
 
-    // Add compressed data chunk to the stream buffer
+    /// Adds a compressed data chunk to the stream buffer.
     pub fn update(&mut self, chunk: &Array<u8>) {
         for let mut i = 0; i < chunk.len(); i += 1 {
             self.buffer.append(chunk[i]);
         }
     }
 
-    // Decompress all buffered data and return result
+    /// Decompresses all buffered data and returns the result.
     pub fn finish(&mut self) -> Array<u8> {
         let result = self.decompress(&self.buffer);
         self.total_in += self.buffer.len();
@@ -3586,7 +3616,7 @@ impl InflateStream {
         return result;
     }
 
-    // Decompress data (one-shot)
+    /// Decompresses data in one shot and returns the result.
     pub fn decompress(&self, input: &Array<u8>) -> Array<u8> {
         if self.format == RAW_FORMAT {
             return inflate_raw(input);
@@ -3654,6 +3684,8 @@ impl InflateStream {
 
 // Scan for a valid deflate block in corrupted data
 // Returns the offset where a potential valid block starts, or -1 if not found
+/// Finds the next sync point in a DEFLATE stream, starting from the given offset.
+/// Returns the offset or -1 if not found.
 pub fn inflate_sync_find(input: &Array<u8>, start: i32) -> i32 {
     // Look for stored block marker: 00 00 FF FF
     // This pattern appears at the start of a stored block after a sync flush

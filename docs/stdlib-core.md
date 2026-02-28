@@ -1054,7 +1054,11 @@ Result type - either Ok(T) or Err(E)
 
 #### `pub fn panic(message: String) -> !`
 
+Logs a message to stderr and traps.
+
 #### `pub fn unreachable() -> !`
+
+Traps unconditionally, marking unreachable code.
 
 ## core:cli
 
@@ -1131,50 +1135,50 @@ dropped and this function will return an error-code.
 
 #### `pub fn write_to_stream(tx: i32, message: String, add_newline: bool)`
 
+Writes a string to a stream tx handle.
+Called AFTER the consumer (write_via_stream) has been started.
+If add_newline is true, appends '\n' after the message.
+
 #### `pub fn println(message: String) with Stdout`
 
-Print a line to stdout (adds newline)
-Uses WASI P3 async stream with correct ordering:
-1. Start consumer (write_via_stream) with rx first
-2. Write data to tx + close tx
-3. Wait for consumer to complete
+Prints a line to stdout (adds newline).
 
 #### `pub fn eprintln(message: String) with Stderr`
 
-Print a line to stderr (adds newline)
+Prints a line to stderr (adds newline).
 
 #### `pub fn print(message: String) with Stdout`
 
-Print to stdout without newline
+Prints to stdout without a trailing newline.
 
 #### `pub fn eprint(message: String) with Stderr`
 
-Print to stderr without newline
+Prints to stderr without a trailing newline.
 
 #### `pub fn env(name: String) -> Option<String> with Environment`
 
-Get environment variable by name
-TODO: Implement when for-in loops are supported
+Returns the value of an environment variable by name.
+TODO: Implement when for-in loops are supported.
 
 #### `pub fn args() -> Array<String> with Environment`
 
-Get all command-line arguments
+Returns all command-line arguments.
 
 #### `pub fn cwd() -> Option<String> with Environment`
 
-Get current working directory
+Returns the current working directory.
 
 #### `pub fn exit_success() -> ! with Exit`
 
-Exit with success (code 0)
+Exits with success (code 0).
 
 #### `pub fn exit_error() -> ! with Exit`
 
-Exit with error
+Exits with an error.
 
 #### `pub fn exit(code: u8) -> ! with Exit`
 
-Exit with specific status code
+Exits with a specific status code.
 
 ## core:clocks
 
@@ -1228,8 +1232,8 @@ Wait for the specified duration to elapse.
 
 #### `pub fn now() -> Mark with MonotonicClock`
 
-Get the current monotonic clock time in nanoseconds.
-The clock is monotonic, so successive calls will return non-decreasing values.
+Returns the current monotonic clock time in nanoseconds.
+Successive calls return non-decreasing values.
 
 ## core:collections
 
@@ -1251,44 +1255,44 @@ of a hash table for key lookups.
 
 ##### `pub fn new() -> TreeMap<K, V>`
 
-Creates a new empty TreeMap
+Creates a new empty TreeMap.
 
 ##### `pub fn len(&self) -> i32`
 
-Returns the number of key-value pairs in the map
+Returns the number of key-value pairs in the map.
 
 ##### `pub fn is_empty(&self) -> bool`
 
-Returns true if the map contains no elements
+Returns true if the map contains no elements.
 
 ##### `pub fn contains_key(&self, key: K) -> bool`
 
-Returns true if the map contains a value for the specified key
+Returns true if the map contains a value for the specified key.
 
 ##### `pub fn get(&self, key: K) -> Option<V>`
 
-Returns the value corresponding to the key, or null if not found
+Returns the value corresponding to the key, or null if not found.
 
 ##### `pub fn remove(&mut self, key: K) -> bool`
 
-Removes a key from the map. Returns true if the key was present.
-This is a "shift remove" that preserves insertion order of remaining elements.
+Removes a key from the map and returns true if the key was present.
+Preserves insertion order of remaining elements.
 
 ##### `pub fn keys(&self) -> Array<K>`
 
-Returns all keys in insertion order
+Returns all keys in insertion order.
 
 ##### `pub fn values(&self) -> Array<V>`
 
-Returns all values in insertion order
+Returns all values in insertion order.
 
 ##### `pub fn entries(&self) -> Array<[K, V]>`
 
-Returns all key-value pairs in insertion order
+Returns all key-value pairs in insertion order.
 
 ##### `pub fn clear(&mut self)`
 
-Removes all key-value pairs from the map
+Removes all key-value pairs from the map.
 
 ##### `impl IndexAssign<K> for TreeMap<K, V>`
 
@@ -1322,26 +1326,26 @@ Base64 encoding and decoding (RFC 4648).
 
 #### `pub fn encode(data: &Array<u8>) -> String`
 
-Standard Base64 encode (RFC 4648 §4, padded).
+Encodes bytes as standard Base64 (RFC 4648 §4, padded).
 
 #### `pub fn encode_url(data: &Array<u8>) -> String`
 
-URL-safe Base64 encode (RFC 4648 §5, no padding).
+Encodes bytes as URL-safe Base64 (RFC 4648 §5, no padding).
 Equivalent to `encode_with(data, Encoding::UrlSafe | Encoding::NoPadding)`.
 
 #### `pub fn encode_with(data: &Array<u8>, encoding: Encoding) -> String`
 
-Encode with custom flags.
+Encodes bytes as Base64 with custom flags.
 
 #### `pub fn decode(encoded: String) -> Option<Array<u8>>`
 
-Decode Base64 from a string.
+Decodes a Base64 string.
 Accepts both standard (+/) and URL-safe (-_) alphabets, with or without padding.
 Returns null on invalid input.
 
 #### `pub fn decode_bytes(encoded: &Array<u8>) -> Option<Array<u8>>`
 
-Decode Base64 from raw bytes (e.g., HTTP body, file content).
+Decodes Base64 from raw bytes (e.g., HTTP body, file content).
 Same lenient behavior as `decode`.
 
 ## core:zlib
@@ -1422,9 +1426,13 @@ zlib compression and decompression (RFC 1950/1951/1952).
 
 #### `pub struct GzipHeader`
 
+Represents a gzip header for customization (deflateSetHeader / inflateGetHeader).
+
 *Fields are private.*
 
 ##### `pub fn new() -> GzipHeader`
+
+Creates a new GzipHeader with default values.
 
 ##### `pub fn set_text(&mut self, text: bool)`
 
@@ -1442,118 +1450,231 @@ zlib compression and decompression (RFC 1950/1951/1952).
 
 #### `pub struct DeflateStream`
 
+Streaming deflate compressor. Supports chunked input via update()/finish().
+
 *Fields are private.*
 
 ##### `pub fn new(level: i32) -> DeflateStream`
 
+Creates a new DeflateStream with the specified compression level.
+
 ##### `pub fn new_with_strategy(level: i32, strategy: i32) -> DeflateStream`
+
+Creates a new DeflateStream with the specified level and strategy.
 
 ##### `pub fn new_with_format(level: i32, format: i32) -> DeflateStream`
 
+Creates a new DeflateStream with format selection (ZLIB_FORMAT, RAW_FORMAT, GZIP_FORMAT).
+
 ##### `pub fn new_full(level: i32, strategy: i32, format: i32) -> DeflateStream`
+
+Creates a new DeflateStream with all parameters specified.
 
 ##### `pub fn set_dictionary(&mut self, dict: &Array<u8>)`
 
+Sets a preset dictionary for compression.
+
 ##### `pub fn set_header(&mut self, header: &GzipHeader)`
+
+Sets a custom gzip header (only for GZIP_FORMAT).
 
 ##### `pub fn params(&mut self, level: i32, strategy: i32)`
 
+Changes the compression level and strategy mid-stream.
+
 ##### `pub fn bound(&self, source_len: i32) -> i32`
+
+Returns the upper bound on compressed size for the given source length.
 
 ##### `pub fn pending(&self) -> i32`
 
+Returns the number of pending output bytes.
+
 ##### `pub fn get_total_in(&self) -> i32`
+
+Returns the total input bytes processed.
 
 ##### `pub fn get_total_out(&self) -> i32`
 
+Returns the total output bytes produced.
+
 ##### `pub fn reset(&mut self)`
+
+Resets the stream for reuse (same level/strategy).
 
 ##### `pub fn copy(&self) -> DeflateStream`
 
+Creates a copy of this stream.
+
 ##### `pub fn update(&mut self, chunk: &Array<u8>)`
+
+Adds input data to the stream buffer.
 
 ##### `pub fn finish(&mut self) -> Array<u8>`
 
+Compresses all buffered input and returns the result.
+
 ##### `pub fn compress(&mut self, input: &Array<u8>) -> Array<u8>`
 
+Compresses input data in one shot and returns the result.
+
 #### `pub struct InflateStream`
+
+Streaming inflate decompressor. Supports chunked input via update()/finish().
 
 *Fields are private.*
 
 ##### `pub fn new() -> InflateStream`
 
+Creates a new InflateStream with zlib format (default).
+
 ##### `pub fn new_with_format(format: i32) -> InflateStream`
+
+Creates a new InflateStream with the specified format.
 
 ##### `pub fn set_dictionary(&mut self, dict: &Array<u8>)`
 
+Sets a preset dictionary for decompression.
+
 ##### `pub fn get_dictionary(&self) -> Array<u8>`
+
+Returns a copy of the preset dictionary.
 
 ##### `pub fn get_total_in(&self) -> i32`
 
+Returns the total input bytes processed.
+
 ##### `pub fn get_total_out(&self) -> i32`
+
+Returns the total output bytes produced.
 
 ##### `pub fn reset(&mut self)`
 
+Resets the stream for reuse.
+
 ##### `pub fn copy(&self) -> InflateStream`
+
+Creates a copy of this stream.
 
 ##### `pub fn update(&mut self, chunk: &Array<u8>)`
 
+Adds a compressed data chunk to the stream buffer.
+
 ##### `pub fn finish(&mut self) -> Array<u8>`
 
+Decompresses all buffered data and returns the result.
+
 ##### `pub fn decompress(&self, input: &Array<u8>) -> Array<u8>`
+
+Decompresses data in one shot and returns the result.
 
 ### Functions
 
 #### `pub fn zlib_version() -> String`
 
+Returns the zlib version string.
+
 #### `pub fn adler32(adler: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32`
+
+Computes an Adler-32 checksum over `buf[offset..offset+len]`, starting from `adler`.
 
 #### `pub fn adler32_init() -> u32`
 
+Returns the initial Adler-32 checksum value (1).
+
 #### `pub fn adler32_combine(adler1: u32, adler2: u32, len2: i32) -> u32`
+
+Combines two Adler-32 checksums into one for concatenated data.
 
 #### `pub fn crc32(crc: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32`
 
+Computes a CRC-32 checksum over `buf[offset..offset+len]`, starting from `crc`.
+
 #### `pub fn crc32_init() -> u32`
+
+Returns the initial CRC-32 checksum value (0).
 
 #### `pub fn crc32_combine(crc1: u32, crc2: u32, len2: i32) -> u32`
 
+Combines two CRC-32 checksums into one for concatenated data.
+
 #### `pub fn compress_bound(source_len: i32) -> i32`
+
+Returns the maximum compressed size for a given source length.
 
 #### `pub fn inflate_raw(input: &Array<u8>) -> Array<u8>`
 
+Decompresses raw DEFLATE data (no header/checksum).
+
 #### `pub fn inflate_zlib(input: &Array<u8>) -> Array<u8>`
+
+Decompresses zlib-wrapped data (RFC 1950).
 
 #### `pub fn deflate_stored(input: &Array<u8>) -> Array<u8>`
 
+Compresses data using DEFLATE stored blocks (no compression, raw).
+
 #### `pub fn zlib_compress_stored(input: &Array<u8>) -> Array<u8>`
+
+Wraps data in zlib format using stored blocks (no actual compression).
 
 #### `pub fn deflate_huffman(input: &Array<u8>) -> Array<u8>`
 
+Compresses data using DEFLATE with Huffman-only encoding (no LZ77).
+
 #### `pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>`
+
+Compresses data using DEFLATE with the specified compression level and strategy.
 
 #### `pub fn zlib_compress(input: &Array<u8>) -> Array<u8>`
 
+Compresses data in zlib format with default compression level.
+
 #### `pub fn compress2(input: &Array<u8>, level: i32) -> Array<u8>`
+
+Compresses data in zlib format with the specified compression level.
 
 #### `pub fn compress_with_strategy(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>`
 
+Compresses data in zlib format with the specified compression level and strategy.
+
 #### `pub fn inflate_gzip(input: &Array<u8>) -> Array<u8>`
+
+Decompresses gzip-wrapped data (RFC 1952).
 
 #### `pub fn gzip_compress(input: &Array<u8>) -> Array<u8>`
 
+Compresses data in gzip format with default compression level.
+
 #### `pub fn gzip_compress2(input: &Array<u8>, level: i32) -> Array<u8>`
+
+Compresses data in gzip format with the specified compression level.
 
 #### `pub fn uncompress(input: &Array<u8>) -> Array<u8>`
 
+Decompresses zlib-wrapped data (alias for `inflate_zlib`).
+
 #### `pub fn deflate_raw(input: &Array<u8>) -> Array<u8>`
+
+Compresses data as raw DEFLATE (no header/checksum) with default level.
 
 #### `pub fn deflate_raw2(input: &Array<u8>, level: i32) -> Array<u8>`
 
+Compresses data as raw DEFLATE (no header/checksum) with the specified level.
+
 #### `pub fn uncompress2(input: &Array<u8>, max_output: i32) -> Array<u8>`
+
+Decompresses zlib-wrapped data with a maximum output size limit.
 
 #### `pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHeader) -> Array<u8>`
 
+Compresses data in gzip format with a custom header and compression level.
+
 #### `pub fn inflate_get_gzip_header(input: &Array<u8>) -> GzipHeader`
 
+Extracts the gzip header from compressed data without decompressing.
+
 #### `pub fn inflate_sync_find(input: &Array<u8>, start: i32) -> i32`
+
+Finds the next sync point in a DEFLATE stream, starting from the given offset.
+Returns the offset or -1 if not found.
