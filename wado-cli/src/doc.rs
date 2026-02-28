@@ -359,11 +359,9 @@ fn render_md_struct(out: &mut String, s: &DocStruct, h3: &str, h4: &str) {
     if !s.fields.is_empty() {
         writeln!(out, "{h4} Fields\n").unwrap();
         for f in &s.fields {
+            writeln!(out, "- `{}: {}`", f.name, f.ty).unwrap();
             if let Some(ref d) = f.doc {
-                let brief = d.lines().next().unwrap_or("");
-                writeln!(out, "- `{}: {}` — {brief}", f.name, f.ty).unwrap();
-            } else {
-                writeln!(out, "- `{}: {}`", f.name, f.ty).unwrap();
+                render_md_list_doc(out, d);
             }
         }
     } else if s.has_private_fields {
@@ -384,11 +382,20 @@ fn render_md_struct(out: &mut String, s: &DocStruct, h3: &str, h4: &str) {
 }
 
 fn render_md_method_item(out: &mut String, m: &DocFunction) {
+    writeln!(out, "- `{}`", m.signature).unwrap();
     if let Some(ref d) = m.doc {
-        let brief = d.lines().next().unwrap_or("");
-        writeln!(out, "- `{}` — {brief}", m.signature).unwrap();
-    } else {
-        writeln!(out, "- `{}`", m.signature).unwrap();
+        render_md_list_doc(out, d);
+    }
+}
+
+fn render_md_list_doc(out: &mut String, doc: &str) {
+    out.push('\n');
+    for line in doc.lines() {
+        if line.trim().is_empty() {
+            out.push('\n');
+        } else {
+            write!(out, "  {line}\n").unwrap();
+        }
     }
 }
 
@@ -400,14 +407,9 @@ fn render_md_enum(out: &mut String, e: &DocEnum, h3: &str) {
         render_md_doc(out, d);
     }
     if !e.cases.is_empty() {
-        let inline = e.cases.join("`, `");
-        if inline.len() + 10 <= 80 {
-            writeln!(out, "\nCases: `{inline}`").unwrap();
-        } else {
-            out.push('\n');
-            for case in &e.cases {
-                writeln!(out, "- `{case}`").unwrap();
-            }
+        out.push('\n');
+        for case in &e.cases {
+            writeln!(out, "- `{case}`").unwrap();
         }
     }
 }
@@ -424,11 +426,9 @@ fn render_md_variant(out: &mut String, v: &DocVariant, h3: &str) {
         } else {
             case.name.clone()
         };
+        writeln!(out, "- `{case_repr}`").unwrap();
         if let Some(ref d) = case.doc {
-            let brief = d.lines().next().unwrap_or("");
-            writeln!(out, "- `{case_repr}` — {brief}").unwrap();
-        } else {
-            writeln!(out, "- `{case_repr}`").unwrap();
+            render_md_list_doc(out, d);
         }
     }
 }

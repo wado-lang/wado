@@ -9,7 +9,9 @@
 
 #### `pub enum ErrorCode`
 
-Cases: `Io`, `IllegalByteSequence`, `Pipe`
+- `Io`
+- `IllegalByteSequence`
+- `Pipe`
 
 ## wasi:filesystem
 
@@ -17,28 +19,67 @@ Cases: `Io`, `IllegalByteSequence`, `Pipe`
 
 #### `pub struct DescriptorStat`
 
+File attributes.
+
+Note: This was called `filestat` in earlier versions of WASI.
+
 ##### Fields
 
 - `type: DescriptorType`
+
+  File type.
 - `link_count: LinkCount`
+
+  Number of hard links to the file.
 - `size: Filesize`
+
+  For regular files, the file size in bytes. For symbolic links, the
+  length in bytes of the pathname contained in the symbolic link.
 - `data_access_timestamp: Option<Instant>`
+
+  Last data access timestamp.
+
+  If the `option` is none, the platform doesn't maintain an access
+  timestamp for this file.
 - `data_modification_timestamp: Option<Instant>`
+
+  Last data modification timestamp.
+
+  If the `option` is none, the platform doesn't maintain a
+  modification timestamp for this file.
 - `status_change_timestamp: Option<Instant>`
+
+  Last file status-change timestamp.
+
+  If the `option` is none, the platform doesn't maintain a
+  status-change timestamp for this file.
 
 #### `pub struct DirectoryEntry`
 
+A directory entry.
+
 ##### Fields
 
 - `type: DescriptorType`
+
+  The type of the file referred to by this directory entry.
 - `name: String`
 
+  The name of the object.
+
 #### `pub struct MetadataHashValue`
+
+A 128-bit hash value, split into parts because wasm doesn't have a
+128-bit integer type.
 
 ##### Fields
 
 - `lower: u64`
+
+  64 bits of a 128-bit hash value.
 - `upper: u64`
+
+  Another 64 bits of a 128-bit hash value.
 
 ### Types
 
@@ -50,6 +91,10 @@ Cases: `Io`, `IllegalByteSequence`, `Pipe`
 
 #### `pub enum DescriptorType`
 
+The type of a filesystem object referenced by a descriptor.
+
+Note: This was called `filetype` in earlier versions of WASI.
+
 - `Unknown`
 - `BlockDevice`
 - `CharacterDevice`
@@ -60,6 +105,11 @@ Cases: `Io`, `IllegalByteSequence`, `Pipe`
 - `Socket`
 
 #### `pub enum ErrorCode`
+
+Error codes returned by functions, similar to `errno` in POSIX.
+Not all of these error codes are returned by the functions provided by this
+API; some are used in higher-level library layers, and others are provided
+merely for alignment with POSIX.
 
 - `Access`
 - `Already`
@@ -100,19 +150,39 @@ Cases: `Io`, `IllegalByteSequence`, `Pipe`
 
 #### `pub enum Advice`
 
-Cases: `Normal`, `Sequential`, `Random`, `WillNeed`, `DontNeed`, `NoReuse`
+File or memory access pattern advisory information.
+
+- `Normal`
+- `Sequential`
+- `Random`
+- `WillNeed`
+- `DontNeed`
+- `NoReuse`
 
 ### Variants
 
 #### `pub variant NewTimestamp`
 
+When setting a timestamp, this gives the value to set it to.
+
 - `NoChange`
+
+  Leave the timestamp set to its previous value.
 - `Now`
+
+  Set the timestamp to the current time of the system clock associated
+  with the filesystem.
 - `Timestamp(Instant)`
+
+  Set the timestamp to the given value.
 
 ### Flags
 
 #### `pub flags DescriptorFlags`
+
+Descriptor flags.
+
+Note: This was called `fdflags` in earlier versions of WASI.
 
 ##### Members
 
@@ -125,11 +195,15 @@ Cases: `Normal`, `Sequential`, `Random`, `WillNeed`, `DontNeed`, `NoReuse`
 
 #### `pub flags PathFlags`
 
+Flags determining the method of how paths are resolved.
+
 ##### Members
 
 - `SymlinkFollow`
 
 #### `pub flags OpenFlags`
+
+Open flags used by `open-at`.
 
 ##### Members
 
@@ -144,6 +218,8 @@ Cases: `Normal`, `Sequential`, `Random`, `WillNeed`, `DontNeed`, `NoReuse`
 
 #### `pub struct DnsErrorPayload`
 
+Defines the case payload type for `DNS-error` above:
+
 ##### Fields
 
 - `rcode: Option<String>`
@@ -151,12 +227,16 @@ Cases: `Normal`, `Sequential`, `Random`, `WillNeed`, `DontNeed`, `NoReuse`
 
 #### `pub struct TlsAlertReceivedPayload`
 
+Defines the case payload type for `TLS-alert-received` above:
+
 ##### Fields
 
 - `alert_id: Option<u8>`
 - `alert_message: Option<String>`
 
 #### `pub struct FieldSizePayload`
+
+Defines the case payload type for `HTTP-response-{header,trailer}-size` above:
 
 ##### Fields
 
@@ -179,6 +259,8 @@ Cases: `Normal`, `Sequential`, `Random`, `WillNeed`, `DontNeed`, `NoReuse`
 
 #### `pub variant Method`
 
+This type corresponds to HTTP standard Methods.
+
 - `Get`
 - `Head`
 - `Post`
@@ -192,11 +274,16 @@ Cases: `Normal`, `Sequential`, `Random`, `WillNeed`, `DontNeed`, `NoReuse`
 
 #### `pub variant Scheme`
 
+This type corresponds to HTTP standard Related Schemes.
+
 - `Http`
 - `Https`
 - `Other(String)`
 
 #### `pub variant ErrorCode`
+
+These cases are inspired by the IANA HTTP Proxy Error Types:
+  <https://www.iana.org/assignments/http-proxy-status/http-proxy-status.xhtml#table-http-proxy-error-types>
 
 - `DnsTimeout`
 - `DnsError(DnsErrorPayload)`
@@ -238,22 +325,66 @@ Cases: `Normal`, `Sequential`, `Random`, `WillNeed`, `DontNeed`, `NoReuse`
 - `ConfigurationError`
 - `InternalError(Option<String>)`
 
+  This is a catch-all error for anything that doesn't fit cleanly into a
+  more specific case. It also includes an optional string for an
+  unstructured description of the error. Users should not depend on the
+  string for diagnosing errors, as it's not required to be consistent
+  between implementations.
+
 #### `pub variant HeaderError`
 
+This type enumerates the different kinds of errors that may occur when
+setting or appending to a `fields` resource.
+
 - `InvalidSyntax`
+
+  This error indicates that a `field-name` or `field-value` was
+  syntactically invalid when used with an operation that sets headers in a
+  `fields`.
 - `Forbidden`
+
+  This error indicates that a forbidden `field-name` was used when trying
+  to set a header in a `fields`.
 - `Immutable`
+
+  This error indicates that the operation on the `fields` was not
+  permitted because the fields are immutable.
 
 #### `pub variant RequestOptionsError`
 
+This type enumerates the different kinds of errors that may occur when
+setting fields of a `request-options` resource.
+
 - `NotSupported`
+
+  Indicates the specified field is not supported by this implementation.
 - `Immutable`
+
+  Indicates that the operation on the `request-options` was not permitted
+  because it is immutable.
 
 ## wasi:clocks
 
 ### Structs
 
 #### `pub struct Instant`
+
+An "instant", or "exact time", is a point in time without regard to any
+time zone: just the time since a particular external reference point,
+often called an "epoch".
+
+Here, the epoch is 1970-01-01T00:00:00Z, also known as
+[POSIX's Seconds Since the Epoch], also known as [Unix Time].
+
+Note that even if the seconds field is negative, incrementing
+nanoseconds always represents moving forwards in time.
+For example, `{ -1 seconds, 999999999 nanoseconds }` represents the
+instant one nanosecond before the epoch.
+For more on various different ways to represent time, see
+https://tc39.es/proposal-temporal/docs/timezone.html
+
+[POSIX's Seconds Since the Epoch]: https://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xbd_chap04.html#tag_21_04_16
+[Unix Time]: https://en.wikipedia.org/wiki/Unix_time
 
 ##### Fields
 
@@ -277,16 +408,28 @@ Cases: `Normal`, `Sequential`, `Random`, `WillNeed`, `DontNeed`, `NoReuse`
 ##### Fields
 
 - `port: u16`
+
+  sin_port
 - `address: Ipv4Address`
+
+  sin_addr
 
 #### `pub struct Ipv6SocketAddress`
 
 ##### Fields
 
 - `port: u16`
+
+  sin6_port
 - `flow_info: u32`
+
+  sin6_flowinfo
 - `address: Ipv6Address`
+
+  sin6_addr
 - `scope_id: u32`
+
+  sin6_scope_id
 
 ### Types
 
@@ -297,6 +440,18 @@ Cases: `Normal`, `Sequential`, `Random`, `WillNeed`, `DontNeed`, `NoReuse`
 ### Enums
 
 #### `pub enum ErrorCode`
+
+Error codes.
+
+In theory, every API can return any error code.
+In practice, API's typically only return the errors documented per API
+combined with a couple of errors that are always possible:
+- `unknown`
+- `access-denied`
+- `not-supported`
+- `out-of-memory`
+
+See each individual API for what the POSIX equivalents are. They sometimes differ per API.
 
 - `Unknown`
 - `AccessDenied`
@@ -315,9 +470,12 @@ Cases: `Normal`, `Sequential`, `Random`, `WillNeed`, `DontNeed`, `NoReuse`
 
 #### `pub enum IpAddressFamily`
 
-Cases: `Ipv4`, `Ipv6`
+- `Ipv4`
+- `Ipv6`
 
 #### `pub enum ErrorCode`
+
+Lookup error codes.
 
 - `Unknown`
 - `AccessDenied`

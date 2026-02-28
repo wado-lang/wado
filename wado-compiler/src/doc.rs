@@ -2,8 +2,8 @@ use indexmap::IndexSet;
 use serde::Serialize;
 
 use crate::ast::{
-    EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl, ImplBlock, Item, Module, Newtype,
-    Param, SelfKind, StructDecl, StructField, TraitDecl, Type, UseItem, VariantDecl,
+    Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl, ImplBlock, Item, Module,
+    Newtype, Param, SelfKind, StructDecl, StructField, TraitDecl, Type, UseItem, VariantDecl,
 };
 use crate::comment::{CommentKind, CommentMap};
 use crate::stdlib;
@@ -218,7 +218,7 @@ fn build_doc_struct(s: &StructDecl, impls: &[&ImplBlock], comments: &CommentMap)
         .map(|f| DocField {
             name: f.name.clone(),
             ty: render_type(&f.ty),
-            doc: extract_doc_comment(comments, &f.span),
+            doc: extract_doc_comment_with_attrs(comments, &f.span, &f.attrs),
         })
         .collect();
 
@@ -226,7 +226,7 @@ fn build_doc_struct(s: &StructDecl, impls: &[&ImplBlock], comments: &CommentMap)
 
     DocStruct {
         signature: render_struct_signature(s),
-        doc: extract_doc_comment(comments, &s.span),
+        doc: extract_doc_comment_with_attrs(comments, &s.span, &s.attrs),
         fields,
         has_private_fields,
         methods,
@@ -278,7 +278,7 @@ fn build_doc_enum(e: &EnumDecl, comments: &CommentMap) -> DocEnum {
     DocEnum {
         signature: render_enum_signature(e),
         cases: e.cases.iter().map(|c| c.name.clone()).collect(),
-        doc: extract_doc_comment(comments, &e.span),
+        doc: extract_doc_comment_with_attrs(comments, &e.span, &e.attrs),
     }
 }
 
@@ -297,7 +297,7 @@ fn build_doc_variant(v: &VariantDecl, comments: &CommentMap) -> DocVariant {
         .map(|c| DocVariantCase {
             name: c.name.clone(),
             payload: c.payload.as_ref().map(render_type),
-            doc: extract_doc_comment(comments, &c.span),
+            doc: extract_doc_comment_with_attrs(comments, &c.span, &c.attrs),
         })
         .collect();
 
@@ -305,7 +305,7 @@ fn build_doc_variant(v: &VariantDecl, comments: &CommentMap) -> DocVariant {
         name: v.name.clone(),
         signature: sig,
         cases,
-        doc: extract_doc_comment(comments, &v.span),
+        doc: extract_doc_comment_with_attrs(comments, &v.span, &v.attrs),
     }
 }
 
@@ -321,14 +321,18 @@ fn build_doc_flags(f: &FlagsDecl, comments: &CommentMap) -> DocFlags {
         name: f.name.clone(),
         signature: sig,
         members: f.flags.iter().map(|m| m.name.clone()).collect(),
-        doc: extract_doc_comment(comments, &f.span),
+        doc: extract_doc_comment_with_attrs(
+            comments,
+            &f.span,
+            f.attributes.as_deref().unwrap_or(&[]),
+        ),
     }
 }
 
 fn build_doc_function(f: &Function, comments: &CommentMap) -> DocFunction {
     DocFunction {
         signature: render_fn_signature(f),
-        doc: extract_doc_comment(comments, &f.span),
+        doc: extract_doc_comment_with_attrs(comments, &f.span, &f.attrs),
     }
 }
 
@@ -348,8 +352,21 @@ fn doc_text(comment: &crate::comment::Comment) -> &str {
 }
 
 fn extract_doc_comment(comments: &CommentMap, span: &crate::token::Span) -> Option<String> {
+    extract_doc_comment_with_attrs(comments, span, &[])
+}
+
+fn extract_doc_comment_with_attrs(
+    comments: &CommentMap,
+    span: &crate::token::Span,
+    attrs: &[Attribute],
+) -> Option<String> {
     let leading = comments.leading_comments(span);
-    let item_line = span.line;
+    // When attributes are present, the doc comment is before the first attribute,
+    // not immediately before the keyword. Use the first attribute's line as the
+    // start to bridge the gap.
+    let item_line = attrs
+        .first()
+        .map_or(span.line, |a| a.span.line);
     let mut expected_line = item_line;
     let mut doc_comments: Vec<&crate::comment::Comment> = Vec::new();
 
