@@ -284,7 +284,6 @@ See also `wado-vscode/README.md` for more details.
 
 `wado-bundled/` is a Rust crate that provides bundled Wasm modules for Wado, providing:
 
-- [x] float-to-string conversion (fts)
 - [x] math functions (libm)
 
 ## Wasm and WASI
