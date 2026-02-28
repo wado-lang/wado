@@ -1,4 +1,5 @@
-// Match ergonomics: using &T in match expressions
+// Match ergonomics: match expressions auto-deref &T scrutinees.
+// Bindings through &T get reference types (Rust-compatible).
 use { println, Stdout } from "core:cli";
 
 enum Color {
@@ -8,7 +9,7 @@ enum Color {
 }
 
 export fn run() with Stdout {
-    // Match on &enum
+    // Match on &enum — enum patterns have no bindings, works directly
     let c = Color::Red;
     let rc = &c;
     let name = match rc {
@@ -18,11 +19,11 @@ export fn run() with Stdout {
     };
     assert name == "red";
 
-    // Match on &Option<T>
+    // Match on &Option<T> — x binds as &i32
     let opt: Option<i32> = Option::<i32>::Some(42);
     let ro = &opt;
     let val = match ro {
-        Some(x) => x,
+        Some(x) => *x,
         None => 0,
     };
     assert val == 42;

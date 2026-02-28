@@ -159,17 +159,17 @@ fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, va
 
 fn "TreeMap<String,i32>::insert_node"(self: &mut TreeMap<String,i32>, node: Option<&mut TreeMapNode<String>>, key: String, index: i32) -> Option<&mut TreeMapNode<String>> {
     if __variant_test(node, case=0, name=Some) {
-        let n: TreeMapNode<String> = __variant_payload(node, case=0);
+        let n: &mut TreeMapNode<String> = __variant_payload(node, case=0);
         if key."String^Eq::eq"(&n.key) {
             n.index = index;
-            return Option<TreeMapNode<String>>::Some(n);
+            return Option<&mut TreeMapNode<String>>::Some(n);
         }
         if (key."String^Ord::cmp"(&n.key) == Ordering::Less) {
             n.left = self."TreeMap<String,i32>::insert_node"(n.left, key, index);
         } else {
             n.right = self."TreeMap<String,i32>::insert_node"(n.right, key, index);
         }
-        let after_skew: Option<&mut TreeMapNode<String>> = self."TreeMap<String,i32>::skew"(Option<TreeMapNode<String>>::Some(n));
+        let after_skew: Option<&mut TreeMapNode<String>> = self."TreeMap<String,i32>::skew"(Option<&mut TreeMapNode<String>>::Some(n));
         return self."TreeMap<String,i32>::split"(after_skew);
     }
     let mut new_node: TreeMapNode<String> = TreeMapNode<String> { key: key, index: index, level: 1, left: null, right: null };
@@ -178,39 +178,39 @@ fn "TreeMap<String,i32>::insert_node"(self: &mut TreeMap<String,i32>, node: Opti
 
 fn "TreeMap<String,i32>::split"(self: &mut TreeMap<String,i32>, node: Option<&mut TreeMapNode<String>>) -> Option<&mut TreeMapNode<String>> {
     if __variant_test(node, case=0, name=Some) {
-        let n: TreeMapNode<String> = __variant_payload(node, case=0);
+        let n: &mut TreeMapNode<String> = __variant_payload(node, case=0);
         let __pattern_temp_1: Option<&mut TreeMapNode<String>> = n.right;
         if __variant_test(__pattern_temp_1, case=0, name=Some) {
-            let right: TreeMapNode<String> = __variant_payload(__pattern_temp_1, case=0);
+            let right: &mut TreeMapNode<String> = __variant_payload(__pattern_temp_1, case=0);
             let __pattern_temp_2: Option<&mut TreeMapNode<String>> = right.right;
             if __variant_test(__pattern_temp_2, case=0, name=Some) {
-                let rr: TreeMapNode<String> = __variant_payload(__pattern_temp_2, case=0);
+                let rr: &mut TreeMapNode<String> = __variant_payload(__pattern_temp_2, case=0);
                 if (rr.level == n.level) {
                     n.right = right.left;
-                    right.left = Option<TreeMapNode<String>>::Some(n);
+                    right.left = Option<&mut TreeMapNode<String>>::Some(n);
                     right.level = (right.level + 1);
-                    return Option<TreeMapNode<String>>::Some(right);
+                    return Option<&mut TreeMapNode<String>>::Some(right);
                 }
             }
         }
-        return Option<TreeMapNode<String>>::Some(n);
+        return Option<&mut TreeMapNode<String>>::Some(n);
     }
     return null;
 }
 
 fn "TreeMap<String,i32>::skew"(self: &mut TreeMap<String,i32>, node: Option<&mut TreeMapNode<String>>) -> Option<&mut TreeMapNode<String>> {
     if __variant_test(node, case=0, name=Some) {
-        let n: TreeMapNode<String> = __variant_payload(node, case=0);
+        let n: &mut TreeMapNode<String> = __variant_payload(node, case=0);
         let __pattern_temp_1: Option<&mut TreeMapNode<String>> = n.left;
         if __variant_test(__pattern_temp_1, case=0, name=Some) {
-            let left: TreeMapNode<String> = __variant_payload(__pattern_temp_1, case=0);
+            let left: &mut TreeMapNode<String> = __variant_payload(__pattern_temp_1, case=0);
             if (left.level == n.level) {
                 n.left = left.right;
-                left.right = Option<TreeMapNode<String>>::Some(n);
-                return Option<TreeMapNode<String>>::Some(left);
+                left.right = Option<&mut TreeMapNode<String>>::Some(n);
+                return Option<&mut TreeMapNode<String>>::Some(left);
             }
         }
-        return Option<TreeMapNode<String>>::Some(n);
+        return Option<&mut TreeMapNode<String>>::Some(n);
     }
     return null;
 }
@@ -244,7 +244,7 @@ fn "TreeMap<String,i32>::find_index"(self: &TreeMap<String,i32>, key: String) ->
     loop {
         let __pattern_temp_0: Option<&mut TreeMapNode<String>> = current;
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let n: TreeMapNode<String> = __variant_payload(__pattern_temp_0, case=0);
+            let n: &mut TreeMapNode<String> = __variant_payload(__pattern_temp_0, case=0);
             if key."String^Eq::eq"(&n.key) {
                 let entry: &TreeMapEntry<String,i32> = &_licm_entries."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(n.index);
                 if entry.deleted {

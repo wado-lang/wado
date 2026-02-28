@@ -1404,6 +1404,24 @@ impl<'a> PatternLowerer<'a> {
                 local_index,
                 type_id,
             } => {
+                // Match ergonomics: if binding type is &T but value type is T,
+                // wrap value in a Ref operation to create the reference.
+                let value = if matches!(type_table.get(*type_id), ResolvedType::Ref(_))
+                    && !matches!(
+                        type_table.get(value.type_id),
+                        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                    ) {
+                    TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref,
+                            expr: Box::new(value),
+                        },
+                        *type_id,
+                        span,
+                    )
+                } else {
+                    value
+                };
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
                         name: name.clone(),
@@ -1864,6 +1882,24 @@ impl<'a> PatternLowerer<'a> {
                 local_index,
                 type_id,
             } => {
+                // Match ergonomics: if binding type is &T but value type is T,
+                // wrap value in a Ref operation.
+                let value = if matches!(type_table.get(*type_id), ResolvedType::Ref(_))
+                    && !matches!(
+                        type_table.get(scrutinee.type_id),
+                        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                    ) {
+                    TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref,
+                            expr: Box::new(scrutinee),
+                        },
+                        *type_id,
+                        span,
+                    )
+                } else {
+                    scrutinee
+                };
                 // Always matches, bind the value
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
@@ -1872,7 +1908,7 @@ impl<'a> PatternLowerer<'a> {
                         is_mut: false,
                         is_reactive: false,
                         type_id: *type_id,
-                        value: scrutinee,
+                        value,
                         skip_value_copy: false,
                     },
                     span,
