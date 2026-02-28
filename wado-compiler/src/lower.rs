@@ -1051,7 +1051,17 @@ impl<'a> PatternLowerer<'a> {
                 self.lower_expr(&mut scrutinee, type_table);
 
                 // Check if this is an Option, custom Variant, or Enum pattern that we can lower
-                let scrutinee_type = type_table.get(scrutinee.type_id);
+                // Match ergonomics: peel Ref/MutRef to find the underlying type
+                let mut scrutinee_type_id = scrutinee.type_id;
+                loop {
+                    match type_table.get(scrutinee_type_id) {
+                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                            scrutinee_type_id = *inner;
+                        }
+                        _ => break,
+                    }
+                }
+                let scrutinee_type = type_table.get(scrutinee_type_id);
                 let can_lower = matches!(
                     scrutinee_type,
                     ResolvedType::Variant { .. }
@@ -1397,6 +1407,24 @@ impl<'a> PatternLowerer<'a> {
                 local_index,
                 type_id,
             } => {
+                // Match ergonomics: if binding type is &T but value type is T,
+                // wrap value in a Ref operation to create the reference.
+                let value = if matches!(type_table.get(*type_id), ResolvedType::Ref(_))
+                    && !matches!(
+                        type_table.get(value.type_id),
+                        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                    ) {
+                    TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref,
+                            expr: Box::new(value),
+                        },
+                        *type_id,
+                        span,
+                    )
+                } else {
+                    value
+                };
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
                         name: name.clone(),
@@ -1591,6 +1619,27 @@ impl<'a> PatternLowerer<'a> {
         }
     }
 
+    /// Insert deref expressions to peel `Ref`/`MutRef` from a scrutinee expression.
+    fn peel_ref_scrutinee(&self, mut scrutinee: TirExpr, type_table: &TypeTable) -> TirExpr {
+        loop {
+            match type_table.get(scrutinee.type_id) {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                    let inner = *inner;
+                    let span = scrutinee.span;
+                    scrutinee = TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Deref,
+                            expr: Box::new(scrutinee),
+                        },
+                        inner,
+                        span,
+                    );
+                }
+                _ => return scrutinee,
+            }
+        }
+    }
+
     /// Lower a struct `IfPattern` to let bindings + then block (unconditional).
     ///
     /// Struct patterns are always irrefutable, so the else branch is discarded.
@@ -1604,6 +1653,9 @@ impl<'a> PatternLowerer<'a> {
         out: &mut Vec<TirStmt>,
         type_table: &TypeTable,
     ) {
+        // Match ergonomics: dereference Ref/MutRef scrutinee
+        let scrutinee = self.peel_ref_scrutinee(scrutinee, type_table);
+
         if let TirPattern::Struct { fields, .. } = pattern {
             // Lower the scrutinee into a temp
             let struct_temp_index = self.alloc_local(scrutinee.type_id);
@@ -1687,6 +1739,9 @@ impl<'a> PatternLowerer<'a> {
         out: &mut Vec<TirStmt>,
         type_table: &TypeTable,
     ) {
+        // Match ergonomics: dereference Ref/MutRef scrutinee
+        let scrutinee = self.peel_ref_scrutinee(scrutinee, type_table);
+
         // Allocate a temp local for the scrutinee to avoid re-evaluation
         let scrutinee_temp_index = self.alloc_local(scrutinee.type_id);
         let scrutinee_temp_name = self.next_temp_name();
@@ -1830,6 +1885,24 @@ impl<'a> PatternLowerer<'a> {
                 local_index,
                 type_id,
             } => {
+                // Match ergonomics: if binding type is &T but value type is T,
+                // wrap value in a Ref operation.
+                let value = if matches!(type_table.get(*type_id), ResolvedType::Ref(_))
+                    && !matches!(
+                        type_table.get(scrutinee.type_id),
+                        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                    ) {
+                    TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref,
+                            expr: Box::new(scrutinee),
+                        },
+                        *type_id,
+                        span,
+                    )
+                } else {
+                    scrutinee
+                };
                 // Always matches, bind the value
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
@@ -1838,7 +1911,7 @@ impl<'a> PatternLowerer<'a> {
                         is_mut: false,
                         is_reactive: false,
                         type_id: *type_id,
-                        value: scrutinee,
+                        value,
                         skip_value_copy: false,
                     },
                     span,
@@ -1959,6 +2032,29 @@ impl<'a> PatternLowerer<'a> {
                         self.lower_expr(guard, type_table);
                     }
                     self.lower_expr(&mut arm.body, type_table);
+                }
+
+                // Match ergonomics: insert deref if scrutinee is Ref/MutRef
+                loop {
+                    match type_table.get(scrutinee.type_id) {
+                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                            let inner = *inner;
+                            let span = scrutinee.span;
+                            let old = std::mem::replace(
+                                scrutinee.as_mut(),
+                                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+                            );
+                            *scrutinee.as_mut() = TirExpr::new(
+                                TirExprKind::Unary {
+                                    op: TirUnaryOp::Deref,
+                                    expr: Box::new(old),
+                                },
+                                inner,
+                                span,
+                            );
+                        }
+                        _ => break,
+                    }
                 }
 
                 // Analyze if this Match can be converted to Switch (for br_table)

@@ -646,7 +646,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         result
     }
 
-    /// Resolve a pattern in an if-pattern context with type information from the scrutinee
+    /// Resolve a pattern in an if-pattern context with type information from the scrutinee.
+    /// Match ergonomics: if the scrutinee is `&T`, peels the reference and propagates
+    /// `ref_binding` so that identifier bindings get `&InnerType` instead of `InnerType`.
     pub(super) fn resolve_if_pattern(
         &mut self,
         pattern: &Pattern,
@@ -654,15 +656,43 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx: &mut FunctionContext,
         span: Span,
     ) -> TirPattern {
+        let mut peeled_type = scrutinee_type;
+        let mut ref_binding = false;
+        loop {
+            match self.type_table.borrow().get(peeled_type).clone() {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                    peeled_type = inner;
+                    ref_binding = true;
+                }
+                _ => break,
+            }
+        }
+        self.resolve_if_pattern_inner(pattern, peeled_type, ctx, span, ref_binding)
+    }
+
+    fn resolve_if_pattern_inner(
+        &mut self,
+        pattern: &Pattern,
+        scrutinee_type: TypeId,
+        ctx: &mut FunctionContext,
+        span: Span,
+        ref_binding: bool,
+    ) -> TirPattern {
         match pattern {
             Pattern::Wildcard => TirPattern::Wildcard,
             Pattern::Ident(name) => {
-                // The binding gets the scrutinee type (or inner type for Option patterns)
-                let index = ctx.add_local(name.clone(), scrutinee_type, false);
+                let binding_type = if ref_binding {
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::Ref(scrutinee_type))
+                } else {
+                    scrutinee_type
+                };
+                let index = ctx.add_local(name.clone(), binding_type, false);
                 TirPattern::Binding {
                     name: name.clone(),
                     local_index: index,
-                    type_id: scrutinee_type,
+                    type_id: binding_type,
                 }
             }
             Pattern::Literal(lit) => {
@@ -730,7 +760,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .iter()
                             .chain(std::iter::repeat(&TypeTable::UNKNOWN)),
                     )
-                    .map(|(p, &ty)| self.resolve_if_pattern(p, ty, ctx, span))
+                    .map(|(p, &ty)| self.resolve_if_pattern_inner(p, ty, ctx, span, ref_binding))
                     .collect();
                 TirPattern::Tuple(resolved)
             }
@@ -819,7 +849,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Single payload = single binding pattern.
                 // For backward compatibility, we still accept `Some(x)` as single binding.
                 let resolved_bindings: Vec<TirPattern> = if bindings.len() == 1 {
-                    vec![self.resolve_if_pattern(&bindings[0], payload_type, ctx, *span)]
+                    vec![self.resolve_if_pattern_inner(
+                        &bindings[0],
+                        payload_type,
+                        ctx,
+                        *span,
+                        ref_binding,
+                    )]
                 } else if bindings.is_empty() {
                     // Unit case like `None` - no bindings
                     vec![]
@@ -828,7 +864,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // Error will be caught by test fixture updates.
                     bindings
                         .iter()
-                        .map(|p| self.resolve_if_pattern(p, TypeTable::UNKNOWN, ctx, *span))
+                        .map(|p| {
+                            self.resolve_if_pattern_inner(
+                                p,
+                                TypeTable::UNKNOWN,
+                                ctx,
+                                *span,
+                                ref_binding,
+                            )
+                        })
                         .collect()
                 };
 
@@ -864,8 +908,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 for field in fields {
                     let (field_index, field_type) =
                         self.lookup_field_type(scrutinee_type, &field.field_name, field.span);
-                    let sub_pattern =
-                        self.resolve_if_pattern(&field.pattern, field_type, ctx, field.span);
+                    let sub_pattern = self.resolve_if_pattern_inner(
+                        &field.pattern,
+                        field_type,
+                        ctx,
+                        field.span,
+                        ref_binding,
+                    );
                     tir_fields.push(TirStructPatternField {
                         field_name: field.field_name.clone(),
                         field_index,

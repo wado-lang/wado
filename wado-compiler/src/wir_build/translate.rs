@@ -4276,10 +4276,41 @@ impl FunctionTranslator<'_, '_> {
                                 name: cast_local.clone(),
                             }),
                         };
-                        if let TirPattern::Binding { local_index, .. } = binding {
+                        if let TirPattern::Binding {
+                            local_index,
+                            type_id,
+                            ..
+                        } = binding
+                        {
+                            // Match ergonomics: if the binding's WIR type is a
+                            // ref (Box<T>) but the payload field is a value type,
+                            // create a StructNew to box the extracted value.
+                            let binding_wir =
+                                self.ctx.type_id_to_wir_type(self.type_table, *type_id);
+                            let payload_field_wir =
+                                self.get_case_payload_wir_type(&case_type_id, i);
+                            let needs_boxing = matches!(binding_wir, WirType::Ref { .. })
+                                && payload_field_wir.as_ref().is_some_and(|t| {
+                                    !matches!(t, WirType::Ref { .. } | WirType::AbstractRef { .. })
+                                });
+                            let value = if needs_boxing {
+                                if let WirType::Ref {
+                                    type_id: box_tid, ..
+                                } = &binding_wir
+                                {
+                                    WirInstr::StructNew {
+                                        type_id: box_tid.clone(),
+                                        fields: vec![payload_get],
+                                    }
+                                } else {
+                                    payload_get
+                                }
+                            } else {
+                                payload_get
+                            };
                             instrs.push(WirInstr::LocalSet {
                                 name: self.local_name(*local_index),
-                                value: Box::new(payload_get),
+                                value: Box::new(value),
                             });
                         } else if let TirPattern::Tuple(sub_patterns) = binding {
                             // Tuple payload: payload_i is a ref to a tuple struct.
@@ -4439,6 +4470,19 @@ impl FunctionTranslator<'_, '_> {
     /// Look up a variant case struct's payload field type, extracting the inner
     /// ref type ID. For `payload_i` of a tuple type, this returns the `WirTypeId`
     /// of the tuple struct.
+    fn get_case_payload_wir_type(
+        &self,
+        case_type_id: &crate::wir::WirTypeId,
+        payload_index: usize,
+    ) -> Option<WirType> {
+        let type_def = self.ctx.types.get(case_type_id.index() as usize)?;
+        if let crate::wir::WirTypeDef::Struct(s) = type_def {
+            let field = s.fields.get(payload_index + 1)?;
+            return Some(field.ty.clone());
+        }
+        None
+    }
+
     fn get_case_payload_ref_type(
         &self,
         case_type_id: &crate::wir::WirTypeId,

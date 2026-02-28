@@ -1,38 +1,10 @@
-// Auto-dereference: assigning &T to a variable of type T via type annotation
-use { println, Stdout } from "core:cli";
-
-export fn run() with Stdout {
-    // let x: i32 = &val (auto-deref in let with type annotation)
+// Let binding with type annotation does not auto-dereference.
+// Use explicit dereference (*ref) instead.
+export fn run() {
     let val = 42;
     let r = &val;
-    let x: i32 = r;
-    assert x == 42;
-
-    // let x: i32 = &mut val
-    let mut mval = 10;
-    let mr = &mut mval;
-    let y: i32 = mr;
-    assert y == 10;
-
-    // let x: i32 = &&val (double deref)
-    let rr = &r;
-    let z: i32 = rr;
-    assert z == 42;
-
-    // let s: String = &str_val
-    let str_val = "hello";
-    let sr = &str_val;
-    let s: String = sr;
-    assert s == "hello";
-
-    // let b: bool = &bool_val
-    let bool_val = true;
-    let br = &bool_val;
-    let b: bool = br;
-    assert b == true;
-
-    println("ok");
+    let x: i32 = r;    // expected i32, found &i32 → error
 }
 
 __DATA__
-{"TODO": true, "stdout": "ok\n"}
+{"compile_error": "expected 'i32', found '&i32'"}

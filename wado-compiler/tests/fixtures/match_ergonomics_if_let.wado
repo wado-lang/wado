@@ -1,12 +1,15 @@
-// Auto-dereference: using &T in if-let and while-let patterns
+// Match ergonomics: if-let, while-let, and matches auto-deref &T scrutinees.
+// Bindings through &T get reference types (Rust-compatible).
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
-    // if let on &Option<T>
+    // if let on &Option<T>: x binds as &i32
     let opt: Option<i32> = Option::<i32>::Some(42);
     let ro = &opt;
     if let Some(x) = ro {
-        println(`got: {x}`);
+        // x is &i32 — dereference to use
+        assert *x == 42;
+        println(`got: {*x}`);
     }
 
     // if let None on &Option<T>
@@ -27,4 +30,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"TODO": true, "stdout": "got: 42\ngot none\nok\n"}
+{"stdout": "got: 42\ngot none\nok\n"}

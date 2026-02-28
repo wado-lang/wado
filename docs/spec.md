@@ -349,6 +349,16 @@ if let Some(x) = opt {
 }
 ```
 
+**Match Ergonomics:** When the scrutinee of `if let`, `match`, or `matches` is a reference type (`&T` or `&mut T`), patterns match against the underlying type. Payload bindings become references — e.g. matching `&Option<T>` with `Some(x)` gives `x: &T`, not `x: T` (Rust-compatible, RFC 2005).
+
+```wado
+let opt: Option<i32> = Option::<i32>::Some(42);
+let ro = &opt;
+if let Some(x) = ro {       // ro: &Option<i32>, x: &i32
+    println(`Got: {*x}`);   // dereference to use the value
+}
+```
+
 ### While Loop
 
 ```wado
@@ -2582,6 +2592,7 @@ match s {
 - Tuple payload pattern destructuring (`if let Foo([a, b]) = x`): implemented
 - `match` expression/statement: implemented
 - `matches` operator: implemented
+- Match ergonomics (`&T` scrutinees in `if let`/`match`/`matches`; payload bindings become refs): implemented
 - Generic custom variant pattern matching (e.g., `Maybe<T>`): not yet implemented
 - `Result<T, E>` pattern matching: not yet implemented
 
