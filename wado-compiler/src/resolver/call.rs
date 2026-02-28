@@ -195,13 +195,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                     // Check if this is a variant case construction (Color::Red)
                     else if let Some(variant_info) = self.variant_cases.get(prefix) {
-                        // Find the case by name
-                        if let Some((case_index, case_data)) = variant_info
+                        // Clone needed data to release the borrow on self
+                        let case_match = variant_info
                             .cases
                             .iter()
                             .enumerate()
                             .find(|(_, c)| c.name == suffix)
-                        {
+                            .map(|(i, c)| (i, c.clone()));
+                        let variant_module_source = variant_info.module_source.clone();
+                        let prefix_owned = prefix.to_string();
+
+                        // Find the case by name
+                        if let Some((case_index, case_data)) = case_match {
                             // Each variant case has exactly one payload.
                             // Unit variants expect 0 args, non-unit variants expect 1 arg.
                             let payload_is_unit = matches!(
@@ -224,13 +229,34 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             }
 
                             // Create variant type
-                            let variant_type = self.type_table.borrow_mut().make_variant(
-                                prefix.to_string(),
-                                variant_info.module_source.clone(),
-                            );
+                            let variant_type = self
+                                .type_table
+                                .borrow_mut()
+                                .make_variant(prefix_owned, variant_module_source);
 
-                            // Payload is the single argument, or None for unit variants
-                            let payload = args.into_iter().next().map(Box::new);
+                            // If the variant has type args (e.g., Option::<Array<u8>>::Some),
+                            // substitute them into the payload type and re-resolve the argument
+                            // with the correct expected type for proper literal coercion.
+                            let variant_type_args: Vec<TypeId> = call
+                                .type_args
+                                .iter()
+                                .map(|ty| self.resolve_type(ty))
+                                .collect();
+
+                            let payload = if payload_is_unit {
+                                None
+                            } else {
+                                let mut payload_type = case_data.payload;
+                                if !variant_type_args.is_empty() {
+                                    payload_type = self
+                                        .substitute_type_params(payload_type, &variant_type_args);
+                                }
+                                // Re-resolve the argument with the substituted payload type
+                                let arg_ast = &call.args[0];
+                                let resolved_arg =
+                                    self.resolve_expr(arg_ast, ctx, Some(payload_type));
+                                Some(Box::new(resolved_arg))
+                            };
 
                             return TirExpr::new(
                                 TirExprKind::VariantConstruct {
