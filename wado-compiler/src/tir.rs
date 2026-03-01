@@ -568,7 +568,7 @@ impl TypeTable {
         let module_source = self
             .option_module_source
             .clone()
-            .unwrap_or_else(ModuleSource::types);
+            .expect("Option module source not registered; missing #[comp_feature(\"option\")] on Option variant");
         self.make_generic_instance("Option".to_string(), module_source, vec![inner])
     }
 
@@ -577,7 +577,7 @@ impl TypeTable {
         let module_source = self
             .result_module_source
             .clone()
-            .unwrap_or_else(ModuleSource::types);
+            .expect("Result module source not registered; missing #[comp_feature(\"result\")] on Result variant");
         self.make_generic_instance("Result".to_string(), module_source, vec![ok, err])
     }
 
