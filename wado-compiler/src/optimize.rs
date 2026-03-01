@@ -62,9 +62,9 @@ struct OptConfig {
 /// |-------|-----|------------|------------------|
 /// | O0    | Yes | 0          | N/A              |
 /// | O1    | Yes | 2          | 10               |
-/// | O2    | Yes | 10         | 18               |
+/// | O2    | Yes | 10         | 10               |
 /// | O3    | Yes | 100        | 20               |
-/// | Os    | Yes | 10         | 18               |
+/// | Os    | Yes | 10         | 10               |
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OptLevel {
     /// No optimization passes. DCE only.
@@ -73,7 +73,7 @@ pub enum OptLevel {
     /// Iterations: 2, Inline threshold: 10.
     O1,
     /// Production optimizations. All passes including DCE.
-    /// Iterations: 10, Inline threshold: 18.
+    /// Iterations: 10, Inline threshold: 10.
     #[default]
     O2,
     /// Aggressive production optimizations. All passes including DCE.
@@ -131,7 +131,7 @@ pub fn optimize(
             // Production mode: full optimizations with DCE
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(10),
-                inline_threshold: inline_threshold.unwrap_or(18),
+                inline_threshold: inline_threshold.unwrap_or(10),
             };
             run_optimization_passes(&mut project, &config);
             // DCE: analyze and remove unreachable functions and types
