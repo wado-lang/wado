@@ -97,7 +97,15 @@ pub enum OptLevel {
 ///
 /// All levels run DCE to remove unreachable functions and types, which
 /// significantly reduces codegen work.
-pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
+///
+/// The `inline_threshold` and `opt_iterations` parameters override the
+/// defaults for the given `opt_level` when provided.
+pub fn optimize(
+    mut project: Project,
+    opt_level: OptLevel,
+    inline_threshold: Option<usize>,
+    opt_iterations: Option<u32>,
+) -> Project {
     match opt_level {
         OptLevel::O0 => {
             // No optimizations, but still run DCE to reduce codegen work
@@ -109,8 +117,8 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
         OptLevel::O1 => {
             // Development mode: all optimizations including DCE
             let config = OptConfig {
-                iterations: 2,
-                inline_threshold: 10,
+                iterations: opt_iterations.unwrap_or(2),
+                inline_threshold: inline_threshold.unwrap_or(10),
             };
             run_optimization_passes(&mut project, &config);
             // DCE: analyze and remove unreachable functions and types
@@ -122,8 +130,8 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
         OptLevel::O2 | OptLevel::Os => {
             // Production mode: full optimizations with DCE
             let config = OptConfig {
-                iterations: 10,
-                inline_threshold: 18,
+                iterations: opt_iterations.unwrap_or(10),
+                inline_threshold: inline_threshold.unwrap_or(18),
             };
             run_optimization_passes(&mut project, &config);
             // DCE: analyze and remove unreachable functions and types
@@ -138,8 +146,8 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
         OptLevel::O3 => {
             // Aggressive production mode: more fixed-point iterations
             let config = OptConfig {
-                iterations: 100,
-                inline_threshold: 20,
+                iterations: opt_iterations.unwrap_or(100),
+                inline_threshold: inline_threshold.unwrap_or(20),
             };
             run_optimization_passes(&mut project, &config);
             // DCE: analyze and remove unreachable functions and types

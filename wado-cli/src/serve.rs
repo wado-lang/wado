@@ -30,6 +30,8 @@ pub struct ServeOptions {
     pub opt_level: OptLevel,
     pub log_level: LogLevel,
     pub addr: String,
+    pub inline_threshold: Option<usize>,
+    pub opt_iterations: Option<u32>,
 }
 
 #[derive(Clone, Copy)]
@@ -37,12 +39,21 @@ pub struct ServeOptions {
 enum Opt {
     Addr,
     OptLevel,
+    InlineThreshold,
+    OptIterations,
     LogLevel,
     Help,
 }
 
 impl Opt {
-    const ALL: &[Self] = &[Self::Addr, Self::OptLevel, Self::LogLevel, Self::Help];
+    const ALL: &[Self] = &[
+        Self::Addr,
+        Self::OptLevel,
+        Self::InlineThreshold,
+        Self::OptIterations,
+        Self::LogLevel,
+        Self::Help,
+    ];
 
     const fn spec(self) -> args::OptSpec {
         match self {
@@ -53,6 +64,8 @@ impl Opt {
                 desc: "Address to listen on (default: 0.0.0.0:8080)",
             },
             Self::OptLevel => args::OPT_LEVEL_SPEC,
+            Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
+            Self::OptIterations => args::OPT_ITERATIONS_SPEC,
             Self::LogLevel => args::LOG_LEVEL_SPEC,
             Self::Help => args::HELP_SPEC,
         }
@@ -80,6 +93,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let mut opt_level = OptLevel::default();
     let mut log_level = LogLevel::default();
     let mut addr = "0.0.0.0:8080".to_string();
+    let mut inline_threshold: Option<usize> = None;
+    let mut opt_iterations: Option<u32> = None;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -104,6 +119,14 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                         }
                     };
                 }
+                Opt::InlineThreshold => {
+                    inline_threshold =
+                        Some(args::parse_inline_threshold_arg("--inline-threshold", &mut parser)?);
+                }
+                Opt::OptIterations => {
+                    opt_iterations =
+                        Some(args::parse_opt_iterations_arg("--opt-iterations", &mut parser)?);
+                }
                 Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
@@ -120,6 +143,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
         opt_level,
         log_level,
         addr,
+        inline_threshold,
+        opt_iterations,
     })
 }
 
@@ -283,6 +308,8 @@ pub async fn run(opts: ServeOptions) {
         opts.log_level,
         Some("wasi:http/service".to_string()),
         false,
+        opts.inline_threshold,
+        opts.opt_iterations,
     )
     .await;
 

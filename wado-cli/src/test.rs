@@ -242,6 +242,8 @@ async fn collect_test_jobs(
             wado_compiler::LogLevel::default(),
             Some("test".to_string()),
             false,
+            None,
+            None,
         )
         .await;
         let compile_duration = compile_start.elapsed();

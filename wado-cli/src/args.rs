@@ -132,6 +132,22 @@ pub const OPT_LEVEL_SPEC: OptSpec = OptSpec {
     desc: "Optimization level: -O0, -O1, -O2, -O3, -Os",
 };
 
+/// Shared spec: `--inline-threshold <n>`
+pub const INLINE_THRESHOLD_SPEC: OptSpec = OptSpec {
+    long: Some("inline-threshold"),
+    short: None,
+    value: Some("<n>"),
+    desc: "Override inlining threshold (max statement count per function)",
+};
+
+/// Shared spec: `--opt-iterations <n>`
+pub const OPT_ITERATIONS_SPEC: OptSpec = OptSpec {
+    long: Some("opt-iterations"),
+    short: None,
+    value: Some("<n>"),
+    desc: "Override number of fixed-point optimization iterations",
+};
+
 /// Shared spec: `--log-level <level>`
 pub const LOG_LEVEL_SPEC: OptSpec = OptSpec {
     long: Some("log-level"),
@@ -227,4 +243,18 @@ pub fn parse_log_level_arg(parser: &mut Parser) -> Result<LogLevel, CliExit> {
             "unknown log level '{level_str}'. Use debug, info, warn, error, or off"
         ))
     })
+}
+
+/// Parse `--inline-threshold <n>` argument value from parser.
+pub fn parse_inline_threshold_arg(opt: &str, parser: &mut Parser) -> Result<usize, CliExit> {
+    let s = require_string(parser)?;
+    s.parse::<usize>()
+        .map_err(|_| CliExit::error(format!("{opt} requires a non-negative integer, got '{s}'")))
+}
+
+/// Parse `--opt-iterations <n>` argument value from parser.
+pub fn parse_opt_iterations_arg(opt: &str, parser: &mut Parser) -> Result<u32, CliExit> {
+    let s = require_string(parser)?;
+    s.parse::<u32>()
+        .map_err(|_| CliExit::error(format!("{opt} requires a non-negative integer, got '{s}'")))
 }
