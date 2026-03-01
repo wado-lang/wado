@@ -35,7 +35,7 @@ export fn run() with Stdout {
             let self: Box<i64> = Box<i64> { value: __sroa_a_value };
             let f: &mut Formatter = &mut __f;
             __inline_i64__fmt_into_5: {
-                "core::prelude/primitives.wado::fmt_i64_decimal"(self.value, f);
+                self.i64::fmt_decimal(f);
             };
         };
         break __tmpl: __r;
@@ -53,7 +53,7 @@ export fn run() with Stdout {
         __inline_i64_Display__fmt_9: {
             let f: &mut Formatter = &mut __f;
             __inline_i64__fmt_into_10: {
-                "core::prelude/primitives.wado::fmt_i64_decimal"(__sroa_a_value, f);
+                Box<i64> { value: __sroa_a_value }.i64::fmt_decimal(f);
             };
         };
         break __tmpl: __r;
@@ -69,27 +69,23 @@ export fn run() with Stdout {
         __inline_f64_Display__fmt_13: {
             let self: Box<f64> = Box<f64> { value: __sroa_b_value };
             let f: &mut Formatter = &mut __f;
-            __inline_f64__fmt_into_15: {
-                "core::prelude/primitives.wado::fmt_f64"(self.value, f);
-            };
+            self.f64::fmt_into(f);
         };
         break __tmpl: __r;
     });
-    __inline_set_f64_16: {
+    __inline_set_f64_15: {
         __sroa_b_value = 2.718;
     };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(21), used: 0 };
         __r.String::append("f64: ");
-        let mut __f: Formatter = __inline_Formatter__new_18: {
+        let mut __f: Formatter = __inline_Formatter__new_17: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_18: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_f64_Display__fmt_19: {
+        __inline_f64_Display__fmt_18: {
             let f: &mut Formatter = &mut __f;
-            __inline_f64__fmt_into_20: {
-                "core::prelude/primitives.wado::fmt_f64"(__sroa_b_value, f);
-            };
+            Box<f64> { value: __sroa_b_value }.f64::fmt_into(f);
         };
         break __tmpl: __r;
     });
@@ -97,14 +93,14 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(22), used: 0 };
         __r.String::append("bool: ");
-        let mut __f: Formatter = __inline_Formatter__new_22: {
+        let mut __f: Formatter = __inline_Formatter__new_20: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_20: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_bool_Display__fmt_23: {
+        __inline_bool_Display__fmt_21: {
             let self: Box<bool> = Box<bool> { value: __sroa_c_value };
             let f: &mut Formatter = &mut __f;
-            __inline_bool__fmt_into_25: {
+            __inline_bool__fmt_into_23: {
                 f.Formatter::pad(if self.value {
                     "true";
                 } else {
@@ -114,19 +110,19 @@ export fn run() with Stdout {
         };
         break __tmpl: __r;
     });
-    __inline_set_bool_26: {
+    __inline_set_bool_24: {
         __sroa_c_value = false;
     };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(22), used: 0 };
         __r.String::append("bool: ");
-        let mut __f: Formatter = __inline_Formatter__new_28: {
+        let mut __f: Formatter = __inline_Formatter__new_26: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_28: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_26: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_bool_Display__fmt_29: {
+        __inline_bool_Display__fmt_27: {
             let f: &mut Formatter = &mut __f;
-            __inline_bool__fmt_into_30: {
+            __inline_bool__fmt_into_28: {
                 f.Formatter::pad(if __sroa_c_value {
                     "true";
                 } else {

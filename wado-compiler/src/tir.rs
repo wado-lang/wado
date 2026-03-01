@@ -621,6 +621,26 @@ impl TypeTable {
         self.intern_map.get(&key).copied()
     }
 
+    /// Find the `module_source` already registered for a `GenericInstance` with the given name.
+    ///
+    /// This is used during synthesis to look up the canonical module source that the resolver
+    /// already assigned to a generic variant (e.g. `Option` → `ModuleSource::prelude()`),
+    /// so the synthesized inspect function uses the same `TypeId` as user code.
+    pub fn find_generic_instance_module_source(&self, name: &str) -> Option<ModuleSource> {
+        for resolved in self.types.values() {
+            if let ResolvedType::GenericInstance {
+                name: iname,
+                module_source,
+                ..
+            } = resolved
+                && iname == name
+            {
+                return Some(module_source.clone());
+            }
+        }
+        None
+    }
+
     /// Find a variant type by name (scanning all types).
     /// Returns the first matching `ResolvedType::Variant` with the given name.
     pub fn find_variant_type_by_name(&self, name: &str) -> Option<TypeId> {

@@ -38,10 +38,10 @@ fn Value::describe(self: &Value) -> String {
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_2: {
-            let __sroa_self_value: i32 = self.n;
+            let self: Box<i32> = Box<i32> { value: self.n };
             let f: &mut Formatter = &mut __f;
             __inline_i32__fmt_into_3: {
-                "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+                self.i32::fmt_decimal(f);
             };
         };
         break __tmpl: __r;
@@ -57,10 +57,10 @@ fn Container::stats(self: &Container) -> String {
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_2: {
-            let __sroa_self_value: i32 = self.read_count;
+            let self: Box<i32> = Box<i32> { value: self.read_count };
             let f: &mut Formatter = &mut __f;
             __inline_i32__fmt_into_3: {
-                "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+                self.i32::fmt_decimal(f);
             };
         };
         __r.String::append(", writes=");
@@ -69,10 +69,10 @@ fn Container::stats(self: &Container) -> String {
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_5: {
-            let __sroa_self_value: i32 = self.write_count;
+            let self: Box<i32> = Box<i32> { value: self.write_count };
             let f: &mut Formatter = &mut __f;
             __inline_i32__fmt_into_6: {
-                "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+                self.i32::fmt_decimal(f);
             };
         };
         break __tmpl: __r;
@@ -210,7 +210,7 @@ export fn run() with Stdout {
             let self: Box<i32> = Box<i32> { value: c.Container::total() };
             let f: &mut Formatter = &mut __f;
             __inline_i32__fmt_into_18: {
-                "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                self.i32::fmt_decimal(f);
             };
         };
         break __tmpl: __r;

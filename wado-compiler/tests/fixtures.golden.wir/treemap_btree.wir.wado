@@ -172,9 +172,9 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref null array<u8>, i32, i64, i32);
 
-type "functype/fmt_i32_decimal" = fn(i32, ref null Formatter);
-
 type "functype/Array<u64>::append" = fn(ref null Array<u64>, u64);
+
+type "functype/i32::fmt_decimal" = fn(ref null "core:internal/Box<i32>", ref null Formatter);
 
 type "functype/String::grow" = fn(ref null String, i32);
 
@@ -396,7 +396,7 @@ fn run() with Stdout {
             __local_40 = "core:internal/Box<i32>" { value: map.size };
             __local_41 = __local_15;
             block {
-                fmt_i32_decimal(__local_40.value, __local_41);
+                i32::fmt_decimal(__local_40, __local_41);
             };
         };
         break __tmpl: __local_14;
@@ -415,7 +415,7 @@ fn run() with Stdout {
                 __local_47 = "core:internal/Box<i32>" { value: val };
                 __local_48 = __local_17;
                 block {
-                    fmt_i32_decimal(__local_47.value, __local_48);
+                    i32::fmt_decimal(__local_47, __local_48);
                 };
             };
             break __tmpl: __local_16;
@@ -441,7 +441,7 @@ fn run() with Stdout {
                 __local_53 = "core:internal/Box<i32>" { value: val2 };
                 __local_54 = __local_19;
                 block {
-                    fmt_i32_decimal(__local_53.value, __local_54);
+                    i32::fmt_decimal(__local_53, __local_54);
                 };
             };
             break __tmpl: __local_18;
@@ -462,7 +462,7 @@ fn run() with Stdout {
                 __local_59 = "core:internal/Box<i32>" { value: val3 };
                 __local_60 = __local_21;
                 block {
-                    fmt_i32_decimal(__local_59.value, __local_60);
+                    i32::fmt_decimal(__local_59, __local_60);
                 };
             };
             break __tmpl: __local_20;
@@ -486,7 +486,7 @@ fn run() with Stdout {
             __local_65 = "core:internal/Box<i32>" { value: map.size };
             __local_66 = __local_23;
             block {
-                fmt_i32_decimal(__local_65.value, __local_66);
+                i32::fmt_decimal(__local_65, __local_66);
             };
         };
         break __tmpl: __local_22;
@@ -522,7 +522,7 @@ fn run() with Stdout {
                             __local_73 = "core:internal/Box<i32>" { value: value_8 };
                             __local_74 = __local_25;
                             block {
-                                fmt_i32_decimal(__local_73.value, __local_74);
+                                i32::fmt_decimal(__local_73, __local_74);
                             };
                         };
                         break __tmpl: __local_24;
@@ -555,7 +555,7 @@ fn run() with Stdout {
             __local_79 = "core:internal/Box<i32>" { value: map.size };
             __local_80 = __local_27;
             block {
-                fmt_i32_decimal(__local_79.value, __local_80);
+                i32::fmt_decimal(__local_79, __local_80);
             };
         };
         break __tmpl: __local_26;
@@ -571,7 +571,7 @@ fn run() with Stdout {
             __local_86 = "core:internal/Box<i32>" { value: map.deleted_count };
             __local_87 = __local_29;
             block {
-                fmt_i32_decimal(__local_86.value, __local_87);
+                i32::fmt_decimal(__local_86, __local_87);
             };
         };
         break __tmpl: __local_28;
@@ -603,7 +603,7 @@ fn run() with Stdout {
                             __local_93 = "core:internal/Box<i32>" { value: value_13 };
                             __local_94 = __local_31;
                             block {
-                                fmt_i32_decimal(__local_93.value, __local_94);
+                                i32::fmt_decimal(__local_93, __local_94);
                             };
                         };
                         break __tmpl: __local_30;
@@ -854,26 +854,6 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
     };
 }
 
-fn fmt_i32_decimal(value, f) {
-    let is_negative: bool;
-    let abs_val: i64;
-    let digit_count: i32;
-    let offset: i32;
-    let __local_6: ref null String;
-    is_negative = value < 0;
-    abs_val = if is_negative -> i64 {
-        0_i64 - builtin::i64_extend_i32_s(value);
-    } else {
-        builtin::i64_extend_i32_s(value);
-    };
-    digit_count = count_digits_i64(abs_val);
-    offset = Formatter::prepare_int_write(f, is_negative, String { repr: ref.as_non_null(builtin::array_new<u8>(0)), used: 0 }, digit_count);
-    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref null array<u8> {
-        __local_6 = f.buf;
-        break __inline_String__internal_raw_bytes_0: __local_6.repr;
-    }, offset, abs_val, digit_count);
-}
-
 fn Array<u64>::append(self, value) {
     let used: i32;
     let capacity: i32;
@@ -894,6 +874,28 @@ fn Array<u64>::append(self, value) {
     };
     builtin::array_set<u64>(self.repr, used, value);
     self.used = used + 1;
+}
+
+fn i32::fmt_decimal(self, f) {
+    let value: i32;
+    let is_negative: bool;
+    let abs_val: i64;
+    let digit_count: i32;
+    let offset: i32;
+    let __local_7: ref null String;
+    value = self.value;
+    is_negative = value < 0;
+    abs_val = if is_negative -> i64 {
+        0_i64 - builtin::i64_extend_i32_s(value);
+    } else {
+        builtin::i64_extend_i32_s(value);
+    };
+    digit_count = count_digits_i64(abs_val);
+    offset = Formatter::prepare_int_write(f, is_negative, String { repr: ref.as_non_null(builtin::array_new<u8>(0)), used: 0 }, digit_count);
+    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref null array<u8> {
+        __local_7 = f.buf;
+        break __inline_String__internal_raw_bytes_0: __local_7.repr;
+    }, offset, abs_val, digit_count);
 }
 
 fn String::grow(self, min_capacity) {

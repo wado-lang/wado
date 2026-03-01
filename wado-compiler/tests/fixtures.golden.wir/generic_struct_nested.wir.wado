@@ -6,7 +6,7 @@ struct Box<i32> {  // from core:internal  // Box<T> with T=i32
     mut value: i32,
 }
 
-struct Box<Box<i32>> {  // Box<T> with T=?147
+struct Box<Box<i32>> {  // Box<T> with T=?146
     mut value: ref "core:internal/Box<i32>",
 }
 
@@ -73,9 +73,9 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref null array<u8>, i32, i64, i32);
 
-type "functype/fmt_i32_decimal" = fn(i32, ref null Formatter);
-
 type "functype/Array<u64>::append" = fn(ref null Array<u64>, u64);
+
+type "functype/i32::fmt_decimal" = fn(ref null "core:internal/Box<i32>", ref null Formatter);
 
 type "functype/String::grow" = fn(ref null String, i32);
 
@@ -134,7 +134,7 @@ fn run() with Stdout {
             __local_6 = "core:internal/Box<i32>" { value: 42 };
             __local_7 = __local_3;
             block {
-                fmt_i32_decimal(__local_6.value, __local_7);
+                i32::fmt_decimal(__local_6, __local_7);
             };
         };
         break __tmpl: __local_2;
@@ -316,26 +316,6 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
     };
 }
 
-fn fmt_i32_decimal(value, f) {
-    let is_negative: bool;
-    let abs_val: i64;
-    let digit_count: i32;
-    let offset: i32;
-    let __local_6: ref null String;
-    is_negative = value < 0;
-    abs_val = if is_negative -> i64 {
-        0_i64 - builtin::i64_extend_i32_s(value);
-    } else {
-        builtin::i64_extend_i32_s(value);
-    };
-    digit_count = count_digits_i64(abs_val);
-    offset = Formatter::prepare_int_write(f, is_negative, String { repr: ref.as_non_null(builtin::array_new<u8>(0)), used: 0 }, digit_count);
-    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref null array<u8> {
-        __local_6 = f.buf;
-        break __inline_String__internal_raw_bytes_0: __local_6.repr;
-    }, offset, abs_val, digit_count);
-}
-
 fn Array<u64>::append(self, value) {
     let used: i32;
     let capacity: i32;
@@ -356,6 +336,28 @@ fn Array<u64>::append(self, value) {
     };
     builtin::array_set<u64>(self.repr, used, value);
     self.used = used + 1;
+}
+
+fn i32::fmt_decimal(self, f) {
+    let value: i32;
+    let is_negative: bool;
+    let abs_val: i64;
+    let digit_count: i32;
+    let offset: i32;
+    let __local_7: ref null String;
+    value = self.value;
+    is_negative = value < 0;
+    abs_val = if is_negative -> i64 {
+        0_i64 - builtin::i64_extend_i32_s(value);
+    } else {
+        builtin::i64_extend_i32_s(value);
+    };
+    digit_count = count_digits_i64(abs_val);
+    offset = Formatter::prepare_int_write(f, is_negative, String { repr: ref.as_non_null(builtin::array_new<u8>(0)), used: 0 }, digit_count);
+    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref null array<u8> {
+        __local_7 = f.buf;
+        break __inline_String__internal_raw_bytes_0: __local_7.repr;
+    }, offset, abs_val, digit_count);
 }
 
 fn String::grow(self, min_capacity) {

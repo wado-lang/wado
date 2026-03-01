@@ -42,47 +42,7 @@ impl<T: Eq, E: Eq> Eq for Result<T, E> {
     }
 }
 
-impl<T: Inspect> Inspect for Option<T> {
-    pub fn inspect(&self, f: &mut Formatter) {
-        match *self {
-            Some(v) => {
-                f.write_str("Option::Some(");
-                v.inspect(f);
-                f.write_str(")");
-            },
-            None => f.write_str("Option::None"),
-        };
-    }
-}
 
-impl<T: Inspect, E: Inspect> Inspect for Result<T, E> {
-    pub fn inspect(&self, f: &mut Formatter) {
-        match *self {
-            Ok(v) => {
-                f.write_str("Result::Ok(");
-                v.inspect(f);
-                f.write_str(")");
-            },
-            Err(e) => {
-                f.write_str("Result::Err(");
-                e.inspect(f);
-                f.write_str(")");
-            },
-        };
-    }
-}
-
-impl<T: Inspect> Display for Option<T> {
-    pub fn fmt(&self, f: &mut Formatter) {
-        self.inspect(f);
-    }
-}
-
-impl<T: Inspect, E: Inspect> Display for Result<T, E> {
-    pub fn fmt(&self, f: &mut Formatter) {
-        self.inspect(f);
-    }
-}
 
 /// Future type - readable end of an async value (WASI Component Model primitive).
 /// This is an opaque i32 handle managed by the runtime.

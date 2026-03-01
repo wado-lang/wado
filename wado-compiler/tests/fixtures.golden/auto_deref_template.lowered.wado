@@ -23,6 +23,8 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
+    let x: Box<i32> = Box<i32> { value: 42 };
+    let rx: Box<i32> = x;
     let s1: String = __tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(23), used: 0 };
         __r.String::append("value: ");
@@ -33,7 +35,7 @@ export fn run() with Stdout {
         __inline_i32_Display__fmt_3: {
             let f: &mut Formatter = &mut __f;
             __inline_i32__fmt_into_4: {
-                "core::prelude/primitives.wado::fmt_i32_decimal"(42, f);
+                rx.i32::fmt_decimal(f);
             };
         };
         break __tmpl: __r;
@@ -57,7 +59,7 @@ export fn run() with Stdout {
                     let self: Box<i32> = Box<i32> { value: 14 };
                     let f: &mut Formatter = &mut __f;
                     __inline_i32__fmt_into_8: {
-                        "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                        self.i32::fmt_decimal(f);
                     };
                 };
                 __r.String::append("\ncondition: s1 == \"value: 42\"\n");
@@ -68,6 +70,7 @@ export fn run() with Stdout {
             });
         }
     }
+    let rrx: &Box<i32> = &rx;
     let s2: String = __tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(24), used: 0 };
         __r.String::append("double: ");
@@ -78,7 +81,7 @@ export fn run() with Stdout {
         __inline_i32_Display__fmt_11: {
             let f: &mut Formatter = &mut __f;
             __inline_i32__fmt_into_12: {
-                "core::prelude/primitives.wado::fmt_i32_decimal"(42, f);
+                rrx.i32::fmt_decimal(f);
             };
         };
         break __tmpl: __r;
@@ -102,7 +105,7 @@ export fn run() with Stdout {
                     let self: Box<i32> = Box<i32> { value: 19 };
                     let f: &mut Formatter = &mut __f;
                     __inline_i32__fmt_into_16: {
-                        "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                        self.i32::fmt_decimal(f);
                     };
                 };
                 __r.String::append("\ncondition: s2 == \"double: 42\"\n");
@@ -140,7 +143,7 @@ export fn run() with Stdout {
                     let self: Box<i32> = Box<i32> { value: 25 };
                     let f: &mut Formatter = &mut __f;
                     __inline_i32__fmt_into_21: {
-                        "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                        self.i32::fmt_decimal(f);
                     };
                 };
                 __r.String::append("\ncondition: s3 == \"hello Alice\"\n");
@@ -185,7 +188,7 @@ export fn run() with Stdout {
                     let self: Box<i32> = Box<i32> { value: 31 };
                     let f: &mut Formatter = &mut __f;
                     __inline_i32__fmt_into_29: {
-                        "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                        self.i32::fmt_decimal(f);
                     };
                 };
                 __r.String::append("\ncondition: s4 == \"flag: true\"\n");
