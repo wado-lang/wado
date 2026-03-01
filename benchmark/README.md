@@ -95,7 +95,7 @@ make benchmark-fts
 
 | Component  | Version                  |
 | ---------- | ------------------------ |
-| Wado       | 2026-02-27               |
+| Wado       | 2026-03-01               |
 | wasmtime   | 41.0.4                   |
 | Node.js    | v24.14.0                 |
 | Python     | 3.14.3 (CPython, no JIT) |
@@ -109,11 +109,11 @@ make benchmark-fts
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 150       | 1.00x    |
-| **Wado**    | 176       | 1.17x    |
-| JavaScript  | 212       | 1.41x    |
-| Python      | 3,660     | 24.40x   |
-| Ruby        | 5,428     | 36.19x   |
+| C (gcc -O3) | 130       | 1.00x    |
+| **Wado**    | 140       | 1.08x    |
+| JavaScript  | 151       | 1.16x    |
+| Python      | 3,512     | 27.02x   |
+| Ruby        | 4,300     | 33.08x   |
 
 All implementations produce the same result: 47,407,790 total iterations.
 
@@ -121,11 +121,11 @@ All implementations produce the same result: 47,407,790 total iterations.
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 3,350     | 1.00x    |
-| **Wado**    | 3,561     | 1.06x    |
-| JavaScript  | 4,184     | 1.25x    |
-| Ruby        | 49,041    | 14.64x   |
-| Python      | 74,686    | 22.29x   |
+| C (gcc -O3) | 3,060     | 1.00x    |
+| **Wado**    | 3,307     | 1.08x    |
+| JavaScript  | 3,511     | 1.15x    |
+| Ruby        | 44,263    | 14.47x   |
+| Python      | 70,698    | 23.11x   |
 
 All implementations produce the same result: 664,579 primes.
 
@@ -133,11 +133,11 @@ All implementations produce the same result: 664,579 primes.
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 44        | 1.00x    |
-| JavaScript  | 130       | 2.95x    |
-| **Wado**    | 160       | 3.64x    |
-| Python      | 765       | 17.39x   |
-| Ruby        | 776       | 17.64x   |
+| C (gcc -O3) | 53        | 1.00x    |
+| JavaScript  | 80        | 1.51x    |
+| **Wado**    | 164       | 3.09x    |
+| Python      | 726       | 13.70x   |
+| Ruby        | 1,191     | 22.47x   |
 
 All implementations produce the same result: 664,579 primes.
 
@@ -145,8 +145,8 @@ All implementations produce the same result: 664,579 primes.
 
 | Runtime               | Compress (ms) | Decompress (ms) | Relative |
 | --------------------- | ------------- | --------------- | -------- |
-| zlib-rs (native Rust) | 1.4           | 0.2             | 1.00x    |
-| **Wado** (pure Wado)  | 75            | 441             | 319x     |
+| zlib-rs (native Rust) | 1.9           | 0.2             | 1.00x    |
+| **Wado** (pure Wado)  | 75            | 793             | 413x     |
 
 Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significant overhead is expected compared to native.
 
@@ -154,10 +154,10 @@ Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significan
 
 | Runtime             | Time (ms) | Relative |
 | ------------------- | --------- | -------- |
-| Zig (-OReleaseFast) | 28        | 1.00x    |
-| Rust (rustc -O)     | 40        | 1.43x    |
-| C (gcc -O3)         | 63        | 2.25x    |
-| **Wado**            | 183       | 6.54x    |
+| Zig (-OReleaseFast) | 26        | 1.00x    |
+| Rust (rustc -O)     | 39        | 1.50x    |
+| C (gcc -O3)         | 62        | 2.38x    |
+| **Wado**            | 230       | 8.85x    |
 
 All implementations produce: Total bytes: 4,000,000. Byte sums are nearly identical (Wado's fts has minor last-digit rounding differences in some values).
 
