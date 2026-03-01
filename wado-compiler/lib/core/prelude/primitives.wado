@@ -1040,7 +1040,7 @@ impl Display for f64 {
 
 impl Inspect for bool {
     pub fn inspect(&self, f: &mut Formatter) {
-        self.fmt(f);
+        f.pad(if *self { "true" } else { "false" });
     }
 }
 
@@ -1072,61 +1072,61 @@ impl Inspect for char {
 
 impl Inspect for i8 {
     pub fn inspect(&self, f: &mut Formatter) {
-        self.fmt(f);
+        fmt_i32_decimal((*self) as i32, f);
     }
 }
 
 impl Inspect for u8 {
     pub fn inspect(&self, f: &mut Formatter) {
-        self.fmt(f);
+        fmt_i32_decimal((*self) as i32, f);
     }
 }
 
 impl Inspect for i16 {
     pub fn inspect(&self, f: &mut Formatter) {
-        self.fmt(f);
+        fmt_i32_decimal((*self) as i32, f);
     }
 }
 
 impl Inspect for u16 {
     pub fn inspect(&self, f: &mut Formatter) {
-        self.fmt(f);
+        fmt_i32_decimal((*self) as i32, f);
     }
 }
 
 impl Inspect for i32 {
     pub fn inspect(&self, f: &mut Formatter) {
-        self.fmt(f);
+        fmt_i32_decimal(*self, f);
     }
 }
 
 impl Inspect for u32 {
     pub fn inspect(&self, f: &mut Formatter) {
-        self.fmt(f);
+        fmt_u32_decimal(*self, f);
     }
 }
 
 impl Inspect for i64 {
     pub fn inspect(&self, f: &mut Formatter) {
-        self.fmt(f);
+        fmt_i64_decimal(*self, f);
     }
 }
 
 impl Inspect for u64 {
     pub fn inspect(&self, f: &mut Formatter) {
-        self.fmt(f);
+        fmt_u64_decimal(*self, f);
     }
 }
 
 impl Inspect for f32 {
     pub fn inspect(&self, f: &mut Formatter) {
-        self.fmt(f);
+        fmt_f32(*self, f);
     }
 }
 
 impl Inspect for f64 {
     pub fn inspect(&self, f: &mut Formatter) {
-        self.fmt(f);
+        fmt_f64(*self, f);
     }
 }
 
