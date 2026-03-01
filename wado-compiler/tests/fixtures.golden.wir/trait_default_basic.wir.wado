@@ -327,24 +327,22 @@ fn Array<u64>::append(self, value) {
 }
 
 fn i32::fmt_decimal(self, f) {
-    let value: i32;
     let is_negative: bool;
     let abs_val: i64;
     let digit_count: i32;
     let offset: i32;
-    let __local_7: ref null String;
-    value = self.value;
-    is_negative = value < 0;
+    let __local_6: ref null String;
+    is_negative = self.value < 0;
     abs_val = if is_negative -> i64 {
-        0_i64 - builtin::i64_extend_i32_s(value);
+        0_i64 - builtin::i64_extend_i32_s(self.value);
     } else {
-        builtin::i64_extend_i32_s(value);
+        builtin::i64_extend_i32_s(self.value);
     };
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: ref.as_non_null(builtin::array_new<u8>(0)), used: 0 }, digit_count);
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref null array<u8> {
-        __local_7 = f.buf;
-        break __inline_String__internal_raw_bytes_0: __local_7.repr;
+        __local_6 = f.buf;
+        break __inline_String__internal_raw_bytes_0: __local_6.repr;
     }, offset, abs_val, digit_count);
 }
 
