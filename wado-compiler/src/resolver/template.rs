@@ -2,7 +2,8 @@
 //!
 //! Resolves sub-expressions and emits `TirExprKind::TemplateString` nodes.
 //! The actual expansion into formatting code happens in the synthesis phase
-//! (post-monomorphize), where all types are concrete.
+//! (pre-monomorphize). Template expansion emits trait method calls that the
+//! monomorphizer resolves to concrete implementations.
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
