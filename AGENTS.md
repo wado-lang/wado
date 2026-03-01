@@ -4,7 +4,7 @@ This is the specification and the toolchain of Wado, a programming language targ
 
 ## The Spec
 
-Read @docs/cheatsheet.md to understand Wado syntax and standard library.
+Read @docs/cheatsheet.md to understand Wado syntax.
 
 If you need detailed specification, read docs/spec.md.
 
@@ -20,7 +20,7 @@ Builtin functions that are directly mapped to wasm instructions or external func
 
 Internal functions that are used to provide language features are implemented in `wado-compiler/lib/core/internal.wado`.
 
-### wasm32 Compatibility
+### Wasm Compatibility
 
 `wado-compiler` must compile for `wasm32-unknown-unknown`. Do not use OS-dependent `std` modules in production code. CI enforces this with a wasm32 build check.
 
@@ -200,8 +200,6 @@ To inspect invalid Wasm when debugging codegen bugs, use `--no-validate`:
 
 ```sh
 # Skip validation and output raw Wasm bytes even if invalid
-wado compile --no-validate -o output.wasm file.wado
-# Combine with --wat-to-stdout to inspect the generated WAT
 wado compile --no-validate --wat-to-stdout file.wado
 ```
 
@@ -210,7 +208,7 @@ wado compile --no-validate --wat-to-stdout file.wado
 Use `wado serve` to run a Wado HTTP service (wasi:http/service world):
 
 ```sh
-wado serve file.wado                 # serve on 0.0.0.0:8080 (default)
+wado serve file.wado                        # serve on 0.0.0.0:8080 (default)
 wado serve --addr 127.0.0.1:3000 file.wado  # serve on custom address
 ```
 
@@ -219,7 +217,7 @@ The source file must export an HTTP handler function:
 ```wado
 use { Request, Response, ErrorCode } from "wasi:http";
 
-export fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // Handle HTTP request and return response
 }
 ```
@@ -282,13 +280,13 @@ See also `wado-vscode/README.md` for more details.
 
 ## Bundled Library
 
-`wado-bundled/` is a Rust crate that provides bundled Wasm modules for Wado, providing:
+The compiler bundles Wasm modules for the language futures:
 
-- [x] math functions (libm)
+- `wado-bundled-libm/` - deterministic Math functions with `libm` crate
 
 ### Wasm and WASI
 
-Wado is designed with the following Wasm features:
+Wado is designed on the following Wasm features:
 
 - Wasm 3.0 (2025-09-17)
 - Wasm GC
@@ -311,7 +309,7 @@ Wado is designed with the following Wasm features:
 ## Rules for Rust
 
 - Follow `clippy::pedantic` lint rules. The workspace is configured with pedantic lints enabled.
-- Write tests in implementation files just for examples. For comprehensive tests, write them in the `tests/`.
+- Write tests in implementation files just for simple smoke tests. For comprehensive tests, write tests in the `tests/`.
 - Manage dependencies in the workspace `Cargo.toml`.
 - Do not use `#![allow(deprecated)]`; use newer alternatives instead.
 - Use `panic!("not yet implemented")` for things that are not yet implemented.
@@ -448,17 +446,13 @@ Run the following to set up your development environment:
 make on-task-started  # install mise and project tools
 ```
 
-If this is your first time running mise in this repository, you may need to trust the configuration file:
-
-```sh
-mise trust
-```
+If this is your first time running mise in this repository, you may need to trust the configuration file by tunning `mise trust`.
 
 ### When Completing a Task
 
 When you have completed a task, make sure everything is up-to-date and tested:
 
-- Update docs if necessary:
+- Update the docs if necessary:
   - docs/spec.md
   - docs/cheatsheet.md
   - docs/compiler.md
