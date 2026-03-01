@@ -335,6 +335,7 @@ Wado is designed with the following Wasm features:
 - Do not parse mangled / formatted names even in `name.rs`. Use parsed objects instead.
 - Minimize hard-coded logic for compiler builtins. Define builtin and internal functions in Wado source files in `lib/core/*.wado`.
 - Minimize hard-coded logic for WASI. Use metadata extracted from `lib/wasi/*.wado`.
+- **Synthesis module_source principle**: Synthesized entities (functions, types) must be associated with the module that defines the source type, not the entry module. When the synthesis phase creates a `GenericInstance` TypeId for a type (e.g. `Option<T>`), it must use the same `module_source` that the resolver uses for that type. The canonical `module_source` for a type is the file path of the module where it is defined (e.g. `ModuleSource::types()` for `core:prelude/types.wado`). Do not scan the `TypeTable` to find a matching `module_source` — use the defining module's source directly. If `TypeTable` helper methods (e.g. `make_option()`) hard-code a `module_source`, ensure it matches the actual file where the type is defined.
 
 ## Wado Evolution Proposals (WEP)
 

@@ -299,14 +299,8 @@ fn generate_inspect_impls(module: &mut TirModule) {
             .iter()
             .map(|tp| tt.make_type_param(tp.name.clone(), tp.index))
             .collect();
-        // Use the module_source that the resolver already registered for this generic variant
-        // (e.g. Option uses ModuleSource::prelude(), not the file-specific module_source),
-        // so the synthesized function shares the same TypeId as user-code values.
-        let variant_module_source = tt
-            .find_generic_instance_module_source(name)
-            .unwrap_or_else(|| module_source.clone());
         let variant_type =
-            tt.make_generic_instance(name.clone(), variant_module_source, type_param_ids);
+            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
         let ref_type = tt.make_ref(variant_type);
         generated.push(Rc::new(RefCell::new(generate_generic_variant_inspect_fn(
             name,
@@ -1835,11 +1829,8 @@ fn generate_display_fallback_impls(module: &mut TirModule) {
             .iter()
             .map(|tp| tt.make_type_param(tp.name.clone(), tp.index))
             .collect();
-        let variant_module_source = tt
-            .find_generic_instance_module_source(&name)
-            .unwrap_or_else(|| module_source.clone());
         let variant_type =
-            tt.make_generic_instance(name.clone(), variant_module_source, type_param_ids);
+            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
         let ref_type = tt.make_ref(variant_type);
         let (di, ii) = simple_pair(&name);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(

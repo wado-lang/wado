@@ -289,7 +289,7 @@ pub enum ResolvedType {
         module_source: ModuleSource,
     },
     // NOTE: Option<T> is no longer a dedicated type variant.
-    // It is represented as GenericInstance { name: "Option", module_source: prelude, type_args: [T] }.
+    // It is represented as GenericInstance { name: "Option", module_source: types(), type_args: [T] }.
     // Use TypeTable::as_option() to check if a type is Option<T>.
     //
     // TODO: Re-add NullableRef optimization for Option<T> where T is non-nullable.
@@ -541,8 +541,12 @@ impl TypeTable {
     }
 
     /// Create an `Option<T>` type, represented as a `GenericInstance` of the Option variant.
+    ///
+    /// Uses `ModuleSource::types()` (`core:prelude/types.wado`) — the actual file where Option is
+    /// defined — so that the `TypeId` matches what the synthesis phase produces when it processes
+    /// the `types.wado` module.
     pub fn make_option(&mut self, inner: TypeId) -> TypeId {
-        self.make_generic_instance("Option".to_string(), ModuleSource::prelude(), vec![inner])
+        self.make_generic_instance("Option".to_string(), ModuleSource::types(), vec![inner])
     }
 
     /// Check if a type is `Option<T>`, returning the inner type if so.
@@ -619,26 +623,6 @@ impl TypeTable {
             base_name: None,
         };
         self.intern_map.get(&key).copied()
-    }
-
-    /// Find the `module_source` already registered for a `GenericInstance` with the given name.
-    ///
-    /// This is used during synthesis to look up the canonical module source that the resolver
-    /// already assigned to a generic variant (e.g. `Option` → `ModuleSource::prelude()`),
-    /// so the synthesized inspect function uses the same `TypeId` as user code.
-    pub fn find_generic_instance_module_source(&self, name: &str) -> Option<ModuleSource> {
-        for resolved in self.types.values() {
-            if let ResolvedType::GenericInstance {
-                name: iname,
-                module_source,
-                ..
-            } = resolved
-                && iname == name
-            {
-                return Some(module_source.clone());
-            }
-        }
-        None
     }
 
     /// Find a variant type by name (scanning all types).
