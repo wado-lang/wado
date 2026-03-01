@@ -97,8 +97,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     type_param_type_ids: Vec::new(),
                                 },
                             );
-                        let comp_features =
-                            super::item::extract_comp_features(&variant_decl.attrs);
+                        let comp_features = super::item::extract_comp_features(&variant_decl.attrs);
                         if comp_features != 0 {
                             type_table.borrow_mut().register_comp_feature_variant(
                                 comp_features,

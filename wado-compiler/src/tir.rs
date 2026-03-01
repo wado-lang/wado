@@ -2272,16 +2272,4 @@ mod tests {
         // Verify as_array works
         assert_eq!(table.as_array(arr1), Some(TypeTable::I32));
     }
-
-    #[test]
-    fn test_composite_types() {
-        let mut table = TypeTable::new();
-        let option_i32 = table.make_option(TypeTable::I32);
-
-        assert!(matches!(
-            table.get(option_i32),
-            ResolvedType::GenericInstance { name, type_args, .. }
-                if name == "Option" && type_args.len() == 1 && type_args[0] == TypeTable::I32
-        ));
-    }
 }

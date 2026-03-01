@@ -204,7 +204,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-
     /// Resolve a function
     pub(super) fn resolve_function(&mut self, func: &Function) -> Option<TirFunction> {
         // Set up type parameters in scope before resolving types
