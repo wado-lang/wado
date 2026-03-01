@@ -82,11 +82,7 @@ pub fn wasi_type_to_type_id(ty: &Type, type_table: &mut TypeTable) -> TypeId {
             "Result" if g.args.len() == 2 => {
                 let ok_type = wasi_type_to_type_id(&g.args[0], type_table);
                 let err_type = wasi_type_to_type_id(&g.args[1], type_table);
-                type_table.make_generic_instance(
-                    "Result".to_string(),
-                    ModuleSource::types(),
-                    vec![ok_type, err_type],
-                )
+                type_table.make_result(ok_type, err_type)
             }
             // Stream/Future/Own/Borrow are handle types represented as i32
             "Stream" | "Future" | "Own" | "Borrow" => TypeTable::I32,
@@ -744,11 +740,7 @@ fn synthesize_lift_result_inner(
         let mut tt = ctx.type_table.borrow_mut();
         let ok_type_id = wasi_type_to_type_id(ok_ty, &mut tt);
         let err_type_id = wasi_type_to_type_id(err_ty, &mut tt);
-        tt.make_generic_instance(
-            "Result".to_string(),
-            ModuleSource::types(),
-            vec![ok_type_id, err_type_id],
-        )
+        tt.make_result(ok_type_id, err_type_id)
     } else {
         TypeTable::I32 // placeholder when no context
     };

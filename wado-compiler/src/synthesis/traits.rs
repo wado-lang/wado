@@ -275,6 +275,47 @@ fn generate_inspect_impls(module: &mut TirModule) {
         ))));
     }
 
+    // Generic variants (e.g., Option<T>, Result<T, E>)
+    let generic_variant_infos: Vec<_> = module
+        .variants
+        .iter()
+        .filter(|v| !v.type_params.is_empty())
+        .map(|v| {
+            let cases: Vec<_> = v
+                .cases
+                .iter()
+                .map(|c| (c.name.clone(), c.index, c.payload))
+                .collect();
+            (v.name.clone(), v.type_params.clone(), cases, v.span)
+        })
+        .collect();
+
+    for (name, type_params, cases, vspan) in &generic_variant_infos {
+        let key = MethodName::format_local(name, Some("Inspect"), "inspect");
+        if existing.contains(&key) {
+            continue;
+        }
+        let type_param_ids: Vec<TypeId> = type_params
+            .iter()
+            .map(|tp| tt.make_type_param(tp.name.clone(), tp.index))
+            .collect();
+        let variant_type =
+            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
+        let ref_type = tt.make_ref(variant_type);
+        generated.push(Rc::new(RefCell::new(generate_generic_variant_inspect_fn(
+            name,
+            type_params,
+            cases,
+            variant_type,
+            ref_type,
+            fmt_type,
+            string_type,
+            &module_source,
+            &mut tt,
+            *vspan,
+        ))));
+    }
+
     // Flags types (newtypes over u32)
     let flags_infos: Vec<_> = module
         .flags
@@ -973,6 +1014,164 @@ fn generate_variant_inspect_fn(
     )
 }
 
+/// Generate `VariantName^Inspect::inspect(&self, &mut Formatter)` for generic variants.
+///
+/// Same structure as `generate_variant_inspect_fn` but with `impl_type_params` set so the
+/// monomorphizer can specialize it for each concrete instantiation (e.g. `Option<i32>`).
+fn generate_generic_variant_inspect_fn(
+    variant_name: &str,
+    type_params: &[TirTypeParam],
+    cases: &[(String, u32, TypeId)],
+    variant_type: TypeId,
+    ref_variant_type: TypeId,
+    fmt_type: TypeId,
+    string_type: TypeId,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
+    span: Span,
+) -> TirFunction {
+    let method_info = LocalMethodName::new(
+        variant_name.to_string(),
+        Some("Inspect".to_string()),
+        "inspect".to_string(),
+    );
+    let qualified_name = method_info.to_mangled_name();
+
+    let params = vec![
+        TirParam {
+            name: "self".to_string(),
+            type_id: ref_variant_type,
+            local_index: 0,
+            span,
+        },
+        TirParam {
+            name: "f".to_string(),
+            type_id: fmt_type,
+            local_index: 1,
+            span,
+        },
+    ];
+
+    let deref_self = || {
+        TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                expr: Box::new(TirExpr::new(
+                    TirExprKind::Local {
+                        index: 0,
+                        name: "self".to_string(),
+                    },
+                    ref_variant_type,
+                    span,
+                )),
+            },
+            variant_type,
+            span,
+        )
+    };
+    let fmt_local = || {
+        TirExpr::new(
+            TirExprKind::Local {
+                index: 1,
+                name: "f".to_string(),
+            },
+            fmt_type,
+            span,
+        )
+    };
+
+    let mut chain: Option<TirExpr> = None;
+    for (case_name, case_index, payload_type) in cases.iter().rev() {
+        let is_unit = *payload_type == TypeTable::UNIT;
+        let mut then_stmts = Vec::new();
+
+        if is_unit {
+            then_stmts.push(write_str_stmt(
+                format!("{variant_name}::{case_name}"),
+                fmt_local(),
+                string_type,
+                span,
+            ));
+        } else {
+            then_stmts.push(write_str_stmt(
+                format!("{variant_name}::{case_name}("),
+                fmt_local(),
+                string_type,
+                span,
+            ));
+            let payload = TirExpr::new(
+                TirExprKind::VariantPayload {
+                    expr: Box::new(deref_self()),
+                    case_index: *case_index,
+                    payload_type: *payload_type,
+                },
+                *payload_type,
+                span,
+            );
+            then_stmts.push(inspect_call(
+                payload,
+                *payload_type,
+                fmt_local(),
+                module_source,
+                tt,
+                span,
+            ));
+            then_stmts.push(write_str_stmt(
+                ")".to_string(),
+                fmt_local(),
+                string_type,
+                span,
+            ));
+        }
+
+        let cond = TirExpr::new(
+            TirExprKind::VariantTest {
+                expr: Box::new(deref_self()),
+                case_index: *case_index,
+                case_name: case_name.clone(),
+            },
+            TypeTable::BOOL,
+            span,
+        );
+        let if_expr = TirExpr::new(
+            TirExprKind::If {
+                condition: Box::new(cond),
+                then_branch: TirBlock::new(then_stmts, span),
+                else_branch: chain
+                    .map(|e| TirBlock::new(vec![TirStmt::new(TirStmtKind::Expr(e), span)], span)),
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        chain = Some(if_expr);
+    }
+
+    let stmts = chain.map_or_else(Vec::new, |e| vec![TirStmt::new(TirStmtKind::Expr(e), span)]);
+    let body = TirBlock::new(stmts, span);
+
+    TirFunction {
+        name: qualified_name,
+        is_pub: true,
+        is_export: false,
+        is_async: false,
+        type_params: Vec::new(),
+        impl_type_params: type_params.to_vec(),
+        monomorph_info: None,
+        method_info: Some(method_info),
+        params,
+        return_type: TypeTable::UNIT,
+        effects: Vec::new(),
+        body: Some(body),
+        span,
+        local_count: 2,
+        local_types: vec![ref_variant_type, fmt_type],
+        address_taken_locals: IndexSet::new(),
+        is_cm_adapter: false,
+        inline_hint: InlineHint::Auto,
+        comp_features: 0,
+    }
+}
+
 /// Generate `NewtypeName^Inspect::inspect(&self, &mut Formatter)` for a newtype.
 ///
 /// Body: inspects the base type value, then writes ` as NewtypeName`.
@@ -1607,6 +1806,40 @@ fn generate_display_fallback_impls(module: &mut TirModule) {
             fmt_type,
             &module_source,
             vec![],
+            span,
+        ))));
+    }
+
+    // Generic variants (e.g., Option<T>, Result<T, E>)
+    for (name, type_params) in module
+        .variants
+        .iter()
+        .filter(|v| !v.type_params.is_empty())
+        .map(|v| (v.name.clone(), v.type_params.clone()))
+        .collect::<Vec<_>>()
+    {
+        let (display_key, inspect_key) = (
+            MethodName::format_local(&name, Some("Display"), "fmt"),
+            MethodName::format_local(&name, Some("Inspect"), "inspect"),
+        );
+        if !should_generate(&display_key, &inspect_key) {
+            continue;
+        }
+        let type_param_ids: Vec<TypeId> = type_params
+            .iter()
+            .map(|tp| tt.make_type_param(tp.name.clone(), tp.index))
+            .collect();
+        let variant_type =
+            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
+        let ref_type = tt.make_ref(variant_type);
+        let (di, ii) = simple_pair(&name);
+        generated.push(Rc::new(RefCell::new(generate_display_fallback(
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            type_params,
             span,
         ))));
     }

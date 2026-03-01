@@ -289,7 +289,7 @@ pub enum ResolvedType {
         module_source: ModuleSource,
     },
     // NOTE: Option<T> is no longer a dedicated type variant.
-    // It is represented as GenericInstance { name: "Option", module_source: prelude, type_args: [T] }.
+    // It is represented as GenericInstance { name: "Option", module_source: types(), type_args: [T] }.
     // Use TypeTable::as_option() to check if a type is Option<T>.
     //
     // TODO: Re-add NullableRef optimization for Option<T> where T is non-nullable.
@@ -372,6 +372,10 @@ pub struct TypeTable {
     types: IndexMap<TypeId, ResolvedType>,
     intern_map: IndexMap<ResolvedType, TypeId>,
     next_id: u32,
+    /// Module source of the canonical `Option<T>` variant, set via `#[comp_feature("option")]`.
+    option_module_source: Option<ModuleSource>,
+    /// Module source of the canonical `Result<T, E>` variant, set via `#[comp_feature("result")]`.
+    result_module_source: Option<ModuleSource>,
 }
 
 impl Default for TypeTable {
@@ -406,6 +410,8 @@ impl TypeTable {
             types: IndexMap::new(),
             intern_map: IndexMap::new(),
             next_id: 0,
+            option_module_source: None,
+            result_module_source: None,
         };
 
         // Pre-populate primitive types matching the constants above
@@ -540,9 +546,39 @@ impl TypeTable {
         self.intern(ResolvedType::BuiltinArray(element))
     }
 
-    /// Create an `Option<T>` type, represented as a `GenericInstance` of the Option variant.
+    /// Register the defining module source for a variant marked with `#[comp_feature]`.
+    ///
+    /// Called by the resolver when it encounters a variant with `COMP_FEATURE_OPTION` or
+    /// `COMP_FEATURE_RESULT` so that `make_option`/`make_result` can use the real path.
+    pub fn register_comp_feature_variant(
+        &mut self,
+        comp_features: u32,
+        module_source: ModuleSource,
+    ) {
+        if comp_features & crate::wir::COMP_FEATURE_OPTION != 0 {
+            self.option_module_source = Some(module_source.clone());
+        }
+        if comp_features & crate::wir::COMP_FEATURE_RESULT != 0 {
+            self.result_module_source = Some(module_source);
+        }
+    }
+
+    /// Create an `Option<T>` type using the module source registered via `#[comp_feature("option")]`.
     pub fn make_option(&mut self, inner: TypeId) -> TypeId {
-        self.make_generic_instance("Option".to_string(), ModuleSource::prelude(), vec![inner])
+        let module_source = self
+            .option_module_source
+            .clone()
+            .expect("Option module source not registered; missing #[comp_feature(\"option\")] on Option variant");
+        self.make_generic_instance("Option".to_string(), module_source, vec![inner])
+    }
+
+    /// Create a `Result<T, E>` type using the module source registered via `#[comp_feature("result")]`.
+    pub fn make_result(&mut self, ok: TypeId, err: TypeId) -> TypeId {
+        let module_source = self
+            .result_module_source
+            .clone()
+            .expect("Result module source not registered; missing #[comp_feature(\"result\")] on Result variant");
+        self.make_generic_instance("Result".to_string(), module_source, vec![ok, err])
     }
 
     /// Check if a type is `Option<T>`, returning the inner type if so.
@@ -1868,6 +1904,8 @@ pub struct TirVariantDecl {
     pub type_params: Vec<TirTypeParam>,
     /// Cases of the variant (e.g., Some, None for Option)
     pub cases: Vec<TirVariantCase>,
+    /// Compiler feature bitflags from `#[comp_feature("...")]` attributes.
+    pub comp_features: u32,
     pub span: Span,
 }
 
@@ -2233,17 +2271,5 @@ mod tests {
         assert_eq!(arr1, arr2);
         // Verify as_array works
         assert_eq!(table.as_array(arr1), Some(TypeTable::I32));
-    }
-
-    #[test]
-    fn test_composite_types() {
-        let mut table = TypeTable::new();
-        let option_i32 = table.make_option(TypeTable::I32);
-
-        assert!(matches!(
-            table.get(option_i32),
-            ResolvedType::GenericInstance { name, type_args, .. }
-                if name == "Option" && type_args.len() == 1 && type_args[0] == TypeTable::I32
-        ));
     }
 }

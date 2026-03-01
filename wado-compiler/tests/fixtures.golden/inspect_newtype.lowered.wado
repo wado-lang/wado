@@ -34,7 +34,7 @@ export fn run() with Stdout {
             let f: &mut Formatter = &mut __f;
             __inline_f64_Inspect__inspect_4: {
                 let self: Box<f64> = Box<f64> { value: self.value as f64 };
-                "core::prelude/primitives.wado::fmt_f64"(self.value, f);
+                self.f64::fmt_into(f);
             };
             __inline_Formatter__write_str_5: {
                 let s: String = " as Meters";
@@ -54,9 +54,11 @@ export fn run() with Stdout {
             let f: &mut Formatter = &mut __f;
             __inline_i32_Inspect__inspect_9: {
                 let self: Box<i32> = Box<i32> { value: self.value as i32 };
-                "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                __inline_i32__fmt_into_10: {
+                    self.i32::fmt_decimal(f);
+                };
             };
-            __inline_Formatter__write_str_10: {
+            __inline_Formatter__write_str_11: {
                 let s: String = " as Seconds";
                 f.buf.String::append(s);
             };

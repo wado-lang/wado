@@ -10,6 +10,28 @@ use crate::tir::{
 use super::Resolver;
 use super::types::{FunctionContext, TypeError};
 
+/// Extract compiler feature bitflags from `#[comp_feature("...")]` attributes.
+pub(super) fn extract_comp_features(attrs: &[crate::ast::Attribute]) -> u32 {
+    let mut features = 0u32;
+    for attr in attrs {
+        if attr.name == "comp_feature" {
+            for arg in &attr.args {
+                match arg.as_str() {
+                    "array_append" => features |= crate::wir::COMP_FEATURE_ARRAY_APPEND,
+                    "string_append" => features |= crate::wir::COMP_FEATURE_STRING_APPEND,
+                    "string_append_char" => {
+                        features |= crate::wir::COMP_FEATURE_STRING_APPEND_CHAR;
+                    }
+                    "option" => features |= crate::wir::COMP_FEATURE_OPTION,
+                    "result" => features |= crate::wir::COMP_FEATURE_RESULT,
+                    _ => {}
+                }
+            }
+        }
+    }
+    features
+}
+
 impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn resolve_struct(&mut self, struct_decl: &ast::StructDecl) -> TirStruct {
         // Set up type parameters in scope before resolving fields
@@ -152,11 +174,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Restore previous type params scope
         self.current_type_params = old_type_params;
 
+        let comp_features = extract_comp_features(&variant_decl.attrs);
+        if comp_features != 0 {
+            self.type_table
+                .borrow_mut()
+                .register_comp_feature_variant(comp_features, self.current_module_source.clone());
+        }
+
         TirVariantDecl {
             name: variant_decl.name.clone(),
             is_pub: variant_decl.is_pub,
             type_params,
             cases,
+            comp_features,
             span: variant_decl.span,
         }
     }
@@ -172,26 +202,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
             None => crate::tir::InlineHint::Hint,
             _ => crate::tir::InlineHint::Auto,
         }
-    }
-
-    /// Extract compiler feature bitflags from `#[comp_feature("...")]` attributes.
-    pub(super) fn extract_comp_features(attrs: &[crate::ast::Attribute]) -> u32 {
-        let mut features = 0u32;
-        for attr in attrs {
-            if attr.name == "comp_feature" {
-                for arg in &attr.args {
-                    match arg.as_str() {
-                        "array_append" => features |= crate::wir::COMP_FEATURE_ARRAY_APPEND,
-                        "string_append" => features |= crate::wir::COMP_FEATURE_STRING_APPEND,
-                        "string_append_char" => {
-                            features |= crate::wir::COMP_FEATURE_STRING_APPEND_CHAR;
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
-        features
     }
 
     /// Resolve a function
@@ -305,7 +315,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Scratch local fields - computed by lower phase
             is_cm_adapter: false,
             inline_hint: Self::extract_inline_hint(&func.attrs),
-            comp_features: Self::extract_comp_features(&func.attrs),
+            comp_features: extract_comp_features(&func.attrs),
         })
     }
 
@@ -579,7 +589,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             address_taken_locals: ctx.address_taken_locals,
             is_cm_adapter: false,
             inline_hint: Self::extract_inline_hint(&func.attrs),
-            comp_features: Self::extract_comp_features(&func.attrs),
+            comp_features: extract_comp_features(&func.attrs),
         })
     }
 }

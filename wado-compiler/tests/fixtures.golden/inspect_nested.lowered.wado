@@ -99,22 +99,26 @@ pub fn "Point^Inspect::inspect"(self: &Point, f: &mut Formatter) {
         f.buf.String::append(s);
     };
     __inline_i32_Inspect__inspect_2: {
-        let __sroa_self_value: i32 = self.x;
-        "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+        let self: Box<i32> = Box<i32> { value: self.x };
+        __inline_i32__fmt_into_3: {
+            self.i32::fmt_decimal(f);
+        };
     };
-    __inline_Formatter__write_str_3: {
+    __inline_Formatter__write_str_4: {
         let s: String = ", ";
         f.buf.String::append(s);
     };
-    __inline_Formatter__write_str_4: {
+    __inline_Formatter__write_str_5: {
         let s: String = "y: ";
         f.buf.String::append(s);
     };
-    __inline_i32_Inspect__inspect_5: {
-        let __sroa_self_value: i32 = self.y;
-        "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+    __inline_i32_Inspect__inspect_6: {
+        let self: Box<i32> = Box<i32> { value: self.y };
+        __inline_i32__fmt_into_7: {
+            self.i32::fmt_decimal(f);
+        };
     };
-    __inline_Formatter__write_str_6: {
+    __inline_Formatter__write_str_8: {
         let s: String = " }";
         f.buf.String::append(s);
     };
@@ -151,22 +155,23 @@ export fn __cm_export__run() {
 }
 
 pub fn "Option<Point>^Inspect::inspect"(self: Box<Option<Point>>, f: &mut Formatter) {
-    match self.value {
-        Some(v) => {
-            __inline_Formatter__write_str_0: {
-                let s: String = "Option::Some(";
-                f.buf.String::append(s);
-            };
-            v."Point^Inspect::inspect"(f);
-            __inline_Formatter__write_str_1: {
-                let s: String = ")";
-                f.buf.String::append(s);
-            };
-        },
-        None => __inline_Formatter__write_str_2: {
-            let s: String = "null";
+    if __variant_test(self.value, case=0, name=Some) {
+        __inline_Formatter__write_str_0: {
+            let s: String = "Option::Some(";
             f.buf.String::append(s);
-        },
+        };
+        __variant_payload(self.value, case=0)."Point^Inspect::inspect"(f);
+        __inline_Formatter__write_str_1: {
+            let s: String = ")";
+            f.buf.String::append(s);
+        };
+    } else {
+        if __variant_test(self.value, case=1, name=None) {
+            __inline_Formatter__write_str_2: {
+                let s: String = "Option::None";
+                f.buf.String::append(s);
+            };
+        };
     };
 }
 

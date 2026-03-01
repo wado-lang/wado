@@ -178,196 +178,165 @@ impl u128 {
         }
     }
 
+    fn fmt_into(&self, f: &mut Formatter) {
+        self.fmt_decimal(f);
+    }
+
     /// Convert u128 to String (for template string interpolation)
     pub fn to_string(&self) -> String {
-        // Handle zero case
-        if *self == u128::zero() {
-            return "0";
+        let mut buf = String::with_capacity(40);
+        let mut f = Formatter::new(&mut buf);
+        self.fmt_into(&mut f);
+        return buf;
+    }
+
+    fn fmt_decimal(&self, f: &mut Formatter) {
+        if self.low == 0 && self.high == 0 {
+            let offset = f.prepare_int_write(false, "", 1);
+            let arr = f.buf.internal_raw_bytes();
+            builtin::array_set_u8(arr, offset, '0' as u8);
+            return;
         }
 
-        // Allocate buffer in linear memory (40 bytes max: 39 digits + safety)
-        let ptr: i32 = builtin::realloc(0, 0, 1, 40);
-
-        // Convert digits in reverse order by repeatedly dividing by 10
-        let mut pos: i32 = 39;
+        // Count digits first
         let mut temp = *self;
         let ten = u128::from_u64(10);
+        let mut digit_count: i32 = 0;
+        while temp > u128::zero() {
+            digit_count += 1;
+            temp = temp / ten;
+        }
 
+        let offset = f.prepare_int_write(false, "", digit_count);
+        let arr = f.buf.internal_raw_bytes();
+
+        // Write digits in reverse order
+        let mut pos = offset + digit_count;
+        temp = *self;
         while temp > u128::zero() {
             pos -= 1;
-            let result = temp.div_rem(&ten);
-            let rem: u128 = result[1];
-            let digit_u64: u64 = rem.low();
-            let digit: i32 = (digit_u64 as i64) as i32;
-            builtin::i32_store8(ptr + pos, (('0' as i32) + digit) as u8);
-            temp = result[0];
+            let digit: i32 = ((temp % ten).low() as i64) as i32;
+            builtin::array_set_u8(arr, pos, (('0' as i32) + digit) as u8);
+            temp = temp / ten;
         }
+    }
 
-        // Calculate length and copy to GC array
-        let len: i32 = 39 - pos;
-        let arr = builtin::array_new::<u8>(len);
-        for (let mut i: i32 = 0; i < len; i += 1) {
-            let byte = builtin::i32_load8_u(ptr + pos + i);
-            builtin::array_set_u8(arr, i, byte);
+    fn fmt_base(&self, f: &mut Formatter, base: i32, upper: bool) {
+        let bits_per_digit = if base == 2 { 1 } else if base == 8 { 3 } else { 4 };
+        let mask: u64 = (base - 1) as u64;
+
+        let prefix = if f.alternate {
+            if base == 2 {
+                "0b"
+            } else if base == 8 {
+                "0o"
+            } else if upper {
+                "0X"
+            } else {
+                "0x"
+            }
+        } else {
+            ""
+        };
+
+        // Count digits
+        let is_zero = self.low == 0 && self.high == 0;
+        let digit_count = if is_zero {
+            1
+        } else {
+            // Find highest set bit across both halves
+            let mut highest_bit: i32 = 0;
+            let h: i64 = self.high as i64;
+            let l: i64 = self.low as i64;
+            let zero: i64 = 0;
+            if h != zero {
+                let mut b: i32 = 63;
+                while b >= 0 {
+                    let one: i64 = 1;
+                    if (h >> (b as i64)) & one != zero {
+                        highest_bit = 64 + b;
+                        break;
+                    }
+                    b -= 1;
+                }
+            } else {
+                let mut b: i32 = 63;
+                while b >= 0 {
+                    let one: i64 = 1;
+                    if (l >> (b as i64)) & one != zero {
+                        highest_bit = b;
+                        break;
+                    }
+                    b -= 1;
+                }
+            }
+            (highest_bit / bits_per_digit) + 1
+        };
+
+        let offset = f.prepare_int_write(false, prefix, digit_count);
+        let arr = f.buf.internal_raw_bytes();
+
+        if is_zero {
+            builtin::array_set_u8(arr, offset, '0' as u8);
+        } else {
+            let mut pos = offset + digit_count;
+            let mut lo: u64 = self.low;
+            let mut hi: u64 = self.high;
+            let shift_u64: u64 = bits_per_digit as u64;
+            while lo != 0 || hi != 0 {
+                pos -= 1;
+                let digit: i32 = (lo & mask) as i32;
+                let ch = if digit < 10 {
+                    ('0' as i32) + digit
+                } else if upper {
+                    ('A' as i32) + digit - 10
+                } else {
+                    ('a' as i32) + digit - 10
+                };
+                builtin::array_set_u8(arr, pos, ch as u8);
+                // Shift right: move bits from hi into lo
+                // For shift amounts 1,3,4 this works correctly
+                let hi_bits = hi << (64 - shift_u64);
+                lo = (lo >> shift_u64) | hi_bits;
+                hi = hi >> shift_u64;
+            }
         }
-
-        // Free linear memory buffer
-        builtin::realloc(ptr, 40, 1, 0);
-
-        return String::internal_from_utf8_raw(arr, len);
-    }
-}
-
-/// Format u128 decimal directly into Formatter buffer.
-/// Shared implementation for Display and Inspect.
-fn fmt_u128_decimal(val: &u128, f: &mut Formatter) {
-    if val.low() == 0 && val.high() == 0 {
-        f.pad("0");
-        return;
-    }
-
-    // Count digits first
-    let mut temp = *val;
-    let ten = u128::from_u64(10);
-    let mut digit_count: i32 = 0;
-    while temp > u128::zero() {
-        digit_count += 1;
-        temp = temp.div_rem(&ten)[0];
-    }
-
-    let offset = f.prepare_int_write(false, "", digit_count);
-    let arr = f.buf.internal_raw_bytes();
-
-    // Write digits in reverse order
-    let mut pos = offset + digit_count;
-    temp = *val;
-    while temp > u128::zero() {
-        pos -= 1;
-        let result = temp.div_rem(&ten);
-        let rem: u128 = result[1];
-        let digit: i32 = (rem.low() as i64) as i32;
-        builtin::array_set_u8(arr, pos, (('0' as i32) + digit) as u8);
-        temp = result[0];
     }
 }
 
 impl Display for u128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_u128_decimal(self, f);
+        self.fmt_into(f);
     }
 }
 
 impl Inspect for u128 {
     pub fn inspect(&self, f: &mut Formatter) {
-        fmt_u128_decimal(self, f);
-    }
-}
-
-/// Helper: format a u128 in a power-of-2 base directly into the Formatter buffer.
-/// bits_per_digit: 1 (binary), 3 (octal), 4 (hex)
-fn fmt_u128_base(val: &u128, f: &mut Formatter, base: i32, upper: bool) {
-    let bits_per_digit = if base == 2 { 1 } else if base == 8 { 3 } else { 4 };
-    let mask: u64 = (base - 1) as u64;
-
-    let prefix = if f.alternate {
-        if base == 2 {
-            "0b"
-        } else if base == 8 {
-            "0o"
-        } else if upper {
-            "0X"
-        } else {
-            "0x"
-        }
-    } else {
-        ""
-    };
-
-    // Count digits
-    let is_zero = val.low() == 0 && val.high() == 0;
-    let digit_count = if is_zero {
-        1
-    } else {
-        // Find highest set bit across both halves
-        let mut highest_bit: i32 = 0;
-        let h: i64 = val.high() as i64;
-        let l: i64 = val.low() as i64;
-        let zero: i64 = 0;
-        if h != zero {
-            let mut b: i32 = 63;
-            while b >= 0 {
-                let one: i64 = 1;
-                if (h >> (b as i64)) & one != zero {
-                    highest_bit = 64 + b;
-                    break;
-                }
-                b -= 1;
-            }
-        } else {
-            let mut b: i32 = 63;
-            while b >= 0 {
-                let one: i64 = 1;
-                if (l >> (b as i64)) & one != zero {
-                    highest_bit = b;
-                    break;
-                }
-                b -= 1;
-            }
-        }
-        (highest_bit / bits_per_digit) + 1
-    };
-
-    let offset = f.prepare_int_write(false, prefix, digit_count);
-    let arr = f.buf.internal_raw_bytes();
-
-    if is_zero {
-        builtin::array_set_u8(arr, offset, '0' as u8);
-    } else {
-        let mut pos = offset + digit_count;
-        let mut lo: u64 = val.low();
-        let mut hi: u64 = val.high();
-        let shift_u64: u64 = bits_per_digit as u64;
-        while lo != 0 || hi != 0 {
-            pos -= 1;
-            let digit: i32 = (lo & mask) as i32;
-            let ch = if digit < 10 {
-                ('0' as i32) + digit
-            } else if upper {
-                ('A' as i32) + digit - 10
-            } else {
-                ('a' as i32) + digit - 10
-            };
-            builtin::array_set_u8(arr, pos, ch as u8);
-            // Shift right: move bits from hi into lo
-            // For shift amounts 1,3,4 this works correctly
-            let hi_bits = hi << (64 - shift_u64);
-            lo = (lo >> shift_u64) | hi_bits;
-            hi = hi >> shift_u64;
-        }
+        self.fmt_into(f);
     }
 }
 
 impl Binary for u128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_u128_base(self, f, 2, false);
+        self.fmt_base(f, 2, false);
     }
 }
 
 impl Octal for u128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_u128_base(self, f, 8, false);
+        self.fmt_base(f, 8, false);
     }
 }
 
 impl LowerHex for u128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_u128_base(self, f, 16, false);
+        self.fmt_base(f, 16, false);
     }
 }
 
 impl UpperHex for u128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_u128_base(self, f, 16, true);
+        self.fmt_base(f, 16, true);
     }
 }
 
@@ -760,184 +729,163 @@ impl i128 {
         return [quotient, remainder];
     }
 
+    fn fmt_into(&self, f: &mut Formatter) {
+        self.fmt_decimal(f);
+    }
+
     /// Convert i128 to String (for template string interpolation)
     pub fn to_string(&self) -> String {
-        // Handle zero case
-        if *self == i128::zero() {
-            return "0";
+        let mut buf = String::with_capacity(41);
+        let mut f = Formatter::new(&mut buf);
+        self.fmt_into(&mut f);
+        return buf;
+    }
+
+    fn fmt_decimal(&self, f: &mut Formatter) {
+        let is_neg = self.is_negative();
+        let abs_val = self.abs_u128();
+        if abs_val.low == 0 && abs_val.high == 0 {
+            let offset = f.prepare_int_write(false, "", 1);
+            let arr = f.buf.internal_raw_bytes();
+            builtin::array_set_u8(arr, offset, '0' as u8);
+            return;
         }
 
-        // Check for negative
-        let is_negative = self.is_negative();
+        let ten = u128::from_u64(10);
+        let mut temp = abs_val;
+        let mut digit_count: i32 = 0;
+        while temp > u128::zero() {
+            digit_count += 1;
+            temp = temp / ten;
+        }
 
-        // Get absolute value as u128 and convert to string
-        let abs_value = self.abs_u128();
-        let abs_str = abs_value.to_string();
+        let offset = f.prepare_int_write(is_neg, "", digit_count);
+        let arr = f.buf.internal_raw_bytes();
 
-        // Prepend minus sign if negative
-        if is_negative {
-            let len = abs_str.len();
-            let abs_bytes = abs_str.internal_raw_bytes();
-            let arr = builtin::array_new::<u8>(len + 1);
-            builtin::array_set_u8(arr, 0, '-' as u8);
-            for (let mut i = 0; i < len; i += 1) {
-                builtin::array_set_u8(arr, i + 1, builtin::array_get_u8(abs_bytes, i));
+        let mut pos = offset + digit_count;
+        temp = abs_val;
+        while temp > u128::zero() {
+            pos -= 1;
+            let digit: i32 = ((temp % ten).low() as i64) as i32;
+            builtin::array_set_u8(arr, pos, (('0' as i32) + digit) as u8);
+            temp = temp / ten;
+        }
+    }
+
+    fn fmt_base(&self, f: &mut Formatter, base: i32, upper: bool) {
+        let is_neg = self.is_negative();
+        let abs_val = self.abs_u128();
+        let bits_per_digit = if base == 2 { 1 } else if base == 8 { 3 } else { 4 };
+        let mask: u64 = (base - 1) as u64;
+
+        let prefix = if f.alternate {
+            if base == 2 {
+                "0b"
+            } else if base == 8 {
+                "0o"
+            } else if upper {
+                "0X"
+            } else {
+                "0x"
             }
-            return String::internal_from_utf8_raw(arr, len + 1);
+        } else {
+            ""
+        };
+
+        let is_zero = abs_val.low == 0 && abs_val.high == 0;
+        let digit_count = if is_zero {
+            1
+        } else {
+            let mut highest_bit: i32 = 0;
+            let h: i64 = abs_val.high as i64;
+            let l: i64 = abs_val.low as i64;
+            let zero: i64 = 0;
+            if h != zero {
+                let mut b: i32 = 63;
+                while b >= 0 {
+                    let one: i64 = 1;
+                    if (h >> (b as i64)) & one != zero {
+                        highest_bit = 64 + b;
+                        break;
+                    }
+                    b -= 1;
+                }
+            } else {
+                let mut b: i32 = 63;
+                while b >= 0 {
+                    let one: i64 = 1;
+                    if (l >> (b as i64)) & one != zero {
+                        highest_bit = b;
+                        break;
+                    }
+                    b -= 1;
+                }
+            }
+            (highest_bit / bits_per_digit) + 1
+        };
+
+        let offset = f.prepare_int_write(is_neg, prefix, digit_count);
+        let arr = f.buf.internal_raw_bytes();
+
+        if is_zero {
+            builtin::array_set_u8(arr, offset, '0' as u8);
+        } else {
+            let mut pos = offset + digit_count;
+            let mut lo: u64 = abs_val.low;
+            let mut hi: u64 = abs_val.high;
+            let shift_u64: u64 = bits_per_digit as u64;
+            while lo != 0 || hi != 0 {
+                pos -= 1;
+                let digit: i32 = (lo & mask) as i32;
+                let ch = if digit < 10 {
+                    ('0' as i32) + digit
+                } else if upper {
+                    ('A' as i32) + digit - 10
+                } else {
+                    ('a' as i32) + digit - 10
+                };
+                builtin::array_set_u8(arr, pos, ch as u8);
+                let hi_bits = hi << (64 - shift_u64);
+                lo = (lo >> shift_u64) | hi_bits;
+                hi = hi >> shift_u64;
+            }
         }
-
-        return abs_str;
-    }
-}
-
-/// Format i128 decimal directly into Formatter buffer.
-/// Shared implementation for Display and Inspect.
-fn fmt_i128_decimal(val: &i128, f: &mut Formatter) {
-    let is_neg = val.is_negative();
-    let abs_val = val.abs_u128();
-    if abs_val.low() == 0 && abs_val.high() == 0 {
-        f.pad("0");
-        return;
-    }
-
-    let ten = u128::from_u64(10);
-    let mut temp = abs_val;
-    let mut digit_count: i32 = 0;
-    while temp > u128::zero() {
-        digit_count += 1;
-        temp = temp.div_rem(&ten)[0];
-    }
-
-    let offset = f.prepare_int_write(is_neg, "", digit_count);
-    let arr = f.buf.internal_raw_bytes();
-
-    let mut pos = offset + digit_count;
-    temp = abs_val;
-    while temp > u128::zero() {
-        pos -= 1;
-        let result = temp.div_rem(&ten);
-        let rem: u128 = result[1];
-        let digit: i32 = (rem.low() as i64) as i32;
-        builtin::array_set_u8(arr, pos, (('0' as i32) + digit) as u8);
-        temp = result[0];
     }
 }
 
 impl Display for i128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_i128_decimal(self, f);
+        self.fmt_into(f);
     }
 }
 
 impl Inspect for i128 {
     pub fn inspect(&self, f: &mut Formatter) {
-        fmt_i128_decimal(self, f);
-    }
-}
-
-/// Helper: format an i128 in a power-of-2 base using abs_u128 for the magnitude.
-fn fmt_i128_base(val: &i128, f: &mut Formatter, base: i32, upper: bool) {
-    let is_neg = val.is_negative();
-    let abs_val = val.abs_u128();
-    // Temporarily set sign_plus to handle the sign via prepare_int_write
-    let bits_per_digit = if base == 2 { 1 } else if base == 8 { 3 } else { 4 };
-    let mask: u64 = (base - 1) as u64;
-
-    let prefix = if f.alternate {
-        if base == 2 {
-            "0b"
-        } else if base == 8 {
-            "0o"
-        } else if upper {
-            "0X"
-        } else {
-            "0x"
-        }
-    } else {
-        ""
-    };
-
-    let is_zero = abs_val.low() == 0 && abs_val.high() == 0;
-    let digit_count = if is_zero {
-        1
-    } else {
-        let mut highest_bit: i32 = 0;
-        let h: i64 = abs_val.high() as i64;
-        let l: i64 = abs_val.low() as i64;
-        let zero: i64 = 0;
-        if h != zero {
-            let mut b: i32 = 63;
-            while b >= 0 {
-                let one: i64 = 1;
-                if (h >> (b as i64)) & one != zero {
-                    highest_bit = 64 + b;
-                    break;
-                }
-                b -= 1;
-            }
-        } else {
-            let mut b: i32 = 63;
-            while b >= 0 {
-                let one: i64 = 1;
-                if (l >> (b as i64)) & one != zero {
-                    highest_bit = b;
-                    break;
-                }
-                b -= 1;
-            }
-        }
-        (highest_bit / bits_per_digit) + 1
-    };
-
-    let offset = f.prepare_int_write(is_neg, prefix, digit_count);
-    let arr = f.buf.internal_raw_bytes();
-
-    if is_zero {
-        builtin::array_set_u8(arr, offset, '0' as u8);
-    } else {
-        let mut pos = offset + digit_count;
-        let mut lo: u64 = abs_val.low();
-        let mut hi: u64 = abs_val.high();
-        let shift_u64: u64 = bits_per_digit as u64;
-        while lo != 0 || hi != 0 {
-            pos -= 1;
-            let digit: i32 = (lo & mask) as i32;
-            let ch = if digit < 10 {
-                ('0' as i32) + digit
-            } else if upper {
-                ('A' as i32) + digit - 10
-            } else {
-                ('a' as i32) + digit - 10
-            };
-            builtin::array_set_u8(arr, pos, ch as u8);
-            let hi_bits = hi << (64 - shift_u64);
-            lo = (lo >> shift_u64) | hi_bits;
-            hi = hi >> shift_u64;
-        }
+        self.fmt_into(f);
     }
 }
 
 impl Binary for i128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_i128_base(self, f, 2, false);
+        self.fmt_base(f, 2, false);
     }
 }
 
 impl Octal for i128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_i128_base(self, f, 8, false);
+        self.fmt_base(f, 8, false);
     }
 }
 
 impl LowerHex for i128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_i128_base(self, f, 16, false);
+        self.fmt_base(f, 16, false);
     }
 }
 
 impl UpperHex for i128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_i128_base(self, f, 16, true);
+        self.fmt_base(f, 16, true);
     }
 }
 

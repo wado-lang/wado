@@ -335,6 +335,7 @@ Wado is designed with the following Wasm features:
 - Do not parse mangled / formatted names even in `name.rs`. Use parsed objects instead.
 - Minimize hard-coded logic for compiler builtins. Define builtin and internal functions in Wado source files in `lib/core/*.wado`.
 - Minimize hard-coded logic for WASI. Use metadata extracted from `lib/wasi/*.wado`.
+- Synthesized and monomorphized entities must use the `module_source` of their defining module, not the entry module. `TypeTable` helpers like `make_option()` derive the module source from the `#[comp_feature]` registration, not by hardcoding a path.
 
 ## Wado Evolution Proposals (WEP)
 

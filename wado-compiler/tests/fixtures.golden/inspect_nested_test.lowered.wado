@@ -132,14 +132,16 @@ pub fn "Array<i32>^Inspect::inspect"(self: &Array<i32>, f: &mut Formatter) {
                     };
                 }
                 __inline_i32_Inspect__inspect_3: {
-                    let __sroa_self_value: i32 = self."Array<i32>^IndexValue::index_value"(i);
-                    "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+                    let self: Box<i32> = Box<i32> { value: self."Array<i32>^IndexValue::index_value"(i) };
+                    __inline_i32__fmt_into_4: {
+                        self.i32::fmt_decimal(f);
+                    };
                 };
             }
             i = (i + 1);
         }
     }
-    __inline_Formatter__write_char_4: {
+    __inline_Formatter__write_char_5: {
         f.buf.String::append_char(']');
     };
 }

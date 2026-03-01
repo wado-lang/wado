@@ -2,12 +2,14 @@
 //
 // This module defines fundamental sum types that are used throughout Wado programs.
 /// Optional value - either Some(T) or None
+#[comp_feature("option")]
 pub variant Option<T> {
     Some(T),
     None,
 }
 
 /// Result type - either Ok(T) or Err(E)
+#[comp_feature("result")]
 pub variant Result<T, E> {
     Ok(T),
     Err(E),
@@ -42,47 +44,7 @@ impl<T: Eq, E: Eq> Eq for Result<T, E> {
     }
 }
 
-impl<T: Inspect> Inspect for Option<T> {
-    pub fn inspect(&self, f: &mut Formatter) {
-        match *self {
-            Some(v) => {
-                f.write_str("Option::Some(");
-                v.inspect(f);
-                f.write_str(")");
-            },
-            None => f.write_str("null"),
-        };
-    }
-}
 
-impl<T: Inspect, E: Inspect> Inspect for Result<T, E> {
-    pub fn inspect(&self, f: &mut Formatter) {
-        match *self {
-            Ok(v) => {
-                f.write_str("Result::Ok(");
-                v.inspect(f);
-                f.write_str(")");
-            },
-            Err(e) => {
-                f.write_str("Result::Err(");
-                e.inspect(f);
-                f.write_str(")");
-            },
-        };
-    }
-}
-
-impl<T: Inspect> Display for Option<T> {
-    pub fn fmt(&self, f: &mut Formatter) {
-        self.inspect(f);
-    }
-}
-
-impl<T: Inspect, E: Inspect> Display for Result<T, E> {
-    pub fn fmt(&self, f: &mut Formatter) {
-        self.inspect(f);
-    }
-}
 
 /// Future type - readable end of an async value (WASI Component Model primitive).
 /// This is an opaque i32 handle managed by the runtime.

@@ -66,7 +66,7 @@
     (export "__test_0_greeting" (func 4))
     (export "__test_1" (func 5))
     (func (;2;) (type 8)
-      (local i32 i32 (ref null 2) (ref null 3) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 2) (ref null 0) (ref null 3))
+      (local i32 i32 (ref null 2) (ref null 3) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3) (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3))
       (block ;; label = @1
         (if ;; label = @2
           (global.get 0)
@@ -77,7 +77,7 @@
           (i32.const 1)))
     )
     (func (;3;) (type 9)
-      (local i32 (ref null 2) (ref null 3) i32 (ref null 2) (ref null 0) (ref null 3))
+      (local i32 (ref null 2) (ref null 3) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3))
       (block ;; label = @1
         (if ;; label = @2
           (global.get 0)
@@ -88,7 +88,7 @@
           (i32.const 1)))
     )
     (func (;4;) (type 10)
-      (local i32 i32 (ref null 2) (ref null 3) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 2) (ref null 0) (ref null 3))
+      (local i32 i32 (ref null 2) (ref null 3) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3) (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3))
       (block ;; label = @1
         (block ;; label = @2
           (if ;; label = @3
@@ -102,7 +102,7 @@
         (i32.const 0))
     )
     (func (;5;) (type 11)
-      (local i32 (ref null 2) (ref null 3) i32 (ref null 2) (ref null 0) (ref null 3))
+      (local i32 (ref null 2) (ref null 3) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3))
       (block ;; label = @1
         (block ;; label = @2
           (if ;; label = @3

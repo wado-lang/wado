@@ -33,13 +33,15 @@ export fn run() with Stdout {
         __inline_i32_Display__fmt_4: {
             let self: Box<i32> = Box<i32> { value: 42 };
             let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+            __inline_i32__fmt_into_5: {
+                self.i32::fmt_decimal(f);
+            };
         };
         break __tmpl: __r;
     });
-    let s: String = __inline_identity_String__5: {
+    let s: String = __inline_identity_String__6: {
         let value: String = "hello";
-        break __inline_identity_String__5: value;
+        break __inline_identity_String__6: value;
     };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(42), used: 0 };
@@ -47,21 +49,23 @@ export fn run() with Stdout {
         __r.String::append(s);
         break __tmpl: __r;
     });
-    let pair: [i32, String] = __inline_make_pair_i32_String__7: {
+    let pair: [i32, String] = __inline_make_pair_i32_String__8: {
         let second: String = "world";
-        break __inline_make_pair_i32_String__7: [10, second];
+        break __inline_make_pair_i32_String__8: [10, second];
     };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(48), used: 0 };
         __r.String::append("make_pair = (");
-        let mut __f: Formatter = __inline_Formatter__new_9: {
+        let mut __f: Formatter = __inline_Formatter__new_10: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_10: {
+        __inline_i32_Display__fmt_11: {
             let self: Box<i32> = Box<i32> { value: pair.0 };
             let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+            __inline_i32__fmt_into_12: {
+                self.i32::fmt_decimal(f);
+            };
         };
         __r.String::append(", ");
         __r.String::append(pair.1);

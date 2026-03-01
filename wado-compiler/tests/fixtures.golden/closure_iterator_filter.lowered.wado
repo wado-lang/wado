@@ -107,7 +107,9 @@ export fn run() with Stdout {
                     __inline_i32_Display__fmt_18: {
                         let self: Box<i32> = Box<i32> { value: x };
                         let f: &mut Formatter = &mut __f;
-                        "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                        __inline_i32__fmt_into_19: {
+                            self.i32::fmt_decimal(f);
+                        };
                     };
                     break __tmpl: __r;
                 });
@@ -116,10 +118,10 @@ export fn run() with Stdout {
             }
         }
     }
-    let large: Array<i32> = __inline_ArrayIter_i32___filter_20: {
+    let large: Array<i32> = __inline_ArrayIter_i32___filter_21: {
         let self: &ArrayIter<i32> = &ArrayIter<i32> { repr: nums.repr, used: nums.used, index: 0 };
         let pred: fn(i32) -> bool = &__Closure_1 { __capture_0: 5 };
-        break __inline_ArrayIter_i32___filter_20: FilterIter<i32> { repr: self.repr, used: self.used, index: self.index, pred: pred };
+        break __inline_ArrayIter_i32___filter_21: FilterIter<i32> { repr: self.repr, used: self.used, index: self.index, pred: pred };
     }."FilterIter<i32>^Iterator::collect"();
     __for_of_1: {
         let mut __iter_1: ArrayIter<i32> = ArrayIter<i32> { repr: large.repr, used: large.used, index: 0 };
@@ -129,14 +131,16 @@ export fn run() with Stdout {
                 let x: i32 = __variant_payload(__pattern_temp_1, case=0);
                 core::cli::println(__tmpl: {
                     let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
-                    let mut __f: Formatter = __inline_Formatter__new_23: {
+                    let mut __f: Formatter = __inline_Formatter__new_24: {
                         let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_23: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                        break __inline_Formatter__new_24: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
-                    __inline_i32_Display__fmt_24: {
+                    __inline_i32_Display__fmt_25: {
                         let self: Box<i32> = Box<i32> { value: x };
                         let f: &mut Formatter = &mut __f;
-                        "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                        __inline_i32__fmt_into_26: {
+                            self.i32::fmt_decimal(f);
+                        };
                     };
                     break __tmpl: __r;
                 });

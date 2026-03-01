@@ -54,7 +54,9 @@ fn __test_0_display_integer() {
                 __inline_i32_Display__fmt_3: {
                     let self: Box<i32> = Box<i32> { value: 29 };
                     let f: &mut Formatter = &mut __f;
-                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                    __inline_i32__fmt_into_4: {
+                        self.i32::fmt_decimal(f);
+                    };
                 };
                 __r.String::append("\ncondition: b.display_value() == \"42\"\n");
                 __r.String::append("b.display_value(): ");
@@ -93,7 +95,9 @@ fn __test_1_inspect_integer() {
                 __inline_i32_Display__fmt_3: {
                     let self: Box<i32> = Box<i32> { value: 34 };
                     let f: &mut Formatter = &mut __f;
-                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                    __inline_i32__fmt_into_4: {
+                        self.i32::fmt_decimal(f);
+                    };
                 };
                 __r.String::append("\ncondition: b.inspect_value() == \"42\"\n");
                 __r.String::append("b.inspect_value(): ");
@@ -132,7 +136,9 @@ fn __test_2_display_string() {
                 __inline_i32_Display__fmt_3: {
                     let self: Box<i32> = Box<i32> { value: 40 };
                     let f: &mut Formatter = &mut __f;
-                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                    __inline_i32__fmt_into_4: {
+                        self.i32::fmt_decimal(f);
+                    };
                 };
                 __r.String::append("\ncondition: b.display_value() == \"hello\"\n");
                 __r.String::append("b.display_value(): ");
@@ -171,7 +177,9 @@ fn __test_3_inspect_string() {
                 __inline_i32_Display__fmt_3: {
                     let self: Box<i32> = Box<i32> { value: 45 };
                     let f: &mut Formatter = &mut __f;
-                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                    __inline_i32__fmt_into_4: {
+                        self.i32::fmt_decimal(f);
+                    };
                 };
                 __r.String::append("\ncondition: b.inspect_value() == `\"hello\"`\n");
                 __r.String::append("b.inspect_value(): ");
@@ -210,7 +218,9 @@ fn __test_4_both_display_and_inspect_for_integer() {
                 __inline_i32_Display__fmt_3: {
                     let self: Box<i32> = Box<i32> { value: 51 };
                     let f: &mut Formatter = &mut __f;
-                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                    __inline_i32__fmt_into_4: {
+                        self.i32::fmt_decimal(f);
+                    };
                 };
                 __r.String::append("\ncondition: b.both() == \"display=99 inspect=99\"\n");
                 __r.String::append("b.both(): ");
@@ -249,7 +259,9 @@ fn __test_5_both_display_and_inspect_for_string() {
                 __inline_i32_Display__fmt_3: {
                     let self: Box<i32> = Box<i32> { value: 56 };
                     let f: &mut Formatter = &mut __f;
-                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                    __inline_i32__fmt_into_4: {
+                        self.i32::fmt_decimal(f);
+                    };
                 };
                 __r.String::append("\ncondition: b.both() == `display=world inspect=\"world\"`\n");
                 __r.String::append("b.both(): ");
@@ -288,7 +300,9 @@ fn __test_6_display_bool() {
                 __inline_i32_Display__fmt_3: {
                     let self: Box<i32> = Box<i32> { value: 62 };
                     let f: &mut Formatter = &mut __f;
-                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                    __inline_i32__fmt_into_4: {
+                        self.i32::fmt_decimal(f);
+                    };
                 };
                 __r.String::append("\ncondition: b.display_value() == \"true\"\n");
                 __r.String::append("b.display_value(): ");
@@ -327,7 +341,9 @@ fn __test_7_inspect_bool() {
                 __inline_i32_Display__fmt_3: {
                     let self: Box<i32> = Box<i32> { value: 67 };
                     let f: &mut Formatter = &mut __f;
-                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                    __inline_i32__fmt_into_4: {
+                        self.i32::fmt_decimal(f);
+                    };
                 };
                 __r.String::append("\ncondition: b.inspect_value() == \"true\"\n");
                 __r.String::append("b.inspect_value(): ");
@@ -389,11 +405,13 @@ fn "Box<bool>::inspect_value"(self: &Box<bool>) -> String {
         __inline_bool_Inspect__inspect_2: {
             let __sroa_self_value: bool = self.value;
             let f: &mut Formatter = &mut __f;
-            f.Formatter::pad(if __sroa_self_value {
-                "true";
-            } else {
-                "false";
-            });
+            __inline_bool__fmt_into_3: {
+                f.Formatter::pad(if __sroa_self_value {
+                    "true";
+                } else {
+                    "false";
+                });
+            };
         };
         break __tmpl: __r;
     };
@@ -409,11 +427,13 @@ fn "Box<bool>::display_value"(self: &Box<bool>) -> String {
         __inline_bool_Display__fmt_2: {
             let __sroa_self_value: bool = self.value;
             let f: &mut Formatter = &mut __f;
-            f.Formatter::pad(if __sroa_self_value {
-                "true";
-            } else {
-                "false";
-            });
+            __inline_bool__fmt_into_3: {
+                f.Formatter::pad(if __sroa_self_value {
+                    "true";
+                } else {
+                    "false";
+                });
+            };
         };
         break __tmpl: __r;
     };
@@ -451,19 +471,23 @@ fn "Box<i32>::both"(self: &Box<i32>) -> String {
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_2: {
-            let __sroa_self_value: i32 = self.value;
+            let self: Box<i32> = Box<i32> { value: self.value };
             let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+            __inline_i32__fmt_into_3: {
+                self.i32::fmt_decimal(f);
+            };
         };
         __r.String::append(" inspect=");
-        __f = __inline_Formatter__new_3: {
+        __f = __inline_Formatter__new_4: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Inspect__inspect_4: {
-            let __sroa_self_value: i32 = self.value;
+        __inline_i32_Inspect__inspect_5: {
+            let self: Box<i32> = Box<i32> { value: self.value };
             let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+            __inline_i32__fmt_into_6: {
+                self.i32::fmt_decimal(f);
+            };
         };
         break __tmpl: __r;
     };
@@ -505,9 +529,11 @@ fn "Box<i32>::inspect_value"(self: &Box<i32>) -> String {
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Inspect__inspect_2: {
-            let __sroa_self_value: i32 = self.value;
+            let self: Box<i32> = Box<i32> { value: self.value };
             let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+            __inline_i32__fmt_into_3: {
+                self.i32::fmt_decimal(f);
+            };
         };
         break __tmpl: __r;
     };
@@ -521,9 +547,11 @@ fn "Box<i32>::display_value"(self: &Box<i32>) -> String {
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_2: {
-            let __sroa_self_value: i32 = self.value;
+            let self: Box<i32> = Box<i32> { value: self.value };
             let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+            __inline_i32__fmt_into_3: {
+                self.i32::fmt_decimal(f);
+            };
         };
         break __tmpl: __r;
     };

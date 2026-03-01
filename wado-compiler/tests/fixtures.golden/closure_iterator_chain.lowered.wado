@@ -127,7 +127,9 @@ export fn run() with Stdout {
                     __inline_i32_Display__fmt_18: {
                         let self: Box<i32> = Box<i32> { value: x };
                         let f: &mut Formatter = &mut __f;
-                        "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                        __inline_i32__fmt_into_19: {
+                            self.i32::fmt_decimal(f);
+                        };
                     };
                     break __tmpl: __r;
                 });
@@ -136,21 +138,23 @@ export fn run() with Stdout {
             }
         }
     }
-    let sum: i32 = __inline_ArrayIter_i32___map_i32__20: {
+    let sum: i32 = __inline_ArrayIter_i32___map_i32__21: {
         let self: &ArrayIter<i32> = &ArrayIter<i32> { repr: nums.repr, used: nums.used, index: 0 };
         let f: fn(i32) -> i32 = &__Closure_2 {  };
-        break __inline_ArrayIter_i32___map_i32__20: MapIter<i32,i32> { repr: self.repr, used: self.used, index: self.index, f: f };
+        break __inline_ArrayIter_i32___map_i32__21: MapIter<i32,i32> { repr: self.repr, used: self.used, index: self.index, f: f };
     }."MapIter<i32,i32>::fold<i32>"(0, &__Closure_3 {  });
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_22: {
+        let mut __f: Formatter = __inline_Formatter__new_23: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_23: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_23: {
+        __inline_i32_Display__fmt_24: {
             let self: Box<i32> = Box<i32> { value: sum };
             let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+            __inline_i32__fmt_into_25: {
+                self.i32::fmt_decimal(f);
+            };
         };
         break __tmpl: __r;
     });

@@ -95,10 +95,12 @@ pub fn "Box<i32>^Inspect::inspect"(self: &Box<i32>, f: &mut Formatter) {
         f.buf.String::append(s);
     };
     __inline_i32_Inspect__inspect_2: {
-        let __sroa_self_value: i32 = self.value;
-        "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+        let self: Box<i32> = Box<i32> { value: self.value };
+        __inline_i32__fmt_into_3: {
+            self.i32::fmt_decimal(f);
+        };
     };
-    __inline_Formatter__write_str_3: {
+    __inline_Formatter__write_str_4: {
         let s: String = " }";
         f.buf.String::append(s);
     };

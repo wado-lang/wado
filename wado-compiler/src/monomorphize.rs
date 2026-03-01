@@ -2471,7 +2471,17 @@ impl Monomorphizer {
                     // name directly instead of adding type args.
                     // Skip for non-generic structs that don't use the enclosing type params.
                     let new_info = if info.is_type_param_receiver && !type_names.is_empty() {
-                        info.with_substituted_struct_name(&type_names[0])
+                        // Use the (already-substituted) receiver type to find the concrete name.
+                        // type_names[0] would be wrong when there are multiple type params
+                        // (e.g. Result<T,E>: the Err(E) branch should use E's substitution,
+                        // not T's).
+                        let mut inner = receiver.type_id;
+                        while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
+                            type_table.get(inner).clone()
+                        {
+                            inner = t;
+                        }
+                        info.with_substituted_struct_name(&type_table.mangle_type_name(inner))
                     } else if needs_struct_type_args {
                         info.with_struct_type_args(&type_names)
                     } else {
@@ -2494,8 +2504,13 @@ impl Monomorphizer {
                                 .get(&new_func_name)
                                 .cloned()
                                 .or_else(|| {
-                                    let concrete_type_id = sorted_entries[0].1;
-                                    module_source_for_trait_impl(type_table, *concrete_type_id)
+                                    let mut inner = receiver.type_id;
+                                    while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
+                                        type_table.get(inner).clone()
+                                    {
+                                        inner = t;
+                                    }
+                                    module_source_for_trait_impl(type_table, inner)
                                 });
                             *method_func = FunctionRef::External {
                                 module_source: concrete_module

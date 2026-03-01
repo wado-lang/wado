@@ -150,11 +150,11 @@ type "functype/check_special" = fn(f64) -> ref null "tuple/[bool, bool, SpecialK
 
 type "functype/__initialize_module" = fn();
 
-type "functype/fmt_f64" = fn(f64, ref null Formatter);
-
 type "functype/Array<u64>::append" = fn(ref null Array<u64>, u64);
 
 type "functype/Array<u64>^IndexValue::index_value" = fn(ref null Array<u64>, i32) -> u64;
+
+type "functype/f64::fmt_into" = fn(ref null "core:internal/Box<f64>", ref null Formatter);
 
 type "functype/String::grow" = fn(ref null String, i32);
 
@@ -244,7 +244,7 @@ fn run() with Stdout {
         block {
             __local_12 = "core:internal/Box<f64>" { value: area1 };
             __local_13 = __local_7;
-            fmt_f64(__local_12.value, __local_13);
+            f64::fmt_into(__local_12, __local_13);
         };
         break __tmpl: __local_6;
     });
@@ -270,7 +270,7 @@ fn run() with Stdout {
         block {
             __local_16 = "core:internal/Box<f64>" { value: area2 };
             __local_17 = __local_9;
-            fmt_f64(__local_16.value, __local_17);
+            f64::fmt_into(__local_16, __local_17);
         };
         break __tmpl: __local_8;
     });
@@ -1263,92 +1263,6 @@ fn __initialize_module() {
     };
 }
 
-fn fmt_f64(value, f) {
-    let is_special: bool;
-    let is_neg: bool;
-    let kind: enum:SpecialKind;
-    let mark_5: i32;
-    let abs_f: f64;
-    let result: ref null FormatResult;
-    let d: u64;
-    let p: i32;
-    let nd: i32;
-    let exp: i32;
-    let mark_12: i32;
-    let __pattern_temp_0: ref null "tuple/[bool, bool, SpecialKind]";
-    let __local_14: ref null Formatter;
-    let __local_15: ref null String;
-    let __local_16: ref null Formatter;
-    let __local_17: ref null String;
-    let __sroa___pattern_temp_0_0: bool;
-    let __sroa___pattern_temp_0_1: bool;
-    let __sroa___pattern_temp_0_2: i32;
-    multivalue_bind [__sroa___pattern_temp_0_0, __sroa___pattern_temp_0_1, __sroa___pattern_temp_0_2] = check_special(value);
-    is_special = __sroa___pattern_temp_0_0;
-    is_neg = __sroa___pattern_temp_0_1;
-    kind = __sroa___pattern_temp_0_2;
-    if is_special {
-        mark_5 = __inline_String__len_1: block -> i32 {
-            __local_15 = f.buf;
-            break __inline_String__len_1: __local_15.used;
-        };
-        if kind == 3 {
-            String::append_char(f.buf, 78);
-            String::append_char(f.buf, 97);
-            String::append_char(f.buf, 78);
-        } else if kind == 2 {
-            String::append(f.buf, if is_neg -> ref null String {
-                String { repr: ref.as_non_null(array.new_data<u8>[6](0, 4)), used: 4 };
-            } else {
-                String { repr: ref.as_non_null(array.new_data<u8>[7](0, 3)), used: 3 };
-            });
-        } else {
-            String::append(f.buf, if is_neg -> ref null String {
-                String { repr: ref.as_non_null(array.new_data<u8>[8](0, 4)), used: 4 };
-            } else {
-                String { repr: ref.as_non_null(array.new_data<u8>[9](0, 3)), used: 3 };
-            });
-        };
-        Formatter::apply_padding(f, mark_5);
-        return;
-    };
-    abs_f = if is_neg -> f64 {
-        builtin::f64_neg(value);
-    } else {
-        value;
-    };
-    let __sroa_result_digits: u64;
-    let __sroa_result_exponent: i32;
-    multivalue_bind [__sroa_result_digits, __sroa_result_exponent] = short(abs_f);
-    d = __sroa_result_digits;
-    p = __sroa_result_exponent;
-    nd = digits(d);
-    exp = (p + nd) - 1;
-    mark_12 = __inline_String__len_3: block -> i32 {
-        __local_17 = f.buf;
-        break __inline_String__len_3: __local_17.used;
-    };
-    if is_neg {
-        String::append_char(f.buf, 45);
-    } else if f.sign_plus {
-        String::append_char(f.buf, 43);
-    };
-    if if exp < -4 -> i32 {
-        1;
-    } else {
-        exp >= 16;
-    } {
-        write_exp(f.buf, d, p, nd, 0);
-    } else if p >= 0 {
-        write_decimal(f.buf, d, p, nd);
-        String::append_char(f.buf, 46);
-        String::append_char(f.buf, 48);
-    } else {
-        write_decimal(f.buf, d, p, nd);
-    };
-    Formatter::apply_padding(f, mark_12);
-}
-
 fn Array<u64>::append(self, value) {
     let used: i32;
     let capacity: i32;
@@ -1377,6 +1291,94 @@ fn Array<u64>^IndexValue::index_value(self, index) {
         unreachable;
     };
     return builtin::array_get<u64>(self.repr, index);
+}
+
+fn f64::fmt_into(self, f) {
+    let value: f64;
+    let is_special: bool;
+    let is_neg: bool;
+    let kind: enum:SpecialKind;
+    let mark_6: i32;
+    let abs_f: f64;
+    let result: ref null FormatResult;
+    let d: u64;
+    let p: i32;
+    let nd: i32;
+    let exp: i32;
+    let mark_13: i32;
+    let __pattern_temp_0: ref null "tuple/[bool, bool, SpecialKind]";
+    let __local_15: ref null Formatter;
+    let __local_16: ref null String;
+    let __local_17: ref null Formatter;
+    let __local_18: ref null String;
+    value = self.value;
+    let __sroa___pattern_temp_0_0: bool;
+    let __sroa___pattern_temp_0_1: bool;
+    let __sroa___pattern_temp_0_2: i32;
+    multivalue_bind [__sroa___pattern_temp_0_0, __sroa___pattern_temp_0_1, __sroa___pattern_temp_0_2] = check_special(value);
+    is_special = __sroa___pattern_temp_0_0;
+    is_neg = __sroa___pattern_temp_0_1;
+    kind = __sroa___pattern_temp_0_2;
+    if is_special {
+        mark_6 = __inline_String__len_1: block -> i32 {
+            __local_16 = f.buf;
+            break __inline_String__len_1: __local_16.used;
+        };
+        if kind == 3 {
+            String::append_char(f.buf, 78);
+            String::append_char(f.buf, 97);
+            String::append_char(f.buf, 78);
+        } else if kind == 2 {
+            String::append(f.buf, if is_neg -> ref null String {
+                String { repr: ref.as_non_null(array.new_data<u8>[6](0, 4)), used: 4 };
+            } else {
+                String { repr: ref.as_non_null(array.new_data<u8>[7](0, 3)), used: 3 };
+            });
+        } else {
+            String::append(f.buf, if is_neg -> ref null String {
+                String { repr: ref.as_non_null(array.new_data<u8>[8](0, 4)), used: 4 };
+            } else {
+                String { repr: ref.as_non_null(array.new_data<u8>[9](0, 3)), used: 3 };
+            });
+        };
+        Formatter::apply_padding(f, mark_6);
+        return;
+    };
+    abs_f = if is_neg -> f64 {
+        builtin::f64_neg(value);
+    } else {
+        value;
+    };
+    let __sroa_result_digits: u64;
+    let __sroa_result_exponent: i32;
+    multivalue_bind [__sroa_result_digits, __sroa_result_exponent] = short(abs_f);
+    d = __sroa_result_digits;
+    p = __sroa_result_exponent;
+    nd = digits(d);
+    exp = (p + nd) - 1;
+    mark_13 = __inline_String__len_3: block -> i32 {
+        __local_18 = f.buf;
+        break __inline_String__len_3: __local_18.used;
+    };
+    if is_neg {
+        String::append_char(f.buf, 45);
+    } else if f.sign_plus {
+        String::append_char(f.buf, 43);
+    };
+    if if exp < -4 -> i32 {
+        1;
+    } else {
+        exp >= 16;
+    } {
+        write_exp(f.buf, d, p, nd, 0);
+    } else if p >= 0 {
+        write_decimal(f.buf, d, p, nd);
+        String::append_char(f.buf, 46);
+        String::append_char(f.buf, 48);
+    } else {
+        write_decimal(f.buf, d, p, nd);
+    };
+    Formatter::apply_padding(f, mark_13);
 }
 
 fn String::grow(self, min_capacity) {
