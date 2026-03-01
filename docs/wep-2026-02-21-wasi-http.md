@@ -196,13 +196,12 @@ All types are imported from `"wasi:http"`.
 | ----------------------- | -------------------------------------- | -------------------------- |
 | `Client::send(request)` | `async -> Result<Response, ErrorCode>` | Send outbound HTTP request |
 
-### `FutureWritable<T>`
+### CM Async Primitives
 
-The writable end of a `Future<T>`, obtained from `Future::<T>::new()` which returns `[Future<T>, FutureWritable<T>]`.
-
-| Method               | Description                     |
-| -------------------- | ------------------------------- |
-| `tx.write(value: T)` | Resolve the future with a value |
+`Future<T>`, `FutureWritable<T>`, `Stream<T>`, and `StreamWritable<T>` are Component Model
+primitives used throughout the HTTP API. Their resource declarations, canonical attributes,
+and error handling semantics are defined in
+[WEP: Redesign Wasm CM Builtins as Resource Canonical Attributes](wep-2026-03-01-cm-resource-canonical-attrs.md).
 
 ## E2E Test Fixtures
 
