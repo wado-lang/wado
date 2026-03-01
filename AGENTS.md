@@ -423,15 +423,14 @@ Run `make on-task-started` to install mise and all required development tools au
 ```sh
 make test
 make build
-make format # format Rust files and markdown files
+make format      # format Rust files and markdown files
 make format-wado # format Wado source files
-
-make hello     # generates example/hello.wat and example/hello.wasm
-make hello-run # simple smoke test
 
 make benchmark-count-prime # use integer arithmetic
 make benchmark-mandelbrot  # use float arithmetic
 make benchmark-sieve       # use arrays
+make benchmark-fts         # float-to-string
+make benchmark-zlib        # complex calculation
 
 make report-wasm-size
 ```
@@ -442,15 +441,11 @@ The compiler emits timestamped diagnostics to stderr. Use `--log-level` to contr
 
 ### Log Levels
 
-```sh
-wado compile --log-level debug file.wado   # all messages including phase spans
-wado compile --log-level info file.wado    # info, warnings, errors (default)
-wado compile --log-level warn file.wado    # warnings and errors only
-wado compile --log-level error file.wado   # errors only
-wado compile --log-level off file.wado     # silent
-```
+`compile`, `run`, and `serve` subcommands has `--log-level`, which accepts `off`, `error`, `warn`, `info` (default), and `debug`, for example:
 
-`--log-level` is available on `compile`, `run`, and `serve` subcommands.
+```sh
+wado compile --log-level debug file.wado # all messages including phase spans
+```
 
 ## Development Workflow
 
@@ -483,7 +478,8 @@ This syncs `vendor/wasmtime` to the exact version in `Cargo.lock` (required for 
 When you have completed a task, make sure everything is up-to-date and tested:
 
 - Update docs if necessary:
-  - docs/spec.md if the language specification is updated.
-  - docs/compiler.md if the new features are implemented.
-  - docs/cheatsheet.md if the syntax/stdlib is updated.
-- Run `make on-task-done` to format, clippy-fix, update golden fixtures, regenerate stdlib docs, and test.
+  - docs/spec.md
+  - docs/cheatsheet.md
+  - docs/compiler.md
+  - docs/optimizer.md
+- Run `make on-task-done` to format, clippy-fix, update golden fixtures, regenerate stdlib docs, and test. It will take 10+ minutes.
