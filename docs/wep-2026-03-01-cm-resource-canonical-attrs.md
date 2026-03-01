@@ -136,10 +136,12 @@ a new CM concept — it is the same handle value that was joined, wrapped in a d
 Wado type for type safety.
 
 When `Subtask::join(set)` is called:
+
 1. The CM `waitable-join(subtask_handle, set_handle)` is invoked
 2. A `Waitable` wrapping `subtask_handle` is returned
 
 When `WaitableSet::wait()` returns a `WaitEvent`:
+
 1. The CM `waitable-set-wait(set, outptr)` writes `[handle, payload]` to linear memory
 2. The adapter loads them and constructs `WaitEvent { code, handle: Waitable(handle), payload }`
 
@@ -192,11 +194,11 @@ For futures, `count` is always 0 (single value). So the return is `0 | status` o
 
 `Future::read(&self) -> Option<T>`:
 
-| CM ReturnCode | Wado result | Meaning |
-|---------------|-------------|---------|
-| BLOCKED       | (internal)  | Wait via waitable-set, then retry |
-| COMPLETED     | `Option::Some(value)` | Writer fulfilled the future |
-| DROPPED       | `Option::None` | Writer dropped without fulfilling |
+| CM ReturnCode | Wado result           | Meaning                           |
+| ------------- | --------------------- | --------------------------------- |
+| BLOCKED       | (internal)            | Wait via waitable-set, then retry |
+| COMPLETED     | `Option::Some(value)` | Writer fulfilled the future       |
+| DROPPED       | `Option::None`        | Writer dropped without fulfilling |
 
 The synthesis handles BLOCKED internally (same pattern as `stream_read`), so the
 user never sees it. COMPLETED produces `Some(value)`, DROPPED produces `None`.
@@ -217,10 +219,10 @@ if let Some(value) = future.read() {
 
 `FutureWritable::write(&self, value: T)`:
 
-| CM ReturnCode | Wado behavior | Meaning |
-|---------------|---------------|---------|
-| BLOCKED       | (internal)    | Wait via waitable-set, then retry |
-| COMPLETED     | Returns normally | Value delivered to reader |
+| CM ReturnCode | Wado behavior            | Meaning                                 |
+| ------------- | ------------------------ | --------------------------------------- |
+| BLOCKED       | (internal)               | Wait via waitable-set, then retry       |
+| COMPLETED     | Returns normally         | Value delivered to reader               |
 | DROPPED       | Returns normally (no-op) | Reader already dropped; value discarded |
 
 DROPPED on write is silently ignored — the reader went away, but this is not an error
@@ -231,11 +233,11 @@ trailers where the reader may close before trailers are written.
 
 `Stream::read(&self, max: i32) -> Array<T>`:
 
-| CM ReturnCode | Wado result | Meaning |
-|---------------|-------------|---------|
-| BLOCKED       | (internal)  | Wait via waitable-set, then retry |
-| COMPLETED     | `Array` with `count` items | Data available |
-| DROPPED       | Empty `Array` | Writer closed (EOF) |
+| CM ReturnCode | Wado result                | Meaning                           |
+| ------------- | -------------------------- | --------------------------------- |
+| BLOCKED       | (internal)                 | Wait via waitable-set, then retry |
+| COMPLETED     | `Array` with `count` items | Data available                    |
+| DROPPED       | Empty `Array`              | Writer closed (EOF)               |
 
 For streams, DROPPED is "end of stream" — the empty array serves as the EOF signal.
 This is the existing behavior and remains unchanged.
@@ -244,11 +246,11 @@ This is the existing behavior and remains unchanged.
 
 `StreamWritable::write(&self, data: Array<T>)`:
 
-| CM ReturnCode | Wado behavior | Meaning |
-|---------------|---------------|---------|
-| BLOCKED       | (internal)    | Wait via waitable-set, then retry |
-| COMPLETED     | Returns normally | Data written |
-| DROPPED       | Returns normally (no-op) | Reader closed; data discarded |
+| CM ReturnCode | Wado behavior            | Meaning                           |
+| ------------- | ------------------------ | --------------------------------- |
+| BLOCKED       | (internal)               | Wait via waitable-set, then retry |
+| COMPLETED     | Returns normally         | Data written                      |
+| DROPPED       | Returns normally (no-op) | Reader closed; data discarded     |
 
 #### ErrorContext is Orthogonal
 
@@ -256,6 +258,7 @@ This is the existing behavior and remains unchanged.
 independent CM resource for carrying debug messages across component boundaries.
 
 Application-level errors are encoded in the payload type itself:
+
 - `Future<Result<Response, ErrorCode>>` — `ErrorCode` is in the Result, not in ReturnCode
 - `Stream<u8>` carrying HTTP body — errors go through a separate `Future<Result<...>>`
 
@@ -268,18 +271,21 @@ not application semantics.
 `Option<WaitEvent>`. The CM adapter synthesis handles linear memory details:
 
 For `wait`:
+
 1. Allocate 8 bytes via `realloc`
 2. Call `waitable-set-wait(set, addr)` → returns event code (i32)
 3. Load handle and payload: `i32_load(addr)`, `i32_load(addr+4)`
 4. Construct `WaitEvent { code, handle: Waitable(handle), payload }`
 
 For `poll`:
+
 1. Allocate 8 bytes via `realloc`
 2. Call `waitable-set-poll(set, addr)` → returns event code or sentinel
 3. If sentinel (no event): return `Option::None`
 4. Otherwise: load, construct `Option::Some(WaitEvent { ... })`
 
 For `Subtask::join`:
+
 1. Call `waitable-join(subtask_handle, set_handle)` (void return in CM)
 2. Return `Waitable(subtask_handle)` — wrap the joined handle as a token
 

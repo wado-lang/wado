@@ -33,6 +33,7 @@ wasmtime v41+.
 ### stream\<T\>
 
 A unidirectional, typed data channel between two ends:
+
 - **Readable end** (rx): the consumer reads data from this handle.
 - **Writable end** (tx): the producer writes data to this handle.
 
@@ -46,6 +47,7 @@ layout (size, alignment) of each item in memory.
 ### future\<T\>
 
 A one-shot async value:
+
 - **Readable end** (rx): the consumer waits for the value.
 - **Writable end** (tx): the producer fulfills the value exactly once.
 
@@ -381,6 +383,7 @@ Normal return: (count << 4) | status
 ```
 
 **Decoding example**:
+
 ```
 result = stream_read(rx, ptr, 100);
 if result == 0xFFFF_FFFF {
@@ -421,6 +424,7 @@ Bits 4-31: subtask handle (28-bit)
 ```
 
 **Decoding**:
+
 ```
 packed = call_async_import(args...);
 status = packed & 0xF;
@@ -440,15 +444,15 @@ if handle != 0 {
 
 Events returned by `waitable-set.wait`:
 
-| Code | Name               | Payload           |
-|------|--------------------|-------------------|
-| 0    | EVENT_NONE         | —                 |
-| 1    | EVENT_SUBTASK      | Status (§8.1)     |
-| 2    | EVENT_STREAM_READ  | ReturnCode (§7)   |
-| 3    | EVENT_STREAM_WRITE | ReturnCode (§7)   |
-| 4    | EVENT_FUTURE_READ  | ReturnCode (§7)   |
-| 5    | EVENT_FUTURE_WRITE | ReturnCode (§7)   |
-| 6    | EVENT_CANCELLED    | —                 |
+| Code | Name               | Payload         |
+| ---- | ------------------ | --------------- |
+| 0    | EVENT_NONE         | —               |
+| 1    | EVENT_SUBTASK      | Status (§8.1)   |
+| 2    | EVENT_STREAM_READ  | ReturnCode (§7) |
+| 3    | EVENT_STREAM_WRITE | ReturnCode (§7) |
+| 4    | EVENT_FUTURE_READ  | ReturnCode (§7) |
+| 5    | EVENT_FUTURE_WRITE | ReturnCode (§7) |
+| 6    | EVENT_CANCELLED    | —               |
 
 ### 8.3 Async Export (canon lift async)
 
@@ -503,6 +507,7 @@ writes data to the **writable end**, then closes the writable end. The async fun
 completes when all data is consumed.
 
 **Sequence**:
+
 ```
 1. [rx, tx] = stream.new<u8>()
 2. subtask = call write-via-stream(rx)     ← pass readable end
@@ -526,6 +531,7 @@ interface stdin {
 The stream is **created by the host** — the guest reads from it.
 
 **Sequence**:
+
 ```
 1. [stream_rx, done_future_rx] = call read-via-stream()
 2. loop:
@@ -597,12 +603,12 @@ interface client {
 
 ### 9.5 Common WIT Patterns Summary
 
-| Operation       | WIT Pattern                                                       | Who creates stream? |
-|-----------------|-------------------------------------------------------------------|---------------------|
-| **Write to**    | `async func(data: stream<T>) -> result<_, E>`                    | Guest (caller)      |
-| **Read from**   | `func() -> tuple<stream<T>, future<result<_, E>>>`               | Host (callee)       |
-| **HTTP new**    | `func(contents: option<stream<u8>>, trailers: future<...>) -> tuple<T, future<...>>` | Guest               |
-| **HTTP consume**| `func(this: T, res: future<...>) -> tuple<stream<u8>, future<...>>`| Host (extracts)    |
+| Operation        | WIT Pattern                                                                          | Who creates stream? |
+| ---------------- | ------------------------------------------------------------------------------------ | ------------------- |
+| **Write to**     | `async func(data: stream<T>) -> result<_, E>`                                        | Guest (caller)      |
+| **Read from**    | `func() -> tuple<stream<T>, future<result<_, E>>>`                                   | Host (callee)       |
+| **HTTP new**     | `func(contents: option<stream<u8>>, trailers: future<...>) -> tuple<T, future<...>>` | Guest               |
+| **HTTP consume** | `func(this: T, res: future<...>) -> tuple<stream<u8>, future<...>>`                  | Host (extracts)     |
 
 ---
 
@@ -801,20 +807,20 @@ in the resource method signatures.
 
 ### 12.1 ReturnCode → Wado Type Mapping
 
-| Operation | CM Return | Wado Mapping |
-|-----------|-----------|-------------|
-| `future.read` — COMPLETED | Value at ptr | `Option::Some(value)` |
-| `future.read` — DROPPED | No value | `Option::None` |
-| `future.read` — BLOCKED | (internal) | Synthesis waits via waitable-set, retries |
-| `future.write` — COMPLETED | Value delivered | Returns normally |
-| `future.write` — DROPPED | Reader gone | Returns normally (no-op, value discarded) |
-| `future.write` — BLOCKED | (internal) | Synthesis waits via waitable-set, retries |
-| `stream.read` — COMPLETED | `count` items | `Array<T>` with `count` elements |
-| `stream.read` — DROPPED | EOF, last items | Empty `Array<T>` (EOF signal) |
-| `stream.read` — BLOCKED | (internal) | Synthesis waits via waitable-set, retries |
-| `stream.write` — COMPLETED | `count` items | Returns normally |
-| `stream.write` — DROPPED | Reader gone | Returns normally (no-op) |
-| `stream.write` — BLOCKED | (internal) | Synthesis waits via waitable-set, retries |
+| Operation                  | CM Return       | Wado Mapping                              |
+| -------------------------- | --------------- | ----------------------------------------- |
+| `future.read` — COMPLETED  | Value at ptr    | `Option::Some(value)`                     |
+| `future.read` — DROPPED    | No value        | `Option::None`                            |
+| `future.read` — BLOCKED    | (internal)      | Synthesis waits via waitable-set, retries |
+| `future.write` — COMPLETED | Value delivered | Returns normally                          |
+| `future.write` — DROPPED   | Reader gone     | Returns normally (no-op, value discarded) |
+| `future.write` — BLOCKED   | (internal)      | Synthesis waits via waitable-set, retries |
+| `stream.read` — COMPLETED  | `count` items   | `Array<T>` with `count` elements          |
+| `stream.read` — DROPPED    | EOF, last items | Empty `Array<T>` (EOF signal)             |
+| `stream.read` — BLOCKED    | (internal)      | Synthesis waits via waitable-set, retries |
+| `stream.write` — COMPLETED | `count` items   | Returns normally                          |
+| `stream.write` — DROPPED   | Reader gone     | Returns normally (no-op)                  |
+| `stream.write` — BLOCKED   | (internal)      | Synthesis waits via waitable-set, retries |
 
 ### 12.2 Future::read Returns Option<T>
 
@@ -850,36 +856,36 @@ boundaries. It is not used for stream/future operational errors.
 
 From `vendor/wasm-tools/crates/wasm-encoder/src/component/canonicals.rs`:
 
-| Category        | Operation         | Wasm Encoder Method             |
-|-----------------|-------------------|---------------------------------|
-| **Stream**      | new               | `CanonicalFunctionSection::stream_new`    |
-|                 | read              | `...::stream_read`              |
-|                 | write             | `...::stream_write`             |
-|                 | cancel-read       | `...::stream_cancel_read`       |
-|                 | cancel-write      | `...::stream_cancel_write`      |
-|                 | close-readable    | `...::stream_drop_readable`     |
-|                 | close-writable    | `...::stream_drop_writable`     |
-| **Future**      | new               | `...::future_new`               |
-|                 | read              | `...::future_read`              |
-|                 | write             | `...::future_write`             |
-|                 | cancel-read       | `...::future_cancel_read`       |
-|                 | cancel-write      | `...::future_cancel_write`      |
-|                 | close-readable    | `...::future_drop_readable`     |
-|                 | close-writable    | `...::future_drop_writable`     |
-| **Task**        | return            | `...::task_return`              |
-|                 | cancel            | `...::task_cancel`              |
-| **Subtask**     | drop              | `...::subtask_drop`             |
-|                 | cancel            | `...::subtask_cancel`           |
-| **Backpressure**| inc               | `...::backpressure_inc`         |
-|                 | dec               | `...::backpressure_dec`         |
-| **Waitable**    | set.new           | `...::waitable_set_new`         |
-|                 | set.wait          | `...::waitable_set_wait`        |
-|                 | set.poll          | `...::waitable_set_poll`        |
-|                 | set.drop          | `...::waitable_set_drop`        |
-|                 | join              | `...::waitable_join`            |
-| **Error Ctx**   | new               | `...::error_context_new`        |
-|                 | debug-message     | `...::error_context_debug_message` |
-|                 | drop              | `...::error_context_drop`       |
+| Category         | Operation      | Wasm Encoder Method                    |
+| ---------------- | -------------- | -------------------------------------- |
+| **Stream**       | new            | `CanonicalFunctionSection::stream_new` |
+|                  | read           | `...::stream_read`                     |
+|                  | write          | `...::stream_write`                    |
+|                  | cancel-read    | `...::stream_cancel_read`              |
+|                  | cancel-write   | `...::stream_cancel_write`             |
+|                  | close-readable | `...::stream_drop_readable`            |
+|                  | close-writable | `...::stream_drop_writable`            |
+| **Future**       | new            | `...::future_new`                      |
+|                  | read           | `...::future_read`                     |
+|                  | write          | `...::future_write`                    |
+|                  | cancel-read    | `...::future_cancel_read`              |
+|                  | cancel-write   | `...::future_cancel_write`             |
+|                  | close-readable | `...::future_drop_readable`            |
+|                  | close-writable | `...::future_drop_writable`            |
+| **Task**         | return         | `...::task_return`                     |
+|                  | cancel         | `...::task_cancel`                     |
+| **Subtask**      | drop           | `...::subtask_drop`                    |
+|                  | cancel         | `...::subtask_cancel`                  |
+| **Backpressure** | inc            | `...::backpressure_inc`                |
+|                  | dec            | `...::backpressure_dec`                |
+| **Waitable**     | set.new        | `...::waitable_set_new`                |
+|                  | set.wait       | `...::waitable_set_wait`               |
+|                  | set.poll       | `...::waitable_set_poll`               |
+|                  | set.drop       | `...::waitable_set_drop`               |
+|                  | join           | `...::waitable_join`                   |
+| **Error Ctx**    | new            | `...::error_context_new`               |
+|                  | debug-message  | `...::error_context_debug_message`     |
+|                  | drop           | `...::error_context_drop`              |
 
 ## Appendix B: Flat Stream Variants
 
@@ -933,15 +939,15 @@ Same as service but also imports `handler` (the upstream handler to forward to).
 
 ## Appendix D: File Locations in Vendor
 
-| What                        | Path                                                                        |
-|-----------------------------|-----------------------------------------------------------------------------|
-| WASI P3 CLI WIT             | `vendor/wasmtime/crates/wasi/src/p3/wit/deps/cli.wit`                       |
-| WASI P3 Filesystem WIT      | `vendor/wasmtime/crates/wasi/src/p3/wit/deps/filesystem.wit`                |
-| WASI P3 HTTP WIT            | `vendor/wasmtime/crates/wasi-http/src/p3/wit/deps/http.wit`                 |
-| WASI P3 Clocks WIT          | `vendor/wasmtime/crates/wasi/src/p3/wit/deps/clocks.wit`                    |
-| WASI P3 Sockets WIT         | `vendor/wasmtime/crates/wasi/src/p3/wit/deps/sockets.wit`                   |
-| WASI P3 Random WIT          | `vendor/wasmtime/crates/wasi/src/p3/wit/deps/random.wit`                    |
-| Canonical function sigs     | `vendor/wasmtime/crates/environ/src/component.rs`                           |
-| Stream/future runtime impl  | `vendor/wasmtime/crates/wasmtime/src/runtime/component/concurrent/futures_and_streams.rs` |
-| Canonical ABI encoder       | `vendor/wasm-tools/crates/wasm-encoder/src/component/canonicals.rs`         |
-| Async tests                 | `vendor/wasmtime/tests/all/component_model/async.rs`                        |
+| What                       | Path                                                                                      |
+| -------------------------- | ----------------------------------------------------------------------------------------- |
+| WASI P3 CLI WIT            | `vendor/wasmtime/crates/wasi/src/p3/wit/deps/cli.wit`                                     |
+| WASI P3 Filesystem WIT     | `vendor/wasmtime/crates/wasi/src/p3/wit/deps/filesystem.wit`                              |
+| WASI P3 HTTP WIT           | `vendor/wasmtime/crates/wasi-http/src/p3/wit/deps/http.wit`                               |
+| WASI P3 Clocks WIT         | `vendor/wasmtime/crates/wasi/src/p3/wit/deps/clocks.wit`                                  |
+| WASI P3 Sockets WIT        | `vendor/wasmtime/crates/wasi/src/p3/wit/deps/sockets.wit`                                 |
+| WASI P3 Random WIT         | `vendor/wasmtime/crates/wasi/src/p3/wit/deps/random.wit`                                  |
+| Canonical function sigs    | `vendor/wasmtime/crates/environ/src/component.rs`                                         |
+| Stream/future runtime impl | `vendor/wasmtime/crates/wasmtime/src/runtime/component/concurrent/futures_and_streams.rs` |
+| Canonical ABI encoder      | `vendor/wasm-tools/crates/wasm-encoder/src/component/canonicals.rs`                       |
+| Async tests                | `vendor/wasmtime/tests/all/component_model/async.rs`                                      |
