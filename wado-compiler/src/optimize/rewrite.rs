@@ -1,14 +1,11 @@
 //! TIR rewrite optimizations for Wado
 //!
-//! This module provides lightweight TIR rewrites that don't warrant their own module:
+//! This module provides lightweight TIR rewrites that run after optimization:
 //!
-//! 1. **Labeled Block Simplification**: Eliminates trivial `label: { break label: expr; }`
-//!    patterns (common after inlining) by replacing them with just `expr`.
-//!
-//! 2. **Select Lowering**: Converts simple `if cond { a } else { b }` expressions to
-//!    `builtin::select(cond, a, b)` which emits the branchless Wasm `select` instruction.
-//!    Both branches must be pure (no side effects, no traps) since `select` evaluates
-//!    both operands eagerly.
+//! - **Select Lowering**: Converts simple `if cond { a } else { b }` expressions to
+//!   `builtin::select(cond, a, b)` which emits the branchless Wasm `select` instruction.
+//!   Both branches must be pure (no side effects, no traps) since `select` evaluates
+//!   both operands eagerly.
 
 use crate::name::ModuleSource;
 use crate::project::Project;
@@ -18,82 +15,76 @@ use crate::tir::{
 };
 
 /// Run all post-optimization TIR rewrites in a single pass over all functions.
-///
-/// For each function, this performs:
-/// - Labeled block simplification (`L: { break L: expr; }` -> `expr`)
 pub fn rewrite(project: &mut Project) {
     for module in project.tir_modules.values_mut() {
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
 
             if let Some(ref mut body) = func.body {
-                simplify_labeled_blocks_in_block(body);
+                rewrite_block(body);
             }
         }
     }
 }
 
-fn simplify_labeled_blocks_in_block(block: &mut TirBlock) -> bool {
+fn rewrite_block(block: &mut TirBlock) -> bool {
     let mut changed = false;
     for stmt in &mut block.stmts {
-        changed |= simplify_labeled_blocks_in_stmt(stmt);
+        changed |= rewrite_stmt(stmt);
     }
     changed
 }
 
-fn simplify_labeled_blocks_in_stmt(stmt: &mut TirStmt) -> bool {
+fn rewrite_stmt(stmt: &mut TirStmt) -> bool {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } => simplify_labeled_blocks_in_expr(value),
-        TirStmtKind::Expr(expr) => simplify_labeled_blocks_in_expr(expr),
-        TirStmtKind::Return { value } => {
-            value.as_mut().is_some_and(simplify_labeled_blocks_in_expr)
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetPattern { value, .. } => {
+            rewrite_expr(value)
         }
+        TirStmtKind::Expr(expr) => rewrite_expr(expr),
+        TirStmtKind::Return { value } => value.as_mut().is_some_and(rewrite_expr),
         TirStmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            let mut changed = simplify_labeled_blocks_in_expr(condition);
-            changed |= simplify_labeled_blocks_in_block(then_block);
+            let mut changed = rewrite_expr(condition);
+            changed |= rewrite_block(then_block);
             if let Some(eb) = else_block {
-                changed |= simplify_labeled_blocks_in_block(eb);
+                changed |= rewrite_block(eb);
             }
             changed
         }
-        TirStmtKind::Loop { body } => simplify_labeled_blocks_in_block(body),
-        TirStmtKind::LabeledBlock { block, .. } => simplify_labeled_blocks_in_block(block),
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            rewrite_block(body)
+        }
         TirStmtKind::IfPattern {
             scrutinee,
             then_block,
             else_block,
             ..
         } => {
-            let mut changed = simplify_labeled_blocks_in_expr(scrutinee);
-            changed |= simplify_labeled_blocks_in_block(then_block);
+            let mut changed = rewrite_expr(scrutinee);
+            changed |= rewrite_block(then_block);
             if let Some(eb) = else_block {
-                changed |= simplify_labeled_blocks_in_block(eb);
+                changed |= rewrite_block(eb);
             }
             changed
         }
-        TirStmtKind::Break { value, .. } => {
-            value.as_mut().is_some_and(simplify_labeled_blocks_in_expr)
-        }
+        TirStmtKind::Break { value, .. } => value.as_mut().is_some_and(rewrite_expr),
         TirStmtKind::Continue => false,
-        TirStmtKind::LetPattern { value, .. } => simplify_labeled_blocks_in_expr(value),
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     }
 }
 
-fn simplify_labeled_blocks_in_expr(expr: &mut TirExpr) -> bool {
+fn rewrite_expr(expr: &mut TirExpr) -> bool {
     let mut changed = false;
 
-    // First, recurse into sub-expressions
     match &mut expr.kind {
         TirExprKind::Binary { left, right, .. } => {
-            changed |= simplify_labeled_blocks_in_expr(left);
-            changed |= simplify_labeled_blocks_in_expr(right);
+            changed |= rewrite_expr(left);
+            changed |= rewrite_expr(right);
         }
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
@@ -101,40 +92,40 @@ fn simplify_labeled_blocks_in_expr(expr: &mut TirExpr) -> bool {
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
-            changed |= simplify_labeled_blocks_in_expr(inner);
+            changed |= rewrite_expr(inner);
         }
         TirExprKind::Assign { target, value } => {
-            changed |= simplify_labeled_blocks_in_expr(target);
-            changed |= simplify_labeled_blocks_in_expr(value);
+            changed |= rewrite_expr(target);
+            changed |= rewrite_expr(value);
         }
         TirExprKind::Index { expr: inner, index } => {
-            changed |= simplify_labeled_blocks_in_expr(inner);
-            changed |= simplify_labeled_blocks_in_expr(index);
+            changed |= rewrite_expr(inner);
+            changed |= rewrite_expr(index);
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
         | TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                changed |= simplify_labeled_blocks_in_expr(arg);
+                changed |= rewrite_expr(arg);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            changed |= simplify_labeled_blocks_in_expr(receiver);
+            changed |= rewrite_expr(receiver);
             for arg in args {
-                changed |= simplify_labeled_blocks_in_expr(arg);
+                changed |= rewrite_expr(arg);
             }
         }
         TirExprKind::IndirectCall { callee, args } => {
-            changed |= simplify_labeled_blocks_in_expr(callee);
+            changed |= rewrite_expr(callee);
             for arg in args {
-                changed |= simplify_labeled_blocks_in_expr(arg);
+                changed |= rewrite_expr(arg);
             }
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            changed |= simplify_labeled_blocks_in_expr(functor);
+            changed |= rewrite_expr(functor);
         }
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            changed |= simplify_labeled_blocks_in_block(block);
+            changed |= rewrite_block(block);
         }
         TirExprKind::If {
             condition,
@@ -146,45 +137,44 @@ fn simplify_labeled_blocks_in_expr(expr: &mut TirExpr) -> bool {
                 try_lower_to_select(condition, then_branch, else_branch, expr.type_id, expr.span)
             {
                 *expr = select_call;
-                // Re-process the new Call expression
-                changed |= simplify_labeled_blocks_in_expr(expr);
+                changed |= rewrite_expr(expr);
                 return changed;
             }
-            changed |= simplify_labeled_blocks_in_expr(condition);
-            changed |= simplify_labeled_blocks_in_block(then_branch);
+            changed |= rewrite_expr(condition);
+            changed |= rewrite_block(then_branch);
             if let Some(eb) = else_branch {
-                changed |= simplify_labeled_blocks_in_block(eb);
+                changed |= rewrite_block(eb);
             }
         }
         TirExprKind::Match { expr: inner, arms } => {
-            changed |= simplify_labeled_blocks_in_expr(inner);
+            changed |= rewrite_expr(inner);
             for arm in arms {
                 if let Some(guard) = &mut arm.guard {
-                    changed |= simplify_labeled_blocks_in_expr(guard);
+                    changed |= rewrite_expr(guard);
                 }
-                changed |= simplify_labeled_blocks_in_expr(&mut arm.body);
+                changed |= rewrite_expr(&mut arm.body);
             }
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                changed |= simplify_labeled_blocks_in_expr(&mut field.value);
+                changed |= rewrite_expr(&mut field.value);
             }
         }
         TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
-                changed |= simplify_labeled_blocks_in_expr(elem);
+                changed |= rewrite_expr(elem);
             }
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
-                changed |= simplify_labeled_blocks_in_expr(p);
+                changed |= rewrite_expr(p);
             }
         }
         TirExprKind::Closure { body, .. } => {
-            changed |= simplify_labeled_blocks_in_expr(body);
+            changed |= rewrite_expr(body);
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            changed |= simplify_labeled_blocks_in_expr(value);
+            changed |= rewrite_expr(value);
         }
         TirExprKind::Switch {
             scrutinee,
@@ -192,11 +182,11 @@ fn simplify_labeled_blocks_in_expr(expr: &mut TirExpr) -> bool {
             default,
             ..
         } => {
-            changed |= simplify_labeled_blocks_in_expr(scrutinee);
+            changed |= rewrite_expr(scrutinee);
             for arm in arms {
-                changed |= simplify_labeled_blocks_in_block(arm);
+                changed |= rewrite_block(arm);
             }
-            changed |= simplify_labeled_blocks_in_block(default);
+            changed |= rewrite_block(default);
         }
         // Leaf nodes
         TirExprKind::Local { .. }
@@ -214,31 +204,6 @@ fn simplify_labeled_blocks_in_expr(expr: &mut TirExpr) -> bool {
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
-    }
-
-    // Simplify: `label: { break label: expr; }` → `expr`
-    if let TirExprKind::LabeledBlock { label, block, .. } = &expr.kind
-        && block.stmts.len() == 1
-        && let TirStmtKind::Break {
-            label: Some(break_label),
-            value: Some(_),
-        } = &block.stmts[0].kind
-        && break_label == label
-    {
-        let TirExprKind::LabeledBlock { block, .. } =
-            std::mem::replace(&mut expr.kind, TirExprKind::Unit)
-        else {
-            unreachable!();
-        };
-        let mut stmts = block.stmts;
-        let TirStmtKind::Break {
-            value: Some(inner), ..
-        } = stmts.remove(0).kind
-        else {
-            unreachable!();
-        };
-        *expr = inner;
-        changed = true;
     }
 
     changed
