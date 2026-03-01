@@ -65,7 +65,7 @@ pub resource Future<T> {
     fn new() -> [Future<T>, FutureWritable<T>];
 
     #[canonical("future-read")]
-    fn read(&self) -> T;
+    fn read(&self) -> Option<T>;
 
     #[canonical("future-close-readable")]
     fn close(&self);
@@ -173,6 +173,94 @@ does NOT expose the raw handle — users must go through `join` to obtain tokens
 
 This is documented here for clarity. A future redesign could introduce `Future<T>` as
 an effect or concept with `FutureReadable<T>` + `FutureWritable<T>` as the resource pair.
+
+### Error Handling: ReturnCode Semantics
+
+All CM stream/future read/write operations return a 32-bit `ReturnCode`:
+
+```
+BLOCKED:  0xFFFF_FFFF — operation not ready, must wait via waitable set
+Normal:   (count << 4) | status
+  status 0 = COMPLETED — operation succeeded
+  status 1 = DROPPED   — the other end was closed/dropped
+  status 2 = CANCELLED — operation was explicitly cancelled
+```
+
+For futures, `count` is always 0 (single value). So the return is `0 | status` or BLOCKED.
+
+#### Future::read Error Handling
+
+`Future::read(&self) -> Option<T>`:
+
+| CM ReturnCode | Wado result | Meaning |
+|---------------|-------------|---------|
+| BLOCKED       | (internal)  | Wait via waitable-set, then retry |
+| COMPLETED     | `Option::Some(value)` | Writer fulfilled the future |
+| DROPPED       | `Option::None` | Writer dropped without fulfilling |
+
+The synthesis handles BLOCKED internally (same pattern as `stream_read`), so the
+user never sees it. COMPLETED produces `Some(value)`, DROPPED produces `None`.
+
+Returning `Option<T>` rather than bare `T` is essential because DROPPED is a normal
+condition — the writer may be cancelled or close without writing. Trapping would be
+too harsh for a recoverable situation. Users who need the value can handle the None:
+
+```wado
+if let Some(value) = future.read() {
+    // use value
+} else {
+    panic("future was not fulfilled");
+}
+```
+
+#### FutureWritable::write Error Handling
+
+`FutureWritable::write(&self, value: T)`:
+
+| CM ReturnCode | Wado behavior | Meaning |
+|---------------|---------------|---------|
+| BLOCKED       | (internal)    | Wait via waitable-set, then retry |
+| COMPLETED     | Returns normally | Value delivered to reader |
+| DROPPED       | Returns normally (no-op) | Reader already dropped; value discarded |
+
+DROPPED on write is silently ignored — the reader went away, but this is not an error
+for the writer. The value is simply discarded. This matches the pattern used in HTTP
+trailers where the reader may close before trailers are written.
+
+#### Stream::read Error Handling (Existing)
+
+`Stream::read(&self, max: i32) -> Array<T>`:
+
+| CM ReturnCode | Wado result | Meaning |
+|---------------|-------------|---------|
+| BLOCKED       | (internal)  | Wait via waitable-set, then retry |
+| COMPLETED     | `Array` with `count` items | Data available |
+| DROPPED       | Empty `Array` | Writer closed (EOF) |
+
+For streams, DROPPED is "end of stream" — the empty array serves as the EOF signal.
+This is the existing behavior and remains unchanged.
+
+#### StreamWritable::write Error Handling (Existing)
+
+`StreamWritable::write(&self, data: Array<T>)`:
+
+| CM ReturnCode | Wado behavior | Meaning |
+|---------------|---------------|---------|
+| BLOCKED       | (internal)    | Wait via waitable-set, then retry |
+| COMPLETED     | Returns normally | Data written |
+| DROPPED       | Returns normally (no-op) | Reader closed; data discarded |
+
+#### ErrorContext is Orthogonal
+
+`ErrorContext` is **not** used for stream/future operational errors. It is an
+independent CM resource for carrying debug messages across component boundaries.
+
+Application-level errors are encoded in the payload type itself:
+- `Future<Result<Response, ErrorCode>>` — `ErrorCode` is in the Result, not in ReturnCode
+- `Stream<u8>` carrying HTTP body — errors go through a separate `Future<Result<...>>`
+
+ReturnCode only indicates the **transfer status** (did the read/write succeed?),
+not application semantics.
 
 ### WaitableSet Adapter Synthesis
 

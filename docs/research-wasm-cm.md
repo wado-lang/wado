@@ -24,6 +24,7 @@ wasmtime v41+.
 9. [WASI P3 Interface Patterns](#9-wasi-p3-interface-patterns)
 10. [Stream/Future Lifecycle Patterns](#10-streamfuture-lifecycle-patterns)
 11. [Pitfalls and Ordering Constraints](#11-pitfalls-and-ordering-constraints)
+12. [Wado-Level Error Handling Mapping](#12-wado-level-error-handling-mapping)
 
 ---
 
@@ -768,6 +769,58 @@ subtask_drop(handle)              // safe after completion
 
 `future.write` can only be called once per future. A second call will trap.
 This is unlike streams, which support multiple writes.
+
+---
+
+## 12. Wado-Level Error Handling Mapping
+
+This section documents how CM ReturnCode values map to Wado-level types
+in the resource method signatures.
+
+### 12.1 ReturnCode → Wado Type Mapping
+
+| Operation | CM Return | Wado Mapping |
+|-----------|-----------|-------------|
+| `future.read` — COMPLETED | Value at ptr | `Option::Some(value)` |
+| `future.read` — DROPPED | No value | `Option::None` |
+| `future.read` — BLOCKED | (internal) | Synthesis waits via waitable-set, retries |
+| `future.write` — COMPLETED | Value delivered | Returns normally |
+| `future.write` — DROPPED | Reader gone | Returns normally (no-op, value discarded) |
+| `future.write` — BLOCKED | (internal) | Synthesis waits via waitable-set, retries |
+| `stream.read` — COMPLETED | `count` items | `Array<T>` with `count` elements |
+| `stream.read` — DROPPED | EOF, last items | Empty `Array<T>` (EOF signal) |
+| `stream.read` — BLOCKED | (internal) | Synthesis waits via waitable-set, retries |
+| `stream.write` — COMPLETED | `count` items | Returns normally |
+| `stream.write` — DROPPED | Reader gone | Returns normally (no-op) |
+| `stream.write` — BLOCKED | (internal) | Synthesis waits via waitable-set, retries |
+
+### 12.2 Future::read Returns Option<T>
+
+`Future::read(&self) -> Option<T>`:
+
+- `Some(value)` — writer fulfilled the future (COMPLETED)
+- `None` — writer dropped without fulfilling (DROPPED)
+
+DROPPED is a **normal condition**: the writer may be cancelled, or close the writable
+end without calling `future.write`. Returning `Option<T>` rather than bare `T` avoids
+trapping on a recoverable situation.
+
+### 12.3 Application Errors vs Transfer Errors
+
+Application-level errors are encoded in the **payload type**, not in ReturnCode:
+
+```
+Future<Result<Response, ErrorCode>>
+       ~~~~~~~~~~~~~~~~~~~~~~~~
+       This is the payload type T. ErrorCode is application-level.
+```
+
+ReturnCode only indicates the **transfer status** — did the CM transfer succeed?
+A COMPLETED return with `Result::Err(ErrorCode)` means: "the future was fulfilled,
+and the fulfillment value is an error."
+
+`ErrorContext` is a separate CM resource for carrying debug messages across component
+boundaries. It is not used for stream/future operational errors.
 
 ---
 
