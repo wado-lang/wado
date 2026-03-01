@@ -27,12 +27,12 @@ build: wado-compiler/lib/builtins/wado-bundled-fts.wat wado-compiler/lib/builtin
 
 .PHONY: hello
 hello:
-	cargo run -p wado-cli --quiet -- compile -O2 -o example/hello.wat example/hello.wado
-	cargo run -p wado-cli --quiet -- compile -O2 -o example/hello.wasm example/hello.wado
+	cargo run -p wado-cli -- compile -O2 -o example/hello.wat  example/hello.wado
+	cargo run -p wado-cli -- compile -O2 -o example/hello.wasm example/hello.wado
 
 .PHONY: hello-run
 hello-run:
-	cargo run -p wado-cli --quiet -- run example/hello.wado
+	cargo run -p wado-cli -- run example/hello.wado
 
 .PHONY: hello-run-wasmtime
 hello-run-wasmtime: hello
@@ -44,7 +44,7 @@ test:
 
 .PHONY: test-wado
 test-wado:
-	cargo run -p wado-cli --quiet -- test example/*.wado wado-compiler/lib/core benchmark/*/*.wado wasm-size/*/*.wado
+	cargo run -p wado-cli -- test example/*.wado wado-compiler/lib/core benchmark/*/*.wado wasm-size/*/*.wado
 
 .PHONY: test-cov
 test-cov:
@@ -70,13 +70,13 @@ format:
 
 .PHONY: format-wado
 format-wado:
-	cargo run --bin wado --quiet -- format -w $$(grep -L '"compile_error"' wado-compiler/tests/fixtures/*.wado wado-compiler/tests/fixtures/**/*.wado)
+	cargo run --bin wado -- format -w $$(grep -L '"compile_error"' wado-compiler/tests/fixtures/**/*.wado)
 
 .PHONY: update-golden-fixtures
 update-golden-fixtures:
 	@mkdir -p wado-compiler/tests/fixtures.golden
 	@rm -rf wado-compiler/tests/fixtures.golden/*.*
-	@cargo run --bin wado --quiet -- dump --optimize --unparse -O2 \
+	@cargo run --bin wado -- dump --optimize --unparse -O2 \
 		-o 'wado-compiler/tests/fixtures.golden/{name}.lowered.wado' \
 		wado-compiler/tests/fixtures/*.wado
 
@@ -128,8 +128,8 @@ test-wado-vscode:
 
 .PHONY: update-wado-vscode-grammar
 update-wado-vscode-grammar:
-	cargo run --bin wado --quiet -- syntax --format tmLanguage -o wado-vscode/syntaxes/wado.tmLanguage.json
-	cargo run --bin wado --quiet -- syntax --format language-config -o wado-vscode/language-configuration.json
+	cargo run --bin wado -- syntax --format tmLanguage -o wado-vscode/syntaxes/wado.tmLanguage.json
+	cargo run --bin wado -- syntax --format language-config -o wado-vscode/language-configuration.json
 	@echo "Updated wado-vscode syntax files"
 
 .PHONY: update-json-schema-files
