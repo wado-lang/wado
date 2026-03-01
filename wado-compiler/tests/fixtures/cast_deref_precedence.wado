@@ -1,0 +1,45 @@
+// Operator precedence: unary * (deref) must bind tighter than `as` (cast).
+//
+// `*r as T` must parse as `(*r) as T`, not `*(r as T)`.
+//
+// WEP: docs/wep-2026-01-11-operator-precedence.md
+// Level 3 (unary) > Level 4 (as)
+
+test "deref then cast: *r as i64 == (*r) as i64" {
+    let x: i32 = 42;
+    let r = &x;
+    let v = *r as i64;
+    assert v == 42 as i64;
+}
+
+test "deref then cast: negative value" {
+    let x: i32 = -1;
+    let r = &x;
+    let v = *r as i64;
+    assert v == -1 as i64;
+}
+
+test "chained cast after deref: *r as i32 as i64" {
+    let x: i32 = 100;
+    let r = &x;
+    let v = *r as i32 as i64;
+    assert v == 100 as i64;
+}
+
+test "deref cast in arithmetic: *r as i64 + 1" {
+    let x: i32 = 10;
+    let r = &x;
+    let v = *r as i64 + 1 as i64;
+    assert v == 11 as i64;
+}
+
+test "double deref then cast: **rr as i64" {
+    let x: i32 = 7;
+    let r = &x;
+    let rr = &r;
+    let v = **rr as i64;
+    assert v == 7 as i64;
+}
+
+__DATA__
+{"test": {}}

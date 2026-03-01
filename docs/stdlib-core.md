@@ -1066,6 +1066,10 @@ _Fields are private._
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
 
+##### `impl Inspect for bool`
+
+###### `pub fn inspect(&self, f: &mut Formatter)`
+
 ##### `impl Ord for bool`
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
@@ -1108,6 +1112,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
 
+##### `impl Inspect for char`
+
+###### `pub fn inspect(&self, f: &mut Formatter)`
+
 ##### `impl Ord for char`
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
@@ -1127,6 +1135,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 ##### `impl Display for i8`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Inspect for i8`
+
+###### `pub fn inspect(&self, f: &mut Formatter)`
 
 ##### `impl Binary for i8`
 
@@ -1164,6 +1176,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
 
+##### `impl Inspect for u8`
+
+###### `pub fn inspect(&self, f: &mut Formatter)`
+
 ##### `impl Binary for u8`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1199,6 +1215,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 ##### `impl Display for i16`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Inspect for i16`
+
+###### `pub fn inspect(&self, f: &mut Formatter)`
 
 ##### `impl Binary for i16`
 
@@ -1236,6 +1256,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
 
+##### `impl Inspect for u16`
+
+###### `pub fn inspect(&self, f: &mut Formatter)`
+
 ##### `impl Binary for u16`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1271,6 +1295,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 ##### `impl Display for i32`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Inspect for i32`
+
+###### `pub fn inspect(&self, f: &mut Formatter)`
 
 ##### `impl Binary for i32`
 
@@ -1308,6 +1336,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
 
+##### `impl Inspect for u32`
+
+###### `pub fn inspect(&self, f: &mut Formatter)`
+
 ##### `impl Binary for u32`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1344,6 +1376,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
 
+##### `impl Inspect for i64`
+
+###### `pub fn inspect(&self, f: &mut Formatter)`
+
 ##### `impl Binary for i64`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1379,6 +1415,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 ##### `impl Display for u64`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Inspect for u64`
+
+###### `pub fn inspect(&self, f: &mut Formatter)`
 
 ##### `impl Binary for u64`
 
@@ -1574,6 +1614,10 @@ Floating-point remainder of x/y
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
 
+##### `impl Inspect for f32`
+
+###### `pub fn inspect(&self, f: &mut Formatter)`
+
 ##### `impl LowerExp for f32`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1759,6 +1803,10 @@ Floating-point remainder of x/y
 ##### `impl Display for f64`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
+
+##### `impl Inspect for f64`
+
+###### `pub fn inspect(&self, f: &mut Formatter)`
 
 ##### `impl LowerExp for f64`
 

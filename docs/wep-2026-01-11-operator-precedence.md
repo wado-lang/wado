@@ -264,6 +264,7 @@ From highest to lowest precedence:
 **Key differences from Rust**:
 
 - Level 3: Added `~` for bitwise NOT (Rust uses `!` only)
+- Level 4: `as` sits between unary (level 3) and multiplicative (level 5), so `*x as T` parses as `(*x) as T` — same as Rust
 - Level 11: Comparison chaining allowed with semantic validation:
   - Same-direction chains OK: `a < b < c`, `a > b > c`, `a == b == c`
   - Mixed-direction chains rejected: `a < b > c`

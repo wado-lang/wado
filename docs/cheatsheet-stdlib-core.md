@@ -615,6 +615,10 @@ impl Display for bool {
     pub fn fmt(&self, f: &mut Formatter);
 }
 
+impl Inspect for bool {
+    pub fn inspect(&self, f: &mut Formatter);
+}
+
 impl Ord for bool {
     pub fn cmp(&self, other: &Self) -> Ordering;
 }
@@ -634,6 +638,10 @@ impl Display for char {
     pub fn fmt(&self, f: &mut Formatter);
 }
 
+impl Inspect for char {
+    pub fn inspect(&self, f: &mut Formatter);
+}
+
 impl Ord for char {
     pub fn cmp(&self, other: &Self) -> Ordering;
 }
@@ -650,6 +658,10 @@ impl i8 {
 
 impl Display for i8 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Inspect for i8 {
+    pub fn inspect(&self, f: &mut Formatter);
 }
 
 impl Binary for i8 {
@@ -686,6 +698,10 @@ impl Display for u8 {
     pub fn fmt(&self, f: &mut Formatter);
 }
 
+impl Inspect for u8 {
+    pub fn inspect(&self, f: &mut Formatter);
+}
+
 impl Binary for u8 {
     pub fn fmt(&self, f: &mut Formatter);
 }
@@ -718,6 +734,10 @@ impl i16 {
 
 impl Display for i16 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Inspect for i16 {
+    pub fn inspect(&self, f: &mut Formatter);
 }
 
 impl Binary for i16 {
@@ -754,6 +774,10 @@ impl Display for u16 {
     pub fn fmt(&self, f: &mut Formatter);
 }
 
+impl Inspect for u16 {
+    pub fn inspect(&self, f: &mut Formatter);
+}
+
 impl Binary for u16 {
     pub fn fmt(&self, f: &mut Formatter);
 }
@@ -786,6 +810,10 @@ impl i32 {
 
 impl Display for i32 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Inspect for i32 {
+    pub fn inspect(&self, f: &mut Formatter);
 }
 
 impl Binary for i32 {
@@ -822,6 +850,10 @@ impl Display for u32 {
     pub fn fmt(&self, f: &mut Formatter);
 }
 
+impl Inspect for u32 {
+    pub fn inspect(&self, f: &mut Formatter);
+}
+
 impl Binary for u32 {
     pub fn fmt(&self, f: &mut Formatter);
 }
@@ -856,6 +888,10 @@ impl Display for i64 {
     pub fn fmt(&self, f: &mut Formatter);
 }
 
+impl Inspect for i64 {
+    pub fn inspect(&self, f: &mut Formatter);
+}
+
 impl Binary for i64 {
     pub fn fmt(&self, f: &mut Formatter);
 }
@@ -888,6 +924,10 @@ impl u64 {
 
 impl Display for u64 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Inspect for u64 {
+    pub fn inspect(&self, f: &mut Formatter);
 }
 
 impl Binary for u64 {
@@ -970,6 +1010,10 @@ impl Display for f32 {
     pub fn fmt(&self, f: &mut Formatter);
 }
 
+impl Inspect for f32 {
+    pub fn inspect(&self, f: &mut Formatter);
+}
+
 impl LowerExp for f32 {
     pub fn fmt(&self, f: &mut Formatter);
 }
@@ -1040,6 +1084,10 @@ impl f64 {
 
 impl Display for f64 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Inspect for f64 {
+    pub fn inspect(&self, f: &mut Formatter);
 }
 
 impl LowerExp for f64 {
