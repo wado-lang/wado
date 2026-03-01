@@ -2029,8 +2029,23 @@ impl Parser {
         Ok(left)
     }
 
+    fn parse_cast_expr(&mut self) -> ParseResult<Expr> {
+        let mut expr = self.parse_unary_expr()?;
+        while *self.peek_kind() == TokenKind::As {
+            let start_span = self.peek().span;
+            self.advance();
+            let target_type = self.parse_type()?;
+            expr = Expr::Cast(Box::new(CastExpr {
+                expr,
+                target_type,
+                span: start_span,
+            }));
+        }
+        Ok(expr)
+    }
+
     fn parse_multiplicative_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_unary_expr()?;
+        let mut left = self.parse_cast_expr()?;
 
         loop {
             let op = match self.peek_kind() {
@@ -2041,7 +2056,7 @@ impl Parser {
             };
             let left_span = left.span();
             self.advance();
-            let right = self.parse_unary_expr()?;
+            let right = self.parse_cast_expr()?;
             let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
                 left,
@@ -2256,16 +2271,6 @@ impl Parser {
                         expr,
                         index,
                         span: merged_span,
-                    }));
-                }
-                TokenKind::As => {
-                    let start_span = self.peek().span;
-                    self.advance();
-                    let target_type = self.parse_type()?;
-                    expr = Expr::Cast(Box::new(CastExpr {
-                        expr,
-                        target_type,
-                        span: start_span,
                     }));
                 }
                 TokenKind::Matches => {
