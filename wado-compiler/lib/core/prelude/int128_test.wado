@@ -660,20 +660,6 @@ test "i128 one" {
     assert one == expected;
 }
 
-test "u128 mul_u64" {
-    let a: u128 = 100;
-    let expected: u128 = 5000;
-    assert a.mul_u64(50) == expected;
-}
-
-test "u128 mul_u64 crossing 64-bit boundary" {
-    // 2^32 * 2^32 = 2^64
-    let a: u128 = 4294967296;
-    let result = a.mul_u64(4294967296);
-    assert result.low() == 0;
-    assert result.high() == 1;
-}
-
 test "i128 from_u128 reinterprets bits" {
     let u: u128 = 42;
     let i = i128::from_u128(u);

@@ -27,12 +27,12 @@ impl u128 {
         let mut i = 0;
         let len = s.len();
         let bytes = s.internal_raw_bytes();
+        let ten: u128 = 10;
         while i < len {
             let byte = builtin::array_get_u8(bytes, i);
             let digit = (byte as i32) - ('0' as i32);
             if 0 <= digit && digit <= 9 {
-                let digit_u64: u64 = digit as u64;
-                result = result.mul_u64(10).add(&u128::from_u64(digit_u64));
+                result = result * ten + u128::from_u64(digit as u64);
             }
             i += 1;
         }
@@ -57,21 +57,6 @@ impl u128 {
     /// Gets the high 64 bits
     pub fn high(&self) -> u64 {
         return self.high;
-    }
-
-    /// Multiplies u128 by a u64 value
-    pub fn mul_u64(&self, multiplier: u64) -> u128 {
-        // (high, low) * multiplier
-        // = low * multiplier + (high * multiplier) << 64
-        let [low_lo, low_hi] = builtin::i64_mul_wide_u(self.low as i64, multiplier as i64);
-        let [high_lo, _] = builtin::i64_mul_wide_u(self.high as i64, multiplier as i64);
-        // result.low = low_lo
-        // result.high = low_hi + high_lo (ignore overflow)
-        let result_high = (low_hi as u64) + (high_lo as u64);
-        return u128 {
-            low: low_lo as u64,
-            high: result_high,
-        };
     }
 
     /// Add two u128 values
@@ -108,7 +93,7 @@ impl u128 {
     pub fn div_rem(&self, divisor: &u128) -> [u128, u128] {
         // Check for division by zero
         if divisor.low == 0 && divisor.high == 0 {
-            panic("division by zero");
+            panic("u128 division by zero");
         }
 
         // Quick return if dividend < divisor
@@ -597,11 +582,12 @@ impl i128 {
         // Parse the absolute value as u128
         let mut abs_value = u128::zero();
         let mut i = start_idx;
+        let ten: u128 = 10;
         while i < len {
             let byte = builtin::array_get_u8(bytes, i);
             let digit = (byte as i32) - ('0' as i32);
             if 0 <= digit && digit <= 9 {
-                abs_value = abs_value.mul_u64(10).add(&u128::from_u64(digit as u64));
+                abs_value = abs_value * ten + u128::from_u64(digit as u64);
             }
             i += 1;
         }
@@ -695,7 +681,7 @@ impl i128 {
     pub fn div_rem(&self, divisor: &i128) -> [i128, i128] {
         // Check for division by zero
         if divisor.low == 0 && divisor.high == 0 {
-            panic("division by zero");
+            panic("i128 division by zero");
         }
 
         let dividend_neg = self.is_negative();
