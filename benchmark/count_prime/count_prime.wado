@@ -9,7 +9,7 @@
 //   cargo run --bin wado -- run benchmark/count_prime.wado
 
 use {println, Stdout} from "core:cli";
-use {now, MonotonicClock} from "core:clocks";
+use {MonotonicClock} from "wasi:clocks";
 
 fn is_prime(n: i32) -> bool {
     if n < 2 {
@@ -56,9 +56,9 @@ test "count_primes" {
 export fn run() with Stdout, MonotonicClock {
     let limit = 10000000;
 
-    let start = now();
+    let start = MonotonicClock::now();
     let count = count_primes(limit);
-    let end = now();
+    let end = MonotonicClock::now();
 
     let elapsed_ns = (end - start) as u64;
     // Convert nanoseconds to milliseconds (integer division)

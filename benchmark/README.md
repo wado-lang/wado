@@ -257,7 +257,7 @@ samply record wado run --profile perfmap benchmark/count_prime/count_prime.wado
 - Ruby uses CRuby
 - Times include program initialization overhead
 - Wado CLI is built with `--release` for fair comparison with natively-compiled competitors
-- Wado benchmarks use `MonotonicClock::now()` from `core:clocks` for timing
+- Wado benchmarks use `MonotonicClock::now()` from `wasi:clocks` for timing
 - zlib benchmark compares Wado's pure Wado zlib against native zlib-rs (Rust)
 - fts benchmark compares Wado, C (`snprintf`), Rust (`write!`), and Zig (`std.fmt`)
 - Rust benchmarks use `rustc -O` (release optimization)

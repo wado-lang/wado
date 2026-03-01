@@ -8,7 +8,7 @@
 //   cargo run --bin wado -- run -O2 benchmark/zlib_bench.wado
 
 use {println, Stdout} from "core:cli";
-use {now, MonotonicClock} from "core:clocks";
+use {MonotonicClock} from "wasi:clocks";
 use {zlib_compress, inflate_zlib} from "core:zlib";
 
 test "compression round-trip" {
@@ -36,12 +36,12 @@ export fn run() with Stdout, MonotonicClock {
     println(`zlib {size} bytes x {iterations} iterations`);
 
     // Benchmark compression (10 iterations)
-    let t0 = now();
+    let t0 = MonotonicClock::now();
     let mut compressed: Array<u8> = [];
     for let mut iter = 0; iter < iterations; iter += 1 {
         compressed = zlib_compress(&data);
     }
-    let t1 = now();
+    let t1 = MonotonicClock::now();
 
     let compress_ns = (t1 - t0) as u64;
     let compress_ms = compress_ns / 1000000;
@@ -49,12 +49,12 @@ export fn run() with Stdout, MonotonicClock {
     println(`Compress: {compress_ms} ms`);
 
     // Benchmark decompression (10 iterations)
-    let t2 = now();
+    let t2 = MonotonicClock::now();
     let mut decompressed: Array<u8> = [];
     for let mut iter = 0; iter < iterations; iter += 1 {
         decompressed = inflate_zlib(&compressed);
     }
-    let t3 = now();
+    let t3 = MonotonicClock::now();
 
     let decompress_ns = (t3 - t2) as u64;
     let decompress_ms = decompress_ns / 1000000;

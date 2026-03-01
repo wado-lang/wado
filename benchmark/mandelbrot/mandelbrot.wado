@@ -9,7 +9,7 @@
 //   cargo run --bin wado -- run benchmark/mandelbrot.wado
 
 use {println, Stdout} from "core:cli";
-use {now, MonotonicClock} from "core:clocks";
+use {MonotonicClock} from "wasi:clocks";
 
 fn mandelbrot_iterations(cx: f64, cy: f64, max_iter: i32) -> i32 {
     let mut x = 0.0;
@@ -54,7 +54,7 @@ export fn run() with Stdout, MonotonicClock {
     let dx = (x_max - x_min) / (width as f64);
     let dy = (y_max - y_min) / (height as f64);
 
-    let start = now();
+    let start = MonotonicClock::now();
 
     // Use i32 accumulator (max possible: 1024*768*256 = 201,326,592 fits in i32)
     let mut total_iterations = 0;
@@ -74,7 +74,7 @@ export fn run() with Stdout, MonotonicClock {
         py = py + 1;
     }
 
-    let end = now();
+    let end = MonotonicClock::now();
     let elapsed_ns = (end - start) as u64;
     // Convert nanoseconds to milliseconds (integer division)
     let elapsed_ms = elapsed_ns / 1000000;

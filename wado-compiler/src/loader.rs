@@ -204,7 +204,6 @@ fn cached_core_stdlib() -> &'static IndexMap<ModuleSource, Module> {
         let core_modules: &[(&str, &str)] = &[
             ("builtin", stdlib::CORE_BUILTIN),
             ("cli", stdlib::CORE_CLI),
-            ("clocks", stdlib::CORE_CLOCKS),
             ("collections", stdlib::CORE_COLLECTIONS),
             ("internal", stdlib::CORE_INTERNAL),
             ("prelude", stdlib::CORE_PRELUDE),
@@ -216,7 +215,6 @@ fn cached_core_stdlib() -> &'static IndexMap<ModuleSource, Module> {
             ("prelude/string.wado", stdlib::CORE_PRELUDE_STRING),
             ("prelude/traits.wado", stdlib::CORE_PRELUDE_TRAITS),
             ("prelude/types.wado", stdlib::CORE_PRELUDE_TYPES),
-            ("stream", stdlib::CORE_STREAM),
             ("zlib", stdlib::CORE_ZLIB),
         ];
         let mut cache = IndexMap::with_capacity(core_modules.len());

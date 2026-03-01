@@ -1,12 +1,12 @@
-// Test MonotonicClock::now() from core:clocks
+// Test MonotonicClock::now() from wasi:clocks
 // Verifies that the monotonic clock returns non-decreasing values
 
 use { println, Stdout } from "core:cli";
-use { now, MonotonicClock } from "core:clocks";
+use { MonotonicClock } from "wasi:clocks";
 
 export fn run() with Stdout, MonotonicClock {
-    let t1 = now();
-    let t2 = now();
+    let t1 = MonotonicClock::now();
+    let t2 = MonotonicClock::now();
 
     // Monotonic clock should return non-decreasing values
     if t2 >= t1 {
