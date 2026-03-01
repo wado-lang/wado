@@ -17,7 +17,7 @@ impl u128 {
     /// Create a u128 from low and high 64-bit parts
     /// Used by the compiler for efficient large literal construction
     pub fn from_pair(low: u64, high: u64) -> u128 {
-        return u128 { low: low, high: high };
+        return u128 { low, high };
     }
 
     /// Create a u128 from a string (decimal representation)
@@ -39,27 +39,27 @@ impl u128 {
         return result;
     }
 
-    /// Create a zero u128
+    /// Creates a zero u128
     pub fn zero() -> u128 {
         return u128 { low: 0, high: 0 };
     }
 
-    /// Create a u128 with value 1
+    /// Creates a u128 with value 1
     pub fn one() -> u128 {
         return u128 { low: 1, high: 0 };
     }
 
-    /// Get the low 64 bits
+    /// Gets the low 64 bits
     pub fn low(&self) -> u64 {
         return self.low;
     }
 
-    /// Get the high 64 bits
+    /// Gets the high 64 bits
     pub fn high(&self) -> u64 {
         return self.high;
     }
 
-    /// Multiply u128 by a u64 value
+    /// Multiplies u128 by a u64 value
     pub fn mul_u64(&self, multiplier: u64) -> u128 {
         // (high, low) * multiplier
         // = low * multiplier + (high * multiplier) << 64
@@ -191,20 +191,20 @@ impl u128 {
     }
 
     fn fmt_decimal(&self, f: &mut Formatter) {
-        if self.low == 0 && self.high == 0 {
+        if *self == 0 {
             let offset = f.prepare_int_write(false, "", 1);
             let arr = f.buf.internal_raw_bytes();
             builtin::array_set_u8(arr, offset, '0' as u8);
             return;
         }
 
+        let ten: u128 = 10;
+
         // Count digits first
         let mut temp = *self;
-        let ten = u128::from_u64(10);
-        let mut digit_count: i32 = 0;
-        while temp > u128::zero() {
+        let mut digit_count = 0;
+        for let mut temp = *self; temp > 0; temp /= ten {
             digit_count += 1;
-            temp = temp / ten;
         }
 
         let offset = f.prepare_int_write(false, "", digit_count);
@@ -212,12 +212,10 @@ impl u128 {
 
         // Write digits in reverse order
         let mut pos = offset + digit_count;
-        temp = *self;
-        while temp > u128::zero() {
+        for let mut temp = *self; temp > 0; temp /= ten {
             pos -= 1;
             let digit: i32 = ((temp % ten).low() as i64) as i32;
             builtin::array_set_u8(arr, pos, (('0' as i32) + digit) as u8);
-            temp = temp / ten;
         }
     }
 
@@ -578,7 +576,7 @@ impl i128 {
     /// Create an i128 from low and high 64-bit parts
     /// Used by the compiler for efficient large literal construction
     pub fn from_pair(low: u64, high: i64) -> i128 {
-        return i128 { low: low, high: high };
+        return i128 { low, high };
     }
 
     /// Create an i128 from a string (decimal representation, optionally prefixed with '-')
@@ -616,32 +614,32 @@ impl i128 {
         return result;
     }
 
-    /// Create a zero i128
+    /// Creates a zero i128
     pub fn zero() -> i128 {
         return i128 { low: 0, high: 0 };
     }
 
-    /// Create an i128 with value 1
+    /// Creates an i128 with value 1
     pub fn one() -> i128 {
         return i128 { low: 1, high: 0 };
     }
 
-    /// Get the low 64 bits (unsigned)
+    /// Gets the low 64 bits (unsigned)
     pub fn low(&self) -> u64 {
         return self.low;
     }
 
-    /// Get the high 64 bits (signed)
+    /// Gets the high 64 bits (signed)
     pub fn high(&self) -> i64 {
         return self.high;
     }
 
-    /// Check if this i128 is negative
+    /// Checks if this i128 is negative
     pub fn is_negative(&self) -> bool {
         return self.high < 0;
     }
 
-    /// Add two i128 values
+    /// Adds two i128 values
     pub fn add(&self, other: &i128) -> i128 {
         let [lo, hi] = builtin::i64_add128(
             self.low as i64,
@@ -672,8 +670,7 @@ impl i128 {
     /// Negate this i128 value
     pub fn neg(&self) -> i128 {
         // -x = ~x + 1 = 0 - x
-        let zero = i128::zero();
-        return zero.sub(self);
+        return i128::zero().sub(self);
     }
 
     /// Get absolute value as u128
@@ -751,12 +748,11 @@ impl i128 {
             return;
         }
 
-        let ten = u128::from_u64(10);
+        let ten: u128 = 10;
         let mut temp = abs_val;
         let mut digit_count: i32 = 0;
-        while temp > u128::zero() {
+        for let mut temp = abs_val; temp > 0; temp /= ten {
             digit_count += 1;
-            temp = temp / ten;
         }
 
         let offset = f.prepare_int_write(is_neg, "", digit_count);
@@ -764,11 +760,10 @@ impl i128 {
 
         let mut pos = offset + digit_count;
         temp = abs_val;
-        while temp > u128::zero() {
+        for let mut temp = abs_val; temp > 0; temp /= ten {
             pos -= 1;
-            let digit: i32 = ((temp % ten).low() as i64) as i32;
+            let digit = ((temp % ten).low() as i64) as i32;
             builtin::array_set_u8(arr, pos, (('0' as i32) + digit) as u8);
-            temp = temp / ten;
         }
     }
 
@@ -792,19 +787,18 @@ impl i128 {
             ""
         };
 
-        let is_zero = abs_val.low == 0 && abs_val.high == 0;
+        let is_zero = abs_val == 0;
         let digit_count = if is_zero {
             1
         } else {
             let mut highest_bit: i32 = 0;
             let h: i64 = abs_val.high as i64;
             let l: i64 = abs_val.low as i64;
-            let zero: i64 = 0;
-            if h != zero {
+            if h != 0 {
                 let mut b: i32 = 63;
                 while b >= 0 {
                     let one: i64 = 1;
-                    if (h >> (b as i64)) & one != zero {
+                    if (h >> (b as i64)) & one != 0 {
                         highest_bit = 64 + b;
                         break;
                     }
@@ -814,7 +808,7 @@ impl i128 {
                 let mut b: i32 = 63;
                 while b >= 0 {
                     let one: i64 = 1;
-                    if (l >> (b as i64)) & one != zero {
+                    if (l >> (b as i64)) & one != 0 {
                         highest_bit = b;
                         break;
                     }
@@ -990,8 +984,7 @@ impl Neg for i128 {
 
     pub fn neg(&self) -> Self::Output {
         // -x = ~x + 1 = 0 - x
-        let zero = i128::zero();
-        return zero.sub(self);
+        return i128::zero().sub(self);
     }
 }
 
@@ -1050,7 +1043,7 @@ impl Shl for i128 {
     pub fn shl(&self, rhs: u32) -> Self::Output {
         let shift = rhs as i32;
         if shift >= 128 {
-            return i128::zero();
+            return 0;
         }
         if shift >= 64 {
             // All low bits shift into high, low becomes 0
@@ -1087,7 +1080,7 @@ impl Shr for i128 {
                     high: -1,
                 };
             } else {
-                return i128::zero();
+                return 0;
             }
         }
         if shift >= 64 {
