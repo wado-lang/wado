@@ -4,7 +4,7 @@ This is the specification and the toolchain of Wado, a programming language targ
 
 ## The Spec
 
-Read @docs/cheatsheet.md to understand Wado syntax and standard library.
+Read @docs/cheatsheet.md to understand Wado syntax.
 
 If you need detailed specification, read docs/spec.md.
 
@@ -20,7 +20,7 @@ Builtin functions that are directly mapped to wasm instructions or external func
 
 Internal functions that are used to provide language features are implemented in `wado-compiler/lib/core/internal.wado`.
 
-### wasm32 Compatibility
+### Wasm Compatibility
 
 `wado-compiler` must compile for `wasm32-unknown-unknown`. Do not use OS-dependent `std` modules in production code. CI enforces this with a wasm32 build check.
 
@@ -200,8 +200,6 @@ To inspect invalid Wasm when debugging codegen bugs, use `--no-validate`:
 
 ```sh
 # Skip validation and output raw Wasm bytes even if invalid
-wado compile --no-validate -o output.wasm file.wado
-# Combine with --wat-to-stdout to inspect the generated WAT
 wado compile --no-validate --wat-to-stdout file.wado
 ```
 
@@ -210,7 +208,7 @@ wado compile --no-validate --wat-to-stdout file.wado
 Use `wado serve` to run a Wado HTTP service (wasi:http/service world):
 
 ```sh
-wado serve file.wado                 # serve on 0.0.0.0:8080 (default)
+wado serve file.wado                        # serve on 0.0.0.0:8080 (default)
 wado serve --addr 127.0.0.1:3000 file.wado  # serve on custom address
 ```
 
@@ -219,7 +217,7 @@ The source file must export an HTTP handler function:
 ```wado
 use { Request, Response, ErrorCode } from "wasi:http";
 
-export fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // Handle HTTP request and return response
 }
 ```
@@ -282,22 +280,13 @@ See also `wado-vscode/README.md` for more details.
 
 ## Bundled Library
 
-`wado-bundled/` is a Rust crate that provides bundled Wasm modules for Wado, providing:
+The compiler bundles Wasm modules for the language futures:
 
-- [x] math functions (libm)
+- `wado-bundled-libm/` - deterministic Math functions with `libm` crate
 
-## Wasm and WASI
+### Wasm and WASI
 
-There are external references in the module for convenience:
-
-- `vendor/wasm/` - WebAssembly/spec
-- `vendor/wasi/` - WebAssembly/WASI
-- `vendor/wasmtime/` - a Wasm runtime with WASI P3 support
-- `vendor/wasm-tools/` - a Wasm toolchain, where the Wado compiler relies on.
-
-### Wasm and WASI Features
-
-Wado is designed with the following Wasm features:
+Wado is designed on the following Wasm features:
 
 - Wasm 3.0 (2025-09-17)
 - Wasm GC
@@ -320,7 +309,7 @@ Wado is designed with the following Wasm features:
 ## Rules for Rust
 
 - Follow `clippy::pedantic` lint rules. The workspace is configured with pedantic lints enabled.
-- Write tests in implementation files just for examples. For comprehensive tests, write them in the `tests/`.
+- Write tests in implementation files just for simple smoke tests. For comprehensive tests, write tests in the `tests/`.
 - Manage dependencies in the workspace `Cargo.toml`.
 - Do not use `#![allow(deprecated)]`; use newer alternatives instead.
 - Use `panic!("not yet implemented")` for things that are not yet implemented.
@@ -424,15 +413,14 @@ Run `make on-task-started` to install mise and all required development tools au
 ```sh
 make test
 make build
-make format # format Rust files and markdown files
+make format      # format Rust files and markdown files
 make format-wado # format Wado source files
-
-make hello     # generates example/hello.wat and example/hello.wasm
-make hello-run # simple smoke test
 
 make benchmark-count-prime # use integer arithmetic
 make benchmark-mandelbrot  # use float arithmetic
 make benchmark-sieve       # use arrays
+make benchmark-fts         # float-to-string
+make benchmark-zlib        # complex calculation
 
 make report-wasm-size
 ```
@@ -443,15 +431,11 @@ The compiler emits timestamped diagnostics to stderr. Use `--log-level` to contr
 
 ### Log Levels
 
-```sh
-wado compile --log-level debug file.wado   # all messages including phase spans
-wado compile --log-level info file.wado    # info, warnings, errors (default)
-wado compile --log-level warn file.wado    # warnings and errors only
-wado compile --log-level error file.wado   # errors only
-wado compile --log-level off file.wado     # silent
-```
+`compile`, `run`, and `serve` subcommands has `--log-level`, which accepts `off`, `error`, `warn`, `info` (default), and `debug`, for example:
 
-`--log-level` is available on `compile`, `run`, and `serve` subcommands.
+```sh
+wado compile --log-level debug file.wado # all messages including phase spans
+```
 
 ## Development Workflow
 
@@ -463,28 +447,15 @@ Run the following to set up your development environment:
 make on-task-started  # install mise and project tools
 ```
 
-If this is your first time running mise in this repository, you may need to trust the configuration file:
-
-```sh
-mise trust
-```
-
-### Syncing Vendor Submodules
-
-Run the following to sync all vendor submodules:
-
-```sh
-mise run sync-vendor
-```
-
-This syncs `vendor/wasmtime` to the exact version in `Cargo.lock` (required for WASI P3 compatibility), and updates other vendor submodules (`vendor/wasm`, `vendor/wasi`, `vendor/wasm-tools`) to their latest remote HEAD.
+If this is your first time running mise in this repository, you may need to trust the configuration file by tunning `mise trust`.
 
 ### When Completing a Task
 
 When you have completed a task, make sure everything is up-to-date and tested:
 
-- Update docs if necessary:
-  - docs/spec.md if the language specification is updated.
-  - docs/compiler.md if the new features are implemented.
-  - docs/cheatsheet.md if the syntax/stdlib is updated.
-- Run `make on-task-done` to format, clippy-fix, update golden fixtures, regenerate stdlib docs, and test.
+- Update the docs if necessary:
+  - docs/spec.md
+  - docs/cheatsheet.md
+  - docs/compiler.md
+  - docs/optimizer.md
+- Run `make on-task-done` to format, clippy-fix, update golden fixtures, regenerate stdlib docs, and test. It will take 10+ minutes.
