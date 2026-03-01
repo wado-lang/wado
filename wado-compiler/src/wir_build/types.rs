@@ -9,7 +9,7 @@ use crate::name::{ModuleSource, StructName};
 use crate::tir::{ResolvedType, TirModule, TirStruct, TirVariantDecl, TypeId, TypeTable};
 use crate::wir::{
     WirArrayType, WirEnumCase, WirEnumType, WirField, WirGenericOrigin, WirMeta, WirName,
-    WirStructType, WirTypeDef, WirVariantCase, WirVariantType,
+    WirStructType, WirType, WirTypeDef, WirVariantCase, WirVariantType,
 };
 
 use indexmap::{IndexMap, IndexSet};
@@ -543,15 +543,19 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                 let fields: Vec<WirField> = elements
                     .iter()
                     .enumerate()
-                    .map(|(i, &elem_type_id)| {
+                    .filter_map(|(i, &elem_type_id)| {
                         let ty = ctx.type_id_to_wir_type(type_table, elem_type_id);
+                        // Unit-typed elements have no Wasm representation; omit them.
+                        if matches!(ty, WirType::Unit) {
+                            return None;
+                        }
                         // Tuple fields use non-nullable refs
                         let ty = ty.as_nonnull();
-                        WirField {
+                        Some(WirField {
                             name: format!("{i}"),
                             ty,
                             mutable: true,
-                        }
+                        })
                     })
                     .collect();
 
