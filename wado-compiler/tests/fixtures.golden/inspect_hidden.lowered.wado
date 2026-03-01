@@ -41,7 +41,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$User"(u, &mut __f);
+        u."User^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
@@ -50,7 +50,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline___inspect_AllHidden_5: {
+        __inline_AllHidden_Inspect__inspect_5: {
             __inline_Formatter__write_str_6: {
                 let s: String = "AllHidden { .. }";
                 __f.buf.String::append(s);
@@ -61,46 +61,35 @@ export fn run() with Stdout {
     core::cli::println("ok");
 }
 
-fn "__inspect$User"(__val: User, __fmt: &mut Formatter) {
+pub fn "User^Inspect::inspect"(self: &User, f: &mut Formatter) {
     __inline_Formatter__write_str_0: {
         let s: String = "User { ";
-        __fmt.buf.String::append(s);
+        f.buf.String::append(s);
     };
     __inline_Formatter__write_str_1: {
         let s: String = "name: ";
-        __fmt.buf.String::append(s);
+        f.buf.String::append(s);
     };
-    __inline___inspect_String_2: {
-        let __val: String = __val.name;
-        __inline_Formatter__write_char_3: {
-            __fmt.buf.String::append_char('"');
-        };
-        core::internal::write_escaped_string(__val, __fmt);
-        __inline_Formatter__write_char_4: {
-            __fmt.buf.String::append_char('"');
-        };
+    self.name."String^Inspect::inspect"(f);
+    __inline_Formatter__write_str_2: {
+        let s: String = ", ";
+        f.buf.String::append(s);
+    };
+    __inline_Formatter__write_str_3: {
+        let s: String = "age: ";
+        f.buf.String::append(s);
+    };
+    __inline_i32_Inspect__inspect_4: {
+        let __sroa_self_value: i32 = self.age;
+        "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
     };
     __inline_Formatter__write_str_5: {
-        let s: String = ", ";
-        __fmt.buf.String::append(s);
+        let s: String = ", ..";
+        f.buf.String::append(s);
     };
     __inline_Formatter__write_str_6: {
-        let s: String = "age: ";
-        __fmt.buf.String::append(s);
-    };
-    __inline___inspect_i32_7: {
-        let __val: i32 = __val.age;
-        __inline_i32_Display__fmt_8: {
-            "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
-        };
-    };
-    __inline_Formatter__write_str_9: {
-        let s: String = ", ..";
-        __fmt.buf.String::append(s);
-    };
-    __inline_Formatter__write_str_10: {
         let s: String = " }";
-        __fmt.buf.String::append(s);
+        f.buf.String::append(s);
     };
 }
 

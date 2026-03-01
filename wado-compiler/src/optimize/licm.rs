@@ -517,6 +517,9 @@ fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut ModifiedVars) {
         | TirExprKind::Capture { .. }
         | TirExprKind::Match { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 }
 
@@ -798,6 +801,9 @@ fn collect_licm_ref_bindings_in_expr(
         | TirExprKind::Capture { .. }
         | TirExprKind::Match { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 }
 
@@ -1382,6 +1388,9 @@ fn find_hoist_candidates_in_expr(
         | TirExprKind::Capture { .. }
         | TirExprKind::Match { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 }
 
@@ -1616,5 +1625,8 @@ fn replace_hoisted_in_expr(
         | TirExprKind::Capture { .. }
         | TirExprKind::Match { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 }

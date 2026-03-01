@@ -314,10 +314,6 @@ pub async fn compile_with_options<H: CompilerHost>(
         monomorphize_project(project)
     };
 
-    // Post-monomorphize inspect synthesis: resolve deferred markers from generic
-    // type params (now concrete) and dispatch Display vs Inspect correctly.
-    let project = synthesis::inspect::synthesize_inspect(project);
-
     // === Phase 9: Lower (Project -> Project) ===
     let project = {
         let _span = logger.span("lower");
@@ -525,10 +521,6 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             let _span = logger.span("monomorphize");
             monomorphize_project(project)
         };
-
-        // Post-monomorphize inspect synthesis: resolve deferred markers from generic
-        // type params (now concrete) and dispatch Display vs Inspect correctly.
-        let project = synthesis::inspect::synthesize_inspect(project);
 
         let mono_snapshot = Some(project.tir_modules.clone());
 

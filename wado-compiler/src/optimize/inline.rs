@@ -71,6 +71,9 @@ fn count_expr(expr: &TirExpr) -> usize {
         | TirExprKind::Null => 0,
         // Closure and effect-related expressions
         TirExprKind::Capture { .. } | TirExprKind::EnumConstruct { .. } => 0,
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
         TirExprKind::CmRawCall { args, .. } => args.iter().map(count_expr).sum(),
         TirExprKind::IndirectCall { callee, args } => {
             count_expr(callee) + args.iter().map(count_expr).sum::<usize>()
@@ -425,6 +428,9 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 }
 
@@ -2271,6 +2277,9 @@ fn remap_expr(
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => expr.kind.clone(),
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     };
 
     TirExpr::new(kind, expr.type_id, expr.span)
@@ -2993,6 +3002,9 @@ fn inline_calls_in_expr(
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 }
 

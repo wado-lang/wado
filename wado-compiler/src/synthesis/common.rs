@@ -10,7 +10,7 @@ use indexmap::IndexSet;
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::{
     FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirParam, TirStmt, TirStmtKind, TypeId, TypeTable,
+    TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -370,4 +370,112 @@ pub fn make_synthetic_method(
         inline_hint: InlineHint::Auto,
         comp_features: 0,
     }
+}
+
+/// Build a `f.write_str("text")` statement using Formatter's `write_str` method.
+pub fn write_str_stmt(
+    text: impl Into<String>,
+    fmt: TirExpr,
+    string_type: TypeId,
+    span: Span,
+) -> TirStmt {
+    let call = TirExpr::new(
+        TirExprKind::MethodCall {
+            receiver: Box::new(fmt),
+            func: FunctionRef::External {
+                module_source: ModuleSource::format(),
+                name: "Formatter::write_str".to_string(),
+                monomorph_info: None,
+                method_info: Some(LocalMethodName::new(
+                    "Formatter".to_string(),
+                    None,
+                    "write_str".to_string(),
+                )),
+            },
+            type_args: vec![],
+            args: vec![TirExpr::new(
+                TirExprKind::StringLiteral(text.into()),
+                string_type,
+                span,
+            )],
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    TirStmt::new(TirStmtKind::Expr(call), span)
+}
+
+/// Build a trait method call statement: `receiver.TraitName::method(args)`.
+pub fn trait_method_call(
+    receiver: TirExpr,
+    method_info: LocalMethodName,
+    module_source: ModuleSource,
+    args: Vec<TirExpr>,
+    span: Span,
+) -> TirStmt {
+    let fn_name = method_info.to_mangled_name();
+    let call = TirExpr::new(
+        TirExprKind::MethodCall {
+            receiver: Box::new(receiver),
+            func: FunctionRef::External {
+                module_source,
+                name: fn_name,
+                monomorph_info: None,
+                method_info: Some(method_info),
+            },
+            type_args: vec![],
+            args,
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    TirStmt::new(TirStmtKind::Expr(call), span)
+}
+
+/// Create a dereference expression: `*expr`.
+pub fn deref_expr(expr: TirExpr, inner_type: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr: Box::new(expr),
+        },
+        inner_type,
+        span,
+    )
+}
+
+/// Create a reference expression: `&expr`.
+pub fn ref_expr(expr: TirExpr, ref_type: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref,
+            expr: Box::new(expr),
+        },
+        ref_type,
+        span,
+    )
+}
+
+/// Create a string literal expression.
+pub fn string_lit(text: impl Into<String>, string_type: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(TirExprKind::StringLiteral(text.into()), string_type, span)
+}
+
+/// Create a field access expression: `expr.field_name`.
+pub fn field_access(
+    expr: TirExpr,
+    field_index: u32,
+    field_name: impl Into<String>,
+    field_type: TypeId,
+    span: Span,
+) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::FieldAccess {
+            expr: Box::new(expr),
+            field_index,
+            field_name: field_name.into(),
+        },
+        field_type,
+        span,
+    )
 }

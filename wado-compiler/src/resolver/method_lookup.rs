@@ -937,24 +937,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
     }
-
-    /// Get the ultimate base type by stripping all Ref/MutRef and Newtype wrappers
-    /// This follows the entire chain: Ref(Newtype(Ref(Primitive))) -> Primitive
-    pub(super) fn get_ultimate_base_type(&self, type_id: TypeId) -> TypeId {
-        let mut current = type_id;
-        loop {
-            match self.type_table.borrow().get(current).clone() {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    current = inner;
-                }
-                ResolvedType::Newtype { base_type, .. } => {
-                    current = base_type;
-                }
-                _ => return current,
-            }
-        }
-    }
-
     /// Adjust the receiver expression to match what the method's self parameter expects
     pub(super) fn adjust_receiver_for_self_kind(
         &mut self,

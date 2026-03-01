@@ -67,7 +67,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Array<i32>"(row, &mut __f);
+        row."Array<i32>^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     let new_row: Array<i32> = __seq_lit: {
@@ -93,65 +93,10 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Array<Array<i32>>"(matrix, &mut __f);
+        matrix."Array<Array<i32>>^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     core::cli::println("ok");
-}
-
-fn "__inspect$Array<i32>"(__val: Array<i32>, __fmt: &mut Formatter) {
-    __inline_Formatter__write_char_0: {
-        __fmt.buf.String::append_char('[');
-    };
-    let __inspect_len: i32 = __val.used;
-    let mut __inspect_i: i32 = 0;
-    let _licm_buf: &mut String = __fmt.buf;
-    loop {
-        if !(__inspect_i < __inspect_len) {
-            break;
-        }
-        if (__inspect_i > 0) {
-            __inline_Formatter__write_str_2: {
-                let s: String = ", ";
-                _licm_buf.String::append(s);
-            };
-        };
-        __inline___inspect_i32_3: {
-            let __val: i32 = __val[__inspect_i];
-            __inline_i32_Display__fmt_4: {
-                "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
-            };
-        };
-        __inspect_i = (__inspect_i + 1);
-    }
-    __inline_Formatter__write_char_5: {
-        __fmt.buf.String::append_char(']');
-    };
-}
-
-fn "__inspect$Array<Array<i32>>"(__val: Array<Array<i32>>, __fmt: &mut Formatter) {
-    __inline_Formatter__write_char_0: {
-        __fmt.buf.String::append_char('[');
-    };
-    let __inspect_len: i32 = __val.used;
-    let mut __inspect_i: i32 = 0;
-    let _licm_buf: &mut String = __fmt.buf;
-    loop {
-        if !(__inspect_i < __inspect_len) {
-            break;
-        }
-        if (__inspect_i > 0) {
-            __inline_Formatter__write_str_2: {
-                let s: String = ", ";
-                _licm_buf.String::append(s);
-            };
-        };
-        "__inspect$Array<i32>"(__val[__inspect_i], __fmt);
-        __inspect_i = (__inspect_i + 1);
-    }
-    __inline_Formatter__write_char_3: {
-        __fmt.buf.String::append_char(']');
-    };
 }
 
 export fn __cm_export__run() {
@@ -159,11 +104,79 @@ export fn __cm_export__run() {
     cm_raw_call task-return(0);
 }
 
+pub fn "Array<Array<i32>>^Inspect::inspect"(self: &Array<Array<i32>>, f: &mut Formatter) {
+    __inline_Formatter__write_char_0: {
+        f.buf.String::append_char('[');
+    };
+    __for_5: {
+        let mut i: i32 = 0;
+        let _licm_used: i32 = self.used;
+        let _licm_buf: &mut String = f.buf;
+        loop {
+            if !(i < _licm_used) {
+                break __for_5;
+            }
+            __for_5_body: {
+                if (i > 0) {
+                    __inline_Formatter__write_str_2: {
+                        let s: String = ", ";
+                        _licm_buf.String::append(s);
+                    };
+                }
+                self."Array<Array<i32>>^IndexValue::index_value"(i)."Array<i32>^Inspect::inspect"(f);
+            }
+            i = (i + 1);
+        }
+    }
+    __inline_Formatter__write_char_3: {
+        f.buf.String::append_char(']');
+    };
+}
+
 fn "Array<Array<i32>>^IndexAssign::index_assign"(self: &mut Array<Array<i32>>, index: i32, value: Array<i32>) {
     if (index >= self.used) {
         core::internal::panic("index out of bounds");
     }
     core::builtin::array_set::<Array<i32>>(self.repr, index, value);
+}
+
+pub fn "Array<i32>^Inspect::inspect"(self: &Array<i32>, f: &mut Formatter) {
+    __inline_Formatter__write_char_0: {
+        f.buf.String::append_char('[');
+    };
+    __for_5: {
+        let mut i: i32 = 0;
+        let _licm_used: i32 = self.used;
+        let _licm_buf: &mut String = f.buf;
+        loop {
+            if !(i < _licm_used) {
+                break __for_5;
+            }
+            __for_5_body: {
+                if (i > 0) {
+                    __inline_Formatter__write_str_2: {
+                        let s: String = ", ";
+                        _licm_buf.String::append(s);
+                    };
+                }
+                __inline_i32_Inspect__inspect_3: {
+                    let __sroa_self_value: i32 = self."Array<i32>^IndexValue::index_value"(i);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+                };
+            }
+            i = (i + 1);
+        }
+    }
+    __inline_Formatter__write_char_4: {
+        f.buf.String::append_char(']');
+    };
+}
+
+fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
+    if (index >= self.used) {
+        core::internal::panic("index out of bounds");
+    }
+    return core::builtin::array_get::<i32>(self.repr, index);
 }
 
 pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {

@@ -199,10 +199,10 @@ fn run() with Stdout {
     let point: ref null Shape;
     let __local_2: f64;
     let area1: f64;
-    let __local_4: ref null String;
-    let __local_5: ref null Formatter;
-    let __local_6: f64;
+    let __local_4: f64;
     let area2: f64;
+    let __local_6: ref null String;
+    let __local_7: ref null Formatter;
     let __local_8: ref null String;
     let __local_9: ref null Formatter;
     let __local_10: i32;
@@ -235,26 +235,26 @@ fn run() with Stdout {
         unreachable;
     };
     "core:cli/println"(__tmpl: block -> ref null String {
-        __local_4 = String { repr: ref.as_non_null(builtin::array_new<u8>(29)), used: 0 };
-        String::append(__local_4, String { repr: ref.as_non_null(array.new_data<u8>[12](0, 13)), used: 13 });
-        __local_5 = __inline_Formatter__new_2: block -> ref null Formatter {
-            __local_11 = __local_4;
+        __local_6 = String { repr: ref.as_non_null(builtin::array_new<u8>(29)), used: 0 };
+        String::append(__local_6, String { repr: ref.as_non_null(array.new_data<u8>[12](0, 13)), used: 13 });
+        __local_7 = __inline_Formatter__new_2: block -> ref null Formatter {
+            __local_11 = __local_6;
             break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_11) };
         };
         block {
             __local_12 = "core:internal/Box<f64>" { value: area1 };
-            __local_13 = __local_5;
+            __local_13 = __local_7;
             fmt_f64(__local_12.value, __local_13);
         };
-        break __tmpl: __local_4;
+        break __tmpl: __local_6;
     });
     let __match_scrut_1: ref null Shape;
     __match_scrut_1 = point;
     area2 = if ref.test Shape::Circle(__match_scrut_1) -> f64 {
         let __cast_2: ref Shape::Circle;
         __cast_2 = ref.cast Shape::Circle(__match_scrut_1);
-        __local_6 = __cast_2.payload_0;
-        (3.14159 * __local_6) * __local_6;
+        __local_4 = __cast_2.payload_0;
+        (3.14159 * __local_4) * __local_4;
     } else if __match_scrut_1.discriminant == 1 -> f64 {
         0;
     } else {

@@ -9,20 +9,6 @@ use crate::name::ModuleSource;
 use crate::tir::TypeId;
 use crate::token::Span;
 
-/// Parsed format specification from a template string interpolation.
-/// Syntax: `[[fill]align][sign][#][0][width][.precision]type`
-#[allow(dead_code)]
-pub(super) struct ParsedFormatSpec {
-    pub(super) fill: Option<char>,
-    pub(super) align: Option<char>, // '<', '^', '>'
-    pub(super) sign_plus: bool,
-    pub(super) alternate: bool,
-    pub(super) zero_pad: bool,
-    pub(super) width: Option<i64>,
-    pub(super) precision: Option<i64>,
-    pub(super) type_char: Option<char>, // 'b','o','x','X','e','E','?'
-}
-
 /// Struct field info: module source and field definitions
 #[derive(Clone)]
 pub(super) struct StructFieldInfo {

@@ -30,26 +30,38 @@ fn describe(f: Fruit) -> String {
                 let buf: &mut String = &mut __r;
                 break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            "__inspect$Fruit"(f, &mut __f);
+            __inline_Fruit_Display__fmt_2: {
+                let self: &Fruit = &f;
+                let f: &mut Formatter = &mut __f;
+                self."Fruit^Inspect::inspect"(f);
+            };
             break __tmpl: __r;
         },
         Banana => __tmpl: {
             let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(26), used: 0 };
-            let mut __f: Formatter = __inline_Formatter__new_3: {
+            let mut __f: Formatter = __inline_Formatter__new_4: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            "__inspect$Fruit"(f, &mut __f);
+            __inline_Fruit_Display__fmt_5: {
+                let self: &Fruit = &f;
+                let f: &mut Formatter = &mut __f;
+                self."Fruit^Inspect::inspect"(f);
+            };
             __r.String::append(" is yellow");
             break __tmpl: __r;
         },
         Cherry => __tmpl: {
             let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(25), used: 0 };
-            let mut __f: Formatter = __inline_Formatter__new_5: {
+            let mut __f: Formatter = __inline_Formatter__new_7: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            "__inspect$Fruit"(f, &mut __f);
+            __inline_Fruit_Display__fmt_8: {
+                let self: &Fruit = &f;
+                let f: &mut Formatter = &mut __f;
+                self."Fruit^Inspect::inspect"(f);
+            };
             __r.String::append(" is small");
             break __tmpl: __r;
         },
@@ -72,7 +84,11 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Fruit"(f, &mut __f);
+        __inline_Fruit_Display__fmt_3: {
+            let self: &Fruit = &f;
+            let f: &mut Formatter = &mut __f;
+            self."Fruit^Inspect::inspect"(f);
+        };
         break __tmpl: __r;
     });
     core::cli::println(describe(Fruit::Apple));
@@ -80,23 +96,23 @@ export fn run() with Stdout {
     core::cli::println(describe(Fruit::Cherry));
 }
 
-fn "__inspect$Fruit"(__val: Fruit, __fmt: &mut Formatter) {
-    if (__val == 0) {
+pub fn "Fruit^Inspect::inspect"(self: &Fruit, f: &mut Formatter) {
+    if (*self == 0) {
         __inline_Formatter__write_str_0: {
             let s: String = "Fruit::Apple";
-            __fmt.buf.String::append(s);
+            f.buf.String::append(s);
         };
     } else {
-        if (__val == 1) {
+        if (*self == 1) {
             __inline_Formatter__write_str_1: {
                 let s: String = "Fruit::Banana";
-                __fmt.buf.String::append(s);
+                f.buf.String::append(s);
             };
         } else {
-            if (__val == 2) {
+            if (*self == 2) {
                 __inline_Formatter__write_str_2: {
                     let s: String = "Fruit::Cherry";
-                    __fmt.buf.String::append(s);
+                    f.buf.String::append(s);
                 };
             };
         };

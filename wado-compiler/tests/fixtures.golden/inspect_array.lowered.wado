@@ -50,7 +50,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Array<i32>"(arr, &mut __f);
+        arr."Array<i32>^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     let empty: Array<i32> = __seq_lit: {
@@ -63,7 +63,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Array<i32>"(empty, &mut __f);
+        empty."Array<i32>^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     let single: Array<i32> = __seq_lit: {
@@ -80,7 +80,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Array<i32>"(single, &mut __f);
+        single."Array<i32>^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
@@ -89,26 +89,34 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_18: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Array<i32>"(arr, &mut __f);
+        __inline_Array_i32__Display__fmt_19: {
+            let self: &Array<i32> = &arr;
+            let f: &mut Formatter = &mut __f;
+            self."Array<i32>^Inspect::inspect"(f);
+        };
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_20: {
+        let mut __f: Formatter = __inline_Formatter__new_21: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_20: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Array<i32>"(empty, &mut __f);
+        __inline_Array_i32__Display__fmt_22: {
+            let self: &Array<i32> = &empty;
+            let f: &mut Formatter = &mut __f;
+            self."Array<i32>^Inspect::inspect"(f);
+        };
         break __tmpl: __r;
     });
     let points: Array<Point> = __seq_lit: {
         let mut __b: Array<Point> = Array<Point> { repr: core::builtin::array_new::<Point>(2), used: 0 };
-        __inline_Array_Point__SequenceLiteralBuilder__push_literal_22: {
+        __inline_Array_Point__SequenceLiteralBuilder__push_literal_24: {
             let self: &mut Array<Point> = &mut __b;
             let value: Point = Point { x: 1, y: 2 };
             self."Array<Point>::append"(value);
         };
-        __inline_Array_Point__SequenceLiteralBuilder__push_literal_23: {
+        __inline_Array_Point__SequenceLiteralBuilder__push_literal_25: {
             let self: &mut Array<Point> = &mut __b;
             let value: Point = Point { x: 3, y: 4 };
             self."Array<Point>::append"(value);
@@ -117,108 +125,89 @@ export fn run() with Stdout {
     };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_26: {
+        let mut __f: Formatter = __inline_Formatter__new_28: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_26: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_28: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Array<Point>"(points, &mut __f);
+        __inline_Array_Point__Display__fmt_29: {
+            let self: &Array<Point> = &points;
+            let f: &mut Formatter = &mut __f;
+            self."Array<Point>^Inspect::inspect"(f);
+        };
         break __tmpl: __r;
     });
 }
 
-fn "__inspect$Array<i32>"(__val: Array<i32>, __fmt: &mut Formatter) {
-    __inline_Formatter__write_char_0: {
-        __fmt.buf.String::append_char('[');
-    };
-    let __inspect_len: i32 = __val.used;
-    let mut __inspect_i: i32 = 0;
-    let _licm_buf: &mut String = __fmt.buf;
-    loop {
-        if !(__inspect_i < __inspect_len) {
-            break;
-        }
-        if (__inspect_i > 0) {
-            __inline_Formatter__write_str_2: {
-                let s: String = ", ";
-                _licm_buf.String::append(s);
-            };
-        };
-        __inline___inspect_i32_3: {
-            let __val: i32 = __val[__inspect_i];
-            __inline_i32_Display__fmt_4: {
-                "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
-            };
-        };
-        __inspect_i = (__inspect_i + 1);
-    }
-    __inline_Formatter__write_char_5: {
-        __fmt.buf.String::append_char(']');
-    };
-}
-
-fn "__inspect$Array<Point>"(__val: Array<Point>, __fmt: &mut Formatter) {
-    __inline_Formatter__write_char_0: {
-        __fmt.buf.String::append_char('[');
-    };
-    let __inspect_len: i32 = __val.used;
-    let mut __inspect_i: i32 = 0;
-    let _licm_buf: &mut String = __fmt.buf;
-    loop {
-        if !(__inspect_i < __inspect_len) {
-            break;
-        }
-        if (__inspect_i > 0) {
-            __inline_Formatter__write_str_2: {
-                let s: String = ", ";
-                _licm_buf.String::append(s);
-            };
-        };
-        "__inspect$Point"(__val[__inspect_i], __fmt);
-        __inspect_i = (__inspect_i + 1);
-    }
-    __inline_Formatter__write_char_3: {
-        __fmt.buf.String::append_char(']');
-    };
-}
-
-fn "__inspect$Point"(__val: Point, __fmt: &mut Formatter) {
+pub fn "Point^Inspect::inspect"(self: &Point, f: &mut Formatter) {
     __inline_Formatter__write_str_0: {
         let s: String = "Point { ";
-        __fmt.buf.String::append(s);
+        f.buf.String::append(s);
     };
     __inline_Formatter__write_str_1: {
         let s: String = "x: ";
-        __fmt.buf.String::append(s);
+        f.buf.String::append(s);
     };
-    __inline___inspect_i32_2: {
-        let __val: i32 = __val.x;
-        __inline_i32_Display__fmt_3: {
-            "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
-        };
+    __inline_i32_Inspect__inspect_2: {
+        let __sroa_self_value: i32 = self.x;
+        "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+    };
+    __inline_Formatter__write_str_3: {
+        let s: String = ", ";
+        f.buf.String::append(s);
     };
     __inline_Formatter__write_str_4: {
-        let s: String = ", ";
-        __fmt.buf.String::append(s);
-    };
-    __inline_Formatter__write_str_5: {
         let s: String = "y: ";
-        __fmt.buf.String::append(s);
+        f.buf.String::append(s);
     };
-    __inline___inspect_i32_6: {
-        let __val: i32 = __val.y;
-        __inline_i32_Display__fmt_7: {
-            "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
-        };
+    __inline_i32_Inspect__inspect_5: {
+        let __sroa_self_value: i32 = self.y;
+        "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
     };
-    __inline_Formatter__write_str_8: {
+    __inline_Formatter__write_str_6: {
         let s: String = " }";
-        __fmt.buf.String::append(s);
+        f.buf.String::append(s);
     };
 }
 
 export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
+}
+
+pub fn "Array<Point>^Inspect::inspect"(self: &Array<Point>, f: &mut Formatter) {
+    __inline_Formatter__write_char_0: {
+        f.buf.String::append_char('[');
+    };
+    __for_5: {
+        let mut i: i32 = 0;
+        let _licm_used: i32 = self.used;
+        let _licm_buf: &mut String = f.buf;
+        loop {
+            if !(i < _licm_used) {
+                break __for_5;
+            }
+            __for_5_body: {
+                if (i > 0) {
+                    __inline_Formatter__write_str_2: {
+                        let s: String = ", ";
+                        _licm_buf.String::append(s);
+                    };
+                }
+                self."Array<Point>^IndexValue::index_value"(i)."Point^Inspect::inspect"(f);
+            }
+            i = (i + 1);
+        }
+    }
+    __inline_Formatter__write_char_3: {
+        f.buf.String::append_char(']');
+    };
+}
+
+fn "Array<Point>^IndexValue::index_value"(self: &Array<Point>, index: i32) -> Point {
+    if (index >= self.used) {
+        core::internal::panic("index out of bounds");
+    }
+    return core::builtin::array_get::<Point>(self.repr, index);
 }
 
 pub fn "Array<Point>::append"(self: &mut Array<Point>, value: Point) {
@@ -235,6 +224,45 @@ pub fn "Array<Point>::append"(self: &mut Array<Point>, value: Point) {
     }
     core::builtin::array_set::<Point>(self.repr, used, value);
     self.used = (used + 1);
+}
+
+pub fn "Array<i32>^Inspect::inspect"(self: &Array<i32>, f: &mut Formatter) {
+    __inline_Formatter__write_char_0: {
+        f.buf.String::append_char('[');
+    };
+    __for_5: {
+        let mut i: i32 = 0;
+        let _licm_used: i32 = self.used;
+        let _licm_buf: &mut String = f.buf;
+        loop {
+            if !(i < _licm_used) {
+                break __for_5;
+            }
+            __for_5_body: {
+                if (i > 0) {
+                    __inline_Formatter__write_str_2: {
+                        let s: String = ", ";
+                        _licm_buf.String::append(s);
+                    };
+                }
+                __inline_i32_Inspect__inspect_3: {
+                    let __sroa_self_value: i32 = self."Array<i32>^IndexValue::index_value"(i);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+                };
+            }
+            i = (i + 1);
+        }
+    }
+    __inline_Formatter__write_char_4: {
+        f.buf.String::append_char(']');
+    };
+}
+
+fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
+    if (index >= self.used) {
+        core::internal::panic("index out of bounds");
+    }
+    return core::builtin::array_get::<i32>(self.repr, index);
 }
 
 pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {

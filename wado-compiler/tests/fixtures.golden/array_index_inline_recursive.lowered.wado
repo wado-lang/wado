@@ -126,6 +126,13 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
     self.used = (used + 1);
 }
 
+fn "Array<Node<String>>^IndexValue::index_value"(self: &Array<&mut Node<String>>, index: i32) -> &mut Node<String> {
+    if (index >= self.used) {
+        core::internal::panic("index out of bounds");
+    }
+    return core::builtin::array_get::<&mut Node<String>>(self.repr, index);
+}
+
 fn "Node<String>::traverse"(self: &Node<String>, depth: i32) with Stdout {
     print_depth(depth);
     if !self.is_leaf {
@@ -144,13 +151,6 @@ fn "Node<String>::traverse"(self: &Node<String>, depth: i32) with Stdout {
             }
         }
     }
-}
-
-fn "Array<Node<String>>^IndexValue::index_value"(self: &Array<&mut Node<String>>, index: i32) -> &mut Node<String> {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<&mut Node<String>>(self.repr, index);
 }
 
 pub fn "Array<Node<String>>::append"(self: &mut Array<&mut Node<String>>, value: &mut Node<String>) {

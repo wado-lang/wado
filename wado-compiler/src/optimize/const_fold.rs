@@ -246,6 +246,9 @@ fn fold_constants_in_expr(expr: &mut TirExpr, type_table: &TypeTable) -> bool {
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 
     // Now try to fold this expression

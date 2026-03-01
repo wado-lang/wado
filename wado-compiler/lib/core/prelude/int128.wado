@@ -218,10 +218,48 @@ impl u128 {
     }
 }
 
-// Display implementation for u128
+/// Format u128 decimal directly into Formatter buffer.
+/// Shared implementation for Display and Inspect.
+fn fmt_u128_decimal(val: &u128, f: &mut Formatter) {
+    if val.low() == 0 && val.high() == 0 {
+        f.pad("0");
+        return;
+    }
+
+    // Count digits first
+    let mut temp = *val;
+    let ten = u128::from_u64(10);
+    let mut digit_count: i32 = 0;
+    while temp > u128::zero() {
+        digit_count += 1;
+        temp = temp.div_rem(&ten)[0];
+    }
+
+    let offset = f.prepare_int_write(false, "", digit_count);
+    let arr = f.buf.internal_raw_bytes();
+
+    // Write digits in reverse order
+    let mut pos = offset + digit_count;
+    temp = *val;
+    while temp > u128::zero() {
+        pos -= 1;
+        let result = temp.div_rem(&ten);
+        let rem: u128 = result[1];
+        let digit: i32 = (rem.low() as i64) as i32;
+        builtin::array_set_u8(arr, pos, (('0' as i32) + digit) as u8);
+        temp = result[0];
+    }
+}
+
 impl Display for u128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        f.write_str(self.to_string());
+        fmt_u128_decimal(self, f);
+    }
+}
+
+impl Inspect for u128 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        fmt_u128_decimal(self, f);
     }
 }
 
@@ -752,10 +790,48 @@ impl i128 {
     }
 }
 
-// Display implementation for i128
+/// Format i128 decimal directly into Formatter buffer.
+/// Shared implementation for Display and Inspect.
+fn fmt_i128_decimal(val: &i128, f: &mut Formatter) {
+    let is_neg = val.is_negative();
+    let abs_val = val.abs_u128();
+    if abs_val.low() == 0 && abs_val.high() == 0 {
+        f.pad("0");
+        return;
+    }
+
+    let ten = u128::from_u64(10);
+    let mut temp = abs_val;
+    let mut digit_count: i32 = 0;
+    while temp > u128::zero() {
+        digit_count += 1;
+        temp = temp.div_rem(&ten)[0];
+    }
+
+    let offset = f.prepare_int_write(is_neg, "", digit_count);
+    let arr = f.buf.internal_raw_bytes();
+
+    let mut pos = offset + digit_count;
+    temp = abs_val;
+    while temp > u128::zero() {
+        pos -= 1;
+        let result = temp.div_rem(&ten);
+        let rem: u128 = result[1];
+        let digit: i32 = (rem.low() as i64) as i32;
+        builtin::array_set_u8(arr, pos, (('0' as i32) + digit) as u8);
+        temp = result[0];
+    }
+}
+
 impl Display for i128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        f.write_str(self.to_string());
+        fmt_i128_decimal(self, f);
+    }
+}
+
+impl Inspect for i128 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        fmt_i128_decimal(self, f);
     }
 }
 

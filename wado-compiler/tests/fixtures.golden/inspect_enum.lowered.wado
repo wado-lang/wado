@@ -36,7 +36,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Color"(r, &mut __f);
+        r."Color^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     let g: Color = Color::Green;
@@ -46,7 +46,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Color"(g, &mut __f);
+        g."Color^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     let b: Color = Color::Blue;
@@ -56,28 +56,28 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Color"(b, &mut __f);
+        b."Color^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
 }
 
-fn "__inspect$Color"(__val: Color, __fmt: &mut Formatter) {
-    if (__val == 0) {
+pub fn "Color^Inspect::inspect"(self: &Color, f: &mut Formatter) {
+    if (*self == 0) {
         __inline_Formatter__write_str_0: {
             let s: String = "Color::Red";
-            __fmt.buf.String::append(s);
+            f.buf.String::append(s);
         };
     } else {
-        if (__val == 1) {
+        if (*self == 1) {
             __inline_Formatter__write_str_1: {
                 let s: String = "Color::Green";
-                __fmt.buf.String::append(s);
+                f.buf.String::append(s);
             };
         } else {
-            if (__val == 2) {
+            if (*self == 2) {
                 __inline_Formatter__write_str_2: {
                     let s: String = "Color::Blue";
-                    __fmt.buf.String::append(s);
+                    f.buf.String::append(s);
                 };
             };
         };

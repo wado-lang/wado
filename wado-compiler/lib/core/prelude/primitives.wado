@@ -1038,6 +1038,97 @@ impl Display for f64 {
     }
 }
 
+impl Inspect for bool {
+    pub fn inspect(&self, f: &mut Formatter) {
+        f.pad(if *self { "true" } else { "false" });
+    }
+}
+
+impl Inspect for char {
+    pub fn inspect(&self, f: &mut Formatter) {
+        f.write_char('\'');
+        let c = *self;
+        if c == '\'' {
+            f.write_char('\\');
+            f.write_char('\'');
+        } else if c == '\\' {
+            f.write_char('\\');
+            f.write_char('\\');
+        } else if c == '\n' {
+            f.write_char('\\');
+            f.write_char('n');
+        } else if c == '\r' {
+            f.write_char('\\');
+            f.write_char('r');
+        } else if c == '\t' {
+            f.write_char('\\');
+            f.write_char('t');
+        } else {
+            f.write_char(c);
+        }
+        f.write_char('\'');
+    }
+}
+
+impl Inspect for i8 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        fmt_i32_decimal((*self) as i32, f);
+    }
+}
+
+impl Inspect for u8 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        fmt_i32_decimal((*self) as i32, f);
+    }
+}
+
+impl Inspect for i16 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        fmt_i32_decimal((*self) as i32, f);
+    }
+}
+
+impl Inspect for u16 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        fmt_i32_decimal((*self) as i32, f);
+    }
+}
+
+impl Inspect for i32 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        fmt_i32_decimal(*self, f);
+    }
+}
+
+impl Inspect for u32 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        fmt_u32_decimal(*self, f);
+    }
+}
+
+impl Inspect for i64 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        fmt_i64_decimal(*self, f);
+    }
+}
+
+impl Inspect for u64 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        fmt_u64_decimal(*self, f);
+    }
+}
+
+impl Inspect for f32 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        fmt_f32(*self, f);
+    }
+}
+
+impl Inspect for f64 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        fmt_f64(*self, f);
+    }
+}
 
 impl LowerExp for f32 {
     pub fn fmt(&self, f: &mut Formatter) {

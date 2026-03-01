@@ -307,6 +307,9 @@ fn propagate_constants_in_expr(
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 
     changed

@@ -14,6 +14,7 @@ use crate::logger::{Bail, Logger};
 use crate::name::ModuleSource;
 use crate::tir::{
     FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirModule, TirStmt, TirStmtKind,
+    TirTemplatePart,
 };
 use crate::token::Span;
 
@@ -297,6 +298,13 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(payload_expr) = payload {
                     self.check_expr(payload_expr)?;
+                }
+            }
+            TirExprKind::TemplateString { parts } => {
+                for part in parts {
+                    if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
+                        self.check_expr(inner)?;
+                    }
                 }
             }
             TirExprKind::LabeledBlock { block, .. } => {

@@ -579,6 +579,9 @@ fn check_escape_in_expr(expr: &TirExpr, candidates: &IndexSet<u32>, escaped: &mu
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 }
 
@@ -970,6 +973,9 @@ fn check_soft_escape_in_expr(
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 }
 
@@ -1694,7 +1700,8 @@ fn rewrite_expr(
         | TirExprKind::Global { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
-        | TirExprKind::EnumConstruct { .. } => {}
+        | TirExprKind::EnumConstruct { .. }
+        | TirExprKind::TemplateString { .. } => {}
     }
 }
 

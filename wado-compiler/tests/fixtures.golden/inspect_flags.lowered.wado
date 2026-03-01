@@ -35,7 +35,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Perms"(1, &mut __f);
+        Box<u32> { value: 1 }."Perms^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
@@ -44,7 +44,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Perms"(3, &mut __f);
+        Box<u32> { value: 3 }."Perms^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
@@ -53,7 +53,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Perms"(7, &mut __f);
+        Box<u32> { value: 7 }."Perms^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
@@ -62,57 +62,46 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Perms"(0, &mut __f);
+        Box<u32> { value: 0 }."Perms^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
 }
 
-fn "__inspect$Perms"(__val: Perms, __fmt: &mut Formatter) {
-    if (__val as u32 == 0) {
+pub fn "Perms^Inspect::inspect"(self: Box<u32>, f: &mut Formatter) {
+    if (self.value as u32 == 0) {
         __inline_Formatter__write_str_0: {
             let s: String = "Perms::none()";
-            __fmt.buf.String::append(s);
+            f.buf.String::append(s);
         };
-    } else {
-        let mut __inspect_first: bool = true;
-        if ((__val as u32 & 1) != 0) {
-            if !__inspect_first {
-                __inline_Formatter__write_str_1: {
-                    let s: String = " | ";
-                    __fmt.buf.String::append(s);
-                };
-            };
+    };
+    if ((self.value as u32 & 1) != 0) {
+        __inline_Formatter__write_str_1: {
+            let s: String = "Perms::Read";
+            f.buf.String::append(s);
+        };
+    };
+    if ((self.value as u32 & 2) != 0) {
+        if ((self.value as u32 & 1) != 0) {
             __inline_Formatter__write_str_2: {
-                let s: String = "Perms::Read";
-                __fmt.buf.String::append(s);
+                let s: String = " | ";
+                f.buf.String::append(s);
             };
-            __inspect_first = false;
         };
-        if ((__val as u32 & 2) != 0) {
-            if !__inspect_first {
-                __inline_Formatter__write_str_3: {
-                    let s: String = " | ";
-                    __fmt.buf.String::append(s);
-                };
-            };
+        __inline_Formatter__write_str_3: {
+            let s: String = "Perms::Write";
+            f.buf.String::append(s);
+        };
+    };
+    if ((self.value as u32 & 4) != 0) {
+        if ((self.value as u32 & 3) != 0) {
             __inline_Formatter__write_str_4: {
-                let s: String = "Perms::Write";
-                __fmt.buf.String::append(s);
+                let s: String = " | ";
+                f.buf.String::append(s);
             };
-            __inspect_first = false;
         };
-        if ((__val as u32 & 4) != 0) {
-            if !__inspect_first {
-                __inline_Formatter__write_str_5: {
-                    let s: String = " | ";
-                    __fmt.buf.String::append(s);
-                };
-            };
-            __inline_Formatter__write_str_6: {
-                let s: String = "Perms::Execute";
-                __fmt.buf.String::append(s);
-            };
-            __inspect_first = false;
+        __inline_Formatter__write_str_5: {
+            let s: String = "Perms::Execute";
+            f.buf.String::append(s);
         };
     };
 }

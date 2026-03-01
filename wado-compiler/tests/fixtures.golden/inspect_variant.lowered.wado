@@ -30,7 +30,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Shape"(c, &mut __f);
+        Box<Shape> { value: c }."Shape^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     let r: Shape = Shape::Rectangle([3.0, 4.0]);
@@ -40,7 +40,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Shape"(r, &mut __f);
+        Box<Shape> { value: r }."Shape^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     let p: Shape = Shape::Point;
@@ -50,69 +50,67 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Shape"(p, &mut __f);
+        Box<Shape> { value: p }."Shape^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
 }
 
-fn "__inspect$Shape"(__val: Shape, __fmt: &mut Formatter) {
-    if __variant_test(__val, case=0, name=Circle) {
+pub fn "Shape^Inspect::inspect"(self: Box<Shape>, f: &mut Formatter) {
+    if __variant_test(self.value, case=0, name=Circle) {
         __inline_Formatter__write_str_0: {
             let s: String = "Shape::Circle(";
-            __fmt.buf.String::append(s);
+            f.buf.String::append(s);
         };
-        __inline___inspect_f64_1: {
-            let __val: f64 = __variant_payload(__val, case=0);
-            __inline_f64_Display__fmt_2: {
-                "core::prelude/primitives.wado::fmt_f64"(__val, __fmt);
-            };
+        __inline_f64_Inspect__inspect_1: {
+            let __sroa_self_value: f64 = __variant_payload(self.value, case=0);
+            "core::prelude/primitives.wado::fmt_f64"(__sroa_self_value, f);
         };
-        __inline_Formatter__write_char_3: {
-            __fmt.buf.String::append_char(')');
+        __inline_Formatter__write_str_2: {
+            let s: String = ")";
+            f.buf.String::append(s);
         };
     } else {
-        if __variant_test(__val, case=1, name=Rectangle) {
-            __inline_Formatter__write_str_4: {
+        if __variant_test(self.value, case=1, name=Rectangle) {
+            __inline_Formatter__write_str_3: {
                 let s: String = "Shape::Rectangle(";
-                __fmt.buf.String::append(s);
+                f.buf.String::append(s);
             };
-            "__inspect$[f64, f64]"(__variant_payload(__val, case=1), __fmt);
-            __inline_Formatter__write_char_5: {
-                __fmt.buf.String::append_char(')');
+            __variant_payload(self.value, case=1)."Tuple<f64,f64>^Inspect::inspect"(f);
+            __inline_Formatter__write_str_4: {
+                let s: String = ")";
+                f.buf.String::append(s);
             };
         } else {
-            if __variant_test(__val, case=2, name=Point) {
-                __inline_Formatter__write_str_6: {
+            if __variant_test(self.value, case=2, name=Point) {
+                __inline_Formatter__write_str_5: {
                     let s: String = "Shape::Point";
-                    __fmt.buf.String::append(s);
+                    f.buf.String::append(s);
                 };
             };
         };
     };
 }
 
-fn "__inspect$[f64, f64]"(__val: [f64, f64], __fmt: &mut Formatter) {
-    __inline_Formatter__write_char_0: {
-        __fmt.buf.String::append_char('[');
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    __inline_Formatter__write_str_0: {
+        let s: String = "[";
+        f.buf.String::append(s);
     };
-    __inline___inspect_f64_1: {
-        let __val: f64 = __val.0;
-        __inline_f64_Display__fmt_2: {
-            "core::prelude/primitives.wado::fmt_f64"(__val, __fmt);
-        };
+    __inline_f64_Inspect__inspect_1: {
+        let __sroa_self_value: f64 = *self.0;
+        "core::prelude/primitives.wado::fmt_f64"(__sroa_self_value, f);
     };
-    __inline_Formatter__write_str_3: {
+    __inline_Formatter__write_str_2: {
         let s: String = ", ";
-        __fmt.buf.String::append(s);
+        f.buf.String::append(s);
     };
-    __inline___inspect_f64_4: {
-        let __val: f64 = __val.1;
-        __inline_f64_Display__fmt_5: {
-            "core::prelude/primitives.wado::fmt_f64"(__val, __fmt);
-        };
+    __inline_f64_Inspect__inspect_3: {
+        let __sroa_self_value: f64 = *self.1;
+        "core::prelude/primitives.wado::fmt_f64"(__sroa_self_value, f);
     };
-    __inline_Formatter__write_char_6: {
-        __fmt.buf.String::append_char(']');
+    __inline_Formatter__write_str_4: {
+        let s: String = "]";
+        f.buf.String::append(s);
     };
 }
 
