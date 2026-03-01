@@ -495,23 +495,19 @@ Used for literal coercion: `let x: u128 = "12345678901234567890"`
 
 ##### `pub fn zero() -> u128`
 
-Create a zero u128
+Creates a zero u128
 
 ##### `pub fn one() -> u128`
 
-Create a u128 with value 1
+Creates a u128 with value 1
 
 ##### `pub fn low(&self) -> u64`
 
-Get the low 64 bits
+Gets the low 64 bits
 
 ##### `pub fn high(&self) -> u64`
 
-Get the high 64 bits
-
-##### `pub fn mul_u64(&self, multiplier: u64) -> u128`
-
-Multiply u128 by a u64 value
+Gets the high 64 bits
 
 ##### `pub fn add(&self, other: &u128) -> u128`
 
@@ -638,27 +634,27 @@ Used for literal coercion: `let x: i128 = "-12345678901234567890"`
 
 ##### `pub fn zero() -> i128`
 
-Create a zero i128
+Creates a zero i128
 
 ##### `pub fn one() -> i128`
 
-Create an i128 with value 1
+Creates an i128 with value 1
 
 ##### `pub fn low(&self) -> u64`
 
-Get the low 64 bits (unsigned)
+Gets the low 64 bits (unsigned)
 
 ##### `pub fn high(&self) -> i64`
 
-Get the high 64 bits (signed)
+Gets the high 64 bits (signed)
 
 ##### `pub fn is_negative(&self) -> bool`
 
-Check if this i128 is negative
+Checks if this i128 is negative
 
 ##### `pub fn add(&self, other: &i128) -> i128`
 
-Add two i128 values
+Adds two i128 values
 
 ##### `pub fn sub(&self, other: &i128) -> i128`
 

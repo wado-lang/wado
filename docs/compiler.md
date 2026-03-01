@@ -980,43 +980,7 @@ This optimization enables ergonomic APIs with methods while maintaining direct W
 
 ### 128-bit Integer Types (i128/u128)
 
-Unlike primitive types (`i32`, `i64`, etc.), Wado's 128-bit integers are implemented as **structs** in `core:prelude/int128` and re-exported from the prelude, making them available without explicit imports:
-
-```wado
-pub struct u128 {
-    low: u64,
-    high: u64,
-}
-
-pub struct i128 {
-    low: u64,
-    high: i64,
-}
-```
-
-**Why structs?**
-
-1. **Wasm has no 128-bit primitive**: Only 32/64-bit integers are native
-2. **Most operations need software implementation**: Division, shifts, bitwise ops
-3. **Leverages operator overloading**: Uses `Add`, `Sub`, `Eq`, `Ord` traits
-4. **Component Model compatibility**: WIT has no 128-bit types; struct maps to record
-
-**Available operations:**
-
-| Category   | Operations                                                     |
-| ---------- | -------------------------------------------------------------- |
-| Arithmetic | `+`, `-` (via `Add`/`Sub` traits), `mul_u64()` method          |
-| Comparison | `==`, `!=`, `<`, `<=`, `>`, `>=` (via `Eq`/`Ord` traits)       |
-| Negation   | Unary `-` for i128 (via `Neg` trait)                           |
-| Conversion | `from_u64()`, `from_i64()`, `from_string()`, `low()`, `high()` |
-
-**Wasm Wide Arithmetic instructions** are used for efficient add/sub:
-
-- `builtin::i64_add128` → `i64.add128`
-- `builtin::i64_sub128` → `i64.sub128`
-- `builtin::i64_mul_wide_u` → `i64.mul_wide_u`
-
-See [WEP: 128-bit Integer Types](./wep-2026-01-24-i128-u128-types.md) for full design rationale.
+See [WEP: 128-bit Integer Types](./wep-2026-01-24-i128-u128-types.md).
 
 ### Template String Interpolation
 

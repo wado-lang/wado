@@ -230,7 +230,6 @@ impl u128 {
     pub fn one() -> u128;
     pub fn low(&self) -> u64;
     pub fn high(&self) -> u64;
-    pub fn mul_u64(&self, multiplier: u64) -> u128;
     pub fn add(&self, other: &u128) -> u128;
     pub fn sub(&self, other: &u128) -> u128;
     pub fn div_rem(&self, divisor: &u128) -> [u128, u128];
