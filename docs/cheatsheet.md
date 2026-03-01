@@ -7,6 +7,9 @@ Quick reference for Wado syntax.
 ```wado
 // Line comment
 /* Block comment */
+
+//! Module doc comment
+/// Doc comment
 ```
 
 ## Shebang
@@ -40,8 +43,8 @@ fn foo(n: i64) { ... }
 foo(100);                       // integer literal coerced to i64
 
 // Strings
-"hello"         // String
-`Hello, {name}` // template string
+"Hello"         // String
+`Hello, {name}` // Template string
 
 // Characters
 'A'
@@ -53,7 +56,7 @@ true
 false
 
 // Null
-null            // same as Option::None
+null // same as Option::None
 
 // Unit
 ()
@@ -79,8 +82,8 @@ global mut counter: i32 = 0;        // mutable
 // With visibility
 pub global VERSION: i32 = 1;        // accessible from other modules
 
-// Arithmetic expressions
-global DOUBLED: i32 = 21 * 2;       // evaluated at initialization
+// Expressions
+global DOUBLED: i32 = 21 * 2;
 
 // Object type globals
 global mut MESSAGE: String = "Hello, World!";
@@ -105,6 +108,7 @@ Global variables map directly to WebAssembly globals. Constant expressions are e
 i8, i16, i32, i64         // signed integers
 u8, u16, u32, u64         // unsigned integers
 f32, f64                  // floats
+char                      // unicode scalar
 bool, char
 
 // 128-bit integers (prelude types, work like primitives)
@@ -113,9 +117,9 @@ i128, u128
 // Composite
 String                  // UTF-8 string
 Array<T>                // dynamic array
-[T, U, V]               // tuple type
-Option<T>               // optional value
-Result<T, E>            // result type
+[T, U, V]               // tuple
+Option<T>               // optional value (prelude type)
+Result<T, E>            // result type (prelude type)
 
 // Reference
 &T                      // immutable reference
@@ -218,7 +222,7 @@ let desc = orig.sorted_by(|a: &i32, b: &i32| {
 
 ```wado
 // String literals
-let s = "hello";                         // String literal (UTF-8)
+let s = "hello";                         // String literal (unicode scalars)
 
 // Multiline strings (newlines preserved)
 let poem = "Line 1
@@ -258,7 +262,7 @@ let jp = "日本";
 jp.len();                                // 6 (bytes)
 jp.chars().count();                      // 2 (characters)
 
-// Low-level byte access (prefer iterators)
+// Low-level byte access (UTF-8; prefer iterators)
 let byte = s.get_byte(0);                // get byte at index
 s.set_byte(0, 72);                       // set byte at index (requires mut)
 
@@ -272,12 +276,12 @@ builder.append("World!");
 // String concatenation (static method)
 let combined = String::concat("Hello, ", "World!");  // "Hello, World!"
 
-// Iterating over characters (for-of with chars())
+// Iterating over characters
 for let c of "hello".chars() {
     println(`{c}`);              // h, e, l, l, o
 }
 
-// Iterating over bytes (for-of with bytes())
+// Iterating over bytes
 for let b of "hello".bytes() {
     println(`{b}`);              // 104, 101, 108, 108, 111
 }
@@ -296,7 +300,7 @@ struct Box<T> {
     value: T,
 }
 
-// Field visibility (same rules as functions)
+// Field visibility (visible in the same module)
 pub struct Config {
     pub name: String,   // accessible from other modules
     secret: i32,        // private to this module
@@ -335,7 +339,7 @@ let mut { x, y } = p;
 struct Line { start: Point, end: Point }
 let { start: { x: x1, y: y1 }, end: { x: x2, y: y2 } } = line;
 
-// In for-of
+// Destructuring in for-of
 for let { x, y } of points {
     println(`{x}, {y}`);
 }
@@ -383,7 +387,7 @@ Enums auto-derive `Display`, `Eq`, and `Ord`:
 
 ```wado
 // Display: case name as string
-println(`{c}`);              // "Red"
+println(`{c}`);              // "Color::Red"
 
 // Eq: compare by discriminant
 let a = Color::Red;
@@ -447,14 +451,6 @@ assert rw as u32 == 3;
 ```
 
 Flags are newtypes over `u32`. Bitwise operators (`|`, `&`, `^`) work naturally.
-Attributes can annotate members for WIT name mapping:
-
-```wado
-pub flags PathFlags {
-    #[wasi("symlink-follow")]
-    SymlinkFollow,
-}
-```
 
 ## Variants
 
@@ -464,7 +460,7 @@ Variants are sum types with payloads (unlike enums which have no payloads). See 
 // Custom variant with unit and payload cases
 variant Shape {
     Circle(f64),           // radius
-    Rectangle([f64, f64]), // width, height (explicit tuple payload)
+    Rectangle([f64, f64]), // width, height (tuple payload)
     Point,                 // no payload
 }
 
@@ -570,12 +566,12 @@ All entity definitions can have `pub` visibility, including struct fields.
 
 ```wado
 impl Point {
-    // Instance method with &self (borrows immutably)
+    // Instance method with &self
     fn sum(&self) -> i32 {
         return self.x + self.y;
     }
 
-    // Instance method with &mut self (borrows mutably)
+    // Instance method with &mut self
     fn reset(&mut self) {
         self.x = 0;
         self.y = 0;
@@ -610,7 +606,7 @@ impl f64 {
     pub const PI: f64 = 3.14159265358979323846;
 }
 
-// Access with Type::CONST syntax (no parentheses)
+// Access with Type::CONST syntax
 let pi = f64::PI;
 let max = i32::MAX;
 ```
@@ -630,8 +626,8 @@ For the full API, see [Core Standard Library Reference](./cheatsheet-stdlib-core
 ```wado
 // char conversion
 let code = 'A' as i32;              // 65
-let c = char::from_u32(65 as u32);  // Option<char>: Some('A')
-let c = char::from_i32(65);         // Option<char>: Some('A')
+let c = char::from_u32(65 as u32);  // Option::<char>::Some('A')
+let c = char::from_i32(65);         // Option::<char>::Some('A')
 
 // Math (static methods on f64/f32)
 let pi = f64::PI;
@@ -971,8 +967,7 @@ for ; let Some(x) = iter.next(); {
 
 // For with pattern and update expression
 let mut iter = items.iter();
-let mut count = 0;
-for ; let Some(x) = iter.next(); count += 1 {
+for let mut count = 0; let Some(x) = iter.next(); count += 1 {
     println(`item {count}: {x}`);
 }
 
@@ -980,7 +975,6 @@ for ; let Some(x) = iter.next(); count += 1 {
 for let item of items {
     println(`{item}`);
 }
-// Works with Array<T> and any type implementing IntoIterator
 
 // Infinite loop
 loop {
@@ -1645,13 +1639,12 @@ Wado intentionally does not support macros.
 
 ## Not Yet Implemented
 
-- `resource` (Wasm CM resource handles)
 - Effect handlers
 - `reactive` values and `observe()`
 - `stores[...]` syntax for reference storage
 - postfix `?` operator (error propagation)
 - JSX
-- Generic function/method call type inference (variant and struct literal inference is implemented)
+- Generic function/method call type inference
 
 ## See Also
 

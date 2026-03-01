@@ -3006,12 +3006,12 @@ The `#[TODO]` attribute marks a test as a placeholder for a feature not yet impl
 The `wado test` command discovers and runs tests:
 
 ```sh
-# Auto-discover and run all *_test.wado files recursively
+# Auto-discover and run all **/*_test.wado files recursively
 wado test
 
 # Run tests in specific file(s)
 wado test path/to/file.wado
-wado test tests/*.wado
+wado test path # find path/**/*_test.wado
 
 # Filter tests by name pattern
 wado test --filter "addition"
@@ -3080,15 +3080,6 @@ test "add positive numbers" {
 test "add negative numbers" {
     assert add(-1, -1) == -2;
     assert add(-5, 3) == -2;
-}
-
-test "multiply" {
-    assert multiply(3, 4) == 12;
-    assert multiply(0, 100) == 0;
-}
-
-// Entry point required for valid Wado module
-export fn run() {
 }
 ```
 

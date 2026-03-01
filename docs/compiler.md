@@ -1585,23 +1585,10 @@ Checked during analysis phase. Non-exhaustive patterns are compile errors.
 
 ## Not Yet Implemented
 
-### Expressions
-
 - Range expressions
 - `?` operator (error propagation)
-
-### Semantic Analysis
-
-- Simple type checking
-- Generic type checking
 - Type inference
-- Borrow checking / move analysis
-- Unused variable warnings
-
-### Code Generation
-
-- Custom variant pattern matching (struct payloads, see WEP)
 - Effect handlers
-- Value semantics for Result<T, E> (blocked on Result codegen)
 - Reactive signals (source values, derived values, effect blocks)
+- JSX
 - Generic function/method type inference
