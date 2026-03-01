@@ -102,86 +102,6 @@ export fn run() with Stdout {
     });
 }
 
-fn "__inspect$Array<Array<Array<i32>>>"(__val: Array<Array<Array<i32>>>, __fmt: &mut Formatter) {
-    __inline_Formatter__write_char_0: {
-        __fmt.buf.String::append_char('[');
-    };
-    let __inspect_len: i32 = __val.used;
-    let mut __inspect_i: i32 = 0;
-    let _licm_buf: &mut String = __fmt.buf;
-    loop {
-        if !(__inspect_i < __inspect_len) {
-            break;
-        }
-        if (__inspect_i > 0) {
-            __inline_Formatter__write_str_2: {
-                let s: String = ", ";
-                _licm_buf.String::append(s);
-            };
-        };
-        "__inspect$Array<Array<i32>>"(__val[__inspect_i], __fmt);
-        __inspect_i = (__inspect_i + 1);
-    }
-    __inline_Formatter__write_char_3: {
-        __fmt.buf.String::append_char(']');
-    };
-}
-
-fn "__inspect$Array<Array<i32>>"(__val: Array<Array<i32>>, __fmt: &mut Formatter) {
-    __inline_Formatter__write_char_0: {
-        __fmt.buf.String::append_char('[');
-    };
-    let __inspect_len: i32 = __val.used;
-    let mut __inspect_i: i32 = 0;
-    let _licm_buf: &mut String = __fmt.buf;
-    loop {
-        if !(__inspect_i < __inspect_len) {
-            break;
-        }
-        if (__inspect_i > 0) {
-            __inline_Formatter__write_str_2: {
-                let s: String = ", ";
-                _licm_buf.String::append(s);
-            };
-        };
-        "__inspect$Array<i32>"(__val[__inspect_i], __fmt);
-        __inspect_i = (__inspect_i + 1);
-    }
-    __inline_Formatter__write_char_3: {
-        __fmt.buf.String::append_char(']');
-    };
-}
-
-fn "__inspect$Array<i32>"(__val: Array<i32>, __fmt: &mut Formatter) {
-    __inline_Formatter__write_char_0: {
-        __fmt.buf.String::append_char('[');
-    };
-    let __inspect_len: i32 = __val.used;
-    let mut __inspect_i: i32 = 0;
-    let _licm_buf: &mut String = __fmt.buf;
-    loop {
-        if !(__inspect_i < __inspect_len) {
-            break;
-        }
-        if (__inspect_i > 0) {
-            __inline_Formatter__write_str_2: {
-                let s: String = ", ";
-                _licm_buf.String::append(s);
-            };
-        };
-        __inline___inspect_i32_3: {
-            let __val: i32 = __val[__inspect_i];
-            __inline_i32_Display__fmt_4: {
-                "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
-            };
-        };
-        __inspect_i = (__inspect_i + 1);
-    }
-    __inline_Formatter__write_char_5: {
-        __fmt.buf.String::append_char(']');
-    };
-}
-
 export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
@@ -233,5 +153,85 @@ pub fn "Array<Array<Array<i32>>>::append"(self: &mut Array<Array<Array<i32>>>, v
     }
     core::builtin::array_set::<Array<Array<i32>>>(self.repr, used, value);
     self.used = (used + 1);
+}
+
+fn "__inspect$Array<Array<Array<i32>>>"(__val: Array<Array<Array<i32>>>, __fmt: &mut Formatter) {
+    __inline_Formatter__write_char_0: {
+        __fmt.buf.String::append_char('[');
+    };
+    let __inspect_len: i32 = __val.used;
+    let mut __inspect_i: i32 = 0;
+    let _licm_buf: &mut String = __fmt.buf;
+    loop {
+        if !(__inspect_i < __inspect_len) {
+            break;
+        }
+        if (__inspect_i > 0) {
+            __inline_Formatter__write_str_1: {
+                let s: String = ", ";
+                _licm_buf.String::append(s);
+            };
+        };
+        "__inspect$Array<Array<i32>>"(__val[__inspect_i], __fmt);
+        __inspect_i = (__inspect_i + 1);
+    }
+    __inline_Formatter__write_char_2: {
+        __fmt.buf.String::append_char(']');
+    };
+}
+
+fn "__inspect$Array<Array<i32>>"(__val: Array<Array<i32>>, __fmt: &mut Formatter) {
+    __inline_Formatter__write_char_0: {
+        __fmt.buf.String::append_char('[');
+    };
+    let __inspect_len: i32 = __val.used;
+    let mut __inspect_i: i32 = 0;
+    let _licm_buf: &mut String = __fmt.buf;
+    loop {
+        if !(__inspect_i < __inspect_len) {
+            break;
+        }
+        if (__inspect_i > 0) {
+            __inline_Formatter__write_str_1: {
+                let s: String = ", ";
+                _licm_buf.String::append(s);
+            };
+        };
+        "__inspect$Array<i32>"(__val[__inspect_i], __fmt);
+        __inspect_i = (__inspect_i + 1);
+    }
+    __inline_Formatter__write_char_2: {
+        __fmt.buf.String::append_char(']');
+    };
+}
+
+fn "__inspect$Array<i32>"(__val: Array<i32>, __fmt: &mut Formatter) {
+    __inline_Formatter__write_char_0: {
+        __fmt.buf.String::append_char('[');
+    };
+    let __inspect_len: i32 = __val.used;
+    let mut __inspect_i: i32 = 0;
+    let _licm_buf: &mut String = __fmt.buf;
+    loop {
+        if !(__inspect_i < __inspect_len) {
+            break;
+        }
+        if (__inspect_i > 0) {
+            __inline_Formatter__write_str_1: {
+                let s: String = ", ";
+                _licm_buf.String::append(s);
+            };
+        };
+        __inline___inspect_i32_2: {
+            let __val: i32 = __val[__inspect_i];
+            __inline_i32_Display__fmt_3: {
+                "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
+            };
+        };
+        __inspect_i = (__inspect_i + 1);
+    }
+    __inline_Formatter__write_char_4: {
+        __fmt.buf.String::append_char(']');
+    };
 }
 

@@ -35,6 +35,11 @@ export fn run() with Stdout {
     });
 }
 
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
+}
+
 fn "__inspect$[i32, String, bool]"(__val: [i32, String, bool], __fmt: &mut Formatter) {
     __inline_Formatter__write_char_0: {
         __fmt.buf.String::append_char('[');
@@ -76,10 +81,5 @@ fn "__inspect$[i32, String, bool]"(__val: [i32, String, bool], __fmt: &mut Forma
     __inline_Formatter__write_char_10: {
         __fmt.buf.String::append_char(']');
     };
-}
-
-export fn __cm_export__run() {
-    run();
-    cm_raw_call task-return(0);
 }
 

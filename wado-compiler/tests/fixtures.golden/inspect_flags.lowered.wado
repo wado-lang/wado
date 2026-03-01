@@ -67,6 +67,11 @@ export fn run() with Stdout {
     });
 }
 
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
+}
+
 fn "__inspect$Perms"(__val: Perms, __fmt: &mut Formatter) {
     if (__val as u32 == 0) {
         __inline_Formatter__write_str_0: {
@@ -115,10 +120,5 @@ fn "__inspect$Perms"(__val: Perms, __fmt: &mut Formatter) {
             __inspect_first = false;
         };
     };
-}
-
-export fn __cm_export__run() {
-    run();
-    cm_raw_call task-return(0);
 }
 

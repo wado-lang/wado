@@ -1421,6 +1421,43 @@ pub enum TirExprKind {
         /// Default arm for values outside the range
         default: TirBlock,
     },
+
+    /// Unresolved template string expression.
+    ///
+    /// Created by the resolver with resolved sub-expressions but without
+    /// expanding to formatting code. The synthesis phase (post-monomorphize)
+    /// expands this into the `__tmpl` labeled block with `String::with_capacity`,
+    /// `append`, `Formatter`, and `Display`/inspect calls.
+    TemplateString {
+        parts: Vec<TirTemplatePart>,
+    },
+}
+
+/// A part of a resolved template string.
+#[derive(Debug, Clone)]
+pub enum TirTemplatePart {
+    /// A literal string segment.
+    Literal(String),
+    /// An interpolated expression with optional format specifier.
+    Interpolation {
+        expr: TirExpr,
+        format_spec: Option<TemplateFormatSpec>,
+    },
+}
+
+/// Parsed format specification from a template string interpolation.
+/// Syntax: `[[fill]align][sign][#][0][width][.precision]type`
+#[derive(Debug, Clone)]
+pub struct TemplateFormatSpec {
+    pub fill: Option<char>,
+    pub align: Option<char>,
+    pub sign_plus: bool,
+    pub alternate: bool,
+    pub zero_pad: bool,
+    pub width: Option<i64>,
+    pub precision: Option<i64>,
+    /// Type character: `b`, `o`, `x`, `X`, `e`, `E`, `?`
+    pub type_char: Option<char>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

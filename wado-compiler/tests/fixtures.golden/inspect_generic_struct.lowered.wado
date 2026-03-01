@@ -55,6 +55,11 @@ export fn run() with Stdout {
     core::cli::println("ok");
 }
 
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
+}
+
 fn "__inspect$Box<i32>"(__val: Box<i32>, __fmt: &mut Formatter) {
     __inline_Formatter__write_str_0: {
         let s: String = "Box { ";
@@ -117,10 +122,5 @@ fn "__inspect$Pair<String>"(__val: Pair<String>, __fmt: &mut Formatter) {
         let s: String = " }";
         __fmt.buf.String::append(s);
     };
-}
-
-export fn __cm_export__run() {
-    run();
-    cm_raw_call task-return(0);
 }
 

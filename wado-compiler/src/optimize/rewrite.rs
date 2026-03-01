@@ -211,6 +211,9 @@ fn simplify_labeled_blocks_in_expr(expr: &mut TirExpr) -> bool {
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 
     // Simplify: `label: { break label: expr; }` → `expr`

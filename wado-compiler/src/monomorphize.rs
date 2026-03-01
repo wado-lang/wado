@@ -20,7 +20,7 @@ use crate::project::Project;
 use crate::tir::{
     FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirField, TirFunction, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirStruct, TirUnaryOp, TypeId, TypeTable,
+    TirStruct, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -913,6 +913,13 @@ impl Monomorphizer {
                     self.rewrite_types_in_block(arm, type_table);
                 }
                 self.rewrite_types_in_block(default, type_table);
+            }
+            TirExprKind::TemplateString { parts } => {
+                for part in parts {
+                    if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
+                        self.rewrite_types_in_expr(inner, type_table);
+                    }
+                }
             }
         }
     }
@@ -1962,6 +1969,17 @@ impl Monomorphizer {
                     type_table,
                 );
             }
+            TirExprKind::TemplateString { parts } => {
+                for part in parts {
+                    if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
+                        self.collect_func_instantiation_sites_in_expr(
+                            inner,
+                            generic_functions,
+                            type_table,
+                        );
+                    }
+                }
+            }
             // Literals and simple expressions
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -2888,6 +2906,13 @@ impl Monomorphizer {
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
+            TirExprKind::TemplateString { parts } => {
+                for part in parts {
+                    if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
+                        self.substitute_types_in_expr(inner, substitution, type_table);
+                    }
+                }
+            }
         }
     }
 
@@ -3064,6 +3089,13 @@ impl Monomorphizer {
             }
             TirExprKind::ClosureToCanonical { functor, .. } => {
                 Self::update_local_expr_types_in_expr(functor, local_types);
+            }
+            TirExprKind::TemplateString { parts } => {
+                for part in parts {
+                    if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
+                        Self::update_local_expr_types_in_expr(inner, local_types);
+                    }
+                }
             }
             _ => {}
         }
@@ -3528,6 +3560,13 @@ impl Monomorphizer {
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
+            TirExprKind::TemplateString { parts } => {
+                for part in parts {
+                    if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
+                        self.rewrite_function_calls_in_expr(inner, type_table);
+                    }
+                }
+            }
         }
     }
 

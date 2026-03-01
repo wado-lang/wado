@@ -632,6 +632,9 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 }
 
@@ -2164,6 +2167,9 @@ impl<'a> PatternLowerer<'a> {
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
+            TirExprKind::TemplateString { .. } => {
+                unreachable!("TemplateString should be expanded before this phase")
+            }
         }
     }
 }
@@ -3664,6 +3670,9 @@ impl BoxLowerer {
             TirExprKind::Assign { .. } | TirExprKind::Unary { .. } => {
                 // Handled below
             }
+            TirExprKind::TemplateString { .. } => {
+                unreachable!("TemplateString should be expanded before this phase")
+            }
         }
 
         // Now handle the boxing-specific transformations (top-down after sub-expressions)
@@ -4247,6 +4256,9 @@ impl ClosureLowerer {
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
+            TirExprKind::TemplateString { .. } => {
+                unreachable!("TemplateString should be expanded before this phase")
+            }
         }
     }
 
@@ -4457,6 +4469,9 @@ impl ClosureLowerer {
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
+            TirExprKind::TemplateString { .. } => {
+                unreachable!("TemplateString should be expanded before this phase")
+            }
         }
     }
 
@@ -5654,6 +5669,9 @@ impl ClosureLowerer {
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => false,
+            TirExprKind::TemplateString { .. } => {
+                unreachable!("TemplateString should be expanded before this phase")
+            }
         }
     }
 
@@ -5924,6 +5942,9 @@ impl ClosureLowerer {
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
+            TirExprKind::TemplateString { .. } => {
+                unreachable!("TemplateString should be expanded before this phase")
+            }
         }
     }
 
@@ -6887,6 +6908,9 @@ impl ClosureLowerer {
                 expr.type_id,
                 expr.span,
             ),
+            TirExprKind::TemplateString { .. } => {
+                unreachable!("TemplateString should be expanded before this phase")
+            }
         }
     }
 
@@ -7187,6 +7211,9 @@ impl ClosureLowerer {
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
+            TirExprKind::TemplateString { .. } => {
+                unreachable!("TemplateString should be expanded before this phase")
+            }
         }
     }
 
@@ -7536,6 +7563,9 @@ impl ClosureLowerer {
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. }
             | TirExprKind::VariantConstruct { payload: None, .. } => {}
+            TirExprKind::TemplateString { .. } => {
+                unreachable!("TemplateString should be expanded before this phase")
+            }
         }
     }
 }
@@ -7800,6 +7830,9 @@ impl StringCollector {
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
+            TirExprKind::TemplateString { .. } => {
+                unreachable!("TemplateString should be expanded before this phase")
+            }
         }
     }
 }

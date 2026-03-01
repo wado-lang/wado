@@ -69,65 +69,6 @@ export fn run() with Stdout {
     });
 }
 
-fn "__inspect$Array<Array<String>>"(__val: Array<Array<String>>, __fmt: &mut Formatter) {
-    __inline_Formatter__write_char_0: {
-        __fmt.buf.String::append_char('[');
-    };
-    let __inspect_len: i32 = __val.used;
-    let mut __inspect_i: i32 = 0;
-    let _licm_buf: &mut String = __fmt.buf;
-    loop {
-        if !(__inspect_i < __inspect_len) {
-            break;
-        }
-        if (__inspect_i > 0) {
-            __inline_Formatter__write_str_2: {
-                let s: String = ", ";
-                _licm_buf.String::append(s);
-            };
-        };
-        "__inspect$Array<String>"(__val[__inspect_i], __fmt);
-        __inspect_i = (__inspect_i + 1);
-    }
-    __inline_Formatter__write_char_3: {
-        __fmt.buf.String::append_char(']');
-    };
-}
-
-fn "__inspect$Array<String>"(__val: Array<String>, __fmt: &mut Formatter) {
-    __inline_Formatter__write_char_0: {
-        __fmt.buf.String::append_char('[');
-    };
-    let __inspect_len: i32 = __val.used;
-    let mut __inspect_i: i32 = 0;
-    let _licm_buf: &mut String = __fmt.buf;
-    loop {
-        if !(__inspect_i < __inspect_len) {
-            break;
-        }
-        if (__inspect_i > 0) {
-            __inline_Formatter__write_str_2: {
-                let s: String = ", ";
-                _licm_buf.String::append(s);
-            };
-        };
-        __inline___inspect_String_3: {
-            let __val: String = __val[__inspect_i];
-            __inline_Formatter__write_char_4: {
-                _licm_buf.String::append_char('"');
-            };
-            core::internal::write_escaped_string(__val, __fmt);
-            __inline_Formatter__write_char_5: {
-                _licm_buf.String::append_char('"');
-            };
-        };
-        __inspect_i = (__inspect_i + 1);
-    }
-    __inline_Formatter__write_char_6: {
-        __fmt.buf.String::append_char(']');
-    };
-}
-
 export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
@@ -163,5 +104,64 @@ pub fn "Array<Array<String>>::append"(self: &mut Array<Array<String>>, value: Ar
     }
     core::builtin::array_set::<Array<String>>(self.repr, used, value);
     self.used = (used + 1);
+}
+
+fn "__inspect$Array<Array<String>>"(__val: Array<Array<String>>, __fmt: &mut Formatter) {
+    __inline_Formatter__write_char_0: {
+        __fmt.buf.String::append_char('[');
+    };
+    let __inspect_len: i32 = __val.used;
+    let mut __inspect_i: i32 = 0;
+    let _licm_buf: &mut String = __fmt.buf;
+    loop {
+        if !(__inspect_i < __inspect_len) {
+            break;
+        }
+        if (__inspect_i > 0) {
+            __inline_Formatter__write_str_1: {
+                let s: String = ", ";
+                _licm_buf.String::append(s);
+            };
+        };
+        "__inspect$Array<String>"(__val[__inspect_i], __fmt);
+        __inspect_i = (__inspect_i + 1);
+    }
+    __inline_Formatter__write_char_2: {
+        __fmt.buf.String::append_char(']');
+    };
+}
+
+fn "__inspect$Array<String>"(__val: Array<String>, __fmt: &mut Formatter) {
+    __inline_Formatter__write_char_0: {
+        __fmt.buf.String::append_char('[');
+    };
+    let __inspect_len: i32 = __val.used;
+    let mut __inspect_i: i32 = 0;
+    let _licm_buf: &mut String = __fmt.buf;
+    loop {
+        if !(__inspect_i < __inspect_len) {
+            break;
+        }
+        if (__inspect_i > 0) {
+            __inline_Formatter__write_str_1: {
+                let s: String = ", ";
+                _licm_buf.String::append(s);
+            };
+        };
+        __inline___inspect_String_2: {
+            let __val: String = __val[__inspect_i];
+            __inline_Formatter__write_char_3: {
+                _licm_buf.String::append_char('"');
+            };
+            core::internal::write_escaped_string(__val, __fmt);
+            __inline_Formatter__write_char_4: {
+                _licm_buf.String::append_char('"');
+            };
+        };
+        __inspect_i = (__inspect_i + 1);
+    }
+    __inline_Formatter__write_char_5: {
+        __fmt.buf.String::append_char(']');
+    };
 }
 

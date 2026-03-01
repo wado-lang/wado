@@ -118,6 +118,11 @@ export fn run() with Stdout {
     core::cli::println("ok");
 }
 
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
+}
+
 fn "__inspect$char"(__val: char, __fmt: &mut Formatter) {
     __inline_Formatter__write_char_0: {
         __fmt.buf.String::append_char('\'');
@@ -126,10 +131,5 @@ fn "__inspect$char"(__val: char, __fmt: &mut Formatter) {
     __inline_Formatter__write_char_1: {
         __fmt.buf.String::append_char('\'');
     };
-}
-
-export fn __cm_export__run() {
-    run();
-    cm_raw_call task-return(0);
 }
 

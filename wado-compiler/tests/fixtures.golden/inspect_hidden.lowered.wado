@@ -61,6 +61,11 @@ export fn run() with Stdout {
     core::cli::println("ok");
 }
 
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
+}
+
 fn "__inspect$User"(__val: User, __fmt: &mut Formatter) {
     __inline_Formatter__write_str_0: {
         let s: String = "User { ";
@@ -102,10 +107,5 @@ fn "__inspect$User"(__val: User, __fmt: &mut Formatter) {
         let s: String = " }";
         __fmt.buf.String::append(s);
     };
-}
-
-export fn __cm_export__run() {
-    run();
-    cm_raw_call task-return(0);
 }
 

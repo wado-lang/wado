@@ -80,6 +80,11 @@ export fn run() with Stdout {
     core::cli::println(describe(Fruit::Cherry));
 }
 
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
+}
+
 fn "__inspect$Fruit"(__val: Fruit, __fmt: &mut Formatter) {
     if (__val == 0) {
         __inline_Formatter__write_str_0: {
@@ -101,10 +106,5 @@ fn "__inspect$Fruit"(__val: Fruit, __fmt: &mut Formatter) {
             };
         };
     };
-}
-
-export fn __cm_export__run() {
-    run();
-    cm_raw_call task-return(0);
 }
 

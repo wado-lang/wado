@@ -55,6 +55,11 @@ export fn run() with Stdout {
     });
 }
 
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
+}
+
 fn "__inspect$Shape"(__val: Shape, __fmt: &mut Formatter) {
     if __variant_test(__val, case=0, name=Circle) {
         __inline_Formatter__write_str_0: {
@@ -114,10 +119,5 @@ fn "__inspect$[f64, f64]"(__val: [f64, f64], __fmt: &mut Formatter) {
     __inline_Formatter__write_char_6: {
         __fmt.buf.String::append_char(']');
     };
-}
-
-export fn __cm_export__run() {
-    run();
-    cm_raw_call task-return(0);
 }
 

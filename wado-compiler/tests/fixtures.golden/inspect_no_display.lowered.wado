@@ -141,22 +141,36 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        if &mut __f.alternate {
-            __inline_Formatter__write_str_23: {
-                let s: String = "|x: i32| x * 2";
+        __inline___inspect_fn_i32_____i32_23: {
+            __inline_Formatter__write_str_24: {
+                let s: String = "|i32| -> i32";
                 __f.buf.String::append(s);
             };
-        } else {
-            __inline___inspect_fn_i32_____i32_24: {
-                __inline_Formatter__write_str_25: {
-                    let s: String = "|i32| -> i32";
-                    __f.buf.String::append(s);
-                };
-            };
-        }
+        };
         break __tmpl: __r;
     });
     core::cli::println("ok");
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
+}
+
+pub fn "Array<Point>::append"(self: &mut Array<Point>, value: Point) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "core::prelude/array.wado::select<i32>"((a > 4), a, 4);
+        };
+        let new_repr: builtin::array<Point> = core::builtin::array_new::<Point>(new_capacity);
+        core::builtin::array_copy::<Point>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<Point>(self.repr, used, value);
+    self.used = (used + 1);
 }
 
 fn "__inspect$Point"(__val: Point, __fmt: &mut Formatter) {
@@ -332,7 +346,7 @@ fn "__inspect$Array<Point>"(__val: Array<Point>, __fmt: &mut Formatter) {
             break;
         }
         if (__inspect_i > 0) {
-            __inline_Formatter__write_str_2: {
+            __inline_Formatter__write_str_1: {
                 let s: String = ", ";
                 _licm_buf.String::append(s);
             };
@@ -340,30 +354,9 @@ fn "__inspect$Array<Point>"(__val: Array<Point>, __fmt: &mut Formatter) {
         "__inspect$Point"(__val[__inspect_i], __fmt);
         __inspect_i = (__inspect_i + 1);
     }
-    __inline_Formatter__write_char_3: {
+    __inline_Formatter__write_char_2: {
         __fmt.buf.String::append_char(']');
     };
-}
-
-export fn __cm_export__run() {
-    run();
-    cm_raw_call task-return(0);
-}
-
-pub fn "Array<Point>::append"(self: &mut Array<Point>, value: Point) {
-    let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
-        let new_capacity: i32 = __inline_i32_max_0: {
-            let a: i32 = (capacity * 2);
-            break __inline_i32_max_0: "core::prelude/array.wado::select<i32>"((a > 4), a, 4);
-        };
-        let new_repr: builtin::array<Point> = core::builtin::array_new::<Point>(new_capacity);
-        core::builtin::array_copy::<Point>(new_repr, 0, self.repr, 0, used);
-        self.repr = new_repr;
-    }
-    core::builtin::array_set::<Point>(self.repr, used, value);
-    self.used = (used + 1);
 }
 
 fn __Closure_0::__call(self: &__Closure_0, x: i32) -> i32 {

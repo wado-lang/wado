@@ -51,6 +51,11 @@ export fn run() with Stdout {
     core::cli::println("ok");
 }
 
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
+}
+
 fn "__inspect$Point"(__val: Point, __fmt: &mut Formatter) {
     __inline_Formatter__write_str_0: {
         let s: String = "Point { ";
@@ -102,10 +107,5 @@ fn "__inspect$Option<Point>"(__val: Option<Point>, __fmt: &mut Formatter) {
             __fmt.buf.String::append(s);
         };
     };
-}
-
-export fn __cm_export__run() {
-    run();
-    cm_raw_call task-return(0);
 }
 

@@ -55,6 +55,11 @@ export fn run() with Stdout {
     });
 }
 
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
+}
+
 fn "__inspect$Option<Option<Option<i32>>>"(__val: Option<Option<Option<i32>>>, __fmt: &mut Formatter) {
     if __variant_test(__val, case=0, name=Some) {
         __inline_Formatter__write_str_0: {
@@ -112,10 +117,5 @@ fn "__inspect$Option<i32>"(__val: Option<i32>, __fmt: &mut Formatter) {
             __fmt.buf.String::append(s);
         };
     };
-}
-
-export fn __cm_export__run() {
-    run();
-    cm_raw_call task-return(0);
 }
 

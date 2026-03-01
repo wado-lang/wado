@@ -75,6 +75,43 @@ export fn run() with Stdout {
     });
 }
 
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
+}
+
+pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "core::prelude/array.wado::select<i32>"((a > 4), a, 4);
+        };
+        let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
+        core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<i32>(self.repr, used, value);
+    self.used = (used + 1);
+}
+
+pub fn "Array<Array<i32>>::append"(self: &mut Array<Array<i32>>, value: Array<i32>) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "core::prelude/array.wado::select<i32>"((a > 4), a, 4);
+        };
+        let new_repr: builtin::array<Array<i32>> = core::builtin::array_new::<Array<i32>>(new_capacity);
+        core::builtin::array_copy::<Array<i32>>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<Array<i32>>(self.repr, used, value);
+    self.used = (used + 1);
+}
+
 fn "__inspect$Matrix"(__val: Matrix, __fmt: &mut Formatter) {
     __inline_Formatter__write_str_0: {
         let s: String = "Matrix { ";
@@ -117,7 +154,7 @@ fn "__inspect$Array<Array<i32>>"(__val: Array<Array<i32>>, __fmt: &mut Formatter
             break;
         }
         if (__inspect_i > 0) {
-            __inline_Formatter__write_str_2: {
+            __inline_Formatter__write_str_1: {
                 let s: String = ", ";
                 _licm_buf.String::append(s);
             };
@@ -125,7 +162,7 @@ fn "__inspect$Array<Array<i32>>"(__val: Array<Array<i32>>, __fmt: &mut Formatter
         "__inspect$Array<i32>"(__val[__inspect_i], __fmt);
         __inspect_i = (__inspect_i + 1);
     }
-    __inline_Formatter__write_char_3: {
+    __inline_Formatter__write_char_2: {
         __fmt.buf.String::append_char(']');
     };
 }
@@ -142,58 +179,21 @@ fn "__inspect$Array<i32>"(__val: Array<i32>, __fmt: &mut Formatter) {
             break;
         }
         if (__inspect_i > 0) {
-            __inline_Formatter__write_str_2: {
+            __inline_Formatter__write_str_1: {
                 let s: String = ", ";
                 _licm_buf.String::append(s);
             };
         };
-        __inline___inspect_i32_3: {
+        __inline___inspect_i32_2: {
             let __val: i32 = __val[__inspect_i];
-            __inline_i32_Display__fmt_4: {
+            __inline_i32_Display__fmt_3: {
                 "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
             };
         };
         __inspect_i = (__inspect_i + 1);
     }
-    __inline_Formatter__write_char_5: {
+    __inline_Formatter__write_char_4: {
         __fmt.buf.String::append_char(']');
     };
-}
-
-export fn __cm_export__run() {
-    run();
-    cm_raw_call task-return(0);
-}
-
-pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
-    let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
-        let new_capacity: i32 = __inline_i32_max_0: {
-            let a: i32 = (capacity * 2);
-            break __inline_i32_max_0: "core::prelude/array.wado::select<i32>"((a > 4), a, 4);
-        };
-        let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
-        core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
-        self.repr = new_repr;
-    }
-    core::builtin::array_set::<i32>(self.repr, used, value);
-    self.used = (used + 1);
-}
-
-pub fn "Array<Array<i32>>::append"(self: &mut Array<Array<i32>>, value: Array<i32>) {
-    let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
-        let new_capacity: i32 = __inline_i32_max_0: {
-            let a: i32 = (capacity * 2);
-            break __inline_i32_max_0: "core::prelude/array.wado::select<i32>"((a > 4), a, 4);
-        };
-        let new_repr: builtin::array<Array<i32>> = core::builtin::array_new::<Array<i32>>(new_capacity);
-        core::builtin::array_copy::<Array<i32>>(new_repr, 0, self.repr, 0, used);
-        self.repr = new_repr;
-    }
-    core::builtin::array_set::<Array<i32>>(self.repr, used, value);
-    self.used = (used + 1);
 }
 

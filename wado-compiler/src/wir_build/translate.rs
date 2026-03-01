@@ -1603,6 +1603,10 @@ impl FunctionTranslator<'_, '_> {
                 target_fn_type,
             } => self.translate_closure_to_canonical(functor, *functor_id, *target_fn_type),
 
+            TirExprKind::TemplateString { .. } => {
+                unreachable!("TemplateString should have been expanded before WIR build")
+            }
+
             // === Labeled Block Expression ===
             TirExprKind::LabeledBlock { label, block, .. } => {
                 let has_result = expr.type_id != TypeTable::UNIT;
