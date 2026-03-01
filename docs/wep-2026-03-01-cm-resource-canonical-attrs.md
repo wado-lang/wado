@@ -1,4 +1,4 @@
-# WEP: CM Resource Canonical Attributes
+# WEP: Redesign Wasm CM Builtins as Resource Canonical Attributes
 
 ## Context
 
@@ -6,31 +6,37 @@ Component Model (CM) async primitives — `stream`, `future`, `waitable-set`, `s
 `error-context`, and `task.return` — are currently declared as bare functions in
 `builtin.wado` with `#[canonical("wasi", "...")]` attributes. The connection between
 these low-level builtins and the user-facing resource types (`Stream<T>`, `Future<T>`, etc.)
-is entirely hard-coded in Rust across multiple compiler phases:
+is entirely hard-coded in Rust across five compiler phases:
 
-- `method_call.rs` matches type names to resolve `Stream::new()` → synthetic builtin call
-- `wir_build/translate.rs` has `try_translate_stream_method`, `try_translate_stream_writable_method`,
-  `try_translate_future_writable_method` — each 100+ lines of WIR generation
-- `optimize/dce.rs` matches `("Stream", "close")`, `("StreamWritable", "write")` etc.
-  to inject canonical builtin dependencies
+```
+method_call.rs   →  type name matching   →  synthetic "builtin::stream_create_pair" call
+translate.rs     →  try_translate_*       →  WIR inline synthesis (100+ lines each)
+dce.rs           →  ("Stream", "close")   →  canonical import dependency injection
+wasm_plan.rs     →  TirImport filtering   →  ComponentPlan.canonical_intrinsics
+component.rs     →  canonical name match  →  CM builder instruction
+```
 
-This design has several problems:
+Additionally, `stream.wado` provides thin wrappers (`stream_new()`, `waitable_set_new()`, etc.)
+around `builtin::*` functions, adding an unnecessary indirection layer.
 
-1. **CM builtins pollute `builtin.wado`** — 14 CM functions mixed with ~60 Wasm instruction builtins
-2. **Invisible contract** — the resource method declarations in `types.wado` have no bodies
-   and nothing connects them to the canonical operations except hard-coded Rust
-3. **Hard to extend** — adding a new resource method (e.g., `Stream::cancel_read()`)
-   requires changes across 4+ Rust files
-4. **No type safety** — `builtin::stream_read(rx, ptr, len)` takes raw `i32` handles;
-   the type system doesn't enforce that `rx` is a Stream handle
+### Problems
+
+1. **Scattered knowledge** — CM resource knowledge is hard-coded across 5 Rust files
+   with no single source of truth connecting resource methods to canonical operations
+2. **builtin.wado pollution** — 13 CM functions mixed with ~60 Wasm instruction builtins
+3. **Invisible contract** — resource declarations in `types.wado` have no bodies and
+   nothing links them to canonical operations except hard-coded Rust
+4. **Raw i32 handles** — `builtin::stream_read(rx, ptr, len)` bypasses the type system;
+   `WaitableSet` and `Subtask` exist only as raw i32 values
+5. **Missing operations** — `Future::read`, `WaitableSet`, `Subtask`, `ErrorContext`
+   are not user-facing types
 
 ## Decision
 
-Move canonical operation declarations from `builtin.wado` to `#[canonical]` attributes
-on resource method declarations in `prelude/types.wado`. The compiler's CM adapter
-synthesis continues to generate the WIR glue code (memory allocation, BLOCKED handling,
-GC↔linear memory conversion), but is driven by these attributes instead of hard-coded
-type name matching.
+Redesign the CM resource architecture from first principles. Resource method declarations
+in `types.wado` become the single source of truth via `#[canonical]` attributes. The compiler
+pipeline is restructured so that canonical intrinsic discovery flows from these attributes
+through the compilation phases, replacing all hard-coded type/method name matching.
 
 ### Resource Declarations (types.wado)
 
@@ -58,6 +64,9 @@ pub resource Future<T> {
     #[canonical("future-new")]
     fn new() -> [Future<T>, FutureWritable<T>];
 
+    #[canonical("future-read")]
+    fn read(&self) -> T;
+
     #[canonical("future-close-readable")]
     fn close(&self);
 }
@@ -75,10 +84,10 @@ pub resource WaitableSet {
     fn new() -> WaitableSet;
 
     #[canonical("waitable-set-wait")]
-    fn wait(&self, out_addr: i32) -> i32;
+    fn wait(&self) -> [i32, i32];
 
     #[canonical("waitable-set-poll")]
-    fn poll(&self, out_addr: i32) -> i32;
+    fn poll(&self) -> Option<[i32, i32]>;
 
     #[canonical("waitable-set-drop")]
     fn close(&self);
@@ -91,176 +100,331 @@ pub resource Subtask {
     #[canonical("waitable-join")]
     fn join(&self, set: &WaitableSet);
 }
+
+pub resource ErrorContext {
+    #[canonical("error-context-new")]
+    fn new(message: String) -> ErrorContext;
+
+    #[canonical("error-context-debug-message")]
+    fn debug_message(&self) -> String;
+
+    #[canonical("error-context-drop")]
+    fn close(&self);
+}
 ```
+
+### Naming: Future<T> as the Readable End
+
+`Future<T>` is the readable end (CM `future-read` handle). The CM spec names these
+`future-read` and `future-write`, so strictly speaking `Future<T>` should be
+`FutureReadable<T>`. We keep `Future<T>` because:
+
+- Most APIs receive futures (readable end); adding "Readable" is noise
+- Matches JS/Python convention where "future"/"promise" means the consumer side
+- `Stream<T>` has the same asymmetry (it's the readable end)
+
+This is documented here for clarity. A future redesign could introduce `Future<T>` as
+an effect or concept with `FutureReadable<T>` + `FutureWritable<T>` as the resource pair.
+
+### WaitableSet Wado-Level Types
+
+`WaitableSet::wait` and `WaitableSet::poll` use Wado-level types (`[i32, i32]` and
+`Option<[i32, i32]>`) instead of raw `out_addr: i32`. The CM adapter synthesis
+handles the linear memory buffer allocation and read-back:
+
+1. Allocate 8 bytes via `realloc`
+2. Call `waitable-set-wait(set, addr)` or `waitable-set-poll(set, addr)`
+3. Load `[i32_load(addr), i32_load(addr+4)]` into the return tuple
+4. Free the buffer
+
+This keeps the Wado API clean while the adapter handles CM-level details.
 
 ### What Stays in builtin.wado
 
-- All Wasm instruction builtins (array_*, i32_load, f64_sqrt, etc.)
-- `realloc` (`#[canonical("mem", "realloc")]`) — memory, not CM
+- All Wasm instruction builtins (`array_*`, `i32_load`, `f64_sqrt`, etc.)
+- `realloc` (`#[canonical("mem", "realloc")]`) — linear memory management, not CM
 - Bundled libm functions (`#[canonical("bundled", "...")]`)
 - `call_indirect_stdout_write_via_stream` / `call_indirect_stderr_write_via_stream`
   — ambient I/O, handled by separate codegen path
 - `inspect<T>` / `display<T>` — synthesis markers
+- `task_return` (`#[canonical("wasi", "task-return")]`) — language statement, not a
+  resource method
 
 ### What Gets Removed from builtin.wado
 
-All 14 CM canonical functions:
+13 CM canonical functions:
+
 - `stream_new`, `stream_read`, `stream_write`, `stream_drop_writable`, `stream_drop_readable`
 - `future_new`, `future_write`, `future_drop_writable`, `future_drop_readable`
-- `task_return`
 - `waitable_set_new`, `waitable_join`, `waitable_set_wait`
 - `subtask_drop`
 
-### What Gets Removed
+### What Gets Deleted
 
-- `stream.wado` — thin wrappers around `builtin::*` functions, no longer needed
+- `lib/core/stream.wado` — thin wrappers around `builtin::*`, replaced by resource methods
 
-### task.return
+## Architecture
 
-`task return expr;` is a language statement, not a resource method. Its canonical operation
-`task-return` is emitted directly by the compiler when lowering the `task return` statement.
-It does not belong to any resource type.
+### Current Pipeline (hard-coded)
 
-It will be declared as a standalone canonical function in `internal.wado`:
-
-```wado
-#[canonical("wasi", "task-return")]
-fn task_return(result: i32);
+```
+builtin.wado                     types.wado
+  #[canonical("wasi", "...")]      resource Stream<T> { fn read(...); }
+  fn stream_read(...)                  (no attributes, no bodies)
+         │                                      │
+         ▼                                      ▼
+  BuiltinRegistry                   method_call.rs
+  name → canonical_name              hard-coded: Stream → "stream_create_pair"
+         │                                      │
+         ▼                                      ▼
+  dce.rs                            translate.rs
+  hard-coded: ("Stream","read")       try_translate_stream_method(...)
+  → add stream_read + waitable_*     try_translate_stream_writable_method(...)
+  → populate TirImport list          try_translate_future_writable_method(...)
+         │                                      │
+         ▼                                      ▼
+  wasm_plan.rs                      WirInstr::Call { func_id }
+  filter namespace=="wasi"            via "builtin/stream_read" alias
+  → ComponentPlan.canonical_intrinsics
+         │
+         ▼
+  component.rs
+  match "stream-read" → builder.stream_read(...)
 ```
 
-This keeps it out of `builtin.wado` (it's CM, not a Wasm instruction) while remaining
-accessible to the compiler's `task return` statement synthesis.
+### New Pipeline (attribute-driven)
 
-## Compiler Changes
+```
+types.wado (single source of truth)
+  resource Stream<T> {
+      #[canonical("stream-read")]
+      fn read(&self, max: i32) -> Array<T>;
+  }
+         │
+         ▼
+  Resolver (method_lookup.rs)
+  resource method with #[canonical] attr
+  → MethodInfo { canonical_name: Some("stream-read") }
+         │
+         ▼
+  WIR Translation (translate.rs)
+  try_translate_canonical_method(method_info)
+  match canonical_name:
+    "stream-read" → emit_stream_read(...)
+                    ctx.register_canonical("stream-read")
+                    ctx.register_canonical("waitable-set-new")  // dependency
+                    ctx.register_canonical("waitable-join")
+                    ctx.register_canonical("waitable-set-wait")
+         │
+         ▼
+  WirContext.needed_canonicals: IndexSet<CanonicalImport>
+         │
+         ▼
+  ComponentPlan (wasm_plan.rs)
+  reads from WirContext, not from TirImport
+         │
+         ▼
+  Codegen (component.rs)
+  match "stream-read" → builder.stream_read(...)
+  (unchanged)
+```
 
-### 1. Attribute Parsing (existing infrastructure)
+### Key Architectural Changes
 
-The `#[canonical("...")]` attribute syntax is already parsed. Resource method declarations
-are already function declarations in the AST. No parser changes needed.
-
-### 2. Resource Method Resolution (method_call.rs)
-
-Replace hard-coded type name matching with canonical attribute lookup:
+#### 1. MethodInfo Carries Canonical Name
 
 ```rust
-// Before:
-ResolvedType::Stream(inner) if method == "new" && args.is_empty() => {
-    Some(("stream_create_pair", ...))
-}
-
-// After:
-if let Some(canonical_name) = resource_method.canonical_attr() {
-    // Dispatch to CM adapter synthesis based on canonical_name
+pub struct MethodInfo {
+    // ... existing fields ...
+    pub canonical_name: Option<String>,  // from #[canonical("...")] attribute
 }
 ```
 
-### 3. WIR Translation (wir_build/translate.rs)
+Populated by the resolver when resolving a resource method that has a `#[canonical]`
+attribute. This is the bridge between resource declarations and WIR synthesis.
 
-Replace `try_translate_stream_method` etc. with a unified `try_translate_canonical_method`:
+#### 2. Unified Canonical Method Dispatch
+
+Replace three separate interceptors with a single dispatch point:
 
 ```rust
-fn try_translate_canonical_method(
-    &mut self,
-    receiver: &TirExpr,
-    method_info: &MethodInfo,
-    args: &[TirExpr],
-    result_type: TypeId,
-) -> Option<WirInstr> {
-    let canonical_name = method_info.canonical_name.as_ref()?;
-    match canonical_name.as_str() {
-        "stream-read" => Some(self.emit_stream_read(...)),
-        "stream-write" => Some(self.emit_stream_write(...)),
-        "stream-close-readable" | "stream-close-writable" => Some(self.emit_close(...)),
-        "stream-new" => Some(self.emit_stream_new(...)),
-        "future-new" => Some(self.emit_future_new(...)),
-        "future-write" => Some(self.emit_future_write(...)),
-        "future-close-readable" | "future-close-writable" => Some(self.emit_close(...)),
-        "waitable-set-new" => Some(self.emit_simple_canonical(...)),
-        "waitable-set-wait" => Some(self.emit_simple_canonical(...)),
-        "waitable-join" => Some(self.emit_simple_canonical(...)),
-        "subtask-drop" => Some(self.emit_simple_canonical(...)),
+// Before: three separate functions, dispatched by receiver type
+if let Some(instr) = self.try_translate_future_writable_method(...) { ... }
+if let Some(instr) = self.try_translate_stream_method(...) { ... }
+if let Some(instr) = self.try_translate_stream_writable_method(...) { ... }
+
+// After: one function, dispatched by canonical attribute
+if let Some(instr) = self.try_translate_canonical_method(method_info, ...) { ... }
+```
+
+The dispatch is on `canonical_name`, not on receiver type:
+
+```rust
+fn try_translate_canonical_method(&mut self, ...) -> Option<WirInstr> {
+    let canonical = method_info.canonical_name.as_ref()?;
+    match canonical.as_str() {
+        "stream-new"             => self.emit_stream_new(...),
+        "stream-read"            => self.emit_stream_read(...),
+        "stream-write"           => self.emit_stream_write(...),
+        "stream-close-readable"  => self.emit_drop_handle("stream-close-readable", ...),
+        "stream-close-writable"  => self.emit_drop_handle("stream-close-writable", ...),
+        "future-new"             => self.emit_future_new(...),
+        "future-read"            => self.emit_future_read(...),
+        "future-write"           => self.emit_future_write(...),
+        "future-close-readable"  => self.emit_drop_handle("future-close-readable", ...),
+        "future-close-writable"  => self.emit_drop_handle("future-close-writable", ...),
+        "waitable-set-new"       => self.emit_waitable_set_new(...),
+        "waitable-set-wait"      => self.emit_waitable_set_wait(...),
+        "waitable-set-poll"      => self.emit_waitable_set_poll(...),
+        "waitable-set-drop"      => self.emit_drop_handle("waitable-set-drop", ...),
+        "waitable-join"          => self.emit_waitable_join(...),
+        "subtask-drop"           => self.emit_drop_handle("subtask-drop", ...),
+        "error-context-new"      => self.emit_error_context_new(...),
+        "error-context-debug-message" => self.emit_error_context_debug_message(...),
+        "error-context-drop"     => self.emit_drop_handle("error-context-drop", ...),
         _ => None,
     }
 }
 ```
 
-The synthesis functions (`emit_stream_read`, `emit_stream_write`, etc.) remain unchanged
-in their WIR output. Only the dispatch mechanism changes.
+Each `emit_*` function registers its own canonical dependencies, so the knowledge of
+"stream-read needs waitable-set-new + waitable-join + waitable-set-wait" lives in
+`emit_stream_read`, not in DCE.
 
-### 4. Canonical Intrinsic Registration
+#### 3. Canonical Import Registration Moves to WIR
 
-Currently, canonical intrinsics are discovered by scanning TIR imports for
-`namespace == "wasi"`. With the new design, they are registered during WIR translation
-when a canonical method is encountered.
-
-The WIR build context will collect needed canonicals:
+Currently canonical imports are collected by DCE (TIR phase) and stored in `TirImport`.
+In the new design, they are registered during WIR translation:
 
 ```rust
-struct WirBuildContext {
-    needed_canonicals: IndexSet<String>,  // "stream-new", "stream-read", etc.
+// WirBuildContext
+pub struct WirBuildContext {
+    needed_canonicals: IndexMap<String, CanonicalImport>,
     // ...
 }
-```
 
-When `try_translate_canonical_method` emits adapter code, it registers the canonical:
-
-```rust
-self.ctx.needed_canonicals.insert("stream-read".to_string());
-```
-
-The component plan then uses this set instead of filtering TIR imports.
-
-### 5. Dead Code Elimination (optimize/dce.rs)
-
-Replace hard-coded `("Stream", "close")` matching with canonical attribute lookup
-on the method info. The DCE phase already has access to method info — it just needs
-to check for the canonical attribute instead of matching on type/method name strings.
-
-### 6. MethodInfo Enhancement
-
-Add an optional `canonical_name` field to `MethodInfo`:
-
-```rust
-pub struct MethodInfo {
-    pub receiver_type: String,
-    pub method_name: String,
-    pub canonical_name: Option<String>,  // NEW: from #[canonical("...")] attribute
+pub struct CanonicalImport {
+    pub canonical_name: String,   // "stream-read"
+    pub params: Vec<WirType>,     // [I32, I32, I32]
+    pub returns: Vec<WirType>,    // [I32]
 }
 ```
 
-This field is populated during type resolution when a resource method with a
-`#[canonical]` attribute is resolved.
+Each synthesis function registers what it needs:
+
+```rust
+fn emit_stream_read(&mut self, ...) -> WirInstr {
+    let stream_read = self.ctx.ensure_canonical("stream-read", &[I32, I32, I32], &[I32]);
+    let ws_new = self.ctx.ensure_canonical("waitable-set-new", &[], &[I32]);
+    let w_join = self.ctx.ensure_canonical("waitable-join", &[I32, I32], &[]);
+    let ws_wait = self.ctx.ensure_canonical("waitable-set-wait", &[I32, I32], &[I32]);
+    // ... emit WIR using these func IDs ...
+}
+```
+
+`ensure_canonical` returns a `WirFuncId`, registering the import lazily if not
+already registered.
+
+#### 4. DCE Simplified
+
+DCE no longer needs CM-specific knowledge. It performs standard call-graph reachability
+analysis. The canonical import dependency injection (lines 202-252 in current `dce.rs`)
+is removed entirely — that responsibility now belongs to the WIR synthesis functions.
+
+DCE still handles:
+
+- Removing unreachable functions
+- Removing unused globals
+- Standard dead code elimination
+
+It does NOT handle:
+
+- ~~Matching `("Stream", "close")` → add `stream_drop_readable`~~
+- ~~Matching `("StreamWritable", "write")` → add `stream_write` + waitable_*~~
+- ~~Populating `TirImport` for canonical intrinsics~~
+
+#### 5. method_call.rs Simplified
+
+The special cases for `Stream::new()` and `Future::new()` that synthesize
+`"stream_create_pair"` / `"future_create_pair"` calls are removed. Instead,
+the resolver finds the `new` method on the resource declaration, sees its
+`#[canonical("stream-new")]` attribute, and passes it through as a normal
+method call with `canonical_name` set in `MethodInfo`.
+
+## Prelude Exports
+
+`prelude.wado` adds the new types:
+
+```wado
+pub use {
+    Option, Result,
+    Stream, StreamWritable,
+    Future, FutureWritable,
+    WaitableSet, Subtask, ErrorContext,
+} from "core:prelude/types.wado";
+```
+
+## E2E Tests
+
+WaitableSet and Subtask are user-facing, so e2e tests are required:
+
+```wado
+// tests/fixtures/waitable_set_basic.wado
+// Test that WaitableSet can be created and used directly
+export fn run() {
+    let ws = WaitableSet::new();
+    ws.close();
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
+```
 
 ## Migration Path
 
 1. Add `canonical_name` field to `MethodInfo`
 2. Populate it from resource method `#[canonical]` attributes during resolution
-3. Add `try_translate_canonical_method` to WIR translation
-4. Route existing synthesis code through the new dispatch
-5. Update DCE to use canonical attributes
-6. Update component plan to collect from WIR context
-7. Remove CM functions from `builtin.wado`
-8. Remove `stream.wado`
-9. Add `WaitableSet` and `Subtask` resource types to `types.wado`
-10. Move `task_return` to `internal.wado` with `#[canonical]`
+3. Add `ensure_canonical` to `WirBuildContext` for lazy canonical import registration
+4. Add `try_translate_canonical_method` to WIR translation, dispatch by canonical name
+5. Move each existing `emit_*` function to register its own canonical dependencies
+6. Route existing `try_translate_stream_method` etc. through the new unified dispatch
+7. Remove CM-specific logic from DCE
+8. Update `wasm_plan.rs` to collect canonicals from WIR context
+9. Remove `method_call.rs` special cases for `Stream::new()` / `Future::new()`
+10. Add `#[canonical]` attributes to resource methods in `types.wado`
+11. Add `WaitableSet`, `Subtask`, `ErrorContext` resource declarations
+12. Add `Future::read` declaration
+13. Update `WaitableSet::wait`/`poll` to use Wado-level return types
+14. Remove 13 CM functions from `builtin.wado`
+15. Delete `stream.wado`
+16. Update prelude exports
+17. Add e2e tests for WaitableSet/Subtask
+18. Implement `emit_future_read`, `emit_waitable_set_wait`, `emit_waitable_set_poll`,
+    `emit_error_context_*` synthesis functions (or stub as compile errors)
 
 ## Consequences
 
 **Positive:**
-- CM operations are declared where they belong — on the resource types
-- Adding a new resource method requires only: (a) declaration in `types.wado`,
-  (b) one synthesis function in `translate.rs`
-- `builtin.wado` becomes clean: only Wasm instructions and libm
-- Resource method signatures document the user-facing API (typed handles, not raw i32)
-- `WaitableSet` and `Subtask` become first-class types, enabling advanced async patterns
+
+- Single source of truth: resource declarations in `types.wado` define both the
+  user-facing API and the canonical operation mapping
+- Adding a new resource method requires only: (a) declaration with `#[canonical]`
+  in `types.wado`, (b) one `emit_*` synthesis function in `translate.rs`
+- `builtin.wado` becomes clean: only Wasm instructions, libm, and `task_return`
+- WaitableSet, Subtask, ErrorContext become first-class typed resources
+- DCE is simpler and has no CM-specific knowledge
+- Type safety: handles are typed resources, not raw i32
 
 **Negative:**
-- The compiler still has hard-coded synthesis for each canonical operation
-  (this is inherent — each operation needs different adapter logic)
-- The `#[canonical]` attribute on resource methods is a Wado-specific extension
-  (but so was `#[canonical]` on builtins)
+
+- The compiler still has a hard-coded `match` on canonical names in `translate.rs`
+  (inherent — each operation needs different adapter logic)
+- New synthesis functions needed for previously unimplemented operations
+  (`future-read`, `waitable-set-wait` adapter, `waitable-set-poll`, `error-context-*`)
 
 **Neutral:**
-- No user-visible API change (Stream/Future methods remain the same)
-- No Wasm output change (same canonical intrinsics, same adapter code)
+
+- No change to existing user-facing Stream/Future API
+- No change to Wasm output for existing programs
 - `task return` statement syntax unchanged
