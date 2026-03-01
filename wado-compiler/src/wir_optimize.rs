@@ -492,9 +492,19 @@ fn check_return_struct_new(instr: &WirInstr, expected_type_idx: u32) -> bool {
             // Void return is fine for our purposes (won't happen in struct-returning fn)
             true
         }
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-            all_returns_are_struct_new(body, expected_type_idx)
+        WirInstr::Block { body, result, .. } => {
+            let inner_ok = all_returns_are_struct_new(body, expected_type_idx);
+            if result.is_some() {
+                // Typed block: the block's exit values are carried via [val, Br(0)] pairs.
+                // These Br-exit values must also be StructNew, otherwise the function
+                // cannot be correctly SROA'd (rewrite_returns_to_multi_value only handles
+                // explicit Return instructions, not Block/Br exits).
+                inner_ok && all_br_values_are_struct_new(body, expected_type_idx, 0)
+            } else {
+                inner_ok
+            }
         }
+        WirInstr::Loop { body, .. } => all_returns_are_struct_new(body, expected_type_idx),
         WirInstr::If {
             then_body,
             else_body,
@@ -553,6 +563,9 @@ fn value_expr_is_struct_new(expr: &WirInstr, expected_type_idx: u32) -> bool {
 
 /// Check that all `StructNew`; `Br` pairs targeting `target_depth` and the fallthrough
 /// `StructNew` in a typed block are of the expected type.
+///
+/// Also handles `Seq([..., val, Br(depth)])` patterns where the exit value and branch
+/// are wrapped in a `Seq` (e.g. the `LabeledBlock` exit pattern).
 fn all_br_values_are_struct_new(
     instrs: &[WirInstr],
     expected_type_idx: u32,
@@ -563,7 +576,7 @@ fn all_br_values_are_struct_new(
         if i + 1 < instrs.len()
             && matches!(&instrs[i + 1], WirInstr::Br { depth } if *depth == target_depth)
         {
-            // The instruction before Br must be a StructNew of the expected type,
+            // [val, Br(depth)] pair: the instruction before Br is the exit value.
             // OR dead code (unreachable path — skip it).
             let is_valid = contains_unreachable(&instrs[i])
                 || matches!(&instrs[i], WirInstr::StructNew { type_id, .. } if type_id.index() == expected_type_idx);
@@ -571,6 +584,22 @@ fn all_br_values_are_struct_new(
                 return false;
             }
             i += 2;
+        } else if let WirInstr::Seq(seq) = &instrs[i]
+            && seq
+                .last()
+                .is_some_and(|last| matches!(last, WirInstr::Br { depth } if *depth == target_depth))
+        {
+            // Seq([..., val, Br(depth)]): the Br is wrapped in a Seq (LabeledBlock exit pattern).
+            // The instruction before the Br within the Seq is the exit value.
+            let exit_val = seq.len().checked_sub(2).and_then(|j| seq.get(j));
+            let is_valid = exit_val.is_some_and(|v| {
+                contains_unreachable(v)
+                    || matches!(v, WirInstr::StructNew { type_id, .. } if type_id.index() == expected_type_idx)
+            });
+            if !is_valid {
+                return false;
+            }
+            i += 1;
         } else {
             // Recurse into nested blocks
             if let WirInstr::Block { body, .. } = &instrs[i]
@@ -1237,6 +1266,9 @@ fn lift_return_into_struct_new_leaves(expr: &mut WirInstr) {
 /// Rewrite `StructNew; Br { depth }` pairs that target the outer block (at `target_depth`)
 /// into `Return { Seq(fields) }; Nop` (Nop replaces the Br). Also rewrites the fallthrough
 /// `StructNew` at the end of the block.
+///
+/// Also handles `Seq([..., StructNew, Br(depth)])` patterns where the exit value and
+/// branch are wrapped in a `Seq` (e.g. the `LabeledBlock` exit pattern).
 fn rewrite_struct_new_br_to_return(instrs: &mut [WirInstr], target_depth: u32) {
     let mut i = 0;
     while i + 1 < instrs.len() {
@@ -1256,9 +1288,37 @@ fn rewrite_struct_new_br_to_return(instrs: &mut [WirInstr], target_depth: u32) {
             // Skip dead code (unreachable) before Br — leave as-is
             i += 2;
         } else {
-            // Recurse into nested blocks (which add 1 to the depth)
-            if let WirInstr::Block { body, .. } = &mut instrs[i] {
-                rewrite_struct_new_br_to_return(body, target_depth + 1);
+            // Handle Seq([..., StructNew, Br(target_depth)]) — LabeledBlock exit pattern
+            let is_seq_exit = if let WirInstr::Seq(seq) = &instrs[i] {
+                seq.last()
+                    .is_some_and(|last| matches!(last, WirInstr::Br { depth } if *depth == target_depth))
+                    && seq.len() >= 2
+                    && matches!(seq.get(seq.len() - 2), Some(WirInstr::StructNew { .. }))
+            } else {
+                false
+            };
+            if is_seq_exit {
+                if let WirInstr::Seq(mut seq) =
+                    std::mem::replace(&mut instrs[i], WirInstr::Nop)
+                {
+                    seq.pop(); // remove Br
+                    if let Some(WirInstr::StructNew { fields, .. }) = seq.pop() {
+                        let ret = WirInstr::Return {
+                            value: Some(Box::new(WirInstr::Seq(fields))),
+                        };
+                        instrs[i] = if seq.is_empty() {
+                            ret
+                        } else {
+                            seq.push(ret);
+                            WirInstr::Seq(seq)
+                        };
+                    }
+                }
+            } else {
+                // Recurse into nested blocks (which add 1 to the depth)
+                if let WirInstr::Block { body, .. } = &mut instrs[i] {
+                    rewrite_struct_new_br_to_return(body, target_depth + 1);
+                }
             }
             i += 1;
         }

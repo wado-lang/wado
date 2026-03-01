@@ -7,7 +7,7 @@ use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{
     FunctionRef, InlineHint, PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirModule, TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable,
+    TirFunction, TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use indexmap::IndexMap;
 use indexmap::IndexSet;
@@ -1156,7 +1156,7 @@ fn try_inline_method_call_expr(
     current_module: &[String],
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
-    _type_table: &TypeTable,
+    type_table: &TypeTable,
     inline_counter: &mut u32,
 ) -> Option<(TirExpr, (Vec<String>, String))> {
     let TirExprKind::MethodCall {
@@ -1207,12 +1207,42 @@ fn try_inline_method_call_expr(
     let mut block_stmts = Vec::new();
     let mut param_to_local: IndexMap<u32, u32> = IndexMap::new();
 
-    // Bind receiver to first parameter (self)
-    // Use receiver's type_id to handle monomorphization type variance
+    // Bind receiver to first parameter (self).
+    // If the parameter is &self or &mut self (reference type), wrap the receiver
+    // in the appropriate reference expression. This avoids creating a value copy
+    // (ValueCopy in WIR) of the receiver struct, which would break mutation
+    // semantics: with a value copy, `self.field = x` would update the LOCAL copy
+    // but not the original receiver. With a reference binding, `self.field = x`
+    // translates to a WIR StructSet on the original receiver object.
     let first_param = &candidate.params[0];
     let self_local_index = local_offset;
     param_to_local.insert(first_param.local_index, self_local_index);
-    local_types.push(receiver.type_id);
+    let (self_type_id, self_value) = match type_table.get(first_param.type_id) {
+        ResolvedType::MutRef(_) => {
+            let ref_expr = TirExpr {
+                kind: TirExprKind::Unary {
+                    op: TirUnaryOp::MutRef,
+                    expr: receiver.clone(),
+                },
+                type_id: first_param.type_id,
+                span: expr.span,
+            };
+            (first_param.type_id, ref_expr)
+        }
+        ResolvedType::Ref(_) => {
+            let ref_expr = TirExpr {
+                kind: TirExprKind::Unary {
+                    op: TirUnaryOp::Ref,
+                    expr: receiver.clone(),
+                },
+                type_id: first_param.type_id,
+                span: expr.span,
+            };
+            (first_param.type_id, ref_expr)
+        }
+        _ => (receiver.type_id, (**receiver).clone()),
+    };
+    local_types.push(self_type_id);
     *local_count += 1;
 
     // Use original parameter name (not _inline_ prefix)
@@ -1222,8 +1252,8 @@ fn try_inline_method_call_expr(
             local_index: self_local_index,
             is_mut: false,
             is_reactive: false,
-            type_id: receiver.type_id,
-            value: (**receiver).clone(),
+            type_id: self_type_id,
+            value: self_value,
             skip_value_copy: false,
         },
         expr.span,
