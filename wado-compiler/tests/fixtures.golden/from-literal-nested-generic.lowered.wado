@@ -40,48 +40,42 @@ export fn run() with Stdout {
         __b."NestedMap<Array<String>,i32>^KeyValueLiteralBuilder::insert_literal"("b", 2);
         break __kv_lit: *__b;
     };
-    __assert_0: {
-        let __v0: i32 = __inline_Array_String___len_3: {
-            let self: &Array<String> = &m.keys;
-            break __inline_Array_String___len_3: self.used;
-        };
-        let __cond: bool = (__v0 == 2);
-        if !__cond {
-            core::internal::panic(__tmpl: {
-                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(134), used: 0 };
-                __r.String::append("Assertion failed in ");
-                __r.String::append("run");
-                __r.String::append(" at ");
-                __r.String::append("wado-compiler/tests/fixtures/from-literal-nested-generic.wado");
-                __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_5: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_6: {
-                    let self: Box<i32> = Box<i32> { value: 36 };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_7: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\ncondition: m.keys.len() == 2\n");
-                __r.String::append("m.keys.len(): ");
-                __f = __inline_Formatter__new_8: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_9: {
-                    let self: Box<i32> = Box<i32> { value: __v0 };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_10: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\n");
-                break __tmpl: __r;
-            });
-        }
+    let __v0: i32 = __inline_Array_String___len_3: {
+        let self: &Array<String> = &m.keys;
+        break __inline_Array_String___len_3: self.used;
+    };
+    let __cond: bool = (__v0 == 2);
+    if !__cond {
+        core::internal::panic(__tmpl: {
+            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(134), used: 0 };
+            __r.String::append("Assertion failed in ");
+            __r.String::append("run");
+            __r.String::append(" at ");
+            __r.String::append("wado-compiler/tests/fixtures/from-literal-nested-generic.wado");
+            __r.String::append(":");
+            let mut __f: Formatter = __inline_Formatter__new_5: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: 36 };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\ncondition: m.keys.len() == 2\n");
+            __r.String::append("m.keys.len(): ");
+            __f = __inline_Formatter__new_8: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: __v0 };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\n");
+            break __tmpl: __r;
+        });
     }
     core::cli::println("ok");
 }

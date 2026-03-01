@@ -36,16 +36,14 @@ export fn run() with Stdout {
     arr."Array<String>::append"("hello");
     arr."Array<String>::append"("world");
     arr."Array<String>::append"("!");
-    __for_of_0: {
-        let mut __iter_0: ArrayIter<String> = ArrayIter<String> { repr: arr.repr, used: arr.used, index: 0 };
-        loop {
-            let __pattern_temp_0: Option<String> = __iter_0."ArrayIter<String>^Iterator::next"();
-            if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                let x: String = __variant_payload(__pattern_temp_0, case=0);
-                core::cli::println(x);
-            } else {
-                break;
-            }
+    let mut __iter_0: ArrayIter<String> = ArrayIter<String> { repr: arr.repr, used: arr.used, index: 0 };
+    loop {
+        let __pattern_temp_0: Option<String> = __iter_0."ArrayIter<String>^Iterator::next"();
+        if __variant_test(__pattern_temp_0, case=0, name=Some) {
+            let x: String = __variant_payload(__pattern_temp_0, case=0);
+            core::cli::println(x);
+        } else {
+            break;
         }
     }
 }

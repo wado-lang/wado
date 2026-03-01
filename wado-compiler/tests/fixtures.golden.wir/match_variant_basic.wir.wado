@@ -241,11 +241,9 @@ fn run() with Stdout {
             __local_11 = __local_6;
             break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_11) };
         };
-        block {
-            __local_12 = "core:internal/Box<f64>" { value: area1 };
-            __local_13 = __local_7;
-            f64::fmt_into(__local_12, __local_13);
-        };
+        __local_12 = "core:internal/Box<f64>" { value: area1 };
+        __local_13 = __local_7;
+        f64::fmt_into(__local_12, __local_13);
         break __tmpl: __local_6;
     });
     let __match_scrut_1: ref null Shape;
@@ -267,11 +265,9 @@ fn run() with Stdout {
             __local_15 = __local_8;
             break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_15) };
         };
-        block {
-            __local_16 = "core:internal/Box<f64>" { value: area2 };
-            __local_17 = __local_9;
-            f64::fmt_into(__local_16, __local_17);
-        };
+        __local_16 = "core:internal/Box<f64>" { value: area2 };
+        __local_17 = __local_9;
+        f64::fmt_into(__local_16, __local_17);
         break __tmpl: __local_8;
     });
 }
@@ -305,10 +301,8 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
                 if (i < len) == 0 {
                     break __for_0;
                 };
-                block {
-                    byte = builtin::array_get_u8(msg_bytes, i);
-                    builtin::store_u8(ptr + i, byte);
-                };
+                byte = builtin::array_get_u8(msg_bytes, i);
+                builtin::store_u8(ptr + i, byte);
                 i = i + 1;
                 continue l7;
             };
@@ -343,9 +337,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
                 if (i < len) == 0 {
                     break __for_1;
                 };
-                block {
-                    builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                };
+                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l11;
             };
@@ -1018,11 +1010,9 @@ fn write_digits_at(buf, offset, val, nd) {
             if (idx >= offset) == 0 {
                 break b91;
             };
-            block {
-                __local_7 = idx;
-                __local_8 = 48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255);
-                builtin::array_set_u8(_licm_repr, __local_7, __local_8);
-            };
+            __local_7 = idx;
+            __local_8 = 48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255);
+            builtin::array_set_u8(_licm_repr, __local_7, __local_8);
             v = v /u 10_i64;
             idx = idx - 1;
             continue l92;
@@ -1057,38 +1047,26 @@ fn write_decimal(buf, d, p, nd) {
     if decimal_pos <= 0 {
         String::append_char(buf, 48);
         String::append_char(buf, 46);
-        block {
-            __local_10 = 0 - decimal_pos;
-            String::append_byte_filled(buf, 48, __local_10);
-        };
+        __local_10 = 0 - decimal_pos;
+        String::append_byte_filled(buf, 48, __local_10);
         digit_offset = buf.used;
-        block {
-            String::append_byte_filled(buf, 48, nd);
-        };
+        String::append_byte_filled(buf, 48, nd);
         write_digits_at(buf, digit_offset, d, nd);
     } else if decimal_pos >= nd {
         start_6 = buf.used;
-        block {
-            String::append_byte_filled(buf, 48, nd);
-        };
+        String::append_byte_filled(buf, 48, nd);
         write_digits_at(buf, start_6, d, nd);
-        block {
-            __local_18 = decimal_pos - nd;
-            String::append_byte_filled(buf, 48, __local_18);
-        };
+        __local_18 = decimal_pos - nd;
+        String::append_byte_filled(buf, 48, __local_18);
     } else {
         start_7 = buf.used;
-        block {
-            __local_21 = nd + 1;
-            String::append_byte_filled(buf, 48, __local_21);
-        };
+        __local_21 = nd + 1;
+        String::append_byte_filled(buf, 48, __local_21);
         write_digits_at(buf, start_7, d, nd);
         raw = buf.repr;
         builtin::array_copy<u8>(raw, (start_7 + decimal_pos) + 1, raw, start_7 + decimal_pos, nd - decimal_pos);
-        block {
-            __local_24 = start_7 + decimal_pos;
-            builtin::array_set_u8(buf.repr, __local_24, 46);
-        };
+        __local_24 = start_7 + decimal_pos;
+        builtin::array_set_u8(buf.repr, __local_24, 46);
     };
 }
 
@@ -1121,22 +1099,16 @@ fn write_exp(buf, d, p, nd, upper) {
     exp = (p + nd) - 1;
     if nd > 1 {
         start_6 = buf.used;
-        block {
-            __local_12 = nd + 1;
-            String::append_byte_filled(buf, 48, __local_12);
-        };
+        __local_12 = nd + 1;
+        String::append_byte_filled(buf, 48, __local_12);
         write_digits_at(buf, start_6, d, nd);
         raw = buf.repr;
         builtin::array_copy<u8>(raw, start_6 + 2, raw, start_6 + 1, nd - 1);
-        block {
-            __local_15 = start_6 + 1;
-            builtin::array_set_u8(buf.repr, __local_15, 46);
-        };
+        __local_15 = start_6 + 1;
+        builtin::array_set_u8(buf.repr, __local_15, 46);
     } else {
         start_8 = buf.used;
-        block {
-            String::append_byte_filled(buf, 48, 1);
-        };
+        String::append_byte_filled(buf, 48, 1);
         write_digits_at(buf, start_8, d, 1);
     };
     String::append(buf, if upper -> ref null String {
@@ -1526,14 +1498,12 @@ fn Formatter::apply_padding(self, start_pos) {
                 if (i_8 >= 0) == 0 {
                     break b132;
                 };
-                block {
-                    __local_14 = (start_pos + left_pad) + i_8;
-                    __local_15 = __inline_String__get_byte_2: block -> u8 {
-                        __local_17 = start_pos + i_8;
-                        break __inline_String__get_byte_2: builtin::array_get_u8(_licm_repr_33, __local_17);
-                    };
-                    builtin::array_set_u8(_licm_repr_33, __local_14, __local_15);
+                __local_14 = (start_pos + left_pad) + i_8;
+                __local_15 = __inline_String__get_byte_2: block -> u8 {
+                    __local_17 = start_pos + i_8;
+                    break __inline_String__get_byte_2: builtin::array_get_u8(_licm_repr_33, __local_17);
                 };
+                builtin::array_set_u8(_licm_repr_33, __local_14, __local_15);
                 i_8 = i_8 - 1;
                 continue l133;
             };
@@ -1547,12 +1517,8 @@ fn Formatter::apply_padding(self, start_pos) {
                     if (j_9 < left_pad) == 0 {
                         break __for_1;
                     };
-                    block {
-                        block {
-                            __local_19 = start_pos + j_9;
-                            builtin::array_set_u8(_licm_repr_34, __local_19, fill_byte);
-                        };
-                    };
+                    __local_19 = start_pos + j_9;
+                    builtin::array_set_u8(_licm_repr_34, __local_19, fill_byte);
                     j_9 = j_9 + 1;
                     continue l136;
                 };
@@ -1569,14 +1535,12 @@ fn Formatter::apply_padding(self, start_pos) {
                 if (i_10 >= 0) == 0 {
                     break b138;
                 };
-                block {
-                    __local_22 = (start_pos + padding) + i_10;
-                    __local_23 = __inline_String__get_byte_5: block -> u8 {
-                        __local_25 = start_pos + i_10;
-                        break __inline_String__get_byte_5: builtin::array_get_u8(_licm_repr_35, __local_25);
-                    };
-                    builtin::array_set_u8(_licm_repr_35, __local_22, __local_23);
+                __local_22 = (start_pos + padding) + i_10;
+                __local_23 = __inline_String__get_byte_5: block -> u8 {
+                    __local_25 = start_pos + i_10;
+                    break __inline_String__get_byte_5: builtin::array_get_u8(_licm_repr_35, __local_25);
                 };
+                builtin::array_set_u8(_licm_repr_35, __local_22, __local_23);
                 i_10 = i_10 - 1;
                 continue l139;
             };
@@ -1590,12 +1554,8 @@ fn Formatter::apply_padding(self, start_pos) {
                     if (j_11 < padding) == 0 {
                         break __for_2;
                     };
-                    block {
-                        block {
-                            __local_27 = start_pos + j_11;
-                            builtin::array_set_u8(_licm_repr_36, __local_27, fill_byte);
-                        };
-                    };
+                    __local_27 = start_pos + j_11;
+                    builtin::array_set_u8(_licm_repr_36, __local_27, fill_byte);
                     j_11 = j_11 + 1;
                     continue l142;
                 };

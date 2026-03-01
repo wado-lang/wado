@@ -9,7 +9,7 @@
 //! - Constant propagation via `const_prop` module
 //! - Constant folding via `const_fold` module
 //! - Loop-Invariant Code Motion (LICM) via `licm` module
-//! - Post-optimization rewrites (select lowering, move insertion) via `rewrite` module
+//! - Post-optimization rewrites (select lowering) via `rewrite` module
 
 mod const_fold;
 mod const_global_promotion;

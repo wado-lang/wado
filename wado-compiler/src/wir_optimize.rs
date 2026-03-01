@@ -2617,19 +2617,17 @@ fn collapse_appends_in_body(
     while i < body.len() {
         if let Some(init_info) = try_match_array_init(&body[i], array_struct_types) {
             let n = init_info.capacity;
-            // Check if the next N instructions are matching append calls.
+            // Check if the next instructions are matching append calls.
+            // Each append may be a single instruction (Block wrapping LocalSet+Call)
+            // or multiple flat instructions (LocalSet* + Call) from block flattening.
             if n > 0
-                && i + n < body.len()
-                && let Some(values) = try_match_append_sequence(
-                    &body[i + 1..i + 1 + n],
-                    &init_info,
-                    append_func_indices,
-                )
+                && let Some((values, consumed)) =
+                    try_match_append_sequence(&body[i + 1..], n, &init_info, append_func_indices)
             {
                 // Rewrite: replace ArrayNewDefault with ArrayNewFixed in the init.
                 rewrite_init_to_fixed(&mut body[i], &init_info, values);
-                // Remove the N append instructions.
-                body.drain(i + 1..i + 1 + n);
+                // Remove the consumed append instructions.
+                body.drain(i + 1..i + 1 + consumed);
                 // Continue from the next instruction after the rewritten init.
                 i += 1;
                 continue;
@@ -2745,48 +2743,79 @@ fn try_extract_array_new_default(
     })
 }
 
-/// Try to match N consecutive instructions as `Array::append(receiver, value)` calls.
-/// Each append may be wrapped in a `Block` (from inlining), possibly with
-/// `LocalSet` instructions that copy the receiver into a temporary local.
-/// Returns the extracted element values if successful.
+/// Try to match N append operations starting from the given instruction slice.
+/// Each append may be either:
+/// - A single `Block` instruction wrapping `LocalSet* + Call` (from inlined labeled blocks)
+/// - A sequence of flat `LocalSet* + Call` instructions (from flattened blocks)
+///
+/// Returns the extracted element values and the total number of instructions consumed,
+/// or `None` if the pattern doesn't match.
 fn try_match_append_sequence(
     instrs: &[WirInstr],
+    expected_count: usize,
     init_info: &ArrayInitInfo,
     append_func_indices: &IndexSet<u32>,
-) -> Option<Vec<WirInstr>> {
-    let mut values = Vec::with_capacity(instrs.len());
+) -> Option<(Vec<WirInstr>, usize)> {
+    let mut values = Vec::with_capacity(expected_count);
+    let mut consumed = 0;
 
-    for instr in instrs {
-        // Extract the Call, local aliases, and value bindings from inside a Block.
+    while values.len() < expected_count && consumed < instrs.len() {
+        let instr = &instrs[consumed];
+
+        // Try pattern 1: Block wrapping LocalSet* + Call (from inlined labeled blocks)
         let (call, aliases, value_bindings) = extract_call_from_block(instr);
-
-        let WirInstr::Call { func_id, args } = call else {
-            return None;
-        };
-
-        // Check if this is a recognized append function.
-        if !append_func_indices.contains(&func_id.index()) {
-            return None;
+        if let WirInstr::Call { func_id, args } = call
+            && append_func_indices.contains(&func_id.index())
+            && args.len() == 2
+            && receiver_matches_with_aliases(&args[0], init_info, &aliases)
+        {
+            let element = resolve_value_binding(&args[1], &value_bindings, &aliases);
+            values.push(element);
+            consumed += 1;
+            continue;
         }
 
-        // Verify the receiver matches the access path.
-        if args.len() != 2 {
-            return None;
+        // Try pattern 2: Flat LocalSet* + Call sequence (from flattened blocks)
+        // Collect leading LocalSet instructions, then expect a matching Call.
+        let mut flat_aliases = Vec::new();
+        let mut flat_value_bindings = Vec::new();
+        let mut j = consumed;
+        while j < instrs.len() {
+            if let WirInstr::LocalSet { name, value } = &instrs[j] {
+                if let WirInstr::LocalGet { name: src_name } = value.as_ref() {
+                    flat_aliases.push((name.clone(), src_name.clone()));
+                } else {
+                    flat_value_bindings.push((name.clone(), *value.clone()));
+                }
+                j += 1;
+            } else {
+                break;
+            }
+        }
+        // We must have consumed at least one LocalSet (otherwise pattern 1 would match)
+        // and the next instruction must be a matching Call.
+        if j > consumed
+            && j < instrs.len()
+            && let WirInstr::Call { func_id, args } = &instrs[j]
+            && append_func_indices.contains(&func_id.index())
+            && args.len() == 2
+            && receiver_matches_with_aliases(&args[0], init_info, &flat_aliases)
+        {
+            let element = resolve_value_binding(&args[1], &flat_value_bindings, &flat_aliases);
+            values.push(element);
+            consumed = j + 1;
+            continue;
         }
 
-        if !receiver_matches_with_aliases(&args[0], init_info, &aliases) {
-            return None;
-        }
-
-        // Resolve the element value through value bindings and aliases.
-        // For non-scalar elements (e.g., String, struct), the value is materialized
-        // in a preceding LocalSet and referenced via LocalGet in the call arg.
-        // For reference elements (e.g., &mut Item), the value may be a LocalGet alias.
-        let element = resolve_value_binding(&args[1], &value_bindings, &aliases);
-        values.push(element);
+        // Neither pattern matched
+        return None;
     }
 
-    Some(values)
+    if values.len() == expected_count {
+        Some((values, consumed))
+    } else {
+        None
+    }
 }
 
 /// Resolve a value through value bindings and aliases from the enclosing block.
@@ -2841,11 +2870,13 @@ fn resolve_value_binding(
 fn extract_call_from_block(
     instr: &WirInstr,
 ) -> (&WirInstr, Vec<(String, String)>, Vec<(String, WirInstr)>) {
-    let WirInstr::Block {
-        body, result: None, ..
-    } = instr
-    else {
-        return (instr, Vec::new(), Vec::new());
+    // Accept both Block (from inlined labeled blocks) and Seq (from flattened blocks).
+    let body = match instr {
+        WirInstr::Block {
+            body, result: None, ..
+        }
+        | WirInstr::Seq(body) => body,
+        _ => return (instr, Vec::new(), Vec::new()),
     };
 
     if body.is_empty() {

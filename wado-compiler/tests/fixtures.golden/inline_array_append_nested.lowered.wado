@@ -26,10 +26,8 @@ fn Container::add_items(self: &mut Container, count: i32) {
             if !(i < count) {
                 break __for_0;
             }
-            __for_0_body: {
-                self.items."Array<i32>::append"(i);
-                self.items."Array<i32>::append"((i * 2));
-            }
+            self.items."Array<i32>::append"(i);
+            self.items."Array<i32>::append"((i * 2));
             i = (i + 1);
         }
     }
@@ -48,11 +46,9 @@ fn Container::process(self: &mut Container) {
             if !(i < _licm_used) {
                 break __for_1;
             }
-            __for_1_body: {
-                let val: i32 = _licm_items."Array<i32>^IndexValue::index_value"(i);
-                if ((val % 2) == 0) {
-                    temp."Array<i32>::append"(val);
-                }
+            let val: i32 = _licm_items."Array<i32>^IndexValue::index_value"(i);
+            if ((val % 2) == 0) {
+                temp."Array<i32>::append"(val);
             }
             i = (i + 1);
         }
@@ -64,9 +60,7 @@ fn Container::process(self: &mut Container) {
             if !(j < _licm_used) {
                 break __for_2;
             }
-            __for_2_body: {
-                self.items."Array<i32>::append"((temp."Array<i32>^IndexValue::index_value"(j) + 100));
-            }
+            self.items."Array<i32>::append"((temp."Array<i32>^IndexValue::index_value"(j) + 100));
             j = (j + 1);
         }
     }
@@ -93,15 +87,13 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_5: {
+        {
             let self: Box<i32> = Box<i32> { value: __inline_Array_i32___len_6: {
                 let self: &Array<i32> = &c.items;
                 break __inline_Array_i32___len_6: self.used;
             } };
             let f: &mut Formatter = &mut __f;
-            __inline_i32__fmt_into_7: {
-                self.i32::fmt_decimal(f);
-            };
+            self.i32::fmt_decimal(f);
         };
         break __tmpl: __r;
     });

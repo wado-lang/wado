@@ -36,34 +36,30 @@ export fn run() with Stdout {
     arr."Array<bool>::append"(true);
     arr."Array<bool>::append"(false);
     arr."Array<bool>::append"(true);
-    __for_of_0: {
-        let mut __iter_0: ArrayIter<bool> = ArrayIter<bool> { repr: arr.repr, used: arr.used, index: 0 };
-        loop {
-            let __pattern_temp_0: Option<bool> = __iter_0."ArrayIter<bool>^Iterator::next"();
-            if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                let x: bool = __variant_payload(__pattern_temp_0, case=0);
-                core::cli::println(__tmpl: {
-                    let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
-                    let mut __f: Formatter = __inline_Formatter__new_5: {
-                        let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_bool_Display__fmt_6: {
-                        let self: Box<bool> = Box<bool> { value: x };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_bool__fmt_into_7: {
-                            f.Formatter::pad(if self.value {
-                                "true";
-                            } else {
-                                "false";
-                            });
-                        };
-                    };
-                    break __tmpl: __r;
-                });
-            } else {
-                break;
-            }
+    let mut __iter_0: ArrayIter<bool> = ArrayIter<bool> { repr: arr.repr, used: arr.used, index: 0 };
+    loop {
+        let __pattern_temp_0: Option<bool> = __iter_0."ArrayIter<bool>^Iterator::next"();
+        if __variant_test(__pattern_temp_0, case=0, name=Some) {
+            let x: bool = __variant_payload(__pattern_temp_0, case=0);
+            core::cli::println(__tmpl: {
+                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
+                let mut __f: Formatter = __inline_Formatter__new_5: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                {
+                    let self: Box<bool> = Box<bool> { value: x };
+                    let f: &mut Formatter = &mut __f;
+                    f.Formatter::pad(if self.value {
+                        "true";
+                    } else {
+                        "false";
+                    });
+                };
+                break __tmpl: __r;
+            });
+        } else {
+            break;
         }
     }
 }

@@ -126,25 +126,17 @@ fn print_point(p) with Stdout {
             __local_4 = __local_1;
             break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_4) };
         };
-        block {
-            __local_5 = "core:internal/Box<i32>" { value: p.x };
-            __local_6 = __local_2;
-            block {
-                i32::fmt_decimal(__local_5, __local_6);
-            };
-        };
+        __local_5 = "core:internal/Box<i32>" { value: p.x };
+        __local_6 = __local_2;
+        i32::fmt_decimal(__local_5, __local_6);
         String::append_char(__local_1, 44);
         __local_2 = __inline_Formatter__new_4: block -> ref null Formatter {
             __local_9 = __local_1;
             break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_9) };
         };
-        block {
-            __local_10 = "core:internal/Box<i32>" { value: p.y };
-            __local_11 = __local_2;
-            block {
-                i32::fmt_decimal(__local_10, __local_11);
-            };
-        };
+        __local_10 = "core:internal/Box<i32>" { value: p.y };
+        __local_11 = __local_2;
+        i32::fmt_decimal(__local_10, __local_11);
         break __tmpl: __local_1;
     });
 }
@@ -191,10 +183,8 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
                 if (i < len) == 0 {
                     break __for_0;
                 };
-                block {
-                    byte = builtin::array_get_u8(msg_bytes, i);
-                    builtin::store_u8(ptr + i, byte);
-                };
+                byte = builtin::array_get_u8(msg_bytes, i);
+                builtin::store_u8(ptr + i, byte);
                 i = i + 1;
                 continue l3;
             };
@@ -298,9 +288,7 @@ fn count_digits_i64(val) {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
-                block {
-                    n = n + 1;
-                };
+                n = n + 1;
                 t = t / 10_i64;
                 continue l9;
             };
@@ -325,10 +313,8 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
-                    block {
-                        pos = pos - 1;
-                        builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
-                    };
+                    pos = pos - 1;
+                    builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
                     continue l13;
                 };
@@ -470,9 +456,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                block {
-                    String::append_char(_licm_buf, c);
-                };
+                String::append_char(_licm_buf, c);
                 i = i + 1;
                 continue l26;
             };

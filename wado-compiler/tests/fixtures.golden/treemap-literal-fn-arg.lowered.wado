@@ -50,19 +50,17 @@ pub struct "ArrayIter<TreeMapEntry<String,i32>>" {
 
 fn sum_values(m: TreeMap<String,i32>) -> i32 {
     let mut total: i32 = 0;
-    __for_of_0: {
-        let mut __iter_0: ArrayIter<Tuple<String,i32>> = __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: {
-            let self: &Array<[String, i32]> = &m."TreeMap<String,i32>::entries"();
-            break __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: ArrayIter<Tuple<String,i32>> { repr: self.repr, used: self.used, index: 0 };
-        };
-        loop {
-            let __pattern_temp_0: Option<[String, i32]> = __iter_0."ArrayIter<Tuple<String,i32>>^Iterator::next"();
-            if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                let entry: [String, i32] = __variant_payload(__pattern_temp_0, case=0);
-                total = (total + entry.1);
-            } else {
-                break;
-            }
+    let mut __iter_0: ArrayIter<Tuple<String,i32>> = __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: {
+        let self: &Array<[String, i32]> = &m."TreeMap<String,i32>::entries"();
+        break __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: ArrayIter<Tuple<String,i32>> { repr: self.repr, used: self.used, index: 0 };
+    };
+    loop {
+        let __pattern_temp_0: Option<[String, i32]> = __iter_0."ArrayIter<Tuple<String,i32>>^Iterator::next"();
+        if __variant_test(__pattern_temp_0, case=0, name=Some) {
+            let entry: [String, i32] = __variant_payload(__pattern_temp_0, case=0);
+            total = (total + entry.1);
+        } else {
+            break;
         }
     }
     return total;
@@ -81,61 +79,55 @@ export fn run() with Stdout {
             let mut __b: Array<TreeMapEntry<String,i32>> = Array<TreeMapEntry<String,i32>> { repr: core::builtin::array_new::<TreeMapEntry<String,i32>>(0), used: 0 };
             break __seq_lit: *__b;
         }, size: 0, deleted_count: 0 };
-        __inline_TreeMap_String_i32__KeyValueLiteralBuilder__insert_literal_2: {
+        {
             let self: &mut TreeMap<String,i32> = &mut __b;
             let key: String = "x";
             self."TreeMap<String,i32>::insert"(key, 10);
         };
-        __inline_TreeMap_String_i32__KeyValueLiteralBuilder__insert_literal_3: {
+        {
             let self: &mut TreeMap<String,i32> = &mut __b;
             let key: String = "y";
             self."TreeMap<String,i32>::insert"(key, 20);
         };
-        __inline_TreeMap_String_i32__KeyValueLiteralBuilder__insert_literal_4: {
+        {
             let self: &mut TreeMap<String,i32> = &mut __b;
             let key: String = "z";
             self."TreeMap<String,i32>::insert"(key, 30);
         };
         break __kv_lit: *__b;
     });
-    __assert_0: {
-        let __cond: bool = (total == 60);
-        if !__cond {
-            core::internal::panic(__tmpl: {
-                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(121), used: 0 };
-                __r.String::append("Assertion failed in ");
-                __r.String::append("run");
-                __r.String::append(" at ");
-                __r.String::append("wado-compiler/tests/fixtures/treemap-literal-fn-arg.wado");
-                __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_7: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_8: {
-                    let self: Box<i32> = Box<i32> { value: 15 };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_9: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\ncondition: total == 60\n");
-                __r.String::append("total: ");
-                __f = __inline_Formatter__new_10: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_11: {
-                    let self: Box<i32> = Box<i32> { value: total };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_12: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\n");
-                break __tmpl: __r;
-            });
-        }
+    let __cond: bool = (total == 60);
+    if !__cond {
+        core::internal::panic(__tmpl: {
+            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(121), used: 0 };
+            __r.String::append("Assertion failed in ");
+            __r.String::append("run");
+            __r.String::append(" at ");
+            __r.String::append("wado-compiler/tests/fixtures/treemap-literal-fn-arg.wado");
+            __r.String::append(":");
+            let mut __f: Formatter = __inline_Formatter__new_7: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: 15 };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\ncondition: total == 60\n");
+            __r.String::append("total: ");
+            __f = __inline_Formatter__new_10: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: total };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\n");
+            break __tmpl: __r;
+        });
     }
     core::cli::println("fn arg: ok");
 }
@@ -282,21 +274,19 @@ pub fn "TreeMap<String,i32>::entries"(self: &TreeMap<String,i32>) -> Array<[Stri
         let mut __b: Array<[String, i32]> = Array<Tuple<String,i32>> { repr: core::builtin::array_new::<[String, i32]>(0), used: 0 };
         break __seq_lit: *__b;
     };
-    __for_of_3: {
-        let mut __iter_3: ArrayIter<TreeMapEntry<String,i32>> = __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_2: {
-            let self: &Array<TreeMapEntry<String,i32>> = &self.entries;
-            break __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_2: ArrayIter<TreeMapEntry<String,i32>> { repr: self.repr, used: self.used, index: 0 };
-        };
-        loop {
-            let __pattern_temp_0: Option<TreeMapEntry<String,i32>> = __iter_3."ArrayIter<TreeMapEntry<String,i32>>^Iterator::next"();
-            if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                let entry: TreeMapEntry<String,i32> = __variant_payload(__pattern_temp_0, case=0);
-                if !entry.deleted {
-                    result."Array<Tuple<String,i32>>::append"([entry.key, entry.value]);
-                }
-            } else {
-                break;
+    let mut __iter_3: ArrayIter<TreeMapEntry<String,i32>> = __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_2: {
+        let self: &Array<TreeMapEntry<String,i32>> = &self.entries;
+        break __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_2: ArrayIter<TreeMapEntry<String,i32>> { repr: self.repr, used: self.used, index: 0 };
+    };
+    loop {
+        let __pattern_temp_0: Option<TreeMapEntry<String,i32>> = __iter_3."ArrayIter<TreeMapEntry<String,i32>>^Iterator::next"();
+        if __variant_test(__pattern_temp_0, case=0, name=Some) {
+            let entry: TreeMapEntry<String,i32> = __variant_payload(__pattern_temp_0, case=0);
+            if !entry.deleted {
+                result."Array<Tuple<String,i32>>::append"([entry.key, entry.value]);
             }
+        } else {
+            break;
         }
     }
     return result;

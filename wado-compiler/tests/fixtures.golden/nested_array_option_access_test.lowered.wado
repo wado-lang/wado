@@ -34,15 +34,15 @@ export fn run() with Stdout {
     let c: Option<i32> = Option<i32>::Some(99);
     let arr: Array<Option<i32>> = __seq_lit: {
         let mut __b: Array<Option<i32>> = Array<Option<i32>> { repr: core::builtin::array_new::<Option<i32>>(3), used: 0 };
-        __inline_Array_Option_i32___SequenceLiteralBuilder__push_literal_2: {
+        {
             let self: &mut Array<Option<i32>> = &mut __b;
             self."Array<Option<i32>>::append"(a);
         };
-        __inline_Array_Option_i32___SequenceLiteralBuilder__push_literal_3: {
+        {
             let self: &mut Array<Option<i32>> = &mut __b;
             self."Array<Option<i32>>::append"(b);
         };
-        __inline_Array_Option_i32___SequenceLiteralBuilder__push_literal_4: {
+        {
             let self: &mut Array<Option<i32>> = &mut __b;
             self."Array<Option<i32>>::append"(c);
         };
@@ -58,12 +58,10 @@ export fn run() with Stdout {
                 let buf: &mut String = &mut __r;
                 break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            __inline_i32_Display__fmt_8: {
+            {
                 let self: Box<i32> = Box<i32> { value: x };
                 let f: &mut Formatter = &mut __f;
-                __inline_i32__fmt_into_9: {
-                    self.i32::fmt_decimal(f);
-                };
+                self.i32::fmt_decimal(f);
             };
             break __tmpl: __r;
         });
@@ -72,36 +70,32 @@ export fn run() with Stdout {
     if __variant_test(__pattern_temp_1, case=1, name=None) {
         core::cli::println("second: null");
     }
-    __for_of_0: {
-        let mut __iter_0: ArrayIter<Option<i32>> = ArrayIter<Option<i32>> { repr: arr.repr, used: arr.used, index: 0 };
-        loop {
-            let __pattern_temp_2: Option<Option<i32>> = __iter_0."ArrayIter<Option<i32>>^Iterator::next"();
-            if __variant_test(__pattern_temp_2, case=0, name=Some) {
-                let item: Option<i32> = __variant_payload(__pattern_temp_2, case=0);
-                let s: String = match item {
-                    Some(n) => __tmpl: {
-                        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(22), used: 0 };
-                        __r.String::append("Some(");
-                        let mut __f: Formatter = __inline_Formatter__new_12: {
-                            let buf: &mut String = &mut __r;
-                            break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                        };
-                        __inline_i32_Display__fmt_13: {
-                            let self: Box<i32> = Box<i32> { value: n };
-                            let f: &mut Formatter = &mut __f;
-                            __inline_i32__fmt_into_14: {
-                                self.i32::fmt_decimal(f);
-                            };
-                        };
-                        __r.String::append(")");
-                        break __tmpl: __r;
-                    },
-                    None => "None",
-                };
-                core::cli::println(s);
-            } else {
-                break;
-            }
+    let mut __iter_0: ArrayIter<Option<i32>> = ArrayIter<Option<i32>> { repr: arr.repr, used: arr.used, index: 0 };
+    loop {
+        let __pattern_temp_2: Option<Option<i32>> = __iter_0."ArrayIter<Option<i32>>^Iterator::next"();
+        if __variant_test(__pattern_temp_2, case=0, name=Some) {
+            let item: Option<i32> = __variant_payload(__pattern_temp_2, case=0);
+            let s: String = match item {
+                Some(n) => __tmpl: {
+                    let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(22), used: 0 };
+                    __r.String::append("Some(");
+                    let mut __f: Formatter = __inline_Formatter__new_12: {
+                        let buf: &mut String = &mut __r;
+                        break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    };
+                    {
+                        let self: Box<i32> = Box<i32> { value: n };
+                        let f: &mut Formatter = &mut __f;
+                        self.i32::fmt_decimal(f);
+                    };
+                    __r.String::append(")");
+                    break __tmpl: __r;
+                },
+                None => "None",
+            };
+            core::cli::println(s);
+        } else {
+            break;
         }
     }
     core::cli::println("ok");

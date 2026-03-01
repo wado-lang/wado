@@ -113,12 +113,12 @@ export fn run() with Stdout {
     });
     let arr: Array<Point> = __seq_lit: {
         let mut __b: Array<Point> = Array<Point> { repr: core::builtin::array_new::<Point>(2), used: 0 };
-        __inline_Array_Point__SequenceLiteralBuilder__push_literal_16: {
+        {
             let self: &mut Array<Point> = &mut __b;
             let value: Point = Point { x: 1, y: 2 };
             self."Array<Point>::append"(value);
         };
-        __inline_Array_Point__SequenceLiteralBuilder__push_literal_17: {
+        {
             let self: &mut Array<Point> = &mut __b;
             let value: Point = Point { x: 3, y: 4 };
             self."Array<Point>::append"(value);
@@ -140,7 +140,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_Formatter__write_str_23: {
+        {
             let s: String = "|i32| -> i32";
             __f.buf.String::append(s);
         };
@@ -151,19 +151,19 @@ export fn run() with Stdout {
 
 pub fn "Color^Inspect::inspect"(self: &Color, f: &mut Formatter) {
     if (*self == 0) {
-        __inline_Formatter__write_str_0: {
+        {
             let s: String = "Color::Red";
             f.buf.String::append(s);
         };
     } else {
         if (*self == 1) {
-            __inline_Formatter__write_str_1: {
+            {
                 let s: String = "Color::Green";
                 f.buf.String::append(s);
             };
         } else {
             if (*self == 2) {
-                __inline_Formatter__write_str_2: {
+                {
                     let s: String = "Color::Blue";
                     f.buf.String::append(s);
                 };
@@ -173,35 +173,31 @@ pub fn "Color^Inspect::inspect"(self: &Color, f: &mut Formatter) {
 }
 
 pub fn "Point^Inspect::inspect"(self: &Point, f: &mut Formatter) {
-    __inline_Formatter__write_str_0: {
+    {
         let s: String = "Point { ";
         f.buf.String::append(s);
     };
-    __inline_Formatter__write_str_1: {
+    {
         let s: String = "x: ";
         f.buf.String::append(s);
     };
-    __inline_i32_Inspect__inspect_2: {
+    {
         let self: Box<i32> = Box<i32> { value: self.x };
-        __inline_i32__fmt_into_3: {
-            self.i32::fmt_decimal(f);
-        };
+        self.i32::fmt_decimal(f);
     };
-    __inline_Formatter__write_str_4: {
+    {
         let s: String = ", ";
         f.buf.String::append(s);
     };
-    __inline_Formatter__write_str_5: {
+    {
         let s: String = "y: ";
         f.buf.String::append(s);
     };
-    __inline_i32_Inspect__inspect_6: {
+    {
         let self: Box<i32> = Box<i32> { value: self.y };
-        __inline_i32__fmt_into_7: {
-            self.i32::fmt_decimal(f);
-        };
+        self.i32::fmt_decimal(f);
     };
-    __inline_Formatter__write_str_8: {
+    {
         let s: String = " }";
         f.buf.String::append(s);
     };
@@ -209,21 +205,21 @@ pub fn "Point^Inspect::inspect"(self: &Point, f: &mut Formatter) {
 
 pub fn "Shape^Inspect::inspect"(self: Box<Shape>, f: &mut Formatter) {
     if __variant_test(self.value, case=0, name=Circle) {
-        __inline_Formatter__write_str_0: {
+        {
             let s: String = "Shape::Circle(";
             f.buf.String::append(s);
         };
-        __inline_f64_Inspect__inspect_1: {
+        {
             let self: Box<f64> = Box<f64> { value: __variant_payload(self.value, case=0) };
             self.f64::fmt_into(f);
         };
-        __inline_Formatter__write_str_2: {
+        {
             let s: String = ")";
             f.buf.String::append(s);
         };
     } else {
         if __variant_test(self.value, case=1, name=Point) {
-            __inline_Formatter__write_str_3: {
+            {
                 let s: String = "Shape::Point";
                 f.buf.String::append(s);
             };
@@ -233,25 +229,25 @@ pub fn "Shape^Inspect::inspect"(self: Box<Shape>, f: &mut Formatter) {
 
 pub fn "Mode^Inspect::inspect"(self: Box<u32>, f: &mut Formatter) {
     if (self.value as u32 == 0) {
-        __inline_Formatter__write_str_0: {
+        {
             let s: String = "Mode::none()";
             f.buf.String::append(s);
         };
     };
     if ((self.value as u32 & 1) != 0) {
-        __inline_Formatter__write_str_1: {
+        {
             let s: String = "Mode::Read";
             f.buf.String::append(s);
         };
     };
     if ((self.value as u32 & 2) != 0) {
         if ((self.value as u32 & 1) != 0) {
-            __inline_Formatter__write_str_2: {
+            {
                 let s: String = " | ";
                 f.buf.String::append(s);
             };
         };
-        __inline_Formatter__write_str_3: {
+        {
             let s: String = "Mode::Write";
             f.buf.String::append(s);
         };
@@ -264,9 +260,7 @@ export fn __cm_export__run() {
 }
 
 pub fn "Array<Point>^Inspect::inspect"(self: &Array<Point>, f: &mut Formatter) {
-    __inline_Formatter__write_char_0: {
-        f.buf.String::append_char('[');
-    };
+    f.buf.String::append_char('[');
     __for_5: {
         let mut i: i32 = 0;
         let _licm_used: i32 = self.used;
@@ -275,21 +269,17 @@ pub fn "Array<Point>^Inspect::inspect"(self: &Array<Point>, f: &mut Formatter) {
             if !(i < _licm_used) {
                 break __for_5;
             }
-            __for_5_body: {
-                if (i > 0) {
-                    __inline_Formatter__write_str_2: {
-                        let s: String = ", ";
-                        _licm_buf.String::append(s);
-                    };
-                }
-                self."Array<Point>^IndexValue::index_value"(i)."Point^Inspect::inspect"(f);
+            if (i > 0) {
+                {
+                    let s: String = ", ";
+                    _licm_buf.String::append(s);
+                };
             }
+            self."Array<Point>^IndexValue::index_value"(i)."Point^Inspect::inspect"(f);
             i = (i + 1);
         }
     }
-    __inline_Formatter__write_char_3: {
-        f.buf.String::append_char(']');
-    };
+    f.buf.String::append_char(']');
 }
 
 fn "Array<Point>^IndexValue::index_value"(self: &Array<Point>, index: i32) -> Point {
@@ -317,18 +307,18 @@ pub fn "Array<Point>::append"(self: &mut Array<Point>, value: Point) {
 
 pub fn "Option<Point>^Inspect::inspect"(self: Box<Option<Point>>, f: &mut Formatter) {
     if __variant_test(self.value, case=0, name=Some) {
-        __inline_Formatter__write_str_0: {
+        {
             let s: String = "Option::Some(";
             f.buf.String::append(s);
         };
         __variant_payload(self.value, case=0)."Point^Inspect::inspect"(f);
-        __inline_Formatter__write_str_1: {
+        {
             let s: String = ")";
             f.buf.String::append(s);
         };
     } else {
         if __variant_test(self.value, case=1, name=None) {
-            __inline_Formatter__write_str_2: {
+            {
                 let s: String = "Option::None";
                 f.buf.String::append(s);
             };
@@ -338,23 +328,21 @@ pub fn "Option<Point>^Inspect::inspect"(self: Box<Option<Point>>, f: &mut Format
 
 pub fn "Option<i32>^Inspect::inspect"(self: Box<Option<i32>>, f: &mut Formatter) {
     if __variant_test(self.value, case=0, name=Some) {
-        __inline_Formatter__write_str_0: {
+        {
             let s: String = "Option::Some(";
             f.buf.String::append(s);
         };
-        __inline_i32_Inspect__inspect_1: {
+        {
             let self: Box<i32> = Box<i32> { value: __variant_payload(self.value, case=0) };
-            __inline_i32__fmt_into_2: {
-                self.i32::fmt_decimal(f);
-            };
+            self.i32::fmt_decimal(f);
         };
-        __inline_Formatter__write_str_3: {
+        {
             let s: String = ")";
             f.buf.String::append(s);
         };
     } else {
         if __variant_test(self.value, case=1, name=None) {
-            __inline_Formatter__write_str_4: {
+            {
                 let s: String = "Option::None";
                 f.buf.String::append(s);
             };

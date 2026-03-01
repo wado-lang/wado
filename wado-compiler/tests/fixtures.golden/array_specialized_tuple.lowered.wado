@@ -36,48 +36,42 @@ export fn run() with Stdout {
     arr."Array<Tuple<bool,i32,String>>::append"([true, 1, "one"]);
     arr."Array<Tuple<bool,i32,String>>::append"([false, 2, "two"]);
     arr."Array<Tuple<bool,i32,String>>::append"([true, 3, "three"]);
-    __for_of_0: {
-        let mut __iter_0: ArrayIter<Tuple<bool,i32,String>> = ArrayIter<Tuple<bool,i32,String>> { repr: arr.repr, used: arr.used, index: 0 };
-        loop {
-            let __pattern_temp_0: Option<[bool, i32, String]> = __iter_0."ArrayIter<Tuple<bool,i32,String>>^Iterator::next"();
-            if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                let x: [bool, i32, String] = __variant_payload(__pattern_temp_0, case=0);
-                core::cli::println(__tmpl: {
-                    let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(50), used: 0 };
-                    let mut __f: Formatter = __inline_Formatter__new_5: {
-                        let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_bool_Display__fmt_6: {
-                        let self: Box<bool> = Box<bool> { value: x.0 };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_bool__fmt_into_7: {
-                            f.Formatter::pad(if self.value {
-                                "true";
-                            } else {
-                                "false";
-                            });
-                        };
-                    };
-                    __r.String::append(" ");
-                    __f = __inline_Formatter__new_8: {
-                        let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_9: {
-                        let self: Box<i32> = Box<i32> { value: x.1 };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_i32__fmt_into_10: {
-                            self.i32::fmt_decimal(f);
-                        };
-                    };
-                    __r.String::append(" ");
-                    __r.String::append(x.2);
-                    break __tmpl: __r;
-                });
-            } else {
-                break;
-            }
+    let mut __iter_0: ArrayIter<Tuple<bool,i32,String>> = ArrayIter<Tuple<bool,i32,String>> { repr: arr.repr, used: arr.used, index: 0 };
+    loop {
+        let __pattern_temp_0: Option<[bool, i32, String]> = __iter_0."ArrayIter<Tuple<bool,i32,String>>^Iterator::next"();
+        if __variant_test(__pattern_temp_0, case=0, name=Some) {
+            let x: [bool, i32, String] = __variant_payload(__pattern_temp_0, case=0);
+            core::cli::println(__tmpl: {
+                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(50), used: 0 };
+                let mut __f: Formatter = __inline_Formatter__new_5: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                {
+                    let self: Box<bool> = Box<bool> { value: x.0 };
+                    let f: &mut Formatter = &mut __f;
+                    f.Formatter::pad(if self.value {
+                        "true";
+                    } else {
+                        "false";
+                    });
+                };
+                __r.String::append(" ");
+                __f = __inline_Formatter__new_8: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                {
+                    let self: Box<i32> = Box<i32> { value: x.1 };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
+                };
+                __r.String::append(" ");
+                __r.String::append(x.2);
+                break __tmpl: __r;
+            });
+        } else {
+            break;
         }
     }
 }

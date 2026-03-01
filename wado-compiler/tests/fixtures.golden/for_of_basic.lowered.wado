@@ -31,39 +31,37 @@ export fn run() with Stdout {
     };
     let numbers: Array<i32> = __seq_lit: {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(5), used: 0 };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_2: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(1);
         };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_3: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(2);
         };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_4: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(3);
         };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_5: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(4);
         };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_6: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(5);
         };
         break __seq_lit: *__b;
     };
     let mut sum: i32 = 0;
-    __for_of_0: {
-        let mut __iter_0: ArrayIter<i32> = ArrayIter<i32> { repr: numbers.repr, used: numbers.used, index: 0 };
-        loop {
-            let __pattern_temp_0: Option<i32> = __iter_0."ArrayIter<i32>^Iterator::next"();
-            if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                let n: i32 = __variant_payload(__pattern_temp_0, case=0);
-                sum = (sum + n);
-            } else {
-                break;
-            }
+    let mut __iter_0: ArrayIter<i32> = ArrayIter<i32> { repr: numbers.repr, used: numbers.used, index: 0 };
+    loop {
+        let __pattern_temp_0: Option<i32> = __iter_0."ArrayIter<i32>^Iterator::next"();
+        if __variant_test(__pattern_temp_0, case=0, name=Some) {
+            let n: i32 = __variant_payload(__pattern_temp_0, case=0);
+            sum = (sum + n);
+        } else {
+            break;
         }
     }
     core::cli::println(__tmpl: {
@@ -73,12 +71,10 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_11: {
+        {
             let self: Box<i32> = Box<i32> { value: sum };
             let f: &mut Formatter = &mut __f;
-            __inline_i32__fmt_into_12: {
-                self.i32::fmt_decimal(f);
-            };
+            self.i32::fmt_decimal(f);
         };
         break __tmpl: __r;
     });

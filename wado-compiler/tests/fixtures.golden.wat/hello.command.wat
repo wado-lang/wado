@@ -156,16 +156,15 @@
                   (local.get 3)))
               (then
                 (br 3 (;@1;))))
-            (block ;; label = @4
-              (local.set 8
-                (array.get_u 1
-                  (local.get 4)
-                  (local.get 7)))
-              (i32.store8
-                (i32.add
-                  (local.get 6)
-                  (local.get 7))
-                (local.get 8)))
+            (local.set 8
+              (array.get_u 1
+                (local.get 4)
+                (local.get 7)))
+            (i32.store8
+              (i32.add
+                (local.get 6)
+                (local.get 7))
+              (local.get 8))
             (local.set 7
               (i32.add
                 (local.get 7)
