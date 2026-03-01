@@ -45,10 +45,7 @@ export fn run() with Stdout {
             let value: [String, i32] = ["b", 2];
             self."Array<Tuple<String,i32>>::append"(value);
         };
-        break __seq_lit: __inline_Array_Tuple_String_i32___SequenceLiteralBuilder__build_4: {
-            let self: &Array<[String, i32]> = &__b;
-            break __inline_Array_Tuple_String_i32___SequenceLiteralBuilder__build_4: *self;
-        };
+        break __seq_lit: *__b;
     } };
     h."Holder<String,i32>::process"();
     core::cli::println("ok");
@@ -61,7 +58,7 @@ export fn __cm_export__run() {
 
 fn "Holder<String,i32>::process"(self: &Holder<String,i32>) {
     let mut __iter_0: ArrayIter<Tuple<String,i32>> = __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: {
-        let self: &Array<[String, i32]> = &&self.items;
+        let self: &Array<[String, i32]> = &self.items;
         break __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: ArrayIter<Tuple<String,i32>> { repr: self.repr, used: self.used, index: 0 };
     };
     loop {

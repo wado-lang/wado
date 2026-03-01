@@ -321,14 +321,8 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let byte: u8;
     let __local_9: ref null String;
     let __local_10: ref null String;
-    len = __inline_String__len_0: block -> i32 {
-        __local_9 = message;
-        break __inline_String__len_0: __local_9.used;
-    };
-    msg_bytes = __inline_String__internal_raw_bytes_1: block -> ref null array<u8> {
-        __local_10 = message;
-        break __inline_String__internal_raw_bytes_1: __local_10.repr;
-    };
+    len = message.used;
+    msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
         len + 1;
     } else {
@@ -393,14 +387,8 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
     let ptr: i32;
     let __local_7: ref null String;
     let __local_8: ref null String;
-    len = __inline_String__len_0: block -> i32 {
-        __local_7 = message;
-        break __inline_String__len_0: __local_7.used;
-    };
-    msg_bytes = __inline_String__internal_raw_bytes_1: block -> ref null array<u8> {
-        __local_8 = message;
-        break __inline_String__internal_raw_bytes_1: __local_8.repr;
-    };
+    len = message.used;
+    msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
         len + 1;
     } else {
@@ -1278,11 +1266,7 @@ fn __initialize_module() {
     let __local_43: i32;
     POW10 = __seq_lit: block -> ref null Array<u64> {
         __local_0 = Array<u64> { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
-        __inline_Array_u64__SequenceLiteralBuilder__build_21: block -> ref null Array<u64> {
-            __local_42 = __local_0;
-            break __inline_Array_u64__SequenceLiteralBuilder__build_21: __local_42;
-        };
-        break __seq_lit;
+        break __seq_lit: __local_0;
     };
 }
 
@@ -1446,10 +1430,7 @@ fn String::append(self, other) {
     let new_used: i32;
     let __local_4: ref null String;
     let __local_5: ref null String;
-    other_len = __inline_String__len_0: block -> i32 {
-        __local_4 = other;
-        break __inline_String__len_0: __local_4.used;
-    };
+    other_len = other.used;
     if other_len == 0 {
         return;
     };
@@ -1457,10 +1438,7 @@ fn String::append(self, other) {
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
     };
-    builtin::array_copy<u8>(self.repr, self.used, __inline_String__internal_raw_bytes_1: block -> ref null array<u8> {
-        __local_5 = other;
-        break __inline_String__internal_raw_bytes_1: __local_5.repr;
-    }, 0, other_len);
+    builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
 

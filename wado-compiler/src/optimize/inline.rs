@@ -1208,17 +1208,16 @@ fn try_inline_method_call_expr(
     let mut param_to_local: IndexMap<u32, u32> = IndexMap::new();
 
     // Bind receiver to first parameter (self).
-    // If the parameter is &self or &mut self (reference type), wrap the receiver
-    // in the appropriate reference expression. This avoids creating a value copy
-    // (ValueCopy in WIR) of the receiver struct, which would break mutation
-    // semantics: with a value copy, `self.field = x` would update the LOCAL copy
-    // but not the original receiver. With a reference binding, `self.field = x`
-    // translates to a WIR StructSet on the original receiver object.
+    // For &mut self receivers, wrap in a MutRef expression so that field
+    // mutations (`self.field = x`) translate to WIR StructSet on the original
+    // receiver rather than on a value copy. A value copy would lose writes.
+    // For &self receivers, a value copy is safe (no mutations) and lets copy
+    // propagation simplify `self.field` → `receiver.field` without a ref level.
     let first_param = &candidate.params[0];
     let self_local_index = local_offset;
     param_to_local.insert(first_param.local_index, self_local_index);
-    let (self_type_id, self_value) = match type_table.get(first_param.type_id) {
-        ResolvedType::MutRef(_) => {
+    let (self_type_id, self_value) =
+        if matches!(type_table.get(first_param.type_id), ResolvedType::MutRef(_)) {
             let ref_expr = TirExpr {
                 kind: TirExprKind::Unary {
                     op: TirUnaryOp::MutRef,
@@ -1228,20 +1227,9 @@ fn try_inline_method_call_expr(
                 span: expr.span,
             };
             (first_param.type_id, ref_expr)
-        }
-        ResolvedType::Ref(_) => {
-            let ref_expr = TirExpr {
-                kind: TirExprKind::Unary {
-                    op: TirUnaryOp::Ref,
-                    expr: receiver.clone(),
-                },
-                type_id: first_param.type_id,
-                span: expr.span,
-            };
-            (first_param.type_id, ref_expr)
-        }
-        _ => (receiver.type_id, (**receiver).clone()),
-    };
+        } else {
+            (receiver.type_id, (**receiver).clone())
+        };
     local_types.push(self_type_id);
     *local_count += 1;
 

@@ -78,10 +78,7 @@ export fn handle(request: Request) {
             let self: &mut Array<u8> = &mut &mut __b;
             self."Array<u8>::append"(111);
         };
-        break __seq_lit: __inline_Array_u8__SequenceLiteralBuilder__build_13: {
-            let self: &Array<u8> = &__b;
-            break __inline_Array_u8__SequenceLiteralBuilder__build_13: *self;
-        };
+        break __seq_lit: *__b;
     };
     let value: FieldValue = bytes as FieldValue;
     let append_result: Result<(), HeaderError> = __cm_adapter__Fields_append(&fields, "x-test" as FieldName, value);
@@ -569,15 +566,8 @@ fn __cm_adapter__Fields_has(self: &Fields, name: FieldName) -> bool {
 fn __cm_adapter__Fields_append(self: &Fields, name: FieldName, value: FieldValue) -> Result<(), HeaderError> {
     let __name_packed: i64 = core::internal::cm_lower_string(name);
     let __value_packed: i64 = __inline_cm_lower_array_u8_0: {
-        let arr: FieldValue = value;
-        let data: builtin::array<u8> = __inline_Array_u8___internal_raw_data_1: {
-            let self: &Array<u8> = &&arr;
-            break __inline_Array_u8___internal_raw_data_1: self.repr;
-        };
-        let len: i32 = __inline_Array_u8___len_2: {
-            let self: &Array<u8> = &&arr;
-            break __inline_Array_u8___len_2: self.used;
-        };
+        let data: builtin::array<u8> = value.repr;
+        let len: i32 = value.used;
         break __inline_cm_lower_array_u8_0: core::internal::cm_lower_list_u8(data, len);
     };
     let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);

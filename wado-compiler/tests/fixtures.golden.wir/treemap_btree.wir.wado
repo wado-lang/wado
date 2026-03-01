@@ -392,10 +392,7 @@ fn run() with Stdout {
             __local_39 = __local_14;
             break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_39) };
         };
-        __local_40 = "core:internal/Box<i32>" { value: __inline_TreeMap_String_i32___len_5: block -> i32 {
-            __local_42 = map;
-            break __inline_TreeMap_String_i32___len_5: __local_42.size;
-        } };
+        __local_40 = "core:internal/Box<i32>" { value: map.size };
         __local_41 = __local_15;
         i32::fmt_decimal(__local_40, __local_41);
         break __tmpl: __local_14;
@@ -469,10 +466,7 @@ fn run() with Stdout {
             __local_64 = __local_22;
             break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_64) };
         };
-        __local_65 = "core:internal/Box<i32>" { value: __inline_TreeMap_String_i32___len_22: block -> i32 {
-            __local_67 = map;
-            break __inline_TreeMap_String_i32___len_22: __local_67.size;
-        } };
+        __local_65 = "core:internal/Box<i32>" { value: map.size };
         __local_66 = __local_23;
         i32::fmt_decimal(__local_65, __local_66);
         break __tmpl: __local_22;
@@ -483,10 +477,7 @@ fn run() with Stdout {
     };
     "core:cli/println"(String { repr: ref.as_non_null(array.new_data<u8>[13](0, 27)), used: 27 });
     entries = TreeMap<String,i32>::iter(map);
-    __iter_7 = __inline_Array_Tuple_String_i32___IntoIterator__into_iter_24: block -> ref null ArrayIter<Tuple<String,i32>> {
-        __local_70 = entries;
-        break __inline_Array_Tuple_String_i32___IntoIterator__into_iter_24: ArrayIter<Tuple<String,i32>> { repr: ref.as_non_null(__local_70.repr), used: __local_70.used, index: 0 };
-    };
+    __iter_7 = ArrayIter<Tuple<String,i32>> { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
     b5: block {
         l6: loop {
             let __sroa___pattern_temp_4_discriminant: i32;
@@ -534,10 +525,7 @@ fn run() with Stdout {
             __local_78 = __local_26;
             break __inline_Formatter__new_30: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_78) };
         };
-        __local_79 = "core:internal/Box<i32>" { value: __inline_TreeMap_String_i32___len_32: block -> i32 {
-            __local_81 = map;
-            break __inline_TreeMap_String_i32___len_32: __local_81.size;
-        } };
+        __local_79 = "core:internal/Box<i32>" { value: map.size };
         __local_80 = __local_27;
         i32::fmt_decimal(__local_79, __local_80);
         break __tmpl: __local_26;
@@ -556,10 +544,7 @@ fn run() with Stdout {
     });
     "core:cli/println"(String { repr: ref.as_non_null(array.new_data<u8>[18](0, 24)), used: 24 });
     final_entries = TreeMap<String,i32>::iter(map);
-    __iter_8 = __inline_Array_Tuple_String_i32___IntoIterator__into_iter_38: block -> ref null ArrayIter<Tuple<String,i32>> {
-        __local_90 = final_entries;
-        break __inline_Array_Tuple_String_i32___IntoIterator__into_iter_38: ArrayIter<Tuple<String,i32>> { repr: ref.as_non_null(__local_90.repr), used: __local_90.used, index: 0 };
-    };
+    __iter_8 = ArrayIter<Tuple<String,i32>> { repr: ref.as_non_null(final_entries.repr), used: final_entries.used, index: 0 };
     b9: block {
         l10: loop {
             let __sroa___pattern_temp_5_discriminant: i32;
@@ -606,14 +591,8 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let byte: u8;
     let __local_9: ref null String;
     let __local_10: ref null String;
-    len = __inline_String__len_0: block -> i32 {
-        __local_9 = message;
-        break __inline_String__len_0: __local_9.used;
-    };
-    msg_bytes = __inline_String__internal_raw_bytes_1: block -> ref null array<u8> {
-        __local_10 = message;
-        break __inline_String__internal_raw_bytes_1: __local_10.repr;
-    };
+    len = message.used;
+    msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
         len + 1;
     } else {
@@ -678,14 +657,8 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
     let ptr: i32;
     let __local_7: ref null String;
     let __local_8: ref null String;
-    len = __inline_String__len_0: block -> i32 {
-        __local_7 = message;
-        break __inline_String__len_0: __local_7.used;
-    };
-    msg_bytes = __inline_String__internal_raw_bytes_1: block -> ref null array<u8> {
-        __local_8 = message;
-        break __inline_String__internal_raw_bytes_1: __local_8.repr;
-    };
+    len = message.used;
+    msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
         len + 1;
     } else {
@@ -916,10 +889,7 @@ fn String::append(self, other) {
     let new_used: i32;
     let __local_4: ref null String;
     let __local_5: ref null String;
-    other_len = __inline_String__len_0: block -> i32 {
-        __local_4 = other;
-        break __inline_String__len_0: __local_4.used;
-    };
+    other_len = other.used;
     if other_len == 0 {
         return;
     };
@@ -927,10 +897,7 @@ fn String::append(self, other) {
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
     };
-    builtin::array_copy<u8>(self.repr, self.used, __inline_String__internal_raw_bytes_1: block -> ref null array<u8> {
-        __local_5 = other;
-        break __inline_String__internal_raw_bytes_1: __local_5.repr;
-    }, 0, other_len);
+    builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
 
@@ -1098,45 +1065,33 @@ fn BTreeNode<String,i32>::compact(self) {
     let _licm_keys: ref null Array<String>;
     let _licm_deleted: ref null Array<bool>;
     let _licm_values: ref null Array<i32>;
+    let _licm_used_20: i32;
     let _licm_children: ref null Array<BTreeNode<String,i32>>;
-    let __local_21: i32;
-    let __local_22: i32;
+    let _licm_used_22: i32;
     let __local_23: i32;
-    new_keys = value_copy Array<String>(__seq_lit: block -> ref null Array<String> {
+    let __local_24: i32;
+    let __local_25: i32;
+    new_keys = __seq_lit: block -> ref null Array<String> {
         __local_1 = Array<String> { repr: ref.as_non_null(builtin::array_new<ref null String>(0)), used: 0 };
-        __inline_Array_String__SequenceLiteralBuilder__build_1: block -> ref null Array<String> {
-            __local_10 = __local_1;
-            break __inline_Array_String__SequenceLiteralBuilder__build_1: __local_10;
-        };
-        break __seq_lit;
-    });
-    new_values = value_copy Array<i32>(__seq_lit: block -> ref null Array<i32> {
+        break __seq_lit: __local_1;
+    };
+    new_values = __seq_lit: block -> ref null Array<i32> {
         __local_3 = Array<i32> { repr: ref.as_non_null(builtin::array_new<i32>(0)), used: 0 };
-        __inline_Array_i32__SequenceLiteralBuilder__build_3: block -> ref null Array<i32> {
-            __local_12 = __local_3;
-            break __inline_Array_i32__SequenceLiteralBuilder__build_3: __local_12;
-        };
-        break __seq_lit;
-    });
-    new_deleted = value_copy Array<bool>(__seq_lit: block -> ref null Array<bool> {
+        break __seq_lit: __local_3;
+    };
+    new_deleted = __seq_lit: block -> ref null Array<bool> {
         __local_5 = Array<bool> { repr: ref.as_non_null(builtin::array_new<bool>(0)), used: 0 };
-        __inline_Array_bool__SequenceLiteralBuilder__build_5: block -> ref null Array<bool> {
-            __local_14 = __local_5;
-            break __inline_Array_bool__SequenceLiteralBuilder__build_5: __local_14;
-        };
-        break __seq_lit;
-    });
+        break __seq_lit: __local_5;
+    };
     __for_1: block {
         i_7 = 0;
         _licm_keys = self.keys;
         _licm_deleted = self.deleted;
         _licm_values = self.values;
+        _licm_used_20 = _licm_keys.used;
         block {
             l56: loop {
-                if (i_7 < __inline_Array_String___len_6: block -> i32 {
-                    __local_15 = _licm_keys;
-                    break __inline_Array_String___len_6: __local_15.used;
-                }) == 0 {
+                if (i_7 < _licm_used_20) == 0 {
                     break __for_1;
                 };
                 if Array<bool>^IndexValue::index_value(_licm_deleted, i_7) == 0 {
@@ -1156,12 +1111,10 @@ fn BTreeNode<String,i32>::compact(self) {
         __for_2: block {
             i_8 = 0;
             _licm_children = self.children;
+            _licm_used_22 = _licm_children.used;
             block {
                 l61: loop {
-                    if (i_8 < __inline_Array_BTreeNode_String_i32____len_7: block -> i32 {
-                        __local_16 = _licm_children;
-                        break __inline_Array_BTreeNode_String_i32____len_7: __local_16.used;
-                    }) == 0 {
+                    if (i_8 < _licm_used_22) == 0 {
                         break __for_2;
                     };
                     BTreeNode<String,i32>::compact(Array<BTreeNode<String,i32>>^IndexValue::index_value(_licm_children, i_8));
@@ -1275,14 +1228,10 @@ fn TreeMap<String,i32>::iter(self) {
     let __local_5: i32;
     let __local_6: ref null Array<Tuple<String,i32>>;
     let __local_7: i32;
-    result = value_copy Array<Tuple<String,i32>>(__seq_lit: block -> ref null Array<Tuple<String,i32>> {
+    result = __seq_lit: block -> ref null Array<Tuple<String,i32>> {
         __local_1 = Array<Tuple<String,i32>> { repr: ref.as_non_null(builtin::array_new<ref null "tuple/[String, i32]">(0)), used: 0 };
-        __inline_Array_Tuple_String_i32___SequenceLiteralBuilder__build_1: block -> ref null Array<Tuple<String,i32>> {
-            __local_6 = __local_1;
-            break __inline_Array_Tuple_String_i32___SequenceLiteralBuilder__build_1: __local_6;
-        };
-        break __seq_lit;
-    });
+        break __seq_lit: __local_1;
+    };
     __pattern_temp_0 = value_copy Option<BTreeNode<String,i32>>(self.root);
     if ref.test Option<BTreeNode<String,i32>>::Some(__pattern_temp_0) {
         root = ref.cast Option<BTreeNode<String,i32>>::Some(__pattern_temp_0).payload_0;
@@ -1301,25 +1250,23 @@ fn TreeMap<String,i32>::collect_entries(self, node, result) {
     let _licm_children: ref null Array<BTreeNode<String,i32>>;
     let _licm_deleted: ref null Array<bool>;
     let _licm_values: ref null Array<i32>;
+    let _licm_used_12: i32;
+    let _licm_used_13: i32;
     i = 0;
     _licm_keys = node.keys;
     _licm_is_leaf = node.is_leaf;
     _licm_children = node.children;
     _licm_deleted = node.deleted;
     _licm_values = node.values;
+    _licm_used_12 = _licm_keys.used;
+    _licm_used_13 = _licm_children.used;
     b72: block {
         l73: loop {
-            if (i < __inline_Array_String___len_0: block -> i32 {
-                __local_4 = _licm_keys;
-                break __inline_Array_String___len_0: __local_4.used;
-            }) == 0 {
+            if (i < _licm_used_12) == 0 {
                 break b72;
             };
             if if _licm_is_leaf == 0 -> i32 {
-                i < __inline_Array_BTreeNode_String_i32____len_1: block -> i32 {
-                    __local_5 = _licm_children;
-                    break __inline_Array_BTreeNode_String_i32____len_1: __local_5.used;
-                };
+                i < _licm_used_13;
             } else {
                 0;
             } {
@@ -1382,14 +1329,13 @@ fn TreeMap<String,i32>::delete_in_node(self, node, key) {
     let __local_4: ref null Array<String>;
     let __local_5: ref null Array<String>;
     let _licm_keys: ref null Array<String>;
+    let _licm_used: i32;
     i = 0;
     _licm_keys = node.keys;
+    _licm_used = _licm_keys.used;
     b82: block {
         l83: loop {
-            if if i < __inline_Array_String___len_0: block -> i32 {
-                __local_4 = _licm_keys;
-                break __inline_Array_String___len_0: __local_4.used;
-            } -> i32 {
+            if if i < _licm_used -> i32 {
                 String^Ord::cmp(key, Array<String>^IndexValue::index_value(_licm_keys, i)) == 2;
             } else {
                 0;
@@ -1446,14 +1392,13 @@ fn TreeMap<String,i32>::search_in_node(self, node, key) {
     let __local_4: ref null Array<String>;
     let __local_5: ref null Array<String>;
     let _licm_keys: ref null Array<String>;
+    let _licm_used: i32;
     i = 0;
     _licm_keys = node.keys;
+    _licm_used = _licm_keys.used;
     b92: block {
         l93: loop {
-            if if i < __inline_Array_String___len_0: block -> i32 {
-                __local_4 = _licm_keys;
-                break __inline_Array_String___len_0: __local_4.used;
-            } -> i32 {
+            if if i < _licm_used -> i32 {
                 String^Ord::cmp(key, Array<String>^IndexValue::index_value(_licm_keys, i)) == 2;
             } else {
                 0;
@@ -1527,16 +1472,16 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
     let __local_8: ref null Array<String>;
     let __local_9: ref null TreeMap<String,i32>;
     let _licm_keys_10: ref null Array<String>;
-    let _licm_keys_11: ref null Array<String>;
+    let _licm_used_11: i32;
+    let _licm_keys_12: ref null Array<String>;
+    let _licm_used_13: i32;
     if node.is_leaf {
         pos_4 = 0;
         _licm_keys_10 = node.keys;
+        _licm_used_11 = _licm_keys_10.used;
         b105: block {
             l106: loop {
-                if if pos_4 < __inline_Array_String___len_0: block -> i32 {
-                    __local_6 = _licm_keys_10;
-                    break __inline_Array_String___len_0: __local_6.used;
-                } -> i32 {
+                if if pos_4 < _licm_used_11 -> i32 {
                     String^Ord::cmp(Array<String>^IndexValue::index_value(_licm_keys_10, pos_4), key) == 0;
                 } else {
                     0;
@@ -1569,14 +1514,12 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
         self.size = self.size + 1;
     } else {
         pos_5 = 0;
-        _licm_keys_11 = node.keys;
+        _licm_keys_12 = node.keys;
+        _licm_used_13 = _licm_keys_12.used;
         b112: block {
             l113: loop {
-                if if pos_5 < __inline_Array_String___len_2: block -> i32 {
-                    __local_8 = _licm_keys_11;
-                    break __inline_Array_String___len_2: __local_8.used;
-                } -> i32 {
-                    String^Ord::cmp(key, Array<String>^IndexValue::index_value(_licm_keys_11, pos_5)) == 2;
+                if if pos_5 < _licm_used_13 -> i32 {
+                    String^Ord::cmp(key, Array<String>^IndexValue::index_value(_licm_keys_12, pos_5)) == 2;
                 } else {
                     0;
                 } == 0 {
@@ -1677,7 +1620,9 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
     let _licm_keys: ref null Array<String>;
     let _licm_values: ref null Array<i32>;
     let _licm_deleted: ref null Array<bool>;
+    let _licm_used_16: i32;
     let _licm_children: ref null Array<BTreeNode<String,i32>>;
+    let _licm_used_18: i32;
     full_child = Array<BTreeNode<String,i32>>^IndexValue::index_value(parent.children, child_index);
     new_sibling = BTreeNode<String,i32>::new_leaf();
     if full_child.is_leaf == 0 {
@@ -1689,12 +1634,10 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
         _licm_keys = full_child.keys;
         _licm_values = full_child.values;
         _licm_deleted = full_child.deleted;
+        _licm_used_16 = _licm_keys.used;
         block {
             l129: loop {
-                if (i_6 < __inline_Array_String___len_0: block -> i32 {
-                    __local_11 = _licm_keys;
-                    break __inline_Array_String___len_0: __local_11.used;
-                }) == 0 {
+                if (i_6 < _licm_used_16) == 0 {
                     break __for_3;
                 };
                 Array<String>::append(new_sibling.keys, Array<String>^IndexValue::index_value(_licm_keys, i_6));
@@ -1709,12 +1652,10 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
         __for_4: block {
             i_7 = mid + 1;
             _licm_children = full_child.children;
+            _licm_used_18 = _licm_children.used;
             block {
                 l133: loop {
-                    if (i_7 < __inline_Array_BTreeNode_String_i32____len_1: block -> i32 {
-                        __local_12 = _licm_children;
-                        break __inline_Array_BTreeNode_String_i32____len_1: __local_12.used;
-                    }) == 0 {
+                    if (i_7 < _licm_used_18) == 0 {
                         break __for_4;
                     };
                     Array<BTreeNode<String,i32>>::append(new_sibling.children, Array<BTreeNode<String,i32>>^IndexValue::index_value(_licm_children, i_7));
@@ -1775,32 +1716,16 @@ fn BTreeNode<String,i32>::new_internal() {
     let __local_15: i32;
     return BTreeNode<String,i32> { keys: ref.as_non_null(__seq_lit: block -> ref null Array<String> {
         __local_1 = Array<String> { repr: ref.as_non_null(builtin::array_new<ref null String>(0)), used: 0 };
-        __inline_Array_String__SequenceLiteralBuilder__build_1: block -> ref null Array<String> {
-            __local_5 = __local_1;
-            break __inline_Array_String__SequenceLiteralBuilder__build_1: __local_5;
-        };
-        break __seq_lit;
+        break __seq_lit: __local_1;
     }), values: ref.as_non_null(__seq_lit: block -> ref null Array<i32> {
         __local_2 = Array<i32> { repr: ref.as_non_null(builtin::array_new<i32>(0)), used: 0 };
-        __inline_Array_i32__SequenceLiteralBuilder__build_3: block -> ref null Array<i32> {
-            __local_7 = __local_2;
-            break __inline_Array_i32__SequenceLiteralBuilder__build_3: __local_7;
-        };
-        break __seq_lit;
+        break __seq_lit: __local_2;
     }), deleted: ref.as_non_null(__seq_lit: block -> ref null Array<bool> {
         __local_0 = Array<bool> { repr: ref.as_non_null(builtin::array_new<bool>(0)), used: 0 };
-        __inline_Array_bool__SequenceLiteralBuilder__build_5: block -> ref null Array<bool> {
-            __local_9 = __local_0;
-            break __inline_Array_bool__SequenceLiteralBuilder__build_5: __local_9;
-        };
-        break __seq_lit;
+        break __seq_lit: __local_0;
     }), children: ref.as_non_null(__seq_lit: block -> ref null Array<BTreeNode<String,i32>> {
         __local_3 = Array<BTreeNode<String,i32>> { repr: ref.as_non_null(builtin::array_new<ref null BTreeNode<String,i32>>(0)), used: 0 };
-        __inline_Array_BTreeNode_String_i32___SequenceLiteralBuilder__build_7: block -> ref null Array<BTreeNode<String,i32>> {
-            __local_11 = __local_3;
-            break __inline_Array_BTreeNode_String_i32___SequenceLiteralBuilder__build_7: __local_11;
-        };
-        break __seq_lit;
+        break __seq_lit: __local_3;
     }), is_leaf: 0 };
 }
 
@@ -1810,17 +1735,16 @@ fn BTreeNode<String,i32>::is_full(self, max_keys) {
     let __local_4: ref null Array<String>;
     let _licm_keys: ref null Array<String>;
     let _licm_deleted: ref null Array<bool>;
+    let _licm_used: i32;
     count = 0;
     __for_0: block {
         i = 0;
         _licm_keys = self.keys;
         _licm_deleted = self.deleted;
+        _licm_used = _licm_keys.used;
         block {
             l137: loop {
-                if (i < __inline_Array_String___len_0: block -> i32 {
-                    __local_4 = _licm_keys;
-                    break __inline_Array_String___len_0: __local_4.used;
-                }) == 0 {
+                if (i < _licm_used) == 0 {
                     break __for_0;
                 };
                 if Array<bool>^IndexValue::index_value(_licm_deleted, i) == 0 {
@@ -1853,32 +1777,16 @@ fn BTreeNode<String,i32>::new_leaf() {
     let __local_15: i32;
     return BTreeNode<String,i32> { keys: ref.as_non_null(__seq_lit: block -> ref null Array<String> {
         __local_1 = Array<String> { repr: ref.as_non_null(builtin::array_new<ref null String>(0)), used: 0 };
-        __inline_Array_String__SequenceLiteralBuilder__build_1: block -> ref null Array<String> {
-            __local_5 = __local_1;
-            break __inline_Array_String__SequenceLiteralBuilder__build_1: __local_5;
-        };
-        break __seq_lit;
+        break __seq_lit: __local_1;
     }), values: ref.as_non_null(__seq_lit: block -> ref null Array<i32> {
         __local_2 = Array<i32> { repr: ref.as_non_null(builtin::array_new<i32>(0)), used: 0 };
-        __inline_Array_i32__SequenceLiteralBuilder__build_3: block -> ref null Array<i32> {
-            __local_7 = __local_2;
-            break __inline_Array_i32__SequenceLiteralBuilder__build_3: __local_7;
-        };
-        break __seq_lit;
+        break __seq_lit: __local_2;
     }), deleted: ref.as_non_null(__seq_lit: block -> ref null Array<bool> {
         __local_0 = Array<bool> { repr: ref.as_non_null(builtin::array_new<bool>(0)), used: 0 };
-        __inline_Array_bool__SequenceLiteralBuilder__build_5: block -> ref null Array<bool> {
-            __local_9 = __local_0;
-            break __inline_Array_bool__SequenceLiteralBuilder__build_5: __local_9;
-        };
-        break __seq_lit;
+        break __seq_lit: __local_0;
     }), children: ref.as_non_null(__seq_lit: block -> ref null Array<BTreeNode<String,i32>> {
         __local_3 = Array<BTreeNode<String,i32>> { repr: ref.as_non_null(builtin::array_new<ref null BTreeNode<String,i32>>(0)), used: 0 };
-        __inline_Array_BTreeNode_String_i32___SequenceLiteralBuilder__build_7: block -> ref null Array<BTreeNode<String,i32>> {
-            __local_11 = __local_3;
-            break __inline_Array_BTreeNode_String_i32___SequenceLiteralBuilder__build_7: __local_11;
-        };
-        break __seq_lit;
+        break __seq_lit: __local_3;
     }), is_leaf: 1 };
 }
 
@@ -1920,14 +1828,8 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else if self.sign_plus {
         sign = String { repr: ref.as_non_null(array.new_data<u8>[21](0, 1)), used: 1 };
     };
-    sign_len = __inline_String__len_0: block -> i32 {
-        __local_14 = sign;
-        break __inline_String__len_0: __local_14.used;
-    };
-    prefix_len = __inline_String__len_1: block -> i32 {
-        __local_15 = prefix;
-        break __inline_String__len_1: __local_15.used;
-    };
+    sign_len = sign.used;
+    prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
     if if self.width <= 0 -> i32 {
         1;

@@ -24,10 +24,7 @@ export fn run() with Stdout, Preopens {
         __modules_initialized = true;
     };
     let dirs: Array<[Descriptor, String]> = __cm_adapter__Preopens_get_directories();
-    let dir_count: i32 = __inline_Array_Tuple_Descriptor_String____len_1: {
-        let self: &Array<[Descriptor, String]> = &&dirs;
-        break __inline_Array_Tuple_Descriptor_String____len_1: self.used;
-    };
+    let dir_count: i32 = dirs.used;
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(52), used: 0 };
         __r.String::append("test: preopens returned ");
@@ -47,10 +44,7 @@ export fn run() with Stdout, Preopens {
         let first: [Descriptor, String] = dirs."Array<Tuple<Descriptor,String>>^IndexValue::index_value"(0);
         let path: String = first.1;
         core::cli::println("test: first preopened path exists");
-        if (__inline_String__len_6: {
-            let self: &String = &&path;
-            break __inline_String__len_6: self.used;
-        } >= 0) {
+        if (path.used >= 0) {
             core::cli::println("test: preopened path is valid string");
         }
     } else {

@@ -30,10 +30,7 @@ fn return_non_empty() -> Option<Array<u8>> {
             let self: &mut Array<u8> = &mut &mut __b;
             self."Array<u8>::append"(3);
         };
-        break __seq_lit: __inline_Array_u8__SequenceLiteralBuilder__build_4: {
-            let self: &Array<u8> = &__b;
-            break __inline_Array_u8__SequenceLiteralBuilder__build_4: *self;
-        };
+        break __seq_lit: *__b;
     });
 }
 
@@ -52,10 +49,7 @@ fn return_result_array() -> Result<Array<i32>, String> {
             let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(30);
         };
-        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_4: {
-            let self: &Array<i32> = &__b;
-            break __inline_Array_i32__SequenceLiteralBuilder__build_4: *self;
-        };
+        break __seq_lit: *__b;
     });
 }
 
@@ -69,17 +63,11 @@ export fn run() with Stdout {
     };
     let __pattern_temp_0: Option<Array<u8>> = Option<Array<u8>>::Some(__seq_lit: {
         let mut __b: Array<u8> = Array<u8> { repr: core::builtin::array_new::<u8>(0), used: 0 };
-        break __seq_lit: __inline_Array_u8__SequenceLiteralBuilder__build_3: {
-            let self: &Array<u8> = &__b;
-            break __inline_Array_u8__SequenceLiteralBuilder__build_3: *self;
-        };
+        break __seq_lit: *__b;
     });
     if __variant_test(__pattern_temp_0, case=0, name=Some) {
         let arr: Array<u8> = __variant_payload(__pattern_temp_0, case=0);
-        let __v0: i32 = __inline_Array_u8___len_4: {
-            let self: &Array<u8> = &&arr;
-            break __inline_Array_u8___len_4: self.used;
-        };
+        let __v0: i32 = arr.used;
         let __cond: bool = (__v0 == 0);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -119,10 +107,7 @@ export fn run() with Stdout {
     let __pattern_temp_1: Option<Array<u8>> = return_non_empty();
     if __variant_test(__pattern_temp_1, case=0, name=Some) {
         let arr: Array<u8> = __variant_payload(__pattern_temp_1, case=0);
-        let __v0: i32 = __inline_Array_u8___len_12: {
-            let self: &Array<u8> = &&arr;
-            break __inline_Array_u8___len_12: self.used;
-        };
+        let __v0: i32 = arr.used;
         let __cond: bool = (__v0 == 3);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -196,10 +181,7 @@ export fn run() with Stdout {
     let __pattern_temp_2: Result<Array<i32>, String> = return_result_array();
     if __variant_test(__pattern_temp_2, case=0, name=Ok) {
         let arr: Array<i32> = __variant_payload(__pattern_temp_2, case=0);
-        let __v0: i32 = __inline_Array_i32___len_27: {
-            let self: &Array<i32> = &&arr;
-            break __inline_Array_i32___len_27: self.used;
-        };
+        let __v0: i32 = arr.used;
         let __cond: bool = (__v0 == 3);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -272,17 +254,11 @@ export fn run() with Stdout {
     }
     let __pattern_temp_3: Result<Array<i32>, String> = Result<Array<i32>, String>::Ok(__seq_lit: {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(0), used: 0 };
-        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_44: {
-            let self: &Array<i32> = &__b;
-            break __inline_Array_i32__SequenceLiteralBuilder__build_44: *self;
-        };
+        break __seq_lit: *__b;
     });
     if __variant_test(__pattern_temp_3, case=0, name=Ok) {
         let arr: Array<i32> = __variant_payload(__pattern_temp_3, case=0);
-        let __v0: i32 = __inline_Array_i32___len_45: {
-            let self: &Array<i32> = &&arr;
-            break __inline_Array_i32___len_45: self.used;
-        };
+        let __v0: i32 = arr.used;
         let __cond: bool = (__v0 == 0);
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -330,10 +306,7 @@ export fn run() with Stdout {
             let self: &mut Array<u8> = &mut &mut __b;
             self."Array<u8>::append"(2);
         };
-        break __seq_lit: __inline_Array_u8__SequenceLiteralBuilder__build_56: {
-            let self: &Array<u8> = &__b;
-            break __inline_Array_u8__SequenceLiteralBuilder__build_56: *self;
-        };
+        break __seq_lit: *__b;
     });
     let __cond: bool = match opt_i32 {
         Some(n) => (n == 42),
@@ -361,10 +334,7 @@ export fn run() with Stdout {
         });
     }
     let __cond: bool = match opt_arr {
-        Some(a) => (__inline_Array_u8___len_61: {
-            let self: &Array<u8> = &&a;
-            break __inline_Array_u8___len_61: self.used;
-        } == 2),
+        Some(a) => (a.used == 2),
         _ => false,
     };
     if !__cond {

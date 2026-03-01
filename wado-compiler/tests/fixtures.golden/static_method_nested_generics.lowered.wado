@@ -49,16 +49,9 @@ export fn run() with Stdout {
             let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(3);
         };
-        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_5: {
-            let self: &Array<i32> = &__b;
-            break __inline_Array_i32__SequenceLiteralBuilder__build_5: *self;
-        };
+        break __seq_lit: *__b;
     };
-    let boxed_arr: Box<Array<i32>> = Box<Array<i32>> { value: arr };
-    let inner: Array<i32> = __inline_Box_Array_i32____get_7: {
-        let self: &Box<Array<i32>> = &&boxed_arr;
-        break __inline_Box_Array_i32____get_7: self.value;
-    };
+    let inner: Array<i32> = arr;
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(27), used: 0 };
         __r.String::append("inner len: ");
@@ -67,10 +60,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: __inline_Array_i32___len_11: {
-                let self: &Array<i32> = &&inner;
-                break __inline_Array_i32___len_11: self.used;
-            } };
+            let self: Box<i32> = Box<i32> { value: inner.used };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };
@@ -90,12 +80,6 @@ export fn run() with Stdout {
         };
         break __tmpl: __r;
     });
-    let inner_box: Box<i32> = Box<i32> { value: 42 };
-    let outer_box: Box<Box<i32>> = Box<Box<i32>> { value: inner_box };
-    let unwrapped: Box<i32> = __inline_Box_Box_i32____get_19: {
-        let self: &Box<Box<i32>> = &&outer_box;
-        break __inline_Box_Box_i32____get_19: self.value;
-    };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(33), used: 0 };
         __r.String::append("unwrapped value: ");
@@ -104,10 +88,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: __inline_Box_i32___get_23: {
-                let self: &Box<i32> = &&unwrapped;
-                break __inline_Box_i32___get_23: self.value;
-            } };
+            let self: Box<i32> = Box<i32> { value: 42 };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };

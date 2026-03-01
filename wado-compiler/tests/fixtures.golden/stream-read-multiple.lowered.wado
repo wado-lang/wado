@@ -30,10 +30,7 @@ export fn run() with Stdout {
     let mut reads: i32 = 0;
     loop {
         let chunk: Array<u8> = rx."Stream<u8>::read"(2);
-        if (__inline_Array_u8___len_1: {
-            let self: &Array<u8> = &&chunk;
-            break __inline_Array_u8___len_1: self.used;
-        } == 0) {
+        if (chunk.used == 0) {
             break;
         }
         reads = (reads + 1);

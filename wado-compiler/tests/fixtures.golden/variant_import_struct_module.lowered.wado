@@ -24,16 +24,10 @@ pub fn format_with_opts(s: String, opts: Options) -> String {
     if (opts.width <= 0) {
         return s;
     }
-    if (__inline_String__len_0: {
-        let self: &String = &&s;
-        break __inline_String__len_0: self.used;
-    } >= opts.width) {
+    if (s.used >= opts.width) {
         return s;
     }
-    let pad_len: i32 = (opts.width - __inline_String__len_1: {
-        let self: &String = &&s;
-        break __inline_String__len_1: self.used;
-    });
+    let pad_len: i32 = (opts.width - s.used);
     let mut pad: String = String { repr: "core::prelude/string.wado::array_new<u8>"(pad_len), used: 0 };
     __for_0: {
         let mut i: i32 = 0;

@@ -49,10 +49,7 @@ export fn run() with Stdout {
             let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(4);
         };
-        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_7: {
-            let self: &Array<i32> = &__b;
-            break __inline_Array_i32__SequenceLiteralBuilder__build_7: *self;
-        };
+        break __seq_lit: *__b;
     } };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
@@ -79,11 +76,9 @@ fn "Holder<i32>::min"(self: &Holder<i32>) -> i32 {
     __for_0: {
         let mut i: i32 = 1;
         let _licm_items: Array<i32> = self.items;
+        let _licm_used: i32 = _licm_items.used;
         loop {
-            if !(i < __inline_Array_i32___len_0: {
-                let self: &Array<i32> = &&_licm_items;
-                break __inline_Array_i32___len_0: self.used;
-            }) {
+            if !(i < _licm_used) {
                 break __for_0;
             }
             if (_licm_items."Array<i32>^IndexValue::index_value"(i) < m) {

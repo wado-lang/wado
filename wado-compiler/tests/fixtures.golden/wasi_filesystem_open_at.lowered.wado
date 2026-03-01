@@ -24,10 +24,7 @@ export fn run() with Stdout, Stderr, Preopens {
         __modules_initialized = true;
     };
     let dirs: Array<[Descriptor, String]> = __cm_adapter__Preopens_get_directories();
-    if (__inline_Array_Tuple_Descriptor_String____len_1: {
-        let self: &Array<[Descriptor, String]> = &&dirs;
-        break __inline_Array_Tuple_Descriptor_String____len_1: self.used;
-    } == 0) {
+    if (dirs.used == 0) {
         core::cli::eprintln("open_at: no preopened directories available");
         return;
     }

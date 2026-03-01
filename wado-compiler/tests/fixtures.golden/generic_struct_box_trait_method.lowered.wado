@@ -41,10 +41,7 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let mut b: Box<Point> = Box<Point> { value: Point { x: 10, y: 20 } };
-    let p: Point = __inline_Box_Point___get_1: {
-        let self: &Box<Point> = &&b;
-        break __inline_Box_Point___get_1: self.value;
-    };
+    let p: Point = b.value;
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(43), used: 0 };
         __r.String::append("point: (");
@@ -125,8 +122,6 @@ export fn run() with Stdout {
         __r.String::append(")");
         break __tmpl: __r;
     });
-    let b1: Box<i32> = Box<i32> { value: 42 };
-    let b2: Box<i32> = b1;
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(20), used: 0 };
         __r.String::append("b1: ");
@@ -135,10 +130,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_25: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: __inline_Box_i32___get_27: {
-                let self: &Box<i32> = &&b1;
-                break __inline_Box_i32___get_27: self.value;
-            } };
+            let self: Box<i32> = Box<i32> { value: 42 };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };
@@ -152,24 +144,15 @@ export fn run() with Stdout {
             break __inline_Formatter__new_30: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: __inline_Box_i32___get_32: {
-                let self: &Box<i32> = &&b2;
-                break __inline_Box_i32___get_32: self.value;
-            } };
+            let self: Box<i32> = Box<i32> { value: 42 };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };
         break __tmpl: __r;
     });
-    let pa: Box<Point> = Box<Point> { value: Point { x: 1, y: 2 } };
-    let pb: Box<Point> = Box<Point> { value: Point { x: 1, y: 2 } };
-    if __inline_Box_Point___get_34: {
-        let self: &Box<Point> = &&pa;
-        break __inline_Box_Point___get_34: self.value;
-    }."Point^Eq::eq"(&__inline_Box_Point___get_35: {
-        let self: &Box<Point> = &&pb;
-        break __inline_Box_Point___get_35: self.value;
-    }) {
+    let __sroa_pa_value: Point = Point { x: 1, y: 2 };
+    let __sroa_pb_value: Point = Point { x: 1, y: 2 };
+    if __sroa_pa_value."Point^Eq::eq"(&__sroa_pb_value) {
         core::cli::println("equal");
     } else {
         core::cli::println("not equal");

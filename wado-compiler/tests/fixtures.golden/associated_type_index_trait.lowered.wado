@@ -27,12 +27,6 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let container: MyContainer = MyContainer { data: 42 };
-    let val_ref: Box<i32> = __inline_MyContainer_Index__index_1: {
-        let self: &MyContainer = &&container;
-        break __inline_MyContainer_Index__index_1: Box<i32> { value: self.data };
-    };
-    let val: i32 = val_ref.value;
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(23), used: 0 };
         __r.String::append("Value: ");
@@ -41,7 +35,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: val };
+            let self: Box<i32> = Box<i32> { value: 42 };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };

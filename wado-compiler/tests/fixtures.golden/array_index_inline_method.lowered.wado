@@ -46,10 +46,7 @@ export fn run() with Stdout {
             let value: String = "cherry";
             self."Array<String>::append"(value);
         };
-        break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_5: {
-            let self: &Array<String> = &__b;
-            break __inline_Array_String__SequenceLiteralBuilder__build_5: *self;
-        };
+        break __seq_lit: *__b;
     }, values: __seq_lit: {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(3), used: 0 };
         {
@@ -64,10 +61,7 @@ export fn run() with Stdout {
             let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(30);
         };
-        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_10: {
-            let self: &Array<i32> = &__b;
-            break __inline_Array_i32__SequenceLiteralBuilder__build_10: *self;
-        };
+        break __seq_lit: *__b;
     }, deleted: __seq_lit: {
         let mut __b: Array<bool> = Array<bool> { repr: core::builtin::array_new::<bool>(3), used: 0 };
         {
@@ -82,10 +76,7 @@ export fn run() with Stdout {
             let self: &mut Array<bool> = &mut &mut __b;
             self."Array<bool>::append"(false);
         };
-        break __seq_lit: __inline_Array_bool__SequenceLiteralBuilder__build_15: {
-            let self: &Array<bool> = &__b;
-            break __inline_Array_bool__SequenceLiteralBuilder__build_15: *self;
-        };
+        break __seq_lit: *__b;
     } };
     let idx: i32 = c."Container<String,i32>::find_key_index"(&"cherry");
     let full: bool = c."Container<String,i32>::is_full"(5);
@@ -146,11 +137,9 @@ fn "Container<String,i32>::is_full"(self: &Container<String,i32>, max_keys: i32)
         let mut i: i32 = 0;
         let _licm_keys: Array<String> = self.keys;
         let _licm_deleted: Array<bool> = self.deleted;
+        let _licm_used: i32 = _licm_keys.used;
         loop {
-            if !(i < __inline_Array_String___len_0: {
-                let self: &Array<String> = &&_licm_keys;
-                break __inline_Array_String___len_0: self.used;
-            }) {
+            if !(i < _licm_used) {
                 break __for_0;
             }
             if !_licm_deleted."Array<bool>^IndexValue::index_value"(i) {
@@ -172,11 +161,9 @@ fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool
 fn "Container<String,i32>::find_key_index"(self: &Container<String,i32>, key: &String) -> i32 {
     let mut i: i32 = 0;
     let _licm_keys: Array<String> = self.keys;
+    let _licm_used: i32 = _licm_keys.used;
     loop {
-        if !((i < __inline_Array_String___len_0: {
-            let self: &Array<String> = &&_licm_keys;
-            break __inline_Array_String___len_0: self.used;
-        }) && (_licm_keys."Array<String>^IndexValue::index_value"(i)."String^Ord::cmp"(&*key) == Ordering::Less)) {
+        if !((i < _licm_used) && (_licm_keys."Array<String>^IndexValue::index_value"(i)."String^Ord::cmp"(&*key) == Ordering::Less)) {
             break;
         }
         i = (i + 1);

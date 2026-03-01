@@ -25,10 +25,7 @@ export fn run() with Stdout {
     };
     let mut digits: Array<i32> = __seq_lit: {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(0), used: 0 };
-        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_2: {
-            let self: &Array<i32> = &__b;
-            break __inline_Array_i32__SequenceLiteralBuilder__build_2: *self;
-        };
+        break __seq_lit: *__b;
     };
     let mut v: u64 = 12345;
     loop {
@@ -38,10 +35,7 @@ export fn run() with Stdout {
         digits."Array<i32>::append"((v % 10) as i32);
         v = (v / 10);
     }
-    let __v0: i32 = __inline_Array_i32___len_3: {
-        let self: &Array<i32> = &&digits;
-        break __inline_Array_i32___len_3: self.used;
-    };
+    let __v0: i32 = digits.used;
     let __cond: bool = (__v0 == 5);
     if !__cond {
         core::internal::panic(__tmpl: {

@@ -31,18 +31,12 @@ export fn run() with Stdout {
     };
     let mut arr: Array<u64> = __seq_lit: {
         let mut __b: Array<u64> = Array<u64> { repr: core::builtin::array_new::<u64>(0), used: 0 };
-        break __seq_lit: __inline_Array_u64__SequenceLiteralBuilder__build_2: {
-            let self: &Array<u64> = &__b;
-            break __inline_Array_u64__SequenceLiteralBuilder__build_2: *self;
-        };
+        break __seq_lit: *__b;
     };
     arr."Array<u64>::append"(10000000000);
     arr."Array<u64>::append"(20000000000);
     arr."Array<u64>::append"(30000000000);
-    let mut __iter_0: ArrayIter<u64> = __inline_Array_u64__IntoIterator__into_iter_3: {
-        let self: &Array<u64> = &&arr;
-        break __inline_Array_u64__IntoIterator__into_iter_3: ArrayIter<u64> { repr: self.repr, used: self.used, index: 0 };
-    };
+    let mut __iter_0: ArrayIter<u64> = ArrayIter<u64> { repr: arr.repr, used: arr.used, index: 0 };
     loop {
         let __pattern_temp_0: Option<u64> = __iter_0."ArrayIter<u64>^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {

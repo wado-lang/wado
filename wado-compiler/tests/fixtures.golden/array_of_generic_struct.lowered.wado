@@ -34,10 +34,7 @@ fn __test_0_container_of_boxes() {
     };
     let mut c: Container<Box<i32>> = Container<Box<i32>> { items: __seq_lit: {
         let mut __b: Array<Box<i32>> = Array<Box<i32>> { repr: core::builtin::array_new::<Box<i32>>(0), used: 0 };
-        break __seq_lit: __inline_Array_Box_i32___SequenceLiteralBuilder__build_1: {
-            let self: &Array<Box<i32>> = &__b;
-            break __inline_Array_Box_i32___SequenceLiteralBuilder__build_1: *self;
-        };
+        break __seq_lit: *__b;
     }, size: 0 };
     c."Container<Box<i32>>::add"(Box<i32> { value: 42 });
     let __v0: i32 = c.size;
@@ -120,17 +117,11 @@ fn __test_1_array_of_boxes() {
     };
     let mut arr: Array<Box<i32>> = __seq_lit: {
         let mut __b: Array<Box<i32>> = Array<Box<i32>> { repr: core::builtin::array_new::<Box<i32>>(0), used: 0 };
-        break __seq_lit: __inline_Array_Box_i32___SequenceLiteralBuilder__build_2: {
-            let self: &Array<Box<i32>> = &__b;
-            break __inline_Array_Box_i32___SequenceLiteralBuilder__build_2: *self;
-        };
+        break __seq_lit: *__b;
     };
     arr."Array<Box<i32>>::append"(Box<i32> { value: 10 });
     arr."Array<Box<i32>>::append"(Box<i32> { value: 20 });
-    let __v0: i32 = __inline_Array_Box_i32____len_5: {
-        let self: &Array<Box<i32>> = &&arr;
-        break __inline_Array_Box_i32____len_5: self.used;
-    };
+    let __v0: i32 = arr.used;
     let __cond: bool = (__v0 == 2);
     if !__cond {
         core::internal::panic(__tmpl: {

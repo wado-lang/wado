@@ -31,18 +31,12 @@ export fn run() with Stdout {
     };
     let mut arr: Array<String> = __seq_lit: {
         let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(0), used: 0 };
-        break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_2: {
-            let self: &Array<String> = &__b;
-            break __inline_Array_String__SequenceLiteralBuilder__build_2: *self;
-        };
+        break __seq_lit: *__b;
     };
     arr."Array<String>::append"("hello");
     arr."Array<String>::append"("world");
     arr."Array<String>::append"("!");
-    let mut __iter_0: ArrayIter<String> = __inline_Array_String__IntoIterator__into_iter_3: {
-        let self: &Array<String> = &&arr;
-        break __inline_Array_String__IntoIterator__into_iter_3: ArrayIter<String> { repr: self.repr, used: self.used, index: 0 };
-    };
+    let mut __iter_0: ArrayIter<String> = ArrayIter<String> { repr: arr.repr, used: arr.used, index: 0 };
     loop {
         let __pattern_temp_0: Option<String> = __iter_0."ArrayIter<String>^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {

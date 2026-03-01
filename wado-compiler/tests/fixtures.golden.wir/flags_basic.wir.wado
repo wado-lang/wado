@@ -167,14 +167,8 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let byte: u8;
     let __local_9: ref null String;
     let __local_10: ref null String;
-    len = __inline_String__len_0: block -> i32 {
-        __local_9 = message;
-        break __inline_String__len_0: __local_9.used;
-    };
-    msg_bytes = __inline_String__internal_raw_bytes_1: block -> ref null array<u8> {
-        __local_10 = message;
-        break __inline_String__internal_raw_bytes_1: __local_10.repr;
-    };
+    len = message.used;
+    msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
         len + 1;
     } else {

@@ -41,18 +41,13 @@ export fn run() with Stdout {
             let value: &mut Item = &mut b;
             self."Array<Item>::append"(value);
         };
-        break __seq_lit: __inline_Array_Item__SequenceLiteralBuilder__build_4: {
-            let self: &Array<&mut Item> = &__b;
-            break __inline_Array_Item__SequenceLiteralBuilder__build_4: *self;
-        };
+        break __seq_lit: *__b;
     };
     __for_0: {
         let mut i: i32 = 0;
+        let _licm_used: i32 = items.used;
         loop {
-            if !(i < __inline_Array_Item___len_5: {
-                let self: &Array<&mut Item> = &&items;
-                break __inline_Array_Item___len_5: self.used;
-            }) {
+            if !(i < _licm_used) {
                 break __for_0;
             }
             core::cli::println(__tmpl: {

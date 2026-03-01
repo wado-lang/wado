@@ -36,19 +36,14 @@ fn Container::add_items(self: &mut Container, count: i32) {
 fn Container::process(self: &mut Container) {
     let mut temp: Array<i32> = __seq_lit: {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(0), used: 0 };
-        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_1: {
-            let self: &Array<i32> = &__b;
-            break __inline_Array_i32__SequenceLiteralBuilder__build_1: *self;
-        };
+        break __seq_lit: *__b;
     };
     __for_1: {
         let mut i: i32 = 0;
         let _licm_items: Array<i32> = self.items;
+        let _licm_used: i32 = _licm_items.used;
         loop {
-            if !(i < __inline_Array_i32___len_2: {
-                let self: &Array<i32> = &&_licm_items;
-                break __inline_Array_i32___len_2: self.used;
-            }) {
+            if !(i < _licm_used) {
                 break __for_1;
             }
             let val: i32 = _licm_items."Array<i32>^IndexValue::index_value"(i);
@@ -60,11 +55,9 @@ fn Container::process(self: &mut Container) {
     }
     __for_2: {
         let mut j: i32 = 0;
+        let _licm_used: i32 = temp.used;
         loop {
-            if !(j < __inline_Array_i32___len_3: {
-                let self: &Array<i32> = &&temp;
-                break __inline_Array_i32___len_3: self.used;
-            }) {
+            if !(j < _licm_used) {
                 break __for_2;
             }
             self.items."Array<i32>::append"((temp."Array<i32>^IndexValue::index_value"(j) + 100));
@@ -83,10 +76,7 @@ export fn run() with Stdout {
     };
     let mut c: Container = Container { items: __seq_lit: {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(0), used: 0 };
-        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_2: {
-            let self: &Array<i32> = &__b;
-            break __inline_Array_i32__SequenceLiteralBuilder__build_2: *self;
-        };
+        break __seq_lit: *__b;
     } };
     c.Container::add_items(3);
     c.Container::process();
@@ -99,7 +89,7 @@ export fn run() with Stdout {
         };
         {
             let self: Box<i32> = Box<i32> { value: __inline_Array_i32___len_6: {
-                let self: &Array<i32> = &&c.items;
+                let self: &Array<i32> = &c.items;
                 break __inline_Array_i32___len_6: self.used;
             } };
             let f: &mut Formatter = &mut __f;

@@ -105,23 +105,14 @@ export fn run() with Stdout {
             let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(10);
         };
-        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_12: {
-            let self: &Array<i32> = &__b;
-            break __inline_Array_i32__SequenceLiteralBuilder__build_12: *self;
-        };
+        break __seq_lit: *__b;
     };
     let result: Array<i32> = __inline_ArrayIter_i32___filter_14: {
-        let self: &ArrayIter<i32> = &&__inline_Array_i32___iter_13: {
-            let self: &Array<i32> = &&nums;
-            break __inline_Array_i32___iter_13: ArrayIter<i32> { repr: self.repr, used: self.used, index: 0 };
-        };
+        let self: &ArrayIter<i32> = &ArrayIter<i32> { repr: nums.repr, used: nums.used, index: 0 };
         let pred: fn(i32) -> bool = &__Closure_0 {  };
         break __inline_ArrayIter_i32___filter_14: FilterIter<i32> { repr: self.repr, used: self.used, index: self.index, pred: pred };
     }."FilterIter<i32>::map<i32>"(&__Closure_1 {  })."FilterMapIter<i32,i32>^Iterator::collect"();
-    let mut __iter_0: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_15: {
-        let self: &Array<i32> = &&result;
-        break __inline_Array_i32__IntoIterator__into_iter_15: ArrayIter<i32> { repr: self.repr, used: self.used, index: 0 };
-    };
+    let mut __iter_0: ArrayIter<i32> = ArrayIter<i32> { repr: result.repr, used: result.used, index: 0 };
     loop {
         let __pattern_temp_0: Option<i32> = __iter_0."ArrayIter<i32>^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
@@ -144,10 +135,7 @@ export fn run() with Stdout {
         }
     }
     let sum: i32 = __inline_ArrayIter_i32___map_i32__21: {
-        let self: &ArrayIter<i32> = &&__inline_Array_i32___iter_20: {
-            let self: &Array<i32> = &&nums;
-            break __inline_Array_i32___iter_20: ArrayIter<i32> { repr: self.repr, used: self.used, index: 0 };
-        };
+        let self: &ArrayIter<i32> = &ArrayIter<i32> { repr: nums.repr, used: nums.used, index: 0 };
         let f: fn(i32) -> i32 = &__Closure_2 {  };
         break __inline_ArrayIter_i32___map_i32__21: MapIter<i32,i32> { repr: self.repr, used: self.used, index: self.index, f: f };
     }."MapIter<i32,i32>::fold<i32>"(0, &__Closure_3 {  });
@@ -174,7 +162,7 @@ export fn __cm_export__run() {
 pub fn "MapIter<i32,i32>::fold<i32>"(self: &mut MapIter<i32,i32>, init: i32, f: fn(i32, i32) -> i32) -> i32 {
     let mut acc: i32 = init;
     let mut __iter_15: MapIter<i32,i32> = __inline_MapIter_i32_i32__IntoIterator__into_iter_0: {
-        let self: &MapIter<i32,i32> = &&*self;
+        let self: &MapIter<i32,i32> = &*self;
         break __inline_MapIter_i32_i32__IntoIterator__into_iter_0: *self;
     };
     loop {
@@ -214,10 +202,7 @@ pub fn "FilterIter<i32>::map<i32>"(self: &FilterIter<i32>, f: fn(i32) -> i32) ->
 pub fn "FilterMapIter<i32,i32>^Iterator::collect"(self: &mut FilterMapIter<i32,i32>) -> Array<i32> {
     let mut result: Array<i32> = __seq_lit: {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(0), used: 0 };
-        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_1: {
-            let self: &Array<i32> = &__b;
-            break __inline_Array_i32__SequenceLiteralBuilder__build_1: *self;
-        };
+        break __seq_lit: *__b;
     };
     loop {
         let __pattern_temp_0: Option<i32> = self."FilterMapIter<i32,i32>^Iterator::next"();

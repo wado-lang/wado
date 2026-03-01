@@ -824,14 +824,8 @@ fn "core:internal/cm_lower_string"(s) {  // from core:internal
     let ptr: i32;
     let __local_4: ref null String;
     let __local_5: ref null String;
-    len = __inline_String__len_0: block -> i32 {
-        __local_4 = s;
-        break __inline_String__len_0: __local_4.used;
-    };
-    bytes = __inline_String__internal_raw_bytes_1: block -> ref null array<u8> {
-        __local_5 = s;
-        break __inline_String__internal_raw_bytes_1: __local_5.repr;
-    };
+    len = s.used;
+    bytes = s.repr;
     ptr = "mem/realloc"(0, 0, 1, len);
     "core:internal/gc_array_to_memory"(bytes, ptr, len);
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);

@@ -51,10 +51,7 @@ export fn run() with Stdout {
             let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(3);
         };
-        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_5: {
-            let self: &Array<i32> = &__b;
-            break __inline_Array_i32__SequenceLiteralBuilder__build_5: *self;
-        };
+        break __seq_lit: *__b;
     };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(21), used: 0 };
@@ -64,10 +61,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: __inline_Array_i32___len_9: {
-                let self: &Array<i32> = &&nums;
-                break __inline_Array_i32___len_9: self.used;
-            } };
+            let self: Box<i32> = Box<i32> { value: nums.used };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };
@@ -86,10 +80,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_13: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: __inline_Array_i32___len_15: {
-                let self: &Array<i32> = &&nums;
-                break __inline_Array_i32___len_15: self.used;
-            } };
+            let self: Box<i32> = Box<i32> { value: nums.used };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };
@@ -98,11 +89,9 @@ export fn run() with Stdout {
     double_all(&mut nums);
     __for_1: {
         let mut i: i32 = 0;
+        let _licm_used: i32 = nums.used;
         loop {
-            if !(i < __inline_Array_i32___len_17: {
-                let self: &Array<i32> = &&nums;
-                break __inline_Array_i32___len_17: self.used;
-            }) {
+            if !(i < _licm_used) {
                 break __for_1;
             }
             core::cli::println(__tmpl: {
