@@ -45,16 +45,18 @@ export fn run() with Stdout {
         __inline_i32_Display__fmt_5: {
             let self: Box<i32> = Box<i32> { value: 10 };
             let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+            __inline_i32__fmt_into_6: {
+                "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+            };
         };
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(24), used: 0 };
         __r.String::append("CURRENT=");
-        let mut __f: Formatter = __inline_Formatter__new_7: {
+        let mut __f: Formatter = __inline_Formatter__new_8: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         Box<char> { value: CURRENT }."char^Display::fmt"(&mut __f);
         break __tmpl: __r;
@@ -63,9 +65,9 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(30), used: 0 };
         __r.String::append("CURRENT after=");
-        let mut __f: Formatter = __inline_Formatter__new_9: {
+        let mut __f: Formatter = __inline_Formatter__new_10: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         Box<char> { value: CURRENT }."char^Display::fmt"(&mut __f);
         break __tmpl: __r;

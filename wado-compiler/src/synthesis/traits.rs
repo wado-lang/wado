@@ -1611,6 +1611,40 @@ fn generate_display_fallback_impls(module: &mut TirModule) {
         ))));
     }
 
+    // Generic variants (e.g., Option<T>, Result<T, E>)
+    for (name, type_params) in module
+        .variants
+        .iter()
+        .filter(|v| !v.type_params.is_empty())
+        .map(|v| (v.name.clone(), v.type_params.clone()))
+        .collect::<Vec<_>>()
+    {
+        let (display_key, inspect_key) = (
+            MethodName::format_local(&name, Some("Display"), "fmt"),
+            MethodName::format_local(&name, Some("Inspect"), "inspect"),
+        );
+        if !should_generate(&display_key, &inspect_key) {
+            continue;
+        }
+        let type_param_ids: Vec<TypeId> = type_params
+            .iter()
+            .map(|tp| tt.make_type_param(tp.name.clone(), tp.index))
+            .collect();
+        let variant_type =
+            tt.make_generic_instance(name.clone(), module_source.clone(), type_param_ids);
+        let ref_type = tt.make_ref(variant_type);
+        let (di, ii) = simple_pair(&name);
+        generated.push(Rc::new(RefCell::new(generate_display_fallback(
+            di,
+            ii,
+            ref_type,
+            fmt_type,
+            &module_source,
+            type_params,
+            span,
+        ))));
+    }
+
     // Flags types
     for (name, flags_type_id) in module
         .flags

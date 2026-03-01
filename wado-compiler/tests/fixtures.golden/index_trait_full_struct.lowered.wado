@@ -40,7 +40,9 @@ fn Value::describe(self: &Value) -> String {
         __inline_i32_Display__fmt_2: {
             let __sroa_self_value: i32 = self.n;
             let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+            __inline_i32__fmt_into_3: {
+                "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+            };
         };
         break __tmpl: __r;
     };
@@ -57,17 +59,21 @@ fn Container::stats(self: &Container) -> String {
         __inline_i32_Display__fmt_2: {
             let __sroa_self_value: i32 = self.read_count;
             let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+            __inline_i32__fmt_into_3: {
+                "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+            };
         };
         __r.String::append(", writes=");
-        __f = __inline_Formatter__new_3: {
+        __f = __inline_Formatter__new_4: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_4: {
+        __inline_i32_Display__fmt_5: {
             let __sroa_self_value: i32 = self.write_count;
             let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+            __inline_i32__fmt_into_6: {
+                "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+            };
         };
         break __tmpl: __r;
     };
@@ -203,7 +209,9 @@ export fn run() with Stdout {
         __inline_i32_Display__fmt_17: {
             let self: Box<i32> = Box<i32> { value: c.Container::total() };
             let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+            __inline_i32__fmt_into_18: {
+                "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+            };
         };
         break __tmpl: __r;
     });
@@ -213,7 +221,7 @@ export fn run() with Stdout {
         __r.String::append(c.Container::stats());
         break __tmpl: __r;
     });
-    __inline_Container__reset_stats_19: {
+    __inline_Container__reset_stats_20: {
         c.read_count = 0;
         c.write_count = 0;
     };
@@ -223,11 +231,11 @@ export fn run() with Stdout {
         __r.String::append(c.Container::stats());
         break __tmpl: __r;
     });
-    __inline_Value__increment_21: {
+    __inline_Value__increment_22: {
         let self: &mut Value = c."Container^IndexMut::index_mut"(0);
         self.n = (self.n + 1);
     };
-    __inline_Value__increment_22: {
+    __inline_Value__increment_23: {
         let self: &mut Value = c."Container^IndexMut::index_mut"(1);
         self.n = (self.n + 1);
     };

@@ -1,0 +1,161 @@
+// Test: :? (inspect) format specifier - primitives, char, string, Option, Result,
+// and combinations with width/alignment
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Integer inspect == display (same fmt_into)
+    let i: i32 = 42;
+    assert `{i:?}` == "42";
+    assert `{i:?}` == `{i}`;
+
+    let neg: i32 = -42;
+    assert `{neg:?}` == "-42";
+
+    let i64_max: i64 = 9223372036854775807;
+    assert `{i64_max:?}` == "9223372036854775807";
+
+    let u32_max: u32 = 4294967295;
+    assert `{u32_max:?}` == "4294967295";
+
+    let u64_max: u64 = 18446744073709551615;
+    assert `{u64_max:?}` == "18446744073709551615";
+
+    // i128/u128 inspect
+    let i128_val: i128 = -170141183460469231731687303715884105728;
+    assert `{i128_val:?}` == "-170141183460469231731687303715884105728";
+
+    let u128_val: u128 = 340282366920938463463374607431768211455;
+    assert `{u128_val:?}` == "340282366920938463463374607431768211455";
+
+    // Small integer types
+    let i8_val: i8 = -128 as i8;
+    assert `{i8_val:?}` == "-128";
+
+    let u8_val: u8 = 255 as u8;
+    assert `{u8_val:?}` == "255";
+
+    let i16_val: i16 = -32768 as i16;
+    assert `{i16_val:?}` == "-32768";
+
+    let u16_val: u16 = 65535 as u16;
+    assert `{u16_val:?}` == "65535";
+
+    // Float inspect == display
+    let pi = 3.14;
+    assert `{pi:?}` == "3.14";
+    assert `{pi:?}` == `{pi}`;
+
+    let zero = 0.0;
+    assert `{zero:?}` == "0.0";
+
+    let neg_zero = -0.0;
+    assert `{neg_zero:?}` == "-0.0";
+
+    let f32_val: f32 = 2.5 as f32;
+    assert `{f32_val:?}` == "2.5";
+
+    // Bool inspect == display
+    assert `{true:?}` == "true";
+    assert `{false:?}` == "false";
+
+    // Char: Display outputs the character itself; Inspect outputs quoted form
+    let c = 'A';
+    assert `{c}` == "A";
+    assert `{c:?}` == "'A'";
+
+    let digit = '0';
+    assert `{digit}` == "0";
+    assert `{digit:?}` == "'0'";
+
+    let space = ' ';
+    assert `{space}` == " ";
+    assert `{space:?}` == "' '";
+
+    // Char escape sequences in inspect
+    let newline = '\n';
+    assert `{newline:?}` == "'\\n'";
+
+    let tab = '\t';
+    assert `{tab:?}` == "'\\t'";
+
+    let cr = '\r';
+    assert `{cr:?}` == "'\\r'";
+
+    let single_quote = '\'';
+    assert `{single_quote:?}` == "'\\''";
+
+    let backslash = '\\';
+    assert `{backslash:?}` == "'\\\\'";
+
+    // Regular char (non-special)
+    let z = 'Z';
+    assert `{z:?}` == "'Z'";
+
+    // String: Display outputs string; Inspect outputs quoted with escapes
+    let s = "hello";
+    assert `{s}` == "hello";
+    assert `{s:?}` == "\"hello\"";
+
+    let empty = "";
+    assert `{empty}` == "";
+    assert `{empty:?}` == "\"\"";
+
+    // String inspect escapes
+    let with_quote = "say \"hi\"";
+    assert `{with_quote:?}` == "\"say \\\"hi\\\"\"";
+
+    let with_newline = "line1\nline2";
+    assert `{with_newline:?}` == "\"line1\\nline2\"";
+
+    // Option inspect
+    let some_i32: Option<i32> = Option::<i32>::Some(42);
+    assert `{some_i32:?}` == "Option::Some(42)";
+    assert `{some_i32}` == "Option::Some(42)";
+
+    let none_i32: Option<i32> = null;
+    assert `{none_i32:?}` == "Option::None";
+    assert `{none_i32}` == "Option::None";
+
+    // Option with string payload: inner inspect quotes the string
+    let some_str: Option<String> = Option::<String>::Some("world");
+    assert `{some_str:?}` == "Option::Some(\"world\")";
+
+    // Nested Option
+    let some_some: Option<Option<i32>> = Option::<Option<i32>>::Some(Option::<i32>::Some(7));
+    assert `{some_some:?}` == "Option::Some(Option::Some(7))";
+
+    let some_none: Option<Option<i32>> = Option::<Option<i32>>::Some(null);
+    assert `{some_none:?}` == "Option::Some(Option::None)";
+
+    // Result inspect
+    let ok_val: Result<i32, String> = Result::<i32, String>::Ok(42);
+    assert `{ok_val:?}` == "Result::Ok(42)";
+    assert `{ok_val}` == "Result::Ok(42)";
+
+    let err_val: Result<i32, String> = Result::<i32, String>::Err("fail");
+    assert `{err_val:?}` == "Result::Err(\"fail\")";
+
+    let err_int: Result<String, i32> = Result::<String, i32>::Err(-1);
+    assert `{err_int:?}` == "Result::Err(-1)";
+
+    // :? combined with width and alignment (inspect value is padded)
+    let x: i32 = 42;
+    assert `{x:10?}` == "        42";
+    assert `{x:<10?}` == "42        ";
+    assert `{x:^10?}` == "    42    ";
+    assert `{x:*^10?}` == "****42****";
+
+    // :? with i128
+    let i128_pos: i128 = 42;
+    assert `{i128_pos:10?}` == "        42";
+    assert `{i128_pos:<10?}` == "42        ";
+
+    // :? with bool and width
+    assert `{true:10?}` == "      true";
+    assert `{false:<10?}` == "false     ";
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

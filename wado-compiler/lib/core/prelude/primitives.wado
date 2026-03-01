@@ -476,10 +476,14 @@ fn fmt_int_base(abs_val: i64, is_negative: bool, f: &mut Formatter, base: i32, u
 
 
 impl bool {
+    fn fmt_into(&self, f: &mut Formatter) {
+        f.pad(if *self { "true" } else { "false" });
+    }
+
     pub fn to_string(&self) -> String {
         let mut buf = String::with_capacity(5);
         let mut f = Formatter::new(&mut buf);
-        f.pad(if *self { "true" } else { "false" });
+        self.fmt_into(&mut f);
         return buf;
     }
 }
@@ -579,8 +583,15 @@ impl i8 {
 
     pub fn min(a: i8, b: i8) -> i8 { return builtin::select::<i8>(a < b, a, b); }
 
+    fn fmt_into(&self, f: &mut Formatter) {
+        fmt_i32_decimal((*self) as i32, f);
+    }
+
     pub fn to_string(&self) -> String {
-        return ((*self) as i32).to_string();
+        let mut buf = String::with_capacity(5);
+        let mut f = Formatter::new(&mut buf);
+        self.fmt_into(&mut f);
+        return buf;
     }
 }
 
@@ -592,8 +603,15 @@ impl u8 {
 
     pub fn min(a: u8, b: u8) -> u8 { return builtin::select::<u8>(a < b, a, b); }
 
+    fn fmt_into(&self, f: &mut Formatter) {
+        fmt_i32_decimal((*self) as i32, f);
+    }
+
     pub fn to_string(&self) -> String {
-        return ((*self) as i32).to_string();
+        let mut buf = String::with_capacity(4);
+        let mut f = Formatter::new(&mut buf);
+        self.fmt_into(&mut f);
+        return buf;
     }
 }
 
@@ -605,8 +623,15 @@ impl i16 {
 
     pub fn min(a: i16, b: i16) -> i16 { return builtin::select::<i16>(a < b, a, b); }
 
+    fn fmt_into(&self, f: &mut Formatter) {
+        fmt_i32_decimal((*self) as i32, f);
+    }
+
     pub fn to_string(&self) -> String {
-        return ((*self) as i32).to_string();
+        let mut buf = String::with_capacity(7);
+        let mut f = Formatter::new(&mut buf);
+        self.fmt_into(&mut f);
+        return buf;
     }
 }
 
@@ -618,8 +643,15 @@ impl u16 {
 
     pub fn min(a: u16, b: u16) -> u16 { return builtin::select::<u16>(a < b, a, b); }
 
+    fn fmt_into(&self, f: &mut Formatter) {
+        fmt_i32_decimal((*self) as i32, f);
+    }
+
     pub fn to_string(&self) -> String {
-        return ((*self) as i32).to_string();
+        let mut buf = String::with_capacity(6);
+        let mut f = Formatter::new(&mut buf);
+        self.fmt_into(&mut f);
+        return buf;
     }
 }
 
@@ -631,10 +663,14 @@ impl i32 {
 
     pub fn min(a: i32, b: i32) -> i32 { return builtin::select::<i32>(a < b, a, b); }
 
+    fn fmt_into(&self, f: &mut Formatter) {
+        fmt_i32_decimal(*self, f);
+    }
+
     pub fn to_string(&self) -> String {
         let mut buf = String::with_capacity(12);
         let mut f = Formatter::new(&mut buf);
-        fmt_i32_decimal(*self, &mut f);
+        self.fmt_into(&mut f);
         return buf;
     }
 }
@@ -647,10 +683,14 @@ impl u32 {
 
     pub fn min(a: u32, b: u32) -> u32 { return builtin::select::<u32>(a < b, a, b); }
 
+    fn fmt_into(&self, f: &mut Formatter) {
+        fmt_u32_decimal(*self, f);
+    }
+
     pub fn to_string(&self) -> String {
         let mut buf = String::with_capacity(11);
         let mut f = Formatter::new(&mut buf);
-        fmt_u32_decimal(*self, &mut f);
+        self.fmt_into(&mut f);
         return buf;
     }
 }
@@ -663,10 +703,14 @@ impl i64 {
 
     pub fn min(a: i64, b: i64) -> i64 { return builtin::select::<i64>(a < b, a, b); }
 
+    fn fmt_into(&self, f: &mut Formatter) {
+        fmt_i64_decimal(*self, f);
+    }
+
     pub fn to_string(&self) -> String {
         let mut buf = String::with_capacity(21);
         let mut f = Formatter::new(&mut buf);
-        fmt_i64_decimal(*self, &mut f);
+        self.fmt_into(&mut f);
         return buf;
     }
 }
@@ -679,10 +723,14 @@ impl u64 {
 
     pub fn min(a: u64, b: u64) -> u64 { return builtin::select::<u64>(a < b, a, b); }
 
+    fn fmt_into(&self, f: &mut Formatter) {
+        fmt_u64_decimal(*self, f);
+    }
+
     pub fn to_string(&self) -> String {
         let mut buf = String::with_capacity(21);
         let mut f = Formatter::new(&mut buf);
-        fmt_u64_decimal(*self, &mut f);
+        self.fmt_into(&mut f);
         return buf;
     }
 }
@@ -704,10 +752,14 @@ impl f32 {
     pub const NEG_INFINITY: f32 = -1.0 / 0.0;
     pub const NAN: f32 = 0.0 / 0.0;
 
+    fn fmt_into(&self, f: &mut Formatter) {
+        fmt_f32(*self, f);
+    }
+
     pub fn to_string(&self) -> String {
         let mut buf = String::with_capacity(16);
         let mut f = Formatter::new(&mut buf);
-        fmt_f32(*self, &mut f);
+        self.fmt_into(&mut f);
         return buf;
     }
 
@@ -842,10 +894,14 @@ impl f64 {
     pub const NEG_INFINITY: f64 = -1.0 / 0.0;
     pub const NAN: f64 = 0.0 / 0.0;
 
+    fn fmt_into(&self, f: &mut Formatter) {
+        fmt_f64(*self, f);
+    }
+
     pub fn to_string(&self) -> String {
         let mut buf = String::with_capacity(24);
         let mut f = Formatter::new(&mut buf);
-        fmt_f64(*self, &mut f);
+        self.fmt_into(&mut f);
         return buf;
     }
 
@@ -962,7 +1018,7 @@ impl f64 {
 
 impl Display for bool {
     pub fn fmt(&self, f: &mut Formatter) {
-        f.pad(if *self { "true" } else { "false" });
+        self.fmt_into(f);
     }
 }
 
@@ -980,67 +1036,67 @@ impl Display for char {
 
 impl Display for i8 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_i32_decimal((*self) as i32, f);
+        self.fmt_into(f);
     }
 }
 
 impl Display for u8 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_i32_decimal((*self) as i32, f);
+        self.fmt_into(f);
     }
 }
 
 impl Display for i16 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_i32_decimal((*self) as i32, f);
+        self.fmt_into(f);
     }
 }
 
 impl Display for u16 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_i32_decimal((*self) as i32, f);
+        self.fmt_into(f);
     }
 }
 
 impl Display for i32 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_i32_decimal(*self, f);
+        self.fmt_into(f);
     }
 }
 
 impl Display for u32 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_u32_decimal(*self, f);
+        self.fmt_into(f);
     }
 }
 
 impl Display for i64 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_i64_decimal(*self, f);
+        self.fmt_into(f);
     }
 }
 
 impl Display for u64 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_u64_decimal(*self, f);
+        self.fmt_into(f);
     }
 }
 
 impl Display for f32 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_f32(*self, f);
+        self.fmt_into(f);
     }
 }
 
 impl Display for f64 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_f64(*self, f);
+        self.fmt_into(f);
     }
 }
 
 impl Inspect for bool {
     pub fn inspect(&self, f: &mut Formatter) {
-        f.pad(if *self { "true" } else { "false" });
+        self.fmt_into(f);
     }
 }
 
@@ -1072,61 +1128,61 @@ impl Inspect for char {
 
 impl Inspect for i8 {
     pub fn inspect(&self, f: &mut Formatter) {
-        fmt_i32_decimal((*self) as i32, f);
+        self.fmt_into(f);
     }
 }
 
 impl Inspect for u8 {
     pub fn inspect(&self, f: &mut Formatter) {
-        fmt_i32_decimal((*self) as i32, f);
+        self.fmt_into(f);
     }
 }
 
 impl Inspect for i16 {
     pub fn inspect(&self, f: &mut Formatter) {
-        fmt_i32_decimal((*self) as i32, f);
+        self.fmt_into(f);
     }
 }
 
 impl Inspect for u16 {
     pub fn inspect(&self, f: &mut Formatter) {
-        fmt_i32_decimal((*self) as i32, f);
+        self.fmt_into(f);
     }
 }
 
 impl Inspect for i32 {
     pub fn inspect(&self, f: &mut Formatter) {
-        fmt_i32_decimal(*self, f);
+        self.fmt_into(f);
     }
 }
 
 impl Inspect for u32 {
     pub fn inspect(&self, f: &mut Formatter) {
-        fmt_u32_decimal(*self, f);
+        self.fmt_into(f);
     }
 }
 
 impl Inspect for i64 {
     pub fn inspect(&self, f: &mut Formatter) {
-        fmt_i64_decimal(*self, f);
+        self.fmt_into(f);
     }
 }
 
 impl Inspect for u64 {
     pub fn inspect(&self, f: &mut Formatter) {
-        fmt_u64_decimal(*self, f);
+        self.fmt_into(f);
     }
 }
 
 impl Inspect for f32 {
     pub fn inspect(&self, f: &mut Formatter) {
-        fmt_f32(*self, f);
+        self.fmt_into(f);
     }
 }
 
 impl Inspect for f64 {
     pub fn inspect(&self, f: &mut Formatter) {
-        fmt_f64(*self, f);
+        self.fmt_into(f);
     }
 }
 
