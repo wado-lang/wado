@@ -286,16 +286,7 @@ See also `wado-vscode/README.md` for more details.
 
 - [x] math functions (libm)
 
-## Wasm and WASI
-
-There are external references in the module for convenience:
-
-- `vendor/wasm/` - WebAssembly/spec
-- `vendor/wasi/` - WebAssembly/WASI
-- `vendor/wasmtime/` - a Wasm runtime with WASI P3 support
-- `vendor/wasm-tools/` - a Wasm toolchain, where the Wado compiler relies on.
-
-### Wasm and WASI Features
+### Wasm and WASI
 
 Wado is designed with the following Wasm features:
 
@@ -462,16 +453,6 @@ If this is your first time running mise in this repository, you may need to trus
 ```sh
 mise trust
 ```
-
-### Syncing Vendor Submodules
-
-Run the following to sync all vendor submodules:
-
-```sh
-mise run sync-vendor
-```
-
-This syncs `vendor/wasmtime` to the exact version in `Cargo.lock` (required for WASI P3 compatibility), and updates other vendor submodules (`vendor/wasm`, `vendor/wasi`, `vendor/wasm-tools`) to their latest remote HEAD.
 
 ### When Completing a Task
 
