@@ -2659,6 +2659,19 @@ fn prune_branches_in_expr(expr: &mut TirExpr) -> bool {
         changed = true;
     }
 
+    // Simplify `label: { ... }` → `{ ... }` when no break targets the label
+    if let TirExprKind::LabeledBlock { label, block, .. } = &expr.kind
+        && !block_has_break_to(label, block)
+    {
+        let TirExprKind::LabeledBlock { block, .. } =
+            std::mem::replace(&mut expr.kind, TirExprKind::Unit)
+        else {
+            unreachable!();
+        };
+        expr.kind = TirExprKind::Block(block);
+        changed = true;
+    }
+
     // Simplify `[label:] { }` → `()` (empty block, with or without label)
     if matches!(&expr.kind, TirExprKind::Block(b) | TirExprKind::LabeledBlock { block: b, .. } if b.stmts.is_empty())
     {
@@ -2674,6 +2687,7 @@ fn prune_branches_in_expr(expr: &mut TirExpr) -> bool {
 /// - `if false { A }` → remove
 /// - `if false { A } else { B }` → inline B's statements
 /// - `label: { }` (empty labeled block) → remove
+/// - `label: { stmts }` (unused label) → flatten stmts into parent
 fn eliminate_dead_stmts(block: &mut TirBlock) -> bool {
     let dominated = |s: &TirStmt| {
         matches!(
@@ -2682,7 +2696,8 @@ fn eliminate_dead_stmts(block: &mut TirBlock) -> bool {
                 if matches!(condition.kind, TirExprKind::BoolLiteral(_))
         ) || matches!(
             &s.kind,
-            TirStmtKind::LabeledBlock { block, .. } if block.stmts.is_empty()
+            TirStmtKind::LabeledBlock { label, block }
+                if block.stmts.is_empty() || !block_has_break_to(label, block)
         ) || matches!(
             &s.kind,
             TirStmtKind::Expr(e) if matches!(e.kind, TirExprKind::Unit)
@@ -2713,10 +2728,14 @@ fn eliminate_dead_stmts(block: &mut TirBlock) -> bool {
             }
             continue;
         }
-        // Empty labeled block → drop
-        if let TirStmtKind::LabeledBlock { block: inner, .. } = &stmt.kind
-            && inner.stmts.is_empty()
+        // Labeled block with unused label → flatten stmts into parent
+        if let TirStmtKind::LabeledBlock { ref label, block: ref inner } = stmt.kind
+            && !block_has_break_to(label, inner)
         {
+            let TirStmtKind::LabeledBlock { block: inner, .. } = stmt.kind else {
+                unreachable!();
+            };
+            block.stmts.extend(inner.stmts);
             continue;
         }
         // Unit expression → drop (side-effect free)
@@ -2728,6 +2747,75 @@ fn eliminate_dead_stmts(block: &mut TirBlock) -> bool {
         block.stmts.push(stmt);
     }
     true
+}
+
+/// Check if any `break` statement in the block targets the given label.
+fn block_has_break_to(label: &str, block: &TirBlock) -> bool {
+    block.stmts.iter().any(|s| stmt_has_break_to(label, s))
+}
+
+fn stmt_has_break_to(label: &str, stmt: &TirStmt) -> bool {
+    match &stmt.kind {
+        TirStmtKind::Break { label: Some(l), .. } => l == label,
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetPattern { value, .. } => {
+            expr_has_break_to(label, value)
+        }
+        TirStmtKind::Expr(expr) => expr_has_break_to(label, expr),
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            expr_has_break_to(label, condition)
+                || block_has_break_to(label, then_block)
+                || else_block
+                    .as_ref()
+                    .is_some_and(|b| block_has_break_to(label, b))
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            block_has_break_to(label, body)
+        }
+        TirStmtKind::IfPattern {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            expr_has_break_to(label, scrutinee)
+                || block_has_break_to(label, then_block)
+                || else_block
+                    .as_ref()
+                    .is_some_and(|b| block_has_break_to(label, b))
+        }
+        TirStmtKind::Return { value } => {
+            value.as_ref().is_some_and(|v| expr_has_break_to(label, v))
+        }
+        _ => false,
+    }
+}
+
+fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
+    match &expr.kind {
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            block_has_break_to(label, block)
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            expr_has_break_to(label, condition)
+                || block_has_break_to(label, then_branch)
+                || else_branch
+                    .as_ref()
+                    .is_some_and(|b| block_has_break_to(label, b))
+        }
+        TirExprKind::Match { expr, arms } => {
+            expr_has_break_to(label, expr)
+                || arms.iter().any(|arm| expr_has_break_to(label, &arm.body))
+        }
+        _ => false,
+    }
 }
 
 #[cfg(test)]
