@@ -18,11 +18,9 @@ global mut __modules_initialized: bool = false;
 fn fmt_int(value: Box<i32>, fill: char, align: Alignment, sign_plus: bool, zero_pad: bool, width: i32) -> String {
     let mut buf: String = String { repr: "core::prelude/string.wado::array_new<u8>"(64), used: 0 };
     let mut f: Formatter = Formatter { fill: fill, align: align, sign_plus: sign_plus, alternate: false, zero_pad: zero_pad, width: width, precision: -1, buf: &mut buf };
-    __inline_i32_Display__fmt_1: {
+    {
         let f: &mut Formatter = &mut f;
-        __inline_i32__fmt_into_2: {
-            value.i32::fmt_decimal(f);
-        };
+        value.i32::fmt_decimal(f);
     };
     return buf;
 }
@@ -38,283 +36,245 @@ export fn run() with Stdout {
     let x: Box<i32> = Box<i32> { value: 42 };
     let neg: Box<i32> = Box<i32> { value: -42 };
     let big: Box<i32> = Box<i32> { value: 12345 };
-    __assert_0: {
-        let __v0: String = fmt_int(x, ' ', Alignment::Right, false, false, 10);
-        let __cond: bool = __v0."String^Eq::eq"(&"        42");
-        if !__cond {
-            core::internal::panic(__tmpl: {
-                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(225), used: 0 };
-                __r.String::append("Assertion failed in ");
-                __r.String::append("run");
-                __r.String::append(" at ");
-                __r.String::append("wado-compiler/tests/fixtures/display_format_padding.wado");
-                __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_2: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_3: {
-                    let self: Box<i32> = Box<i32> { value: 26 };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_4: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\ncondition: fmt_int(&x, ' ', Alignment::Right, false, false, 10) == \"        42\"\n");
-                __r.String::append("fmt_int(&x, ' ', Alignment::Right, false, false, 10): ");
-                __r.String::append(__v0);
-                __r.String::append("\n");
-                break __tmpl: __r;
-            });
-        }
+    let __v0: String = fmt_int(x, ' ', Alignment::Right, false, false, 10);
+    let __cond: bool = __v0."String^Eq::eq"(&"        42");
+    if !__cond {
+        core::internal::panic(__tmpl: {
+            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(225), used: 0 };
+            __r.String::append("Assertion failed in ");
+            __r.String::append("run");
+            __r.String::append(" at ");
+            __r.String::append("wado-compiler/tests/fixtures/display_format_padding.wado");
+            __r.String::append(":");
+            let mut __f: Formatter = __inline_Formatter__new_2: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: 26 };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\ncondition: fmt_int(&x, ' ', Alignment::Right, false, false, 10) == \"        42\"\n");
+            __r.String::append("fmt_int(&x, ' ', Alignment::Right, false, false, 10): ");
+            __r.String::append(__v0);
+            __r.String::append("\n");
+            break __tmpl: __r;
+        });
     }
-    __assert_1: {
-        let __v0: String = fmt_int(x, ' ', Alignment::Left, false, false, 10);
-        let __cond: bool = __v0."String^Eq::eq"(&"42        ");
-        if !__cond {
-            core::internal::panic(__tmpl: {
-                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(223), used: 0 };
-                __r.String::append("Assertion failed in ");
-                __r.String::append("run");
-                __r.String::append(" at ");
-                __r.String::append("wado-compiler/tests/fixtures/display_format_padding.wado");
-                __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_6: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_7: {
-                    let self: Box<i32> = Box<i32> { value: 29 };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_8: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\ncondition: fmt_int(&x, ' ', Alignment::Left, false, false, 10) == \"42        \"\n");
-                __r.String::append("fmt_int(&x, ' ', Alignment::Left, false, false, 10): ");
-                __r.String::append(__v0);
-                __r.String::append("\n");
-                break __tmpl: __r;
-            });
-        }
+    let __v0: String = fmt_int(x, ' ', Alignment::Left, false, false, 10);
+    let __cond: bool = __v0."String^Eq::eq"(&"42        ");
+    if !__cond {
+        core::internal::panic(__tmpl: {
+            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(223), used: 0 };
+            __r.String::append("Assertion failed in ");
+            __r.String::append("run");
+            __r.String::append(" at ");
+            __r.String::append("wado-compiler/tests/fixtures/display_format_padding.wado");
+            __r.String::append(":");
+            let mut __f: Formatter = __inline_Formatter__new_6: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: 29 };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\ncondition: fmt_int(&x, ' ', Alignment::Left, false, false, 10) == \"42        \"\n");
+            __r.String::append("fmt_int(&x, ' ', Alignment::Left, false, false, 10): ");
+            __r.String::append(__v0);
+            __r.String::append("\n");
+            break __tmpl: __r;
+        });
     }
-    __assert_2: {
-        let __v0: String = fmt_int(x, ' ', Alignment::Center, false, false, 10);
-        let __cond: bool = __v0."String^Eq::eq"(&"    42    ");
-        if !__cond {
-            core::internal::panic(__tmpl: {
-                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(227), used: 0 };
-                __r.String::append("Assertion failed in ");
-                __r.String::append("run");
-                __r.String::append(" at ");
-                __r.String::append("wado-compiler/tests/fixtures/display_format_padding.wado");
-                __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_10: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_11: {
-                    let self: Box<i32> = Box<i32> { value: 32 };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_12: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\ncondition: fmt_int(&x, ' ', Alignment::Center, false, false, 10) == \"    42    \"\n");
-                __r.String::append("fmt_int(&x, ' ', Alignment::Center, false, false, 10): ");
-                __r.String::append(__v0);
-                __r.String::append("\n");
-                break __tmpl: __r;
-            });
-        }
+    let __v0: String = fmt_int(x, ' ', Alignment::Center, false, false, 10);
+    let __cond: bool = __v0."String^Eq::eq"(&"    42    ");
+    if !__cond {
+        core::internal::panic(__tmpl: {
+            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(227), used: 0 };
+            __r.String::append("Assertion failed in ");
+            __r.String::append("run");
+            __r.String::append(" at ");
+            __r.String::append("wado-compiler/tests/fixtures/display_format_padding.wado");
+            __r.String::append(":");
+            let mut __f: Formatter = __inline_Formatter__new_10: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: 32 };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\ncondition: fmt_int(&x, ' ', Alignment::Center, false, false, 10) == \"    42    \"\n");
+            __r.String::append("fmt_int(&x, ' ', Alignment::Center, false, false, 10): ");
+            __r.String::append(__v0);
+            __r.String::append("\n");
+            break __tmpl: __r;
+        });
     }
-    __assert_3: {
-        let __v0: String = fmt_int(x, '0', Alignment::Right, false, true, 8);
-        let __cond: bool = __v0."String^Eq::eq"(&"00000042");
-        if !__cond {
-            core::internal::panic(__tmpl: {
-                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(219), used: 0 };
-                __r.String::append("Assertion failed in ");
-                __r.String::append("run");
-                __r.String::append(" at ");
-                __r.String::append("wado-compiler/tests/fixtures/display_format_padding.wado");
-                __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_14: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_15: {
-                    let self: Box<i32> = Box<i32> { value: 35 };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_16: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\ncondition: fmt_int(&x, '0', Alignment::Right, false, true, 8) == \"00000042\"\n");
-                __r.String::append("fmt_int(&x, '0', Alignment::Right, false, true, 8): ");
-                __r.String::append(__v0);
-                __r.String::append("\n");
-                break __tmpl: __r;
-            });
-        }
+    let __v0: String = fmt_int(x, '0', Alignment::Right, false, true, 8);
+    let __cond: bool = __v0."String^Eq::eq"(&"00000042");
+    if !__cond {
+        core::internal::panic(__tmpl: {
+            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(219), used: 0 };
+            __r.String::append("Assertion failed in ");
+            __r.String::append("run");
+            __r.String::append(" at ");
+            __r.String::append("wado-compiler/tests/fixtures/display_format_padding.wado");
+            __r.String::append(":");
+            let mut __f: Formatter = __inline_Formatter__new_14: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: 35 };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\ncondition: fmt_int(&x, '0', Alignment::Right, false, true, 8) == \"00000042\"\n");
+            __r.String::append("fmt_int(&x, '0', Alignment::Right, false, true, 8): ");
+            __r.String::append(__v0);
+            __r.String::append("\n");
+            break __tmpl: __r;
+        });
     }
-    __assert_4: {
-        let __v0: String = fmt_int(neg, '0', Alignment::Right, false, true, 8);
-        let __cond: bool = __v0."String^Eq::eq"(&"-0000042");
-        if !__cond {
-            core::internal::panic(__tmpl: {
-                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(223), used: 0 };
-                __r.String::append("Assertion failed in ");
-                __r.String::append("run");
-                __r.String::append(" at ");
-                __r.String::append("wado-compiler/tests/fixtures/display_format_padding.wado");
-                __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_18: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_18: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_19: {
-                    let self: Box<i32> = Box<i32> { value: 38 };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_20: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\ncondition: fmt_int(&neg, '0', Alignment::Right, false, true, 8) == \"-0000042\"\n");
-                __r.String::append("fmt_int(&neg, '0', Alignment::Right, false, true, 8): ");
-                __r.String::append(__v0);
-                __r.String::append("\n");
-                break __tmpl: __r;
-            });
-        }
+    let __v0: String = fmt_int(neg, '0', Alignment::Right, false, true, 8);
+    let __cond: bool = __v0."String^Eq::eq"(&"-0000042");
+    if !__cond {
+        core::internal::panic(__tmpl: {
+            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(223), used: 0 };
+            __r.String::append("Assertion failed in ");
+            __r.String::append("run");
+            __r.String::append(" at ");
+            __r.String::append("wado-compiler/tests/fixtures/display_format_padding.wado");
+            __r.String::append(":");
+            let mut __f: Formatter = __inline_Formatter__new_18: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_18: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: 38 };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\ncondition: fmt_int(&neg, '0', Alignment::Right, false, true, 8) == \"-0000042\"\n");
+            __r.String::append("fmt_int(&neg, '0', Alignment::Right, false, true, 8): ");
+            __r.String::append(__v0);
+            __r.String::append("\n");
+            break __tmpl: __r;
+        });
     }
-    __assert_5: {
-        let __v0: String = fmt_int(x, ' ', Alignment::Right, true, false, -1);
-        let __cond: bool = __v0."String^Eq::eq"(&"+42");
-        if !__cond {
-            core::internal::panic(__tmpl: {
-                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(216), used: 0 };
-                __r.String::append("Assertion failed in ");
-                __r.String::append("run");
-                __r.String::append(" at ");
-                __r.String::append("wado-compiler/tests/fixtures/display_format_padding.wado");
-                __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_22: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_23: {
-                    let self: Box<i32> = Box<i32> { value: 41 };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_24: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\ncondition: fmt_int(&x, ' ', Alignment::Right, true, false, -1) == \"+42\"\n");
-                __r.String::append("fmt_int(&x, ' ', Alignment::Right, true, false, -1): ");
-                __r.String::append(__v0);
-                __r.String::append("\n");
-                break __tmpl: __r;
-            });
-        }
+    let __v0: String = fmt_int(x, ' ', Alignment::Right, true, false, -1);
+    let __cond: bool = __v0."String^Eq::eq"(&"+42");
+    if !__cond {
+        core::internal::panic(__tmpl: {
+            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(216), used: 0 };
+            __r.String::append("Assertion failed in ");
+            __r.String::append("run");
+            __r.String::append(" at ");
+            __r.String::append("wado-compiler/tests/fixtures/display_format_padding.wado");
+            __r.String::append(":");
+            let mut __f: Formatter = __inline_Formatter__new_22: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: 41 };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\ncondition: fmt_int(&x, ' ', Alignment::Right, true, false, -1) == \"+42\"\n");
+            __r.String::append("fmt_int(&x, ' ', Alignment::Right, true, false, -1): ");
+            __r.String::append(__v0);
+            __r.String::append("\n");
+            break __tmpl: __r;
+        });
     }
-    __assert_6: {
-        let __v0: String = fmt_int(x, '*', Alignment::Center, false, false, 10);
-        let __cond: bool = __v0."String^Eq::eq"(&"****42****");
-        if !__cond {
-            core::internal::panic(__tmpl: {
-                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(227), used: 0 };
-                __r.String::append("Assertion failed in ");
-                __r.String::append("run");
-                __r.String::append(" at ");
-                __r.String::append("wado-compiler/tests/fixtures/display_format_padding.wado");
-                __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_26: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_26: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_27: {
-                    let self: Box<i32> = Box<i32> { value: 44 };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_28: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\ncondition: fmt_int(&x, '*', Alignment::Center, false, false, 10) == \"****42****\"\n");
-                __r.String::append("fmt_int(&x, '*', Alignment::Center, false, false, 10): ");
-                __r.String::append(__v0);
-                __r.String::append("\n");
-                break __tmpl: __r;
-            });
-        }
+    let __v0: String = fmt_int(x, '*', Alignment::Center, false, false, 10);
+    let __cond: bool = __v0."String^Eq::eq"(&"****42****");
+    if !__cond {
+        core::internal::panic(__tmpl: {
+            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(227), used: 0 };
+            __r.String::append("Assertion failed in ");
+            __r.String::append("run");
+            __r.String::append(" at ");
+            __r.String::append("wado-compiler/tests/fixtures/display_format_padding.wado");
+            __r.String::append(":");
+            let mut __f: Formatter = __inline_Formatter__new_26: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_26: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: 44 };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\ncondition: fmt_int(&x, '*', Alignment::Center, false, false, 10) == \"****42****\"\n");
+            __r.String::append("fmt_int(&x, '*', Alignment::Center, false, false, 10): ");
+            __r.String::append(__v0);
+            __r.String::append("\n");
+            break __tmpl: __r;
+        });
     }
     let mut buf: String = String { repr: "core::prelude/string.wado::array_new<u8>"(64), used: 0 };
     let mut f: Formatter = Formatter { fill: ' ', align: Alignment::Left, sign_plus: false, alternate: false, zero_pad: false, width: 8, precision: -1, buf: &mut buf };
-    __inline_bool_Display__fmt_30: {
+    {
         let f: &mut Formatter = &mut f;
-        __inline_bool__fmt_into_31: {
-            f.Formatter::pad("true");
-        };
+        f.Formatter::pad("true");
     };
-    __assert_7: {
-        let __v0: String = buf;
-        let __cond: bool = __v0."String^Eq::eq"(&"true    ");
-        if !__cond {
-            core::internal::panic(__tmpl: {
-                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(125), used: 0 };
-                __r.String::append("Assertion failed in ");
-                __r.String::append("run");
-                __r.String::append(" at ");
-                __r.String::append("wado-compiler/tests/fixtures/display_format_padding.wado");
-                __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_33: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_33: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_34: {
-                    let self: Box<i32> = Box<i32> { value: 59 };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_35: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\ncondition: buf == \"true    \"\n");
-                __r.String::append("buf: ");
-                __r.String::append(__v0);
-                __r.String::append("\n");
-                break __tmpl: __r;
-            });
-        }
+    let __v0: String = buf;
+    let __cond: bool = __v0."String^Eq::eq"(&"true    ");
+    if !__cond {
+        core::internal::panic(__tmpl: {
+            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(125), used: 0 };
+            __r.String::append("Assertion failed in ");
+            __r.String::append("run");
+            __r.String::append(" at ");
+            __r.String::append("wado-compiler/tests/fixtures/display_format_padding.wado");
+            __r.String::append(":");
+            let mut __f: Formatter = __inline_Formatter__new_33: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_33: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: 59 };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\ncondition: buf == \"true    \"\n");
+            __r.String::append("buf: ");
+            __r.String::append(__v0);
+            __r.String::append("\n");
+            break __tmpl: __r;
+        });
     }
-    __assert_8: {
-        let __v0: String = fmt_int(big, ' ', Alignment::Right, false, false, 2);
-        let __cond: bool = __v0."String^Eq::eq"(&"12345");
-        if !__cond {
-            core::internal::panic(__tmpl: {
-                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(222), used: 0 };
-                __r.String::append("Assertion failed in ");
-                __r.String::append("run");
-                __r.String::append(" at ");
-                __r.String::append("wado-compiler/tests/fixtures/display_format_padding.wado");
-                __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_37: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_37: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_38: {
-                    let self: Box<i32> = Box<i32> { value: 62 };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_39: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\ncondition: fmt_int(&big, ' ', Alignment::Right, false, false, 2) == \"12345\"\n");
-                __r.String::append("fmt_int(&big, ' ', Alignment::Right, false, false, 2): ");
-                __r.String::append(__v0);
-                __r.String::append("\n");
-                break __tmpl: __r;
-            });
-        }
+    let __v0: String = fmt_int(big, ' ', Alignment::Right, false, false, 2);
+    let __cond: bool = __v0."String^Eq::eq"(&"12345");
+    if !__cond {
+        core::internal::panic(__tmpl: {
+            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(222), used: 0 };
+            __r.String::append("Assertion failed in ");
+            __r.String::append("run");
+            __r.String::append(" at ");
+            __r.String::append("wado-compiler/tests/fixtures/display_format_padding.wado");
+            __r.String::append(":");
+            let mut __f: Formatter = __inline_Formatter__new_37: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_37: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: 62 };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\ncondition: fmt_int(&big, ' ', Alignment::Right, false, false, 2) == \"12345\"\n");
+            __r.String::append("fmt_int(&big, ' ', Alignment::Right, false, false, 2): ");
+            __r.String::append(__v0);
+            __r.String::append("\n");
+            break __tmpl: __r;
+        });
     }
     core::cli::println("ok");
 }

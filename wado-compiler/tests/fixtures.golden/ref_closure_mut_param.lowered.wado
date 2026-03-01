@@ -27,11 +27,9 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let mut y: Box<i32> = Box<i32> { value: 10 };
-    __inline_modify_via_closure___Closure_0_1: {
-        __inline___Closure_0____call_2: {
-            let r: Box<i32> = y;
-            r.value = (r.value + 5);
-        };
+    {
+        let r: Box<i32> = y;
+        r.value = (r.value + 5);
     };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(26), used: 0 };
@@ -40,11 +38,9 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_5: {
+        {
             let f: &mut Formatter = &mut __f;
-            __inline_i32__fmt_into_6: {
-                y.i32::fmt_decimal(f);
-            };
+            y.i32::fmt_decimal(f);
         };
         break __tmpl: __r;
     });

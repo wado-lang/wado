@@ -25,16 +25,16 @@ export fn run() with Stdout {
     };
     let arr: Array<Array<String>> = __seq_lit: {
         let mut __b: Array<Array<String>> = Array<Array<String>> { repr: core::builtin::array_new::<Array<String>>(2), used: 0 };
-        __inline_Array_Array_String___SequenceLiteralBuilder__push_literal_2: {
+        {
             let self: &mut Array<Array<String>> = &mut __b;
             let value: Array<String> = __seq_lit: {
                 let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(2), used: 0 };
-                __inline_Array_String__SequenceLiteralBuilder__push_literal_4: {
+                {
                     let self: &mut Array<String> = &mut __b;
                     let value: String = "a";
                     self."Array<String>::append"(value);
                 };
-                __inline_Array_String__SequenceLiteralBuilder__push_literal_5: {
+                {
                     let self: &mut Array<String> = &mut __b;
                     let value: String = "b";
                     self."Array<String>::append"(value);
@@ -43,11 +43,11 @@ export fn run() with Stdout {
             };
             self."Array<Array<String>>::append"(value);
         };
-        __inline_Array_Array_String___SequenceLiteralBuilder__push_literal_7: {
+        {
             let self: &mut Array<Array<String>> = &mut __b;
             let value: Array<String> = __seq_lit: {
                 let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(1), used: 0 };
-                __inline_Array_String__SequenceLiteralBuilder__push_literal_9: {
+                {
                     let self: &mut Array<String> = &mut __b;
                     let value: String = "c";
                     self."Array<String>::append"(value);
@@ -91,9 +91,7 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
 }
 
 pub fn "Array<Array<String>>^Inspect::inspect"(self: &Array<Array<String>>, f: &mut Formatter) {
-    __inline_Formatter__write_char_0: {
-        f.buf.String::append_char('[');
-    };
+    f.buf.String::append_char('[');
     __for_5: {
         let mut i: i32 = 0;
         let _licm_used: i32 = self.used;
@@ -102,21 +100,17 @@ pub fn "Array<Array<String>>^Inspect::inspect"(self: &Array<Array<String>>, f: &
             if !(i < _licm_used) {
                 break __for_5;
             }
-            __for_5_body: {
-                if (i > 0) {
-                    __inline_Formatter__write_str_2: {
-                        let s: String = ", ";
-                        _licm_buf.String::append(s);
-                    };
-                }
-                self."Array<Array<String>>^IndexValue::index_value"(i)."Array<String>^Inspect::inspect"(f);
+            if (i > 0) {
+                {
+                    let s: String = ", ";
+                    _licm_buf.String::append(s);
+                };
             }
+            self."Array<Array<String>>^IndexValue::index_value"(i)."Array<String>^Inspect::inspect"(f);
             i = (i + 1);
         }
     }
-    __inline_Formatter__write_char_3: {
-        f.buf.String::append_char(']');
-    };
+    f.buf.String::append_char(']');
 }
 
 fn "Array<Array<String>>^IndexValue::index_value"(self: &Array<Array<String>>, index: i32) -> Array<String> {
@@ -127,9 +121,7 @@ fn "Array<Array<String>>^IndexValue::index_value"(self: &Array<Array<String>>, i
 }
 
 pub fn "Array<String>^Inspect::inspect"(self: &Array<String>, f: &mut Formatter) {
-    __inline_Formatter__write_char_0: {
-        f.buf.String::append_char('[');
-    };
+    f.buf.String::append_char('[');
     __for_5: {
         let mut i: i32 = 0;
         let _licm_used: i32 = self.used;
@@ -138,21 +130,17 @@ pub fn "Array<String>^Inspect::inspect"(self: &Array<String>, f: &mut Formatter)
             if !(i < _licm_used) {
                 break __for_5;
             }
-            __for_5_body: {
-                if (i > 0) {
-                    __inline_Formatter__write_str_2: {
-                        let s: String = ", ";
-                        _licm_buf.String::append(s);
-                    };
-                }
-                self."Array<String>^IndexValue::index_value"(i)."String^Inspect::inspect"(f);
+            if (i > 0) {
+                {
+                    let s: String = ", ";
+                    _licm_buf.String::append(s);
+                };
             }
+            self."Array<String>^IndexValue::index_value"(i)."String^Inspect::inspect"(f);
             i = (i + 1);
         }
     }
-    __inline_Formatter__write_char_3: {
-        f.buf.String::append_char(']');
-    };
+    f.buf.String::append_char(']');
 }
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {

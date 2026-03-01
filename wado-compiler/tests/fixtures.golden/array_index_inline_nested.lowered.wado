@@ -31,17 +31,17 @@ export fn run() with Stdout {
     };
     let __sroa_node_keys: Array<String> = __seq_lit: {
         let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(3), used: 0 };
-        __inline_Array_String__SequenceLiteralBuilder__push_literal_2: {
+        {
             let self: &mut Array<String> = &mut __b;
             let value: String = "apple";
             self."Array<String>::append"(value);
         };
-        __inline_Array_String__SequenceLiteralBuilder__push_literal_3: {
+        {
             let self: &mut Array<String> = &mut __b;
             let value: String = "banana";
             self."Array<String>::append"(value);
         };
-        __inline_Array_String__SequenceLiteralBuilder__push_literal_4: {
+        {
             let self: &mut Array<String> = &mut __b;
             let value: String = "cherry";
             self."Array<String>::append"(value);
@@ -50,15 +50,15 @@ export fn run() with Stdout {
     };
     let __sroa_node_values: Array<i32> = __seq_lit: {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(3), used: 0 };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_7: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(10);
         };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_8: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(20);
         };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_9: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(30);
         };
@@ -66,15 +66,15 @@ export fn run() with Stdout {
     };
     let __sroa_node_deleted: Array<bool> = __seq_lit: {
         let mut __b: Array<bool> = Array<bool> { repr: core::builtin::array_new::<bool>(3), used: 0 };
-        __inline_Array_bool__SequenceLiteralBuilder__push_literal_12: {
+        {
             let self: &mut Array<bool> = &mut __b;
             self."Array<bool>::append"(false);
         };
-        __inline_Array_bool__SequenceLiteralBuilder__push_literal_13: {
+        {
             let self: &mut Array<bool> = &mut __b;
             self."Array<bool>::append"(true);
         };
-        __inline_Array_bool__SequenceLiteralBuilder__push_literal_14: {
+        {
             let self: &mut Array<bool> = &mut __b;
             self."Array<bool>::append"(false);
         };
@@ -88,10 +88,8 @@ export fn run() with Stdout {
             if !(i < _licm_used) {
                 break __for_0;
             }
-            __for_0_body: {
-                if !__sroa_node_deleted."Array<bool>^IndexValue::index_value"(i) {
-                    sum = (sum + __sroa_node_values."Array<i32>^IndexValue::index_value"(i));
-                }
+            if !__sroa_node_deleted."Array<bool>^IndexValue::index_value"(i) {
+                sum = (sum + __sroa_node_values."Array<i32>^IndexValue::index_value"(i));
             }
             i = (i + 1);
         }
@@ -103,12 +101,10 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_18: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_19: {
+        {
             let self: Box<i32> = Box<i32> { value: sum };
             let f: &mut Formatter = &mut __f;
-            __inline_i32__fmt_into_20: {
-                self.i32::fmt_decimal(f);
-            };
+            self.i32::fmt_decimal(f);
         };
         break __tmpl: __r;
     });

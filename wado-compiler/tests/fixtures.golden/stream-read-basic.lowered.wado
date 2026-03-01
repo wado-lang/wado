@@ -28,45 +28,39 @@ export fn run() with Stdout {
     let [rx, tx] = core::builtin::stream_create_pair();
     tx."StreamWritable<u8>::close"();
     let result: Array<u8> = rx."Stream<u8>::read"(64);
-    __assert_0: {
-        let __v0: i32 = result.used;
-        let __cond: bool = (__v0 == 0);
-        if !__cond {
-            core::internal::panic(__tmpl: {
-                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(134), used: 0 };
-                __r.String::append("Assertion failed in ");
-                __r.String::append("run");
-                __r.String::append(" at ");
-                __r.String::append("wado-compiler/tests/fixtures/stream-read-basic.wado");
-                __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_3: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_4: {
-                    let self: Box<i32> = Box<i32> { value: 13 };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_5: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\ncondition: result.len() == 0\n");
-                __r.String::append("result.len(): ");
-                __f = __inline_Formatter__new_6: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_7: {
-                    let self: Box<i32> = Box<i32> { value: __v0 };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_8: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\n");
-                break __tmpl: __r;
-            });
-        }
+    let __v0: i32 = result.used;
+    let __cond: bool = (__v0 == 0);
+    if !__cond {
+        core::internal::panic(__tmpl: {
+            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(134), used: 0 };
+            __r.String::append("Assertion failed in ");
+            __r.String::append("run");
+            __r.String::append(" at ");
+            __r.String::append("wado-compiler/tests/fixtures/stream-read-basic.wado");
+            __r.String::append(":");
+            let mut __f: Formatter = __inline_Formatter__new_3: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: 13 };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\ncondition: result.len() == 0\n");
+            __r.String::append("result.len(): ");
+            __f = __inline_Formatter__new_6: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: __v0 };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\n");
+            break __tmpl: __r;
+        });
     }
     rx."Stream<u8>::close"();
     core::cli::println("read ok");

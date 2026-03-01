@@ -30,25 +30,21 @@ export fn run() with Stdout {
             if !(i < 5) {
                 break __for_0;
             }
-            __for_0_body: {
-                let s: String = __tmpl: {
-                    __tmpl_buf_100.used = 0;
-                    __tmpl_buf_100.String::append("n=");
-                    let mut __f: Formatter = __inline_Formatter__new_2: {
-                        let buf: &mut String = &mut __tmpl_buf_100;
-                        break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_3: {
-                        let self: Box<i32> = Box<i32> { value: i };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_i32__fmt_into_4: {
-                            self.i32::fmt_decimal(f);
-                        };
-                    };
-                    break __tmpl: __tmpl_buf_100;
+            let s: String = __tmpl: {
+                __tmpl_buf_100.used = 0;
+                __tmpl_buf_100.String::append("n=");
+                let mut __f: Formatter = __inline_Formatter__new_2: {
+                    let buf: &mut String = &mut __tmpl_buf_100;
+                    break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                total = (total + s.used);
-            }
+                {
+                    let self: Box<i32> = Box<i32> { value: i };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
+                };
+                break __tmpl: __tmpl_buf_100;
+            };
+            total = (total + s.used);
             i = (i + 1);
         }
     }
@@ -59,12 +55,10 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_8: {
+        {
             let self: Box<i32> = Box<i32> { value: total };
             let f: &mut Formatter = &mut __f;
-            __inline_i32__fmt_into_9: {
-                self.i32::fmt_decimal(f);
-            };
+            self.i32::fmt_decimal(f);
         };
         break __tmpl: __r;
     });
@@ -76,37 +70,31 @@ export fn run() with Stdout {
             if !(i < 3) {
                 break __for_1;
             }
-            __for_1_body: {
-                let s: String = __tmpl: {
-                    __tmpl_buf_101.used = 0;
-                    __tmpl_buf_101.String::append("v=");
-                    let mut __f: Formatter = __inline_Formatter__new_11: {
-                        let buf: &mut String = &mut __tmpl_buf_101;
-                        break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_12: {
-                        let self: Box<i32> = Box<i32> { value: i };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_i32__fmt_into_13: {
-                            self.i32::fmt_decimal(f);
-                        };
-                    };
-                    break __tmpl: __tmpl_buf_101;
+            let s: String = __tmpl: {
+                __tmpl_buf_101.used = 0;
+                __tmpl_buf_101.String::append("v=");
+                let mut __f: Formatter = __inline_Formatter__new_11: {
+                    let buf: &mut String = &mut __tmpl_buf_101;
+                    break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __for_of_2: {
-                    let mut __iter_2: StrUtf8ByteIter = __inline_StrUtf8ByteIter_IntoIterator__into_iter_14: {
-                        let self: &StrUtf8ByteIter = &StrUtf8ByteIter { repr: s.repr, used: s.used, index: 0 };
-                        break __inline_StrUtf8ByteIter_IntoIterator__into_iter_14: *self;
-                    };
-                    loop {
-                        let __pattern_temp_0: Option<u8> = __iter_2."StrUtf8ByteIter^Iterator::next"();
-                        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                            let b: u8 = __variant_payload(__pattern_temp_0, case=0);
-                            byte_sum = (byte_sum + b as u64);
-                        } else {
-                            break;
-                        }
-                    }
+                {
+                    let self: Box<i32> = Box<i32> { value: i };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
+                };
+                break __tmpl: __tmpl_buf_101;
+            };
+            let mut __iter_2: StrUtf8ByteIter = __inline_StrUtf8ByteIter_IntoIterator__into_iter_14: {
+                let self: &StrUtf8ByteIter = &StrUtf8ByteIter { repr: s.repr, used: s.used, index: 0 };
+                break __inline_StrUtf8ByteIter_IntoIterator__into_iter_14: *self;
+            };
+            loop {
+                let __pattern_temp_0: Option<u8> = __iter_2."StrUtf8ByteIter^Iterator::next"();
+                if __variant_test(__pattern_temp_0, case=0, name=Some) {
+                    let b: u8 = __variant_payload(__pattern_temp_0, case=0);
+                    byte_sum = (byte_sum + b as u64);
+                } else {
+                    break;
                 }
             }
             i = (i + 1);
@@ -119,12 +107,10 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_u64_Display__fmt_18: {
+        {
             let self: Box<u64> = Box<u64> { value: byte_sum };
             let f: &mut Formatter = &mut __f;
-            __inline_u64__fmt_into_19: {
-                self.u64::fmt_decimal(f);
-            };
+            self.u64::fmt_decimal(f);
         };
         break __tmpl: __r;
     });
@@ -138,42 +124,36 @@ export fn run() with Stdout {
             if !(i < 3) {
                 break __for_3;
             }
-            __for_3_body: {
-                let a: String = __tmpl: {
-                    __tmpl_buf_102.used = 0;
-                    __tmpl_buf_102.String::append("a=");
-                    let mut __f: Formatter = __inline_Formatter__new_21: {
-                        let buf: &mut String = &mut __tmpl_buf_102;
-                        break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_22: {
-                        let self: Box<i32> = Box<i32> { value: i };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_i32__fmt_into_23: {
-                            self.i32::fmt_decimal(f);
-                        };
-                    };
-                    break __tmpl: __tmpl_buf_102;
+            let a: String = __tmpl: {
+                __tmpl_buf_102.used = 0;
+                __tmpl_buf_102.String::append("a=");
+                let mut __f: Formatter = __inline_Formatter__new_21: {
+                    let buf: &mut String = &mut __tmpl_buf_102;
+                    break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                let b: String = __tmpl: {
-                    __tmpl_buf_103.used = 0;
-                    __tmpl_buf_103.String::append("b=");
-                    let mut __f: Formatter = __inline_Formatter__new_25: {
-                        let buf: &mut String = &mut __tmpl_buf_103;
-                        break __inline_Formatter__new_25: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_26: {
-                        let self: Box<i32> = Box<i32> { value: i };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_i32__fmt_into_27: {
-                            self.i32::fmt_decimal(f);
-                        };
-                    };
-                    break __tmpl: __tmpl_buf_103;
+                {
+                    let self: Box<i32> = Box<i32> { value: i };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
                 };
-                t1 = (t1 + a.used);
-                t2 = (t2 + b.used);
-            }
+                break __tmpl: __tmpl_buf_102;
+            };
+            let b: String = __tmpl: {
+                __tmpl_buf_103.used = 0;
+                __tmpl_buf_103.String::append("b=");
+                let mut __f: Formatter = __inline_Formatter__new_25: {
+                    let buf: &mut String = &mut __tmpl_buf_103;
+                    break __inline_Formatter__new_25: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                {
+                    let self: Box<i32> = Box<i32> { value: i };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
+                };
+                break __tmpl: __tmpl_buf_103;
+            };
+            t1 = (t1 + a.used);
+            t2 = (t2 + b.used);
             i = (i + 1);
         }
     }
@@ -184,24 +164,20 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_31: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_32: {
+        {
             let self: Box<i32> = Box<i32> { value: t1 };
             let f: &mut Formatter = &mut __f;
-            __inline_i32__fmt_into_33: {
-                self.i32::fmt_decimal(f);
-            };
+            self.i32::fmt_decimal(f);
         };
         __r.String::append(",t2=");
         __f = __inline_Formatter__new_34: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_34: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_35: {
+        {
             let self: Box<i32> = Box<i32> { value: t2 };
             let f: &mut Formatter = &mut __f;
-            __inline_i32__fmt_into_36: {
-                self.i32::fmt_decimal(f);
-            };
+            self.i32::fmt_decimal(f);
         };
         break __tmpl: __r;
     });
@@ -213,25 +189,21 @@ export fn run() with Stdout {
             if !(i < 3) {
                 break __for_4;
             }
-            __for_4_body: {
-                let s: String = __tmpl: {
-                    __tmpl_buf_104.used = 0;
-                    __tmpl_buf_104.String::append("c=");
-                    let mut __f: Formatter = __inline_Formatter__new_38: {
-                        let buf: &mut String = &mut __tmpl_buf_104;
-                        break __inline_Formatter__new_38: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_39: {
-                        let self: Box<i32> = Box<i32> { value: i };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_i32__fmt_into_40: {
-                            self.i32::fmt_decimal(f);
-                        };
-                    };
-                    break __tmpl: __tmpl_buf_104;
+            let s: String = __tmpl: {
+                __tmpl_buf_104.used = 0;
+                __tmpl_buf_104.String::append("c=");
+                let mut __f: Formatter = __inline_Formatter__new_38: {
+                    let buf: &mut String = &mut __tmpl_buf_104;
+                    break __inline_Formatter__new_38: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                t3 = (t3 + s.used);
-            }
+                {
+                    let self: Box<i32> = Box<i32> { value: i };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
+                };
+                break __tmpl: __tmpl_buf_104;
+            };
+            t3 = (t3 + s.used);
             i = (i + 1);
         }
     }
@@ -242,12 +214,10 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_43: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_44: {
+        {
             let self: Box<i32> = Box<i32> { value: t3 };
             let f: &mut Formatter = &mut __f;
-            __inline_i32__fmt_into_45: {
-                self.i32::fmt_decimal(f);
-            };
+            self.i32::fmt_decimal(f);
         };
         break __tmpl: __r;
     });

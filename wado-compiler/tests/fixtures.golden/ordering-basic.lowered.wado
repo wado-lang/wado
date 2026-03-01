@@ -46,15 +46,15 @@ export fn run() with Stdout {
     }
     let arr1: Array<i32> = __seq_lit: {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(3), used: 0 };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_2: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(1);
         };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_3: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(2);
         };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_4: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(3);
         };
@@ -62,15 +62,15 @@ export fn run() with Stdout {
     };
     let arr2: Array<i32> = __seq_lit: {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(3), used: 0 };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_7: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(1);
         };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_8: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(2);
         };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_9: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(4);
         };
@@ -78,15 +78,15 @@ export fn run() with Stdout {
     };
     let arr3: Array<i32> = __seq_lit: {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(3), used: 0 };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_12: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(1);
         };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_13: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(2);
         };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_14: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(3);
         };
@@ -142,10 +142,8 @@ pub fn "Array<i32>^Eq::eq"(self: &Array<i32>, other: &Array<i32>) -> bool {
             if !(i < _licm_used) {
                 break __for_0;
             }
-            __for_0_body: {
-                if (core::builtin::array_get::<i32>(_licm_repr, i) != core::builtin::array_get::<i32>(_licm_repr, i)) {
-                    return false;
-                }
+            if (core::builtin::array_get::<i32>(_licm_repr, i) != core::builtin::array_get::<i32>(_licm_repr, i)) {
+                return false;
             }
             i = (i + 1);
         }
@@ -167,15 +165,13 @@ pub fn "Array<i32>^Ord::cmp"(self: &Array<i32>, other: &Array<i32>) -> Ordering 
             if !(i < min_len) {
                 break __for_1;
             }
-            __for_1_body: {
-                let a: i32 = core::builtin::array_get::<i32>(_licm_repr, i);
-                let b: i32 = core::builtin::array_get::<i32>(_licm_repr, i);
-                if (a < b) {
-                    return Ordering::Less;
-                }
-                if (a > b) {
-                    return Ordering::Greater;
-                }
+            let a: i32 = core::builtin::array_get::<i32>(_licm_repr, i);
+            let b: i32 = core::builtin::array_get::<i32>(_licm_repr, i);
+            if (a < b) {
+                return Ordering::Less;
+            }
+            if (a > b) {
+                return Ordering::Greater;
             }
             i = (i + 1);
         }

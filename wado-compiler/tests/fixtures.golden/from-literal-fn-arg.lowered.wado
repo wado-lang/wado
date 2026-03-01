@@ -28,19 +28,17 @@ struct "SimpleMap<i32>" {
 
 fn sum_values(m: SimpleMap<i32>) -> i32 {
     let mut total: i32 = 0;
-    __for_of_1: {
-        let mut __iter_1: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_0: {
-            let self: &Array<i32> = &m.values;
-            break __inline_Array_i32__IntoIterator__into_iter_0: ArrayIter<i32> { repr: self.repr, used: self.used, index: 0 };
-        };
-        loop {
-            let __pattern_temp_0: Option<i32> = __iter_1."ArrayIter<i32>^Iterator::next"();
-            if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                let v: i32 = __variant_payload(__pattern_temp_0, case=0);
-                total = (total + v);
-            } else {
-                break;
-            }
+    let mut __iter_1: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_0: {
+        let self: &Array<i32> = &m.values;
+        break __inline_Array_i32__IntoIterator__into_iter_0: ArrayIter<i32> { repr: self.repr, used: self.used, index: 0 };
+    };
+    loop {
+        let __pattern_temp_0: Option<i32> = __iter_1."ArrayIter<i32>^Iterator::next"();
+        if __variant_test(__pattern_temp_0, case=0, name=Some) {
+            let v: i32 = __variant_payload(__pattern_temp_0, case=0);
+            total = (total + v);
+        } else {
+            break;
         }
     }
     return total;
@@ -73,44 +71,38 @@ export fn run() with Stdout {
             break __inline_Array_String___len_1: self.used;
         };
     };
-    __assert_0: {
-        let __cond: bool = (n == 3);
-        if !__cond {
-            core::internal::panic(__tmpl: {
-                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(112), used: 0 };
-                __r.String::append("Assertion failed in ");
-                __r.String::append("run");
-                __r.String::append(" at ");
-                __r.String::append("wado-compiler/tests/fixtures/from-literal-fn-arg.wado");
-                __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_6: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_7: {
-                    let self: Box<i32> = Box<i32> { value: 60 };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_8: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\ncondition: n == 3\n");
-                __r.String::append("n: ");
-                __f = __inline_Formatter__new_9: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_10: {
-                    let self: Box<i32> = Box<i32> { value: n };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_11: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\n");
-                break __tmpl: __r;
-            });
-        }
+    let __cond: bool = (n == 3);
+    if !__cond {
+        core::internal::panic(__tmpl: {
+            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(112), used: 0 };
+            __r.String::append("Assertion failed in ");
+            __r.String::append("run");
+            __r.String::append(" at ");
+            __r.String::append("wado-compiler/tests/fixtures/from-literal-fn-arg.wado");
+            __r.String::append(":");
+            let mut __f: Formatter = __inline_Formatter__new_6: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: 60 };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\ncondition: n == 3\n");
+            __r.String::append("n: ");
+            __f = __inline_Formatter__new_9: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: n };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\n");
+            break __tmpl: __r;
+        });
     }
     let s: i32 = sum_values(__kv_lit: {
         let mut __b: SimpleMap<i32> = SimpleMap<i32> { keys: __seq_lit: {
@@ -124,44 +116,38 @@ export fn run() with Stdout {
         __b."SimpleMap<i32>^KeyValueLiteralBuilder::insert_literal"("y", 20);
         break __kv_lit: *__b;
     });
-    __assert_1: {
-        let __cond: bool = (s == 30);
-        if !__cond {
-            core::internal::panic(__tmpl: {
-                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(113), used: 0 };
-                __r.String::append("Assertion failed in ");
-                __r.String::append("run");
-                __r.String::append(" at ");
-                __r.String::append("wado-compiler/tests/fixtures/from-literal-fn-arg.wado");
-                __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_15: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_15: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_16: {
-                    let self: Box<i32> = Box<i32> { value: 63 };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_17: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\ncondition: s == 30\n");
-                __r.String::append("s: ");
-                __f = __inline_Formatter__new_18: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_18: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_19: {
-                    let self: Box<i32> = Box<i32> { value: s };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_20: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\n");
-                break __tmpl: __r;
-            });
-        }
+    let __cond: bool = (s == 30);
+    if !__cond {
+        core::internal::panic(__tmpl: {
+            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(113), used: 0 };
+            __r.String::append("Assertion failed in ");
+            __r.String::append("run");
+            __r.String::append(" at ");
+            __r.String::append("wado-compiler/tests/fixtures/from-literal-fn-arg.wado");
+            __r.String::append(":");
+            let mut __f: Formatter = __inline_Formatter__new_15: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_15: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: 63 };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\ncondition: s == 30\n");
+            __r.String::append("s: ");
+            __f = __inline_Formatter__new_18: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_18: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: s };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\n");
+            break __tmpl: __r;
+        });
     }
     core::cli::println("fn arg KeyValueLiteral: ok");
 }

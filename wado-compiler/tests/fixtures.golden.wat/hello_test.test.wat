@@ -90,28 +90,26 @@
     (func (;4;) (type 10)
       (local i32 i32 (ref null 2) (ref null 3) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3) (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3))
       (block ;; label = @1
-        (block ;; label = @2
-          (if ;; label = @3
-            (global.get 0)
-            (then
-              (br 1 (;@2;))))
-          (call 6)
-          (global.set 0
-            (i32.const 1))))
+        (if ;; label = @2
+          (global.get 0)
+          (then
+            (br 1 (;@1;))))
+        (call 6)
+        (global.set 0
+          (i32.const 1)))
       (call 1
         (i32.const 0))
     )
     (func (;5;) (type 11)
       (local i32 (ref null 2) (ref null 3) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3))
       (block ;; label = @1
-        (block ;; label = @2
-          (if ;; label = @3
-            (global.get 0)
-            (then
-              (br 1 (;@2;))))
-          (call 6)
-          (global.set 0
-            (i32.const 1))))
+        (if ;; label = @2
+          (global.get 0)
+          (then
+            (br 1 (;@1;))))
+        (call 6)
+        (global.set 0
+          (i32.const 1)))
       (call 1
         (i32.const 0))
     )

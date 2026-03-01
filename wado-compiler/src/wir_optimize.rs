@@ -2621,12 +2621,8 @@ fn collapse_appends_in_body(
             // Each append may be a single instruction (Block wrapping LocalSet+Call)
             // or multiple flat instructions (LocalSet* + Call) from block flattening.
             if n > 0
-                && let Some((values, consumed)) = try_match_append_sequence(
-                    &body[i + 1..],
-                    n,
-                    &init_info,
-                    append_func_indices,
-                )
+                && let Some((values, consumed)) =
+                    try_match_append_sequence(&body[i + 1..], n, &init_info, append_func_indices)
             {
                 // Rewrite: replace ArrayNewDefault with ArrayNewFixed in the init.
                 rewrite_init_to_fixed(&mut body[i], &init_info, values);
@@ -2805,8 +2801,7 @@ fn try_match_append_sequence(
             && args.len() == 2
             && receiver_matches_with_aliases(&args[0], init_info, &flat_aliases)
         {
-            let element =
-                resolve_value_binding(&args[1], &flat_value_bindings, &flat_aliases);
+            let element = resolve_value_binding(&args[1], &flat_value_bindings, &flat_aliases);
             values.push(element);
             consumed = j + 1;
             continue;

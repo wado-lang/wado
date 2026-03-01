@@ -31,44 +31,38 @@ export fn run() {
         __modules_initialized = true;
     };
     let result: i32 = factorial(5);
-    __assert_0: {
-        let __cond: bool = (result == 120);
-        if !__cond {
-            core::internal::panic(__tmpl: {
-                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(124), used: 0 };
-                __r.String::append("Assertion failed in ");
-                __r.String::append("run");
-                __r.String::append(" at ");
-                __r.String::append("wado-compiler/tests/fixtures/opt_inline_recursive.wado");
-                __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_2: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_3: {
-                    let self: Box<i32> = Box<i32> { value: 13 };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_4: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\ncondition: result == 120\n");
-                __r.String::append("result: ");
-                __f = __inline_Formatter__new_5: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_6: {
-                    let self: Box<i32> = Box<i32> { value: result };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_7: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\n");
-                break __tmpl: __r;
-            });
-        }
+    let __cond: bool = (result == 120);
+    if !__cond {
+        core::internal::panic(__tmpl: {
+            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(124), used: 0 };
+            __r.String::append("Assertion failed in ");
+            __r.String::append("run");
+            __r.String::append(" at ");
+            __r.String::append("wado-compiler/tests/fixtures/opt_inline_recursive.wado");
+            __r.String::append(":");
+            let mut __f: Formatter = __inline_Formatter__new_2: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: 13 };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\ncondition: result == 120\n");
+            __r.String::append("result: ");
+            __f = __inline_Formatter__new_5: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: result };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\n");
+            break __tmpl: __r;
+        });
     }
 }
 

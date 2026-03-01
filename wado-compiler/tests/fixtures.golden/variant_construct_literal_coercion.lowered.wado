@@ -18,15 +18,15 @@ global mut __modules_initialized: bool = false;
 fn return_non_empty() -> Option<Array<u8>> {
     return Option<Array<u8>>::Some(__seq_lit: {
         let mut __b: Array<u8> = Array<u8> { repr: core::builtin::array_new::<u8>(3), used: 0 };
-        __inline_Array_u8__SequenceLiteralBuilder__push_literal_1: {
+        {
             let self: &mut Array<u8> = &mut __b;
             self."Array<u8>::append"(1);
         };
-        __inline_Array_u8__SequenceLiteralBuilder__push_literal_2: {
+        {
             let self: &mut Array<u8> = &mut __b;
             self."Array<u8>::append"(2);
         };
-        __inline_Array_u8__SequenceLiteralBuilder__push_literal_3: {
+        {
             let self: &mut Array<u8> = &mut __b;
             self."Array<u8>::append"(3);
         };
@@ -37,15 +37,15 @@ fn return_non_empty() -> Option<Array<u8>> {
 fn return_result_array() -> Result<Array<i32>, String> {
     return Result<Array<i32>, String>::Ok(__seq_lit: {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(3), used: 0 };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_1: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(10);
         };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_2: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(20);
         };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_3: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(30);
         };
@@ -67,45 +67,39 @@ export fn run() with Stdout {
     });
     if __variant_test(__pattern_temp_0, case=0, name=Some) {
         let arr: Array<u8> = __variant_payload(__pattern_temp_0, case=0);
-        __assert_0: {
-            let __v0: i32 = arr.used;
-            let __cond: bool = (__v0 == 0);
-            if !__cond {
-                core::internal::panic(__tmpl: {
-                    let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(128), used: 0 };
-                    __r.String::append("Assertion failed in ");
-                    __r.String::append("run");
-                    __r.String::append(" at ");
-                    __r.String::append("wado-compiler/tests/fixtures/variant_construct_literal_coercion.wado");
-                    __r.String::append(":");
-                    let mut __f: Formatter = __inline_Formatter__new_6: {
-                        let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_7: {
-                        let self: Box<i32> = Box<i32> { value: 25 };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_i32__fmt_into_8: {
-                            self.i32::fmt_decimal(f);
-                        };
-                    };
-                    __r.String::append("\ncondition: arr.len() == 0\n");
-                    __r.String::append("arr.len(): ");
-                    __f = __inline_Formatter__new_9: {
-                        let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_10: {
-                        let self: Box<i32> = Box<i32> { value: __v0 };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_i32__fmt_into_11: {
-                            self.i32::fmt_decimal(f);
-                        };
-                    };
-                    __r.String::append("\n");
-                    break __tmpl: __r;
-                });
-            }
+        let __v0: i32 = arr.used;
+        let __cond: bool = (__v0 == 0);
+        if !__cond {
+            core::internal::panic(__tmpl: {
+                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(128), used: 0 };
+                __r.String::append("Assertion failed in ");
+                __r.String::append("run");
+                __r.String::append(" at ");
+                __r.String::append("wado-compiler/tests/fixtures/variant_construct_literal_coercion.wado");
+                __r.String::append(":");
+                let mut __f: Formatter = __inline_Formatter__new_6: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                {
+                    let self: Box<i32> = Box<i32> { value: 25 };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
+                };
+                __r.String::append("\ncondition: arr.len() == 0\n");
+                __r.String::append("arr.len(): ");
+                __f = __inline_Formatter__new_9: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                {
+                    let self: Box<i32> = Box<i32> { value: __v0 };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
+                };
+                __r.String::append("\n");
+                break __tmpl: __r;
+            });
         }
     } else {
         core::internal::panic("expected Some");
@@ -113,85 +107,73 @@ export fn run() with Stdout {
     let __pattern_temp_1: Option<Array<u8>> = return_non_empty();
     if __variant_test(__pattern_temp_1, case=0, name=Some) {
         let arr: Array<u8> = __variant_payload(__pattern_temp_1, case=0);
-        __assert_1: {
-            let __v0: i32 = arr.used;
-            let __cond: bool = (__v0 == 3);
-            if !__cond {
-                core::internal::panic(__tmpl: {
-                    let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(128), used: 0 };
-                    __r.String::append("Assertion failed in ");
-                    __r.String::append("run");
-                    __r.String::append(" at ");
-                    __r.String::append("wado-compiler/tests/fixtures/variant_construct_literal_coercion.wado");
-                    __r.String::append(":");
-                    let mut __f: Formatter = __inline_Formatter__new_14: {
-                        let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_15: {
-                        let self: Box<i32> = Box<i32> { value: 32 };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_i32__fmt_into_16: {
-                            self.i32::fmt_decimal(f);
-                        };
-                    };
-                    __r.String::append("\ncondition: arr.len() == 3\n");
-                    __r.String::append("arr.len(): ");
-                    __f = __inline_Formatter__new_17: {
-                        let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_18: {
-                        let self: Box<i32> = Box<i32> { value: __v0 };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_i32__fmt_into_19: {
-                            self.i32::fmt_decimal(f);
-                        };
-                    };
-                    __r.String::append("\n");
-                    break __tmpl: __r;
-                });
-            }
+        let __v0: i32 = arr.used;
+        let __cond: bool = (__v0 == 3);
+        if !__cond {
+            core::internal::panic(__tmpl: {
+                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(128), used: 0 };
+                __r.String::append("Assertion failed in ");
+                __r.String::append("run");
+                __r.String::append(" at ");
+                __r.String::append("wado-compiler/tests/fixtures/variant_construct_literal_coercion.wado");
+                __r.String::append(":");
+                let mut __f: Formatter = __inline_Formatter__new_14: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                {
+                    let self: Box<i32> = Box<i32> { value: 32 };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
+                };
+                __r.String::append("\ncondition: arr.len() == 3\n");
+                __r.String::append("arr.len(): ");
+                __f = __inline_Formatter__new_17: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                {
+                    let self: Box<i32> = Box<i32> { value: __v0 };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
+                };
+                __r.String::append("\n");
+                break __tmpl: __r;
+            });
         }
-        __assert_2: {
-            let __v0: u8 = arr."Array<u8>^IndexValue::index_value"(0);
-            let __cond: bool = (__v0 == 1);
-            if !__cond {
-                core::internal::panic(__tmpl: {
-                    let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(128), used: 0 };
-                    __r.String::append("Assertion failed in ");
-                    __r.String::append("run");
-                    __r.String::append(" at ");
-                    __r.String::append("wado-compiler/tests/fixtures/variant_construct_literal_coercion.wado");
-                    __r.String::append(":");
-                    let mut __f: Formatter = __inline_Formatter__new_21: {
-                        let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_22: {
-                        let self: Box<i32> = Box<i32> { value: 33 };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_i32__fmt_into_23: {
-                            self.i32::fmt_decimal(f);
-                        };
-                    };
-                    __r.String::append("\ncondition: arr[0] == 1 as u8\n");
-                    __r.String::append("arr[0]: ");
-                    __f = __inline_Formatter__new_24: {
-                        let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_24: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_u8_Display__fmt_25: {
-                        let self: Box<u8> = Box<u8> { value: __v0 };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_u8__fmt_into_26: {
-                            Box<i32> { value: self.value as i32 }.i32::fmt_decimal(f);
-                        };
-                    };
-                    __r.String::append("\n");
-                    break __tmpl: __r;
-                });
-            }
+        let __v0: u8 = arr."Array<u8>^IndexValue::index_value"(0);
+        let __cond: bool = (__v0 == 1);
+        if !__cond {
+            core::internal::panic(__tmpl: {
+                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(128), used: 0 };
+                __r.String::append("Assertion failed in ");
+                __r.String::append("run");
+                __r.String::append(" at ");
+                __r.String::append("wado-compiler/tests/fixtures/variant_construct_literal_coercion.wado");
+                __r.String::append(":");
+                let mut __f: Formatter = __inline_Formatter__new_21: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                {
+                    let self: Box<i32> = Box<i32> { value: 33 };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
+                };
+                __r.String::append("\ncondition: arr[0] == 1 as u8\n");
+                __r.String::append("arr[0]: ");
+                __f = __inline_Formatter__new_24: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_24: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                {
+                    let self: Box<u8> = Box<u8> { value: __v0 };
+                    let f: &mut Formatter = &mut __f;
+                    Box<i32> { value: self.value as i32 }.i32::fmt_decimal(f);
+                };
+                __r.String::append("\n");
+                break __tmpl: __r;
+            });
         }
     } else {
         core::internal::panic("expected Some");
@@ -199,85 +181,73 @@ export fn run() with Stdout {
     let __pattern_temp_2: Result<Array<i32>, String> = return_result_array();
     if __variant_test(__pattern_temp_2, case=0, name=Ok) {
         let arr: Array<i32> = __variant_payload(__pattern_temp_2, case=0);
-        __assert_3: {
-            let __v0: i32 = arr.used;
-            let __cond: bool = (__v0 == 3);
-            if !__cond {
-                core::internal::panic(__tmpl: {
-                    let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(128), used: 0 };
-                    __r.String::append("Assertion failed in ");
-                    __r.String::append("run");
-                    __r.String::append(" at ");
-                    __r.String::append("wado-compiler/tests/fixtures/variant_construct_literal_coercion.wado");
-                    __r.String::append(":");
-                    let mut __f: Formatter = __inline_Formatter__new_29: {
-                        let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_29: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_30: {
-                        let self: Box<i32> = Box<i32> { value: 40 };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_i32__fmt_into_31: {
-                            self.i32::fmt_decimal(f);
-                        };
-                    };
-                    __r.String::append("\ncondition: arr.len() == 3\n");
-                    __r.String::append("arr.len(): ");
-                    __f = __inline_Formatter__new_32: {
-                        let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_32: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_33: {
-                        let self: Box<i32> = Box<i32> { value: __v0 };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_i32__fmt_into_34: {
-                            self.i32::fmt_decimal(f);
-                        };
-                    };
-                    __r.String::append("\n");
-                    break __tmpl: __r;
-                });
-            }
+        let __v0: i32 = arr.used;
+        let __cond: bool = (__v0 == 3);
+        if !__cond {
+            core::internal::panic(__tmpl: {
+                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(128), used: 0 };
+                __r.String::append("Assertion failed in ");
+                __r.String::append("run");
+                __r.String::append(" at ");
+                __r.String::append("wado-compiler/tests/fixtures/variant_construct_literal_coercion.wado");
+                __r.String::append(":");
+                let mut __f: Formatter = __inline_Formatter__new_29: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_29: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                {
+                    let self: Box<i32> = Box<i32> { value: 40 };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
+                };
+                __r.String::append("\ncondition: arr.len() == 3\n");
+                __r.String::append("arr.len(): ");
+                __f = __inline_Formatter__new_32: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_32: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                {
+                    let self: Box<i32> = Box<i32> { value: __v0 };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
+                };
+                __r.String::append("\n");
+                break __tmpl: __r;
+            });
         }
-        __assert_4: {
-            let __v0: i32 = arr."Array<i32>^IndexValue::index_value"(0);
-            let __cond: bool = (__v0 == 10);
-            if !__cond {
-                core::internal::panic(__tmpl: {
-                    let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(123), used: 0 };
-                    __r.String::append("Assertion failed in ");
-                    __r.String::append("run");
-                    __r.String::append(" at ");
-                    __r.String::append("wado-compiler/tests/fixtures/variant_construct_literal_coercion.wado");
-                    __r.String::append(":");
-                    let mut __f: Formatter = __inline_Formatter__new_36: {
-                        let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_36: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_37: {
-                        let self: Box<i32> = Box<i32> { value: 41 };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_i32__fmt_into_38: {
-                            self.i32::fmt_decimal(f);
-                        };
-                    };
-                    __r.String::append("\ncondition: arr[0] == 10\n");
-                    __r.String::append("arr[0]: ");
-                    __f = __inline_Formatter__new_39: {
-                        let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_39: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_40: {
-                        let self: Box<i32> = Box<i32> { value: __v0 };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_i32__fmt_into_41: {
-                            self.i32::fmt_decimal(f);
-                        };
-                    };
-                    __r.String::append("\n");
-                    break __tmpl: __r;
-                });
-            }
+        let __v0: i32 = arr."Array<i32>^IndexValue::index_value"(0);
+        let __cond: bool = (__v0 == 10);
+        if !__cond {
+            core::internal::panic(__tmpl: {
+                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(123), used: 0 };
+                __r.String::append("Assertion failed in ");
+                __r.String::append("run");
+                __r.String::append(" at ");
+                __r.String::append("wado-compiler/tests/fixtures/variant_construct_literal_coercion.wado");
+                __r.String::append(":");
+                let mut __f: Formatter = __inline_Formatter__new_36: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_36: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                {
+                    let self: Box<i32> = Box<i32> { value: 41 };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
+                };
+                __r.String::append("\ncondition: arr[0] == 10\n");
+                __r.String::append("arr[0]: ");
+                __f = __inline_Formatter__new_39: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_39: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                {
+                    let self: Box<i32> = Box<i32> { value: __v0 };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
+                };
+                __r.String::append("\n");
+                break __tmpl: __r;
+            });
         }
     } else {
         core::internal::panic("expected Ok");
@@ -288,45 +258,39 @@ export fn run() with Stdout {
     });
     if __variant_test(__pattern_temp_3, case=0, name=Ok) {
         let arr: Array<i32> = __variant_payload(__pattern_temp_3, case=0);
-        __assert_5: {
-            let __v0: i32 = arr.used;
-            let __cond: bool = (__v0 == 0);
-            if !__cond {
-                core::internal::panic(__tmpl: {
-                    let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(128), used: 0 };
-                    __r.String::append("Assertion failed in ");
-                    __r.String::append("run");
-                    __r.String::append(" at ");
-                    __r.String::append("wado-compiler/tests/fixtures/variant_construct_literal_coercion.wado");
-                    __r.String::append(":");
-                    let mut __f: Formatter = __inline_Formatter__new_47: {
-                        let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_47: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_48: {
-                        let self: Box<i32> = Box<i32> { value: 48 };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_i32__fmt_into_49: {
-                            self.i32::fmt_decimal(f);
-                        };
-                    };
-                    __r.String::append("\ncondition: arr.len() == 0\n");
-                    __r.String::append("arr.len(): ");
-                    __f = __inline_Formatter__new_50: {
-                        let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_50: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_51: {
-                        let self: Box<i32> = Box<i32> { value: __v0 };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_i32__fmt_into_52: {
-                            self.i32::fmt_decimal(f);
-                        };
-                    };
-                    __r.String::append("\n");
-                    break __tmpl: __r;
-                });
-            }
+        let __v0: i32 = arr.used;
+        let __cond: bool = (__v0 == 0);
+        if !__cond {
+            core::internal::panic(__tmpl: {
+                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(128), used: 0 };
+                __r.String::append("Assertion failed in ");
+                __r.String::append("run");
+                __r.String::append(" at ");
+                __r.String::append("wado-compiler/tests/fixtures/variant_construct_literal_coercion.wado");
+                __r.String::append(":");
+                let mut __f: Formatter = __inline_Formatter__new_47: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_47: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                {
+                    let self: Box<i32> = Box<i32> { value: 48 };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
+                };
+                __r.String::append("\ncondition: arr.len() == 0\n");
+                __r.String::append("arr.len(): ");
+                __f = __inline_Formatter__new_50: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_50: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                {
+                    let self: Box<i32> = Box<i32> { value: __v0 };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
+                };
+                __r.String::append("\n");
+                break __tmpl: __r;
+            });
         }
     } else {
         core::internal::panic("expected Ok");
@@ -334,73 +298,65 @@ export fn run() with Stdout {
     let opt_i32: Option<i32> = Option<i32>::Some(42);
     let opt_arr: Option<Array<u8>> = Option<Array<u8>>::Some(__seq_lit: {
         let mut __b: Array<u8> = Array<u8> { repr: core::builtin::array_new::<u8>(2), used: 0 };
-        __inline_Array_u8__SequenceLiteralBuilder__push_literal_54: {
+        {
             let self: &mut Array<u8> = &mut __b;
             self."Array<u8>::append"(1);
         };
-        __inline_Array_u8__SequenceLiteralBuilder__push_literal_55: {
+        {
             let self: &mut Array<u8> = &mut __b;
             self."Array<u8>::append"(2);
         };
         break __seq_lit: *__b;
     });
-    __assert_6: {
-        let __cond: bool = match opt_i32 {
-            Some(n) => (n == 42),
-            _ => false,
-        };
-        if !__cond {
-            core::internal::panic(__tmpl: {
-                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(124), used: 0 };
-                __r.String::append("Assertion failed in ");
-                __r.String::append("run");
-                __r.String::append(" at ");
-                __r.String::append("wado-compiler/tests/fixtures/variant_construct_literal_coercion.wado");
-                __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_58: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_58: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_59: {
-                    let self: Box<i32> = Box<i32> { value: 56 };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_60: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\ncondition: opt_i32 matches { Some(n) && n == 42 }\n");
-                break __tmpl: __r;
-            });
-        }
+    let __cond: bool = match opt_i32 {
+        Some(n) => (n == 42),
+        _ => false,
+    };
+    if !__cond {
+        core::internal::panic(__tmpl: {
+            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(124), used: 0 };
+            __r.String::append("Assertion failed in ");
+            __r.String::append("run");
+            __r.String::append(" at ");
+            __r.String::append("wado-compiler/tests/fixtures/variant_construct_literal_coercion.wado");
+            __r.String::append(":");
+            let mut __f: Formatter = __inline_Formatter__new_58: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_58: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: 56 };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\ncondition: opt_i32 matches { Some(n) && n == 42 }\n");
+            break __tmpl: __r;
+        });
     }
-    __assert_7: {
-        let __cond: bool = match opt_arr {
-            Some(a) => (a.used == 2),
-            _ => false,
-        };
-        if !__cond {
-            core::internal::panic(__tmpl: {
-                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(129), used: 0 };
-                __r.String::append("Assertion failed in ");
-                __r.String::append("run");
-                __r.String::append(" at ");
-                __r.String::append("wado-compiler/tests/fixtures/variant_construct_literal_coercion.wado");
-                __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_63: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_63: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_64: {
-                    let self: Box<i32> = Box<i32> { value: 57 };
-                    let f: &mut Formatter = &mut __f;
-                    __inline_i32__fmt_into_65: {
-                        self.i32::fmt_decimal(f);
-                    };
-                };
-                __r.String::append("\ncondition: opt_arr matches { Some(a) && a.len() == 2 }\n");
-                break __tmpl: __r;
-            });
-        }
+    let __cond: bool = match opt_arr {
+        Some(a) => (a.used == 2),
+        _ => false,
+    };
+    if !__cond {
+        core::internal::panic(__tmpl: {
+            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(129), used: 0 };
+            __r.String::append("Assertion failed in ");
+            __r.String::append("run");
+            __r.String::append(" at ");
+            __r.String::append("wado-compiler/tests/fixtures/variant_construct_literal_coercion.wado");
+            __r.String::append(":");
+            let mut __f: Formatter = __inline_Formatter__new_63: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_63: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            {
+                let self: Box<i32> = Box<i32> { value: 57 };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
+            };
+            __r.String::append("\ncondition: opt_arr matches { Some(a) && a.len() == 2 }\n");
+            break __tmpl: __r;
+        });
     }
     core::cli::println("ok");
 }

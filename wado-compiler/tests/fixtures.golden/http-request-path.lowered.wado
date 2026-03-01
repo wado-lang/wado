@@ -20,35 +20,31 @@ export fn handle(request: Request) {
     let path: Option<String> = __cm_adapter__Request_get_path_with_query(&request);
     if __variant_test(path, case=0, name=Some) {
         let p: String = __variant_payload(path, case=0);
-        __assert_0: {
-            let __v0: String = p;
-            let __cond: bool = __v0."String^Eq::eq"(&"/hello");
-            if !__cond {
-                core::internal::panic(__tmpl: {
-                    let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(119), used: 0 };
-                    __r.String::append("Assertion failed in ");
-                    __r.String::append("handle");
-                    __r.String::append(" at ");
-                    __r.String::append("wado-compiler/tests/fixtures/http-request-path.wado");
-                    __r.String::append(":");
-                    let mut __f: Formatter = __inline_Formatter__new_1: {
-                        let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_2: {
-                        let self: Box<i32> = Box<i32> { value: 10 };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_i32__fmt_into_3: {
-                            self.i32::fmt_decimal(f);
-                        };
-                    };
-                    __r.String::append("\ncondition: p == \"/hello\"\n");
-                    __r.String::append("p: ");
-                    __r.String::append(__v0);
-                    __r.String::append("\n");
-                    break __tmpl: __r;
-                });
-            }
+        let __v0: String = p;
+        let __cond: bool = __v0."String^Eq::eq"(&"/hello");
+        if !__cond {
+            core::internal::panic(__tmpl: {
+                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(119), used: 0 };
+                __r.String::append("Assertion failed in ");
+                __r.String::append("handle");
+                __r.String::append(" at ");
+                __r.String::append("wado-compiler/tests/fixtures/http-request-path.wado");
+                __r.String::append(":");
+                let mut __f: Formatter = __inline_Formatter__new_1: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                {
+                    let self: Box<i32> = Box<i32> { value: 10 };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
+                };
+                __r.String::append("\ncondition: p == \"/hello\"\n");
+                __r.String::append("p: ");
+                __r.String::append(__v0);
+                __r.String::append("\n");
+                break __tmpl: __r;
+            });
         }
     } else {
         core::internal::panic("expected path but got null");

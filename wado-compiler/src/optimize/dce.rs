@@ -2729,7 +2729,10 @@ fn eliminate_dead_stmts(block: &mut TirBlock) -> bool {
             continue;
         }
         // Labeled block with unused label → flatten stmts into parent
-        if let TirStmtKind::LabeledBlock { ref label, block: ref inner } = stmt.kind
+        if let TirStmtKind::LabeledBlock {
+            ref label,
+            block: ref inner,
+        } = stmt.kind
             && !block_has_break_to(label, inner)
         {
             let TirStmtKind::LabeledBlock { block: inner, .. } = stmt.kind else {

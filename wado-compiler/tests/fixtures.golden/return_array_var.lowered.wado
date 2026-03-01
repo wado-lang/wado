@@ -24,15 +24,15 @@ pub struct "ArrayIter<i32>" {
 fn get_numbers() -> Array<i32> {
     let arr: Array<i32> = __seq_lit: {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(3), used: 0 };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_1: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(1);
         };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_2: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(2);
         };
-        __inline_Array_i32__SequenceLiteralBuilder__push_literal_3: {
+        {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(3);
         };
@@ -50,30 +50,26 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let nums: Array<i32> = get_numbers();
-    __for_of_0: {
-        let mut __iter_0: ArrayIter<i32> = ArrayIter<i32> { repr: nums.repr, used: nums.used, index: 0 };
-        loop {
-            let __pattern_temp_0: Option<i32> = __iter_0."ArrayIter<i32>^Iterator::next"();
-            if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                let n: i32 = __variant_payload(__pattern_temp_0, case=0);
-                core::cli::println(__tmpl: {
-                    let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
-                    let mut __f: Formatter = __inline_Formatter__new_3: {
-                        let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_4: {
-                        let self: Box<i32> = Box<i32> { value: n };
-                        let f: &mut Formatter = &mut __f;
-                        __inline_i32__fmt_into_5: {
-                            self.i32::fmt_decimal(f);
-                        };
-                    };
-                    break __tmpl: __r;
-                });
-            } else {
-                break;
-            }
+    let mut __iter_0: ArrayIter<i32> = ArrayIter<i32> { repr: nums.repr, used: nums.used, index: 0 };
+    loop {
+        let __pattern_temp_0: Option<i32> = __iter_0."ArrayIter<i32>^Iterator::next"();
+        if __variant_test(__pattern_temp_0, case=0, name=Some) {
+            let n: i32 = __variant_payload(__pattern_temp_0, case=0);
+            core::cli::println(__tmpl: {
+                let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
+                let mut __f: Formatter = __inline_Formatter__new_3: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                {
+                    let self: Box<i32> = Box<i32> { value: n };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
+                };
+                break __tmpl: __r;
+            });
+        } else {
+            break;
         }
     }
 }

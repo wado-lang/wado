@@ -33,42 +33,36 @@ fn __test_trap_1_failing() {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    __assert_0: {
-        core::internal::panic(__tmpl: {
-            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(110), used: 0 };
-            __r.String::append("Assertion failed in ");
-            __r.String::append("__test_trap_1_failing");
-            __r.String::append(" at ");
-            __r.String::append("wado-compiler/tests/fixtures/test_fail.wado");
-            __r.String::append(":");
-            let mut __f: Formatter = __inline_Formatter__new_2: {
-                let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-            };
-            __inline_i32_Display__fmt_3: {
-                let self: Box<i32> = Box<i32> { value: 10 };
-                let f: &mut Formatter = &mut __f;
-                __inline_i32__fmt_into_4: {
-                    self.i32::fmt_decimal(f);
-                };
-            };
-            __r.String::append(": ");
-            __r.String::append("this should fail");
-            __r.String::append("\ncondition: 1 == 2\n");
-            break __tmpl: __r;
-        });
-    }
+    core::internal::panic(__tmpl: {
+        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(110), used: 0 };
+        __r.String::append("Assertion failed in ");
+        __r.String::append("__test_trap_1_failing");
+        __r.String::append(" at ");
+        __r.String::append("wado-compiler/tests/fixtures/test_fail.wado");
+        __r.String::append(":");
+        let mut __f: Formatter = __inline_Formatter__new_2: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        {
+            let self: Box<i32> = Box<i32> { value: 10 };
+            let f: &mut Formatter = &mut __f;
+            self.i32::fmt_decimal(f);
+        };
+        __r.String::append(": ");
+        __r.String::append("this should fail");
+        __r.String::append("\ncondition: 1 == 2\n");
+        break __tmpl: __r;
+    });
 }
 
 export fn __cm_export____test_0_passing() {
-    __inline___test_0_passing_0: {
-        __inline___initialize_modules_1: {
-            if __modules_initialized {
-                break __inline___initialize_modules_1;
-            }
-            "core::prelude/fpfmt.wado::__initialize_module"();
-            __modules_initialized = true;
-        };
+    __inline___initialize_modules_1: {
+        if __modules_initialized {
+            break __inline___initialize_modules_1;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
     };
     cm_raw_call task-return(0);
 }
