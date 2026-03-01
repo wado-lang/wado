@@ -142,7 +142,15 @@ cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 ft
 
 [tasks.all]
 description = "Run all benchmarks"
-depends = ["count-prime", "mandelbrot", "sieve", "zlib", "fts"]
+run = """
+#!/usr/bin/env bash
+set -e
+mise run count-prime
+mise run mandelbrot
+mise run sieve
+mise run zlib
+mise run fts
+"""
 
 [tasks.clean]
 description = "Clean benchmark artifacts"
