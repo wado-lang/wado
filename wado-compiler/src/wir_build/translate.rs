@@ -1352,8 +1352,16 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::StructLiteral { fields, .. } => {
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, expr.type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
+                    // Unit-typed fields have no Wasm representation; skip them.
                     let field_instrs: Vec<WirInstr> = fields
                         .iter()
+                        .filter(|f| {
+                            !matches!(
+                                self.ctx
+                                    .type_id_to_wir_type(self.type_table, f.value.type_id),
+                                WirType::Unit
+                            )
+                        })
                         .map(|f| self.translate_expr(&f.value))
                         .collect();
                     self.struct_new(type_id, field_instrs)
@@ -1368,6 +1376,12 @@ impl FunctionTranslator<'_, '_> {
                 field_name,
                 ..
             } => {
+                // If the field's result type is unit, emit only the receiver
+                // for side effects and return Nop — unit has no Wasm representation.
+                if expr.type_id == TypeTable::UNIT {
+                    let recv = self.translate_expr(receiver);
+                    return WirInstr::Seq(vec![WirInstr::Drop(Box::new(recv))]);
+                }
                 let recv = self.translate_expr(receiver);
                 let wir_type = self
                     .ctx
@@ -1410,6 +1424,18 @@ impl FunctionTranslator<'_, '_> {
                             name: self.local_name(*index),
                             value: Box::new(val),
                         }
+                    }
+                    TirExprKind::FieldAccess {
+                        expr: receiver,
+                        field_name: _,
+                        ..
+                    } if target.type_id == TypeTable::UNIT => {
+                        // Unit-typed field assignment: the field has no Wasm
+                        // representation. Emit the receiver for side effects (then
+                        // drop the ref), and emit val for side effects (it produces
+                        // nothing because unit has no Wasm representation).
+                        let recv = self.translate_expr(receiver);
+                        WirInstr::Seq(vec![val, WirInstr::Drop(Box::new(recv))])
                     }
                     TirExprKind::FieldAccess {
                         expr: receiver,
@@ -1511,8 +1537,17 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::TupleLiteral { elements } => {
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, expr.type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
-                    let field_instrs: Vec<WirInstr> =
-                        elements.iter().map(|e| self.translate_expr(e)).collect();
+                    // Unit-typed elements have no Wasm representation; skip them.
+                    let field_instrs: Vec<WirInstr> = elements
+                        .iter()
+                        .filter(|e| {
+                            !matches!(
+                                self.ctx.type_id_to_wir_type(self.type_table, e.type_id),
+                                WirType::Unit
+                            )
+                        })
+                        .map(|e| self.translate_expr(e))
+                        .collect();
                     self.struct_new(type_id, field_instrs)
                 } else {
                     WirInstr::Unreachable

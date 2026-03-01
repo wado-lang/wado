@@ -1969,7 +1969,7 @@ Successive calls return non-decreasing values.
 
 ## core:collections
 
-Collection types: `TreeMap<K, V>` (ordered key-value map).
+Collection types: `TreeMap<K, V>` and `TreeSet<T>` (insertion-order preserved).
 
 ### Structs
 
@@ -2041,6 +2041,68 @@ Removes all key-value pairs from the map.
 ###### `fn insert_literal(&mut self, key: String, value: Self::Value)`
 
 ###### `fn build(&self) -> TreeMap<String, V>`
+
+#### `pub struct TreeSet<T>`
+
+A set that iterates in insertion order.
+
+Backed by a `TreeMap<T, ()>` which uses a balanced binary search tree for
+O(log n) membership tests and a dense array for O(1) insertion-order iteration.
+
+Duplicate inserts are silently ignored (preserving the original position).
+Removing an element and re-inserting it appends it at the end.
+
+`T` must implement `Ord` to use any of the methods.
+
+_Fields are private._
+
+##### `pub fn new() -> TreeSet<T>`
+
+Creates a new empty TreeSet.
+
+##### `pub fn len(&self) -> i32`
+
+Returns the number of elements in the set.
+
+##### `pub fn is_empty(&self) -> bool`
+
+Returns true if the set contains no elements.
+
+##### `pub fn insert(&mut self, value: T) -> bool`
+
+Inserts a value into the set.
+
+Returns true if the value was newly inserted, false if it was already present.
+
+##### `pub fn contains(&self, value: T) -> bool`
+
+Returns true if the set contains the given value.
+
+##### `pub fn remove(&mut self, value: T) -> bool`
+
+Removes a value from the set.
+
+Returns true if the value was present, false otherwise.
+
+##### `pub fn clear(&mut self)`
+
+Removes all elements from the set.
+
+##### `pub fn iter(&self) -> TreeSetIter<T>`
+
+Returns an iterator over the elements in insertion order.
+
+##### `impl IntoIterator for TreeSet<T>`
+
+###### `fn into_iter(&self) -> TreeSetIter<T>`
+
+##### `impl SequenceLiteralBuilder for TreeSet<T>`
+
+###### `fn new_literal(capacity: i32) -> TreeSet<T>`
+
+###### `fn push_literal(&mut self, value: T)`
+
+###### `fn build(&self) -> TreeSet<T>`
 
 ## core:base64
 

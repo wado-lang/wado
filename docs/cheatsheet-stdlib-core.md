@@ -1149,7 +1149,7 @@ pub fn now() -> Mark with MonotonicClock;
 
 ## core:collections
 
-Collection types: `TreeMap<K, V>` (ordered key-value map).
+Collection types: `TreeMap<K, V>` and `TreeSet<T>` (insertion-order preserved).
 
 ### Structs
 
@@ -1183,6 +1183,33 @@ impl KeyValueLiteralBuilder for TreeMap<String, V> {
     fn new_literal(capacity: i32) -> TreeMap<String, V>;
     fn insert_literal(&mut self, key: String, value: Self::Value);
     fn build(&self) -> TreeMap<String, V>;
+}
+```
+
+```wado
+pub struct TreeSet<T> {
+    ..
+}
+
+impl TreeSet {
+    pub fn new() -> TreeSet<T>;
+    pub fn len(&self) -> i32;
+    pub fn is_empty(&self) -> bool;
+    pub fn insert(&mut self, value: T) -> bool;
+    pub fn contains(&self, value: T) -> bool;
+    pub fn remove(&mut self, value: T) -> bool;
+    pub fn clear(&mut self);
+    pub fn iter(&self) -> TreeSetIter<T>;
+}
+
+impl IntoIterator for TreeSet<T> {
+    fn into_iter(&self) -> TreeSetIter<T>;
+}
+
+impl SequenceLiteralBuilder for TreeSet<T> {
+    fn new_literal(capacity: i32) -> TreeSet<T>;
+    fn push_literal(&mut self, value: T);
+    fn build(&self) -> TreeSet<T>;
 }
 ```
 

@@ -48,7 +48,6 @@ test "clear empties map" {
     map["b"] = 2;
     map["c"] = 3;
     assert map.len() == 3;
-
     map.clear();
     assert map.is_empty();
     assert map.len() == 0;
@@ -71,7 +70,6 @@ test "entries returns key-value pairs in insertion order" {
     map["first"] = 1;
     map["second"] = 2;
     map["third"] = 3;
-
     let pairs = map.entries();
     assert pairs.len() == 3;
     assert pairs[0].0 == "first";
@@ -88,7 +86,6 @@ test "entries after update" {
     map["second"] = 2;
     map["third"] = 3;
     map["second"] = 200;
-
     let pairs = map.entries();
     assert pairs[1].0 == "second";
     assert pairs[1].1 == 200;
@@ -100,7 +97,6 @@ test "entries after remove" {
     map["second"] = 2;
     map["third"] = 3;
     map.remove("second");
-
     let pairs = map.entries();
     assert pairs.len() == 2;
     assert pairs[0].0 == "first";
@@ -118,7 +114,6 @@ test "keys in insertion order" {
     map["foxtrot"] = 6;
     map["bravo"] = 2;
     map["hotel"] = 8;
-
     let keys = map.keys();
     assert keys[0] == "echo";
     assert keys[1] == "charlie";
@@ -138,7 +133,6 @@ test "values in insertion order" {
     map["golf"] = 7;
     map["alpha"] = 1;
     map["india"] = 9;
-
     let values = map.values();
     assert values[0] == 5;
     assert values[1] == 3;
@@ -152,7 +146,6 @@ test "remove existing key" {
     map["a"] = 1;
     map["b"] = 2;
     map["c"] = 3;
-
     assert map.remove("b");
     assert !map.contains_key("b");
     assert map.len() == 2;
@@ -168,12 +161,16 @@ test "remove nonexistent key" {
     assert map.len() == 2;
 }
 
+test "remove from empty map returns false" {
+    let mut map = TreeMap::<String, i32>::new();
+    assert !map.remove("anything");
+}
+
 test "reinsert after remove" {
     let mut map = TreeMap::<String, i32>::new();
     map["a"] = 1;
     map["b"] = 2;
     map["c"] = 3;
-
     assert map.remove("b");
     map["b"] = 999;
     assert map.contains_key("b");
@@ -188,7 +185,6 @@ test "remove from middle preserves order" {
     map["third"] = 3;
     map["fourth"] = 4;
     map["fifth"] = 5;
-
     assert map.remove("third");
     let keys = map.keys();
     assert keys.len() == 4;
@@ -203,7 +199,6 @@ test "remove from beginning preserves order" {
     map["first"] = 1;
     map["second"] = 2;
     map["third"] = 3;
-
     assert map.remove("first");
     let keys = map.keys();
     assert keys[0] == "second";
@@ -215,7 +210,6 @@ test "remove from end preserves order" {
     map["first"] = 1;
     map["second"] = 2;
     map["third"] = 3;
-
     assert map.remove("third");
     let keys = map.keys();
     assert keys.len() == 2;
@@ -228,15 +222,13 @@ test "reinsert goes to end" {
     map["a"] = 1;
     map["b"] = 2;
     map["c"] = 3;
-
     assert map.remove("b");
     map["b"] = 999;
-
     let keys = map.keys();
     assert keys.len() == 3;
     assert keys[0] == "a";
     assert keys[1] == "c";
-    assert keys[2] == "b"; // reinserted at end
+    assert keys[2] == "b";
 }
 
 test "multiple removes and reinserts" {
@@ -244,12 +236,10 @@ test "multiple removes and reinserts" {
     map["a"] = 1;
     map["b"] = 2;
     map["c"] = 3;
-
     map.remove("b");
     map["b"] = 999;
     map.remove("a");
     map["a"] = 111;
-
     let keys = map.keys();
     assert keys[0] == "c";
     assert keys[1] == "b";
@@ -261,15 +251,12 @@ test "update does not change position" {
     map["a"] = 1;
     map["b"] = 2;
     map["c"] = 3;
-
     map["a"] = 100;
     map["b"] = 200;
-
     let keys = map.keys();
     assert keys[0] == "a";
     assert keys[1] == "b";
     assert keys[2] == "c";
-
     let values = map.values();
     assert values[0] == 100;
     assert values[1] == 200;
@@ -288,26 +275,20 @@ test "compact after many deletions preserves order" {
     map["h"] = 8;
     map["i"] = 9;
     map["j"] = 10;
-
     assert map.len() == 10;
-
-    // Remove 6 items to trigger compaction
     map.remove("b");
     map.remove("c");
     map.remove("e");
     map.remove("g");
     map.remove("h");
     map.remove("i");
-
     assert map.len() == 4;
-
     let keys = map.keys();
     assert keys.len() == 4;
     assert keys[0] == "a";
     assert keys[1] == "d";
     assert keys[2] == "f";
     assert keys[3] == "j";
-
     let values = map.values();
     assert values[0] == 1;
     assert values[1] == 4;
@@ -327,14 +308,12 @@ test "insert after compact" {
     map["h"] = 8;
     map["i"] = 9;
     map["j"] = 10;
-
     map.remove("b");
     map.remove("c");
     map.remove("e");
     map.remove("g");
     map.remove("h");
     map.remove("i");
-
     map["new"] = 100;
     let keys = map.keys();
     assert keys.len() == 5;
@@ -345,22 +324,130 @@ test "insert after compact" {
 
 test "50 items insert and partial remove" {
     let mut map = TreeMap::<String, i32>::new();
-
     for let mut i = 0; i < 50; i += 1 {
         map[`item{i}`] = i;
     }
     assert map.len() == 50;
     assert map["item0"] == 0;
     assert map["item49"] == 49;
-
-    // Remove every other item
     for let mut i = 0; i < 50; i += 2 {
         map.remove(`item{i}`);
     }
     assert map.len() == 25;
-
     assert map.contains_key("item1");
     assert map.contains_key("item3");
     assert !map.contains_key("item0");
     assert !map.contains_key("item2");
+}
+
+test "key-value literal coercion" {
+    let m: TreeMap<String, i32> = { a: 1, b: 2, c: 3 };
+    assert m.len() == 3;
+    assert m["a"] == 1;
+    assert m["b"] == 2;
+    assert m["c"] == 3;
+}
+
+test "key-value literal preserves insertion order" {
+    let m: TreeMap<String, i32> = { echo: 5, charlie: 3, alpha: 1 };
+    let keys = m.keys();
+    assert keys[0] == "echo";
+    assert keys[1] == "charlie";
+    assert keys[2] == "alpha";
+}
+
+fn make_literal_map() -> TreeMap<String, i32> {
+    return { x: 10, y: 20 };
+}
+
+test "key-value literal coercion in return position" {
+    let m = make_literal_map();
+    assert m.len() == 2;
+    assert m["x"] == 10;
+    assert m["y"] == 20;
+}
+
+test "empty key-value literal" {
+    let m: TreeMap<String, i32> = {};
+    assert m.is_empty();
+}
+
+#[expect_trap]
+test "index access panics for missing key" {
+    let map = TreeMap::<String, i32>::new();
+    let _ = map["missing"];
+}
+
+test "for-of over entries" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["a"] = 1;
+    map["b"] = 2;
+    map["c"] = 3;
+    let mut ks: Array<String> = [];
+    let mut vs: Array<i32> = [];
+    for let [k, v] of map.entries() {
+        ks.append(k);
+        vs.append(v);
+    }
+    assert ks.len() == 3;
+    assert ks[0] == "a" && vs[0] == 1;
+    assert ks[1] == "b" && vs[1] == 2;
+    assert ks[2] == "c" && vs[2] == 3;
+}
+
+test "for-of over keys" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["x"] = 10;
+    map["y"] = 20;
+    let mut result: Array<String> = [];
+    for let k of map.keys() {
+        result.append(k);
+    }
+    assert result.len() == 2;
+    assert result[0] == "x";
+    assert result[1] == "y";
+}
+
+test "for-of over values" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["x"] = 10;
+    map["y"] = 20;
+    let mut sum = 0;
+    for let v of map.values() {
+        sum = sum + v;
+    }
+    assert sum == 30;
+}
+
+test "i32 key insert and get" {
+    let mut map = TreeMap::<i32, String>::new();
+    map[1] = "one";
+    map[2] = "two";
+    map[3] = "three";
+    assert map.len() == 3;
+    assert map[1] == "one";
+    assert map[2] == "two";
+    assert map[3] == "three";
+}
+
+test "i32 key insertion order" {
+    let mut map = TreeMap::<i32, i32>::new();
+    map[30] = 300;
+    map[10] = 100;
+    map[20] = 200;
+    let keys = map.keys();
+    assert keys[0] == 30;
+    assert keys[1] == 10;
+    assert keys[2] == 20;
+}
+
+test "i32 key remove" {
+    let mut map = TreeMap::<i32, String>::new();
+    map[1] = "a";
+    map[2] = "b";
+    map[3] = "c";
+    assert map.remove(2);
+    assert !map.contains_key(2);
+    assert map.len() == 2;
+    assert map.get(2) matches { None };
 }
