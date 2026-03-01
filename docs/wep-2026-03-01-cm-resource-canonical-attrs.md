@@ -86,7 +86,7 @@ pub resource Waitable;
 
 /// Result of `WaitableSet::wait` or `WaitableSet::poll`.
 pub struct WaitEvent {
-    pub code: i32,        // CM event code (stream-read=1, stream-write=2, etc.)
+    pub code: i32,        // CM event code (subtask=1, stream-read=2, stream-write=3, future-read=4, future-write=5, cancelled=6)
     pub handle: Waitable, // which waitable handle triggered the event
     pub payload: u32,     // event-specific data (e.g. count|status for streams)
 }
@@ -136,7 +136,7 @@ a new CM concept — it is the same handle value that was joined, wrapped in a d
 Wado type for type safety.
 
 When `Subtask::join(set)` is called:
-1. The CM `waitable-join(set_handle, subtask_handle)` is invoked
+1. The CM `waitable-join(subtask_handle, set_handle)` is invoked
 2. A `Waitable` wrapping `subtask_handle` is returned
 
 When `WaitableSet::wait()` returns a `WaitEvent`:
@@ -280,7 +280,7 @@ For `poll`:
 4. Otherwise: load, construct `Option::Some(WaitEvent { ... })`
 
 For `Subtask::join`:
-1. Call `waitable-join(set_handle, subtask_handle)` (void return in CM)
+1. Call `waitable-join(subtask_handle, set_handle)` (void return in CM)
 2. Return `Waitable(subtask_handle)` — wrap the joined handle as a token
 
 ### What Stays in builtin.wado

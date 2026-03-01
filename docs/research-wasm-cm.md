@@ -246,6 +246,28 @@ Same pattern as stream close operations.
 - **Core signature**: `(subtask: i32) -> i32`
 - **Returns**: status code or BLOCKED (if async flag set)
 
+### 4.4 task.cancel
+
+```
+(canon task.cancel (core func $f))
+```
+
+- **Core signature**: `() -> ()`
+- **Semantics**: cancels the current task (self-cancellation). No parameters because
+  it implicitly applies to the task executing this call.
+
+### 4.5 backpressure.inc / backpressure.dec
+
+```
+(canon backpressure.inc (core func $f))
+(canon backpressure.dec (core func $f))
+```
+
+- **Core signature**: `() -> ()`
+- **Semantics**: increment/decrement the backpressure counter for the current component
+  instance. While the counter is > 0, the runtime will not schedule new calls into
+  this instance, providing flow control for async exports.
+
 ---
 
 ## 5. Waitable Set Operations
@@ -835,19 +857,21 @@ From `vendor/wasm-tools/crates/wasm-encoder/src/component/canonicals.rs`:
 |                 | write             | `...::stream_write`             |
 |                 | cancel-read       | `...::stream_cancel_read`       |
 |                 | cancel-write      | `...::stream_cancel_write`      |
-|                 | close-readable    | `...::stream_close_readable`    |
-|                 | close-writable    | `...::stream_close_writable`    |
+|                 | close-readable    | `...::stream_drop_readable`     |
+|                 | close-writable    | `...::stream_drop_writable`     |
 | **Future**      | new               | `...::future_new`               |
 |                 | read              | `...::future_read`              |
 |                 | write             | `...::future_write`             |
 |                 | cancel-read       | `...::future_cancel_read`       |
 |                 | cancel-write      | `...::future_cancel_write`      |
-|                 | close-readable    | `...::future_close_readable`    |
-|                 | close-writable    | `...::future_close_writable`    |
+|                 | close-readable    | `...::future_drop_readable`     |
+|                 | close-writable    | `...::future_drop_writable`     |
 | **Task**        | return            | `...::task_return`              |
 |                 | cancel            | `...::task_cancel`              |
 | **Subtask**     | drop              | `...::subtask_drop`             |
 |                 | cancel            | `...::subtask_cancel`           |
+| **Backpressure**| inc               | `...::backpressure_inc`         |
+|                 | dec               | `...::backpressure_dec`         |
 | **Waitable**    | set.new           | `...::waitable_set_new`         |
 |                 | set.wait          | `...::waitable_set_wait`        |
 |                 | set.poll          | `...::waitable_set_poll`        |
