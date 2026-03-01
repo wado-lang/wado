@@ -55,7 +55,7 @@ Rules:
 - `return` is forbidden in `async fn` bodies.
 - The expression is type-checked against the declared return type of the enclosing `export async fn`.
 
-The compiler expands `task return` during the CM Adapter phase into a sequence that lowers the Wado value to flat CM ABI values and calls `builtin::task_return`. See [WEP: TIR-Level CM Adapter Synthesis](wep-2026-02-15-cm-adapter-synthesis.md) for implementation details.
+The compiler expands `task return` during the synthesis phase (CM adapter generation) into a sequence that lowers the Wado value to flat CM ABI values and calls `builtin::task_return`. See [WEP: TIR-Level CM Adapter Synthesis](wep-2026-02-15-cm-adapter-synthesis.md) for implementation details.
 
 ### 3. Trailers Future Pattern
 
@@ -196,13 +196,12 @@ All types are imported from `"wasi:http"`.
 | ----------------------- | -------------------------------------- | -------------------------- |
 | `Client::send(request)` | `async -> Result<Response, ErrorCode>` | Send outbound HTTP request |
 
-### `FutureWritable<T>`
+### CM Async Primitives
 
-The writable end of a `Future<T>`, obtained from `Future::<T>::new()` which returns `[Future<T>, FutureWritable<T>]`.
-
-| Method               | Description                     |
-| -------------------- | ------------------------------- |
-| `tx.write(value: T)` | Resolve the future with a value |
+`Future<T>`, `FutureWritable<T>`, `Stream<T>`, and `StreamWritable<T>` are Component Model
+primitives used throughout the HTTP API. Their resource declarations, canonical attributes,
+and error handling semantics are defined in
+[WEP: Redesign Wasm CM Builtins as Resource Canonical Attributes](wep-2026-03-01-cm-resource-canonical-attrs.md).
 
 ## E2E Test Fixtures
 
@@ -241,7 +240,7 @@ HTTP test fixtures are in `wado-compiler/tests/fixtures/http-*.wado`. Each has a
 
 ### Compiler
 
-- The CM Adapter phase synthesizes a different adapter for `export async fn` vs `export fn`. The async adapter lifts parameters only; it does not wrap the return value. Instead, `task return` statements in the user function body are expanded inline into `task.return` calls. See [WEP: TIR-Level CM Adapter Synthesis](wep-2026-02-15-cm-adapter-synthesis.md).
+- The synthesis phase (CM adapter generation) synthesizes a different adapter for `export async fn` vs `export fn`. The async adapter lifts parameters only; it does not wrap the return value. Instead, `task return` statements in the user function body are expanded inline into `task.return` calls. See [WEP: TIR-Level CM Adapter Synthesis](wep-2026-02-15-cm-adapter-synthesis.md).
 - `return` in `async fn` is a compile error, detected during desugaring or type-checking.
 
 ### Runtime
@@ -254,6 +253,7 @@ HTTP test fixtures are in `wado-compiler/tests/fixtures/http-*.wado`. Each has a
 - WASI HTTP WIT: `vendor/wasmtime/crates/wasi-http/src/p3/wit/deps/http.wit`
 - Wado HTTP types: `wado-compiler/lib/wasi/http.wado`
 - [WEP: TIR-Level CM Adapter Synthesis](wep-2026-02-15-cm-adapter-synthesis.md)
+- [WEP: Redesign Wasm CM Builtins as Resource Canonical Attributes](wep-2026-03-01-cm-resource-canonical-attrs.md)
 - [WEP: Target WASI P3 Only](wep-2026-01-11-wasi-p3-only.md)
 - WASI HTTP types: `wasi:http/types@0.3.0-rc-2026-01-06`
 - WASI HTTP handler: `wasi:http/handler@0.3.0-rc-2026-01-06`

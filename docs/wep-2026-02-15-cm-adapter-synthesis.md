@@ -13,14 +13,19 @@ CM adapter synthesis replaces all of that with a single **type-driven recursive 
 ### Pipeline Position
 
 ```
-parse → desugar → modules → symbols → tir (resolve) → effect_check
-                                                            ↓
-                                                       cm_adapter_gen
-                                                            ↓
-                                       monomorphize → lower → optimize → wasm_plan → codegen
+load → analyze → resolve (TIR) → effect_check
+                                       ↓
+                                   synthesis (traits + inspect + cm_adapter)
+                                       ↓
+                    monomorphize → lower → optimize → wir_build → wir_optimize → codegen
 ```
 
-The phase runs after effect checking and before monomorphize, so adapter functions go through monomorphization, optimization, and codegen like user code.
+The CM adapter synthesis runs as part of the `synthesis` phase (alongside trait synthesis and
+inspect synthesis), after effect checking and before monomorphize. Adapter functions go through
+monomorphization, optimization, WIR translation, and codegen like user code.
+
+Note: `wasm_plan` (component planning) is now integrated into the `wir_build` phase as
+`wir_build::plan_project()`, not a standalone pipeline phase.
 
 ### Import Adapters
 
@@ -68,7 +73,7 @@ TirExprKind::CmRawCall {
 }
 ```
 
-Codegen resolves `local_name` to the imported function index. This node is also used for `task-return`, `future-write`, and other CM intrinsics in export adapters.
+Codegen resolves `local_name` to the imported function index. This node is also used for `task-return` and other CM intrinsics in export adapters. For stream/future/waitable-set CM operations, see [WEP: Redesign Wasm CM Builtins as Resource Canonical Attributes](wep-2026-03-01-cm-resource-canonical-attrs.md).
 
 ## Current State
 
@@ -266,12 +271,17 @@ Parameter count is validated, but parameter types and return type compatibility 
 ### Benefits
 
 - **Extensibility**: Any Canonical ABI type is supported by the recursive synthesizer — no per-type hand-coding.
-- **Optimization**: Adapter functions go through lower → optimize, so the optimizer can inline small adapters, eliminate dead branches, and propagate constants.
+- **Optimization**: Adapter functions go through lower → optimize → wir_optimize, so the optimizer can inline small adapters, eliminate dead branches, and propagate constants.
 - **Debuggability**: `wado dump --tir --unparse` and `wado dump --lower --unparse` show the full CM glue as Wado code.
 - **Simpler codegen**: Codegen no longer needs to know about CM lifting/lowering. It compiles adapter functions like any other function.
-- **WIR-ready**: When WIR migration begins, CM adapters are already ordinary TIR functions — no special CM translation needed in `tir_to_wir`.
+- **WIR-compatible**: CM adapters are ordinary TIR functions that translate to WIR without special handling in `wir_build`.
 
 ### Risks
 
 - **Canonical ABI correctness**: Layout computation must match the CM spec exactly. Mitigated by unit tests (37 in `cm_abi.rs`) and E2E tests against wasmtime.
 - **Performance**: Synthesized TIR may produce suboptimal Wasm compared to hand-written codegen. Mitigated by the optimizer and golden fixture comparison.
+
+## Related WEPs
+
+- [WEP: Redesign Wasm CM Builtins as Resource Canonical Attributes](wep-2026-03-01-cm-resource-canonical-attrs.md) — Moves stream/future/waitable-set canonical operations from `builtin.wado` to `#[canonical]` attributes on resource methods, complementing the import/export adapter synthesis here.
+- [WEP: WASI HTTP Integration](wep-2026-02-21-wasi-http.md) — HTTP handler patterns built on the export adapter synthesis and CM async primitives.
