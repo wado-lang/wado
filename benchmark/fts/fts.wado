@@ -6,7 +6,7 @@
 //   make benchmark-fts
 
 use { println, Stdout } from "core:cli";
-use { now, MonotonicClock } from "core:clocks";
+use { MonotonicClock } from "wasi:clocks";
 
 export fn run() with Stdout, MonotonicClock {
     let n = 500000;
@@ -14,7 +14,7 @@ export fn run() with Stdout, MonotonicClock {
     let mut total_bytes: u64 = 0;
     let mut byte_sum: u64 = 0;
 
-    let t0 = now();
+    let t0 = MonotonicClock::now();
 
     for let mut i = 0; i < n; i += 1 {
         state = (state * 1103515245 + 12345) & 0x7FFFFFFF;
@@ -26,7 +26,7 @@ export fn run() with Stdout, MonotonicClock {
         }
     }
 
-    let elapsed_ns = (now() - t0) as u64;
+    let elapsed_ns = (MonotonicClock::now() - t0) as u64;
     let elapsed_ms = elapsed_ns / 1000000;
 
     println(`fts: {n} f64 conversions (%.6f)`);

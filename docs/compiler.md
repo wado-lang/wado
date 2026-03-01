@@ -216,8 +216,6 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 | `core:prelude/format.wado`     | `prelude/format.wado`     | Format traits (Display, Formatter)                 |
 | `core:prelude/fpfmt.wado`      | `prelude/fpfmt.wado`      | Float-to-string formatting (pure Wado)             |
 | `core:cli`                     | `cli.wado`                | CLI output (println, eprintln, etc.)               |
-| `core:clocks`                  | `clocks.wado`             | MonotonicClock, now()                              |
-| `core:stream`                  | `stream.wado`             | Stream utilities                                   |
 | `core:collections`             | `collections.wado`        | TreeMap and other collections                      |
 | `core:zlib`                    | `zlib.wado`               | Compression (zlib/deflate)                         |
 | `core:base64`                  | `base64.wado`             | Base64 encoding/decoding (RFC 4648)                |

@@ -3,13 +3,13 @@
 // This exercises array.new_fixed vs array.new_data optimization.
 
 use { println, Stdout } from "core:cli";
-use { now, MonotonicClock } from "core:clocks";
+use { MonotonicClock } from "wasi:clocks";
 
 export fn run() with Stdout, MonotonicClock {
     let iters = 100000;
 
     // --- 16 elements ---
-    let start16 = now();
+    let start16 = MonotonicClock::now();
     let mut checksum16 = 0;
     for let mut i = 0; i < iters; i += 1 {
         let arr: Array<i32> = [
@@ -18,10 +18,10 @@ export fn run() with Stdout, MonotonicClock {
         ];
         checksum16 += arr[0] + arr[15];
     }
-    let elapsed16 = ((now() - start16) as u64) / 1000;
+    let elapsed16 = ((MonotonicClock::now() - start16) as u64) / 1000;
 
     // --- 32 elements ---
-    let start32 = now();
+    let start32 = MonotonicClock::now();
     let mut checksum32 = 0;
     for let mut i = 0; i < iters; i += 1 {
         let arr: Array<i32> = [
@@ -30,10 +30,10 @@ export fn run() with Stdout, MonotonicClock {
         ];
         checksum32 += arr[0] + arr[31];
     }
-    let elapsed32 = ((now() - start32) as u64) / 1000;
+    let elapsed32 = ((MonotonicClock::now() - start32) as u64) / 1000;
 
     // --- 64 elements ---
-    let start64 = now();
+    let start64 = MonotonicClock::now();
     let mut checksum64 = 0;
     for let mut i = 0; i < iters; i += 1 {
         let arr: Array<i32> = [
@@ -44,10 +44,10 @@ export fn run() with Stdout, MonotonicClock {
         ];
         checksum64 += arr[0] + arr[63];
     }
-    let elapsed64 = ((now() - start64) as u64) / 1000;
+    let elapsed64 = ((MonotonicClock::now() - start64) as u64) / 1000;
 
     // --- 128 elements ---
-    let start128 = now();
+    let start128 = MonotonicClock::now();
     let mut checksum128 = 0;
     for let mut i = 0; i < iters; i += 1 {
         let arr: Array<i32> = [
@@ -62,10 +62,10 @@ export fn run() with Stdout, MonotonicClock {
         ];
         checksum128 += arr[0] + arr[127];
     }
-    let elapsed128 = ((now() - start128) as u64) / 1000;
+    let elapsed128 = ((MonotonicClock::now() - start128) as u64) / 1000;
 
     // --- 256 elements ---
-    let start256 = now();
+    let start256 = MonotonicClock::now();
     let mut checksum256 = 0;
     for let mut i = 0; i < iters; i += 1 {
         let arr: Array<i32> = [
@@ -88,7 +88,7 @@ export fn run() with Stdout, MonotonicClock {
         ];
         checksum256 += arr[0] + arr[255];
     }
-    let elapsed256 = ((now() - start256) as u64) / 1000;
+    let elapsed256 = ((MonotonicClock::now() - start256) as u64) / 1000;
 
     println(`N=16:  {elapsed16} us  (checksum={checksum16})`);
     println(`N=32:  {elapsed32} us  (checksum={checksum32})`);

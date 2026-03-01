@@ -1322,7 +1322,7 @@ The expression is type-checked against the declared return type of the enclosing
 
 For full API reference, see:
 
-- [Core Standard Library Reference](./cheatsheet-stdlib-core.md) - `core:prelude`, `core:cli`, `core:clocks`, `core:collections`, `core:base64`, `core:zlib`
+- [Core Standard Library Reference](./cheatsheet-stdlib-core.md) - `core:prelude`, `core:cli`, `core:collections`, `core:base64`, `core:zlib`
 - [WASI Standard Library Reference](./cheatsheet-stdlib-wasi.md) - `wasi:cli`, `wasi:filesystem`, `wasi:http`, `wasi:clocks`, `wasi:random`, `wasi:sockets`
 
 ```wado
@@ -1334,10 +1334,6 @@ unreachable();            // trap
 use { println, eprintln, print, eprint, Stdout, Stderr } from "core:cli";
 println("with newline");
 eprintln("error line");
-
-// core:clocks
-use { now, MonotonicClock } from "core:clocks";
-let t = now();            // current time in nanoseconds
 
 // core:collections - TreeMap (insertion-order preserved)
 use { TreeMap } from "core:collections";
