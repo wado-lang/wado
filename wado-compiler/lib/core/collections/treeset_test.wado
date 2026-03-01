@@ -1,9 +1,5 @@
 use { TreeSet } from "core:collections";
 
-// ============================================================================
-// Basic operations
-// ============================================================================
-
 test "empty set" {
     let s = TreeSet::<i32>::new();
     assert s.is_empty();
@@ -47,15 +43,10 @@ test "contains returns false for absent element" {
     assert !s.contains(-1);
 }
 
-// ============================================================================
-// Remove
-// ============================================================================
-
 test "remove returns true if present" {
     let mut s = TreeSet::<i32>::new();
     s.insert(5);
-    let removed = s.remove(5);
-    assert removed;
+    assert s.remove(5);
     assert s.len() == 0;
     assert !s.contains(5);
 }
@@ -84,10 +75,6 @@ test "remove preserves other elements" {
     assert s.contains(3);
 }
 
-// ============================================================================
-// Clear
-// ============================================================================
-
 test "clear empties the set" {
     let mut s = TreeSet::<i32>::new();
     s.insert(1);
@@ -109,10 +96,6 @@ test "insert after clear" {
     assert s.contains(2);
 }
 
-// ============================================================================
-// Insertion order
-// ============================================================================
-
 test "iterates in insertion order" {
     let mut s = TreeSet::<i32>::new();
     s.insert(30);
@@ -133,7 +116,7 @@ test "duplicate insert does not change order" {
     s.insert(3);
     s.insert(1);
     s.insert(2);
-    s.insert(1); // duplicate — stays in original position
+    s.insert(1);
     let mut result: Array<i32> = [];
     for let x of s {
         result.append(x);
@@ -150,7 +133,7 @@ test "remove and re-insert appends to end" {
     s.insert(2);
     s.insert(3);
     s.remove(1);
-    s.insert(1); // re-inserted at the end
+    assert s.insert(1);
     let mut result: Array<i32> = [];
     for let x of s {
         result.append(x);
@@ -176,10 +159,6 @@ test "iteration skips removed elements" {
     assert result[1] == 30;
 }
 
-// ============================================================================
-// for-of and iter
-// ============================================================================
-
 test "for-of loop" {
     let mut s = TreeSet::<i32>::new();
     s.insert(5);
@@ -192,7 +171,7 @@ test "for-of loop" {
     assert sum == 15;
 }
 
-test "iter() matches for-of" {
+test "iter matches for-of" {
     let mut s = TreeSet::<i32>::new();
     s.insert(100);
     s.insert(200);
@@ -200,6 +179,26 @@ test "iter() matches for-of" {
     assert iter.next() matches { Some(v) && v == 100 };
     assert iter.next() matches { Some(v) && v == 200 };
     assert iter.next() matches { None };
+}
+
+test "iterate same set twice" {
+    let mut s = TreeSet::<i32>::new();
+    s.insert(1);
+    s.insert(2);
+    s.insert(3);
+    let mut first: Array<i32> = [];
+    for let x of s {
+        first.append(x);
+    }
+    let mut second: Array<i32> = [];
+    for let x of s {
+        second.append(x);
+    }
+    assert first.len() == 3;
+    assert second.len() == 3;
+    assert first[0] == second[0];
+    assert first[1] == second[1];
+    assert first[2] == second[2];
 }
 
 test "empty set iteration yields nothing" {
@@ -211,9 +210,24 @@ test "empty set iteration yields nothing" {
     assert count == 0;
 }
 
-// ============================================================================
-// Sequence literal coercion
-// ============================================================================
+test "negative integers" {
+    let mut s = TreeSet::<i32>::new();
+    s.insert(-3);
+    s.insert(-1);
+    s.insert(-2);
+    assert s.len() == 3;
+    assert s.contains(-1);
+    assert s.contains(-2);
+    assert s.contains(-3);
+    assert !s.contains(0);
+    let mut result: Array<i32> = [];
+    for let x of s {
+        result.append(x);
+    }
+    assert result[0] == -3;
+    assert result[1] == -1;
+    assert result[2] == -2;
+}
 
 test "sequence literal coercion preserves insertion order" {
     let s = [30, 10, 20] as TreeSet<i32>;
@@ -247,10 +261,6 @@ test "empty sequence literal" {
     assert s.is_empty();
 }
 
-// ============================================================================
-// String keys
-// ============================================================================
-
 test "string set basic operations" {
     let mut s = TreeSet::<String>::new();
     s.insert("banana");
@@ -278,10 +288,6 @@ test "string set insertion order" {
     assert result[2] == "b";
 }
 
-// ============================================================================
-// Large-scale / compaction
-// ============================================================================
-
 test "large set insert and lookup" {
     let mut s = TreeSet::<i32>::new();
     let mut i = 0;
@@ -303,19 +309,16 @@ test "compaction after many removals" {
         s.insert(i);
         i = i + 1;
     }
-    // Remove most elements to trigger compaction
     i = 0;
     while i < 40 {
         s.remove(i);
         i = i + 1;
     }
     assert s.len() == 10;
-    // Remaining elements should still be accessible
     assert s.contains(40);
     assert s.contains(49);
     assert !s.contains(0);
     assert !s.contains(39);
-    // Iteration should still work correctly
     let mut result: Array<i32> = [];
     for let x of s {
         result.append(x);
