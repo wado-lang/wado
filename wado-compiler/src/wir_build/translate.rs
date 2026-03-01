@@ -1352,8 +1352,16 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::StructLiteral { fields, .. } => {
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, expr.type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
+                    // Unit-typed fields have no Wasm representation; skip them.
                     let field_instrs: Vec<WirInstr> = fields
                         .iter()
+                        .filter(|f| {
+                            !matches!(
+                                self.ctx
+                                    .type_id_to_wir_type(self.type_table, f.value.type_id),
+                                WirType::Unit
+                            )
+                        })
                         .map(|f| self.translate_expr(&f.value))
                         .collect();
                     self.struct_new(type_id, field_instrs)

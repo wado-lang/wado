@@ -253,15 +253,19 @@ fn register_struct(
     let fields: Vec<WirField> = tir_struct
         .fields
         .iter()
-        .map(|f| {
+        .filter_map(|f| {
             let ty = ctx.type_id_to_wir_type(type_table, f.type_id);
+            // Unit-typed fields have no Wasm representation; omit them.
+            if matches!(ty, WirType::Unit) {
+                return None;
+            }
             // Struct fields use non-nullable refs
             let ty = ty.as_nonnull();
-            WirField {
+            Some(WirField {
                 name: f.name.clone(),
                 ty,
                 mutable: true, // All fields mutable at Wasm GC level
-            }
+            })
         })
         .collect();
 
