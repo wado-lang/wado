@@ -574,3 +574,15 @@ __DATA__
 - No change to existing user-facing Stream/Future API
 - No change to Wasm output for existing programs
 - `task return` statement syntax unchanged
+
+## Related WEPs
+
+- [WEP: TIR-Level CM Adapter Synthesis](wep-2026-02-15-cm-adapter-synthesis.md) — The type-driven
+  synthesizer that generates CM ABI lowering/lifting code for import and export adapters.
+  The canonical method synthesis functions (`emit_stream_read`, etc.) proposed here complement
+  the import/export adapter synthesis: adapters handle the CM boundary crossing (flat ABI),
+  while canonical methods handle stream/future/waitable-set operations within a component.
+- [WEP: WASI HTTP Integration](wep-2026-02-21-wasi-http.md) — HTTP handler patterns that use
+  `Future<T>`, `FutureWritable<T>`, and `Stream<T>` defined here.
+- [Research: Wasm Component Model Async Primitives](../docs/research-wasm-cm.md) — Detailed
+  CM canonical API signatures and return value encoding.
