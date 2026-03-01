@@ -7,7 +7,7 @@ This document describes the Wado compiler architecture and implementation status
 The compiler follows a multi-phase pipeline:
 
 ```
-Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Effect Check → Synthesis → Monomorphize → Lower → Optimize → WIR Build → WIR Optimize → Codegen
+Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Effect Check → Synthesis → Monomorphize → Post-Mono Synthesis → Lower → Optimize → WIR Build → WIR Optimize → Codegen
 ```
 
 ### Compilation Pipeline
@@ -21,8 +21,9 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Analyze      | All modules   | Symbol table    | Build symbol table, validate imports                      |
 | Resolve      | AST + Symbols | Project         | Type resolution, produce Project                          |
 | Effect Check | Project       | Project         | Validate function effect requirements                     |
-| Synthesis    | Project       | Project         | Enum traits, inspect debug output, CM adapter synthesis   |
+| Synthesis    | Project       | Project         | Enum traits, CM adapter synthesis                         |
 | Monomorphize | Project       | Project         | Instantiate generics with concrete types                  |
+| Post-Mono    | Project       | Project         | Template expansion, inspect debug output synthesis        |
 | Lower        | Project       | Project         | Closure, i128 match, global init, string literal lowering |
 | Optimize     | Project       | Project         | Inlining, copy-prop, LICM, DCE, post-opt rewrite          |
 | WIR Build    | Project       | WirModule       | Planning + TIR → WIR (Wasm IR) translation                |
@@ -54,6 +55,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Synthesis       | `synthesis.rs`                       | Unified synthesis phase (`synthesis/`)                      |
 | SynthCommon     | `synthesis/common.rs`                | Shared TIR builders for synthesis phases                    |
 | SynthTraits     | `synthesis/traits.rs`                | Auto-derived Eq/Ord for enum types                          |
+| SynthTemplate   | `synthesis/template.rs`              | Template string expansion (post-monomorphize)               |
 | SynthInspect    | `synthesis/inspect.rs`               | Inspect debug output synthesis (type→TIR)                   |
 | SynthCmAdapter  | `synthesis/cm_adapter.rs`            | CM boundary adapter synthesis (TIR functions)               |
 | CmAbi           | `cm_abi.rs`                          | Canonical ABI layout computation                            |
@@ -1084,24 +1086,28 @@ pub struct FormatSpec {
 }
 ```
 
-**WIR codegen (`codegen/emit.rs`):**
+**Template Expansion (post-monomorphize, `synthesis/template.rs`):**
 
-- String literal parts are collected and embedded in data section
-- Interpolation expressions are evaluated
-- Template strings produce `ref (array u8)` type
-- Integer interpolation (signed i8/i16/i32/i64 and unsigned u8/u16/u32/u64 converted to decimal string)
-- Float interpolation (f32/f64 via `core:prelude/fpfmt.wado` pure Wado formatter)
-- String concatenation using GC array allocation and `array.copy`
+Template strings are expanded after monomorphization, where all type parameters have been substituted with concrete types. The resolver emits `TirExprKind::TemplateString` nodes without expansion; the synthesis phase replaces each with a `__tmpl` labeled block containing:
 
-### Inspect Synthesis (`synthesize_inspect.rs`)
+- `String::with_capacity(N)` to allocate a buffer
+- `String::append(literal)` for literal parts
+- `Formatter` construction with format spec fields
+- `Display::fmt` / `Inspect` dispatch based on the concrete type
+- Direct `Formatter::write_str` for optimized paths (e.g., String append, closure source text)
 
-The inspect synthesis phase replaces `builtin::inspect` marker calls with concrete TIR that writes debug output to a `Formatter`. This runs after effect checking and before CM adapter synthesis.
+This single-pass design eliminates the need for marker-based deferred resolution.
+
+### Inspect Synthesis (`synthesis/inspect.rs`)
+
+The inspect synthesis phase generates `__inspect$TypeName` functions that write debug output to a `Formatter`. This runs after monomorphization in a single post-monomorphize pass together with template expansion.
 
 **How it works:**
 
-1. The resolver emits `StaticCall { func: Builtin("inspect"), .. }` when it encounters `{expr:?}` or when `{expr}` has no `Display` implementation.
-2. `synthesize_inspect` scans TIR for these markers and replaces each with type-specific formatting code — field access for structs, match arms for variants/enums, loops for arrays, etc.
-3. The generated TIR is ordinary code that flows through the rest of the pipeline (monomorphize → lower → optimize → codegen).
+1. Template expansion (`synthesis/template.rs`) encounters `{expr:?}` or `{expr}` with no `Display` impl and registers inspect functions via `InspectRegistry`.
+2. Non-template code may use `builtin::inspect` / `builtin::display` markers, which are replaced in a marker-replacement pass.
+3. Pending inspect function bodies are generated for all registered types — field access for structs, match arms for variants/enums, loops for arrays, etc.
+4. The generated TIR flows through the rest of the pipeline (lower → optimize → codegen).
 
 Each distinct type gets a dedicated `__inspect$TypeName` function generated once and called from all use sites. The `InspectRegistry` deduplicates these across the module.
 
