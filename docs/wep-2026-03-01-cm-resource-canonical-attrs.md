@@ -79,15 +79,29 @@ pub resource FutureWritable<T> {
     fn close(&self);
 }
 
+/// Opaque token identifying a waitable handle within a WaitableSet.
+/// Obtained from `Subtask::join` (and future `Stream::join`, etc.).
+/// Compared by handle identity (==) to determine which waitable fired.
+pub resource Waitable;
+
+/// Result of `WaitableSet::wait` or `WaitableSet::poll`.
+pub struct WaitEvent {
+    pub code: i32,        // CM event code (stream-read=1, stream-write=2, etc.)
+    pub handle: Waitable, // which waitable handle triggered the event
+    pub payload: u32,     // event-specific data (e.g. count|status for streams)
+}
+
 pub resource WaitableSet {
     #[canonical("waitable-set-new")]
     fn new() -> WaitableSet;
 
+    /// Block until an event occurs. Returns the event details.
     #[canonical("waitable-set-wait")]
-    fn wait(&self) -> [i32, i32];
+    fn wait(&self) -> WaitEvent;
 
+    /// Non-blocking poll. Returns Some(event) if an event is ready, None otherwise.
     #[canonical("waitable-set-poll")]
-    fn poll(&self) -> Option<[i32, i32]>;
+    fn poll(&self) -> Option<WaitEvent>;
 
     #[canonical("waitable-set-drop")]
     fn close(&self);
@@ -97,8 +111,10 @@ pub resource Subtask {
     #[canonical("subtask-drop")]
     fn close(&self);
 
+    /// Join this subtask to a waitable set.
+    /// Returns a Waitable token that identifies this subtask in wait results.
     #[canonical("waitable-join")]
-    fn join(&self, set: &WaitableSet);
+    fn join(&self, set: &WaitableSet) -> Waitable;
 }
 
 pub resource ErrorContext {
@@ -113,6 +129,38 @@ pub resource ErrorContext {
 }
 ```
 
+### Waitable: Typed Handle Token
+
+`Waitable` is an opaque resource wrapping a CM handle (u32). It does not represent
+a new CM concept — it is the same handle value that was joined, wrapped in a distinct
+Wado type for type safety.
+
+When `Subtask::join(set)` is called:
+1. The CM `waitable-join(set_handle, subtask_handle)` is invoked
+2. A `Waitable` wrapping `subtask_handle` is returned
+
+When `WaitableSet::wait()` returns a `WaitEvent`:
+1. The CM `waitable-set-wait(set, outptr)` writes `[handle, payload]` to linear memory
+2. The adapter loads them and constructs `WaitEvent { code, handle: Waitable(handle), payload }`
+
+The user compares `event.handle` against tokens from `join`:
+
+```wado
+let ws = WaitableSet::new();
+let w1 = subtask1.join(&ws);
+let w2 = subtask2.join(&ws);
+
+let event = ws.wait();
+if event.handle == w1 {
+    // subtask1 fired
+} else if event.handle == w2 {
+    // subtask2 fired
+}
+```
+
+`Waitable` auto-derives `Eq` (compares underlying handle values). It intentionally
+does NOT expose the raw handle — users must go through `join` to obtain tokens.
+
 ### Naming: Future<T> as the Readable End
 
 `Future<T>` is the readable end (CM `future-read` handle). The CM spec names these
@@ -126,18 +174,26 @@ pub resource ErrorContext {
 This is documented here for clarity. A future redesign could introduce `Future<T>` as
 an effect or concept with `FutureReadable<T>` + `FutureWritable<T>` as the resource pair.
 
-### WaitableSet Wado-Level Types
+### WaitableSet Adapter Synthesis
 
-`WaitableSet::wait` and `WaitableSet::poll` use Wado-level types (`[i32, i32]` and
-`Option<[i32, i32]>`) instead of raw `out_addr: i32`. The CM adapter synthesis
-handles the linear memory buffer allocation and read-back:
+`WaitableSet::wait` returns `WaitEvent` and `WaitableSet::poll` returns
+`Option<WaitEvent>`. The CM adapter synthesis handles linear memory details:
 
+For `wait`:
 1. Allocate 8 bytes via `realloc`
-2. Call `waitable-set-wait(set, addr)` or `waitable-set-poll(set, addr)`
-3. Load `[i32_load(addr), i32_load(addr+4)]` into the return tuple
-4. Free the buffer
+2. Call `waitable-set-wait(set, addr)` → returns event code (i32)
+3. Load handle and payload: `i32_load(addr)`, `i32_load(addr+4)`
+4. Construct `WaitEvent { code, handle: Waitable(handle), payload }`
 
-This keeps the Wado API clean while the adapter handles CM-level details.
+For `poll`:
+1. Allocate 8 bytes via `realloc`
+2. Call `waitable-set-poll(set, addr)` → returns event code or sentinel
+3. If sentinel (no event): return `Option::None`
+4. Otherwise: load, construct `Option::Some(WaitEvent { ... })`
+
+For `Subtask::join`:
+1. Call `waitable-join(set_handle, subtask_handle)` (void return in CM)
+2. Return `Waitable(subtask_handle)` — wrap the joined handle as a token
 
 ### What Stays in builtin.wado
 
@@ -360,6 +416,7 @@ pub use {
     Option, Result,
     Stream, StreamWritable,
     Future, FutureWritable,
+    Waitable, WaitEvent,
     WaitableSet, Subtask, ErrorContext,
 } from "core:prelude/types.wado";
 ```
@@ -414,7 +471,8 @@ __DATA__
 - `builtin.wado` becomes clean: only Wasm instructions, libm, and `task_return`
 - WaitableSet, Subtask, ErrorContext become first-class typed resources
 - DCE is simpler and has no CM-specific knowledge
-- Type safety: handles are typed resources, not raw i32
+- Type safety: handles are typed resources, not raw i32; `Waitable` provides
+  typed wait event identification without exposing raw handle values
 
 **Negative:**
 
