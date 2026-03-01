@@ -582,6 +582,10 @@ impl f32 {
     pub const NAN: f32 = 0.0 / 0.0;
 
     fn fmt_into(&self, f: &mut Formatter) {
+        if f.precision >= 0 {
+            self.fmt_fixed(f.precision, f);
+            return;
+        }
         let [is_special, is_neg, kind] = check_special(*self as f64);
         if is_special {
             let mark = f.mark();
@@ -764,6 +768,10 @@ impl f64 {
     pub const NAN: f64 = 0.0 / 0.0;
 
     fn fmt_into(&self, f: &mut Formatter) {
+        if f.precision >= 0 {
+            self.fmt_fixed(f.precision, f);
+            return;
+        }
         let value = *self;
         let [is_special, is_neg, kind] = check_special(value);
         if is_special {
