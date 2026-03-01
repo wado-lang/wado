@@ -1,0 +1,25 @@
+use { println, Stdout } from "core:cli";
+
+struct WithUnit {
+    x: i32,
+    nothing: (),
+    y: i32,
+}
+
+export fn run() with Stdout {
+    let s = WithUnit { x: 10, nothing: (), y: 20 };
+    println(`{s.x}`);
+    println(`{s.y}`);
+    let u: () = s.nothing;
+    println(`{s.x + s.y}`);
+
+    let mut m = WithUnit { x: 1, nothing: (), y: 2 };
+    m.x = 100;
+    m.nothing = ();
+    m.y = 200;
+    println(`{m.x}`);
+    println(`{m.y}`);
+}
+
+__DATA__
+{"stdout": "10\n20\n30\n100\n200\n"}
