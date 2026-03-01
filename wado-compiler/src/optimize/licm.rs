@@ -406,8 +406,13 @@ fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut ModifiedVars) {
             collect_modified_vars_in_expr(right, modified);
         }
         TirExprKind::Unary { op, expr } => {
-            // If taking a mutable reference, the target is fully modified (caller may write anything)
-            if matches!(op, TirUnaryOp::MutRef) {
+            // &mut local: the local may be reassigned through the ref (boxed primitives).
+            // &mut local.field: in Wasm GC, this just reads the GC reference stored in the
+            // field — neither the parent local nor the field reference itself changes.
+            // Only mark the root as fully modified for a direct &mut local, not &mut local.field.
+            if matches!(op, TirUnaryOp::MutRef)
+                && matches!(expr.kind, TirExprKind::Local { .. })
+            {
                 mark_local_as_fully_modified(expr, modified);
             }
             collect_modified_vars_in_expr(expr, modified);
