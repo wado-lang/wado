@@ -58,6 +58,8 @@ fn compile_to_wir(source_filename: &str, world: Option<&str>) -> String {
             Some(&display_filename),
             OptLevel::O2,
             world,
+            None,
+            None,
         ))
         .unwrap_or_else(|e| panic!("Compilation failed for {}: {e:?}", source_path.display()));
 
