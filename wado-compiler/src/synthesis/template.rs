@@ -17,9 +17,8 @@ use indexmap::IndexMap;
 
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::{
-    FunctionRef, PrimitiveType, ResolvedType, TemplateFormatSpec, TirBlock, TirExpr, TirExprKind,
-    TirModule, TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TirUnaryOp, TypeId,
-    TypeTable,
+    FunctionRef, ResolvedType, TemplateFormatSpec, TirBlock, TirExpr, TirExprKind, TirModule,
+    TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -562,21 +561,6 @@ fn build_template_block(
                     span,
                 );
 
-                // Check for float-with-precision fast path (using inner type)
-                let float_fixed_impl = if trait_name == "Display"
-                    && format_spec
-                        .as_ref()
-                        .is_some_and(|fs| fs.precision.is_some())
-                {
-                    match tt.borrow().get(inner_type).clone() {
-                        ResolvedType::Primitive(PrimitiveType::F64) => Some("f64"),
-                        ResolvedType::Primitive(PrimitiveType::F32) => Some("f32"),
-                        _ => None,
-                    }
-                } else {
-                    None
-                };
-
                 if is_inspect {
                     // Closure with alternate mode (#:?): emit source text if available,
                     // otherwise fall back to signature via inspect trait call
@@ -603,48 +587,6 @@ fn build_template_block(
                             inspect_trait_call(resolved.type_id, resolved, fmt_mut_ref, tt, span);
                         stmts.extend(call_stmts);
                     }
-                } else if let Some(impl_type_name) = float_fixed_impl {
-                    let precision_value = format_spec.as_ref().unwrap().precision.unwrap();
-                    let precision_expr = TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: precision_value as u64,
-                            repr: precision_value.to_string(),
-                        },
-                        TypeTable::I32,
-                        span,
-                    );
-                    let inner_val = deref_to_inner(resolved, inner_type, span);
-                    let ref_inner_type = tt.borrow_mut().make_ref(inner_type);
-                    let ref_val = TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Ref,
-                            expr: Box::new(inner_val),
-                        },
-                        ref_inner_type,
-                        span,
-                    );
-                    let method_info = LocalMethodName::new(
-                        impl_type_name.to_string(),
-                        None,
-                        "fmt_fixed".to_string(),
-                    );
-                    let mangled = method_info.to_mangled_name();
-                    let fmt_call = TirExpr::new(
-                        TirExprKind::MethodCall {
-                            receiver: Box::new(ref_val),
-                            func: FunctionRef::External {
-                                module_source: ModuleSource::primitives(),
-                                name: mangled,
-                                monomorph_info: None,
-                                method_info: Some(method_info),
-                            },
-                            type_args: vec![],
-                            args: vec![precision_expr, fmt_mut_ref],
-                        },
-                        TypeTable::UNIT,
-                        span,
-                    );
-                    stmts.push(TirStmt::new(TirStmtKind::Expr(fmt_call), span));
                 } else {
                     // Always call Display::fmt (or other format trait).
                     // Every type has a Display impl — either user-defined or
