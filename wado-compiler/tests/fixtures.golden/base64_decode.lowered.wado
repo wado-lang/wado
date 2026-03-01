@@ -25,7 +25,7 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let hello: Array<u8> = __inline_String__bytes_1: {
-        let self: &String = &"Hello";
+        let self: &String = &&"Hello";
         break __inline_String__bytes_1: StrUtf8ByteIter { repr: self.repr, used: self.used, index: 0 };
     }."StrUtf8ByteIter^Iterator::collect"();
     let __cond: bool = match core::base64::decode("SGVsbG8=") {
@@ -79,7 +79,10 @@ export fn run() with Stdout {
         });
     }
     let __cond: bool = match core::base64::decode("") {
-        Some(d) => (d.used == 0),
+        Some(d) => (__inline_Array_u8___len_10: {
+            let self: &Array<u8> = &&d;
+            break __inline_Array_u8___len_10: self.used;
+        } == 0),
         _ => false,
     };
     if !__cond {
@@ -106,26 +109,29 @@ export fn run() with Stdout {
     let data: Array<u8> = __seq_lit: {
         let mut __b: Array<u8> = Array<u8> { repr: core::builtin::array_new::<u8>(5), used: 0 };
         {
-            let self: &mut Array<u8> = &mut __b;
+            let self: &mut Array<u8> = &mut &mut __b;
             self."Array<u8>::append"(1);
         };
         {
-            let self: &mut Array<u8> = &mut __b;
+            let self: &mut Array<u8> = &mut &mut __b;
             self."Array<u8>::append"(2);
         };
         {
-            let self: &mut Array<u8> = &mut __b;
+            let self: &mut Array<u8> = &mut &mut __b;
             self."Array<u8>::append"(3);
         };
         {
-            let self: &mut Array<u8> = &mut __b;
+            let self: &mut Array<u8> = &mut &mut __b;
             self."Array<u8>::append"(4);
         };
         {
-            let self: &mut Array<u8> = &mut __b;
+            let self: &mut Array<u8> = &mut &mut __b;
             self."Array<u8>::append"(5);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_u8__SequenceLiteralBuilder__build_21: {
+            let self: &Array<u8> = &__b;
+            break __inline_Array_u8__SequenceLiteralBuilder__build_21: *self;
+        };
     };
     let __cond: bool = match core::base64::decode(__inline_encode_22: {
         let data: &Array<u8> = &data;
@@ -184,7 +190,7 @@ export fn run() with Stdout {
         });
     }
     let raw: Array<u8> = __inline_String__bytes_32: {
-        let self: &String = &"SGVsbG8=";
+        let self: &String = &&"SGVsbG8=";
         break __inline_String__bytes_32: StrUtf8ByteIter { repr: self.repr, used: self.used, index: 0 };
     }."StrUtf8ByteIter^Iterator::collect"();
     let __cond: bool = match __inline_decode_bytes_33: {

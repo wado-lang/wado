@@ -26,21 +26,24 @@ export fn run() with Stdout {
     let arr: Array<Option<i32>> = __seq_lit: {
         let mut __b: Array<Option<i32>> = Array<Option<i32>> { repr: core::builtin::array_new::<Option<i32>>(3), used: 0 };
         {
-            let self: &mut Array<Option<i32>> = &mut __b;
+            let self: &mut Array<Option<i32>> = &mut &mut __b;
             let value: Option<i32> = Option<i32>::Some(1);
             self."Array<Option<i32>>::append"(value);
         };
         {
-            let self: &mut Array<Option<i32>> = &mut __b;
+            let self: &mut Array<Option<i32>> = &mut &mut __b;
             let value: Option<i32> = null;
             self."Array<Option<i32>>::append"(value);
         };
         {
-            let self: &mut Array<Option<i32>> = &mut __b;
+            let self: &mut Array<Option<i32>> = &mut &mut __b;
             let value: Option<i32> = Option<i32>::Some(3);
             self."Array<Option<i32>>::append"(value);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_Option_i32___SequenceLiteralBuilder__build_5: {
+            let self: &Array<Option<i32>> = &__b;
+            break __inline_Array_Option_i32___SequenceLiteralBuilder__build_5: *self;
+        };
     };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };

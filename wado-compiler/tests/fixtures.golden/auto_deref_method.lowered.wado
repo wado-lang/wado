@@ -37,7 +37,11 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let __sroa_box_str_value: String = "hello";
-    let __v0: i32 = __sroa_box_str_value.used;
+    let inner: String = __sroa_box_str_value;
+    let __v0: i32 = __inline_String__len_34: {
+        let self: &String = &&inner;
+        break __inline_String__len_34: self.used;
+    };
     let __cond: bool = (__v0 == 5);
     if !__cond {
         core::internal::panic(__tmpl: {

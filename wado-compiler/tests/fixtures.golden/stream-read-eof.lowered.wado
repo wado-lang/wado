@@ -28,7 +28,10 @@ export fn run() with Stdout {
     let [rx, tx] = core::builtin::stream_create_pair();
     tx."StreamWritable<u8>::close"();
     let result: Array<u8> = rx."Stream<u8>::read"(64);
-    let __v0: i32 = result.used;
+    let __v0: i32 = __inline_Array_u8___len_1: {
+        let self: &Array<u8> = &&result;
+        break __inline_Array_u8___len_1: self.used;
+    };
     let __cond: bool = (__v0 == 0);
     if !__cond {
         core::internal::panic(__tmpl: {

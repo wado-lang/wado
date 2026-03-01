@@ -46,16 +46,19 @@ export fn run() with Stdout {
     let points: Array<Point> = __seq_lit: {
         let mut __b: Array<Point> = Array<Point> { repr: core::builtin::array_new::<Point>(2), used: 0 };
         {
-            let self: &mut Array<Point> = &mut __b;
+            let self: &mut Array<Point> = &mut &mut __b;
             let value: Point = Point { x: 1, y: 2 };
             self."Array<Point>::append"(value);
         };
         {
-            let self: &mut Array<Point> = &mut __b;
+            let self: &mut Array<Point> = &mut &mut __b;
             let value: Point = Point { x: 3, y: 4 };
             self."Array<Point>::append"(value);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_Point__SequenceLiteralBuilder__build_6: {
+            let self: &Array<Point> = &__b;
+            break __inline_Array_Point__SequenceLiteralBuilder__build_6: *self;
+        };
     };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };

@@ -25,7 +25,10 @@ export fn run() with Stdout {
     };
     let mut arr: Array<i32> = __seq_lit: {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(0), used: 0 };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_2: {
+            let self: &Array<i32> = &__b;
+            break __inline_Array_i32__SequenceLiteralBuilder__build_2: *self;
+        };
     };
     arr."Array<i32>::append"(42);
     core::cli::println(__tmpl: {
@@ -36,7 +39,10 @@ export fn run() with Stdout {
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: arr.used };
+            let self: Box<i32> = Box<i32> { value: __inline_Array_i32___len_6: {
+                let self: &Array<i32> = &&arr;
+                break __inline_Array_i32___len_6: self.used;
+            } };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };

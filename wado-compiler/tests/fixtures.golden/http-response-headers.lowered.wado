@@ -15,26 +15,29 @@ export fn handle(request: Request) {
     let value: Array<u8> = __seq_lit: {
         let mut __b: Array<u8> = Array<u8> { repr: core::builtin::array_new::<u8>(5), used: 0 };
         {
-            let self: &mut Array<u8> = &mut __b;
+            let self: &mut Array<u8> = &mut &mut __b;
             self."Array<u8>::append"(104);
         };
         {
-            let self: &mut Array<u8> = &mut __b;
+            let self: &mut Array<u8> = &mut &mut __b;
             self."Array<u8>::append"(101);
         };
         {
-            let self: &mut Array<u8> = &mut __b;
+            let self: &mut Array<u8> = &mut &mut __b;
             self."Array<u8>::append"(108);
         };
         {
-            let self: &mut Array<u8> = &mut __b;
+            let self: &mut Array<u8> = &mut &mut __b;
             self."Array<u8>::append"(108);
         };
         {
-            let self: &mut Array<u8> = &mut __b;
+            let self: &mut Array<u8> = &mut &mut __b;
             self."Array<u8>::append"(111);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_u8__SequenceLiteralBuilder__build_6: {
+            let self: &Array<u8> = &__b;
+            break __inline_Array_u8__SequenceLiteralBuilder__build_6: *self;
+        };
     };
     __cm_adapter__Fields_append(&headers, "x-wado" as FieldName, value as FieldValue);
     let __pattern_temp_0: [Response, Future<Result<(), ErrorCode>>] = __cm_adapter__Response_new(headers, 0, 0, trailers_future);
@@ -355,8 +358,15 @@ fn __cm_adapter__Fields_new() -> Fields {
 fn __cm_adapter__Fields_append(self: &Fields, name: FieldName, value: FieldValue) -> Result<(), HeaderError> {
     let __name_packed: i64 = core::internal::cm_lower_string(name);
     let __value_packed: i64 = __inline_cm_lower_array_u8_0: {
-        let data: builtin::array<u8> = value.repr;
-        let len: i32 = value.used;
+        let arr: FieldValue = value;
+        let data: builtin::array<u8> = __inline_Array_u8___internal_raw_data_1: {
+            let self: &Array<u8> = &&arr;
+            break __inline_Array_u8___internal_raw_data_1: self.repr;
+        };
+        let len: i32 = __inline_Array_u8___len_2: {
+            let self: &Array<u8> = &&arr;
+            break __inline_Array_u8___len_2: self.used;
+        };
         break __inline_cm_lower_array_u8_0: core::internal::cm_lower_list_u8(data, len);
     };
     let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);

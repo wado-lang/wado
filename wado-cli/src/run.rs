@@ -213,12 +213,16 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
                     };
                 }
                 Opt::InlineThreshold => {
-                    inline_threshold =
-                        Some(args::parse_inline_threshold_arg("--optimize-inline-threshold", &mut parser)?);
+                    inline_threshold = Some(args::parse_inline_threshold_arg(
+                        "--optimize-inline-threshold",
+                        &mut parser,
+                    )?);
                 }
                 Opt::OptIterations => {
-                    opt_iterations =
-                        Some(args::parse_opt_iterations_arg("--optimize-iterations", &mut parser)?);
+                    opt_iterations = Some(args::parse_opt_iterations_arg(
+                        "--optimize-iterations",
+                        &mut parser,
+                    )?);
                 }
                 Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
                 Opt::Profile => {

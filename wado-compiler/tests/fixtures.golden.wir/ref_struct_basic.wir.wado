@@ -168,8 +168,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let byte: u8;
     let __local_9: ref null String;
     let __local_10: ref null String;
-    len = message.used;
-    msg_bytes = message.repr;
+    len = __inline_String__len_0: block -> i32 {
+        __local_9 = message;
+        break __inline_String__len_0: __local_9.used;
+    };
+    msg_bytes = __inline_String__internal_raw_bytes_1: block -> ref null array<u8> {
+        __local_10 = message;
+        break __inline_String__internal_raw_bytes_1: __local_10.repr;
+    };
     alloc_size = if add_newline -> i32 {
         len + 1;
     } else {
@@ -406,7 +412,10 @@ fn String::append(self, other) {
     let new_used: i32;
     let __local_4: ref null String;
     let __local_5: ref null String;
-    other_len = other.used;
+    other_len = __inline_String__len_0: block -> i32 {
+        __local_4 = other;
+        break __inline_String__len_0: __local_4.used;
+    };
     if other_len == 0 {
         return;
     };
@@ -414,7 +423,10 @@ fn String::append(self, other) {
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
     };
-    builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
+    builtin::array_copy<u8>(self.repr, self.used, __inline_String__internal_raw_bytes_1: block -> ref null array<u8> {
+        __local_5 = other;
+        break __inline_String__internal_raw_bytes_1: __local_5.repr;
+    }, 0, other_len);
     self.used = new_used;
 }
 
@@ -483,8 +495,14 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else if self.sign_plus {
         sign = String { repr: ref.as_non_null(array.new_data<u8>[3](0, 1)), used: 1 };
     };
-    sign_len = sign.used;
-    prefix_len = prefix.used;
+    sign_len = __inline_String__len_0: block -> i32 {
+        __local_14 = sign;
+        break __inline_String__len_0: __local_14.used;
+    };
+    prefix_len = __inline_String__len_1: block -> i32 {
+        __local_15 = prefix;
+        break __inline_String__len_1: __local_15.used;
+    };
     content_len = (sign_len + prefix_len) + digit_count;
     if if self.width <= 0 -> i32 {
         1;

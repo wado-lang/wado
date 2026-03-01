@@ -153,15 +153,15 @@ export fn run() with Stdout {
         break __tmpl: __r;
     });
     {
-        let self: &mut Value = c."Container^IndexMut::index_mut"(0);
+        let self: &mut Value = &mut c."Container^IndexMut::index_mut"(0);
         self.n = (self.n + 1);
     };
     {
-        let self: &mut Value = c."Container^IndexMut::index_mut"(1);
+        let self: &mut Value = &mut c."Container^IndexMut::index_mut"(1);
         self.n = (self.n + 100);
     };
     {
-        let self: &mut Value = c."Container^IndexMut::index_mut"(2);
+        let self: &mut Value = &mut c."Container^IndexMut::index_mut"(2);
         self.n = (self.n + 200);
     };
     core::cli::println("After mutations:");
@@ -214,8 +214,9 @@ export fn run() with Stdout {
         break __tmpl: __r;
     });
     {
-        c.read_count = 0;
-        c.write_count = 0;
+        let self: &mut Container = &mut &mut c;
+        self.read_count = 0;
+        self.write_count = 0;
     };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(29), used: 0 };
@@ -224,11 +225,11 @@ export fn run() with Stdout {
         break __tmpl: __r;
     });
     {
-        let self: &mut Value = c."Container^IndexMut::index_mut"(0);
+        let self: &mut Value = &mut c."Container^IndexMut::index_mut"(0);
         self.n = (self.n + 1);
     };
     {
-        let self: &mut Value = c."Container^IndexMut::index_mut"(1);
+        let self: &mut Value = &mut c."Container^IndexMut::index_mut"(1);
         self.n = (self.n + 1);
     };
     core::cli::println(__tmpl: {

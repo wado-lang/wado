@@ -32,23 +32,29 @@ export fn run() with Stdout {
     let names: Array<String> = __seq_lit: {
         let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(3), used: 0 };
         {
-            let self: &mut Array<String> = &mut __b;
+            let self: &mut Array<String> = &mut &mut __b;
             let value: String = "Alice";
             self."Array<String>::append"(value);
         };
         {
-            let self: &mut Array<String> = &mut __b;
+            let self: &mut Array<String> = &mut &mut __b;
             let value: String = "Bob";
             self."Array<String>::append"(value);
         };
         {
-            let self: &mut Array<String> = &mut __b;
+            let self: &mut Array<String> = &mut &mut __b;
             let value: String = "Charlie";
             self."Array<String>::append"(value);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_5: {
+            let self: &Array<String> = &__b;
+            break __inline_Array_String__SequenceLiteralBuilder__build_5: *self;
+        };
     };
-    let mut __iter_0: ArrayIter<String> = ArrayIter<String> { repr: names.repr, used: names.used, index: 0 };
+    let mut __iter_0: ArrayIter<String> = __inline_Array_String__IntoIterator__into_iter_6: {
+        let self: &Array<String> = &&names;
+        break __inline_Array_String__IntoIterator__into_iter_6: ArrayIter<String> { repr: self.repr, used: self.used, index: 0 };
+    };
     loop {
         let __pattern_temp_0: Option<String> = __iter_0."ArrayIter<String>^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {

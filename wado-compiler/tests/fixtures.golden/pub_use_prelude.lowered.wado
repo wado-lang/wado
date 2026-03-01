@@ -23,7 +23,16 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    core::cli::println("struct ok");
+    let p: MyPoint = MyPoint { x: 10, y: 20 };
+    let sum: i32 = __inline_MyPoint__sum_2: {
+        let self: &MyPoint = &&p;
+        break __inline_MyPoint__sum_2: (self.x + self.y);
+    };
+    if (sum == 30) {
+        core::cli::println("struct ok");
+    } else {
+        core::cli::println("struct fail");
+    }
     core::cli::println("fn ok");
 }
 

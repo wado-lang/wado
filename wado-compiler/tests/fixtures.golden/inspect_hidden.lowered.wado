@@ -44,6 +44,7 @@ export fn run() with Stdout {
         u."User^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
+    let h: AllHidden = AllHidden { secret1: 1, secret2: 2 };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
         let mut __f: Formatter = __inline_Formatter__new_4: {
@@ -51,8 +52,11 @@ export fn run() with Stdout {
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let s: String = "AllHidden { .. }";
-            __f.buf.String::append(s);
+            let self: &AllHidden = &&h;
+            {
+                let s: String = "AllHidden { .. }";
+                __f.buf.String::append(s);
+            };
         };
         break __tmpl: __r;
     });

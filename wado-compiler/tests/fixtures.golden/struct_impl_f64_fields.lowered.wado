@@ -36,6 +36,7 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
+    let c: Circle = Circle { radius: 5.0 };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(26), used: 0 };
         __r.String::append("diameter: ");
@@ -44,7 +45,10 @@ export fn run() with Stdout {
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<f64> = Box<f64> { value: 10.0 };
+            let self: Box<f64> = Box<f64> { value: __inline_Circle__diameter_4: {
+                let self: &Circle = &&c;
+                break __inline_Circle__diameter_4: (self.radius * 2.0);
+            } };
             let f: &mut Formatter = &mut __f;
             self.f64::fmt_into(f);
         };
@@ -58,7 +62,10 @@ export fn run() with Stdout {
             break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<f64> = Box<f64> { value: 31.4159 };
+            let self: Box<f64> = Box<f64> { value: __inline_Circle__circumference_8: {
+                let self: &Circle = &&c;
+                break __inline_Circle__circumference_8: (6.28318 * self.radius);
+            } };
             let f: &mut Formatter = &mut __f;
             self.f64::fmt_into(f);
         };
@@ -87,7 +94,10 @@ export fn run() with Stdout {
             break __inline_Formatter__new_13: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<f64> = Box<f64> { value: ((v.x * 1.0) + (v.y * 2.0)) };
+            let self: Box<f64> = Box<f64> { value: __inline_Vector2D__dot_15: {
+                let self: &Vector2D = &&v;
+                break __inline_Vector2D__dot_15: ((self.x * 1.0) + (self.y * 2.0));
+            } };
             let f: &mut Formatter = &mut __f;
             self.f64::fmt_into(f);
         };

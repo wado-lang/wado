@@ -32,22 +32,27 @@ export fn run() with Stdout {
     let items: Array<&mut Item> = __seq_lit: {
         let mut __b: Array<&mut Item> = Array<Item> { repr: core::builtin::array_new::<&mut Item>(2), used: 0 };
         {
-            let self: &mut Array<&mut Item> = &mut __b;
+            let self: &mut Array<&mut Item> = &mut &mut __b;
             let value: &mut Item = &mut a;
             self."Array<Item>::append"(value);
         };
         {
-            let self: &mut Array<&mut Item> = &mut __b;
+            let self: &mut Array<&mut Item> = &mut &mut __b;
             let value: &mut Item = &mut b;
             self."Array<Item>::append"(value);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_Item__SequenceLiteralBuilder__build_4: {
+            let self: &Array<&mut Item> = &__b;
+            break __inline_Array_Item__SequenceLiteralBuilder__build_4: *self;
+        };
     };
     __for_0: {
         let mut i: i32 = 0;
-        let _licm_used: i32 = items.used;
         loop {
-            if !(i < _licm_used) {
+            if !(i < __inline_Array_Item___len_5: {
+                let self: &Array<&mut Item> = &&items;
+                break __inline_Array_Item___len_5: self.used;
+            }) {
                 break __for_0;
             }
             core::cli::println(__tmpl: {

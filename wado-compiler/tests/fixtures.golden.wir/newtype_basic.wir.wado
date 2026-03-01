@@ -321,8 +321,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let byte: u8;
     let __local_9: ref null String;
     let __local_10: ref null String;
-    len = message.used;
-    msg_bytes = message.repr;
+    len = __inline_String__len_0: block -> i32 {
+        __local_9 = message;
+        break __inline_String__len_0: __local_9.used;
+    };
+    msg_bytes = __inline_String__internal_raw_bytes_1: block -> ref null array<u8> {
+        __local_10 = message;
+        break __inline_String__internal_raw_bytes_1: __local_10.repr;
+    };
     alloc_size = if add_newline -> i32 {
         len + 1;
     } else {
@@ -387,8 +393,14 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
     let ptr: i32;
     let __local_7: ref null String;
     let __local_8: ref null String;
-    len = message.used;
-    msg_bytes = message.repr;
+    len = __inline_String__len_0: block -> i32 {
+        __local_7 = message;
+        break __inline_String__len_0: __local_7.used;
+    };
+    msg_bytes = __inline_String__internal_raw_bytes_1: block -> ref null array<u8> {
+        __local_8 = message;
+        break __inline_String__internal_raw_bytes_1: __local_8.repr;
+    };
     alloc_size = if add_newline -> i32 {
         len + 1;
     } else {
@@ -1266,7 +1278,11 @@ fn __initialize_module() {
     let __local_43: i32;
     POW10 = __seq_lit: block -> ref null Array<u64> {
         __local_0 = Array<u64> { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
-        break __seq_lit: __local_0;
+        __inline_Array_u64__SequenceLiteralBuilder__build_21: block -> ref null Array<u64> {
+            __local_42 = __local_0;
+            break __inline_Array_u64__SequenceLiteralBuilder__build_21: __local_42;
+        };
+        break __seq_lit;
     };
 }
 
@@ -1430,7 +1446,10 @@ fn String::append(self, other) {
     let new_used: i32;
     let __local_4: ref null String;
     let __local_5: ref null String;
-    other_len = other.used;
+    other_len = __inline_String__len_0: block -> i32 {
+        __local_4 = other;
+        break __inline_String__len_0: __local_4.used;
+    };
     if other_len == 0 {
         return;
     };
@@ -1438,7 +1457,10 @@ fn String::append(self, other) {
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
     };
-    builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
+    builtin::array_copy<u8>(self.repr, self.used, __inline_String__internal_raw_bytes_1: block -> ref null array<u8> {
+        __local_5 = other;
+        break __inline_String__internal_raw_bytes_1: __local_5.repr;
+    }, 0, other_len);
     self.used = new_used;
 }
 
@@ -1497,14 +1519,6 @@ fn Formatter::apply_padding(self, start_pos) {
     let __local_26: ref null String;
     let __local_27: i32;
     let __local_28: u8;
-    let _licm_buf_29: ref null String;
-    let _licm_buf_30: ref null String;
-    let _licm_buf_31: ref null String;
-    let _licm_buf_32: ref null String;
-    let _licm_repr_33: ref null array<u8>;
-    let _licm_repr_34: ref null array<u8>;
-    let _licm_repr_35: ref null array<u8>;
-    let _licm_repr_36: ref null array<u8>;
     content_len = __inline_String__len_0: block -> i32 {
         __local_12 = self.buf;
         break __inline_String__len_0: __local_12.used;
@@ -1526,34 +1540,33 @@ fn Formatter::apply_padding(self, start_pos) {
         right_pad = padding - left_pad;
         String::append_byte_filled(self.buf, fill_byte, left_pad);
         i_8 = content_len - 1;
-        _licm_buf_29 = self.buf;
-        _licm_repr_33 = _licm_buf_29.repr;
         b128: block {
             l129: loop {
                 if (i_8 >= 0) == 0 {
                     break b128;
                 };
+                __local_13 = self.buf;
                 __local_14 = (start_pos + left_pad) + i_8;
                 __local_15 = __inline_String__get_byte_2: block -> u8 {
+                    __local_16 = self.buf;
                     __local_17 = start_pos + i_8;
-                    break __inline_String__get_byte_2: builtin::array_get_u8(_licm_repr_33, __local_17);
+                    break __inline_String__get_byte_2: builtin::array_get_u8(__local_16.repr, __local_17);
                 };
-                builtin::array_set_u8(_licm_repr_33, __local_14, __local_15);
+                builtin::array_set_u8(__local_13.repr, __local_14, __local_15);
                 i_8 = i_8 - 1;
                 continue l129;
             };
         };
         __for_1: block {
             j_9 = 0;
-            _licm_buf_30 = self.buf;
-            _licm_repr_34 = _licm_buf_30.repr;
             block {
                 l132: loop {
                     if (j_9 < left_pad) == 0 {
                         break __for_1;
                     };
+                    __local_18 = self.buf;
                     __local_19 = start_pos + j_9;
-                    builtin::array_set_u8(_licm_repr_34, __local_19, fill_byte);
+                    builtin::array_set_u8(__local_18.repr, __local_19, fill_byte);
                     j_9 = j_9 + 1;
                     continue l132;
                 };
@@ -1563,34 +1576,33 @@ fn Formatter::apply_padding(self, start_pos) {
     } else {
         String::append_byte_filled(self.buf, fill_byte, padding);
         i_10 = content_len - 1;
-        _licm_buf_31 = self.buf;
-        _licm_repr_35 = _licm_buf_31.repr;
         b134: block {
             l135: loop {
                 if (i_10 >= 0) == 0 {
                     break b134;
                 };
+                __local_21 = self.buf;
                 __local_22 = (start_pos + padding) + i_10;
                 __local_23 = __inline_String__get_byte_5: block -> u8 {
+                    __local_24 = self.buf;
                     __local_25 = start_pos + i_10;
-                    break __inline_String__get_byte_5: builtin::array_get_u8(_licm_repr_35, __local_25);
+                    break __inline_String__get_byte_5: builtin::array_get_u8(__local_24.repr, __local_25);
                 };
-                builtin::array_set_u8(_licm_repr_35, __local_22, __local_23);
+                builtin::array_set_u8(__local_21.repr, __local_22, __local_23);
                 i_10 = i_10 - 1;
                 continue l135;
             };
         };
         __for_2: block {
             j_11 = 0;
-            _licm_buf_32 = self.buf;
-            _licm_repr_36 = _licm_buf_32.repr;
             block {
                 l138: loop {
                     if (j_11 < padding) == 0 {
                         break __for_2;
                     };
+                    __local_26 = self.buf;
                     __local_27 = start_pos + j_11;
-                    builtin::array_set_u8(_licm_repr_36, __local_27, fill_byte);
+                    builtin::array_set_u8(__local_26.repr, __local_27, fill_byte);
                     j_11 = j_11 + 1;
                     continue l138;
                 };

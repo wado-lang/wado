@@ -29,6 +29,7 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
+    let local: Point = Point { a: 1, b: 2, c: 3 };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(29), used: 0 };
         __r.String::append("local total: ");
@@ -37,12 +38,16 @@ export fn run() with Stdout {
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: 6 };
+            let self: Box<i32> = Box<i32> { value: __inline_Point__total_4: {
+                let self: &Point = &&local;
+                break __inline_Point__total_4: ((self.a + self.b) + self.c);
+            } };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };
         break __tmpl: __r;
     });
+    let other: Point = Point { x: 10, y: 4 };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(27), used: 0 };
         __r.String::append("other sum: ");
@@ -51,7 +56,10 @@ export fn run() with Stdout {
             break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: 14 };
+            let self: Box<i32> = Box<i32> { value: __inline_Point__sum_9: {
+                let self: &Point = &&other;
+                break __inline_Point__sum_9: (self.x + self.y);
+            } };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };
@@ -65,7 +73,10 @@ export fn run() with Stdout {
             break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: 40 };
+            let self: Box<i32> = Box<i32> { value: __inline_Point__product_14: {
+                let self: &Point = &&other;
+                break __inline_Point__product_14: (self.x * self.y);
+            } };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };

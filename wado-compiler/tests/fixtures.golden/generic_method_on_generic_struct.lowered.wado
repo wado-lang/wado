@@ -27,6 +27,15 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
+    let w: Wrapper = Wrapper { value: 42 };
+    let x: i64 = __inline_Wrapper__convert_i64__1: {
+        let self: &Wrapper = &&w;
+        break __inline_Wrapper__convert_i64__1: 100;
+    };
+    let y: f64 = __inline_Wrapper__convert_f64__2: {
+        let self: &Wrapper = &&w;
+        break __inline_Wrapper__convert_f64__2: 3.14;
+    };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(40), used: 0 };
         __r.String::append("x: ");
@@ -35,7 +44,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i64> = Box<i64> { value: 100 };
+            let self: Box<i64> = Box<i64> { value: x };
             let f: &mut Formatter = &mut __f;
             self.i64::fmt_decimal(f);
         };
@@ -45,7 +54,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<f64> = Box<f64> { value: 3.14 };
+            let self: Box<f64> = Box<f64> { value: y };
             let f: &mut Formatter = &mut __f;
             self.f64::fmt_into(f);
         };

@@ -38,26 +38,29 @@ export fn run() with Stdout {
     let keys: Array<String> = __seq_lit: {
         let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(4), used: 0 };
         {
-            let self: &mut Array<String> = &mut __b;
+            let self: &mut Array<String> = &mut &mut __b;
             let value: String = "apple";
             self."Array<String>::append"(value);
         };
         {
-            let self: &mut Array<String> = &mut __b;
+            let self: &mut Array<String> = &mut &mut __b;
             let value: String = "banana";
             self."Array<String>::append"(value);
         };
         {
-            let self: &mut Array<String> = &mut __b;
+            let self: &mut Array<String> = &mut &mut __b;
             let value: String = "cherry";
             self."Array<String>::append"(value);
         };
         {
-            let self: &mut Array<String> = &mut __b;
+            let self: &mut Array<String> = &mut &mut __b;
             let value: String = "date";
             self."Array<String>::append"(value);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_6: {
+            let self: &Array<String> = &__b;
+            break __inline_Array_String__SequenceLiteralBuilder__build_6: *self;
+        };
     };
     let result: i32 = find_key_index(&keys, &"cherry");
     core::cli::println(__tmpl: {

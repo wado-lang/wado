@@ -26,18 +26,21 @@ export fn run() {
     let mut arr: Array<i32> = __seq_lit: {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(3), used: 0 };
         {
-            let self: &mut Array<i32> = &mut __b;
+            let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(10);
         };
         {
-            let self: &mut Array<i32> = &mut __b;
+            let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(20);
         };
         {
-            let self: &mut Array<i32> = &mut __b;
+            let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(30);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_5: {
+            let self: &Array<i32> = &__b;
+            break __inline_Array_i32__SequenceLiteralBuilder__build_5: *self;
+        };
     };
     arr."Array<i32>^IndexAssign::index_assign"(3, 99);
 }

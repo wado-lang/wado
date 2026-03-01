@@ -32,28 +32,34 @@ export fn run() with Stdout {
     let arr: Array<i32> = __seq_lit: {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(5), used: 0 };
         {
-            let self: &mut Array<i32> = &mut __b;
+            let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(1);
         };
         {
-            let self: &mut Array<i32> = &mut __b;
+            let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(2);
         };
         {
-            let self: &mut Array<i32> = &mut __b;
+            let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(3);
         };
         {
-            let self: &mut Array<i32> = &mut __b;
+            let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(4);
         };
         {
-            let self: &mut Array<i32> = &mut __b;
+            let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(5);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_7: {
+            let self: &Array<i32> = &__b;
+            break __inline_Array_i32__SequenceLiteralBuilder__build_7: *self;
+        };
     };
-    let mut iter: ArrayIter<i32> = ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
+    let mut iter: ArrayIter<i32> = __inline_Array_i32___iter_8: {
+        let self: &Array<i32> = &&arr;
+        break __inline_Array_i32___iter_8: ArrayIter<i32> { repr: self.repr, used: self.used, index: 0 };
+    };
     iter."ArrayIter<i32>^Iterator::next"();
     let remaining: i32 = iter."ArrayIter<i32>^Iterator::count"();
     core::cli::println(__tmpl: {

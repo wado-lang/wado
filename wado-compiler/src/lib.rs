@@ -329,7 +329,12 @@ pub async fn compile_with_options<H: CompilerHost>(
     // === Phase 10: Optimize (Project -> Project) ===
     let project = {
         let _span = logger.span("optimize");
-        optimize(project, options.opt_level, options.inline_threshold, options.opt_iterations)
+        optimize(
+            project,
+            options.opt_level,
+            options.inline_threshold,
+            options.opt_iterations,
+        )
     };
 
     // === Phase 11: Build WIR (planning + TIR → WirModule) ===

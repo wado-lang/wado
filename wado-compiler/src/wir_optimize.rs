@@ -585,9 +585,9 @@ fn all_br_values_are_struct_new(
             }
             i += 2;
         } else if let WirInstr::Seq(seq) = &instrs[i]
-            && seq
-                .last()
-                .is_some_and(|last| matches!(last, WirInstr::Br { depth } if *depth == target_depth))
+            && seq.last().is_some_and(
+                |last| matches!(last, WirInstr::Br { depth } if *depth == target_depth),
+            )
         {
             // Seq([..., val, Br(depth)]): the Br is wrapped in a Seq (LabeledBlock exit pattern).
             // The instruction before the Br within the Seq is the exit value.
@@ -1290,17 +1290,15 @@ fn rewrite_struct_new_br_to_return(instrs: &mut [WirInstr], target_depth: u32) {
         } else {
             // Handle Seq([..., StructNew, Br(target_depth)]) — LabeledBlock exit pattern
             let is_seq_exit = if let WirInstr::Seq(seq) = &instrs[i] {
-                seq.last()
-                    .is_some_and(|last| matches!(last, WirInstr::Br { depth } if *depth == target_depth))
-                    && seq.len() >= 2
+                seq.last().is_some_and(
+                    |last| matches!(last, WirInstr::Br { depth } if *depth == target_depth),
+                ) && seq.len() >= 2
                     && matches!(seq.get(seq.len() - 2), Some(WirInstr::StructNew { .. }))
             } else {
                 false
             };
             if is_seq_exit {
-                if let WirInstr::Seq(mut seq) =
-                    std::mem::replace(&mut instrs[i], WirInstr::Nop)
-                {
+                if let WirInstr::Seq(mut seq) = std::mem::replace(&mut instrs[i], WirInstr::Nop) {
                     seq.pop(); // remove Br
                     if let Some(WirInstr::StructNew { fields, .. }) = seq.pop() {
                         let ret = WirInstr::Return {

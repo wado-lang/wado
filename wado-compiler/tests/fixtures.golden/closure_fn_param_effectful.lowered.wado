@@ -35,18 +35,21 @@ export fn run() with Stdout {
     let items: Array<i32> = __seq_lit: {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(3), used: 0 };
         {
-            let self: &mut Array<i32> = &mut __b;
+            let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(1);
         };
         {
-            let self: &mut Array<i32> = &mut __b;
+            let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(2);
         };
         {
-            let self: &mut Array<i32> = &mut __b;
+            let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(3);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_5: {
+            let self: &Array<i32> = &__b;
+            break __inline_Array_i32__SequenceLiteralBuilder__build_5: *self;
+        };
     };
     "for_each$__Closure_0"(items, &__Closure_0 {  });
 }
@@ -99,7 +102,10 @@ fn __Closure_0::__call(self: &__Closure_0, x: i32) {
 }
 
 fn "for_each$__Closure_0"(items: Array<i32>, f: &__Closure_0) with Stdout {
-    let mut __iter_0: ArrayIter<i32> = ArrayIter<i32> { repr: items.repr, used: items.used, index: 0 };
+    let mut __iter_0: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_0: {
+        let self: &Array<i32> = &&items;
+        break __inline_Array_i32__IntoIterator__into_iter_0: ArrayIter<i32> { repr: self.repr, used: self.used, index: 0 };
+    };
     loop {
         let __pattern_temp_0: Option<i32> = __iter_0."ArrayIter<i32>^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {

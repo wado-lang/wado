@@ -51,7 +51,7 @@ pub struct "ArrayIter<TreeMapEntry<String,i32>>" {
 fn sum_values(m: TreeMap<String,i32>) -> i32 {
     let mut total: i32 = 0;
     let mut __iter_0: ArrayIter<Tuple<String,i32>> = __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: {
-        let self: &Array<[String, i32]> = &m."TreeMap<String,i32>::entries"();
+        let self: &Array<[String, i32]> = &&m."TreeMap<String,i32>::entries"();
         break __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: ArrayIter<Tuple<String,i32>> { repr: self.repr, used: self.used, index: 0 };
     };
     loop {
@@ -77,24 +77,30 @@ export fn run() with Stdout {
     let total: i32 = sum_values(__kv_lit: {
         let mut __b: TreeMap<String,i32> = TreeMap<String,i32> { root: null, entries: __seq_lit: {
             let mut __b: Array<TreeMapEntry<String,i32>> = Array<TreeMapEntry<String,i32>> { repr: core::builtin::array_new::<TreeMapEntry<String,i32>>(0), used: 0 };
-            break __seq_lit: *__b;
+            break __seq_lit: __inline_Array_TreeMapEntry_String_i32___SequenceLiteralBuilder__build_1: {
+                let self: &Array<TreeMapEntry<String,i32>> = &__b;
+                break __inline_Array_TreeMapEntry_String_i32___SequenceLiteralBuilder__build_1: *self;
+            };
         }, size: 0, deleted_count: 0 };
         {
-            let self: &mut TreeMap<String,i32> = &mut __b;
+            let self: &mut TreeMap<String,i32> = &mut &mut __b;
             let key: String = "x";
             self."TreeMap<String,i32>::insert"(key, 10);
         };
         {
-            let self: &mut TreeMap<String,i32> = &mut __b;
+            let self: &mut TreeMap<String,i32> = &mut &mut __b;
             let key: String = "y";
             self."TreeMap<String,i32>::insert"(key, 20);
         };
         {
-            let self: &mut TreeMap<String,i32> = &mut __b;
+            let self: &mut TreeMap<String,i32> = &mut &mut __b;
             let key: String = "z";
             self."TreeMap<String,i32>::insert"(key, 30);
         };
-        break __kv_lit: *__b;
+        break __kv_lit: __inline_TreeMap_String_i32__KeyValueLiteralBuilder__build_5: {
+            let self: &TreeMap<String,i32> = &__b;
+            break __inline_TreeMap_String_i32__KeyValueLiteralBuilder__build_5: *self;
+        };
     });
     let __cond: bool = (total == 60);
     if !__cond {
@@ -144,7 +150,7 @@ fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, va
         return;
     }
     let new_index: i32 = __inline_Array_TreeMapEntry_String_i32____len_0: {
-        let self: &Array<TreeMapEntry<String,i32>> = &self.entries;
+        let self: &Array<TreeMapEntry<String,i32>> = &&self.entries;
         break __inline_Array_TreeMapEntry_String_i32____len_0: self.used;
     };
     let entry: TreeMapEntry<String,i32> = TreeMapEntry<String,i32> { key: key, value: value, deleted: false };
@@ -272,10 +278,13 @@ fn "ArrayIter<Tuple<String,i32>>^Iterator::next"(self: &mut ArrayIter<Tuple<Stri
 pub fn "TreeMap<String,i32>::entries"(self: &TreeMap<String,i32>) -> Array<[String, i32]> {
     let mut result: Array<[String, i32]> = __seq_lit: {
         let mut __b: Array<[String, i32]> = Array<Tuple<String,i32>> { repr: core::builtin::array_new::<[String, i32]>(0), used: 0 };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_Tuple_String_i32___SequenceLiteralBuilder__build_1: {
+            let self: &Array<[String, i32]> = &__b;
+            break __inline_Array_Tuple_String_i32___SequenceLiteralBuilder__build_1: *self;
+        };
     };
     let mut __iter_3: ArrayIter<TreeMapEntry<String,i32>> = __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_2: {
-        let self: &Array<TreeMapEntry<String,i32>> = &self.entries;
+        let self: &Array<TreeMapEntry<String,i32>> = &&self.entries;
         break __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_2: ArrayIter<TreeMapEntry<String,i32>> { repr: self.repr, used: self.used, index: 0 };
     };
     loop {

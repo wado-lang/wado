@@ -28,6 +28,7 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
+    let p: Point = Point { x: 3, y: 4 };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(21), used: 0 };
         __r.String::append("sum: ");
@@ -36,7 +37,10 @@ export fn run() with Stdout {
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: 7 };
+            let self: Box<i32> = Box<i32> { value: __inline_Point__sum_4: {
+                let self: &Point = &&p;
+                break __inline_Point__sum_4: (self.x + self.y);
+            } };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };
@@ -50,7 +54,10 @@ export fn run() with Stdout {
             break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: 12 };
+            let self: Box<i32> = Box<i32> { value: __inline_Point__product_9: {
+                let self: &Point = &&p;
+                break __inline_Point__product_9: (self.x * self.y);
+            } };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };

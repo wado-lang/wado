@@ -36,45 +36,51 @@ export fn run() with Stdout {
     let tree: Tree<String> = Tree<String> { root: Node<String> { keys: __seq_lit: {
         let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(4), used: 0 };
         {
-            let self: &mut Array<String> = &mut __b;
+            let self: &mut Array<String> = &mut &mut __b;
             let value: String = "apple";
             self."Array<String>::append"(value);
         };
         {
-            let self: &mut Array<String> = &mut __b;
+            let self: &mut Array<String> = &mut &mut __b;
             let value: String = "banana";
             self."Array<String>::append"(value);
         };
         {
-            let self: &mut Array<String> = &mut __b;
+            let self: &mut Array<String> = &mut &mut __b;
             let value: String = "cherry";
             self."Array<String>::append"(value);
         };
         {
-            let self: &mut Array<String> = &mut __b;
+            let self: &mut Array<String> = &mut &mut __b;
             let value: String = "date";
             self."Array<String>::append"(value);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_6: {
+            let self: &Array<String> = &__b;
+            break __inline_Array_String__SequenceLiteralBuilder__build_6: *self;
+        };
     }, deleted: __seq_lit: {
         let mut __b: Array<bool> = Array<bool> { repr: core::builtin::array_new::<bool>(4), used: 0 };
         {
-            let self: &mut Array<bool> = &mut __b;
+            let self: &mut Array<bool> = &mut &mut __b;
             self."Array<bool>::append"(false);
         };
         {
-            let self: &mut Array<bool> = &mut __b;
+            let self: &mut Array<bool> = &mut &mut __b;
             self."Array<bool>::append"(true);
         };
         {
-            let self: &mut Array<bool> = &mut __b;
+            let self: &mut Array<bool> = &mut &mut __b;
             self."Array<bool>::append"(false);
         };
         {
-            let self: &mut Array<bool> = &mut __b;
+            let self: &mut Array<bool> = &mut &mut __b;
             self."Array<bool>::append"(false);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_bool__SequenceLiteralBuilder__build_12: {
+            let self: &Array<bool> = &__b;
+            break __inline_Array_bool__SequenceLiteralBuilder__build_12: *self;
+        };
     } }, max_keys: 5 };
     let result: i32 = tree."Tree<String>::check"();
     core::cli::println(__tmpl: {
@@ -127,9 +133,11 @@ fn "Tree<String>::check"(self: &Tree<String>) -> i32 {
 fn "Node<String>::find_index"(self: &Node<String>, key: &String) -> i32 {
     let mut i: i32 = 0;
     let _licm_keys: Array<String> = self.keys;
-    let _licm_used: i32 = _licm_keys.used;
     loop {
-        if !((i < _licm_used) && (_licm_keys."Array<String>^IndexValue::index_value"(i)."String^Ord::cmp"(&*key) == Ordering::Less)) {
+        if !((i < __inline_Array_String___len_0: {
+            let self: &Array<String> = &&_licm_keys;
+            break __inline_Array_String___len_0: self.used;
+        }) && (_licm_keys."Array<String>^IndexValue::index_value"(i)."String^Ord::cmp"(&*key) == Ordering::Less)) {
             break;
         }
         i = (i + 1);
@@ -150,9 +158,11 @@ fn "Node<String>::is_full"(self: &Node<String>, max_keys: i32) -> bool {
         let mut i: i32 = 0;
         let _licm_keys: Array<String> = self.keys;
         let _licm_deleted: Array<bool> = self.deleted;
-        let _licm_used: i32 = _licm_keys.used;
         loop {
-            if !(i < _licm_used) {
+            if !(i < __inline_Array_String___len_0: {
+                let self: &Array<String> = &&_licm_keys;
+                break __inline_Array_String___len_0: self.used;
+            }) {
                 break __for_1;
             }
             if !_licm_deleted."Array<bool>^IndexValue::index_value"(i) {
@@ -177,9 +187,11 @@ fn "Node<String>::count_active"(self: &Node<String>) -> i32 {
         let mut i: i32 = 0;
         let _licm_keys: Array<String> = self.keys;
         let _licm_deleted: Array<bool> = self.deleted;
-        let _licm_used: i32 = _licm_keys.used;
         loop {
-            if !(i < _licm_used) {
+            if !(i < __inline_Array_String___len_0: {
+                let self: &Array<String> = &&_licm_keys;
+                break __inline_Array_String___len_0: self.used;
+            }) {
                 break __for_0;
             }
             if !_licm_deleted."Array<bool>^IndexValue::index_value"(i) {

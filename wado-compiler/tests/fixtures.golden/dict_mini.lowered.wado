@@ -29,7 +29,10 @@ export fn run() with Stdout {
     };
     let mut dict: MiniDict<String,String> = MiniDict<String,String> { entries: __seq_lit: {
         let mut __b: Array<[String, String]> = Array<Tuple<String,String>> { repr: core::builtin::array_new::<[String, String]>(0), used: 0 };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_Tuple_String_String___SequenceLiteralBuilder__build_1: {
+            let self: &Array<[String, String]> = &__b;
+            break __inline_Array_Tuple_String_String___SequenceLiteralBuilder__build_1: *self;
+        };
     } };
     dict."MiniDict<String,String>::set"("name", "Wado");
     dict."MiniDict<String,String>::set"("type", "language");
@@ -109,9 +112,12 @@ export fn run() with Stdout {
             break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: __inline_Array_Tuple_String_String____len_2: {
-                let self: &Array<[String, String]> = &dict.entries;
-                break __inline_Array_Tuple_String_String____len_2: self.used;
+            let self: Box<i32> = Box<i32> { value: __inline_MiniDict_String_String___size_16: {
+                let self: &MiniDict<String,String> = &&dict;
+                break __inline_MiniDict_String_String___size_16: __inline_Array_Tuple_String_String____len_2: {
+                    let self: &Array<[String, String]> = &&self.entries;
+                    break __inline_Array_Tuple_String_String____len_2: self.used;
+                };
             } };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
@@ -133,9 +139,11 @@ fn "MiniDict<String,String>::has"(self: &MiniDict<String,String>, key: String) -
     __for_2: {
         let mut i: i32 = 0;
         let _licm_entries: Array<[String, String]> = self.entries;
-        let _licm_used: i32 = _licm_entries.used;
         loop {
-            if !(i < _licm_used) {
+            if !(i < __inline_Array_Tuple_String_String____len_0: {
+                let self: &Array<[String, String]> = &&_licm_entries;
+                break __inline_Array_Tuple_String_String____len_0: self.used;
+            }) {
                 break __for_2;
             }
             if _licm_entries."Array<Tuple<String,String>>^IndexValue::index_value"(i).0."String^Eq::eq"(&key) {
@@ -158,9 +166,11 @@ fn "MiniDict<String,String>::get"(self: &MiniDict<String,String>, key: String) -
     __for_1: {
         let mut i: i32 = 0;
         let _licm_entries: Array<[String, String]> = self.entries;
-        let _licm_used: i32 = _licm_entries.used;
         loop {
-            if !(i < _licm_used) {
+            if !(i < __inline_Array_Tuple_String_String____len_0: {
+                let self: &Array<[String, String]> = &&_licm_entries;
+                break __inline_Array_Tuple_String_String____len_0: self.used;
+            }) {
                 break __for_1;
             }
             if _licm_entries."Array<Tuple<String,String>>^IndexValue::index_value"(i).0."String^Eq::eq"(&key) {
@@ -177,7 +187,7 @@ fn "MiniDict<String,String>::set"(self: &mut MiniDict<String,String>, key: Strin
         let mut i: i32 = 0;
         loop {
             if !(i < __inline_Array_Tuple_String_String____len_0: {
-                let self: &Array<[String, String]> = &self.entries;
+                let self: &Array<[String, String]> = &&self.entries;
                 break __inline_Array_Tuple_String_String____len_0: self.used;
             }) {
                 break __for_0;

@@ -26,16 +26,19 @@ export fn run() with Stdout {
     let names: Array<String> = __seq_lit: {
         let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(2), used: 0 };
         {
-            let self: &mut Array<String> = &mut __b;
+            let self: &mut Array<String> = &mut &mut __b;
             let value: String = "Hello";
             self."Array<String>::append"(value);
         };
         {
-            let self: &mut Array<String> = &mut __b;
+            let self: &mut Array<String> = &mut &mut __b;
             let value: String = "World";
             self."Array<String>::append"(value);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_4: {
+            let self: &Array<String> = &__b;
+            break __inline_Array_String__SequenceLiteralBuilder__build_4: *self;
+        };
     };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(33), used: 0 };

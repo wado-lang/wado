@@ -23,6 +23,11 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
+    let ca: ContainerA = ContainerA { config: Config { value: 42 } };
+    let cfg_a: Config = __inline_ContainerA__get_config_2: {
+        let self: &ContainerA = &&ca;
+        break __inline_ContainerA__get_config_2: self.config;
+    };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(19), used: 0 };
         __r.String::append("a: ");
@@ -31,7 +36,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: 42 };
+            let self: Box<i32> = Box<i32> { value: cfg_a.value };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };
@@ -41,7 +46,10 @@ export fn run() with Stdout {
         let n: String = "hello";
         break __inline_ContainerB__make_7: ContainerB { config: Config { name: n, count: 7 } };
     };
-    let cfg_b: Config = cb.config;
+    let cfg_b: Config = __inline_ContainerB__get_config_8: {
+        let self: &ContainerB = &&cb;
+        break __inline_ContainerB__get_config_8: self.config;
+    };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(36), used: 0 };
         __r.String::append("b: ");

@@ -24,8 +24,11 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let x: i32 = __inline_test_1: {
-        let __sroa_arr_repr: builtin::array<i32> = core::builtin::array_new::<i32>(10);
-        break __inline_test_1: 0;
+        let arr: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(10), used: 0 };
+        break __inline_test_1: __inline_Array_i32___len_3: {
+            let self: &Array<i32> = &&arr;
+            break __inline_Array_i32___len_3: self.used;
+        };
     };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };

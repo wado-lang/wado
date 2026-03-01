@@ -26,42 +26,51 @@ export fn run() with Stdout {
     let matrix: Array<Array<i32>> = __seq_lit: {
         let mut __b: Array<Array<i32>> = Array<Array<i32>> { repr: core::builtin::array_new::<Array<i32>>(2), used: 0 };
         {
-            let self: &mut Array<Array<i32>> = &mut __b;
+            let self: &mut Array<Array<i32>> = &mut &mut __b;
             let value: Array<i32> = __seq_lit: {
                 let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(3), used: 0 };
                 {
-                    let self: &mut Array<i32> = &mut __b;
+                    let self: &mut Array<i32> = &mut &mut __b;
                     self."Array<i32>::append"(1);
                 };
                 {
-                    let self: &mut Array<i32> = &mut __b;
+                    let self: &mut Array<i32> = &mut &mut __b;
                     self."Array<i32>::append"(2);
                 };
                 {
-                    let self: &mut Array<i32> = &mut __b;
+                    let self: &mut Array<i32> = &mut &mut __b;
                     self."Array<i32>::append"(3);
                 };
-                break __seq_lit: *__b;
+                break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_7: {
+                    let self: &Array<i32> = &__b;
+                    break __inline_Array_i32__SequenceLiteralBuilder__build_7: *self;
+                };
             };
             self."Array<Array<i32>>::append"(value);
         };
         {
-            let self: &mut Array<Array<i32>> = &mut __b;
+            let self: &mut Array<Array<i32>> = &mut &mut __b;
             let value: Array<i32> = __seq_lit: {
                 let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(2), used: 0 };
                 {
-                    let self: &mut Array<i32> = &mut __b;
+                    let self: &mut Array<i32> = &mut &mut __b;
                     self."Array<i32>::append"(4);
                 };
                 {
-                    let self: &mut Array<i32> = &mut __b;
+                    let self: &mut Array<i32> = &mut &mut __b;
                     self."Array<i32>::append"(5);
                 };
-                break __seq_lit: *__b;
+                break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_12: {
+                    let self: &Array<i32> = &__b;
+                    break __inline_Array_i32__SequenceLiteralBuilder__build_12: *self;
+                };
             };
             self."Array<Array<i32>>::append"(value);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_Array_i32___SequenceLiteralBuilder__build_13: {
+            let self: &Array<Array<i32>> = &__b;
+            break __inline_Array_Array_i32___SequenceLiteralBuilder__build_13: *self;
+        };
     };
     let row0: Array<i32> = matrix."Array<Array<i32>>^IndexValue::index_value"(0);
     core::cli::println(__tmpl: {
@@ -71,7 +80,10 @@ export fn run() with Stdout {
             break __inline_Formatter__new_15: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: row0.used };
+            let self: Box<i32> = Box<i32> { value: __inline_Array_i32___len_17: {
+                let self: &Array<i32> = &&row0;
+                break __inline_Array_i32___len_17: self.used;
+            } };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };
@@ -85,7 +97,7 @@ export fn run() with Stdout {
         };
         {
             let self: Box<i32> = Box<i32> { value: __inline_Array_i32___len_22: {
-                let self: &Array<i32> = &matrix."Array<Array<i32>>^IndexValue::index_value"(1);
+                let self: &Array<i32> = &&matrix."Array<Array<i32>>^IndexValue::index_value"(1);
                 break __inline_Array_i32___len_22: self.used;
             } };
             let f: &mut Formatter = &mut __f;

@@ -31,42 +31,63 @@ export fn run() with Stdout {
     let c: Container<String> = Container<String> { items: __seq_lit: {
         let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(3), used: 0 };
         {
-            let self: &mut Array<String> = &mut __b;
+            let self: &mut Array<String> = &mut &mut __b;
             let value: String = "apple";
             self."Array<String>::append"(value);
         };
         {
-            let self: &mut Array<String> = &mut __b;
+            let self: &mut Array<String> = &mut &mut __b;
             let value: String = "banana";
             self."Array<String>::append"(value);
         };
         {
-            let self: &mut Array<String> = &mut __b;
+            let self: &mut Array<String> = &mut &mut __b;
             let value: String = "cherry";
             self."Array<String>::append"(value);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_5: {
+            let self: &Array<String> = &__b;
+            break __inline_Array_String__SequenceLiteralBuilder__build_5: *self;
+        };
     }, markers: __seq_lit: {
         let mut __b: Array<bool> = Array<bool> { repr: core::builtin::array_new::<bool>(3), used: 0 };
         {
-            let self: &mut Array<bool> = &mut __b;
+            let self: &mut Array<bool> = &mut &mut __b;
             self."Array<bool>::append"(true);
         };
         {
-            let self: &mut Array<bool> = &mut __b;
+            let self: &mut Array<bool> = &mut &mut __b;
             self."Array<bool>::append"(false);
         };
         {
-            let self: &mut Array<bool> = &mut __b;
+            let self: &mut Array<bool> = &mut &mut __b;
             self."Array<bool>::append"(true);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_bool__SequenceLiteralBuilder__build_10: {
+            let self: &Array<bool> = &__b;
+            break __inline_Array_bool__SequenceLiteralBuilder__build_10: *self;
+        };
     } };
-    let item0: String = c.items."Array<String>^IndexValue::index_value"(0);
-    let item1: String = c.items."Array<String>^IndexValue::index_value"(1);
-    let item2: String = c.items."Array<String>^IndexValue::index_value"(2);
-    let flag0: bool = c.markers."Array<bool>^IndexValue::index_value"(0);
-    let flag1: bool = c.markers."Array<bool>^IndexValue::index_value"(1);
+    let item0: String = __inline_Container_String___get_item_11: {
+        let self: &Container<String> = &&c;
+        break __inline_Container_String___get_item_11: self.items."Array<String>^IndexValue::index_value"(0);
+    };
+    let item1: String = __inline_Container_String___get_item_12: {
+        let self: &Container<String> = &&c;
+        break __inline_Container_String___get_item_12: self.items."Array<String>^IndexValue::index_value"(1);
+    };
+    let item2: String = __inline_Container_String___get_item_13: {
+        let self: &Container<String> = &&c;
+        break __inline_Container_String___get_item_13: self.items."Array<String>^IndexValue::index_value"(2);
+    };
+    let flag0: bool = __inline_Container_String___is_flagged_14: {
+        let self: &Container<String> = &&c;
+        break __inline_Container_String___is_flagged_14: self.markers."Array<bool>^IndexValue::index_value"(0);
+    };
+    let flag1: bool = __inline_Container_String___is_flagged_15: {
+        let self: &Container<String> = &&c;
+        break __inline_Container_String___is_flagged_15: self.markers."Array<bool>^IndexValue::index_value"(1);
+    };
     let count: i32 = c."Container<String>::count_flagged"();
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(59), used: 0 };
@@ -152,9 +173,11 @@ fn "Container<String>::count_flagged"(self: &Container<String>) -> i32 {
     __for_0: {
         let mut i: i32 = 0;
         let _licm_markers: Array<bool> = self.markers;
-        let _licm_used: i32 = _licm_markers.used;
         loop {
-            if !(i < _licm_used) {
+            if !(i < __inline_Array_bool___len_0: {
+                let self: &Array<bool> = &&_licm_markers;
+                break __inline_Array_bool___len_0: self.used;
+            }) {
                 break __for_0;
             }
             if _licm_markers."Array<bool>^IndexValue::index_value"(i) {

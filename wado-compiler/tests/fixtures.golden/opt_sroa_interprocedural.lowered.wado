@@ -79,7 +79,12 @@ fn float_struct_ops() -> f64 {
 
 #[inline(never)]
 fn method_returns_struct() -> i32 {
-    return 33;
+    let p: Point = Point { x: 1, y: 2 };
+    let q: Point = __inline_Point__offset_0: {
+        let self: &Point = &&p;
+        break __inline_Point__offset_0: Point { x: (self.x + 10), y: (self.y + 20) };
+    };
+    return (q.x + q.y);
 }
 
 export fn run() {

@@ -55,6 +55,7 @@ export fn run() with Stdout {
         };
         break __tmpl: __r;
     });
+    let c: Counter<i32> = Counter<i32> { value: 42 };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(31), used: 0 };
         __r.String::append("counter value: ");
@@ -63,7 +64,10 @@ export fn run() with Stdout {
             break __inline_Formatter__new_13: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: 42 };
+            let self: Box<i32> = Box<i32> { value: __inline_Counter_i32___get_15: {
+                let self: &Counter<i32> = &&c;
+                break __inline_Counter_i32___get_15: self.value;
+            } };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };

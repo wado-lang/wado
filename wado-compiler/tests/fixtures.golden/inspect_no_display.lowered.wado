@@ -114,16 +114,19 @@ export fn run() with Stdout {
     let arr: Array<Point> = __seq_lit: {
         let mut __b: Array<Point> = Array<Point> { repr: core::builtin::array_new::<Point>(2), used: 0 };
         {
-            let self: &mut Array<Point> = &mut __b;
+            let self: &mut Array<Point> = &mut &mut __b;
             let value: Point = Point { x: 1, y: 2 };
             self."Array<Point>::append"(value);
         };
         {
-            let self: &mut Array<Point> = &mut __b;
+            let self: &mut Array<Point> = &mut &mut __b;
             let value: Point = Point { x: 3, y: 4 };
             self."Array<Point>::append"(value);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_Point__SequenceLiteralBuilder__build_18: {
+            let self: &Array<Point> = &__b;
+            break __inline_Array_Point__SequenceLiteralBuilder__build_18: *self;
+        };
     };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
@@ -141,8 +144,9 @@ export fn run() with Stdout {
             break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
+            let self: &mut Formatter = &mut &mut __f;
             let s: String = "|i32| -> i32";
-            __f.buf.String::append(s);
+            self.buf.String::append(s);
         };
         break __tmpl: __r;
     });

@@ -17,7 +17,10 @@ global mut __modules_initialized: bool = false;
 fn sum_bytes(s: String) -> i32 {
     let mut sum: i32 = 0;
     let mut __iter_0: StrUtf8ByteIter = __inline_StrUtf8ByteIter_IntoIterator__into_iter_0: {
-        let self: &StrUtf8ByteIter = &StrUtf8ByteIter { repr: s.repr, used: s.used, index: 0 };
+        let self: &StrUtf8ByteIter = &&__inline_String__bytes_1: {
+            let self: &String = &&s;
+            break __inline_String__bytes_1: StrUtf8ByteIter { repr: self.repr, used: self.used, index: 0 };
+        };
         break __inline_StrUtf8ByteIter_IntoIterator__into_iter_0: *self;
     };
     loop {
@@ -35,7 +38,10 @@ fn sum_bytes(s: String) -> i32 {
 fn count_chars(s: String) -> i32 {
     let mut count: i32 = 0;
     let mut __iter_1: StrCharIter = __inline_StrCharIter_IntoIterator__into_iter_0: {
-        let self: &StrCharIter = &StrCharIter { repr: s.repr, used: s.used, byte_index: 0 };
+        let self: &StrCharIter = &&__inline_String__chars_1: {
+            let self: &String = &&s;
+            break __inline_String__chars_1: StrCharIter { repr: self.repr, used: self.used, byte_index: 0 };
+        };
         break __inline_StrCharIter_IntoIterator__into_iter_0: *self;
     };
     loop {
@@ -51,7 +57,10 @@ fn count_chars(s: String) -> i32 {
 }
 
 fn first_byte(s: String) -> i32 {
-    let mut iter: StrUtf8ByteIter = StrUtf8ByteIter { repr: s.repr, used: s.used, index: 0 };
+    let mut iter: StrUtf8ByteIter = __inline_String__bytes_0: {
+        let self: &String = &&s;
+        break __inline_String__bytes_0: StrUtf8ByteIter { repr: self.repr, used: self.used, index: 0 };
+    };
     let __pattern_temp_0: Option<u8> = iter."StrUtf8ByteIter^Iterator::next"();
     if __variant_test(__pattern_temp_0, case=0, name=Some) {
         let b: u8 = __variant_payload(__pattern_temp_0, case=0);

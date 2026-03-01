@@ -30,26 +30,29 @@ export fn run() with Stdout {
     let h: Holder<i32> = Holder<i32> { items: __seq_lit: {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(5), used: 0 };
         {
-            let self: &mut Array<i32> = &mut __b;
+            let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(5);
         };
         {
-            let self: &mut Array<i32> = &mut __b;
+            let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(3);
         };
         {
-            let self: &mut Array<i32> = &mut __b;
+            let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(8);
         };
         {
-            let self: &mut Array<i32> = &mut __b;
+            let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(1);
         };
         {
-            let self: &mut Array<i32> = &mut __b;
+            let self: &mut Array<i32> = &mut &mut __b;
             self."Array<i32>::append"(4);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_7: {
+            let self: &Array<i32> = &__b;
+            break __inline_Array_i32__SequenceLiteralBuilder__build_7: *self;
+        };
     } };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
@@ -76,9 +79,11 @@ fn "Holder<i32>::min"(self: &Holder<i32>) -> i32 {
     __for_0: {
         let mut i: i32 = 1;
         let _licm_items: Array<i32> = self.items;
-        let _licm_used: i32 = _licm_items.used;
         loop {
-            if !(i < _licm_used) {
+            if !(i < __inline_Array_i32___len_0: {
+                let self: &Array<i32> = &&_licm_items;
+                break __inline_Array_i32___len_0: self.used;
+            }) {
                 break __for_0;
             }
             if (_licm_items."Array<i32>^IndexValue::index_value"(i) < m) {

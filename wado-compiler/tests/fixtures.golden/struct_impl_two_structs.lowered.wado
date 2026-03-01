@@ -33,6 +33,8 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
+    let p: Point = Point { x: 3, y: 4 };
+    let r: Rectangle = Rectangle { width: 5, height: 6 };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(27), used: 0 };
         __r.String::append("point sum: ");
@@ -41,7 +43,10 @@ export fn run() with Stdout {
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: 7 };
+            let self: Box<i32> = Box<i32> { value: __inline_Point__sum_4: {
+                let self: &Point = &&p;
+                break __inline_Point__sum_4: (self.x + self.y);
+            } };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };
@@ -55,7 +60,10 @@ export fn run() with Stdout {
             break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: 30 };
+            let self: Box<i32> = Box<i32> { value: __inline_Rectangle__area_9: {
+                let self: &Rectangle = &&r;
+                break __inline_Rectangle__area_9: (self.width * self.height);
+            } };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };

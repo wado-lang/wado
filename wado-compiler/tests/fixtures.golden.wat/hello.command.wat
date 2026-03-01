@@ -124,11 +124,19 @@
     (func (;12;) (type 17) (param i32 (ref null 2) i32)
       (local i32 (ref null 1) i32 i32 i32 i32 (ref null 2) (ref null 2))
       (local.set 3
-        (struct.get 2 1
-          (local.get 1)))
+        (block (result i32) ;; label = @1
+          (local.set 9
+            (local.get 1))
+          (br 0 (;@1;)
+            (struct.get 2 1
+              (local.get 9)))))
       (local.set 4
-        (struct.get 2 0
-          (local.get 1)))
+        (block (result (ref null 1)) ;; label = @1
+          (local.set 10
+            (local.get 1))
+          (br 0 (;@1;)
+            (struct.get 2 0
+              (local.get 10)))))
       (local.set 5
         (if (result i32) ;; label = @1
           (local.get 2)

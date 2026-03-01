@@ -111,9 +111,9 @@ import memory (1) from "mem/memory";
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let __local_0: ref null "core:internal/Box<i32>";
+    let b: ref null "core:internal/Box<i32>";
     let __local_1: i32;
-    let __local_2: i32;
+    let result: i32;
     let __local_3: ref null String;
     let __local_4: ref null Formatter;
     let __local_5: ref null "core:internal/Box<i32>";
@@ -127,13 +127,21 @@ fn run() with Stdout {
     let __local_13: ref null "core:internal/Box<i32>";
     let __local_14: ref null Formatter;
     let __local_15: i32;
-    let __local_16: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
         };
         __initialize_module();
         __modules_initialized = 1;
+    };
+    b = "core:internal/Box<i32>" { value: 5 };
+    result = __inline_Box_i32___apply___Closure_0_1: block -> i32 {
+        __local_5 = b;
+        __inline___Closure_0____call_2: block -> i32 {
+            __local_8 = __local_5.value;
+            break __inline___Closure_0____call_2: __local_8 * 3;
+        };
+        break __inline_Box_i32___apply___Closure_0_1;
     };
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_3 = String { repr: ref.as_non_null(builtin::array_new<u8>(24)), used: 0 };
@@ -149,7 +157,7 @@ fn run() with Stdout {
             __local_10 = __local_3;
             break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_10) };
         };
-        __local_11 = "core:internal/Box<i32>" { value: 15 };
+        __local_11 = "core:internal/Box<i32>" { value: result };
         __local_12 = __local_4;
         i32::fmt_decimal(__local_11, __local_12);
         break __tmpl: __local_3;
@@ -170,8 +178,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let byte: u8;
     let __local_9: ref null String;
     let __local_10: ref null String;
-    len = message.used;
-    msg_bytes = message.repr;
+    len = __inline_String__len_0: block -> i32 {
+        __local_9 = message;
+        break __inline_String__len_0: __local_9.used;
+    };
+    msg_bytes = __inline_String__internal_raw_bytes_1: block -> ref null array<u8> {
+        __local_10 = message;
+        break __inline_String__internal_raw_bytes_1: __local_10.repr;
+    };
     alloc_size = if add_newline -> i32 {
         len + 1;
     } else {
@@ -408,7 +422,10 @@ fn String::append(self, other) {
     let new_used: i32;
     let __local_4: ref null String;
     let __local_5: ref null String;
-    other_len = other.used;
+    other_len = __inline_String__len_0: block -> i32 {
+        __local_4 = other;
+        break __inline_String__len_0: __local_4.used;
+    };
     if other_len == 0 {
         return;
     };
@@ -416,7 +433,10 @@ fn String::append(self, other) {
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
     };
-    builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
+    builtin::array_copy<u8>(self.repr, self.used, __inline_String__internal_raw_bytes_1: block -> ref null array<u8> {
+        __local_5 = other;
+        break __inline_String__internal_raw_bytes_1: __local_5.repr;
+    }, 0, other_len);
     self.used = new_used;
 }
 
@@ -485,8 +505,14 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else if self.sign_plus {
         sign = String { repr: ref.as_non_null(array.new_data<u8>[3](0, 1)), used: 1 };
     };
-    sign_len = sign.used;
-    prefix_len = prefix.used;
+    sign_len = __inline_String__len_0: block -> i32 {
+        __local_14 = sign;
+        break __inline_String__len_0: __local_14.used;
+    };
+    prefix_len = __inline_String__len_1: block -> i32 {
+        __local_15 = prefix;
+        break __inline_String__len_1: __local_15.used;
+    };
     content_len = (sign_len + prefix_len) + digit_count;
     if if self.width <= 0 -> i32 {
         1;

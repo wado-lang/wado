@@ -31,10 +31,16 @@ export fn run() with Stdout, Stdin {
     let mut total: i32 = 0;
     loop {
         let chunk: Array<u8> = stdin_stream."Stream<u8>::read"(4096);
-        if (chunk.used == 0) {
+        if (__inline_Array_u8___len_1: {
+            let self: &Array<u8> = &&chunk;
+            break __inline_Array_u8___len_1: self.used;
+        } == 0) {
             break;
         }
-        total = (total + chunk.used);
+        total = (total + __inline_Array_u8___len_2: {
+            let self: &Array<u8> = &&chunk;
+            break __inline_Array_u8___len_2: self.used;
+        });
     }
     stdin_stream."Stream<u8>::close"();
     core::cli::println(__tmpl: {

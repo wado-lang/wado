@@ -36,22 +36,28 @@ export fn run() with Stdout {
     let m: FrozenMap<i32> = __kv_lit: {
         let mut __b: FrozenMapBuilder<i32> = FrozenMapBuilder<i32> { keys: __seq_lit: {
             let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(0), used: 0 };
-            break __seq_lit: *__b;
+            break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_1: {
+                let self: &Array<String> = &__b;
+                break __inline_Array_String__SequenceLiteralBuilder__build_1: *self;
+            };
         }, values: __seq_lit: {
             let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(0), used: 0 };
-            break __seq_lit: *__b;
+            break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_3: {
+                let self: &Array<i32> = &__b;
+                break __inline_Array_i32__SequenceLiteralBuilder__build_3: *self;
+            };
         } };
         __b."FrozenMapBuilder<i32>^KeyValueLiteralBuilder::insert_literal"("x", 10);
         __b."FrozenMapBuilder<i32>^KeyValueLiteralBuilder::insert_literal"("y", 20);
         __b."FrozenMapBuilder<i32>^KeyValueLiteralBuilder::insert_literal"("z", 30);
-        break __kv_lit: __inline_FrozenMapBuilder_i32__KeyValueLiteralBuilder__build_2: {
-            let self: FrozenMapBuilder<i32> = __b;
-            break __inline_FrozenMapBuilder_i32__KeyValueLiteralBuilder__build_2: FrozenMap<i32> { keys: self.keys, values: self.values };
-        };
+        break __kv_lit: FrozenMap<i32> { keys: __b.keys, values: __b.values };
     };
-    let __v0: i32 = __inline_Array_String___len_4: {
-        let self: &Array<String> = &m.keys;
-        break __inline_Array_String___len_4: self.used;
+    let __v0: i32 = __inline_FrozenMap_i32___len_3: {
+        let self: &FrozenMap<i32> = &&m;
+        break __inline_FrozenMap_i32___len_3: __inline_Array_String___len_4: {
+            let self: &Array<String> = &&self.keys;
+            break __inline_Array_String___len_4: self.used;
+        };
     };
     let __cond: bool = (__v0 == 3);
     if !__cond {
@@ -200,21 +206,27 @@ export fn run() with Stdout {
     let m2: FrozenMap<i32> = __kv_lit: {
         let mut __b: FrozenMapBuilder<i32> = FrozenMapBuilder<i32> { keys: __seq_lit: {
             let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(0), used: 0 };
-            break __seq_lit: *__b;
+            break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_5: {
+                let self: &Array<String> = &__b;
+                break __inline_Array_String__SequenceLiteralBuilder__build_5: *self;
+            };
         }, values: __seq_lit: {
             let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(0), used: 0 };
-            break __seq_lit: *__b;
+            break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_7: {
+                let self: &Array<i32> = &__b;
+                break __inline_Array_i32__SequenceLiteralBuilder__build_7: *self;
+            };
         } };
         __b."FrozenMapBuilder<i32>^KeyValueLiteralBuilder::insert_literal"("a", 1);
         __b."FrozenMapBuilder<i32>^KeyValueLiteralBuilder::insert_literal"("b", 2);
-        break __kv_lit: __inline_FrozenMapBuilder_i32__KeyValueLiteralBuilder__build_34: {
-            let self: FrozenMapBuilder<i32> = __b;
-            break __inline_FrozenMapBuilder_i32__KeyValueLiteralBuilder__build_34: FrozenMap<i32> { keys: self.keys, values: self.values };
-        };
+        break __kv_lit: FrozenMap<i32> { keys: __b.keys, values: __b.values };
     };
-    let __v0: i32 = __inline_Array_String___len_36: {
-        let self: &Array<String> = &m2.keys;
-        break __inline_Array_String___len_36: self.used;
+    let __v0: i32 = __inline_FrozenMap_i32___len_35: {
+        let self: &FrozenMap<i32> = &&m2;
+        break __inline_FrozenMap_i32___len_35: __inline_Array_String___len_36: {
+            let self: &Array<String> = &&self.keys;
+            break __inline_Array_String___len_36: self.used;
+        };
     };
     let __cond: bool = (__v0 == 2);
     if !__cond {
@@ -277,9 +289,11 @@ fn "FrozenMap<i32>::get"(self: &FrozenMap<i32>, key: String) -> Option<i32> {
     let mut i: i32 = 0;
     let _licm_keys: Array<String> = self.keys;
     let _licm_values: Array<i32> = self.values;
-    let _licm_used: i32 = _licm_keys.used;
     loop {
-        if !(i < _licm_used) {
+        if !(i < __inline_Array_String___len_0: {
+            let self: &Array<String> = &&_licm_keys;
+            break __inline_Array_String___len_0: self.used;
+        }) {
             break;
         }
         if _licm_keys."Array<String>^IndexValue::index_value"(i)."String^Eq::eq"(&key) {

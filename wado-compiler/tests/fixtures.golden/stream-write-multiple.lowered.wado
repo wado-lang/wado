@@ -29,22 +29,25 @@ export fn run() with Stdout {
     let chunk: Array<u8> = __seq_lit: {
         let mut __b: Array<u8> = Array<u8> { repr: core::builtin::array_new::<u8>(4), used: 0 };
         {
-            let self: &mut Array<u8> = &mut __b;
+            let self: &mut Array<u8> = &mut &mut __b;
             self."Array<u8>::append"(65);
         };
         {
-            let self: &mut Array<u8> = &mut __b;
+            let self: &mut Array<u8> = &mut &mut __b;
             self."Array<u8>::append"(66);
         };
         {
-            let self: &mut Array<u8> = &mut __b;
+            let self: &mut Array<u8> = &mut &mut __b;
             self."Array<u8>::append"(67);
         };
         {
-            let self: &mut Array<u8> = &mut __b;
+            let self: &mut Array<u8> = &mut &mut __b;
             self."Array<u8>::append"(10);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_u8__SequenceLiteralBuilder__build_6: {
+            let self: &Array<u8> = &__b;
+            break __inline_Array_u8__SequenceLiteralBuilder__build_6: *self;
+        };
     };
     tx."StreamWritable<u8>::write"(chunk);
     tx."StreamWritable<u8>::close"();

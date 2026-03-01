@@ -32,23 +32,29 @@ export fn run() with Stdout {
     let pairs: Array<[i32, String]> = __seq_lit: {
         let mut __b: Array<[i32, String]> = Array<Tuple<i32,String>> { repr: core::builtin::array_new::<[i32, String]>(3), used: 0 };
         {
-            let self: &mut Array<[i32, String]> = &mut __b;
+            let self: &mut Array<[i32, String]> = &mut &mut __b;
             let value: [i32, String] = [1, "one"];
             self."Array<Tuple<i32,String>>::append"(value);
         };
         {
-            let self: &mut Array<[i32, String]> = &mut __b;
+            let self: &mut Array<[i32, String]> = &mut &mut __b;
             let value: [i32, String] = [2, "two"];
             self."Array<Tuple<i32,String>>::append"(value);
         };
         {
-            let self: &mut Array<[i32, String]> = &mut __b;
+            let self: &mut Array<[i32, String]> = &mut &mut __b;
             let value: [i32, String] = [3, "three"];
             self."Array<Tuple<i32,String>>::append"(value);
         };
-        break __seq_lit: *__b;
+        break __seq_lit: __inline_Array_Tuple_i32_String___SequenceLiteralBuilder__build_5: {
+            let self: &Array<[i32, String]> = &__b;
+            break __inline_Array_Tuple_i32_String___SequenceLiteralBuilder__build_5: *self;
+        };
     };
-    let mut __iter_0: ArrayIter<Tuple<i32,String>> = ArrayIter<Tuple<i32,String>> { repr: pairs.repr, used: pairs.used, index: 0 };
+    let mut __iter_0: ArrayIter<Tuple<i32,String>> = __inline_Array_Tuple_i32_String___IntoIterator__into_iter_6: {
+        let self: &Array<[i32, String]> = &&pairs;
+        break __inline_Array_Tuple_i32_String___IntoIterator__into_iter_6: ArrayIter<Tuple<i32,String>> { repr: self.repr, used: self.used, index: 0 };
+    };
     loop {
         let __pattern_temp_0: Option<[i32, String]> = __iter_0."ArrayIter<Tuple<i32,String>>^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
@@ -74,7 +80,10 @@ export fn run() with Stdout {
             break;
         }
     }
-    let mut __iter_1: ArrayIter<Tuple<i32,String>> = ArrayIter<Tuple<i32,String>> { repr: pairs.repr, used: pairs.used, index: 0 };
+    let mut __iter_1: ArrayIter<Tuple<i32,String>> = __inline_Array_Tuple_i32_String___IntoIterator__into_iter_11: {
+        let self: &Array<[i32, String]> = &&pairs;
+        break __inline_Array_Tuple_i32_String___IntoIterator__into_iter_11: ArrayIter<Tuple<i32,String>> { repr: self.repr, used: self.used, index: 0 };
+    };
     loop {
         let __pattern_temp_2: Option<[i32, String]> = __iter_1."ArrayIter<Tuple<i32,String>>^Iterator::next"();
         if __variant_test(__pattern_temp_2, case=0, name=Some) {

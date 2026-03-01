@@ -44,7 +44,10 @@ export fn run() with Stdout {
                 };
                 break __tmpl: __tmpl_buf_100;
             };
-            total = (total + s.used);
+            total = (total + __inline_String__len_5: {
+                let self: &String = &&s;
+                break __inline_String__len_5: self.used;
+            });
             i = (i + 1);
         }
     }
@@ -85,7 +88,10 @@ export fn run() with Stdout {
                 break __tmpl: __tmpl_buf_101;
             };
             let mut __iter_2: StrUtf8ByteIter = __inline_StrUtf8ByteIter_IntoIterator__into_iter_14: {
-                let self: &StrUtf8ByteIter = &StrUtf8ByteIter { repr: s.repr, used: s.used, index: 0 };
+                let self: &StrUtf8ByteIter = &&__inline_String__bytes_15: {
+                    let self: &String = &&s;
+                    break __inline_String__bytes_15: StrUtf8ByteIter { repr: self.repr, used: self.used, index: 0 };
+                };
                 break __inline_StrUtf8ByteIter_IntoIterator__into_iter_14: *self;
             };
             loop {
@@ -152,8 +158,14 @@ export fn run() with Stdout {
                 };
                 break __tmpl: __tmpl_buf_103;
             };
-            t1 = (t1 + a.used);
-            t2 = (t2 + b.used);
+            t1 = (t1 + __inline_String__len_28: {
+                let self: &String = &&a;
+                break __inline_String__len_28: self.used;
+            });
+            t2 = (t2 + __inline_String__len_29: {
+                let self: &String = &&b;
+                break __inline_String__len_29: self.used;
+            });
             i = (i + 1);
         }
     }
@@ -203,7 +215,13 @@ export fn run() with Stdout {
                 };
                 break __tmpl: __tmpl_buf_104;
             };
-            t3 = (t3 + s.used);
+            t3 = (t3 + __inline_get_len_41: {
+                let s: String = s;
+                break __inline_get_len_41: __inline_String__len_0: {
+                    let self: &String = &&s;
+                    break __inline_String__len_0: self.used;
+                };
+            });
             i = (i + 1);
         }
     }

@@ -27,7 +27,11 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let x: i32 = Box<i32> { value: 42 }.value;
+    let box: ReadOnlyBox = ReadOnlyBox { value: 42 };
+    let x: i32 = __inline_ReadOnlyBox_Index__index_1: {
+        let self: &ReadOnlyBox = &&box;
+        break __inline_ReadOnlyBox_Index__index_1: Box<i32> { value: self.value };
+    }.value;
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(23), used: 0 };
         __r.String::append("Value: ");
