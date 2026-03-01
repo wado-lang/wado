@@ -31,10 +31,21 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_f64_Display__fmt_4: {
+        __inline_Degrees_Display__fmt_4: {
             let self: Box<f64> = Box<f64> { value: d };
             let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_f64"(self.value, f);
+            __inline_Degrees_Inspect__inspect_5: {
+                __inline_f64_Inspect__inspect_6: {
+                    let self: Box<f64> = Box<f64> { value: self.value as f64 };
+                    __inline_f64_Display__fmt_7: {
+                        "core::prelude/primitives.wado::fmt_f64"(self.value, f);
+                    };
+                };
+                __inline_Formatter__write_str_8: {
+                    let s: String = " as Degrees";
+                    f.buf.String::append(s);
+                };
+            };
         };
         break __tmpl: __r;
     });
@@ -42,14 +53,25 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(36), used: 0 };
         __r.String::append("degrees to radians: ");
-        let mut __f: Formatter = __inline_Formatter__new_7: {
+        let mut __f: Formatter = __inline_Formatter__new_11: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_f64_Display__fmt_8: {
+        __inline_Radians_Display__fmt_12: {
             let self: Box<f64> = Box<f64> { value: r2 };
             let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_f64"(self.value, f);
+            __inline_Radians_Inspect__inspect_13: {
+                __inline_f64_Inspect__inspect_14: {
+                    let self: Box<f64> = Box<f64> { value: self.value as f64 };
+                    __inline_f64_Display__fmt_15: {
+                        "core::prelude/primitives.wado::fmt_f64"(self.value, f);
+                    };
+                };
+                __inline_Formatter__write_str_16: {
+                    let s: String = " as Radians";
+                    f.buf.String::append(s);
+                };
+            };
         };
         break __tmpl: __r;
     });

@@ -23,14 +23,48 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let t: [i32, String, bool] = [1, "hello", true];
+    let __sroa_t_1: String = "hello";
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
         let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$[i32, String, bool]"(t, &mut __f);
+        __inline_Formatter__write_str_3: {
+            let s: String = "[";
+            __f.buf.String::append(s);
+        };
+        __inline_i32_Inspect__inspect_4: {
+            let self: Box<i32> = Box<i32> { value: 1 };
+            let f: &mut Formatter = &mut __f;
+            __inline_i32_Display__fmt_5: {
+                "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+            };
+        };
+        __inline_Formatter__write_str_6: {
+            let s: String = ", ";
+            __f.buf.String::append(s);
+        };
+        __sroa_t_1."String^Inspect::inspect"(&mut __f);
+        __inline_Formatter__write_str_7: {
+            let s: String = ", ";
+            __f.buf.String::append(s);
+        };
+        __inline_bool_Inspect__inspect_8: {
+            let self: Box<bool> = Box<bool> { value: true };
+            let f: &mut Formatter = &mut __f;
+            __inline_bool_Display__fmt_9: {
+                f.Formatter::pad(if self.value {
+                    "true";
+                } else {
+                    "false";
+                });
+            };
+        };
+        __inline_Formatter__write_str_10: {
+            let s: String = "]";
+            __f.buf.String::append(s);
+        };
         break __tmpl: __r;
     });
 }
@@ -38,48 +72,5 @@ export fn run() with Stdout {
 export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
-}
-
-fn "__inspect$[i32, String, bool]"(__val: [i32, String, bool], __fmt: &mut Formatter) {
-    __inline_Formatter__write_char_0: {
-        __fmt.buf.String::append_char('[');
-    };
-    __inline___inspect_i32_1: {
-        let __val: i32 = __val.0;
-        __inline_i32_Display__fmt_2: {
-            "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
-        };
-    };
-    __inline_Formatter__write_str_3: {
-        let s: String = ", ";
-        __fmt.buf.String::append(s);
-    };
-    __inline___inspect_String_4: {
-        let __val: String = __val.1;
-        __inline_Formatter__write_char_5: {
-            __fmt.buf.String::append_char('"');
-        };
-        core::internal::write_escaped_string(__val, __fmt);
-        __inline_Formatter__write_char_6: {
-            __fmt.buf.String::append_char('"');
-        };
-    };
-    __inline_Formatter__write_str_7: {
-        let s: String = ", ";
-        __fmt.buf.String::append(s);
-    };
-    __inline___inspect_bool_8: {
-        let __val: bool = __val.2;
-        __inline_bool_Display__fmt_9: {
-            __fmt.Formatter::pad(if __val {
-                "true";
-            } else {
-                "false";
-            });
-        };
-    };
-    __inline_Formatter__write_char_10: {
-        __fmt.buf.String::append_char(']');
-    };
 }
 

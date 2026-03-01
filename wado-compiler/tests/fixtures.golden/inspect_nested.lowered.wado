@@ -40,7 +40,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Line"(line, &mut __f);
+        line."Line^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     let points: Array<Point> = __seq_lit: {
@@ -63,7 +63,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Array<Point>"(points, &mut __f);
+        points."Array<Point>^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     let opt_p: Option<Point> = Option<Point>::Some(Point { x: 10, y: 20 });
@@ -73,7 +73,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Option<Point>"(opt_p, &mut __f);
+        Box<Option<Point>> { value: opt_p }."Option<Point>^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     let none_p: Option<Point> = null;
@@ -83,15 +83,131 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Option<Point>"(none_p, &mut __f);
+        Box<Option<Point>> { value: none_p }."Option<Point>^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     core::cli::println("ok");
 }
 
+pub fn "Point^Inspect::inspect"(self: &Point, f: &mut Formatter) {
+    __inline_Formatter__write_str_0: {
+        let s: String = "Point { ";
+        f.buf.String::append(s);
+    };
+    __inline_Formatter__write_str_1: {
+        let s: String = "x: ";
+        f.buf.String::append(s);
+    };
+    __inline_i32_Inspect__inspect_2: {
+        let __sroa_self_value: i32 = self.x;
+        __inline_i32_Display__fmt_3: {
+            "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+        };
+    };
+    __inline_Formatter__write_str_4: {
+        let s: String = ", ";
+        f.buf.String::append(s);
+    };
+    __inline_Formatter__write_str_5: {
+        let s: String = "y: ";
+        f.buf.String::append(s);
+    };
+    __inline_i32_Inspect__inspect_6: {
+        let __sroa_self_value: i32 = self.y;
+        __inline_i32_Display__fmt_7: {
+            "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+        };
+    };
+    __inline_Formatter__write_str_8: {
+        let s: String = " }";
+        f.buf.String::append(s);
+    };
+}
+
+pub fn "Line^Inspect::inspect"(self: &Line, f: &mut Formatter) {
+    __inline_Formatter__write_str_0: {
+        let s: String = "Line { ";
+        f.buf.String::append(s);
+    };
+    __inline_Formatter__write_str_1: {
+        let s: String = "start: ";
+        f.buf.String::append(s);
+    };
+    self.start."Point^Inspect::inspect"(f);
+    __inline_Formatter__write_str_2: {
+        let s: String = ", ";
+        f.buf.String::append(s);
+    };
+    __inline_Formatter__write_str_3: {
+        let s: String = "end: ";
+        f.buf.String::append(s);
+    };
+    self.end."Point^Inspect::inspect"(f);
+    __inline_Formatter__write_str_4: {
+        let s: String = " }";
+        f.buf.String::append(s);
+    };
+}
+
 export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
+}
+
+pub fn "Option<Point>^Inspect::inspect"(self: Box<Option<Point>>, f: &mut Formatter) {
+    match self.value {
+        Some(v) => {
+            __inline_Formatter__write_str_0: {
+                let s: String = "Option::Some(";
+                f.buf.String::append(s);
+            };
+            v."Point^Inspect::inspect"(f);
+            __inline_Formatter__write_str_1: {
+                let s: String = ")";
+                f.buf.String::append(s);
+            };
+        },
+        None => __inline_Formatter__write_str_2: {
+            let s: String = "null";
+            f.buf.String::append(s);
+        },
+    };
+}
+
+pub fn "Array<Point>^Inspect::inspect"(self: &Array<Point>, f: &mut Formatter) {
+    __inline_Formatter__write_char_0: {
+        f.buf.String::append_char('[');
+    };
+    __for_5: {
+        let mut i: i32 = 0;
+        let _licm_used: i32 = self.used;
+        let _licm_buf: &mut String = f.buf;
+        loop {
+            if !(i < _licm_used) {
+                break __for_5;
+            }
+            __for_5_body: {
+                if (i > 0) {
+                    __inline_Formatter__write_str_2: {
+                        let s: String = ", ";
+                        _licm_buf.String::append(s);
+                    };
+                }
+                self."Array<Point>^IndexValue::index_value"(i)."Point^Inspect::inspect"(f);
+            }
+            i = (i + 1);
+        }
+    }
+    __inline_Formatter__write_char_3: {
+        f.buf.String::append_char(']');
+    };
+}
+
+fn "Array<Point>^IndexValue::index_value"(self: &Array<Point>, index: i32) -> Point {
+    if (index >= self.used) {
+        core::internal::panic("index out of bounds");
+    }
+    return core::builtin::array_get::<Point>(self.repr, index);
 }
 
 pub fn "Array<Point>::append"(self: &mut Array<Point>, value: Point) {
@@ -108,108 +224,5 @@ pub fn "Array<Point>::append"(self: &mut Array<Point>, value: Point) {
     }
     core::builtin::array_set::<Point>(self.repr, used, value);
     self.used = (used + 1);
-}
-
-fn "__inspect$Line"(__val: Line, __fmt: &mut Formatter) {
-    __inline_Formatter__write_str_0: {
-        let s: String = "Line { ";
-        __fmt.buf.String::append(s);
-    };
-    __inline_Formatter__write_str_1: {
-        let s: String = "start: ";
-        __fmt.buf.String::append(s);
-    };
-    "__inspect$Point"(__val.start, __fmt);
-    __inline_Formatter__write_str_2: {
-        let s: String = ", ";
-        __fmt.buf.String::append(s);
-    };
-    __inline_Formatter__write_str_3: {
-        let s: String = "end: ";
-        __fmt.buf.String::append(s);
-    };
-    "__inspect$Point"(__val.end, __fmt);
-    __inline_Formatter__write_str_4: {
-        let s: String = " }";
-        __fmt.buf.String::append(s);
-    };
-}
-
-fn "__inspect$Array<Point>"(__val: Array<Point>, __fmt: &mut Formatter) {
-    __inline_Formatter__write_char_0: {
-        __fmt.buf.String::append_char('[');
-    };
-    let __inspect_len: i32 = __val.used;
-    let mut __inspect_i: i32 = 0;
-    let _licm_buf: &mut String = __fmt.buf;
-    loop {
-        if !(__inspect_i < __inspect_len) {
-            break;
-        }
-        if (__inspect_i > 0) {
-            __inline_Formatter__write_str_1: {
-                let s: String = ", ";
-                _licm_buf.String::append(s);
-            };
-        };
-        "__inspect$Point"(__val[__inspect_i], __fmt);
-        __inspect_i = (__inspect_i + 1);
-    }
-    __inline_Formatter__write_char_2: {
-        __fmt.buf.String::append_char(']');
-    };
-}
-
-fn "__inspect$Option<Point>"(__val: Option<Point>, __fmt: &mut Formatter) {
-    if __variant_test(__val, case=0, name=Some) {
-        __inline_Formatter__write_str_0: {
-            let s: String = "Some(";
-            __fmt.buf.String::append(s);
-        };
-        "__inspect$Point"(__variant_payload(__val, case=0), __fmt);
-        __inline_Formatter__write_char_1: {
-            __fmt.buf.String::append_char(')');
-        };
-    } else {
-        __inline_Formatter__write_str_2: {
-            let s: String = "null";
-            __fmt.buf.String::append(s);
-        };
-    };
-}
-
-fn "__inspect$Point"(__val: Point, __fmt: &mut Formatter) {
-    __inline_Formatter__write_str_0: {
-        let s: String = "Point { ";
-        __fmt.buf.String::append(s);
-    };
-    __inline_Formatter__write_str_1: {
-        let s: String = "x: ";
-        __fmt.buf.String::append(s);
-    };
-    __inline___inspect_i32_2: {
-        let __val: i32 = __val.x;
-        __inline_i32_Display__fmt_3: {
-            "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
-        };
-    };
-    __inline_Formatter__write_str_4: {
-        let s: String = ", ";
-        __fmt.buf.String::append(s);
-    };
-    __inline_Formatter__write_str_5: {
-        let s: String = "y: ";
-        __fmt.buf.String::append(s);
-    };
-    __inline___inspect_i32_6: {
-        let __val: i32 = __val.y;
-        __inline_i32_Display__fmt_7: {
-            "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
-        };
-    };
-    __inline_Formatter__write_str_8: {
-        let s: String = " }";
-        __fmt.buf.String::append(s);
-    };
 }
 

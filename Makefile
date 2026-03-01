@@ -40,7 +40,7 @@ hello-run-wasmtime: hello
 
 .PHONY: test
 test:
-	cargo test
+	RUST_TEST_THREADS=12 cargo test
 
 .PHONY: test-wado
 test-wado:

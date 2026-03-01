@@ -113,13 +113,9 @@ fn __test_2_display_string() {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let __sroa_b_value: String = "hello";
+    let b: Box<String> = Box<String> { value: "hello" };
     __assert_2: {
-        let __v0: String = __tmpl: {
-            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
-            __r.String::append(__sroa_b_value);
-            break __tmpl: __r;
-        };
+        let __v0: String = b."Box<String>::display_value"();
         let __cond: bool = __v0."String^Eq::eq"(&"hello");
         if !__cond {
             core::internal::panic(__tmpl: {
@@ -129,11 +125,11 @@ fn __test_2_display_string() {
                 __r.String::append(" at ");
                 __r.String::append("wado-compiler/tests/fixtures/template-string-generic.wado");
                 __r.String::append(":");
-                let mut __f: Formatter = __inline_Formatter__new_4: {
+                let mut __f: Formatter = __inline_Formatter__new_2: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_5: {
+                __inline_i32_Display__fmt_3: {
                     let self: Box<i32> = Box<i32> { value: 40 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -390,11 +386,11 @@ fn "Box<bool>::inspect_value"(self: &Box<bool>) -> String {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline___inspect_bool_2: {
-            let __val: bool = self.value;
-            let __fmt: &mut Formatter = &mut __f;
+        __inline_bool_Inspect__inspect_2: {
+            let __sroa_self_value: bool = self.value;
+            let f: &mut Formatter = &mut __f;
             __inline_bool_Display__fmt_3: {
-                __fmt.Formatter::pad(if __val {
+                f.Formatter::pad(if __sroa_self_value {
                     "true";
                 } else {
                     "false";
@@ -429,23 +425,21 @@ fn "Box<String>::both"(self: &Box<String>) -> String {
     return __tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(49), used: 0 };
         __r.String::append("display=");
-        __r.String::append(self.value);
-        __r.String::append(" inspect=");
         let mut __f: Formatter = __inline_Formatter__new_1: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline___inspect_String_2: {
-            let __val: String = self.value;
-            let __fmt: &mut Formatter = &mut __f;
-            __inline_Formatter__write_char_3: {
-                __fmt.buf.String::append_char('"');
-            };
-            core::internal::write_escaped_string(__val, __fmt);
-            __inline_Formatter__write_char_4: {
-                __fmt.buf.String::append_char('"');
-            };
+        __inline_String_Display__fmt_2: {
+            let self: &String = &self.value;
+            let f: &mut Formatter = &mut __f;
+            f.Formatter::pad(*self);
         };
+        __r.String::append(" inspect=");
+        __f = __inline_Formatter__new_3: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        self.value."String^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     };
 }
@@ -468,11 +462,11 @@ fn "Box<i32>::both"(self: &Box<i32>) -> String {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline___inspect_i32_4: {
-            let __val: i32 = self.value;
-            let __fmt: &mut Formatter = &mut __f;
+        __inline_i32_Inspect__inspect_4: {
+            let __sroa_self_value: i32 = self.value;
+            let f: &mut Formatter = &mut __f;
             __inline_i32_Display__fmt_5: {
-                "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
+                "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
             };
         };
         break __tmpl: __r;
@@ -486,16 +480,22 @@ fn "Box<String>::inspect_value"(self: &Box<String>) -> String {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline___inspect_String_2: {
-            let __val: String = self.value;
-            let __fmt: &mut Formatter = &mut __f;
-            __inline_Formatter__write_char_3: {
-                __fmt.buf.String::append_char('"');
-            };
-            core::internal::write_escaped_string(__val, __fmt);
-            __inline_Formatter__write_char_4: {
-                __fmt.buf.String::append_char('"');
-            };
+        self.value."String^Inspect::inspect"(&mut __f);
+        break __tmpl: __r;
+    };
+}
+
+fn "Box<String>::display_value"(self: &Box<String>) -> String {
+    return __tmpl: {
+        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        __inline_String_Display__fmt_2: {
+            let self: &String = &self.value;
+            let f: &mut Formatter = &mut __f;
+            f.Formatter::pad(*self);
         };
         break __tmpl: __r;
     };
@@ -508,11 +508,11 @@ fn "Box<i32>::inspect_value"(self: &Box<i32>) -> String {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline___inspect_i32_2: {
-            let __val: i32 = self.value;
-            let __fmt: &mut Formatter = &mut __f;
+        __inline_i32_Inspect__inspect_2: {
+            let __sroa_self_value: i32 = self.value;
+            let f: &mut Formatter = &mut __f;
             __inline_i32_Display__fmt_3: {
-                "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
+                "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
             };
         };
         break __tmpl: __r;

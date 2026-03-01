@@ -35,20 +35,63 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Point"(p, &mut __f);
+        __inline_Point_Display__fmt_3: {
+            let self: &Point = &p;
+            let f: &mut Formatter = &mut __f;
+            self."Point^Inspect::inspect"(f);
+        };
         break __tmpl: __r;
     });
     let opt: Option<Point> = Option<Point>::Some(Point { x: 1, y: 2 });
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_4: {
+        let mut __f: Formatter = __inline_Formatter__new_5: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Option<Point>"(opt, &mut __f);
+        __inline_Option_Point__Display__fmt_6: {
+            let self: Box<Option<Point>> = Box<Option<Point>> { value: opt };
+            let f: &mut Formatter = &mut __f;
+            self."Option<Point>^Inspect::inspect"(f);
+        };
         break __tmpl: __r;
     });
     core::cli::println("ok");
+}
+
+pub fn "Point^Inspect::inspect"(self: &Point, f: &mut Formatter) {
+    __inline_Formatter__write_str_0: {
+        let s: String = "Point { ";
+        f.buf.String::append(s);
+    };
+    __inline_Formatter__write_str_1: {
+        let s: String = "x: ";
+        f.buf.String::append(s);
+    };
+    __inline_i32_Inspect__inspect_2: {
+        let __sroa_self_value: i32 = self.x;
+        __inline_i32_Display__fmt_3: {
+            "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+        };
+    };
+    __inline_Formatter__write_str_4: {
+        let s: String = ", ";
+        f.buf.String::append(s);
+    };
+    __inline_Formatter__write_str_5: {
+        let s: String = "y: ";
+        f.buf.String::append(s);
+    };
+    __inline_i32_Inspect__inspect_6: {
+        let __sroa_self_value: i32 = self.y;
+        __inline_i32_Display__fmt_7: {
+            "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+        };
+    };
+    __inline_Formatter__write_str_8: {
+        let s: String = " }";
+        f.buf.String::append(s);
+    };
 }
 
 export fn __cm_export__run() {
@@ -56,56 +99,23 @@ export fn __cm_export__run() {
     cm_raw_call task-return(0);
 }
 
-fn "__inspect$Point"(__val: Point, __fmt: &mut Formatter) {
-    __inline_Formatter__write_str_0: {
-        let s: String = "Point { ";
-        __fmt.buf.String::append(s);
-    };
-    __inline_Formatter__write_str_1: {
-        let s: String = "x: ";
-        __fmt.buf.String::append(s);
-    };
-    __inline___inspect_i32_2: {
-        let __val: i32 = __val.x;
-        __inline_i32_Display__fmt_3: {
-            "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
-        };
-    };
-    __inline_Formatter__write_str_4: {
-        let s: String = ", ";
-        __fmt.buf.String::append(s);
-    };
-    __inline_Formatter__write_str_5: {
-        let s: String = "y: ";
-        __fmt.buf.String::append(s);
-    };
-    __inline___inspect_i32_6: {
-        let __val: i32 = __val.y;
-        __inline_i32_Display__fmt_7: {
-            "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
-        };
-    };
-    __inline_Formatter__write_str_8: {
-        let s: String = " }";
-        __fmt.buf.String::append(s);
-    };
-}
-
-fn "__inspect$Option<Point>"(__val: Option<Point>, __fmt: &mut Formatter) {
-    if __variant_test(__val, case=0, name=Some) {
-        __inline_Formatter__write_str_0: {
-            let s: String = "Some(";
-            __fmt.buf.String::append(s);
-        };
-        "__inspect$Point"(__variant_payload(__val, case=0), __fmt);
-        __inline_Formatter__write_char_1: {
-            __fmt.buf.String::append_char(')');
-        };
-    } else {
-        __inline_Formatter__write_str_2: {
+pub fn "Option<Point>^Inspect::inspect"(self: Box<Option<Point>>, f: &mut Formatter) {
+    match self.value {
+        Some(v) => {
+            __inline_Formatter__write_str_0: {
+                let s: String = "Option::Some(";
+                f.buf.String::append(s);
+            };
+            v."Point^Inspect::inspect"(f);
+            __inline_Formatter__write_str_1: {
+                let s: String = ")";
+                f.buf.String::append(s);
+            };
+        },
+        None => __inline_Formatter__write_str_2: {
             let s: String = "null";
-            __fmt.buf.String::append(s);
-        };
+            f.buf.String::append(s);
+        },
     };
 }
 

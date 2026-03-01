@@ -7,7 +7,7 @@
 
 #![no_prelude]
 
-use {Display} from "core:prelude/traits.wado";
+use {Display, Inspect} from "core:prelude/traits.wado";
 /// Text alignment for padding.
 pub enum Alignment {
     /// Left-aligned: `{x:<5}` -> "42   "
@@ -236,5 +236,51 @@ impl Formatter {
 impl Display for String {
     pub fn fmt(&self, f: &mut Formatter) {
         f.pad(*self);
+    }
+}
+
+impl Inspect for String {
+    pub fn inspect(&self, f: &mut Formatter) {
+        f.write_char('"');
+        for let c of (*self).chars() {
+            if c == '"' {
+                f.write_char('\\');
+                f.write_char('"');
+            } else if c == '\\' {
+                f.write_char('\\');
+                f.write_char('\\');
+            } else if c == '\n' {
+                f.write_char('\\');
+                f.write_char('n');
+            } else if c == '\r' {
+                f.write_char('\\');
+                f.write_char('r');
+            } else if c == '\t' {
+                f.write_char('\\');
+                f.write_char('t');
+            } else {
+                f.write_char(c);
+            }
+        }
+        f.write_char('"');
+    }
+}
+
+impl<T: Inspect> Inspect for Array<T> {
+    pub fn inspect(&self, f: &mut Formatter) {
+        f.write_char('[');
+        for let mut i = 0; i < self.len(); i += 1 {
+            if i > 0 {
+                f.write_str(", ");
+            }
+            self[i].inspect(f);
+        }
+        f.write_char(']');
+    }
+}
+
+impl<T: Inspect> Display for Array<T> {
+    pub fn fmt(&self, f: &mut Formatter) {
+        self.inspect(f);
     }
 }

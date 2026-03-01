@@ -225,6 +225,12 @@ impl Display for u128 {
     }
 }
 
+impl Inspect for u128 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        self.fmt(f);
+    }
+}
+
 /// Helper: format a u128 in a power-of-2 base directly into the Formatter buffer.
 /// bits_per_digit: 1 (binary), 3 (octal), 4 (hex)
 fn fmt_u128_base(val: &u128, f: &mut Formatter, base: i32, upper: bool) {
@@ -756,6 +762,12 @@ impl i128 {
 impl Display for i128 {
     pub fn fmt(&self, f: &mut Formatter) {
         f.write_str(self.to_string());
+    }
+}
+
+impl Inspect for i128 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        self.fmt(f);
     }
 }
 

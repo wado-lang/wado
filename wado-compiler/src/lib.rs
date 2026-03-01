@@ -314,11 +314,6 @@ pub async fn compile_with_options<H: CompilerHost>(
         monomorphize_project(project)
     };
 
-    // Post-monomorphize synthesis: expand template strings and generate inspect
-    // functions. All types are concrete after monomorphization, so Display vs
-    // Inspect dispatch is resolved in a single pass without markers.
-    let project = synthesis::synthesize_post_monomorphize(project);
-
     // === Phase 9: Lower (Project -> Project) ===
     let project = {
         let _span = logger.span("lower");
@@ -526,9 +521,6 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             let _span = logger.span("monomorphize");
             monomorphize_project(project)
         };
-
-        // Post-monomorphize synthesis: expand template strings + inspect
-        let project = synthesis::synthesize_post_monomorphize(project);
 
         let mono_snapshot = Some(project.tir_modules.clone());
 

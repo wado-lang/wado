@@ -38,7 +38,9 @@ use crate::logger::{Bail, Logger};
 use crate::name::{self as name, MethodName, ModuleSource};
 use crate::project::Project;
 use crate::symbol::SymbolTable;
-use crate::tir::{TirEnum, TirEnumCase, TirFlags, TirFlagsMember, TirModule, TypeId, TypeTable};
+use crate::tir::{
+    TirEnum, TirEnumCase, TirFlags, TirFlagsMember, TirModule, TirNewtype, TypeId, TypeTable,
+};
 
 pub use types::TypeError;
 use types::{
@@ -478,6 +480,16 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             span: flags_decl.span,
                         };
                         tir_module.add_flags(tir_flags);
+                    }
+                }
+                Item::Type(newtype_decl) => {
+                    if let Some(&type_id) = self.newtypes.get(&newtype_decl.name) {
+                        tir_module.add_newtype(TirNewtype {
+                            name: newtype_decl.name.clone(),
+                            is_pub: newtype_decl.is_pub,
+                            type_id,
+                            span: newtype_decl.span,
+                        });
                     }
                 }
                 // Other items will be added as needed

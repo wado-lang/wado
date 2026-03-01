@@ -649,12 +649,21 @@ fn analyze_expr(
                 // Non-monomorphized method - determine target from receiver type
                 // First strip any reference wrappers and newtypes to get the base type
                 let mut current_type = type_table.get(receiver.type_id);
+                let mut newtype_info: Option<(String, ModuleSource)> = None;
                 loop {
                     match current_type {
                         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                             current_type = type_table.get(*inner);
                         }
-                        ResolvedType::Newtype { base_type, .. } => {
+                        ResolvedType::Newtype {
+                            name,
+                            module_source,
+                            base_type,
+                        } => {
+                            // Remember the outermost newtype for its own trait impls
+                            if newtype_info.is_none() {
+                                newtype_info = Some((name.clone(), module_source.clone()));
+                            }
                             current_type = type_table.get(*base_type);
                         }
                         _ => break,
@@ -668,6 +677,18 @@ fn analyze_expr(
                 } else {
                     (func_name.clone(), None)
                 };
+
+                // If the receiver was a newtype (e.g., flags type), also mark
+                // the newtype's own methods as reachable (e.g., Perms^Inspect::inspect).
+                if let Some((newtype_name, newtype_module)) = newtype_info {
+                    let method_id = FunctionId::Method(MethodName::new(
+                        newtype_module,
+                        newtype_name,
+                        trait_name.clone(),
+                        method_name.clone(),
+                    ));
+                    analysis.callees.insert(method_id);
+                }
 
                 match base_receiver_type {
                     ResolvedType::Struct {
@@ -829,6 +850,77 @@ fn analyze_expr(
                         analysis
                             .effect_calls
                             .insert((name.clone(), method_name.clone()));
+                    }
+                    ResolvedType::Variant {
+                        name,
+                        module_source,
+                        ..
+                    } => {
+                        // Variant method call (e.g., Shape^Inspect::inspect)
+                        let method_id = FunctionId::Method(MethodName::new(
+                            module_source.clone(),
+                            name.clone(),
+                            trait_name.clone(),
+                            method_name.clone(),
+                        ));
+                        analysis.callees.insert(method_id);
+                    }
+                    ResolvedType::Tuple(elems) => {
+                        // Tuple method call (e.g., Tuple<f64,f64>^Inspect::inspect)
+                        // Synthesized as non-monomorphized methods with struct_name "Tuple<f64,f64>"
+                        let type_arg_names: Vec<String> = elems
+                            .iter()
+                            .map(|t| type_table.mangle_type_name(*t))
+                            .collect();
+                        let mangled_struct = mangle_generic_name("Tuple", &type_arg_names);
+                        let method_id = FunctionId::Method(MethodName::new(
+                            current_module.clone(),
+                            mangled_struct,
+                            trait_name.clone(),
+                            method_name.clone(),
+                        ));
+                        analysis.callees.insert(method_id);
+                    }
+                    ResolvedType::Function {
+                        params,
+                        return_type,
+                        ..
+                    } => {
+                        // Function type method call (e.g., Fn<2,i32>^Inspect::inspect)
+                        let type_arg_names = vec![
+                            params.len().to_string(),
+                            type_table.mangle_type_name(return_type),
+                        ];
+                        let mangled_struct = mangle_generic_name("Fn", &type_arg_names);
+                        let method_id = FunctionId::Method(MethodName::new(
+                            current_module.clone(),
+                            mangled_struct,
+                            trait_name.clone(),
+                            method_name.clone(),
+                        ));
+                        analysis.callees.insert(method_id);
+                    }
+                    ResolvedType::Future(inner)
+                    | ResolvedType::FutureWritable(inner)
+                    | ResolvedType::Stream(inner)
+                    | ResolvedType::StreamWritable(inner) => {
+                        // Resource handle type method call (e.g., Future<T>^Inspect::inspect)
+                        let base = match base_receiver_type {
+                            ResolvedType::Future(_) => "Future",
+                            ResolvedType::FutureWritable(_) => "FutureWritable",
+                            ResolvedType::Stream(_) => "Stream",
+                            ResolvedType::StreamWritable(_) => "StreamWritable",
+                            _ => unreachable!(),
+                        };
+                        let type_arg_names = vec![type_table.mangle_type_name(inner)];
+                        let mangled_struct = mangle_generic_name(base, &type_arg_names);
+                        let method_id = FunctionId::Method(MethodName::new(
+                            current_module.clone(),
+                            mangled_struct,
+                            trait_name.clone(),
+                            method_name.clone(),
+                        ));
+                        analysis.callees.insert(method_id);
                     }
                     _ => {}
                 }

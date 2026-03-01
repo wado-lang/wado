@@ -449,6 +449,11 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
     }
 
+    /// Iterate over all types in the type table.
+    pub fn all_types(&self) -> impl Iterator<Item = (&TypeId, &ResolvedType)> {
+        self.types.iter()
+    }
+
     /// Try to get a type by ID, returning `None` if the type doesn't exist.
     /// Useful when types may have been removed by DCE.
     pub fn try_get(&self, id: TypeId) -> Option<&ResolvedType> {

@@ -30,7 +30,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Option<Option<String>>"(some_some, &mut __f);
+        Box<Option<Option<String>>> { value: some_some }."Option<Option<String>>^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     let some_none: Option<Option<String>> = Option<Option<String>>::Some(null);
@@ -40,7 +40,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Option<Option<String>>"(some_none, &mut __f);
+        Box<Option<Option<String>>> { value: some_none }."Option<Option<String>>^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     let none: Option<Option<String>> = null;
@@ -50,7 +50,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Option<Option<String>>"(none, &mut __f);
+        Box<Option<Option<String>>> { value: none }."Option<Option<String>>^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
 }
@@ -60,48 +60,43 @@ export fn __cm_export__run() {
     cm_raw_call task-return(0);
 }
 
-fn "__inspect$Option<Option<String>>"(__val: Option<Option<String>>, __fmt: &mut Formatter) {
-    if __variant_test(__val, case=0, name=Some) {
-        __inline_Formatter__write_str_0: {
-            let s: String = "Some(";
-            __fmt.buf.String::append(s);
-        };
-        "__inspect$Option<String>"(__variant_payload(__val, case=0), __fmt);
-        __inline_Formatter__write_char_1: {
-            __fmt.buf.String::append_char(')');
-        };
-    } else {
-        __inline_Formatter__write_str_2: {
+pub fn "Option<Option<String>>^Inspect::inspect"(self: Box<Option<Option<String>>>, f: &mut Formatter) {
+    match self.value {
+        Some(v) => {
+            __inline_Formatter__write_str_0: {
+                let s: String = "Option::Some(";
+                f.buf.String::append(s);
+            };
+            Box<Option<String>> { value: v }."Option<String>^Inspect::inspect"(f);
+            __inline_Formatter__write_str_1: {
+                let s: String = ")";
+                f.buf.String::append(s);
+            };
+        },
+        None => __inline_Formatter__write_str_2: {
             let s: String = "null";
-            __fmt.buf.String::append(s);
-        };
+            f.buf.String::append(s);
+        },
     };
 }
 
-fn "__inspect$Option<String>"(__val: Option<String>, __fmt: &mut Formatter) {
-    if __variant_test(__val, case=0, name=Some) {
-        __inline_Formatter__write_str_0: {
-            let s: String = "Some(";
-            __fmt.buf.String::append(s);
-        };
-        __inline___inspect_String_1: {
-            let __val: String = __variant_payload(__val, case=0);
-            __inline_Formatter__write_char_2: {
-                __fmt.buf.String::append_char('"');
+pub fn "Option<String>^Inspect::inspect"(self: Box<Option<String>>, f: &mut Formatter) {
+    match self.value {
+        Some(v) => {
+            __inline_Formatter__write_str_0: {
+                let s: String = "Option::Some(";
+                f.buf.String::append(s);
             };
-            core::internal::write_escaped_string(__val, __fmt);
-            __inline_Formatter__write_char_3: {
-                __fmt.buf.String::append_char('"');
+            v."String^Inspect::inspect"(f);
+            __inline_Formatter__write_str_1: {
+                let s: String = ")";
+                f.buf.String::append(s);
             };
-        };
-        __inline_Formatter__write_char_4: {
-            __fmt.buf.String::append_char(')');
-        };
-    } else {
-        __inline_Formatter__write_str_5: {
+        },
+        None => __inline_Formatter__write_str_2: {
             let s: String = "null";
-            __fmt.buf.String::append(s);
-        };
+            f.buf.String::append(s);
+        },
     };
 }
 

@@ -401,9 +401,13 @@ async fn run_bulk(opts: &DumpOptions, template: &str) {
     let start = std::time::Instant::now();
 
     // Limit concurrency to avoid exhausting memory with many large-stack threads.
+    // Each compilation uses ~16 MB stack + significant heap for the optimizer,
+    // so we cap at half the available CPUs (minimum 2) to stay within memory.
     let parallelism = std::thread::available_parallelism()
         .map(std::num::NonZero::get)
-        .unwrap_or(4);
+        .unwrap_or(4)
+        / 2;
+    let parallelism = parallelism.max(2);
     let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(parallelism));
 
     let mut skip_count_early = 0u32;

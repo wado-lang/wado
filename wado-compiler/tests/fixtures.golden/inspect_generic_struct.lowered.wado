@@ -39,7 +39,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Box<i32>"(b, &mut __f);
+        b."Box<i32>^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     let p: Pair<String> = Pair<String> { first: "hello", second: "world" };
@@ -49,7 +49,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Pair<String>"(p, &mut __f);
+        p."Pair<String>^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     core::cli::println("ok");
@@ -60,67 +60,49 @@ export fn __cm_export__run() {
     cm_raw_call task-return(0);
 }
 
-fn "__inspect$Box<i32>"(__val: Box<i32>, __fmt: &mut Formatter) {
+pub fn "Pair<String>^Inspect::inspect"(self: &Pair<String>, f: &mut Formatter) {
+    __inline_Formatter__write_str_0: {
+        let s: String = "Pair { ";
+        f.buf.String::append(s);
+    };
+    __inline_Formatter__write_str_1: {
+        let s: String = "first: ";
+        f.buf.String::append(s);
+    };
+    self.first."String^Inspect::inspect"(f);
+    __inline_Formatter__write_str_2: {
+        let s: String = ", ";
+        f.buf.String::append(s);
+    };
+    __inline_Formatter__write_str_3: {
+        let s: String = "second: ";
+        f.buf.String::append(s);
+    };
+    self.second."String^Inspect::inspect"(f);
+    __inline_Formatter__write_str_4: {
+        let s: String = " }";
+        f.buf.String::append(s);
+    };
+}
+
+pub fn "Box<i32>^Inspect::inspect"(self: &Box<i32>, f: &mut Formatter) {
     __inline_Formatter__write_str_0: {
         let s: String = "Box { ";
-        __fmt.buf.String::append(s);
+        f.buf.String::append(s);
     };
     __inline_Formatter__write_str_1: {
         let s: String = "value: ";
-        __fmt.buf.String::append(s);
+        f.buf.String::append(s);
     };
-    __inline___inspect_i32_2: {
-        let __val: i32 = __val.value;
+    __inline_i32_Inspect__inspect_2: {
+        let __sroa_self_value: i32 = self.value;
         __inline_i32_Display__fmt_3: {
-            "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
         };
     };
     __inline_Formatter__write_str_4: {
         let s: String = " }";
-        __fmt.buf.String::append(s);
-    };
-}
-
-fn "__inspect$Pair<String>"(__val: Pair<String>, __fmt: &mut Formatter) {
-    __inline_Formatter__write_str_0: {
-        let s: String = "Pair { ";
-        __fmt.buf.String::append(s);
-    };
-    __inline_Formatter__write_str_1: {
-        let s: String = "first: ";
-        __fmt.buf.String::append(s);
-    };
-    __inline___inspect_String_2: {
-        let __val: String = __val.first;
-        __inline_Formatter__write_char_3: {
-            __fmt.buf.String::append_char('"');
-        };
-        core::internal::write_escaped_string(__val, __fmt);
-        __inline_Formatter__write_char_4: {
-            __fmt.buf.String::append_char('"');
-        };
-    };
-    __inline_Formatter__write_str_5: {
-        let s: String = ", ";
-        __fmt.buf.String::append(s);
-    };
-    __inline_Formatter__write_str_6: {
-        let s: String = "second: ";
-        __fmt.buf.String::append(s);
-    };
-    __inline___inspect_String_7: {
-        let __val: String = __val.second;
-        __inline_Formatter__write_char_8: {
-            __fmt.buf.String::append_char('"');
-        };
-        core::internal::write_escaped_string(__val, __fmt);
-        __inline_Formatter__write_char_9: {
-            __fmt.buf.String::append_char('"');
-        };
-    };
-    __inline_Formatter__write_str_10: {
-        let s: String = " }";
-        __fmt.buf.String::append(s);
+        f.buf.String::append(s);
     };
 }
 

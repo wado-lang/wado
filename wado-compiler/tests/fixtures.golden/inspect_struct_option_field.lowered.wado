@@ -34,7 +34,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Wrapper"(w1, &mut __f);
+        w1."Wrapper^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
     let w2: Wrapper = Wrapper { value: null };
@@ -44,9 +44,25 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Wrapper"(w2, &mut __f);
+        w2."Wrapper^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
+}
+
+pub fn "Wrapper^Inspect::inspect"(self: &Wrapper, f: &mut Formatter) {
+    __inline_Formatter__write_str_0: {
+        let s: String = "Wrapper { ";
+        f.buf.String::append(s);
+    };
+    __inline_Formatter__write_str_1: {
+        let s: String = "value: ";
+        f.buf.String::append(s);
+    };
+    Box<Option<i32>> { value: self.value }."Option<i32>^Inspect::inspect"(f);
+    __inline_Formatter__write_str_2: {
+        let s: String = " }";
+        f.buf.String::append(s);
+    };
 }
 
 export fn __cm_export__run() {
@@ -54,42 +70,27 @@ export fn __cm_export__run() {
     cm_raw_call task-return(0);
 }
 
-fn "__inspect$Wrapper"(__val: Wrapper, __fmt: &mut Formatter) {
-    __inline_Formatter__write_str_0: {
-        let s: String = "Wrapper { ";
-        __fmt.buf.String::append(s);
-    };
-    __inline_Formatter__write_str_1: {
-        let s: String = "value: ";
-        __fmt.buf.String::append(s);
-    };
-    "__inspect$Option<i32>"(__val.value, __fmt);
-    __inline_Formatter__write_str_2: {
-        let s: String = " }";
-        __fmt.buf.String::append(s);
-    };
-}
-
-fn "__inspect$Option<i32>"(__val: Option<i32>, __fmt: &mut Formatter) {
-    if __variant_test(__val, case=0, name=Some) {
-        __inline_Formatter__write_str_0: {
-            let s: String = "Some(";
-            __fmt.buf.String::append(s);
-        };
-        __inline___inspect_i32_1: {
-            let __val: i32 = __variant_payload(__val, case=0);
-            __inline_i32_Display__fmt_2: {
-                "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
+pub fn "Option<i32>^Inspect::inspect"(self: Box<Option<i32>>, f: &mut Formatter) {
+    match self.value {
+        Some(v) => {
+            __inline_Formatter__write_str_0: {
+                let s: String = "Option::Some(";
+                f.buf.String::append(s);
             };
-        };
-        __inline_Formatter__write_char_3: {
-            __fmt.buf.String::append_char(')');
-        };
-    } else {
-        __inline_Formatter__write_str_4: {
+            __inline_i32_Inspect__inspect_1: {
+                __inline_i32_Display__fmt_2: {
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(v, f);
+                };
+            };
+            __inline_Formatter__write_str_3: {
+                let s: String = ")";
+                f.buf.String::append(s);
+            };
+        },
+        None => __inline_Formatter__write_str_4: {
             let s: String = "null";
-            __fmt.buf.String::append(s);
-        };
+            f.buf.String::append(s);
+        },
     };
 }
 

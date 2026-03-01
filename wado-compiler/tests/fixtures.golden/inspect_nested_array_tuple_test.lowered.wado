@@ -43,14 +43,72 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        "__inspect$Array<[i32, String]>"(arr, &mut __f);
+        arr."Array<Tuple<i32,String>>^Inspect::inspect"(&mut __f);
         break __tmpl: __r;
     });
+}
+
+pub fn "Tuple<i32,String>^Inspect::inspect"(self: &[i32, String], f: &mut Formatter) {
+    __inline_Formatter__write_str_0: {
+        let s: String = "[";
+        f.buf.String::append(s);
+    };
+    __inline_i32_Inspect__inspect_1: {
+        let __sroa_self_value: i32 = *self.0;
+        __inline_i32_Display__fmt_2: {
+            "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
+        };
+    };
+    __inline_Formatter__write_str_3: {
+        let s: String = ", ";
+        f.buf.String::append(s);
+    };
+    *self.1."String^Inspect::inspect"(f);
+    __inline_Formatter__write_str_4: {
+        let s: String = "]";
+        f.buf.String::append(s);
+    };
 }
 
 export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
+}
+
+pub fn "Array<Tuple<i32,String>>^Inspect::inspect"(self: &Array<[i32, String]>, f: &mut Formatter) {
+    __inline_Formatter__write_char_0: {
+        f.buf.String::append_char('[');
+    };
+    __for_5: {
+        let mut i: i32 = 0;
+        let _licm_used: i32 = self.used;
+        let _licm_buf: &mut String = f.buf;
+        loop {
+            if !(i < _licm_used) {
+                break __for_5;
+            }
+            __for_5_body: {
+                if (i > 0) {
+                    __inline_Formatter__write_str_2: {
+                        let s: String = ", ";
+                        _licm_buf.String::append(s);
+                    };
+                }
+                self."Array<Tuple<i32,String>>^IndexValue::index_value"(i)."Tuple<i32,String>^Inspect::inspect"(f);
+            }
+            i = (i + 1);
+        }
+    }
+    __inline_Formatter__write_char_3: {
+        f.buf.String::append_char(']');
+    };
+}
+
+fn "Array<Tuple<i32,String>>^IndexValue::index_value"(self: &Array<[i32, String]>, index: i32) -> [i32, String] {
+    if (index >= self.used) {
+        core::internal::panic("index out of bounds");
+    }
+    return core::builtin::array_get::<[i32, String]>(self.repr, index);
 }
 
 pub fn "Array<Tuple<i32,String>>::append"(self: &mut Array<[i32, String]>, value: [i32, String]) {
@@ -67,59 +125,5 @@ pub fn "Array<Tuple<i32,String>>::append"(self: &mut Array<[i32, String]>, value
     }
     core::builtin::array_set::<[i32, String]>(self.repr, used, value);
     self.used = (used + 1);
-}
-
-fn "__inspect$Array<[i32, String]>"(__val: Array<[i32, String]>, __fmt: &mut Formatter) {
-    __inline_Formatter__write_char_0: {
-        __fmt.buf.String::append_char('[');
-    };
-    let __inspect_len: i32 = __val.used;
-    let mut __inspect_i: i32 = 0;
-    let _licm_buf: &mut String = __fmt.buf;
-    loop {
-        if !(__inspect_i < __inspect_len) {
-            break;
-        }
-        if (__inspect_i > 0) {
-            __inline_Formatter__write_str_1: {
-                let s: String = ", ";
-                _licm_buf.String::append(s);
-            };
-        };
-        "__inspect$[i32, String]"(__val[__inspect_i], __fmt);
-        __inspect_i = (__inspect_i + 1);
-    }
-    __inline_Formatter__write_char_2: {
-        __fmt.buf.String::append_char(']');
-    };
-}
-
-fn "__inspect$[i32, String]"(__val: [i32, String], __fmt: &mut Formatter) {
-    __inline_Formatter__write_char_0: {
-        __fmt.buf.String::append_char('[');
-    };
-    __inline___inspect_i32_1: {
-        let __val: i32 = __val.0;
-        __inline_i32_Display__fmt_2: {
-            "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
-        };
-    };
-    __inline_Formatter__write_str_3: {
-        let s: String = ", ";
-        __fmt.buf.String::append(s);
-    };
-    __inline___inspect_String_4: {
-        let __val: String = __val.1;
-        __inline_Formatter__write_char_5: {
-            __fmt.buf.String::append_char('"');
-        };
-        core::internal::write_escaped_string(__val, __fmt);
-        __inline_Formatter__write_char_6: {
-            __fmt.buf.String::append_char('"');
-        };
-    };
-    __inline_Formatter__write_char_7: {
-        __fmt.buf.String::append_char(']');
-    };
 }
 

@@ -243,6 +243,10 @@ impl Display for u128 {
     pub fn fmt(&self, f: &mut Formatter);
 }
 
+impl Inspect for u128 {
+    pub fn inspect(&self, f: &mut Formatter);
+}
+
 impl Binary for u128 {
     pub fn fmt(&self, f: &mut Formatter);
 }
@@ -337,6 +341,10 @@ impl i128 {
 
 impl Display for i128 {
     pub fn fmt(&self, f: &mut Formatter);
+}
+
+impl Inspect for i128 {
+    pub fn inspect(&self, f: &mut Formatter);
 }
 
 impl Binary for i128 {

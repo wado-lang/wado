@@ -171,6 +171,18 @@ pub trait Display {
     fn fmt(&self, f: &mut Formatter);
 }
 
+/// Trait for debug/inspect formatting.
+/// Types implementing this trait can be formatted with `{x:?}` in template strings.
+/// Unlike Display, Inspect always shows the "raw" debug representation:
+/// - Strings are quoted: `"hello"`
+/// - Chars are quoted: `'A'`
+/// - Structs show field names: `Point { x: 10, y: 20 }`
+/// - Enums/Variants show type-qualified names: `Color::Red`
+pub trait Inspect {
+    /// Formats the value as a debug representation and writes to the given formatter.
+    fn inspect(&self, f: &mut Formatter);
+}
+
 /// Trait for formatting values as binary integers.
 /// Used with the `{x:b}` format specifier.
 pub trait Binary {
