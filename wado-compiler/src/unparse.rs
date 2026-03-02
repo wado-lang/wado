@@ -17,6 +17,8 @@ use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::token::Span;
 use indexmap::IndexSet;
 
+const MAX_LINE_WIDTH: usize = 120;
+
 fn effective_start_line(attrs: &[Attribute], span_line: usize) -> usize {
     attrs
         .first()
@@ -134,21 +136,39 @@ impl<'a> Unparser<'a> {
 
         if is_wildcard {
             self.output.push_str("use _ from \"");
+            self.output.push_str(&u.source);
+            self.output.push('"');
         } else {
+            // Try single-line first
+            let snap = self.snapshot();
             self.output.push_str("use { ");
-
             for (i, item) in u.items.iter().enumerate() {
                 if i > 0 {
                     self.output.push_str(", ");
                 }
                 self.unparse_use_item(item);
             }
-
             self.output.push_str(" } from \"");
-        }
+            self.output.push_str(&u.source);
+            self.output.push('"');
 
-        self.output.push_str(&u.source);
-        self.output.push('"');
+            if self.exceeds_width_since(snap) {
+                // Rollback and format multi-line
+                self.rollback(snap);
+                self.output.push_str("use {\n");
+                self.indent_level += 1;
+                for item in &u.items {
+                    self.write_indent();
+                    self.unparse_use_item(item);
+                    self.output.push_str(",\n");
+                }
+                self.indent_level -= 1;
+                self.write_indent();
+                self.output.push_str("} from \"");
+                self.output.push_str(&u.source);
+                self.output.push('"');
+            }
+        }
 
         if let Some(attrs) = &u.attributes {
             self.unparse_import_attributes(attrs);
@@ -1464,6 +1484,13 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_tuple_literal(&mut self, tuple_lit: &TupleLiteralExpr) {
+        if tuple_lit.elements.is_empty() {
+            self.output.push_str("[]");
+            return;
+        }
+
+        // Try single-line first
+        let snap = self.snapshot();
         self.output.push('[');
         for (i, elem) in tuple_lit.elements.iter().enumerate() {
             if i > 0 {
@@ -1472,6 +1499,32 @@ impl<'a> Unparser<'a> {
             self.unparse_expr(elem);
         }
         self.output.push(']');
+
+        if !self.exceeds_width_since(snap) {
+            return;
+        }
+
+        // Rollback and format fill-style: pack elements onto lines up to MAX_LINE_WIDTH
+        self.rollback(snap);
+        self.output.push('[');
+        self.indent_level += 1;
+        for (i, elem) in tuple_lit.elements.iter().enumerate() {
+            let elem_snap = self.snapshot();
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            self.unparse_expr(elem);
+            // Check if this element pushed past the width limit
+            if self.exceeds_width_since(elem_snap) && i > 0 {
+                // Rollback and start a new line
+                self.rollback(elem_snap);
+                self.output.push_str(",\n");
+                self.write_indent();
+                self.unparse_expr(elem);
+            }
+        }
+        self.output.push(']');
+        self.indent_level -= 1;
     }
 
     fn unparse_literal(&mut self, lit: &Literal) {
@@ -1539,7 +1592,7 @@ impl<'a> Unparser<'a> {
 
         let needs_parens = matches!(
             &u.expr,
-            Expr::Binary(_) | Expr::Assign(_) | Expr::CompoundAssign(_)
+            Expr::Binary(_) | Expr::Assign(_) | Expr::CompoundAssign(_) | Expr::ComparisonChain(_)
         );
         if needs_parens {
             self.output.push('(');
@@ -1659,7 +1712,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_call_args(&mut self, args: &[Expr], has_trailing_comma: bool) {
         if has_trailing_comma && !args.is_empty() {
-            // Multiline format with trailing comma
+            // Multiline format with trailing comma (explicitly requested)
             self.output.push_str("(\n");
             self.indent_level += 1;
             for arg in args {
@@ -1671,7 +1724,8 @@ impl<'a> Unparser<'a> {
             self.write_indent();
             self.output.push(')');
         } else {
-            // Single-line format
+            // Try single-line first
+            let snap = self.snapshot();
             self.output.push('(');
             for (i, arg) in args.iter().enumerate() {
                 if i > 0 {
@@ -1680,6 +1734,21 @@ impl<'a> Unparser<'a> {
                 self.unparse_expr(arg);
             }
             self.output.push(')');
+
+            if args.len() > 1 && self.exceeds_width_since(snap) {
+                // Rollback and format multi-line
+                self.rollback(snap);
+                self.output.push_str("(\n");
+                self.indent_level += 1;
+                for arg in args {
+                    self.write_indent();
+                    self.unparse_expr(arg);
+                    self.output.push_str(",\n");
+                }
+                self.indent_level -= 1;
+                self.write_indent();
+                self.output.push(')');
+            }
         }
     }
 
@@ -1991,7 +2060,7 @@ impl<'a> Unparser<'a> {
         }
 
         if s.has_trailing_comma && !s.fields.is_empty() {
-            // Multiline format with trailing comma
+            // Multiline format with trailing comma (explicitly requested)
             self.output.push_str("{\n");
             self.indent_level += 1;
             for field in &s.fields {
@@ -2006,8 +2075,11 @@ impl<'a> Unparser<'a> {
             self.indent_level -= 1;
             self.write_indent();
             self.output.push('}');
+        } else if s.fields.is_empty() {
+            self.output.push_str("{}");
         } else {
-            // Single-line format without trailing comma
+            // Try single-line first
+            let snap = self.snapshot();
             self.output.push_str("{ ");
             for (i, field) in s.fields.iter().enumerate() {
                 if i > 0 {
@@ -2020,6 +2092,25 @@ impl<'a> Unparser<'a> {
                 }
             }
             self.output.push_str(" }");
+
+            if s.fields.len() > 1 && self.exceeds_width_since(snap) {
+                // Rollback and format multi-line
+                self.rollback(snap);
+                self.output.push_str("{\n");
+                self.indent_level += 1;
+                for field in &s.fields {
+                    self.write_indent();
+                    self.output.push_str(&field.name);
+                    if !field.is_shorthand {
+                        self.output.push_str(": ");
+                        self.unparse_expr(&field.value);
+                    }
+                    self.output.push_str(",\n");
+                }
+                self.indent_level -= 1;
+                self.write_indent();
+                self.output.push('}');
+            }
         }
     }
 
@@ -2029,6 +2120,32 @@ impl<'a> Unparser<'a> {
         for _ in 0..self.indent_level {
             self.output.push_str("    ");
         }
+    }
+
+    /// Save current output position for snapshot/rollback.
+    fn snapshot(&self) -> usize {
+        self.output.len()
+    }
+
+    /// Rollback output to a saved snapshot.
+    fn rollback(&mut self, snapshot: usize) {
+        self.output.truncate(snapshot);
+    }
+
+    /// Check if any line since snapshot exceeds `MAX_LINE_WIDTH`.
+    fn exceeds_width_since(&self, snapshot: usize) -> bool {
+        let added = &self.output[snapshot..];
+        added.split('\n').any(|line| {
+            if line.as_ptr() == added.as_ptr() {
+                // First chunk: column = position before snapshot + this chunk
+                self.output[..snapshot]
+                    .rfind('\n')
+                    .map_or(snapshot + line.len(), |nl| snapshot - nl - 1 + line.len())
+                    > MAX_LINE_WIDTH
+            } else {
+                line.len() > MAX_LINE_WIDTH
+            }
+        })
     }
 
     fn emit_leading_comments(&mut self, span: &Span) {

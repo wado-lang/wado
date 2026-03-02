@@ -2724,10 +2724,10 @@ impl Parser {
 
         // Handle empty tuple: []
         if self.check(&TokenKind::RBracket) {
-            self.advance();
+            let end_span = self.advance().span;
             return Ok(Expr::TupleLiteral(Box::new(TupleLiteralExpr {
                 elements,
-                span: start_span,
+                span: start_span.merge(&end_span),
             })));
         }
 
@@ -2744,11 +2744,12 @@ impl Parser {
             elements.push(self.parse_expr()?);
         }
 
-        self.expect(&TokenKind::RBracket)?;
+        let end_token = self.expect(&TokenKind::RBracket)?;
+        let end_span = end_token.span;
 
         Ok(Expr::TupleLiteral(Box::new(TupleLiteralExpr {
             elements,
-            span: start_span,
+            span: start_span.merge(&end_span),
         })))
     }
 
