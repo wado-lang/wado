@@ -1,4 +1,4 @@
-// トップレベルアイテム間に3行以上の空行（2行に削減される）
+// More than 2 blank lines between top-level items (reduced to 2)
 fn first() {
 }
 
@@ -10,10 +10,10 @@ fn second() {
 fn third() {
 }
 
-// use {} に内側スペースなし、コンマの後にスペースなし
+// use {} with no inner spaces and no space after commas
 use { println, eprintln, print, eprint } from "core:cli";
 
-// 構造体フィールドにインライン /* */ コメント
+// Inline /* */ comments on struct fields
 struct Point {
     x: i32,  /* horizontal */
     /* vertical component */
@@ -21,7 +21,7 @@ struct Point {
     z: i32,  /* depth */
 }
 
-// struct の前に /* */ ブロックコメント
+// Block comment /* */ before struct
 /* This is the Color enum */
 enum Color {
     Red,  /* primary */
@@ -32,7 +32,7 @@ enum Color {
     Alpha,
 }
 
-// variant に /* */ ブロックコメント
+// Block comments /* */ in variant
 /* Represents a geometric shape */
 variant Shape {
     /* a circle with radius */
@@ -43,7 +43,7 @@ variant Shape {
     Dot,
 }
 
-// flags に /* */ ブロックコメント
+// Block comments /* */ in flags
 flags Access {
     Read,  /* can read */
     /* can write */
@@ -51,7 +51,7 @@ flags Access {
     Execute,  /* can execute */
 }
 
-// implメソッド間に空行なし（1行に補正される）
+// No blank lines between impl methods (corrected to 1)
 struct Counter {
     n: i32,
 }
@@ -74,7 +74,7 @@ impl Counter {
     }
 }
 
-// 関数内に3行以上の空行（2行に削減）
+// More than 2 blank lines inside a function (reduced to 2)
 fn with_many_blank_lines() {
     let a = 1;
 
@@ -86,7 +86,7 @@ fn with_many_blank_lines() {
     /* a trailing block comment inside function */
 }
 
-// ブロックコメントが制御構造の前後に
+// Block comments before and after control flow
 fn control_flow(x: i32) -> i32 {
     /* check if positive */
     if x > 0 {
@@ -102,7 +102,7 @@ fn control_flow(x: i32) -> i32 {
     return 0;
 }
 
-// ループ内のブロックコメント
+// Block comments inside a loop
 fn loop_example() {
     let mut i = 0;
     /* start of loop */
@@ -114,7 +114,7 @@ fn loop_example() {
     /* after loop */
 }
 
-// ネストしたブロックコメント
+// Nested block comments
 fn nested_blocks() {
     /* outer */
     for let j = 0; j < 5; j += 1 {
@@ -125,7 +125,7 @@ fn nested_blocks() {
     /* all done */
 }
 
-// self: &Self の正規化
+// Normalization of self: &Self
 struct Wrapper {
     val: i32,
 }
@@ -144,7 +144,7 @@ impl Wrapper {
     }
 }
 
-// impl ブロックコメント（メソッドの前後）
+// Block comments in impl (before and after methods)
 struct Logger {
     prefix: String,
 }
@@ -164,7 +164,7 @@ impl Logger {
     }
 }
 
-// implの前に /* */ コメント
+// Block comment /* */ before impl
 /* inherent impl with trait bound */
 impl Array<T: Ord> {
     /* sort in ascending order */
@@ -172,7 +172,7 @@ impl Array<T: Ord> {
     }
 }
 
-// trait のメソッドに /* */ コメント
+// Block comments /* */ on trait methods
 trait Printable {
     /* print to stdout */
     fn print(&self);
@@ -180,7 +180,7 @@ trait Printable {
     fn println(&self);
 }
 
-// effect の async メソッド
+// async methods in effect
 effect FileIO {
     /* read bytes */
     async fn read(path: String) -> Array<u8>;
@@ -188,14 +188,14 @@ effect FileIO {
     fn write(path: String, data: Array<u8>);
 }
 
-// 関数本体の冒頭に /* */ コメント複数
+// Multiple /* */ comments at the start of a function body
 fn add(a: i32, b: i32) -> i32 {
     /* first number */
     /* second number */
     return a + b;
 }
 
-// クロージャのあとに空行が多すぎる
+// Too many blank lines after closures
 fn with_closures() {
     let inc = |x: i32| x + 1;
 
