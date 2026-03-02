@@ -208,7 +208,7 @@ fn licm_loop(
             // Create let statement for the hoisted value
             let hoist_stmt = TirStmt::new(
                 TirStmtKind::Let {
-                    name: format!("_licm_{}", candidate.field_name),
+                    name: format!("_licm_{}_{}", candidate.field_name, candidate.new_local_index),
                     local_index: candidate.new_local_index,
                     is_mut: false,
                     is_reactive: false,
@@ -1490,7 +1490,7 @@ fn replace_hoisted_in_expr(
                 // Replace with a reference to the hoisted local
                 expr.kind = TirExprKind::Local {
                     index: candidate.new_local_index,
-                    name: format!("_licm_{}", candidate.field_name),
+                    name: format!("_licm_{}_{}", candidate.field_name, candidate.new_local_index),
                 };
                 return;
             }
@@ -1504,7 +1504,7 @@ fn replace_hoisted_in_expr(
                     // Replace with a reference to the hoisted local
                     expr.kind = TirExprKind::Local {
                         index: candidate.new_local_index,
-                        name: format!("_licm_{}", candidate.field_name),
+                        name: format!("_licm_{}_{}", candidate.field_name, candidate.new_local_index),
                     };
                     return;
                 }
