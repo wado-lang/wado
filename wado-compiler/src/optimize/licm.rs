@@ -262,10 +262,10 @@ fn mark_gc_local_as_fully_modified(
     modified: &mut ModifiedVars,
     type_table: &TypeTable,
 ) {
-    if let TirExprKind::Local { index, .. } = &expr.kind {
-        if is_gc_heap_type(expr.type_id, type_table) {
-            modified.insert_full(*index);
-        }
+    if let TirExprKind::Local { index, .. } = &expr.kind
+        && is_gc_heap_type(expr.type_id, type_table)
+    {
+        modified.insert_full(*index);
     }
 }
 
@@ -273,7 +273,9 @@ fn mark_gc_local_as_fully_modified(
 fn is_gc_heap_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
         ResolvedType::Struct { .. } => true,
-        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => is_gc_heap_type(*inner, type_table),
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+            is_gc_heap_type(*inner, type_table)
+        }
         _ => false,
     }
 }

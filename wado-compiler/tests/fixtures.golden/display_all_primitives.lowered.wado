@@ -493,7 +493,14 @@ export fn run() with Stdout {
     }
     let __v0: String = __inline_char__to_string_73: {
         let mut buf: String = String { repr: "core::prelude/string.wado::array_new<u8>"(4), used: 0 };
-        buf.String::append_char('Z');
+        {
+            let self: &mut String = &mut buf;
+            if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
+                self.String::grow((self.used + 1));
+            }
+            core::builtin::array_set_u8(self.repr, self.used, 90);
+            self.used = (self.used + 1);
+        };
         break __inline_char__to_string_73: buf;
     };
     let __cond: bool = __v0."String^Eq::eq"(&"Z");
@@ -505,9 +512,9 @@ export fn run() with Stdout {
             __r.String::append(" at ");
             __r.String::append("wado-compiler/tests/fixtures/display_all_primitives.wado");
             __r.String::append(":");
-            let mut __f: Formatter = __inline_Formatter__new_76: {
+            let mut __f: Formatter = __inline_Formatter__new_77: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_76: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_77: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
             {
                 let self: Box<i32> = Box<i32> { value: 52 };

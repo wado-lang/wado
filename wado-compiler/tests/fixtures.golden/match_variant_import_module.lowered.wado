@@ -38,7 +38,19 @@ pub fn apply_padding(s: String, spec: FormatSpec) -> String {
                     if !(i < pad_len) {
                         break __for_0;
                     }
-                    result.String::append_char(fill);
+                    {
+                        let self: &mut String = &mut result;
+                        let code: u32 = fill as u32;
+                        if (code < 0x80) {
+                            if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
+                                self.String::grow((self.used + 1));
+                            }
+                            core::builtin::array_set_u8(self.repr, self.used, code as u8);
+                            self.used = (self.used + 1);
+                        } else {
+                            self.String::append_unicode_scalar(code);
+                        }
+                    };
                     i = (i + 1);
                 }
             }
@@ -53,7 +65,19 @@ pub fn apply_padding(s: String, spec: FormatSpec) -> String {
                     if !(i < left_pad) {
                         break __for_0;
                     }
-                    result.String::append_char(fill);
+                    {
+                        let self: &mut String = &mut result;
+                        let code: u32 = fill as u32;
+                        if (code < 0x80) {
+                            if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
+                                self.String::grow((self.used + 1));
+                            }
+                            core::builtin::array_set_u8(self.repr, self.used, code as u8);
+                            self.used = (self.used + 1);
+                        } else {
+                            self.String::append_unicode_scalar(code);
+                        }
+                    };
                     i = (i + 1);
                 }
             }
@@ -64,7 +88,19 @@ pub fn apply_padding(s: String, spec: FormatSpec) -> String {
                     if !(i < right_pad) {
                         break __for_1;
                     }
-                    result.String::append_char(fill);
+                    {
+                        let self: &mut String = &mut result;
+                        let code: u32 = fill as u32;
+                        if (code < 0x80) {
+                            if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
+                                self.String::grow((self.used + 1));
+                            }
+                            core::builtin::array_set_u8(self.repr, self.used, code as u8);
+                            self.used = (self.used + 1);
+                        } else {
+                            self.String::append_unicode_scalar(code);
+                        }
+                    };
                     i = (i + 1);
                 }
             }
@@ -77,7 +113,19 @@ pub fn apply_padding(s: String, spec: FormatSpec) -> String {
                     if !(i < pad_len) {
                         break __for_0;
                     }
-                    result.String::append_char(fill);
+                    {
+                        let self: &mut String = &mut result;
+                        let code: u32 = fill as u32;
+                        if (code < 0x80) {
+                            if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
+                                self.String::grow((self.used + 1));
+                            }
+                            core::builtin::array_set_u8(self.repr, self.used, code as u8);
+                            self.used = (self.used + 1);
+                        } else {
+                            self.String::append_unicode_scalar(code);
+                        }
+                    };
                     i = (i + 1);
                 }
             }
