@@ -276,6 +276,8 @@ make update-wado-vscode-grammar
 
 which depends on `wado-compiler/src/syntax.rs`. If syntax is updated, keep it up-to-date.
 
+Similarly, if syntax is updated, update the formatter fixtures in `wado-compiler/tests/format.fixtures/` (e.g. `all.dirty.wado`, `all.clean.wado`, `mess.dirty.wado`, `mess.clean.wado`).
+
 See also `wado-vscode/README.md` for more details.
 
 ## Bundled Library
