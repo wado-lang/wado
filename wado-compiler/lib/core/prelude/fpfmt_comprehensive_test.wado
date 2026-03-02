@@ -49,11 +49,7 @@ fn format_exp_padded(d: u64, p: i32, nd: i32) -> String {
         buf.append_char('+');
     }
 
-    let abs_exp = if exp < 0 {
-        -exp;
-    } else {
-        exp;
-    };
+    let abs_exp = if exp < 0 { -exp } else { exp };
     if abs_exp < 10 {
         buf.append_char('0');
         buf.append_char(char::from_u32_unchecked('0' as u32 + abs_exp as u32));
@@ -86,11 +82,7 @@ fn f64_to_string_exp(f: f64, upper: bool) -> String {
         }
         return "NaN";
     }
-    let abs_f = if is_neg {
-        -f;
-    } else {
-        f;
-    };
+    let abs_f = if is_neg { -f } else { f };
     let result = short(abs_f);
     let d = result.digits;
     let p = result.exponent;

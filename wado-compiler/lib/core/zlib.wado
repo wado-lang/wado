@@ -597,17 +597,9 @@ impl InflateState {
     fn new(raw: bool) -> InflateState {
         let wbits = 15;
         return InflateState {
-            mode: if raw {
-                INF_TYPEDO;
-            } else {
-                INF_HEAD;
-            },
+            mode: if raw { INF_TYPEDO } else { INF_HEAD },
             last_block: false,
-            wrap: if raw {
-                0;
-            } else {
-                1;
-            },
+            wrap: if raw { 0 } else { 1 },
             wbits,
             wsize: 0,
             whave: 0,
@@ -1279,11 +1271,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
             output.append(state.length as u8);
             // update window periodically
             if output.len() % 32768 == 0 {
-                let wlen = if output.len() > 32768 {
-                    32768;
-                } else {
-                    output.len();
-                };
+                let wlen = if output.len() > 32768 { 32768 } else { output.len() };
                 state.update_window(&output, output.len(), wlen);
             }
             state.mode = INF_LEN;
@@ -1320,11 +1308,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
 
     // final window update
     if output.len() > 0 {
-        let wlen = if output.len() > 32768 {
-            32768;
-        } else {
-            output.len();
-        };
+        let wlen = if output.len() > 32768 { 32768 } else { output.len() };
         state.update_window(&output, output.len(), wlen);
     }
 
@@ -1693,11 +1677,7 @@ pub fn deflate_huffman(input: &Array<u8>) -> Array<u8> {
             }
 
             let dd = best_dist - 1;
-            let dcode = if dd < 256 {
-                dist_codes[dd] as i32;
-            } else {
-                dist_codes[256 + (dd >> 7)] as i32;
-            };
+            let dcode = if dd < 256 { dist_codes[dd] as i32 } else { dist_codes[256 + (dd >> 7)] as i32 };
             let dist_entry = &dtree[dcode];
             bw.write_bits(dist_entry.code as u32, dist_entry.len as i32);
             let dist_ebits = dist_extra[dcode];
@@ -2068,11 +2048,7 @@ fn write_dynamic_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Arr
 
             let dist = distances[i];
             let dd = dist - 1;
-            let dcode = if dd < 256 {
-                dist_codes_table[dd] as i32;
-            } else {
-                dist_codes_table[256 + (dd >> 7)] as i32;
-            };
+            let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
             dist_freq[dcode] += 1;
         }
     }
@@ -2244,11 +2220,7 @@ fn write_dynamic_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Arr
             // Distance
             let dist = distances[i];
             let dd = dist - 1;
-            let dcode = if dd < 256 {
-                dist_codes_table[dd] as i32;
-            } else {
-                dist_codes_table[256 + (dd >> 7)] as i32;
-            };
+            let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
             bw.write_bits(dist_tree[dcode].code as u32, dist_tree[dcode].len as i32);
             let dist_ebits = dist_extra[dcode];
             if dist_ebits > 0 {
@@ -2286,11 +2258,7 @@ fn write_fixed_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Array
 
             let dist = distances[i];
             let dd = dist - 1;
-            let dcode = if dd < 256 {
-                dist_codes_table[dd] as i32;
-            } else {
-                dist_codes_table[256 + (dd >> 7)] as i32;
-            };
+            let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
             bw.write_bits(dtree[dcode].code as u32, dtree[dcode].len as i32);
             let dist_ebits = dist_extra[dcode];
             if dist_ebits > 0 {
@@ -2449,11 +2417,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                         }
 
                         let mut match_len = 0;
-                        let max_len = if input_len - pos < 258 {
-                            input_len - pos;
-                        } else {
-                            258;
-                        };
+                        let max_len = if input_len - pos < 258 { input_len - pos } else { 258 };
                         while match_len < max_len && input[chain + match_len] == input[pos + match_len] {
                             match_len += 1;
                         }
@@ -2553,11 +2517,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                         }
 
                         let mut match_len = 0;
-                        let max_len = if input_len - pos < 258 {
-                            input_len - pos;
-                        } else {
-                            258;
-                        };
+                        let max_len = if input_len - pos < 258 { input_len - pos } else { 258 };
                         while match_len < max_len && input[chain + match_len] == input[pos + match_len] {
                             match_len += 1;
                         }
@@ -2616,11 +2576,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
             fixed_bits += length_extra[lcode];
             let dist = distances[i];
             let dd = dist - 1;
-            let dcode = if dd < 256 {
-                dist_codes_table[dd] as i32;
-            } else {
-                dist_codes_table[256 + (dd >> 7)] as i32;
-            };
+            let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
             fixed_bits += dtree[dcode].len as i32;
             fixed_bits += dist_extra[dcode];
         }
@@ -2640,11 +2596,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
             lit_freq[257 + lcode] += 1;
             let dist = distances[i];
             let dd = dist - 1;
-            let dcode = if dd < 256 {
-                dist_codes_table[dd] as i32;
-            } else {
-                dist_codes_table[256 + (dd >> 7)] as i32;
-            };
+            let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
             dist_freq[dcode] += 1;
         }
     }
@@ -2681,11 +2633,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
             dynamic_data_bits += length_extra[lcode];
             let dist = distances[i];
             let dd = dist - 1;
-            let dcode = if dd < 256 {
-                dist_codes_table[dd] as i32;
-            } else {
-                dist_codes_table[256 + (dd >> 7)] as i32;
-            };
+            let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
             dynamic_data_bits += dist_lengths[dcode] as i32;
             dynamic_data_bits += dist_extra[dcode];
         }
@@ -2848,11 +2796,7 @@ fn zlib_wrap(input: &Array<u8>, deflated: &Array<u8>, level: i32) -> Array<u8> {
         0;
     } else if level <= 5 {
         1;
-    } else if level <= 6 {
-        2;
-    } else {
-        3;
-    };
+    } else if level <= 6 { 2 } else { 3 };
     let mut flg = flevel << 6;
     let rem = (cmf * 256 + flg) % 31;
     if rem != 0 {
@@ -3041,11 +2985,7 @@ pub fn gzip_compress2(input: &Array<u8>, level: i32) -> Array<u8> {
     // XFL: compression level hint
     let xfl: u8 = if level <= 1 {
         4;
-    } else if level >= 9 {
-        2;
-    } else {
-        0;
-    };
+    } else if level >= 9 { 2 } else { 0 };
     output.append(xfl);
     output.append(0xFF);  // OS = unknown
 
@@ -3207,11 +3147,7 @@ pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHea
     // XFL
     let xfl = if level <= 1 {
         4;
-    } else if level >= 9 {
-        2;
-    } else {
-        0;
-    };
+    } else if level >= 9 { 2 } else { 0 };
     output.append(xfl as u8);
 
     // OS
@@ -3613,11 +3549,7 @@ impl DeflateStream {
             0;
         } else if self.level <= 5 {
             1;
-        } else if self.level <= 6 {
-            2;
-        } else {
-            3;
-        };
+        } else if self.level <= 6 { 2 } else { 3 };
         let mut flg = flevel << 6 | 32;
         let rem = (cmf * 256 + flg) % 31;
         if rem != 0 {

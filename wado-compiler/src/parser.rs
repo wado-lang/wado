@@ -939,18 +939,20 @@ impl Parser {
         let expr = self.parse_expr()?;
 
         // Semicolon is optional if followed by `}` (end of block)
-        if self.check(&TokenKind::Semicolon) {
-            self.advance();
+        let end_span = if self.check(&TokenKind::Semicolon) {
+            self.advance().span
         } else if !self.check(&TokenKind::RBrace) {
             return Err(ParseError {
                 message: format!("expected `;` or `}}`, found {:?}", self.peek_kind()),
                 span: self.peek().span,
             });
-        }
+        } else {
+            expr.span()
+        };
 
         Ok(Stmt::Expr(ExprStmt {
             expr,
-            span: start_span,
+            span: start_span.merge(&end_span),
         }))
     }
 
@@ -991,18 +993,22 @@ impl Parser {
             None
         };
 
-        self.expect(&TokenKind::Semicolon)?;
+        let semi_span = self.expect(&TokenKind::Semicolon)?.span;
 
         Ok(Stmt::Assert(AssertStmt {
             condition,
             message,
-            span: start_span,
+            span: start_span.merge(&semi_span),
         }))
     }
 
     fn parse_let_stmt(&mut self) -> ParseResult<Stmt> {
-        let stmt = self.parse_let_stmt_inner()?;
-        self.expect(&TokenKind::Semicolon)?;
+        let mut stmt = self.parse_let_stmt_inner()?;
+        let semi_span = self.expect(&TokenKind::Semicolon)?.span;
+        // Extend let statement span to include the trailing semicolon
+        if let Stmt::Let(ref mut l) = stmt {
+            l.span = l.span.merge(&semi_span);
+        }
         Ok(stmt)
     }
 
@@ -1060,11 +1066,11 @@ impl Parser {
             Some(self.parse_expr()?)
         };
 
-        self.expect(&TokenKind::Semicolon)?;
+        let semi_span = self.expect(&TokenKind::Semicolon)?.span;
 
         Ok(Stmt::Return(ReturnStmt {
             value,
-            span: start_span,
+            span: start_span.merge(&semi_span),
         }))
     }
 
@@ -1077,11 +1083,11 @@ impl Parser {
         self.expect(&TokenKind::Return)?;
 
         let value = self.parse_expr()?;
-        self.expect(&TokenKind::Semicolon)?;
+        let semi_span = self.expect(&TokenKind::Semicolon)?.span;
 
         Ok(Stmt::TaskReturn(TaskReturnStmt {
             value,
-            span: start_span,
+            span: start_span.merge(&semi_span),
         }))
     }
 
@@ -1419,12 +1425,12 @@ impl Parser {
             (None, None)
         };
 
-        self.expect(&TokenKind::Semicolon)?;
+        let semi_span = self.expect(&TokenKind::Semicolon)?.span;
 
         Ok(Stmt::Break(BreakStmt {
             label,
             value,
-            span: start_span,
+            span: start_span.merge(&semi_span),
         }))
     }
 

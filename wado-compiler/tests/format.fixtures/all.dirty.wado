@@ -291,6 +291,35 @@ fn matches_example(opt: Option<i32>, shape: Shape) -> bool {
     return a && b && c;
 }
 
+/// Inline if expression (single-line when short enough)
+fn inline_if_expr(upper: bool) -> String {
+    let letter = if upper {
+        "E";
+    } else {
+        "e";
+    };
+    return letter;
+}
+
+/// Inline match expression (single-line when short enough)
+fn inline_match_expr(color: Color) -> String {
+    let name = match color {
+        Red => "red",
+        Blue => "blue",
+    };
+    return name;
+}
+
+/// Multiline if expression (too long to inline)
+fn multiline_if_expr(some_very_long_condition_name: bool) -> String {
+    let result = if some_very_long_condition_name {
+        "this_is_a_somewhat_long_value_for_the_then_branch";
+    } else {
+        "this_is_a_somewhat_long_value_for_the_else_branch";
+    };
+    return result;
+}
+
 /// Closures: expression body, no capture
 fn closure_no_capture() {
     let add_one = |x: i32| x + 1;

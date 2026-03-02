@@ -249,11 +249,7 @@ fn asserts(x: i32, s: String) {
 
 /// Match expression with variant patterns
 fn match_shape(shape: Shape) -> f64 {
-    return match shape {
-        Circle(r) => 3.14159 * r * r,
-        Rectangle([w, h]) => w * h,
-        Point => 0.0,
-    };
+    return match shape { Circle(r) => 3.14159 * r * r, Rectangle([w, h]) => w * h, Point => 0.0 };
 }
 
 /// Match with guard conditions
@@ -268,19 +264,12 @@ fn match_with_guard(opt: Option<i32>) -> String {
 
 /// Match with wildcard and block body
 fn match_wildcard(color: Color) -> String {
-    return match color {
-        Red => "red",
-        Green => "green",
-        _ => "other",
-    };
+    return match color { Red => "red", Green => "green", _ => "other" };
 }
 
 /// Match with enum and struct pattern
 fn match_struct(result: Result<Point, String>) -> i32 {
-    return match result {
-        Ok({ x, y }) => x + y,
-        Err(_) => -1,
-    };
+    return match result { Ok({ x, y }) => x + y, Err(_) => -1 };
 }
 
 /// Matches operator
@@ -289,6 +278,28 @@ fn matches_example(opt: Option<i32>, shape: Shape) -> bool {
     let b = opt matches { Some(x) && x > 0 };
     let c = shape matches { Circle(_) };
     return a && b && c;
+}
+
+/// Inline if expression (single-line when short enough)
+fn inline_if_expr(upper: bool) -> String {
+    let letter = if upper { "E" } else { "e" };
+    return letter;
+}
+
+/// Inline match expression (single-line when short enough)
+fn inline_match_expr(color: Color) -> String {
+    let name = match color { Red => "red", Blue => "blue" };
+    return name;
+}
+
+/// Multiline if expression (too long to inline)
+fn multiline_if_expr(some_very_long_condition_name: bool) -> String {
+    let result = if some_very_long_condition_name {
+        "this_is_a_somewhat_long_value_for_the_then_branch";
+    } else {
+        "this_is_a_somewhat_long_value_for_the_else_branch";
+    };
+    return result;
 }
 
 /// Closures: expression body, no capture

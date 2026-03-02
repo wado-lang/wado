@@ -207,11 +207,7 @@ impl u128 {
     fn fmt_base(&self, f: &mut Formatter, base: i32, upper: bool) {
         let bits_per_digit = if base == 2 {
             1;
-        } else if base == 8 {
-            3;
-        } else {
-            4;
-        };
+        } else if base == 8 { 3 } else { 4 };
         let mask: u64 = (base - 1) as u64;
 
         let prefix = if f.alternate {
@@ -277,11 +273,7 @@ impl u128 {
                 let digit: i32 = (lo & mask) as i32;
                 let ch = if digit < 10 {
                     '0' as i32 + digit;
-                } else if upper {
-                    'A' as i32 + digit - 10;
-                } else {
-                    'a' as i32 + digit - 10;
-                };
+                } else if upper { 'A' as i32 + digit - 10 } else { 'a' as i32 + digit - 10 };
                 builtin::array_set_u8(arr, pos, ch as u8);
                 // Shift right: move bits from hi into lo
                 // For shift amounts 1,3,4 this works correctly
@@ -560,11 +552,7 @@ impl i128 {
     /// Create an i128 from an i64 value (sign-extended)
     pub fn from_i64(value: i64) -> i128 {
         // Sign extend: if value is negative, high bits are all 1s (-1)
-        let high: i64 = if value < 0 {
-            -1;
-        } else {
-            0;
-        };
+        let high: i64 = if value < 0 { -1 } else { 0 };
         return i128 { low: value as u64, high };
     }
 
@@ -587,11 +575,7 @@ impl i128 {
         // Check for negative sign
         let first_byte = builtin::array_get_u8(bytes, 0);
         let is_negative = first_byte == '-' as u8;
-        let start_idx = if is_negative {
-            1;
-        } else {
-            0;
-        };
+        let start_idx = if is_negative { 1 } else { 0 };
 
         // Parse the absolute value as u128
         let mut abs_value = u128::zero();
@@ -772,11 +756,7 @@ impl i128 {
         let abs_val = self.abs_u128();
         let bits_per_digit = if base == 2 {
             1;
-        } else if base == 8 {
-            3;
-        } else {
-            4;
-        };
+        } else if base == 8 { 3 } else { 4 };
         let mask: u64 = (base - 1) as u64;
 
         let prefix = if f.alternate {
@@ -839,11 +819,7 @@ impl i128 {
                 let digit: i32 = (lo & mask) as i32;
                 let ch = if digit < 10 {
                     '0' as i32 + digit;
-                } else if upper {
-                    'A' as i32 + digit - 10;
-                } else {
-                    'a' as i32 + digit - 10;
-                };
+                } else if upper { 'A' as i32 + digit - 10 } else { 'a' as i32 + digit - 10 };
                 builtin::array_set_u8(arr, pos, ch as u8);
                 let hi_bits = hi << 64 - shift_u64;
                 lo = lo >> shift_u64 | hi_bits;
@@ -1092,11 +1068,7 @@ impl Shr for i128 {
         if shift >= 64 {
             // All high bits shift into low, high becomes sign extension
             let s = (shift - 64) as i64;
-            let sign_ext: i64 = if self.high < 0 {
-                -1;
-            } else {
-                0;
-            };
+            let sign_ext: i64 = if self.high < 0 { -1 } else { 0 };
             return i128 {
                 low: (self.high >> s) as u64,
                 high: sign_ext,

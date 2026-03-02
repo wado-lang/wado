@@ -79,11 +79,7 @@ fn write_base_digits(arr: builtin::array<u8>, offset: i32, abs_val: i64, digit_c
             let digit: i32 = (temp % base64) as i32;
             let ch = if digit < 10 {
                 '0' as i32 + digit;
-            } else if upper {
-                'A' as i32 + digit - 10;
-            } else {
-                'a' as i32 + digit - 10;
-            };
+            } else if upper { 'A' as i32 + digit - 10 } else { 'a' as i32 + digit - 10 };
             builtin::array_set_u8(arr, pos, ch as u8);
         }
     }
@@ -154,11 +150,7 @@ fn write_u64_base_digits(arr: builtin::array<u8>, offset: i32, val_i64: i64, dig
             let digit: i32 = (temp & mask64) as i32;
             let ch = if digit < 10 {
                 '0' as i32 + digit;
-            } else if upper {
-                'A' as i32 + digit - 10;
-            } else {
-                'a' as i32 + digit - 10;
-            };
+            } else if upper { 'A' as i32 + digit - 10 } else { 'a' as i32 + digit - 10 };
             builtin::array_set_u8(arr, pos, ch as u8);
             // Unsigned right shift: use Wasm's i64.shr_u semantics
             // In Wado, >> on i64 is arithmetic shift. For unsigned shift we need:
@@ -172,11 +164,7 @@ fn write_u64_base_digits(arr: builtin::array<u8>, offset: i32, val_i64: i64, dig
 
 impl bool {
     fn fmt_into(&self, f: &mut Formatter) {
-        f.pad(if *self {
-            "true";
-        } else {
-            "false";
-        });
+        f.pad(if *self { "true" } else { "false" });
     }
 
     pub fn to_string(&self) -> String {
@@ -271,8 +259,6 @@ impl char {
             '\u{3000}' => true,
             _ => false,
         };
-
-
         // SP
         // HT
         // LF
@@ -411,11 +397,7 @@ impl i32 {
 
     fn fmt_decimal(&self, f: &mut Formatter) {
         let is_negative = *self < 0;
-        let abs_val: i64 = if is_negative {
-            0 - *self as i64;
-        } else {
-            *self as i64;
-        };
+        let abs_val: i64 = if is_negative { 0 - *self as i64 } else { *self as i64 };
         let digit_count = count_digits_i64(abs_val);
         let offset = f.prepare_int_write(is_negative, "", digit_count);
         write_decimal_digits(f.buf.internal_raw_bytes(), offset, abs_val, digit_count);
@@ -447,11 +429,7 @@ impl u32 {
 
     fn fmt_decimal(&self, f: &mut Formatter) {
         let val_i32 = *self as i32;
-        let abs_val: i64 = if val_i32 < 0 {
-            val_i32 as i64 + 4294967296;
-        } else {
-            val_i32 as i64;
-        };
+        let abs_val: i64 = if val_i32 < 0 { val_i32 as i64 + 4294967296 } else { val_i32 as i64 };
         let digit_count = count_digits_i64(abs_val);
         let offset = f.prepare_int_write(false, "", digit_count);
         write_decimal_digits(f.buf.internal_raw_bytes(), offset, abs_val, digit_count);
@@ -499,11 +477,7 @@ impl i64 {
             write_decimal_digits(repr, offset, remaining, remaining_digits);
             builtin::array_set_u8(repr, offset + remaining_digits, '8' as u8);
         } else {
-            let abs_val: i64 = if is_negative {
-                zero_i64 - value;
-            } else {
-                value;
-            };
+            let abs_val: i64 = if is_negative { zero_i64 - value } else { value };
             let digit_count = count_digits_i64(abs_val);
             let offset = f.prepare_int_write(is_negative, "", digit_count);
             write_decimal_digits(f.buf.internal_raw_bytes(), offset, abs_val, digit_count);
@@ -620,11 +594,7 @@ impl u64 {
         let val_i64 = *self as i64;
         let bits_per_digit = if base == 2 {
             1;
-        } else if base == 8 {
-            3;
-        } else {
-            4;
-        };
+        } else if base == 8 { 3 } else { 4 };
         let mask = base - 1;
         let prefix = if f.alternate {
             if base == 2 {
@@ -684,26 +654,14 @@ impl f32 {
             if kind matches { NaN } {
                 f.buf.append("NaN");
             } else if kind matches { Inf } {
-                f.buf.append(if is_neg {
-                    "-inf";
-                } else {
-                    "inf";
-                });
+                f.buf.append(if is_neg { "-inf" } else { "inf" });
             } else {
-                f.buf.append(if is_neg {
-                    "-0.0";
-                } else {
-                    "0.0";
-                });
+                f.buf.append(if is_neg { "-0.0" } else { "0.0" });
             }
             f.apply_padding(mark);
             return;
         }
-        let abs_f = if is_neg {
-            -*self;
-        } else {
-            *self;
-        };
+        let abs_f = if is_neg { -*self } else { *self };
         let result = short32(abs_f);
         let d = result.digits;
         let p = result.exponent;
@@ -955,26 +913,14 @@ impl f64 {
             if kind matches { NaN } {
                 f.buf.append("NaN");
             } else if kind matches { Inf } {
-                f.buf.append(if is_neg {
-                    "-inf";
-                } else {
-                    "inf";
-                });
+                f.buf.append(if is_neg { "-inf" } else { "inf" });
             } else {
-                f.buf.append(if is_neg {
-                    "-0.0";
-                } else {
-                    "0.0";
-                });
+                f.buf.append(if is_neg { "-0.0" } else { "0.0" });
             }
             f.apply_padding(mark);
             return;
         }
-        let abs_f = if is_neg {
-            -value;
-        } else {
-            value;
-        };
+        let abs_f = if is_neg { -value } else { value };
         let result = short(abs_f);
         let d = result.digits;
         let p = result.exponent;
@@ -1005,11 +951,7 @@ impl f64 {
             if kind matches { NaN } {
                 f.buf.append("NaN");
             } else if kind matches { Inf } {
-                f.buf.append(if is_neg {
-                    "-inf";
-                } else {
-                    "inf";
-                });
+                f.buf.append(if is_neg { "-inf" } else { "inf" });
             } else {
                 // Zero with precision
                 let buf = f.buf;
@@ -1025,11 +967,7 @@ impl f64 {
             f.apply_padding(mark);
             return;
         }
-        let abs_f = if is_neg {
-            -value;
-        } else {
-            value;
-        };
+        let abs_f = if is_neg { -value } else { value };
         let result = fixed_width_for_prec(abs_f, precision);
         let d = result.digits;
         let p = result.exponent;
@@ -1053,11 +991,7 @@ impl f64 {
             if kind matches { NaN } {
                 f.buf.append("NaN");
             } else if kind matches { Inf } {
-                f.buf.append(if is_neg {
-                    "-inf";
-                } else {
-                    "inf";
-                });
+                f.buf.append(if is_neg { "-inf" } else { "inf" });
             } else {
                 // Zero in exponential
                 let buf = f.buf;
@@ -1069,23 +1003,13 @@ impl f64 {
                     buf.append(".");
                     buf.append_byte_filled('0' as u8, precision);
                 }
-                buf.append(if upper_bool {
-                    "E";
-                } else {
-                    "e";
-                });
-
-
+                buf.append(if upper_bool { "E" } else { "e" });
                 buf.append("0");
             }
             f.apply_padding(mark);
             return;
         }
-        let abs_f = if is_neg {
-            -value;
-        } else {
-            value;
-        };
+        let abs_f = if is_neg { -value } else { value };
         let mark = f.mark();
         if is_neg {
             f.buf.append("-");
@@ -1096,11 +1020,7 @@ impl f64 {
             let total_digits = precision + 1;
             let clamped = if total_digits > 18 {
                 18;
-            } else if total_digits < 1 {
-                1;
-            } else {
-                total_digits;
-            };
+            } else if total_digits < 1 { 1 } else { total_digits };
             let result = fixed_width(abs_f, clamped);
             let d = result.digits;
             let p = result.exponent;
@@ -1502,11 +1422,7 @@ impl Binary for i8 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self as i32;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg {
-            0 - v as i64;
-        } else {
-            v as i64;
-        };
+        let abs_val: i64 = if is_neg { 0 - v as i64 } else { v as i64 };
         abs_val.fmt_base(is_neg, f, 2, false);
     }
 }
@@ -1521,11 +1437,7 @@ impl Binary for i16 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self as i32;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg {
-            0 - v as i64;
-        } else {
-            v as i64;
-        };
+        let abs_val: i64 = if is_neg { 0 - v as i64 } else { v as i64 };
         abs_val.fmt_base(is_neg, f, 2, false);
     }
 }
@@ -1540,11 +1452,7 @@ impl Binary for i32 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg {
-            0 - v as i64;
-        } else {
-            v as i64;
-        };
+        let abs_val: i64 = if is_neg { 0 - v as i64 } else { v as i64 };
         abs_val.fmt_base(is_neg, f, 2, false);
     }
 }
@@ -1552,11 +1460,7 @@ impl Binary for i32 {
 impl Binary for u32 {
     pub fn fmt(&self, f: &mut Formatter) {
         let val_i32 = *self as i32;
-        let abs_val: i64 = if val_i32 < 0 {
-            val_i32 as i64 + 4294967296;
-        } else {
-            val_i32 as i64;
-        };
+        let abs_val: i64 = if val_i32 < 0 { val_i32 as i64 + 4294967296 } else { val_i32 as i64 };
         abs_val.fmt_base(false, f, 2, false);
     }
 }
@@ -1573,11 +1477,7 @@ impl Binary for i64 {
             let half: i64 = 4611686018427387904;
             half.fmt_base(true, f, 2, false);
         } else {
-            let abs_val: i64 = if is_neg {
-                zero_i64 - v;
-            } else {
-                v;
-            };
+            let abs_val: i64 = if is_neg { zero_i64 - v } else { v };
             abs_val.fmt_base(is_neg, f, 2, false);
         }
     }
@@ -1588,11 +1488,7 @@ impl Octal for i8 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self as i32;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg {
-            0 - v as i64;
-        } else {
-            v as i64;
-        };
+        let abs_val: i64 = if is_neg { 0 - v as i64 } else { v as i64 };
         abs_val.fmt_base(is_neg, f, 8, false);
     }
 }
@@ -1607,11 +1503,7 @@ impl Octal for i16 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self as i32;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg {
-            0 - v as i64;
-        } else {
-            v as i64;
-        };
+        let abs_val: i64 = if is_neg { 0 - v as i64 } else { v as i64 };
         abs_val.fmt_base(is_neg, f, 8, false);
     }
 }
@@ -1626,11 +1518,7 @@ impl Octal for i32 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg {
-            0 - v as i64;
-        } else {
-            v as i64;
-        };
+        let abs_val: i64 = if is_neg { 0 - v as i64 } else { v as i64 };
         abs_val.fmt_base(is_neg, f, 8, false);
     }
 }
@@ -1638,11 +1526,7 @@ impl Octal for i32 {
 impl Octal for u32 {
     pub fn fmt(&self, f: &mut Formatter) {
         let val_i32 = *self as i32;
-        let abs_val: i64 = if val_i32 < 0 {
-            val_i32 as i64 + 4294967296;
-        } else {
-            val_i32 as i64;
-        };
+        let abs_val: i64 = if val_i32 < 0 { val_i32 as i64 + 4294967296 } else { val_i32 as i64 };
         abs_val.fmt_base(false, f, 8, false);
     }
 }
@@ -1659,11 +1543,7 @@ impl Octal for i64 {
             let half: i64 = 4611686018427387904;
             half.fmt_base(true, f, 8, false);
         } else {
-            let abs_val: i64 = if is_neg {
-                zero_i64 - v;
-            } else {
-                v;
-            };
+            let abs_val: i64 = if is_neg { zero_i64 - v } else { v };
             abs_val.fmt_base(is_neg, f, 8, false);
         }
     }
@@ -1674,11 +1554,7 @@ impl LowerHex for i8 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self as i32;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg {
-            0 - v as i64;
-        } else {
-            v as i64;
-        };
+        let abs_val: i64 = if is_neg { 0 - v as i64 } else { v as i64 };
         abs_val.fmt_base(is_neg, f, 16, false);
     }
 }
@@ -1693,11 +1569,7 @@ impl LowerHex for i16 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self as i32;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg {
-            0 - v as i64;
-        } else {
-            v as i64;
-        };
+        let abs_val: i64 = if is_neg { 0 - v as i64 } else { v as i64 };
         abs_val.fmt_base(is_neg, f, 16, false);
     }
 }
@@ -1712,11 +1584,7 @@ impl LowerHex for i32 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg {
-            0 - v as i64;
-        } else {
-            v as i64;
-        };
+        let abs_val: i64 = if is_neg { 0 - v as i64 } else { v as i64 };
         abs_val.fmt_base(is_neg, f, 16, false);
     }
 }
@@ -1724,11 +1592,7 @@ impl LowerHex for i32 {
 impl LowerHex for u32 {
     pub fn fmt(&self, f: &mut Formatter) {
         let val_i32 = *self as i32;
-        let abs_val: i64 = if val_i32 < 0 {
-            val_i32 as i64 + 4294967296;
-        } else {
-            val_i32 as i64;
-        };
+        let abs_val: i64 = if val_i32 < 0 { val_i32 as i64 + 4294967296 } else { val_i32 as i64 };
         abs_val.fmt_base(false, f, 16, false);
     }
 }
@@ -1745,11 +1609,7 @@ impl LowerHex for i64 {
             let half: i64 = 4611686018427387904;
             half.fmt_base(true, f, 16, false);
         } else {
-            let abs_val: i64 = if is_neg {
-                zero_i64 - v;
-            } else {
-                v;
-            };
+            let abs_val: i64 = if is_neg { zero_i64 - v } else { v };
             abs_val.fmt_base(is_neg, f, 16, false);
         }
     }
@@ -1760,11 +1620,7 @@ impl UpperHex for i8 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self as i32;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg {
-            0 - v as i64;
-        } else {
-            v as i64;
-        };
+        let abs_val: i64 = if is_neg { 0 - v as i64 } else { v as i64 };
         abs_val.fmt_base(is_neg, f, 16, true);
     }
 }
@@ -1779,11 +1635,7 @@ impl UpperHex for i16 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self as i32;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg {
-            0 - v as i64;
-        } else {
-            v as i64;
-        };
+        let abs_val: i64 = if is_neg { 0 - v as i64 } else { v as i64 };
         abs_val.fmt_base(is_neg, f, 16, true);
     }
 }
@@ -1798,11 +1650,7 @@ impl UpperHex for i32 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg {
-            0 - v as i64;
-        } else {
-            v as i64;
-        };
+        let abs_val: i64 = if is_neg { 0 - v as i64 } else { v as i64 };
         abs_val.fmt_base(is_neg, f, 16, true);
     }
 }
@@ -1810,11 +1658,7 @@ impl UpperHex for i32 {
 impl UpperHex for u32 {
     pub fn fmt(&self, f: &mut Formatter) {
         let val_i32 = *self as i32;
-        let abs_val: i64 = if val_i32 < 0 {
-            val_i32 as i64 + 4294967296;
-        } else {
-            val_i32 as i64;
-        };
+        let abs_val: i64 = if val_i32 < 0 { val_i32 as i64 + 4294967296 } else { val_i32 as i64 };
         abs_val.fmt_base(false, f, 16, true);
     }
 }
@@ -1831,11 +1675,7 @@ impl UpperHex for i64 {
             let half: i64 = 4611686018427387904;
             half.fmt_base(true, f, 16, true);
         } else {
-            let abs_val: i64 = if is_neg {
-                zero_i64 - v;
-            } else {
-                v;
-            };
+            let abs_val: i64 = if is_neg { zero_i64 - v } else { v };
             abs_val.fmt_base(is_neg, f, 16, true);
         }
     }

@@ -37,11 +37,7 @@ pub fn gc_array_to_memory(arr: builtin::array<u8>, ptr: i32, len: i32) {
 pub fn write_string_to_stream(tx: i32, message: String, add_newline: bool) {
     let len = message.len();
     let msg_bytes = message.internal_raw_bytes();
-    let alloc_size = if add_newline {
-        len + 1;
-    } else {
-        len;
-    };
+    let alloc_size = if add_newline { len + 1 } else { len };
     let ptr = builtin::realloc(0, 0, 1, alloc_size);
     gc_array_to_memory(msg_bytes, ptr, len);
     if add_newline {

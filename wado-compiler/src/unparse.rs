@@ -1775,6 +1775,63 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_if_expr(&mut self, i: &IfExpr) {
+        // Try inline format: `if cond { expr } else { expr }`
+        if self.try_inline_if_expr(i) {
+            return;
+        }
+        self.unparse_if_expr_multiline(i);
+    }
+
+    /// Try to format an if expression on a single line.
+    /// Returns true if successful, false if it should fall back to multiline.
+    fn try_inline_if_expr(&mut self, i: &IfExpr) -> bool {
+        // Only eligible when: no init, else exists, both arms are single expressions,
+        // and neither expression is a compound construct
+        if i.init.is_some() {
+            return false;
+        }
+        let Some(else_block) = &i.else_block else {
+            return false;
+        };
+        // No else-if chains
+        if else_block.stmts.len() == 1
+            && matches!(
+                &else_block.stmts[0],
+                Stmt::Expr(ExprStmt {
+                    expr: Expr::If(_),
+                    ..
+                })
+            )
+        {
+            return false;
+        }
+        let Some(then_expr) = block_single_expr(&i.then_block) else {
+            return false;
+        };
+        let Some(else_expr) = block_single_expr(else_block) else {
+            return false;
+        };
+        if !is_inline_safe_expr(then_expr) || !is_inline_safe_expr(else_expr) {
+            return false;
+        }
+
+        let snap = self.snapshot();
+        self.output.push_str("if ");
+        self.unparse_condition(&i.condition);
+        self.output.push_str(" { ");
+        self.unparse_expr(then_expr);
+        self.output.push_str(" } else { ");
+        self.unparse_expr(else_expr);
+        self.output.push_str(" }");
+
+        if self.exceeds_width_since(snap) {
+            self.rollback(snap);
+            return false;
+        }
+        true
+    }
+
+    fn unparse_if_expr_multiline(&mut self, i: &IfExpr) {
         self.output.push_str("if ");
 
         // Handle optional init binding
@@ -1826,6 +1883,46 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_match(&mut self, m: &MatchExpr) {
+        // Try inline format: `match expr { P1 => e1, P2 => e2 }`
+        if self.try_inline_match(m) {
+            return;
+        }
+        self.unparse_match_multiline(m);
+    }
+
+    /// Try to format a match expression on a single line.
+    fn try_inline_match(&mut self, m: &MatchExpr) -> bool {
+        // All arms must have inline-safe bodies
+        if m.arms.iter().any(|arm| !is_inline_safe_expr(&arm.body)) {
+            return false;
+        }
+
+        let snap = self.snapshot();
+        self.output.push_str("match ");
+        self.unparse_expr(&m.expr);
+        self.output.push_str(" { ");
+        for (i, arm) in m.arms.iter().enumerate() {
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            self.unparse_pattern(&arm.pattern);
+            if let Some(guard) = &arm.guard {
+                self.output.push_str(" && ");
+                self.unparse_expr(guard);
+            }
+            self.output.push_str(" => ");
+            self.unparse_expr(&arm.body);
+        }
+        self.output.push_str(" }");
+
+        if self.exceeds_width_since(snap) {
+            self.rollback(snap);
+            return false;
+        }
+        true
+    }
+
+    fn unparse_match_multiline(&mut self, m: &MatchExpr) {
         self.output.push_str("match ");
         self.unparse_expr(&m.expr);
         self.output.push_str(" {\n");
@@ -2290,6 +2387,22 @@ fn get_stmt_span(stmt: &Stmt) -> Span {
         Stmt::Assert(a) => a.span,
         Stmt::LabeledBlock(lb) => lb.span,
     }
+}
+
+fn block_single_expr(block: &Block) -> Option<&Expr> {
+    if block.stmts.len() == 1 {
+        if let Stmt::Expr(e) = &block.stmts[0] {
+            return Some(&e.expr);
+        }
+    }
+    None
+}
+
+fn is_inline_safe_expr(expr: &Expr) -> bool {
+    !matches!(
+        expr,
+        Expr::Block(_) | Expr::If(_) | Expr::Match(_) | Expr::Closure(_) | Expr::LabeledBlock(_)
+    )
 }
 
 fn binary_op_str(op: BinaryOp) -> &'static str {
