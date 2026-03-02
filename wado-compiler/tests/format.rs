@@ -1003,3 +1003,57 @@ fn test_format_golden_mess() {
         "format(mess clean) should be idempotent"
     );
 }
+
+/// Golden test for operator precedence: redundant parens are removed, necessary
+/// parens are kept, and spacing is normalized.
+///
+/// `format.fixtures/ops.all.dirty.wado` has redundant parens and inconsistent
+/// spacing. `format.fixtures/ops.all.clean.wado` is the expected canonical output.
+#[test]
+fn test_format_golden_ops_all() {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
+    let dirty =
+        fs::read_to_string(fixtures.join("ops.all.dirty.wado")).expect("read ops.all dirty");
+    let clean =
+        fs::read_to_string(fixtures.join("ops.all.clean.wado")).expect("read ops.all clean");
+
+    let formatted = wado_compiler::format(&dirty).expect("format ops.all dirty failed");
+    assert_eq!(
+        formatted, clean,
+        "format(ops.all dirty) should equal ops.all clean\n\nActual:\n{}\n\nExpected:\n{}",
+        formatted, clean
+    );
+
+    let formatted2 = wado_compiler::format(&formatted).expect("format ops.all clean failed");
+    assert_eq!(
+        formatted, formatted2,
+        "format(ops.all clean) should be idempotent"
+    );
+}
+
+/// Golden test for operator precedence with messy inputs: block comments,
+/// extra blank lines, and no spacing around operators.
+///
+/// `format.fixtures/ops.mess.dirty.wado` has messy formatting around operators.
+/// `format.fixtures/ops.mess.clean.wado` is the expected canonical output.
+#[test]
+fn test_format_golden_ops_mess() {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
+    let dirty =
+        fs::read_to_string(fixtures.join("ops.mess.dirty.wado")).expect("read ops.mess dirty");
+    let clean =
+        fs::read_to_string(fixtures.join("ops.mess.clean.wado")).expect("read ops.mess clean");
+
+    let formatted = wado_compiler::format(&dirty).expect("format ops.mess dirty failed");
+    assert_eq!(
+        formatted, clean,
+        "format(ops.mess dirty) should equal ops.mess clean\n\nActual:\n{}\n\nExpected:\n{}",
+        formatted, clean
+    );
+
+    let formatted2 = wado_compiler::format(&formatted).expect("format ops.mess clean failed");
+    assert_eq!(
+        formatted, formatted2,
+        "format(ops.mess clean) should be idempotent"
+    );
+}
