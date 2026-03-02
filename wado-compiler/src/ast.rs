@@ -208,6 +208,7 @@ pub struct ResourceDecl {
 #[derive(Debug, Clone)]
 pub struct WorldDecl {
     pub name: String,
+    pub is_pub: bool,
     pub attrs: Vec<Attribute>,
     pub imports: Vec<WorldImport>,
     pub exports: Vec<WorldExport>,
@@ -1170,6 +1171,7 @@ pub struct Newtype {
     pub name: String,
     pub is_pub: bool,
     pub ty: Type,
+    pub attrs: Vec<Attribute>,
     pub span: Span,
 }
 

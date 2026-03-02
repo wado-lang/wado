@@ -17,6 +17,12 @@ use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::token::Span;
 use indexmap::IndexSet;
 
+fn effective_start_line(attrs: &[Attribute], span_line: usize) -> usize {
+    attrs
+        .first()
+        .map_or(span_line, |attr| attr.span.line.min(span_line))
+}
+
 pub struct Unparser<'a> {
     comments: &'a CommentMap,
     output: String,
@@ -344,8 +350,9 @@ impl<'a> Unparser<'a> {
         self.last_source_line = s.span.line;
 
         for field in &s.fields {
+            let effective_line = effective_start_line(&field.attrs, field.span.line);
             self.emit_leading_comments(&field.span);
-            self.emit_blank_lines_to(field.span.line);
+            self.emit_blank_lines_to(effective_line);
             self.unparse_struct_field(field);
             self.emit_trailing_comments_inline(&field.span);
             self.output.push('\n');
@@ -437,8 +444,9 @@ impl<'a> Unparser<'a> {
         self.last_source_line = e.span.line;
 
         for case in &e.cases {
+            let effective_line = effective_start_line(&case.attrs, case.span.line);
             self.emit_leading_comments(&case.span);
-            self.emit_blank_lines_to(case.span.line);
+            self.emit_blank_lines_to(effective_line);
             self.unparse_enum_case(case);
             self.emit_trailing_comments_inline(&case.span);
             self.output.push('\n');
@@ -487,8 +495,9 @@ impl<'a> Unparser<'a> {
         self.last_source_line = v.span.line;
 
         for case in &v.cases {
+            let effective_line = effective_start_line(&case.attrs, case.span.line);
             self.emit_leading_comments(&case.span);
-            self.emit_blank_lines_to(case.span.line);
+            self.emit_blank_lines_to(effective_line);
             self.unparse_variant_case(case);
             self.emit_trailing_comments_inline(&case.span);
             self.output.push('\n');
@@ -542,8 +551,9 @@ impl<'a> Unparser<'a> {
         self.last_source_line = f.span.line;
 
         for flag in &f.flags {
+            let effective_line = effective_start_line(&flag.attrs, flag.span.line);
             self.emit_leading_comments(&flag.span);
-            self.emit_blank_lines_to(flag.span.line);
+            self.emit_blank_lines_to(effective_line);
             self.write_indent();
             for attr in &flag.attrs {
                 self.unparse_attribute(attr);
@@ -565,6 +575,12 @@ impl<'a> Unparser<'a> {
 
     fn unparse_newtype(&mut self, t: &Newtype) {
         self.write_indent();
+
+        for attr in &t.attrs {
+            self.unparse_attribute(attr);
+            self.output.push('\n');
+            self.write_indent();
+        }
 
         if t.is_pub {
             self.output.push_str("pub ");
@@ -736,21 +752,17 @@ impl<'a> Unparser<'a> {
 
         self.indent_level += 1;
 
+        let saved_line = self.last_source_line;
+        self.last_source_line = t.span.line;
+
         // Unparse associated type declarations
         for assoc in &t.associated_types {
             self.write_indent();
             self.output.push_str("type ");
             self.output.push_str(&assoc.name);
             self.output.push_str(";\n");
+            self.last_source_line = assoc.span.end_line();
         }
-
-        // Add blank line between associated types and methods if both present
-        if !t.associated_types.is_empty() && !t.methods.is_empty() {
-            self.output.push('\n');
-        }
-
-        let saved_line = self.last_source_line;
-        self.last_source_line = t.span.line;
 
         for method in &t.methods {
             self.emit_leading_comments(&method.span);
@@ -789,8 +801,9 @@ impl<'a> Unparser<'a> {
         self.last_source_line = e.span.line;
 
         for method in &e.methods {
+            let effective_line = effective_start_line(&method.attrs, method.span.line);
             self.emit_leading_comments(&method.span);
-            self.emit_blank_lines_to(method.span.line);
+            self.emit_blank_lines_to(effective_line);
             self.unparse_effect_method(method);
             self.last_source_line = method.span.end_line();
         }
@@ -860,9 +873,14 @@ impl<'a> Unparser<'a> {
             self.output.push_str(" {\n");
 
             self.indent_level += 1;
+            let saved_line = self.last_source_line;
+            self.last_source_line = r.span.line;
             for method in &r.methods {
+                self.emit_leading_comments(&method.span);
                 self.unparse_effect_method(method);
+                self.last_source_line = method.span.end_line();
             }
+            self.last_source_line = saved_line.max(r.span.end_line());
             self.indent_level -= 1;
 
             self.write_indent();
@@ -877,6 +895,10 @@ impl<'a> Unparser<'a> {
             self.unparse_attribute(attr);
             self.output.push('\n');
             self.write_indent();
+        }
+
+        if w.is_pub {
+            self.output.push_str("pub ");
         }
 
         self.output.push_str("world ");
@@ -1553,7 +1575,16 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_call(&mut self, c: &CallExpr) {
+        // Field access as callee needs parentheses: (self.f)(args)
+        // Without parens, `self.f(args)` would be parsed as a method call.
+        let needs_parens = matches!(&c.callee, Expr::FieldAccess(_));
+        if needs_parens {
+            self.output.push('(');
+        }
         self.unparse_expr(&c.callee);
+        if needs_parens {
+            self.output.push(')');
+        }
         // Output turbofish syntax if there are type arguments
         if !c.type_args.is_empty() {
             self.output.push_str("::<");
@@ -2114,6 +2145,9 @@ fn get_item_first_line(item: &Item) -> usize {
         Item::Effect(e) => first_attr_line(&e.attrs),
         Item::Resource(r) => first_attr_line(&r.attrs),
         Item::Function(f) => first_attr_line(&f.attrs),
+        Item::Type(t) => first_attr_line(&t.attrs),
+        Item::World(w) => first_attr_line(&w.attrs),
+        Item::Global(g) => first_attr_line(&g.attributes),
         Item::Flags(f) => f
             .attributes
             .as_deref()

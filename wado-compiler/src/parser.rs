@@ -325,11 +325,11 @@ impl Parser {
             TokenKind::Enum => self.parse_enum_decl(is_pub, attrs).map(Item::Enum),
             TokenKind::Variant => self.parse_variant_decl(is_pub, attrs).map(Item::Variant),
             TokenKind::Flags => self.parse_flags_decl(is_pub, attrs).map(Item::Flags),
-            TokenKind::Type => self.parse_newtype(is_pub).map(Item::Type),
+            TokenKind::Type => self.parse_newtype(is_pub, attrs).map(Item::Type),
             TokenKind::Impl => self.parse_impl_block().map(Item::Impl),
             TokenKind::Trait => self.parse_trait_decl(is_pub).map(Item::Trait),
             TokenKind::Resource => self.parse_resource_decl(is_pub, attrs).map(Item::Resource),
-            TokenKind::World => self.parse_world_decl(attrs).map(Item::World),
+            TokenKind::World => self.parse_world_decl(is_pub, attrs).map(Item::World),
             TokenKind::Global => self.parse_global_decl(is_pub, attrs).map(Item::Global),
             _ => Err(ParseError {
                 message: format!("expected item, found {:?}", self.peek_kind()),
@@ -3393,7 +3393,7 @@ impl Parser {
         })
     }
 
-    fn parse_newtype(&mut self, is_pub: bool) -> ParseResult<Newtype> {
+    fn parse_newtype(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<Newtype> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Type)?;
         let name = self.consume_ident()?;
@@ -3405,6 +3405,7 @@ impl Parser {
             name,
             is_pub,
             ty,
+            attrs,
             span: start_span,
         })
     }
@@ -3636,7 +3637,7 @@ impl Parser {
     ///     export async fn run() -> Result<(), ()>;
     /// }
     /// ```
-    fn parse_world_decl(&mut self, attrs: Vec<Attribute>) -> ParseResult<WorldDecl> {
+    fn parse_world_decl(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<WorldDecl> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::World)?;
         let name = self.consume_ident()?;
@@ -3669,6 +3670,7 @@ impl Parser {
 
         Ok(WorldDecl {
             name,
+            is_pub,
             attrs,
             imports,
             exports,

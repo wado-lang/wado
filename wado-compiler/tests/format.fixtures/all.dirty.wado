@@ -72,6 +72,14 @@ trait Greet {
     fn name(&self) -> String;
 }
 
+/// Trait with associated type then method (no extra blank lines)
+trait Container {
+    type Item;
+
+    /// Get the contained item
+    fn get(&self) -> Self::Item;
+}
+
 /// self: &Self normalized to &self
 impl Point {
     fn get_x(self: &Self) -> i32 {
@@ -94,8 +102,11 @@ resource Handle;
 
 /// Resource: pub with methods, self: &Self normalized
 pub resource Stream {
+    /// Read data from stream
     fn read(self: &Self, len: u64) -> Array<u8>;
+    /// Write data to stream
     async fn write(self: &Self, data: Array<u8>);
+    /// Close the stream
     fn close(self: &Self);
 }
 
@@ -104,6 +115,43 @@ type Meters = f64;
 
 /// Pub type alias
 pub type Kilograms = f64;
+
+/// Type alias with attribute preserved
+#[wasi("wasi:http/types#field-name")]
+pub type FieldName = String;
+
+/// Type alias with attribute and no visibility
+#[wasi("wasi:http/types#status-code")]
+type StatusCode = u16;
+
+/// Enum with attributed cases (no extra blank lines)
+#[wasi("wasi:sockets/types#ip-address-family")]
+enum IpFamily {
+    #[wasi("ipv4")]
+    Ipv4,
+    #[wasi("ipv6")]
+    Ipv6,
+}
+
+/// Variant with attributed cases (no extra blank lines)
+#[wasi("wasi:http/types#scheme")]
+variant Scheme {
+    #[wasi("HTTP")]
+    Http,
+    #[wasi("HTTPS")]
+    Https,
+    #[wasi("other")]
+    Other(String),
+}
+
+/// Struct with attributed fields (no extra blank lines)
+#[wasi("wasi:http/types#dns-error-payload")]
+struct DnsError {
+    #[wasi("rcode")]
+    pub rcode: Option<String>,
+    #[wasi("info-code")]
+    pub info_code: Option<u16>,
+}
 
 /// Global variables
 global PI: f64 = 3.14159265358979;
@@ -260,6 +308,17 @@ fn closure_block_body() {
     let greet = |name: String| {
         return `Hello, {name}!`;
     };
+}
+
+/// Calling a closure field requires parens: (self.f)(item)
+struct Mapper {
+    f: fn(i32) -> i32,
+}
+
+impl Mapper {
+    fn apply(&self, x: i32) -> i32 {
+        return (self.f)(x);
+    }
 }
 
 /// Closures: capturing and mutable capture

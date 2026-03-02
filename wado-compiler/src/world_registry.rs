@@ -194,6 +194,7 @@ mod tests {
 
         let world = WorldDecl {
             name: "Command".to_string(),
+            is_pub: false,
             attrs: vec![Attribute {
                 name: "wasi".to_string(),
                 args: vec!["wasi:cli/command@0.3.0".to_string()],
