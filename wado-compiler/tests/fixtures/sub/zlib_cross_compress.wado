@@ -23,7 +23,24 @@
 
 use { print, println, Stdout } from "core:cli";
 use { Stdin } from "wasi:cli";
-use { compress2, deflate_raw2, gzip_compress2, zlib_compress_stored, compress_with_strategy, compress_bound, zlib_version, adler32, adler32_init, adler32_combine, crc32, crc32_init, crc32_combine, DeflateStream, RAW_FORMAT, GZIP_FORMAT } from "core:zlib";
+use {
+    compress2,
+    deflate_raw2,
+    gzip_compress2,
+    zlib_compress_stored,
+    compress_with_strategy,
+    compress_bound,
+    zlib_version,
+    adler32,
+    adler32_init,
+    adler32_combine,
+    crc32,
+    crc32_init,
+    crc32_combine,
+    DeflateStream,
+    RAW_FORMAT,
+    GZIP_FORMAT,
+} from "core:zlib";
 
 fn read_all_stdin() -> Array<u8> with Stdin {
     let [stdin_stream, _done] = Stdin::read_via_stream();

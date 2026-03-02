@@ -6,7 +6,24 @@
 // This module intentionally does NOT depend on core:internal to keep the
 // dependency structure simple.
 
-use { check_special, SpecialKind, short, short32, fixed_width, fixed_width_for_prec, digits, format_decimal, format_exp, format_decimal_prec, format_exp_prec, write_decimal, write_exp, write_decimal_prec, write_exp_prec, parse_text } from "core:prelude/fpfmt.wado";
+use {
+    check_special,
+    SpecialKind,
+    short,
+    short32,
+    fixed_width,
+    fixed_width_for_prec,
+    digits,
+    format_decimal,
+    format_exp,
+    format_decimal_prec,
+    format_exp_prec,
+    write_decimal,
+    write_exp,
+    write_decimal_prec,
+    write_exp_prec,
+    parse_text,
+} from "core:prelude/fpfmt.wado";
 
 /// Copy bytes from linear memory to a new GC array (internal helper)
 fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
@@ -254,6 +271,8 @@ impl char {
             '\u{3000}' => true,
             _ => false,
         };
+
+
         // SP
         // HT
         // LF
@@ -1055,6 +1074,8 @@ impl f64 {
                 } else {
                     "e";
                 });
+
+
                 buf.append("0");
             }
             f.apply_padding(mark);
