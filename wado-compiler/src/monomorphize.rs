@@ -2586,7 +2586,9 @@ impl Monomorphizer {
                             let final_type_args = if existing_is_blanket {
                                 if let Some(args) = existing_type_args {
                                     args.iter()
-                                        .map(|&tid| self.substitute_type(tid, substitution, type_table))
+                                        .map(|&tid| {
+                                            self.substitute_type(tid, substitution, type_table)
+                                        })
                                         .collect()
                                 } else {
                                     type_args

@@ -4192,11 +4192,8 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
         for export in &world_info.exports {
             if let Some(return_type) = &export.return_type {
                 let tt = entry_type_table.borrow();
-                let flat_types = compute_export_flat_return_types(
-                    return_type,
-                    &project.tir_modules,
-                    &tt,
-                );
+                let flat_types =
+                    compute_export_flat_return_types(return_type, &project.tir_modules, &tt);
                 project.task_return_flat_params = Some(
                     flat_types
                         .iter()
