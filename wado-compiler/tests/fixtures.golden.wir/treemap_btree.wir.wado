@@ -1062,11 +1062,11 @@ fn BTreeNode<String,i32>::compact(self) {
     let __local_14: ref null Array<bool>;
     let __local_15: ref null Array<String>;
     let __local_16: ref null Array<BTreeNode<String,i32>>;
-    let _licm_keys: ref null Array<String>;
-    let _licm_deleted: ref null Array<bool>;
-    let _licm_values: ref null Array<i32>;
+    let _licm_keys_17: ref null Array<String>;
+    let _licm_deleted_18: ref null Array<bool>;
+    let _licm_values_19: ref null Array<i32>;
     let _licm_used_20: i32;
-    let _licm_children: ref null Array<BTreeNode<String,i32>>;
+    let _licm_children_21: ref null Array<BTreeNode<String,i32>>;
     let _licm_used_22: i32;
     let __local_23: i32;
     let __local_24: i32;
@@ -1085,18 +1085,18 @@ fn BTreeNode<String,i32>::compact(self) {
     };
     __for_1: block {
         i_7 = 0;
-        _licm_keys = self.keys;
-        _licm_deleted = self.deleted;
-        _licm_values = self.values;
-        _licm_used_20 = _licm_keys.used;
+        _licm_keys_17 = self.keys;
+        _licm_deleted_18 = self.deleted;
+        _licm_values_19 = self.values;
+        _licm_used_20 = _licm_keys_17.used;
         block {
             l56: loop {
                 if (i_7 < _licm_used_20) == 0 {
                     break __for_1;
                 };
-                if Array<bool>^IndexValue::index_value(_licm_deleted, i_7) == 0 {
-                    Array<String>::append(new_keys, Array<String>^IndexValue::index_value(_licm_keys, i_7));
-                    Array<i32>::append(new_values, Array<i32>^IndexValue::index_value(_licm_values, i_7));
+                if Array<bool>^IndexValue::index_value(_licm_deleted_18, i_7) == 0 {
+                    Array<String>::append(new_keys, Array<String>^IndexValue::index_value(_licm_keys_17, i_7));
+                    Array<i32>::append(new_values, Array<i32>^IndexValue::index_value(_licm_values_19, i_7));
                     Array<bool>::append(new_deleted, 0);
                 };
                 i_7 = i_7 + 1;
@@ -1110,14 +1110,14 @@ fn BTreeNode<String,i32>::compact(self) {
     if self.is_leaf == 0 {
         __for_2: block {
             i_8 = 0;
-            _licm_children = self.children;
-            _licm_used_22 = _licm_children.used;
+            _licm_children_21 = self.children;
+            _licm_used_22 = _licm_children_21.used;
             block {
                 l61: loop {
                     if (i_8 < _licm_used_22) == 0 {
                         break __for_2;
                     };
-                    BTreeNode<String,i32>::compact(Array<BTreeNode<String,i32>>^IndexValue::index_value(_licm_children, i_8));
+                    BTreeNode<String,i32>::compact(Array<BTreeNode<String,i32>>^IndexValue::index_value(_licm_children_21, i_8));
                     i_8 = i_8 + 1;
                     continue l61;
                 };
@@ -1245,35 +1245,35 @@ fn TreeMap<String,i32>::collect_entries(self, node, result) {
     let __local_4: ref null Array<String>;
     let __local_5: ref null Array<BTreeNode<String,i32>>;
     let __local_6: ref null Array<BTreeNode<String,i32>>;
-    let _licm_keys: ref null Array<String>;
-    let _licm_is_leaf: bool;
-    let _licm_children: ref null Array<BTreeNode<String,i32>>;
-    let _licm_deleted: ref null Array<bool>;
-    let _licm_values: ref null Array<i32>;
+    let _licm_keys_7: ref null Array<String>;
+    let _licm_is_leaf_8: bool;
+    let _licm_children_9: ref null Array<BTreeNode<String,i32>>;
+    let _licm_deleted_10: ref null Array<bool>;
+    let _licm_values_11: ref null Array<i32>;
     let _licm_used_12: i32;
     let _licm_used_13: i32;
     i = 0;
-    _licm_keys = node.keys;
-    _licm_is_leaf = node.is_leaf;
-    _licm_children = node.children;
-    _licm_deleted = node.deleted;
-    _licm_values = node.values;
-    _licm_used_12 = _licm_keys.used;
-    _licm_used_13 = _licm_children.used;
+    _licm_keys_7 = node.keys;
+    _licm_is_leaf_8 = node.is_leaf;
+    _licm_children_9 = node.children;
+    _licm_deleted_10 = node.deleted;
+    _licm_values_11 = node.values;
+    _licm_used_12 = _licm_keys_7.used;
+    _licm_used_13 = _licm_children_9.used;
     b72: block {
         l73: loop {
             if (i < _licm_used_12) == 0 {
                 break b72;
             };
-            if if _licm_is_leaf == 0 -> i32 {
+            if if _licm_is_leaf_8 == 0 -> i32 {
                 i < _licm_used_13;
             } else {
                 0;
             } {
-                TreeMap<String,i32>::collect_entries(self, Array<BTreeNode<String,i32>>^IndexValue::index_value(_licm_children, i), result);
+                TreeMap<String,i32>::collect_entries(self, Array<BTreeNode<String,i32>>^IndexValue::index_value(_licm_children_9, i), result);
             };
-            if Array<bool>^IndexValue::index_value(_licm_deleted, i) == 0 {
-                Array<Tuple<String,i32>>::append(result, "tuple/[String, i32]" { 0: ref.as_non_null(Array<String>^IndexValue::index_value(_licm_keys, i)), 1: Array<i32>^IndexValue::index_value(_licm_values, i) });
+            if Array<bool>^IndexValue::index_value(_licm_deleted_10, i) == 0 {
+                Array<Tuple<String,i32>>::append(result, "tuple/[String, i32]" { 0: ref.as_non_null(Array<String>^IndexValue::index_value(_licm_keys_7, i)), 1: Array<i32>^IndexValue::index_value(_licm_values_11, i) });
             };
             i = i + 1;
             continue l73;
@@ -1328,15 +1328,15 @@ fn TreeMap<String,i32>::delete_in_node(self, node, key) {
     let i: i32;
     let __local_4: ref null Array<String>;
     let __local_5: ref null Array<String>;
-    let _licm_keys: ref null Array<String>;
-    let _licm_used: i32;
+    let _licm_keys_6: ref null Array<String>;
+    let _licm_used_7: i32;
     i = 0;
-    _licm_keys = node.keys;
-    _licm_used = _licm_keys.used;
+    _licm_keys_6 = node.keys;
+    _licm_used_7 = _licm_keys_6.used;
     b82: block {
         l83: loop {
-            if if i < _licm_used -> i32 {
-                String^Ord::cmp(key, Array<String>^IndexValue::index_value(_licm_keys, i)) == 2;
+            if if i < _licm_used_7 -> i32 {
+                String^Ord::cmp(key, Array<String>^IndexValue::index_value(_licm_keys_6, i)) == 2;
             } else {
                 0;
             } == 0 {
@@ -1391,15 +1391,15 @@ fn TreeMap<String,i32>::search_in_node(self, node, key) {
     let i: i32;
     let __local_4: ref null Array<String>;
     let __local_5: ref null Array<String>;
-    let _licm_keys: ref null Array<String>;
-    let _licm_used: i32;
+    let _licm_keys_6: ref null Array<String>;
+    let _licm_used_7: i32;
     i = 0;
-    _licm_keys = node.keys;
-    _licm_used = _licm_keys.used;
+    _licm_keys_6 = node.keys;
+    _licm_used_7 = _licm_keys_6.used;
     b92: block {
         l93: loop {
-            if if i < _licm_used -> i32 {
-                String^Ord::cmp(key, Array<String>^IndexValue::index_value(_licm_keys, i)) == 2;
+            if if i < _licm_used_7 -> i32 {
+                String^Ord::cmp(key, Array<String>^IndexValue::index_value(_licm_keys_6, i)) == 2;
             } else {
                 0;
             } == 0 {
@@ -1547,36 +1547,36 @@ fn TreeMap<String,i32>::sort_node_entries(self, node) {
     let temp_d: bool;
     let __local_7: ref null Array<String>;
     let __local_8: ref null Array<String>;
-    let _licm_keys: ref null Array<String>;
-    let _licm_values: ref null Array<i32>;
-    let _licm_deleted: ref null Array<bool>;
+    let _licm_keys_9: ref null Array<String>;
+    let _licm_values_10: ref null Array<i32>;
+    let _licm_deleted_11: ref null Array<bool>;
     __for_5: block {
         i = 0;
-        _licm_keys = node.keys;
-        _licm_values = node.values;
-        _licm_deleted = node.deleted;
+        _licm_keys_9 = node.keys;
+        _licm_values_10 = node.values;
+        _licm_deleted_11 = node.deleted;
         block {
             l119: loop {
-                if (i < _licm_keys.used) == 0 {
+                if (i < _licm_keys_9.used) == 0 {
                     break __for_5;
                 };
                 __for_6: block {
                     j = i + 1;
                     block {
                         l122: loop {
-                            if (j < _licm_keys.used) == 0 {
+                            if (j < _licm_keys_9.used) == 0 {
                                 break __for_6;
                             };
-                            if String^Ord::cmp(Array<String>^IndexValue::index_value(_licm_keys, i), Array<String>^IndexValue::index_value(_licm_keys, j)) == 2 {
-                                temp_k = Array<String>^IndexValue::index_value(_licm_keys, i);
-                                Array<String>^IndexAssign::index_assign(_licm_keys, i, Array<String>^IndexValue::index_value(_licm_keys, j));
-                                Array<String>^IndexAssign::index_assign(_licm_keys, j, temp_k);
-                                temp_v = Array<i32>^IndexValue::index_value(_licm_values, i);
-                                Array<i32>^IndexAssign::index_assign(_licm_values, i, Array<i32>^IndexValue::index_value(_licm_values, j));
-                                Array<i32>^IndexAssign::index_assign(_licm_values, j, temp_v);
-                                temp_d = Array<bool>^IndexValue::index_value(_licm_deleted, i);
-                                Array<bool>^IndexAssign::index_assign(_licm_deleted, i, Array<bool>^IndexValue::index_value(_licm_deleted, j));
-                                Array<bool>^IndexAssign::index_assign(_licm_deleted, j, temp_d);
+                            if String^Ord::cmp(Array<String>^IndexValue::index_value(_licm_keys_9, i), Array<String>^IndexValue::index_value(_licm_keys_9, j)) == 2 {
+                                temp_k = Array<String>^IndexValue::index_value(_licm_keys_9, i);
+                                Array<String>^IndexAssign::index_assign(_licm_keys_9, i, Array<String>^IndexValue::index_value(_licm_keys_9, j));
+                                Array<String>^IndexAssign::index_assign(_licm_keys_9, j, temp_k);
+                                temp_v = Array<i32>^IndexValue::index_value(_licm_values_10, i);
+                                Array<i32>^IndexAssign::index_assign(_licm_values_10, i, Array<i32>^IndexValue::index_value(_licm_values_10, j));
+                                Array<i32>^IndexAssign::index_assign(_licm_values_10, j, temp_v);
+                                temp_d = Array<bool>^IndexValue::index_value(_licm_deleted_11, i);
+                                Array<bool>^IndexAssign::index_assign(_licm_deleted_11, i, Array<bool>^IndexValue::index_value(_licm_deleted_11, j));
+                                Array<bool>^IndexAssign::index_assign(_licm_deleted_11, j, temp_d);
                             };
                             j = j + 1;
                             continue l122;
@@ -1741,21 +1741,21 @@ fn BTreeNode<String,i32>::is_full(self, max_keys) {
     let count: i32;
     let i: i32;
     let __local_4: ref null Array<String>;
-    let _licm_keys: ref null Array<String>;
-    let _licm_deleted: ref null Array<bool>;
-    let _licm_used: i32;
+    let _licm_keys_5: ref null Array<String>;
+    let _licm_deleted_6: ref null Array<bool>;
+    let _licm_used_7: i32;
     count = 0;
     __for_0: block {
         i = 0;
-        _licm_keys = self.keys;
-        _licm_deleted = self.deleted;
-        _licm_used = _licm_keys.used;
+        _licm_keys_5 = self.keys;
+        _licm_deleted_6 = self.deleted;
+        _licm_used_7 = _licm_keys_5.used;
         block {
             l137: loop {
-                if (i < _licm_used) == 0 {
+                if (i < _licm_used_7) == 0 {
                     break __for_0;
                 };
-                if Array<bool>^IndexValue::index_value(_licm_deleted, i) == 0 {
+                if Array<bool>^IndexValue::index_value(_licm_deleted_6, i) == 0 {
                     count = count + 1;
                 };
                 i = i + 1;
@@ -1800,16 +1800,16 @@ fn BTreeNode<String,i32>::new_leaf() {
 
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
-    let _licm_buf: ref null String;
+    let _licm_buf_4: ref null String;
     __for_0: block {
         i = 0;
-        _licm_buf = self.buf;
+        _licm_buf_4 = self.buf;
         block {
             l141: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf, c);
+                String::append_char(_licm_buf_4, c);
                 i = i + 1;
                 continue l141;
             };
