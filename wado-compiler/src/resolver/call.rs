@@ -199,13 +199,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // Check if this is a static method call (Type::method)
                     // Static methods are registered with mangled names "Type::method"
                     else if self.is_static_method(prefix, suffix) {
-                        // Return as a static method call - will be converted to StaticCall below
+                        // Resolve method-level type args (e.g., i32::deserialize::<MockDeserializer>)
+                        let method_type_args: Vec<TypeId> = call
+                            .type_args
+                            .iter()
+                            .map(|ty| self.resolve_type(ty))
+                            .collect();
                         let mangled_name = MethodName::format_local(prefix, None, suffix);
                         return self.resolve_static_method_call_from_qualified(
                             prefix,
                             suffix,
                             &mangled_name,
                             &args,
+                            &method_type_args,
                             call.span,
                             ctx,
                         );

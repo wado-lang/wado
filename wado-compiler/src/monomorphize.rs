@@ -1814,12 +1814,16 @@ impl Monomorphizer {
                                     method_info,
                                 };
                                 if !self.function_instantiated.contains_key(&key) {
-                                    // Pass total type args count for name generation so that
-                                    // concrete positions are included in the mangled struct name.
+                                    // Compute impl-level type arg count for name generation.
+                                    // type_args includes both impl-level and method-level args.
+                                    // Subtract method-level type params to get impl count.
+                                    let impl_type_arg_count = type_args
+                                        .len()
+                                        .saturating_sub(generic_func.type_params.len());
                                     let mangled = self.method_instantiation_name(
                                         &key,
                                         type_table,
-                                        type_args.len(),
+                                        impl_type_arg_count,
                                     );
                                     self.function_instantiated
                                         .insert(key.clone(), mangled.clone());
