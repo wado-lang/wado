@@ -1,0 +1,65 @@
+// Test: serde error types — enum + struct definitions from the WEP
+use { println, Stdout } from "core:cli";
+
+enum SerializeErrorKind {
+    UnsupportedValue,
+    Custom,
+}
+
+struct SerializeError {
+    kind: SerializeErrorKind,
+    message: String,
+}
+
+enum DeserializeErrorKind {
+    UnexpectedType,
+    MissingField,
+    UnknownVariant,
+    DuplicateField,
+    InvalidValue,
+    Overflow,
+    MalformedInput,
+    TrailingData,
+    Eof,
+    Custom,
+}
+
+struct DeserializeError {
+    kind: DeserializeErrorKind,
+    message: String,
+    offset: i64,
+}
+
+export fn run() with Stdout {
+    let se = SerializeError {
+        kind: SerializeErrorKind::Custom,
+        message: "test error",
+    };
+    println(`SerializeError: {se.message}`);
+
+    let de = DeserializeError {
+        kind: DeserializeErrorKind::MissingField,
+        message: "field 'name' is missing",
+        offset: 42 as i64,
+    };
+    println(`DeserializeError: {de.message} at offset {de.offset}`);
+
+    // Test enum matching
+    let kind = DeserializeErrorKind::MissingField;
+    let label = match kind {
+        UnexpectedType => "unexpected type",
+        MissingField => "missing field",
+        UnknownVariant => "unknown variant",
+        DuplicateField => "duplicate field",
+        InvalidValue => "invalid value",
+        Overflow => "overflow",
+        MalformedInput => "malformed input",
+        TrailingData => "trailing data",
+        Eof => "eof",
+        Custom => "custom",
+    };
+    println(`Kind: {label}`);
+}
+
+__DATA__
+{"stdout": "SerializeError: test error\nDeserializeError: field 'name' is missing at offset 42\nKind: missing field\n"}

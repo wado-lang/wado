@@ -1,0 +1,87 @@
+// Test: basic Deserialize trait definition and implementation
+// Deserialize::deserialize is a static method (no &self)
+use { println, Stdout } from "core:cli";
+
+struct DeserializeError {
+    message: String,
+    offset: i64,
+}
+
+trait Deserialize {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Self, DeserializeError>;
+}
+
+trait Deserializer {
+    fn deserialize_i32(&mut self) -> Result<i32, DeserializeError>;
+    fn deserialize_string(&mut self) -> Result<String, DeserializeError>;
+    fn deserialize_bool(&mut self) -> Result<bool, DeserializeError>;
+}
+
+// Mock deserializer that returns fixed values
+struct MockDeserializer {
+    int_val: i32,
+    str_val: String,
+    bool_val: bool,
+}
+
+impl Deserializer for MockDeserializer {
+    fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
+        return Result::<i32, DeserializeError>::Ok(self.int_val);
+    }
+
+    fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
+        return Result::<String, DeserializeError>::Ok(self.str_val);
+    }
+
+    fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
+        return Result::<bool, DeserializeError>::Ok(self.bool_val);
+    }
+}
+
+impl Deserialize for i32 {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<i32, DeserializeError> {
+        return d.deserialize_i32();
+    }
+}
+
+impl Deserialize for String {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<String, DeserializeError> {
+        return d.deserialize_string();
+    }
+}
+
+impl Deserialize for bool {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<bool, DeserializeError> {
+        return d.deserialize_bool();
+    }
+}
+
+export fn run() with Stdout {
+    let mut d = MockDeserializer {
+        int_val: 42,
+        str_val: "hello",
+        bool_val: true,
+    };
+
+    let i = i32::deserialize::<MockDeserializer>(&mut d);
+    if let Ok(v) = i {
+        println(`i32: {v}`);
+    }
+
+    let s = String::deserialize::<MockDeserializer>(&mut d);
+    if let Ok(v) = s {
+        println(`String: {v}`);
+    }
+
+    let b = bool::deserialize::<MockDeserializer>(&mut d);
+    if let Ok(v) = b {
+        if v {
+            println("bool: true");
+        } else {
+            println("bool: false");
+        }
+    }
+}
+
+__DATA__
+{"TODO": true, "stdout": "i32: 42\nString: hello\nbool: true\n"}

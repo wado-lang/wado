@@ -1,0 +1,64 @@
+// Test: Serialize implementation for enum types (unit variants only)
+use { println, Stdout } from "core:cli";
+
+struct SerializeError {
+    message: String,
+}
+
+trait Serialize {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
+}
+
+trait Serializer {
+    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>;
+    fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>;
+}
+
+struct JsonSerializer {
+    buf: String,
+}
+
+impl Serializer for JsonSerializer {
+    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
+        self.buf.append(`"{*v}"`);
+        return Result::<(), SerializeError>::Ok(());
+    }
+
+    fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError> {
+        self.buf.append(`"{*variant_name}"`);
+        return Result::<(), SerializeError>::Ok(());
+    }
+}
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+// Manual Serialize for enum — what the compiler would generate
+impl Serialize for Color {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return match *self {
+            Red => s.serialize_unit_variant("Color", "Red", 0),
+            Green => s.serialize_unit_variant("Color", "Green", 1),
+            Blue => s.serialize_unit_variant("Color", "Blue", 2),
+        };
+    }
+}
+
+export fn run() with Stdout {
+    let mut ser = JsonSerializer { buf: "" };
+
+    let c = Color::Red;
+    c.serialize::<JsonSerializer>(&mut ser);
+    println(ser.buf);
+
+    ser.buf = "";
+    let c2 = Color::Blue;
+    c2.serialize::<JsonSerializer>(&mut ser);
+    println(ser.buf);
+}
+
+__DATA__
+{"TODO": true, "stdout": "\"Red\"\n\"Blue\"\n"}

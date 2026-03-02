@@ -1,0 +1,158 @@
+// Test: sub-serializer traits (SerializeSeq, SerializeStruct)
+// Tests: generic method with trait bound on sub-serializer trait
+use { println, Stdout } from "core:cli";
+
+struct SerializeError {
+    message: String,
+}
+
+trait Serialize {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
+}
+
+// Sub-serializer for sequences
+trait SerializeSeq {
+    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
+    fn end(&mut self) -> Result<(), SerializeError>;
+}
+
+// Sub-serializer for structs
+trait SerializeStruct {
+    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError>;
+    fn end(&mut self) -> Result<(), SerializeError>;
+}
+
+// Serializer trait with associated types for sub-serializers
+trait Serializer {
+    type SeqSerializer;
+    type StructSerializer;
+
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>;
+    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>;
+    fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError>;
+    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<Self::StructSerializer, SerializeError>;
+}
+
+// Mock text serializer
+struct TextSerializer {
+    buf: String,
+}
+
+struct TextSeqSerializer {
+    parent: TextSerializer,
+    count: i32,
+}
+
+struct TextStructSerializer {
+    parent: TextSerializer,
+    count: i32,
+}
+
+impl Serializer for TextSerializer {
+    type SeqSerializer = TextSeqSerializer;
+    type StructSerializer = TextStructSerializer;
+
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
+        self.buf.append(`{v}`);
+        return Result::<(), SerializeError>::Ok(());
+    }
+
+    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
+        self.buf.append(`"{*v}"`);
+        return Result::<(), SerializeError>::Ok(());
+    }
+
+    fn begin_seq(&mut self, len: i32) -> Result<TextSeqSerializer, SerializeError> {
+        self.buf.append("[");
+        return Result::<TextSeqSerializer, SerializeError>::Ok(TextSeqSerializer {
+            parent: *self,
+            count: 0,
+        });
+    }
+
+    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<TextStructSerializer, SerializeError> {
+        self.buf.append("{");
+        return Result::<TextStructSerializer, SerializeError>::Ok(TextStructSerializer {
+            parent: *self,
+            count: 0,
+        });
+    }
+}
+
+impl SerializeSeq for TextSeqSerializer {
+    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        if self.count > 0 {
+            self.parent.buf.append(",");
+        }
+        value.serialize::<TextSerializer>(&mut self.parent);
+        self.count += 1;
+        return Result::<(), SerializeError>::Ok(());
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        self.parent.buf.append("]");
+        return Result::<(), SerializeError>::Ok(());
+    }
+}
+
+impl SerializeStruct for TextStructSerializer {
+    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
+        if self.count > 0 {
+            self.parent.buf.append(",");
+        }
+        self.parent.buf.append(`"{*name}":`);
+        value.serialize::<TextSerializer>(&mut self.parent);
+        self.count += 1;
+        return Result::<(), SerializeError>::Ok(());
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        self.parent.buf.append("}");
+        return Result::<(), SerializeError>::Ok(());
+    }
+}
+
+// Serialize impls
+impl Serialize for i32 {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_i32(*self);
+    }
+}
+
+impl Serialize for String {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_string(self);
+    }
+}
+
+export fn run() with Stdout {
+    let mut ser = TextSerializer { buf: "" };
+
+    // Test sequence serialization
+    let mut seq = ser.begin_seq(3);
+    if let Ok(mut s) = seq {
+        let a = 1;
+        s.element::<i32>(&a);
+        let b = 2;
+        s.element::<i32>(&b);
+        let c = 3;
+        s.element::<i32>(&c);
+        s.end();
+    }
+    println(`seq: {ser.buf}`);
+
+    // Test struct serialization
+    ser.buf = "";
+    let mut st = ser.begin_struct("User", 2);
+    if let Ok(mut s) = st {
+        let name = "Alice";
+        s.field::<String>("name", &name);
+        let age = 30;
+        s.field::<i32>("age", &age);
+        s.end();
+    }
+    println(`struct: {ser.buf}`);
+}
+
+__DATA__
+{"TODO": true, "stdout": "seq: [1,2,3]\nstruct: {\"name\":\"Alice\",\"age\":30}\n"}

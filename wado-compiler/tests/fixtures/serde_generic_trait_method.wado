@@ -1,0 +1,46 @@
+// Test: generic method defined on a trait (isolated test)
+// This is a prerequisite for serde — trait methods with their own type parameters
+use { println, Stdout } from "core:cli";
+
+trait Writer {
+    fn write_value<T: Printable>(&mut self, value: &T);
+}
+
+trait Printable {
+    fn to_text(&self) -> String;
+}
+
+impl Printable for i32 {
+    fn to_text(&self) -> String {
+        return `{*self}`;
+    }
+}
+
+impl Printable for String {
+    fn to_text(&self) -> String {
+        return *self;
+    }
+}
+
+struct Buffer {
+    data: String,
+}
+
+impl Writer for Buffer {
+    fn write_value<T: Printable>(&mut self, value: &T) {
+        self.data.append(value.to_text());
+    }
+}
+
+export fn run() with Stdout {
+    let mut buf = Buffer { data: "" };
+    let n = 42;
+    buf.write_value::<i32>(&n);
+    buf.data.append(",");
+    let s = "hello";
+    buf.write_value::<String>(&s);
+    println(buf.data);
+}
+
+__DATA__
+{"TODO": true, "stdout": "42,hello\n"}
