@@ -167,16 +167,18 @@ The monomorphizer supports cross-module generic function instantiation. Generic 
 
 **Supported Features:**
 
-| Feature                  | Example                       | Status |
-| ------------------------ | ----------------------------- | ------ |
-| Single type parameter    | `Box<i32>`                    | ✅     |
-| Multiple type parameters | `Pair<i32, String>`           | ✅     |
-| Nested generics          | `Box<Box<i32>>`               | ✅     |
-| Generics in Array        | `Array<Pair<i32, String>>`    | ✅     |
-| Struct type parameters   | `Box<Point>`                  | ✅     |
-| Impl on specialization   | `impl Box<i32> { fn get() }`  | ✅     |
-| Generic functions        | `fn identity<T>(x: T) -> T`   | ✅     |
-| Generic methods          | `impl T { fn foo<U>(&self) }` | ✅     |
+| Feature                        | Example                                 | Status |
+| ------------------------------ | --------------------------------------- | ------ |
+| Single type parameter          | `Box<i32>`                              | ✅     |
+| Multiple type parameters       | `Pair<i32, String>`                     | ✅     |
+| Nested generics                | `Box<Box<i32>>`                         | ✅     |
+| Generics in Array              | `Array<Pair<i32, String>>`              | ✅     |
+| Struct type parameters         | `Box<Point>`                            | ✅     |
+| Impl on specialization         | `impl Box<i32> { fn get() }`            | ✅     |
+| Generic functions              | `fn identity<T>(x: T) -> T`             | ✅     |
+| Generic methods                | `impl T { fn foo<U>(&self) }`           | ✅     |
+| Generic trait methods          | `trait T { fn f<D>(&self, d: D) }`      | ✅     |
+| Static trait methods with args | `i32::deserialize::<MockDeserializer>()` | ✅     |
 
 **Name Mangling:**
 
@@ -614,6 +616,24 @@ let p = Person { name: "Alice" };
 println("Person^Greet::greet"(p));
 ```
 
+**Static Trait Method Calls (no `&self`):**
+
+Traits can define static methods (no `self` parameter). These are called using `Type::method()` syntax:
+
+```wado
+trait Deserialize {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Self, Error>;
+}
+impl Deserialize for i32 {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<i32, Error> { ... }
+}
+
+// Call site: Type::method::<TypeArg>(args)
+let result = i32::deserialize::<JsonDeserializer>(&mut d);
+```
+
+The resolver uses `find_static_method_trait` to detect when a static call targets a trait method and produces the mangled name `i32^Deserialize::deserialize`. Method-level type arguments (e.g., `<JsonDeserializer>`) generate `monomorph_info` for the monomorphizer to create a concrete instantiation.
+
 **Method Resolution Priority:**
 
 1. **Inherent methods** (methods in `impl Type { }`) take priority over trait methods
@@ -1013,7 +1033,8 @@ let outer = `Outer {`Inner {x}`}`;
 - Backtick string tokenization with `TemplateStringLit` token
 - Brace depth tracking to handle nested `{}` in interpolations
 - String literal tracking inside interpolations
-- Escape sequence support (`\n`, `\t`, `\uHHHH`, etc.)
+- Escape sequence support (`\n`, `\t`, `\uHHHH`, `\{`, `\}`, etc.)
+- `\{` and `\}` produce literal braces without triggering interpolation (emitted as `{{`/`}}` for the parser's doubling rule)
 - Nested template string support
 
 **Parser (`parser.rs`):**
@@ -1496,6 +1517,7 @@ Checked during analysis phase. Non-exhaustive patterns are compile errors.
 #### Patterns
 
 - Identifier patterns
+- Mutable identifier patterns (`if let Some(mut x) = ...`, `match { Ok(mut v) => ... }`)
 - Wildcard `_`
 - Tuple patterns
 - Variant patterns in if let (`if let Circle(r) = shape`, `if let Rect([w, h]) = shape`)
