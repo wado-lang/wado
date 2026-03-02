@@ -1269,8 +1269,13 @@ Escape sequences are shared between character and string literals:
 | `\n`     | Newline                    |
 | `\r`     | Carriage return            |
 | `\t`     | Tab                        |
+| `\0`     | Null                       |
+| `\{`     | Left brace (literal `{`)   |
+| `\}`     | Right brace (literal `}`)  |
 | `\uHHHH` | Unicode BMP (4 hex digits) |
 | `\u{H+}` | Unicode full range         |
+
+`\{` and `\}` are useful in template strings to produce literal braces without triggering interpolation.
 
 For characters outside BMP (U+10000 and above), use either:
 

@@ -1,0 +1,12 @@
+// Test: \{ and \} escape sequences in template strings
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let name = "world";
+    println(`\{"{name}"\}`);
+    println(`\{"key": "value"\}`);
+    println(`plain \{ and \}`);
+}
+
+__DATA__
+{"stdout": "{\"world\"}\n{\"key\": \"value\"}\nplain { and }\n"}

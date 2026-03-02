@@ -45,6 +45,7 @@ foo(100);                       // integer literal coerced to i64
 // Strings
 "Hello"         // String
 `Hello, {name}` // Template string
+`\{"key"\}`     // Escaped braces in template string → {"key"}
 
 // Characters
 'A'

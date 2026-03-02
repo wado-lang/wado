@@ -940,6 +940,14 @@ impl<'a> Lexer<'a> {
                 self.advance();
                 Ok('\0') // null
             }
+            Some('{') => {
+                self.advance();
+                Ok('{')
+            }
+            Some('}') => {
+                self.advance();
+                Ok('}')
+            }
             Some('u') => {
                 self.advance();
                 self.parse_unicode_escape(start, start_line, start_column)
@@ -1062,10 +1070,24 @@ impl<'a> Lexer<'a> {
                     });
                 }
                 Some((_, '\\')) => {
-                    // Handle escape sequences in template strings
                     self.advance();
-                    let ch = self.parse_escape_sequence(start, start_line, start_column)?;
-                    value.push(ch);
+                    // \{ and \} produce literal braces in template strings.
+                    // Emit as {{ / }} so the parser's existing doubling rule handles them.
+                    match self.peek_char() {
+                        Some('{') => {
+                            self.advance();
+                            value.push_str("{{");
+                        }
+                        Some('}') => {
+                            self.advance();
+                            value.push_str("}}");
+                        }
+                        _ => {
+                            let ch =
+                                self.parse_escape_sequence(start, start_line, start_column)?;
+                            value.push(ch);
+                        }
+                    }
                 }
                 Some((_, '"')) if !in_string || brace_depth > 0 => {
                     // Track string literals inside interpolations
