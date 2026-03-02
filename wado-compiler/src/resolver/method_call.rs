@@ -145,7 +145,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let assoc_bounds = {
                 let resolved = self.type_table.borrow().get(base_type_id).clone();
                 if let ResolvedType::AssocTypeProjection { bounds, .. } = resolved {
-                    if bounds.is_empty() { None } else { Some(bounds) }
+                    if bounds.is_empty() {
+                        None
+                    } else {
+                        Some(bounds)
+                    }
                 } else {
                     None
                 }

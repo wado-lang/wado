@@ -116,12 +116,10 @@ impl SubstitutionContext {
                 // Substitute the underlying type param to get the concrete type
                 let concrete_id = self.substitute(param_id, type_table);
                 // If the param resolved to a concrete type, look up the associated type binding
-                if concrete_id != param_id {
-                    if let Some(resolved) =
-                        type_table.resolve_assoc_type(concrete_id, &assoc_name)
-                    {
-                        return resolved;
-                    }
+                if concrete_id != param_id
+                    && let Some(resolved) = type_table.resolve_assoc_type(concrete_id, &assoc_name)
+                {
+                    return resolved;
                 }
                 // Fallback: return the concrete type (param substitution)
                 concrete_id

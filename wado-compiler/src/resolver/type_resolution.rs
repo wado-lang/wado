@@ -69,12 +69,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Handle T::AssociatedType where T is a type parameter in scope
         if let Some(&(_, param_type_id)) = self.current_type_params.get(&namespaced.namespace) {
             // Look up trait bounds on the associated type from the trait declaration
-            let assoc_bounds =
-                self.find_assoc_type_bounds(param_type_id, &namespaced.name);
-            return self
-                .type_table
-                .borrow_mut()
-                .make_assoc_type_projection(param_type_id, namespaced.name.clone(), assoc_bounds);
+            let assoc_bounds = self.find_assoc_type_bounds(param_type_id, &namespaced.name);
+            return self.type_table.borrow_mut().make_assoc_type_projection(
+                param_type_id,
+                namespaced.name.clone(),
+                assoc_bounds,
+            );
         }
 
         if namespaced.namespace.as_str() == "builtin" {

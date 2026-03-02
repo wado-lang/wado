@@ -718,9 +718,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                     // Skip unresolved generic instances (e.g. Option<unknown>
                     // from unresolved null literals, or Result<S::Assoc, E>
                     // from generic trait method signatures)
-                    if type_args.iter().any(|t| {
-                        type_table.contains_type_param(*t)
-                    }) {
+                    if type_args.iter().any(|t| type_table.contains_type_param(*t)) {
                         continue;
                     }
 

@@ -2008,8 +2008,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 // Set up associated type bindings as projections so that
                 // Self::AssocType resolves to AssocTypeProjection(self_type_id, "AssocType")
-                let old_bindings =
-                    std::mem::take(&mut self.current_associated_type_bindings);
+                let old_bindings = std::mem::take(&mut self.current_associated_type_bindings);
                 for assoc_decl in &trait_assoc_types {
                     let projection = self.type_table.borrow_mut().make_assoc_type_projection(
                         self_type_id,

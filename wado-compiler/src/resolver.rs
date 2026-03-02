@@ -356,10 +356,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     if impl_block.trait_type.is_some() {
                         // Resolve the target type for registering associated type resolutions
                         let target_type_id = self.resolve_type(&impl_block.ty);
-                        let is_concrete = !self
-                            .type_table
-                            .borrow()
-                            .contains_type_param(target_type_id);
+                        let is_concrete =
+                            !self.type_table.borrow().contains_type_param(target_type_id);
 
                         for binding in &impl_block.associated_types {
                             let type_id = self.resolve_type(&binding.ty);
@@ -369,13 +367,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             // Register in TypeTable for substitution resolution
                             // Only for concrete types (not generic impls like impl<T> Trait for Array<T>)
                             if is_concrete {
-                                self.type_table
-                                    .borrow_mut()
-                                    .register_assoc_type_resolution(
-                                        target_type_id,
-                                        binding.name.clone(),
-                                        type_id,
-                                    );
+                                self.type_table.borrow_mut().register_assoc_type_resolution(
+                                    target_type_id,
+                                    binding.name.clone(),
+                                    type_id,
+                                );
                             }
                         }
                     }
