@@ -998,5 +998,8 @@ fn test_format_golden_mess() {
     );
 
     let formatted2 = wado_compiler::format(&formatted).expect("format mess clean failed");
-    assert_eq!(formatted, formatted2, "format(mess clean) should be idempotent");
+    assert_eq!(
+        formatted, formatted2,
+        "format(mess clean) should be idempotent"
+    );
 }
