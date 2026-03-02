@@ -42,7 +42,8 @@ All levels run DCE (Dead Code Elimination) to remove unreachable functions and t
 
 The optimizer runs after lowering and before Wasm emission:
 
-1. Fixed-point iteration loop (skipped for `-O0`):
+1. Early DCE: remove unreachable functions/types/globals before optimization (all levels). This significantly reduces the working set for subsequent passes by eliminating stdlib functions and types the program doesn't use.
+2. Fixed-point iteration loop (skipped for `-O0`):
    1. Function Inlining
    2. Reference Elimination
    3. SROA (Scalar Replacement of Aggregates)
@@ -53,9 +54,9 @@ The optimizer runs after lowering and before Wasm emission:
    8. Constant Branch Pruning
    9. Loop-Invariant Code Motion (LICM)
    10. Template String Buffer Hoisting
-2. DCE Analysis and removal of unreachable functions/types (all levels)
-3. Post-optimization rewrites (labeled block simplification, select lowering, move insertion; all levels)
-4. WIR-level optimizations (multi-value SROA, constant array data promotion, large array splitting; see [WIR Optimizations](#wir-optimizations))
+3. Final DCE: clean up code made dead by optimizations (e.g., functions inlined away) (all levels)
+4. Post-optimization rewrites (labeled block simplification, select lowering, move insertion; all levels)
+5. WIR-level optimizations (multi-value SROA, constant array data promotion, large array splitting; see [WIR Optimizations](#wir-optimizations))
 
 ## Implemented Optimizations
 
