@@ -766,6 +766,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 name,
                 module_source,
             } => (name.clone(), module_source.clone(), name.clone(), vec![]),
+            ResolvedType::Primitive(prim) => {
+                let name = prim.as_str().to_string();
+                (name.clone(), ModuleSource::primitives(), name, vec![])
+            }
+            ResolvedType::Enum {
+                name,
+                module_source,
+            } => (name.clone(), module_source.clone(), name.clone(), vec![]),
             ResolvedType::GenericInstance {
                 name,
                 module_source,
@@ -939,6 +947,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let simple_name = MethodName::format_local(struct_name, None, method_name);
         if let Some(&return_type) = self.function_return_types.get(&simple_name) {
             return return_type;
+        }
+
+        // Try with trait-qualified name (StructName^TraitName::method)
+        if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name) {
+            let trait_mangled =
+                MethodName::format_local(struct_name, Some(&trait_name), method_name);
+            if let Some(&return_type) = self.function_return_types.get(&trait_mangled) {
+                return return_type;
+            }
         }
 
         // Try looking up in loaded modules
@@ -1333,6 +1350,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         method_name: &str,
         mangled_func_name: &str,
         args: &[TirExpr],
+        method_type_args: &[TypeId],
         span: Span,
         _ctx: &mut FunctionContext,
     ) -> TirExpr {
@@ -1356,23 +1374,49 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Determine module source for the actual struct
         let struct_module = self.find_struct_module_source(&actual_struct_name);
 
+        // Find trait name for trait static methods
+        let trait_name_opt = self.find_static_method_trait(&actual_struct_name, method_name);
+
+        // Use trait-qualified mangled name if this is a trait method
+        let final_mangled_name = if let Some(ref trait_name) = trait_name_opt {
+            MethodName::format_local(&actual_struct_name, Some(trait_name), method_name)
+        } else {
+            actual_mangled_name
+        };
+
         // Look up return type using the actual struct name
-        let return_type = self.lookup_static_method_return_type(
+        let mut return_type = self.lookup_static_method_return_type(
             &actual_struct_name,
             &struct_module,
             method_name,
-            &actual_mangled_name,
+            &final_mangled_name,
         );
+
+        // Substitute method-level type parameters in return type
+        if !method_type_args.is_empty() {
+            return_type = self.substitute_type_params(return_type, method_type_args);
+        }
+
+        // Build monomorph_info for method-level generic instantiation
+        let monomorph_info = if method_type_args.is_empty() {
+            None
+        } else {
+            Some(MonomorphInfo {
+                generic_name: final_mangled_name.clone(),
+                type_args: method_type_args.to_vec(),
+                is_blanket: false,
+            })
+        };
 
         TirExpr::new(
             TirExprKind::StaticCall {
                 func: FunctionRef::External {
                     module_source: struct_module,
-                    name: actual_mangled_name,
-                    monomorph_info: None,
+                    name: final_mangled_name,
+                    monomorph_info,
                     method_info: Some(LocalMethodName::new(
                         actual_struct_name,
-                        None, // Static methods are inherent, no trait
+                        trait_name_opt,
                         method_name.to_string(),
                     )),
                 },

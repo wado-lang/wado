@@ -846,6 +846,98 @@ impl<'a> Lexer<'a> {
     /// Only scans — does not validate or interpret escape values.
     fn skip_escape(&mut self) {
         match self.peek_char() {
+<<<<<<< HEAD
+||||||| 932fd53
+            Some('n') => {
+                self.advance();
+                Ok('\n')
+            }
+            Some('t') => {
+                self.advance();
+                Ok('\t')
+            }
+            Some('r') => {
+                self.advance();
+                Ok('\r')
+            }
+            Some('\\') => {
+                self.advance();
+                Ok('\\')
+            }
+            Some('"') => {
+                self.advance();
+                Ok('"')
+            }
+            Some('\'') => {
+                self.advance();
+                Ok('\'')
+            }
+            Some('/') => {
+                self.advance();
+                Ok('/')
+            }
+            Some('b') => {
+                self.advance();
+                Ok('\x08') // backspace
+            }
+            Some('f') => {
+                self.advance();
+                Ok('\x0C') // form feed
+            }
+            Some('0') => {
+                self.advance();
+                Ok('\0') // null
+            }
+=======
+            Some('n') => {
+                self.advance();
+                Ok('\n')
+            }
+            Some('t') => {
+                self.advance();
+                Ok('\t')
+            }
+            Some('r') => {
+                self.advance();
+                Ok('\r')
+            }
+            Some('\\') => {
+                self.advance();
+                Ok('\\')
+            }
+            Some('"') => {
+                self.advance();
+                Ok('"')
+            }
+            Some('\'') => {
+                self.advance();
+                Ok('\'')
+            }
+            Some('/') => {
+                self.advance();
+                Ok('/')
+            }
+            Some('b') => {
+                self.advance();
+                Ok('\x08') // backspace
+            }
+            Some('f') => {
+                self.advance();
+                Ok('\x0C') // form feed
+            }
+            Some('0') => {
+                self.advance();
+                Ok('\0') // null
+            }
+            Some('{') => {
+                self.advance();
+                Ok('{')
+            }
+            Some('}') => {
+                self.advance();
+                Ok('}')
+            }
+>>>>>>> origin/main
             Some('u') => {
                 self.advance();
                 if self.peek_char() == Some('{') {
@@ -895,10 +987,23 @@ impl<'a> Lexer<'a> {
                     });
                 }
                 Some((_, '\\')) => {
-                    // Handle escape sequences in template strings
                     self.advance();
-                    let ch = self.parse_escape_sequence(start, start_line, start_column)?;
-                    value.push(ch);
+                    // \{ and \} produce literal braces in template strings.
+                    // Emit as {{ / }} so the parser's existing doubling rule handles them.
+                    match self.peek_char() {
+                        Some('{') => {
+                            self.advance();
+                            value.push_str("{{");
+                        }
+                        Some('}') => {
+                            self.advance();
+                            value.push_str("}}");
+                        }
+                        _ => {
+                            let ch = self.parse_escape_sequence(start, start_line, start_column)?;
+                            value.push(ch);
+                        }
+                    }
                 }
                 Some((_, '"')) if !in_string || brace_depth > 0 => {
                     // Track string literals inside interpolations

@@ -1755,6 +1755,10 @@ impl<'a> Unparser<'a> {
     fn unparse_pattern(&mut self, pattern: &Pattern) {
         match pattern {
             Pattern::Ident(name) => self.output.push_str(name),
+            Pattern::MutIdent(name) => {
+                self.output.push_str("mut ");
+                self.output.push_str(name);
+            }
             Pattern::Literal(lit) => self.unparse_literal(lit),
             Pattern::Wildcard => self.output.push('_'),
             Pattern::Tuple(patterns) => {
@@ -1820,6 +1824,10 @@ impl<'a> Unparser<'a> {
     fn unparse_let_pattern(&mut self, pattern: &Pattern) {
         match pattern {
             Pattern::Ident(name) => self.output.push_str(name),
+            Pattern::MutIdent(name) => {
+                self.output.push_str("mut ");
+                self.output.push_str(name);
+            }
             Pattern::Wildcard => self.output.push('_'),
             Pattern::Tuple(patterns) => {
                 self.output.push('[');
@@ -2604,6 +2612,10 @@ fn unparse_condition_into(cond: &Condition, output: &mut String) {
 fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
     match pattern {
         Pattern::Ident(name) => output.push_str(name),
+        Pattern::MutIdent(name) => {
+            output.push_str("mut ");
+            output.push_str(name);
+        }
         Pattern::Literal(lit) => unparse_literal_into(lit, output),
         Pattern::Wildcard => output.push('_'),
         Pattern::Tuple(pats) => {

@@ -900,6 +900,7 @@ pub struct MatchesExpr {
 #[derive(Debug, Clone)]
 pub enum Pattern {
     Ident(String),
+    MutIdent(String),
     Literal(Literal),
     Wildcard,
     Tuple(Vec<Pattern>),

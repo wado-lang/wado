@@ -1,0 +1,64 @@
+// Test: Serialize implementation for Option<T>
+// Option<T> serializes as null for None, delegates to inner for Some
+use { println, Stdout } from "core:cli";
+
+struct SerializeError {
+    message: String,
+}
+
+trait Serialize {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
+}
+
+trait Serializer {
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>;
+    fn serialize_null(&mut self) -> Result<(), SerializeError>;
+}
+
+struct JsonSerializer {
+    buf: String,
+}
+
+impl Serializer for JsonSerializer {
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
+        self.buf.append(`{v}`);
+        return Result::<(), SerializeError>::Ok(());
+    }
+
+    fn serialize_null(&mut self) -> Result<(), SerializeError> {
+        self.buf.append("null");
+        return Result::<(), SerializeError>::Ok(());
+    }
+}
+
+impl Serialize for i32 {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_i32(*self);
+    }
+}
+
+// Serialize for Option<T> — bounded impl
+impl<T: Serialize> Serialize for Option<T> {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        if let Some(v) = self {
+            return v.serialize::<S>(s);
+        }
+        return s.serialize_null();
+    }
+}
+
+export fn run() with Stdout {
+    let mut ser = JsonSerializer { buf: "" };
+
+    let some_val = Option::<i32>::Some(42);
+    some_val.serialize::<JsonSerializer>(&mut ser);
+    println(`Some: {ser.buf}`);
+
+    ser.buf = "";
+    let none_val: Option<i32> = null;
+    none_val.serialize::<JsonSerializer>(&mut ser);
+    println(`None: {ser.buf}`);
+}
+
+__DATA__
+{"stdout": "Some: 42\nNone: null\n"}

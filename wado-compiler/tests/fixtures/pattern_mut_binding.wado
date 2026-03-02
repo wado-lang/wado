@@ -1,0 +1,66 @@
+// Test mut bindings inside patterns (value semantics: original is not modified)
+use { println, Stdout } from "core:cli";
+
+variant Counter {
+    Value(i32),
+    Empty,
+}
+
+export fn run() with Stdout {
+    // if let with mut binding — i32
+    let opt = Option::<i32>::Some(10);
+    if let Some(mut x) = opt {
+        x += 5;
+        assert x == 15;
+        println(`mutated: {x}`);
+    }
+    // original unchanged
+    if let Some(orig) = opt {
+        assert orig == 10;
+        println(`original: {orig}`);
+    }
+
+    // match with mut binding — i32
+    let c = Counter::Value(100);
+    let result = match c {
+        Value(mut n) => {
+            n *= 2;
+            n
+        },
+        Empty => 0,
+    };
+    assert result == 200;
+    println(`result: {result}`);
+    // original unchanged
+    if let Value(orig) = c {
+        assert orig == 100;
+        println(`original: {orig}`);
+    }
+
+    // mut binding with String — append does not affect original
+    let opt_str = Option::<String>::Some("hello");
+    if let Some(mut s) = opt_str {
+        s.append(" world");
+        assert s == "hello world";
+        println(`mutated: {s}`);
+    }
+    if let Some(orig) = opt_str {
+        assert orig == "hello";
+        println(`original: {orig}`);
+    }
+
+    // mut binding with Array — append does not affect original
+    let opt_arr = Option::<Array<i32>>::Some([1, 2, 3] as Array<i32>);
+    if let Some(mut arr) = opt_arr {
+        arr.append(4);
+        assert arr.len() == 4;
+        println(`mutated len: {arr.len()}`);
+    }
+    if let Some(orig) = opt_arr {
+        assert orig.len() == 3;
+        println(`original len: {orig.len()}`);
+    }
+}
+
+__DATA__
+{"stdout": "mutated: 15\noriginal: 10\nresult: 200\noriginal: 100\nmutated: hello world\noriginal: hello\nmutated len: 4\noriginal len: 3\n"}

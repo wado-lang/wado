@@ -173,6 +173,7 @@ fn desugar_let_stmt(l: &LetStmt) -> LetStmt {
 fn desugar_pattern(p: &Pattern) -> Pattern {
     match p {
         Pattern::Ident(name) => Pattern::Ident(name.clone()),
+        Pattern::MutIdent(name) => Pattern::MutIdent(name.clone()),
         Pattern::Literal(lit) => Pattern::Literal(lit.clone()),
         Pattern::Wildcard => Pattern::Wildcard,
         Pattern::Tuple(patterns) => Pattern::Tuple(patterns.iter().map(desugar_pattern).collect()),

@@ -1,0 +1,66 @@
+// Test: basic Serialize trait definition and implementation
+// Tests: trait with generic method, trait bounds on generic method
+use { println, Stdout } from "core:cli";
+
+// Simplified error type
+struct SerializeError {
+    message: String,
+}
+
+// The core Serialize trait — a single generic method
+trait Serialize {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
+}
+
+// Minimal Serializer trait — just serialize_i32 for now
+trait Serializer {
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>;
+    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>;
+}
+
+// A mock serializer that appends text to a buffer
+struct TextSerializer {
+    buf: String,
+}
+
+impl Serializer for TextSerializer {
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
+        self.buf.append(`{v}`);
+        return Result::<(), SerializeError>::Ok(());
+    }
+
+    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
+        self.buf.append(`"{*v}"`);
+        return Result::<(), SerializeError>::Ok(());
+    }
+}
+
+// Implement Serialize for i32
+impl Serialize for i32 {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_i32(*self);
+    }
+}
+
+// Implement Serialize for String
+impl Serialize for String {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_string(self);
+    }
+}
+
+export fn run() with Stdout {
+    let mut ser = TextSerializer { buf: "" };
+
+    let n = 42;
+    n.serialize::<TextSerializer>(&mut ser);
+    println(`i32: {ser.buf}`);
+
+    ser.buf = "";
+    let s = "hello";
+    s.serialize::<TextSerializer>(&mut ser);
+    println(`String: {ser.buf}`);
+}
+
+__DATA__
+{"stdout": "i32: 42\nString: \"hello\"\n"}

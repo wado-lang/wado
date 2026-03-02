@@ -575,16 +575,17 @@ match command {
 
 **Pattern Syntax:**
 
-| Pattern  | Example                      | Description            |
-| -------- | ---------------------------- | ---------------------- |
-| Wildcard | `_`                          | Matches anything       |
-| Variable | `x`                          | Binds matched value    |
-| Literal  | `0`, `"hello"`, `true`       | Matches exact value    |
-| Variant  | `Some(x)`, `None`            | Matches variant case   |
-| Tuple    | `[a, b, c]`                  | Destructures tuple     |
-| Struct   | `{ x, y }`, `Point { x, y }` | Destructures struct    |
-| Or       | `Red \| Blue`                | Matches either pattern |
-| Guard    | `Some(x) && x > 0`           | Pattern with condition |
+| Pattern      | Example                      | Description            |
+| ------------ | ---------------------------- | ---------------------- |
+| Wildcard     | `_`                          | Matches anything       |
+| Variable     | `x`                          | Binds matched value    |
+| Mut variable | `mut x`, `Some(mut x)`       | Binds as mutable       |
+| Literal      | `0`, `"hello"`, `true`       | Matches exact value    |
+| Variant      | `Some(x)`, `None`            | Matches variant case   |
+| Tuple        | `[a, b, c]`                  | Destructures tuple     |
+| Struct       | `{ x, y }`, `Point { x, y }` | Destructures struct    |
+| Or           | `Red \| Blue`                | Matches either pattern |
+| Guard        | `Some(x) && x > 0`           | Pattern with condition |
 
 **Exhaustiveness:**
 
@@ -607,6 +608,24 @@ match customer {
     Premium(years) && years > 5 => 0.3,
     Premium(_) => 0.2,
     _ => 0.1,
+}
+```
+
+**Mutable Bindings in Patterns:**
+
+The `mut` keyword before a binding name makes it mutable inside the pattern body:
+
+```wado
+if let Some(mut x) = opt {
+    x += 10;  // x is mutable
+}
+
+match result {
+    Ok(mut value) => {
+        value *= 2;
+        value
+    },
+    Err(_) => 0,
 }
 ```
 
@@ -1269,8 +1288,13 @@ Escape sequences are shared between character and string literals:
 | `\n`     | Newline                    |
 | `\r`     | Carriage return            |
 | `\t`     | Tab                        |
+| `\0`     | Null                       |
+| `\{`     | Left brace (literal `{`)   |
+| `\}`     | Right brace (literal `}`)  |
 | `\uHHHH` | Unicode BMP (4 hex digits) |
 | `\u{H+}` | Unicode full range         |
+
+`\{` and `\}` are useful in template strings to produce literal braces without triggering interpolation.
 
 For characters outside BMP (U+10000 and above), use either:
 
@@ -1298,6 +1322,9 @@ let hex = `{255:x}`;              // "ff"
 let p = Point { x: 10, y: 20 };
 let debug = `{p:?}`;             // "Point { x: 10, y: 20 }"
 let fallback = `{p}`;            // same — falls back to inspect when no Display impl
+
+// Escaped braces — literal { and } without interpolation
+let json = `\{"key": "{name}"\}`;  // {"key": "Alice"}
 ```
 
 See [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md) for the full specifier table, [WEP: Format Traits](./wep-2026-02-01-format-traits.md) for the trait/Formatter infrastructure, and [WEP: Inspect](./wep-2026-02-21-inspect-debug-output.md) for the `:?` debug output format.

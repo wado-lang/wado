@@ -1,0 +1,107 @@
+// Test: Serialize implementation for variant types (with payloads)
+use { println, Stdout } from "core:cli";
+
+struct SerializeError {
+    message: String,
+}
+
+trait Serialize {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
+}
+
+trait SerializeVariant {
+    fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
+    fn end(&mut self) -> Result<(), SerializeError>;
+}
+
+trait Serializer {
+    type VariantSerializer;
+
+    fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError>;
+    fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>;
+    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<Self::VariantSerializer, SerializeError>;
+}
+
+struct JsonSerializer {
+    buf: String,
+}
+
+struct JsonVariantSerializer {
+    ser: JsonSerializer,
+}
+
+impl Serializer for JsonSerializer {
+    type VariantSerializer = JsonVariantSerializer;
+
+    fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
+        self.buf.append(`{v}`);
+        return Result::<(), SerializeError>::Ok(());
+    }
+
+    fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError> {
+        self.buf.append(`"{*variant_name}"`);
+        return Result::<(), SerializeError>::Ok(());
+    }
+
+    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<JsonVariantSerializer, SerializeError> {
+        self.buf.append(`\{"{*variant_name}":`);
+        return Result::<JsonVariantSerializer, SerializeError>::Ok(JsonVariantSerializer {
+            ser: *self,
+        });
+    }
+}
+
+impl SerializeVariant for JsonVariantSerializer {
+    fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        return value.serialize::<JsonSerializer>(&mut self.ser);
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        self.ser.buf.append("}");
+        return Result::<(), SerializeError>::Ok(());
+    }
+}
+
+impl Serialize for f64 {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_f64(*self);
+    }
+}
+
+variant Shape {
+    Circle(f64),
+    Point,
+}
+
+// Manual Serialize for variant — what the compiler would generate
+impl Serialize for Shape {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return match *self {
+            Circle(r) => {
+                let mut v = s.begin_variant("Shape", "Circle", 0);
+                if let Ok(mut v) = v {
+                    v.payload::<f64>(&r);
+                    return v.end();
+                }
+                return Result::<(), SerializeError>::Err(SerializeError { message: "begin_variant failed" });
+            },
+            Point => s.serialize_unit_variant("Shape", "Point", 1),
+        };
+    }
+}
+
+export fn run() with Stdout {
+    let mut ser = JsonSerializer { buf: "" };
+
+    let shape = Shape::Circle(5.0);
+    shape.serialize::<JsonSerializer>(&mut ser);
+    println(ser.buf);
+
+    ser.buf = "";
+    let shape2 = Shape::Point;
+    shape2.serialize::<JsonSerializer>(&mut ser);
+    println(ser.buf);
+}
+
+__DATA__
+{"TODO": true, "stdout": "{\"Circle\":5}\n\"Point\"\n"}

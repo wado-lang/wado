@@ -278,7 +278,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         span: Span,
     ) -> Result<(), Bail> {
         match pattern {
-            crate::ast::Pattern::Ident(name) => {
+            crate::ast::Pattern::Ident(name) | crate::ast::Pattern::MutIdent(name) => {
                 self.define(name, is_mut, is_reactive, span)?;
             }
             crate::ast::Pattern::Tuple(patterns) => {
@@ -670,6 +670,9 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             crate::ast::Pattern::Ident(name) => {
                 // Pattern bindings are immutable by default
                 self.define(name, false, false, span)?;
+            }
+            crate::ast::Pattern::MutIdent(name) => {
+                self.define(name, true, false, span)?;
             }
             crate::ast::Pattern::Tuple(patterns) => {
                 for p in patterns {
