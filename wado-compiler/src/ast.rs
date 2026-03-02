@@ -727,9 +727,12 @@ pub struct LiteralExpr {
 
 #[derive(Debug, Clone)]
 pub enum Literal {
-    Number(NumberLiteral),
-    String(StringLiteral),
-    Char(char),
+    /// Numeric literal: raw source text (e.g. `"42"`, `"0xFF"`, `"3.14"`). Type resolved later.
+    Number(String),
+    /// String literal: raw source text between quotes (escape sequences not interpreted).
+    String(String),
+    /// Char literal: raw source text between quotes (escape sequences not interpreted).
+    Char(String),
     Bool(bool),
     Null,
     Unit,
@@ -741,38 +744,6 @@ pub enum Literal {
     LocationFunction,
     /// Compile-time data section literal: `#data`
     DataSection,
-}
-
-/// String literal with original representation to preserve multiline strings
-#[derive(Debug, Clone)]
-pub struct StringLiteral {
-    /// The actual string value (with escape sequences interpreted)
-    pub value: String,
-    /// The original source representation (between quotes, unescaped)
-    pub raw: String,
-}
-
-impl PartialEq<str> for StringLiteral {
-    fn eq(&self, other: &str) -> bool {
-        self.value == other
-    }
-}
-
-impl PartialEq<&str> for StringLiteral {
-    fn eq(&self, other: &&str) -> bool {
-        self.value == *other
-    }
-}
-
-/// Numeric literal with original representation (e.g., "0b1100", "0xFF", "42", "3.14", "1e10")
-/// The actual value and type are determined in the resolver phase based on context.
-/// Format rules:
-/// - Has `.` → float only (e.g., "3.14", "1.0")
-/// - Has negative exponent → float only (e.g., "1e-5")
-/// - Otherwise → can be int or float based on context (e.g., "42", "1e10")
-#[derive(Debug, Clone)]
-pub struct NumberLiteral {
-    pub repr: String,
 }
 
 #[derive(Debug, Clone)]

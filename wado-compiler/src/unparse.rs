@@ -71,6 +71,12 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_module(&mut self, module: &Module) {
+        for attr in module.inner_attributes() {
+            self.output.push_str("#![");
+            self.output.push_str(&attr.name);
+            self.output.push_str("]\n");
+        }
+
         for item in &module.items {
             let item_span = get_item_span(item);
             self.unparse_item(item);
@@ -84,8 +90,10 @@ impl<'a> Unparser<'a> {
         // Emit leading comments (handles blank lines before comments)
         self.emit_leading_comments(&span);
 
-        // Emit blank lines before the item itself
-        self.emit_blank_lines_to(span.line);
+        // Emit blank lines before the item itself.
+        // Use the first attribute line (if any) to avoid growing blank lines
+        // between doc comments and attrs on repeated formatting passes.
+        self.emit_blank_lines_to(get_item_first_line(item));
 
         match item {
             Item::Use(u) => self.unparse_use(u),
@@ -234,8 +242,10 @@ impl<'a> Unparser<'a> {
 
         self.output.push(')');
 
-        // Return type
-        if let Some(ret) = &f.return_type {
+        // Return type: skip `-> ()` (unit return is the default)
+        if let Some(ret) = &f.return_type
+            && !matches!(ret, Type::Named(n) if n.name == "()")
+        {
             self.output.push_str(" -> ");
             self.unparse_type(ret);
         }
@@ -270,6 +280,21 @@ impl<'a> Unparser<'a> {
                 return;
             }
             SelfKind::None => {}
+        }
+        // Normalize explicit `self: &Self` / `self: &mut Self` to shorthand form
+        if param.name == "self" {
+            if let Type::Reference(inner) = &param.ty
+                && matches!(inner.as_ref(), Type::Named(n) if n.name == "Self")
+            {
+                self.output.push_str("&self");
+                return;
+            }
+            if let Type::MutReference(inner) = &param.ty
+                && matches!(inner.as_ref(), Type::Named(n) if n.name == "Self")
+            {
+                self.output.push_str("&mut self");
+                return;
+            }
         }
         // Regular parameter
         self.output.push_str(&param.name);
@@ -392,6 +417,12 @@ impl<'a> Unparser<'a> {
     fn unparse_enum(&mut self, e: &EnumDecl) {
         self.write_indent();
 
+        for attr in &e.attrs {
+            self.unparse_attribute(attr);
+            self.output.push('\n');
+            self.write_indent();
+        }
+
         if e.is_pub {
             self.output.push_str("pub ");
         }
@@ -402,11 +433,20 @@ impl<'a> Unparser<'a> {
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
+        let saved_line = self.last_source_line;
+        self.last_source_line = e.span.line;
+
         for case in &e.cases {
+            self.emit_leading_comments(&case.span);
+            self.emit_blank_lines_to(case.span.line);
             self.unparse_enum_case(case);
+            self.emit_trailing_comments_inline(&case.span);
+            self.output.push('\n');
+            self.last_source_line = case.span.end_line();
         }
         self.indent_level -= 1;
 
+        self.last_source_line = saved_line.max(e.span.end_line());
         self.write_indent();
         self.output.push_str("}\n");
     }
@@ -420,11 +460,17 @@ impl<'a> Unparser<'a> {
         }
         self.output.push_str(&case.name);
         // Enum cases have no payload (unlike variant cases)
-        self.output.push_str(",\n");
+        self.output.push(',');
     }
 
     fn unparse_variant(&mut self, v: &VariantDecl) {
         self.write_indent();
+
+        for attr in &v.attrs {
+            self.unparse_attribute(attr);
+            self.output.push('\n');
+            self.write_indent();
+        }
 
         if v.is_pub {
             self.output.push_str("pub ");
@@ -478,6 +524,8 @@ impl<'a> Unparser<'a> {
         if let Some(attrs) = &f.attributes {
             for attr in attrs {
                 self.unparse_attribute(attr);
+                self.output.push('\n');
+                self.write_indent();
             }
         }
 
@@ -490,16 +538,27 @@ impl<'a> Unparser<'a> {
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
+        let saved_line = self.last_source_line;
+        self.last_source_line = f.span.line;
+
         for flag in &f.flags {
+            self.emit_leading_comments(&flag.span);
+            self.emit_blank_lines_to(flag.span.line);
+            self.write_indent();
             for attr in &flag.attrs {
                 self.unparse_attribute(attr);
+                self.output.push('\n');
+                self.write_indent();
             }
-            self.write_indent();
             self.output.push_str(&flag.name);
-            self.output.push_str(",\n");
+            self.output.push(',');
+            self.emit_trailing_comments_inline(&flag.span);
+            self.output.push('\n');
+            self.last_source_line = flag.span.end_line();
         }
         self.indent_level -= 1;
 
+        self.last_source_line = saved_line.max(f.span.end_line());
         self.write_indent();
         self.output.push_str("}\n");
     }
@@ -518,19 +577,72 @@ impl<'a> Unparser<'a> {
         self.output.push_str(";\n");
     }
 
+    /// Output an inherent impl type with type param bounds inlined into type args.
+    /// E.g.: `impl<T: Ord> Array<T>` → `impl Array<T: Ord>`
+    fn unparse_impl_inherent_type(&mut self, ty: &Type, type_params: &[crate::ast::GenericParam]) {
+        let Type::Generic(g) = ty else {
+            // No type args to inline into; just output the type normally
+            self.unparse_type(ty);
+            return;
+        };
+
+        self.output.push_str(&g.name);
+        self.output.push('<');
+        for (i, arg) in g.args.iter().enumerate() {
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            // If this arg is a named type param with bounds, inline the bounds
+            if let Type::Named(n) = arg
+                && let Some(param) = type_params.iter().find(|p| p.name == n.name)
+            {
+                self.output.push_str(&param.name);
+                if !param.bounds.is_empty() {
+                    self.output.push_str(": ");
+                    for (j, bound) in param.bounds.iter().enumerate() {
+                        if j > 0 {
+                            self.output.push_str(" + ");
+                        }
+                        self.output.push_str(&bound.name);
+                        if !bound.assoc_types.is_empty() {
+                            self.output.push('<');
+                            for (k, assoc) in bound.assoc_types.iter().enumerate() {
+                                if k > 0 {
+                                    self.output.push_str(", ");
+                                }
+                                self.output.push_str(&assoc.name);
+                                self.output.push_str(" = ");
+                                self.unparse_type(&assoc.ty);
+                            }
+                            self.output.push('>');
+                        }
+                    }
+                }
+                continue;
+            }
+            self.unparse_type(arg);
+        }
+        self.output.push('>');
+    }
+
     fn unparse_impl(&mut self, i: &ImplBlock) {
         self.write_indent();
         self.output.push_str("impl");
-        self.unparse_generic_params(&i.type_params);
-        self.output.push(' ');
 
         // Handle `impl Trait for Type` vs `impl Type`
         if let Some(trait_type) = &i.trait_type {
+            // Trait impl: use Rust-style generic params at `impl` level
+            self.unparse_generic_params(&i.type_params);
+            self.output.push(' ');
             self.unparse_type(trait_type);
             self.output.push_str(" for ");
+            self.unparse_type(&i.ty);
+        } else {
+            // Inherent impl: use compact form with bounds inlined in type args
+            self.output.push(' ');
+            self.unparse_impl_inherent_type(&i.ty, &i.type_params);
         }
 
-        self.unparse_type(&i.ty);
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
@@ -637,10 +749,17 @@ impl<'a> Unparser<'a> {
             self.output.push('\n');
         }
 
-        // For trait declarations, don't add extra blank lines between method signatures
+        let saved_line = self.last_source_line;
+        self.last_source_line = t.span.line;
+
         for method in &t.methods {
+            self.emit_leading_comments(&method.span);
+            self.emit_blank_lines_to(method.span.line);
             self.unparse_function(method);
+            self.last_source_line = method.span.end_line();
         }
+
+        self.last_source_line = saved_line.max(t.span.end_line());
         self.indent_level -= 1;
 
         self.write_indent();
@@ -666,11 +785,18 @@ impl<'a> Unparser<'a> {
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
+        let saved_line = self.last_source_line;
+        self.last_source_line = e.span.line;
+
         for method in &e.methods {
+            self.emit_leading_comments(&method.span);
+            self.emit_blank_lines_to(method.span.line);
             self.unparse_effect_method(method);
+            self.last_source_line = method.span.end_line();
         }
         self.indent_level -= 1;
 
+        self.last_source_line = saved_line.max(e.span.end_line());
         self.write_indent();
         self.output.push_str("}\n");
     }
@@ -684,6 +810,9 @@ impl<'a> Unparser<'a> {
             self.write_indent();
         }
 
+        if m.is_async {
+            self.output.push_str("async ");
+        }
         self.output.push_str("fn ");
         self.output.push_str(&m.name);
         self.output.push('(');
@@ -692,14 +821,15 @@ impl<'a> Unparser<'a> {
             if i > 0 {
                 self.output.push_str(", ");
             }
-            self.output.push_str(&param.name);
-            self.output.push_str(": ");
-            self.unparse_type(&param.ty);
+            self.unparse_param(param);
         }
 
         self.output.push(')');
 
-        if let Some(ret) = &m.return_type {
+        // Return type: skip `-> ()` (unit return is the default)
+        if let Some(ret) = &m.return_type
+            && !matches!(ret, Type::Named(n) if n.name == "()")
+        {
             self.output.push_str(" -> ");
             self.unparse_type(ret);
         }
@@ -791,7 +921,10 @@ impl<'a> Unparser<'a> {
                 self.unparse_type(&param.ty);
             }
             self.output.push(')');
-            if let Some(ret) = &exp.return_type {
+            // Return type: skip `-> ()` (unit return is the default)
+            if let Some(ret) = &exp.return_type
+                && !matches!(ret, Type::Named(n) if n.name == "()")
+            {
                 self.output.push_str(" -> ");
                 self.unparse_type(ret);
             }
@@ -1321,16 +1454,15 @@ impl<'a> Unparser<'a> {
 
     fn unparse_literal(&mut self, lit: &Literal) {
         match lit {
-            Literal::Number(num_lit) => self.output.push_str(&num_lit.repr),
-            Literal::String(s) => {
-                // Use raw form to preserve multiline strings as-is
+            Literal::Number(repr) => self.output.push_str(repr),
+            Literal::String(raw) => {
                 self.output.push('"');
-                self.output.push_str(&s.raw);
+                self.output.push_str(raw);
                 self.output.push('"');
             }
-            Literal::Char(c) => {
+            Literal::Char(raw) => {
                 self.output.push('\'');
-                self.output.push_str(&escape_char(*c));
+                self.output.push_str(raw);
                 self.output.push('\'');
             }
             Literal::Bool(b) => self.output.push_str(if *b { "true" } else { "false" }),
@@ -1967,6 +2099,28 @@ pub fn get_item_span(item: &Item) -> Span {
         Item::Test(t) => t.span,
         Item::Global(g) => g.span,
     }
+}
+
+/// Returns the first source line of an item, including any preceding attributes.
+/// This is used to compute blank lines correctly when items have both doc comments
+/// and attributes, avoiding blank-line growth on repeated formatting passes.
+fn get_item_first_line(item: &Item) -> usize {
+    let first_attr_line = |attrs: &[crate::ast::Attribute]| attrs.first().map(|a| a.span.line);
+    let item_line = get_item_span(item).line;
+    let attr_line = match item {
+        Item::Struct(s) => first_attr_line(&s.attrs),
+        Item::Enum(e) => first_attr_line(&e.attrs),
+        Item::Variant(v) => first_attr_line(&v.attrs),
+        Item::Effect(e) => first_attr_line(&e.attrs),
+        Item::Resource(r) => first_attr_line(&r.attrs),
+        Item::Function(f) => first_attr_line(&f.attrs),
+        Item::Flags(f) => f
+            .attributes
+            .as_deref()
+            .and_then(|a| a.first().map(|a| a.span.line)),
+        _ => None,
+    };
+    attr_line.unwrap_or(item_line).min(item_line)
 }
 
 fn get_stmt_span(stmt: &Stmt) -> Span {
@@ -2630,16 +2784,15 @@ pub fn unparse_type_into(ty: &Type, output: &mut String) {
 
 fn unparse_literal_into(lit: &Literal, output: &mut String) {
     match lit {
-        Literal::Number(num_lit) => output.push_str(&num_lit.repr),
-        Literal::String(s) => {
-            // Use raw form to preserve multiline strings as-is
+        Literal::Number(repr) => output.push_str(repr),
+        Literal::String(raw) => {
             output.push('"');
-            output.push_str(&s.raw);
+            output.push_str(raw);
             output.push('"');
         }
-        Literal::Char(c) => {
+        Literal::Char(raw) => {
             output.push('\'');
-            output.push_str(&escape_char(*c));
+            output.push_str(raw);
             output.push('\'');
         }
         Literal::Bool(b) => output.push_str(if *b { "true" } else { "false" }),

@@ -482,8 +482,8 @@ impl Point {
 }
 
 #[test]
-fn test_format_preserves_explicit_self_type() {
-    // When user explicitly writes self: &Self, it should be preserved
+fn test_format_normalizes_explicit_self_type() {
+    // Explicit `self: &Self` should be normalized to `&self` shorthand
     let source = r#"
 struct Point {
     x: i32,
@@ -497,17 +497,18 @@ impl Point {
 }
 "#;
     let formatted = wado_compiler::format(source).expect("format failed");
-    // Explicit self: &Self should be preserved, not converted to &self
     assert!(
-        formatted.contains("fn get_x(self: &Self)"),
-        "explicit self: &Self should be preserved: {}",
+        formatted.contains("fn get_x(&self)"),
+        "explicit self: &Self should be normalized to &self: {}",
         formatted
     );
     assert!(
-        !formatted.contains("fn get_x(&self)"),
-        "&self shorthand should not appear when explicit form was used: {}",
+        !formatted.contains("self: &Self"),
+        "self: &Self should not appear after normalization: {}",
         formatted
     );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "should be idempotent");
 }
 
 #[test]
@@ -539,8 +540,8 @@ impl Point {
 }
 
 #[test]
-fn test_format_preserves_explicit_mut_self_type() {
-    // When user explicitly writes self: &mut Self, it should be preserved
+fn test_format_normalizes_explicit_mut_self_type() {
+    // Explicit `self: &mut Self` should be normalized to `&mut self` shorthand
     let source = r#"
 struct Point {
     x: i32,
@@ -554,17 +555,18 @@ impl Point {
 }
 "#;
     let formatted = wado_compiler::format(source).expect("format failed");
-    // Explicit self: &mut Self should be preserved, not converted to &mut self
     assert!(
-        formatted.contains("fn set_x(self: &mut Self"),
-        "explicit self: &mut Self should be preserved: {}",
+        formatted.contains("fn set_x(&mut self"),
+        "explicit self: &mut Self should be normalized to &mut self: {}",
         formatted
     );
     assert!(
-        !formatted.contains("fn set_x(&mut self"),
-        "&mut self shorthand should not appear when explicit form was used: {}",
+        !formatted.contains("self: &mut Self"),
+        "self: &mut Self should not appear after normalization: {}",
         formatted
     );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "should be idempotent");
 }
 
 #[test]
@@ -951,4 +953,107 @@ fn test_format_nested_labeled_blocks() {
     );
     let formatted2 = wado_compiler::format(&formatted).expect("format failed");
     assert_eq!(formatted, formatted2, "should be idempotent");
+}
+
+/// Golden test: format(dirty) == clean, and the result is idempotent.
+///
+/// `format.fixtures/all.dirty.wado` exercises all the syntax constructs whose
+/// formatting was fixed. `format.fixtures/all.clean.wado` is the expected
+/// canonical output. The test verifies:
+///   1. format(dirty) == clean   (fixes are applied)
+///   2. format(clean) == clean   (idempotency)
+#[test]
+fn test_format_golden() {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
+    let dirty = fs::read_to_string(fixtures.join("all.dirty.wado")).expect("read dirty");
+    let clean = fs::read_to_string(fixtures.join("all.clean.wado")).expect("read clean");
+
+    let formatted = wado_compiler::format(&dirty).expect("format dirty failed");
+    assert_eq!(
+        formatted, clean,
+        "format(dirty) should equal clean\n\nActual:\n{}\n\nExpected:\n{}",
+        formatted, clean
+    );
+
+    let formatted2 = wado_compiler::format(&formatted).expect("format clean failed");
+    assert_eq!(formatted, formatted2, "format(clean) should be idempotent");
+}
+
+/// Golden test for "messy" inputs: excessive blank lines, block comments in
+/// unusual positions, missing spaces in use{}, implicit self normalization, etc.
+///
+/// `format.fixtures/mess.dirty.wado` has many deliberately weird patterns.
+/// `format.fixtures/mess.clean.wado` is the expected canonical output.
+#[test]
+fn test_format_golden_mess() {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
+    let dirty = fs::read_to_string(fixtures.join("mess.dirty.wado")).expect("read mess dirty");
+    let clean = fs::read_to_string(fixtures.join("mess.clean.wado")).expect("read mess clean");
+
+    let formatted = wado_compiler::format(&dirty).expect("format mess dirty failed");
+    assert_eq!(
+        formatted, clean,
+        "format(mess dirty) should equal mess clean\n\nActual:\n{}\n\nExpected:\n{}",
+        formatted, clean
+    );
+
+    let formatted2 = wado_compiler::format(&formatted).expect("format mess clean failed");
+    assert_eq!(
+        formatted, formatted2,
+        "format(mess clean) should be idempotent"
+    );
+}
+
+/// Golden test for operator precedence: redundant parens are removed, necessary
+/// parens are kept, and spacing is normalized.
+///
+/// `format.fixtures/ops.all.dirty.wado` has redundant parens and inconsistent
+/// spacing. `format.fixtures/ops.all.clean.wado` is the expected canonical output.
+#[test]
+fn test_format_golden_ops_all() {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
+    let dirty =
+        fs::read_to_string(fixtures.join("ops.all.dirty.wado")).expect("read ops.all dirty");
+    let clean =
+        fs::read_to_string(fixtures.join("ops.all.clean.wado")).expect("read ops.all clean");
+
+    let formatted = wado_compiler::format(&dirty).expect("format ops.all dirty failed");
+    assert_eq!(
+        formatted, clean,
+        "format(ops.all dirty) should equal ops.all clean\n\nActual:\n{}\n\nExpected:\n{}",
+        formatted, clean
+    );
+
+    let formatted2 = wado_compiler::format(&formatted).expect("format ops.all clean failed");
+    assert_eq!(
+        formatted, formatted2,
+        "format(ops.all clean) should be idempotent"
+    );
+}
+
+/// Golden test for operator precedence with messy inputs: block comments,
+/// extra blank lines, and no spacing around operators.
+///
+/// `format.fixtures/ops.mess.dirty.wado` has messy formatting around operators.
+/// `format.fixtures/ops.mess.clean.wado` is the expected canonical output.
+#[test]
+fn test_format_golden_ops_mess() {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
+    let dirty =
+        fs::read_to_string(fixtures.join("ops.mess.dirty.wado")).expect("read ops.mess dirty");
+    let clean =
+        fs::read_to_string(fixtures.join("ops.mess.clean.wado")).expect("read ops.mess clean");
+
+    let formatted = wado_compiler::format(&dirty).expect("format ops.mess dirty failed");
+    assert_eq!(
+        formatted, clean,
+        "format(ops.mess dirty) should equal ops.mess clean\n\nActual:\n{}\n\nExpected:\n{}",
+        formatted, clean
+    );
+
+    let formatted2 = wado_compiler::format(&formatted).expect("format ops.mess clean failed");
+    assert_eq!(
+        formatted, formatted2,
+        "format(ops.mess clean) should be idempotent"
+    );
 }

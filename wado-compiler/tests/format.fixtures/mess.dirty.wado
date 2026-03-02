@@ -1,0 +1,207 @@
+// More than 2 blank lines between top-level items (reduced to 2)
+fn first() {
+}
+
+
+
+fn second() {
+}
+
+
+
+fn third() {
+}
+
+// use {} with no inner spaces and no space after commas
+use {println,eprintln,print,eprint} from "core:cli";
+
+// Inline /* */ comments on struct fields
+struct Point {
+    x: i32, /* horizontal */
+    /* vertical component */
+    y: i32,
+    z: i32, /* depth */
+}
+
+// Block comment /* */ before struct
+/* This is the Color enum */
+enum Color {
+    Red,   /* primary */
+    /* secondary */
+    Green,
+    Blue,  /* another primary */
+    /* last one */
+    Alpha,
+}
+
+// Block comments /* */ in variant
+/* Represents a geometric shape */
+variant Shape {
+    /* a circle with radius */
+    Circle(f64),
+    /* width and height */
+    Rect([f64, f64]),
+    /* just a point */
+    Dot,
+}
+
+// Block comments /* */ in flags
+flags Access {
+    Read,   /* can read */
+    /* can write */
+    Write,
+    Execute, /* can execute */
+}
+
+// No blank lines between impl methods (corrected to 1)
+struct Counter {
+    n: i32,
+}
+
+impl Counter {
+    fn new() -> Counter {
+        return Counter { n: 0 };
+    }
+    fn inc(&mut self) {
+        self.n = self.n + 1;
+    }
+    fn get(&self) -> i32 {
+        return self.n;
+    }
+    fn reset(&mut self) {
+        self.n = 0;
+    }
+}
+
+// More than 2 blank lines inside a function (reduced to 2)
+fn with_many_blank_lines() {
+    let a = 1;
+
+
+
+    let b = 2;
+
+
+
+    let c = a + b;
+    /* a trailing block comment inside function */
+}
+
+// Block comments before and after control flow
+fn control_flow(x: i32) -> i32 {
+    /* check if positive */
+    if x > 0 {
+        /* positive branch */
+        return x;
+    }
+    /* check if negative */
+    if x < 0 {
+        /* negative branch */
+        return -x;
+    }
+    /* must be zero */
+    return 0;
+}
+
+// Block comments inside a loop
+fn loop_example() {
+    let mut i = 0;
+    /* start of loop */
+    while i < 10 {
+        /* loop body */
+        i += 1;
+        /* end of iteration */
+    }
+    /* after loop */
+}
+
+// Nested block comments
+fn nested_blocks() {
+    /* outer */
+    for let j = 0; j < 5; j += 1 {
+        /* inner */
+        let x = j * 2;
+        /* done */
+    }
+    /* all done */
+}
+
+// Normalization of self: &Self
+struct Wrapper {
+    val: i32,
+}
+
+impl Wrapper {
+    fn get(self: &Self) -> i32 {
+        return self.val;
+    }
+    fn set(self: &mut Self, v: i32) {
+        self.val = v;
+    }
+    fn clone_it(self: &Self) -> Wrapper {
+        return Wrapper { val: self.val };
+    }
+}
+
+// Block comments in impl (before and after methods)
+struct Logger {
+    prefix: String,
+}
+
+impl Logger {
+    /* constructor */
+    fn new(prefix: String) -> Logger {
+        return Logger { prefix };
+    }
+
+    /* main log method */
+    fn log(&self, msg: String) {
+    }
+
+    /* log with level */
+    fn log_level(&self, level: i32, msg: String) {
+    }
+}
+
+// Block comment /* */ before impl
+/* inherent impl with trait bound */
+impl Array<T: Ord> {
+    /* sort in ascending order */
+    fn sort(&mut self) {
+    }
+}
+
+// Block comments /* */ on trait methods
+trait Printable {
+    /* print to stdout */
+    fn print(&self);
+    /* print with newline */
+    fn println(&self);
+}
+
+// async methods in effect
+effect FileIO {
+    /* read bytes */
+    async fn read(path: String) -> Array<u8>;
+    /* write bytes */
+    fn write(path: String, data: Array<u8>);
+}
+
+// Multiple /* */ comments at the start of a function body
+fn add(a: i32, b: i32) -> i32 {
+    /* first number */
+    /* second number */
+    return a + b;
+}
+
+// Too many blank lines after closures
+fn with_closures() {
+    let inc = |x: i32| x + 1;
+
+
+
+    let double = |x: i32| x * 2;
+
+
+    let result = double(inc(5));
+}
