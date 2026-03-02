@@ -815,10 +815,7 @@ impl<'a> Lexer<'a> {
         let start_column = self.column;
 
         self.advance(); // consume opening "
-        let content_start = self.pos; // position after opening quote
-
-        let mut value = String::new();
-        let mut pending_high_surrogate: Option<u16> = None;
+        let content_start = self.pos;
 
         loop {
             match self.peek() {
@@ -829,220 +826,52 @@ impl<'a> Lexer<'a> {
                     });
                 }
                 Some((_, '"')) => {
-                    let content_end = self.pos; // position before closing quote
+                    let content_end = self.pos;
                     self.advance();
-                    // Extract raw content between quotes
                     let raw = self.input[content_start..content_end].to_string();
-                    if pending_high_surrogate.is_some() {
-                        return Err(LexError {
-                            message: "invalid surrogate pair: high surrogate at end of string"
-                                .to_string(),
-                            span: Span::new(start, self.pos, start_line, start_column),
-                        });
-                    }
-                    return Ok(TokenKind::StringLit { value, raw });
+                    return Ok(TokenKind::StringLit(raw));
                 }
                 Some((_, '\\')) => {
                     self.advance();
-                    let ch = self.parse_escape_sequence(start, start_line, start_column)?;
-
-                    // Handle surrogate pairs
-                    if let Some(code_unit) = char_to_surrogate(ch) {
-                        if is_high_surrogate(code_unit) {
-                            if pending_high_surrogate.is_some() {
-                                return Err(LexError {
-                                    message: "invalid surrogate pair: high surrogate not followed by low surrogate".to_string(),
-                                    span: Span::new(start, self.pos, start_line, start_column),
-                                });
-                            }
-                            pending_high_surrogate = Some(code_unit);
-                            continue;
-                        } else if is_low_surrogate(code_unit)
-                            && let Some(high) = pending_high_surrogate.take()
-                        {
-                            let combined = decode_surrogate_pair(high, code_unit);
-                            if let Some(c) = char::from_u32(combined) {
-                                value.push(c);
-                                continue;
-                            } else {
-                                return Err(LexError {
-                                    message: "invalid surrogate pair".to_string(),
-                                    span: Span::new(start, self.pos, start_line, start_column),
-                                });
-                            }
-                        }
-                    }
-
-                    // If we had a pending high surrogate but didn't get a low surrogate, error
-                    if pending_high_surrogate.is_some() {
-                        return Err(LexError {
-                            message: "invalid surrogate pair: high surrogate not followed by low surrogate".to_string(),
-                            span: Span::new(start, self.pos, start_line, start_column),
-                        });
-                    }
-
-                    value.push(ch);
+                    self.skip_escape();
                 }
-                Some((_, ch)) => {
-                    if pending_high_surrogate.is_some() {
-                        return Err(LexError {
-                            message: "invalid surrogate pair: high surrogate not followed by low surrogate".to_string(),
-                            span: Span::new(start, self.pos, start_line, start_column),
-                        });
-                    }
+                Some(_) => {
                     self.advance();
-                    value.push(ch);
                 }
             }
         }
     }
 
-    fn parse_escape_sequence(
-        &mut self,
-        start: usize,
-        start_line: usize,
-        start_column: usize,
-    ) -> Result<char, LexError> {
+    /// Advance past one escape sequence (after the leading `\` has been consumed).
+    /// Only scans — does not validate or interpret escape values.
+    fn skip_escape(&mut self) {
         match self.peek_char() {
-            Some('n') => {
-                self.advance();
-                Ok('\n')
-            }
-            Some('t') => {
-                self.advance();
-                Ok('\t')
-            }
-            Some('r') => {
-                self.advance();
-                Ok('\r')
-            }
-            Some('\\') => {
-                self.advance();
-                Ok('\\')
-            }
-            Some('"') => {
-                self.advance();
-                Ok('"')
-            }
-            Some('\'') => {
-                self.advance();
-                Ok('\'')
-            }
-            Some('/') => {
-                self.advance();
-                Ok('/')
-            }
-            Some('b') => {
-                self.advance();
-                Ok('\x08') // backspace
-            }
-            Some('f') => {
-                self.advance();
-                Ok('\x0C') // form feed
-            }
-            Some('0') => {
-                self.advance();
-                Ok('\0') // null
-            }
             Some('u') => {
                 self.advance();
-                self.parse_unicode_escape(start, start_line, start_column)
-            }
-            Some(ch) => Err(LexError {
-                message: format!("invalid escape sequence: \\{ch}"),
-                span: Span::new(start, self.pos, start_line, start_column),
-            }),
-            None => Err(LexError {
-                message: "unterminated string literal".to_string(),
-                span: Span::new(start, self.pos, start_line, start_column),
-            }),
-        }
-    }
-
-    fn parse_unicode_escape(
-        &mut self,
-        start: usize,
-        start_line: usize,
-        start_column: usize,
-    ) -> Result<char, LexError> {
-        // Check for \u{...} (variable length) or \uHHHH (4 hex digits)
-        if self.peek_char() == Some('{') {
-            self.advance(); // consume '{'
-
-            let mut hex = String::new();
-            while let Some((_, ch)) = self.peek() {
-                if ch == '}' {
+                if self.peek_char() == Some('{') {
                     self.advance();
-                    break;
-                }
-                if ch.is_ascii_hexdigit() {
-                    hex.push(ch);
-                    self.advance();
-                } else {
-                    return Err(LexError {
-                        message: format!("invalid character in unicode escape: {ch}"),
-                        span: Span::new(start, self.pos, start_line, start_column),
-                    });
-                }
-            }
-
-            if hex.is_empty() {
-                return Err(LexError {
-                    message: "empty unicode escape".to_string(),
-                    span: Span::new(start, self.pos, start_line, start_column),
-                });
-            }
-
-            let code_point = u32::from_str_radix(&hex, 16).map_err(|_| LexError {
-                message: format!("invalid unicode escape: \\u{{{hex}}}"),
-                span: Span::new(start, self.pos, start_line, start_column),
-            })?;
-
-            char::from_u32(code_point).ok_or_else(|| LexError {
-                message: format!("invalid unicode code point: U+{code_point:04X}"),
-                span: Span::new(start, self.pos, start_line, start_column),
-            })
-        } else {
-            // \uHHHH - exactly 4 hex digits
-            let mut hex = String::new();
-            for _ in 0..4 {
-                match self.peek_char() {
-                    Some(ch) if ch.is_ascii_hexdigit() => {
-                        hex.push(ch);
+                    while let Some((_, c)) = self.peek() {
                         self.advance();
+                        if c == '}' {
+                            break;
+                        }
                     }
-                    _ => {
-                        return Err(LexError {
-                            message: "expected 4 hex digits after \\u".to_string(),
-                            span: Span::new(start, self.pos, start_line, start_column),
-                        });
+                } else {
+                    // \uHHHH — skip up to 4 hex digits
+                    for _ in 0..4 {
+                        match self.peek_char() {
+                            Some(c) if c.is_ascii_hexdigit() => {
+                                self.advance();
+                            }
+                            _ => break,
+                        }
                     }
                 }
             }
-
-            let code_unit = u16::from_str_radix(&hex, 16).map_err(|_| LexError {
-                message: format!("invalid unicode escape: \\u{hex}"),
-                span: Span::new(start, self.pos, start_line, start_column),
-            })?;
-
-            // This might be a surrogate, which we handle specially
-            if is_high_surrogate(code_unit) || is_low_surrogate(code_unit) {
-                // Rust's char cannot hold surrogate values (0xD800-0xDFFF), so we encode
-                // them using Private Use Area characters that can be detected later:
-                // High surrogates (0xD800-0xDBFF) -> PUA (0xE000-0xE7FF)
-                // Low surrogates (0xDC00-0xDFFF) -> PUA (0xE800-0xEBFF)
-                let pua_code = if is_high_surrogate(code_unit) {
-                    u32::from(code_unit - 0xD800) + 0xE000
-                } else {
-                    u32::from(code_unit - 0xDC00) + 0xE800
-                };
-                Ok(char::from_u32(pua_code).unwrap())
-            } else {
-                char::from_u32(u32::from(code_unit)).ok_or_else(|| LexError {
-                    message: format!("invalid unicode code point: U+{code_unit:04X}"),
-                    span: Span::new(start, self.pos, start_line, start_column),
-                })
+            Some(_) => {
+                self.advance();
             }
+            None => {}
         }
     }
 
@@ -1112,7 +941,7 @@ impl<'a> Lexer<'a> {
         self.advance(); // consume opening '
         let inner_start = self.pos;
 
-        let ch = match self.peek() {
+        match self.peek() {
             None => {
                 return Err(LexError {
                     message: "unterminated character literal".to_string(),
@@ -1127,17 +956,15 @@ impl<'a> Lexer<'a> {
             }
             Some((_, '\\')) => {
                 self.advance();
-                self.parse_escape_sequence(start, start_line, start_column)?
+                self.skip_escape();
             }
-            Some((_, c)) => {
+            Some(_) => {
                 self.advance();
-                c
             }
-        };
+        }
 
         let raw = self.input[inner_start..self.pos].to_string();
 
-        // Expect closing quote
         if self.peek_char() != Some('\'') {
             return Err(LexError {
                 message: "unterminated character literal".to_string(),
@@ -1146,7 +973,143 @@ impl<'a> Lexer<'a> {
         }
         self.advance(); // consume closing '
 
-        Ok(TokenKind::CharLit(ch, raw))
+        Ok(TokenKind::CharLit(raw))
+    }
+
+    fn parse_escape_sequence(
+        &mut self,
+        start: usize,
+        start_line: usize,
+        start_column: usize,
+    ) -> Result<char, LexError> {
+        match self.peek_char() {
+            Some('n') => {
+                self.advance();
+                Ok('\n')
+            }
+            Some('t') => {
+                self.advance();
+                Ok('\t')
+            }
+            Some('r') => {
+                self.advance();
+                Ok('\r')
+            }
+            Some('\\') => {
+                self.advance();
+                Ok('\\')
+            }
+            Some('"') => {
+                self.advance();
+                Ok('"')
+            }
+            Some('\'') => {
+                self.advance();
+                Ok('\'')
+            }
+            Some('/') => {
+                self.advance();
+                Ok('/')
+            }
+            Some('b') => {
+                self.advance();
+                Ok('\x08')
+            }
+            Some('f') => {
+                self.advance();
+                Ok('\x0C')
+            }
+            Some('0') => {
+                self.advance();
+                Ok('\0')
+            }
+            Some('u') => {
+                self.advance();
+                self.parse_unicode_escape(start, start_line, start_column)
+            }
+            Some(ch) => Err(LexError {
+                message: format!("invalid escape sequence: \\{ch}"),
+                span: Span::new(start, self.pos, start_line, start_column),
+            }),
+            None => Err(LexError {
+                message: "unterminated string literal".to_string(),
+                span: Span::new(start, self.pos, start_line, start_column),
+            }),
+        }
+    }
+
+    fn parse_unicode_escape(
+        &mut self,
+        start: usize,
+        start_line: usize,
+        start_column: usize,
+    ) -> Result<char, LexError> {
+        if self.peek_char() == Some('{') {
+            self.advance();
+            let mut hex = String::new();
+            while let Some((_, ch)) = self.peek() {
+                if ch == '}' {
+                    self.advance();
+                    break;
+                }
+                if ch.is_ascii_hexdigit() {
+                    hex.push(ch);
+                    self.advance();
+                } else {
+                    return Err(LexError {
+                        message: format!("invalid character in unicode escape: {ch}"),
+                        span: Span::new(start, self.pos, start_line, start_column),
+                    });
+                }
+            }
+            if hex.is_empty() {
+                return Err(LexError {
+                    message: "empty unicode escape".to_string(),
+                    span: Span::new(start, self.pos, start_line, start_column),
+                });
+            }
+            let code_point = u32::from_str_radix(&hex, 16).map_err(|_| LexError {
+                message: format!("invalid unicode escape: \\u{{{hex}}}"),
+                span: Span::new(start, self.pos, start_line, start_column),
+            })?;
+            char::from_u32(code_point).ok_or_else(|| LexError {
+                message: format!("invalid unicode code point: U+{code_point:04X}"),
+                span: Span::new(start, self.pos, start_line, start_column),
+            })
+        } else {
+            let mut hex = String::new();
+            for _ in 0..4 {
+                match self.peek_char() {
+                    Some(ch) if ch.is_ascii_hexdigit() => {
+                        hex.push(ch);
+                        self.advance();
+                    }
+                    _ => {
+                        return Err(LexError {
+                            message: "expected 4 hex digits after \\u".to_string(),
+                            span: Span::new(start, self.pos, start_line, start_column),
+                        });
+                    }
+                }
+            }
+            let code_unit = u16::from_str_radix(&hex, 16).map_err(|_| LexError {
+                message: format!("invalid unicode escape: \\u{hex}"),
+                span: Span::new(start, self.pos, start_line, start_column),
+            })?;
+            if is_high_surrogate(code_unit) || is_low_surrogate(code_unit) {
+                let pua_code = if is_high_surrogate(code_unit) {
+                    u32::from(code_unit - 0xD800) + 0xE000
+                } else {
+                    u32::from(code_unit - 0xDC00) + 0xE800
+                };
+                Ok(char::from_u32(pua_code).unwrap())
+            } else {
+                char::from_u32(u32::from(code_unit)).ok_or_else(|| LexError {
+                    message: format!("invalid unicode code point: U+{code_unit:04X}"),
+                    span: Span::new(start, self.pos, start_line, start_column),
+                })
+            }
+        }
     }
 }
 
@@ -1158,28 +1121,6 @@ fn is_high_surrogate(code_unit: u16) -> bool {
 
 fn is_low_surrogate(code_unit: u16) -> bool {
     (0xDC00..=0xDFFF).contains(&code_unit)
-}
-
-fn char_to_surrogate(c: char) -> Option<u16> {
-    let code = c as u32;
-    // Check for PUA-encoded surrogates:
-    // High surrogates were encoded as PUA 0xE000-0xE7FF
-    // Low surrogates were encoded as PUA 0xE800-0xEBFF
-    if (0xE000..=0xE7FF).contains(&code) {
-        // Decode high surrogate
-        Some((code - 0xE000 + 0xD800) as u16)
-    } else if (0xE800..=0xEBFF).contains(&code) {
-        // Decode low surrogate
-        Some((code - 0xE800 + 0xDC00) as u16)
-    } else {
-        None
-    }
-}
-
-fn decode_surrogate_pair(high: u16, low: u16) -> u32 {
-    let high = u32::from(high - 0xD800);
-    let low = u32::from(low - 0xDC00);
-    0x10000 + (high << 10) + low
 }
 
 #[cfg(test)]
@@ -1231,9 +1172,7 @@ mod tests {
         assert!(matches!(&tokens[2].kind, TokenKind::Ident(s) if s == "println"));
         assert!(matches!(tokens[3].kind, TokenKind::RBrace));
         assert!(matches!(tokens[4].kind, TokenKind::From));
-        assert!(
-            matches!(&tokens[5].kind, TokenKind::StringLit { value, .. } if value == "core:cli")
-        );
+        assert!(matches!(&tokens[5].kind, TokenKind::StringLit(raw) if raw == "core:cli"));
         assert!(matches!(tokens[6].kind, TokenKind::Semicolon));
     }
 
@@ -1242,9 +1181,7 @@ mod tests {
         let mut lexer = Lexer::new(r#""Hello, world!""#);
         let tokens = lexer.tokenize().unwrap();
 
-        assert!(
-            matches!(&tokens[0].kind, TokenKind::StringLit { value, .. } if value == "Hello, world!")
-        );
+        assert!(matches!(&tokens[0].kind, TokenKind::StringLit(raw) if raw == "Hello, world!"));
     }
 
     #[test]

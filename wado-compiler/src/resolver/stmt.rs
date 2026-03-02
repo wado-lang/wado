@@ -697,9 +697,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             Pattern::Literal(lit) => {
                 let tir_lit = match lit {
-                    Literal::Number(n) => {
+                    Literal::Number(repr) => {
                         // Float literals cannot be used in match patterns
-                        if util::is_float_only_literal(&n.repr) {
+                        if util::is_float_only_literal(repr) {
                             let _ = self.logger.error(TypeError::InvalidPattern {
                                 message: "float literals cannot be used in match patterns"
                                     .to_string(),
@@ -724,20 +724,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             ResolvedType::Struct { ref name, .. } if name == "u128"
                         );
                         if is_unsigned {
-                            match util::parse_u128_literal(&n.repr) {
+                            match util::parse_u128_literal(repr) {
                                 Ok(value) => TirLiteralPattern::U128(value),
                                 Err(_) => TirLiteralPattern::U128(0),
                             }
                         } else {
-                            match util::parse_i128_literal(&n.repr) {
+                            match util::parse_i128_literal(repr) {
                                 Ok(value) => TirLiteralPattern::I128(value),
                                 Err(_) => TirLiteralPattern::I128(0),
                             }
                         }
                     }
                     Literal::Bool(b) => TirLiteralPattern::Bool(*b),
-                    Literal::Char(c, _) => TirLiteralPattern::Char(*c),
-                    Literal::String(s) => TirLiteralPattern::String(s.value.clone()),
+                    Literal::Char(raw) => {
+                        TirLiteralPattern::Char(util::unescape_char(raw).unwrap_or('\0'))
+                    }
+                    Literal::String(raw) => {
+                        TirLiteralPattern::String(util::unescape_string(raw).unwrap_or_default())
+                    }
                     Literal::Null => TirLiteralPattern::Null,
                     _ => TirLiteralPattern::Null,
                 };

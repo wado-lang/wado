@@ -113,15 +113,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx: &FunctionContext,
     ) -> TirExpr {
         let (kind, type_id) = match &lit.value {
-            Literal::Number(num_lit) => {
+            Literal::Number(repr) => {
                 // Default type: i32 if integer-compatible, f64 if float-only
-                if util::is_float_only_literal(&num_lit.repr) {
+                if util::is_float_only_literal(repr) {
                     // Must be float (has decimal point or negative exponent)
-                    match util::parse_float_literal(&num_lit.repr) {
+                    match util::parse_float_literal(repr) {
                         Ok(value) => (
                             TirExprKind::FloatLiteral {
                                 value,
-                                repr: num_lit.repr.clone(),
+                                repr: repr.clone(),
                             },
                             TypeTable::F64,
                         ),
@@ -133,7 +133,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             (
                                 TirExprKind::FloatLiteral {
                                     value: 0.0,
-                                    repr: num_lit.repr.clone(),
+                                    repr: repr.clone(),
                                 },
                                 TypeTable::F64,
                             )
@@ -141,11 +141,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 } else {
                     // Can be integer (default to i32)
-                    match util::parse_u128_literal(&num_lit.repr) {
+                    match util::parse_u128_literal(repr) {
                         Ok(value) => (
                             TirExprKind::IntLiteral {
                                 value: value as u64,
-                                repr: num_lit.repr.clone(),
+                                repr: repr.clone(),
                             },
                             TypeTable::I32,
                         ),
@@ -157,7 +157,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             (
                                 TirExprKind::IntLiteral {
                                     value: 0,
-                                    repr: num_lit.repr.clone(),
+                                    repr: repr.clone(),
                                 },
                                 TypeTable::I32,
                             )
@@ -166,10 +166,32 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
             Literal::Bool(b) => (TirExprKind::BoolLiteral(*b), TypeTable::BOOL),
-            Literal::Char(c, _) => (TirExprKind::CharLiteral(*c), TypeTable::CHAR),
-            Literal::String(s) => {
+            Literal::Char(raw) => {
+                let c = match util::unescape_char(raw) {
+                    Ok(c) => c,
+                    Err(message) => {
+                        let _ = self.logger.error(TypeError::InvalidLiteral {
+                            message,
+                            span: lit.span,
+                        });
+                        '\0'
+                    }
+                };
+                (TirExprKind::CharLiteral(c), TypeTable::CHAR)
+            }
+            Literal::String(raw) => {
                 let string_type = self.get_string_struct_type();
-                (TirExprKind::StringLiteral(s.value.clone()), string_type)
+                let value = match util::unescape_string(raw) {
+                    Ok(s) => s,
+                    Err(message) => {
+                        let _ = self.logger.error(TypeError::InvalidLiteral {
+                            message,
+                            span: lit.span,
+                        });
+                        String::new()
+                    }
+                };
+                (TirExprKind::StringLiteral(value), string_type)
             }
             Literal::Null => {
                 let option_unknown = self.type_table.borrow_mut().make_option(TypeTable::UNKNOWN);
@@ -743,11 +765,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let elements = elements.clone();
             // Tuple indexing requires a constant integer index
             if let ast::Expr::Literal(ast::LiteralExpr {
-                value: ast::Literal::Number(num_lit),
+                value: ast::Literal::Number(repr),
                 ..
             }) = &index.index
-                && !util::is_float_only_literal(&num_lit.repr)
-                && let Ok(idx) = num_lit.repr.parse::<usize>()
+                && !util::is_float_only_literal(repr)
+                && let Ok(idx) = repr.parse::<usize>()
             {
                 if idx < elements.len() {
                     let field_type = elements[idx];
@@ -1239,13 +1261,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
         {
             // Handle number literal cast specially to support values > u64
             if let ast::Expr::Literal(lit) = &cast.expr
-                && let Literal::Number(num_lit) = &lit.value
-                && !util::is_float_only_literal(&num_lit.repr)
+                && let Literal::Number(repr) = &lit.value
+                && !util::is_float_only_literal(repr)
             {
                 let parse_result = if name == "u128" {
-                    util::parse_u128_literal(&num_lit.repr).map(|v| v as i128)
+                    util::parse_u128_literal(repr).map(|v| v as i128)
                 } else {
-                    util::parse_i128_literal(&num_lit.repr)
+                    util::parse_i128_literal(repr)
                 };
 
                 match parse_result {
@@ -1267,7 +1289,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             let inner_literal = TirExpr::new(
                                 TirExprKind::IntLiteral {
                                     value: store_value,
-                                    repr: num_lit.repr.clone(),
+                                    repr: repr.clone(),
                                 },
                                 inner_type,
                                 lit.span,
@@ -1298,7 +1320,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                     Err(_) => {
                         let _ = self.logger.error(TypeError::InvalidLiteral {
-                            message: format!("invalid {} literal: {}", name, num_lit.repr),
+                            message: format!("invalid {name} literal: {repr}"),
                             span: lit.span,
                         });
                     }
@@ -1309,18 +1331,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
             if let ast::Expr::Unary(unary) = &cast.expr
                 && unary.op == ast::UnaryOp::Neg
                 && let ast::Expr::Literal(lit) = &unary.expr
-                && let Literal::Number(num_lit) = &lit.value
-                && !util::is_float_only_literal(&num_lit.repr)
+                && let Literal::Number(repr) = &lit.value
+                && !util::is_float_only_literal(repr)
                 && name == "i128"
             {
                 // Parse the negated value directly using Rust's i128
-                let negated_repr = format!("-{}", num_lit.repr);
+                let negated_repr = format!("-{repr}");
                 if let Ok(value) = util::parse_i128_literal(&negated_repr) {
                     let (low, high) = util::unpack_i128(value);
                     return self.build_from_pair_call(name, low, high, target_type, unary.span);
                 }
                 let _ = self.logger.error(TypeError::InvalidLiteral {
-                    message: format!("invalid i128 literal: -{}", num_lit.repr),
+                    message: format!("invalid i128 literal: -{repr}"),
                     span: unary.span,
                 });
             }

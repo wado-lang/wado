@@ -121,6 +121,169 @@ pub(super) fn normalize_numeric_literal(repr: &str) -> String {
         .collect()
 }
 
+/// Interpret the raw content of a string literal (between quotes, without the quotes).
+///
+/// Processes all escape sequences and handles surrogate pairs (`\uD800\uDC00` style).
+/// Returns the resulting Rust `String`, or an error message.
+pub(super) fn unescape_string(raw: &str) -> Result<String, String> {
+    let mut result = String::new();
+    let mut chars = raw.chars().peekable();
+    let mut pending_high: Option<u16> = None;
+
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            let escaped = unescape_one(&mut chars)?;
+            if let Some(code_unit) = as_surrogate_code_unit(escaped) {
+                if is_high_surrogate(code_unit) {
+                    if pending_high.is_some() {
+                        return Err(
+                            "invalid surrogate pair: high surrogate not followed by low surrogate"
+                                .to_string(),
+                        );
+                    }
+                    pending_high = Some(code_unit);
+                    continue;
+                } else if is_low_surrogate(code_unit)
+                    && let Some(high) = pending_high.take()
+                {
+                    let combined = decode_surrogate_pair(high, code_unit);
+                    let c = char::from_u32(combined)
+                        .ok_or_else(|| "invalid surrogate pair".to_string())?;
+                    result.push(c);
+                    continue;
+                }
+            }
+            if pending_high.is_some() {
+                return Err(
+                    "invalid surrogate pair: high surrogate not followed by low surrogate"
+                        .to_string(),
+                );
+            }
+            result.push(escaped);
+        } else {
+            if pending_high.is_some() {
+                return Err(
+                    "invalid surrogate pair: high surrogate not followed by low surrogate"
+                        .to_string(),
+                );
+            }
+            result.push(ch);
+        }
+    }
+    if pending_high.is_some() {
+        return Err("invalid surrogate pair: high surrogate at end of string".to_string());
+    }
+    Ok(result)
+}
+
+/// Interpret the raw content of a char literal (between quotes, without the quotes).
+///
+/// Returns the resulting `char`, or an error message.
+pub(super) fn unescape_char(raw: &str) -> Result<char, String> {
+    let mut chars = raw.chars().peekable();
+    let result = match chars.next() {
+        Some('\\') => unescape_one(&mut chars)?,
+        Some(c) => c,
+        None => return Err("empty char literal".to_string()),
+    };
+    if chars.next().is_some() {
+        return Err("char literal contains more than one character".to_string());
+    }
+    Ok(result)
+}
+
+/// Parse one escape sequence (after the leading `\` has been consumed).
+fn unescape_one<I: Iterator<Item = char>>(
+    chars: &mut std::iter::Peekable<I>,
+) -> Result<char, String> {
+    match chars.next() {
+        Some('n') => Ok('\n'),
+        Some('t') => Ok('\t'),
+        Some('r') => Ok('\r'),
+        Some('\\') => Ok('\\'),
+        Some('"') => Ok('"'),
+        Some('\'') => Ok('\''),
+        Some('/') => Ok('/'),
+        Some('b') => Ok('\x08'),
+        Some('f') => Ok('\x0C'),
+        Some('0') => Ok('\0'),
+        Some('u') => unescape_unicode(chars),
+        Some(c) => Err(format!("invalid escape sequence: \\{c}")),
+        None => Err("unterminated escape sequence".to_string()),
+    }
+}
+
+fn unescape_unicode<I: Iterator<Item = char>>(
+    chars: &mut std::iter::Peekable<I>,
+) -> Result<char, String> {
+    if chars.peek() == Some(&'{') {
+        chars.next(); // consume '{'
+        let mut hex = String::new();
+        loop {
+            match chars.next() {
+                Some('}') => break,
+                Some(c) if c.is_ascii_hexdigit() => hex.push(c),
+                Some(c) => return Err(format!("invalid character in unicode escape: {c}")),
+                None => return Err("unterminated unicode escape".to_string()),
+            }
+        }
+        if hex.is_empty() {
+            return Err("empty unicode escape".to_string());
+        }
+        let code_point = u32::from_str_radix(&hex, 16)
+            .map_err(|_| format!("invalid unicode escape: \\u{{{hex}}}"))?;
+        char::from_u32(code_point)
+            .ok_or_else(|| format!("invalid unicode code point: U+{code_point:04X}"))
+    } else {
+        let mut hex = String::new();
+        for _ in 0..4 {
+            match chars.next() {
+                Some(c) if c.is_ascii_hexdigit() => hex.push(c),
+                _ => return Err("expected 4 hex digits after \\u".to_string()),
+            }
+        }
+        let code_unit = u16::from_str_radix(&hex, 16)
+            .map_err(|_| format!("invalid unicode escape: \\u{hex}"))?;
+        if is_high_surrogate(code_unit) || is_low_surrogate(code_unit) {
+            // Encode surrogate as PUA so the caller can detect and combine pairs
+            let pua = if is_high_surrogate(code_unit) {
+                u32::from(code_unit - 0xD800) + 0xE000
+            } else {
+                u32::from(code_unit - 0xDC00) + 0xE800
+            };
+            Ok(char::from_u32(pua).unwrap())
+        } else {
+            char::from_u32(u32::from(code_unit))
+                .ok_or_else(|| format!("invalid unicode code point: U+{code_unit:04X}"))
+        }
+    }
+}
+
+fn as_surrogate_code_unit(c: char) -> Option<u16> {
+    let code = c as u32;
+    if (0xE000..=0xE7FF).contains(&code) {
+        Some((code - 0xE000 + 0xD800) as u16)
+    } else if (0xE800..=0xEBFF).contains(&code) {
+        Some((code - 0xE800 + 0xDC00) as u16)
+    } else {
+        None
+    }
+}
+
+fn is_high_surrogate(code_unit: u16) -> bool {
+    (0xD800..=0xDBFF).contains(&code_unit)
+}
+
+fn is_low_surrogate(code_unit: u16) -> bool {
+    (0xDC00..=0xDFFF).contains(&code_unit)
+}
+
+fn decode_surrogate_pair(high: u16, low: u16) -> u32 {
+    let high = u32::from(high - 0xD800);
+    let low = u32::from(low - 0xDC00);
+    0x10000 + (high << 10) + low
+}
+
 /// Parse an unsigned integer literal into a u128 value.
 /// Supports decimal, hex, binary, octal, and scientific notation (e.g., "1e10").
 #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]

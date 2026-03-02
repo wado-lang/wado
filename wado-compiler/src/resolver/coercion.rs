@@ -22,33 +22,32 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> Option<TirExpr> {
         // Number literal coercion to integer
         if let Expr::Literal(lit) = expr
-            && let Literal::Number(num_lit) = &lit.value
+            && let Literal::Number(repr) = &lit.value
             && self.type_table.borrow().is_integer(target_type)
         {
-            if util::is_float_only_literal(&num_lit.repr) {
+            if util::is_float_only_literal(repr) {
                 let _ = self.logger.error(TypeError::InvalidLiteral {
                     message: format!(
-                        "cannot use float literal '{}' as integer (has decimal point or negative exponent)",
-                        num_lit.repr
+                        "cannot use float literal '{repr}' as integer (has decimal point or negative exponent)"
                     ),
                     span: lit.span,
                 });
                 return Some(TirExpr::new(
                     TirExprKind::IntLiteral {
                         value: 0,
-                        repr: num_lit.repr.clone(),
+                        repr: repr.clone(),
                     },
                     target_type,
                     lit.span,
                 ));
             }
-            return Some(match util::parse_u128_literal(&num_lit.repr) {
+            return Some(match util::parse_u128_literal(repr) {
                 Ok(value) => {
                     if let Some(err_msg) = util::check_int_range_positive(
                         value,
                         target_type,
                         &self.type_table.borrow(),
-                        &num_lit.repr,
+                        repr,
                     ) {
                         let _ = self.logger.error(TypeError::InvalidLiteral {
                             message: err_msg,
@@ -58,7 +57,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     TirExpr::new(
                         TirExprKind::IntLiteral {
                             value: value as u64,
-                            repr: num_lit.repr.clone(),
+                            repr: repr.clone(),
                         },
                         target_type,
                         lit.span,
@@ -72,7 +71,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     TirExpr::new(
                         TirExprKind::IntLiteral {
                             value: 0,
-                            repr: num_lit.repr.clone(),
+                            repr: repr.clone(),
                         },
                         target_type,
                         lit.span,
@@ -85,33 +84,32 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if let Expr::Unary(unary) = expr
             && unary.op == UnaryOp::Neg
             && let Expr::Literal(lit) = &unary.expr
-            && let Literal::Number(num_lit) = &lit.value
+            && let Literal::Number(repr) = &lit.value
             && self.type_table.borrow().is_integer(target_type)
         {
-            if util::is_float_only_literal(&num_lit.repr) {
+            if util::is_float_only_literal(repr) {
                 let _ = self.logger.error(TypeError::InvalidLiteral {
                     message: format!(
-                        "cannot use float literal '-{}' as integer (has decimal point or negative exponent)",
-                        num_lit.repr
+                        "cannot use float literal '-{repr}' as integer (has decimal point or negative exponent)"
                     ),
                     span: unary.span,
                 });
                 return Some(TirExpr::new(
                     TirExprKind::IntLiteral {
                         value: 0,
-                        repr: format!("-{}", num_lit.repr),
+                        repr: format!("-{repr}"),
                     },
                     target_type,
                     unary.span,
                 ));
             }
-            return Some(match util::parse_u128_literal(&num_lit.repr) {
+            return Some(match util::parse_u128_literal(repr) {
                 Ok(value) => {
                     if let Some(err_msg) = util::check_int_range_negative(
                         value,
                         target_type,
                         &self.type_table.borrow(),
-                        &num_lit.repr,
+                        repr,
                     ) {
                         let _ = self.logger.error(TypeError::InvalidLiteral {
                             message: err_msg,
@@ -122,7 +120,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     TirExpr::new(
                         TirExprKind::IntLiteral {
                             value: neg_value,
-                            repr: format!("-{}", num_lit.repr),
+                            repr: format!("-{repr}"),
                         },
                         target_type,
                         unary.span,
@@ -136,7 +134,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     TirExpr::new(
                         TirExprKind::IntLiteral {
                             value: 0,
-                            repr: format!("-{}", num_lit.repr),
+                            repr: format!("-{repr}"),
                         },
                         target_type,
                         unary.span,
@@ -147,14 +145,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Number literal coercion to float
         if let Expr::Literal(lit) = expr
-            && let Literal::Number(num_lit) = &lit.value
+            && let Literal::Number(repr) = &lit.value
             && self.type_table.borrow().is_float(target_type)
         {
-            return Some(match util::parse_float_literal(&num_lit.repr) {
+            return Some(match util::parse_float_literal(repr) {
                 Ok(value) => TirExpr::new(
                     TirExprKind::FloatLiteral {
                         value,
-                        repr: num_lit.repr.clone(),
+                        repr: repr.clone(),
                     },
                     target_type,
                     lit.span,
@@ -167,7 +165,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     TirExpr::new(
                         TirExprKind::FloatLiteral {
                             value: 0.0,
-                            repr: num_lit.repr.clone(),
+                            repr: repr.clone(),
                         },
                         target_type,
                         lit.span,
@@ -180,14 +178,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if let Expr::Unary(unary) = expr
             && unary.op == UnaryOp::Neg
             && let Expr::Literal(lit) = &unary.expr
-            && let Literal::Number(num_lit) = &lit.value
+            && let Literal::Number(repr) = &lit.value
             && self.type_table.borrow().is_float(target_type)
         {
-            return Some(match util::parse_float_literal(&num_lit.repr) {
+            return Some(match util::parse_float_literal(repr) {
                 Ok(value) => TirExpr::new(
                     TirExprKind::FloatLiteral {
                         value: -value,
-                        repr: format!("-{}", num_lit.repr),
+                        repr: format!("-{repr}"),
                     },
                     target_type,
                     unary.span,
@@ -200,7 +198,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     TirExpr::new(
                         TirExprKind::FloatLiteral {
                             value: 0.0,
-                            repr: format!("-{}", num_lit.repr),
+                            repr: format!("-{repr}"),
                         },
                         target_type,
                         unary.span,
@@ -211,8 +209,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // i128/u128 literal coercion
         if let Expr::Literal(lit) = expr
-            && let Literal::Number(num_lit) = &lit.value
-            && !util::is_float_only_literal(&num_lit.repr)
+            && let Literal::Number(repr) = &lit.value
+            && !util::is_float_only_literal(repr)
         {
             let struct_name = match self.type_table.borrow().get(target_type).clone() {
                 ResolvedType::Struct { name, .. } => Some(name),
@@ -223,9 +221,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 && (name == "u128" || name == "i128")
             {
                 let parse_result = if name == "u128" {
-                    util::parse_u128_literal(&num_lit.repr).map(|v| v as i128)
+                    util::parse_u128_literal(repr).map(|v| v as i128)
                 } else {
-                    util::parse_i128_literal(&num_lit.repr)
+                    util::parse_i128_literal(repr)
                 };
 
                 match parse_result {
@@ -247,7 +245,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             let inner_literal = TirExpr::new(
                                 TirExprKind::IntLiteral {
                                     value: store_value,
-                                    repr: num_lit.repr.clone(),
+                                    repr: repr.clone(),
                                 },
                                 inner_type,
                                 lit.span,
@@ -284,7 +282,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                     Err(_) => {
                         let _ = self.logger.error(TypeError::InvalidLiteral {
-                            message: format!("invalid {} literal: {}", name, num_lit.repr),
+                            message: format!("invalid {name} literal: {repr}"),
                             span: lit.span,
                         });
                     }
@@ -296,8 +294,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if let Expr::Unary(unary) = expr
             && unary.op == ast::UnaryOp::Neg
             && let Expr::Literal(lit) = &unary.expr
-            && let Literal::Number(num_lit) = &lit.value
-            && !util::is_float_only_literal(&num_lit.repr)
+            && let Literal::Number(repr) = &lit.value
+            && !util::is_float_only_literal(repr)
         {
             let struct_name = match self.type_table.borrow().get(target_type).clone() {
                 ResolvedType::Struct { name, .. } => Some(name),
@@ -307,7 +305,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             if let Some(name) = struct_name
                 && name == "i128"
             {
-                let negated_repr = format!("-{}", num_lit.repr);
+                let negated_repr = format!("-{repr}");
                 if let Ok(value) = util::parse_i128_literal(&negated_repr) {
                     let (low, high) = util::unpack_i128(value);
                     return Some(self.build_from_pair_call(
@@ -319,7 +317,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     ));
                 }
                 let _ = self.logger.error(TypeError::InvalidLiteral {
-                    message: format!("invalid i128 literal: -{}", num_lit.repr),
+                    message: format!("invalid i128 literal: -{repr}"),
                     span: unary.span,
                 });
             }

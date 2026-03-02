@@ -1266,9 +1266,7 @@ mod tests {
             }),
             op: CompoundAssignOp::Add,
             value: Expr::Literal(LiteralExpr {
-                value: crate::ast::Literal::Number(crate::ast::NumberLiteral {
-                    repr: "1".to_string(),
-                }),
+                value: crate::ast::Literal::Number("1".to_string()),
                 span: dummy_span(),
             }),
             span: dummy_span(),
@@ -1305,9 +1303,7 @@ mod tests {
         // 0 < x < 10
         let chain = ComparisonChainExpr {
             first: Expr::Literal(LiteralExpr {
-                value: crate::ast::Literal::Number(crate::ast::NumberLiteral {
-                    repr: "0".to_string(),
-                }),
+                value: crate::ast::Literal::Number("0".to_string()),
                 span: dummy_span(),
             }),
             comparisons: vec![
@@ -1322,9 +1318,7 @@ mod tests {
                 ChainedComparison {
                     op: BinaryOp::Lt,
                     right: Expr::Literal(LiteralExpr {
-                        value: crate::ast::Literal::Number(crate::ast::NumberLiteral {
-                            repr: "10".to_string(),
-                        }),
+                        value: crate::ast::Literal::Number("10".to_string()),
                         span: dummy_span(),
                     }),
                     op_span: dummy_span(),

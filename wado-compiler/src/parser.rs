@@ -9,12 +9,11 @@ use crate::ast::{
     FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType,
     GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
     Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr,
-    MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, NumberLiteral,
-    Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StringLiteral,
-    StructDecl, StructField, StructLiteralExpr, StructLiteralField, StructPatternField,
-    TaskReturnStmt, TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl,
-    UseItem, UseItemSimple, VariantCase, VariantDecl, WasiImport, WhileStmt, WorldDecl,
-    WorldExport, WorldImport,
+    MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, Pattern,
+    ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField,
+    StructLiteralExpr, StructLiteralField, StructPatternField, TaskReturnStmt, TestDecl, TraitDecl,
+    TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
+    VariantDecl, WasiImport, WhileStmt, WorldDecl, WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -346,9 +345,9 @@ impl Parser {
         self.advance();
 
         // Optional test name (string literal)
-        let name = if let TokenKind::StringLit { value, .. } = self.peek_kind().clone() {
+        let name = if let TokenKind::StringLit(raw) = self.peek_kind().clone() {
             self.advance();
-            Some(value)
+            Some(raw)
         } else {
             None
         };
@@ -462,9 +461,9 @@ impl Parser {
             let mut args = Vec::new();
             loop {
                 match self.peek_kind().clone() {
-                    TokenKind::StringLit { value, .. } => {
+                    TokenKind::StringLit(raw) => {
                         self.advance();
-                        args.push(value);
+                        args.push(raw);
                     }
                     TokenKind::Ident(value) => {
                         self.advance();
@@ -706,13 +705,13 @@ impl Parser {
         Ok(attrs)
     }
 
-    /// Consume a string literal and return its value
+    /// Consume a string literal and return its raw text (escape sequences not interpreted).
     fn consume_string(&mut self) -> ParseResult<String> {
         match &self.peek().kind {
-            TokenKind::StringLit { value, .. } => {
-                let value = value.clone();
+            TokenKind::StringLit(raw) => {
+                let raw = raw.clone();
                 self.advance();
-                Ok(value)
+                Ok(raw)
             }
             _ => Err(ParseError {
                 message: "expected string literal".to_string(),
@@ -1521,18 +1520,15 @@ impl Parser {
         } else if let TokenKind::NumberLit(repr) = self.peek_kind().clone() {
             // Literal pattern: 42 or 3.14
             self.advance();
-            Ok(Pattern::Literal(Literal::Number(NumberLiteral { repr })))
-        } else if let TokenKind::StringLit { value, raw } = self.peek_kind().clone() {
+            Ok(Pattern::Literal(Literal::Number(repr)))
+        } else if let TokenKind::StringLit(raw) = self.peek_kind().clone() {
             // Literal pattern: "hello"
             self.advance();
-            Ok(Pattern::Literal(Literal::String(StringLiteral {
-                value,
-                raw,
-            })))
-        } else if let TokenKind::CharLit(value, raw) = self.peek_kind().clone() {
+            Ok(Pattern::Literal(Literal::String(raw)))
+        } else if let TokenKind::CharLit(raw) = self.peek_kind().clone() {
             // Literal pattern: 'a'
             self.advance();
-            Ok(Pattern::Literal(Literal::Char(value, raw)))
+            Ok(Pattern::Literal(Literal::Char(raw)))
         } else if self.check(&TokenKind::True) {
             // Literal pattern: true
             self.advance();
@@ -1550,9 +1546,7 @@ impl Parser {
             self.advance();
             if let TokenKind::NumberLit(repr) = self.peek_kind().clone() {
                 self.advance();
-                Ok(Pattern::Literal(Literal::Number(NumberLiteral {
-                    repr: format!("-{repr}"),
-                })))
+                Ok(Pattern::Literal(Literal::Number(format!("-{repr}"))))
             } else {
                 Err(ParseError {
                     message: format!(
@@ -2384,14 +2378,14 @@ impl Parser {
             TokenKind::NumberLit(repr) => {
                 self.advance();
                 Ok(Expr::Literal(LiteralExpr {
-                    value: Literal::Number(NumberLiteral { repr: repr.clone() }),
+                    value: Literal::Number(repr.clone()),
                     span: start_span,
                 }))
             }
-            TokenKind::StringLit { value, raw } => {
+            TokenKind::StringLit(raw) => {
                 self.advance();
                 Ok(Expr::Literal(LiteralExpr {
-                    value: Literal::String(StringLiteral { value, raw }),
+                    value: Literal::String(raw),
                     span: start_span,
                 }))
             }
@@ -2420,10 +2414,10 @@ impl Parser {
                     span: start_span,
                 }))
             }
-            TokenKind::CharLit(value, raw) => {
+            TokenKind::CharLit(raw) => {
                 self.advance();
                 Ok(Expr::Literal(LiteralExpr {
-                    value: Literal::Char(value, raw),
+                    value: Literal::Char(raw),
                     span: start_span,
                 }))
             }
@@ -4509,9 +4503,7 @@ mod tests {
                 // Check that message is present and is a string literal
                 assert!(assert_stmt.message.is_some());
                 if let Some(Expr::Literal(lit)) = &assert_stmt.message {
-                    assert!(
-                        matches!(&lit.value, Literal::String(s) if s.value == "x must be positive")
-                    );
+                    assert!(matches!(&lit.value, Literal::String(s) if s == "x must be positive"));
                 } else {
                     panic!("expected string literal message");
                 }
