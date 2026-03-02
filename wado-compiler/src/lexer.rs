@@ -1083,8 +1083,7 @@ impl<'a> Lexer<'a> {
                             value.push_str("}}");
                         }
                         _ => {
-                            let ch =
-                                self.parse_escape_sequence(start, start_line, start_column)?;
+                            let ch = self.parse_escape_sequence(start, start_line, start_column)?;
                             value.push(ch);
                         }
                     }

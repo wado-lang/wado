@@ -768,12 +768,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             } => (name.clone(), module_source.clone(), name.clone(), vec![]),
             ResolvedType::Primitive(prim) => {
                 let name = prim.as_str().to_string();
-                (
-                    name.clone(),
-                    ModuleSource::primitives(),
-                    name,
-                    vec![],
-                )
+                (name.clone(), ModuleSource::primitives(), name, vec![])
             }
             ResolvedType::Enum {
                 name,
@@ -1380,8 +1375,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let struct_module = self.find_struct_module_source(&actual_struct_name);
 
         // Find trait name for trait static methods
-        let trait_name_opt =
-            self.find_static_method_trait(&actual_struct_name, method_name);
+        let trait_name_opt = self.find_static_method_trait(&actual_struct_name, method_name);
 
         // Use trait-qualified mangled name if this is a trait method
         let final_mangled_name = if let Some(ref trait_name) = trait_name_opt {

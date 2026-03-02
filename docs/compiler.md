@@ -167,17 +167,17 @@ The monomorphizer supports cross-module generic function instantiation. Generic 
 
 **Supported Features:**
 
-| Feature                        | Example                                 | Status |
-| ------------------------------ | --------------------------------------- | ------ |
-| Single type parameter          | `Box<i32>`                              | ✅     |
-| Multiple type parameters       | `Pair<i32, String>`                     | ✅     |
-| Nested generics                | `Box<Box<i32>>`                         | ✅     |
-| Generics in Array              | `Array<Pair<i32, String>>`              | ✅     |
-| Struct type parameters         | `Box<Point>`                            | ✅     |
-| Impl on specialization         | `impl Box<i32> { fn get() }`            | ✅     |
-| Generic functions              | `fn identity<T>(x: T) -> T`             | ✅     |
-| Generic methods                | `impl T { fn foo<U>(&self) }`           | ✅     |
-| Generic trait methods          | `trait T { fn f<D>(&self, d: D) }`      | ✅     |
+| Feature                        | Example                                  | Status |
+| ------------------------------ | ---------------------------------------- | ------ |
+| Single type parameter          | `Box<i32>`                               | ✅     |
+| Multiple type parameters       | `Pair<i32, String>`                      | ✅     |
+| Nested generics                | `Box<Box<i32>>`                          | ✅     |
+| Generics in Array              | `Array<Pair<i32, String>>`               | ✅     |
+| Struct type parameters         | `Box<Point>`                             | ✅     |
+| Impl on specialization         | `impl Box<i32> { fn get() }`             | ✅     |
+| Generic functions              | `fn identity<T>(x: T) -> T`              | ✅     |
+| Generic methods                | `impl T { fn foo<U>(&self) }`            | ✅     |
+| Generic trait methods          | `trait T { fn f<D>(&self, d: D) }`       | ✅     |
 | Static trait methods with args | `i32::deserialize::<MockDeserializer>()` | ✅     |
 
 **Name Mangling:**

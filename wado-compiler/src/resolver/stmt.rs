@@ -278,8 +278,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Handle different pattern types
         match &let_stmt.pattern {
             ast::Pattern::Ident(name) | ast::Pattern::MutIdent(name) => {
-                let is_mut = let_stmt.is_mut
-                    || matches!(&let_stmt.pattern, ast::Pattern::MutIdent(_));
+                let is_mut =
+                    let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent(_));
                 let local_index = ctx.add_local(name.clone(), type_id, is_mut);
                 TirStmt::new(
                     TirStmtKind::Let {

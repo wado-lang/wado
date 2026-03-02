@@ -1567,8 +1567,7 @@ impl Monomorphizer {
                                             >= generic_func.impl_type_params.len()
                                         {
                                             let mut combined_type_args = impl_type_args.clone();
-                                            combined_type_args
-                                                .extend(type_args.iter().copied());
+                                            combined_type_args.extend(type_args.iter().copied());
 
                                             let method_info = LocalMethodName::new(
                                                 base_struct.clone(),
@@ -3361,11 +3360,7 @@ impl Monomorphizer {
                             )];
                             if let Some(ref tn) = trait_name_opt {
                                 dg_names.push((
-                                    MethodName::format_local(
-                                        &base_struct,
-                                        Some(tn),
-                                        &method_name,
-                                    ),
+                                    MethodName::format_local(&base_struct, Some(tn), &method_name),
                                     Some(tn.clone()),
                                 ));
                             }
