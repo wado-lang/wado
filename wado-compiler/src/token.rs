@@ -53,7 +53,8 @@ pub enum TokenKind {
         raw: String,
     },
     TemplateStringLit(String), // Raw template string content (without backticks)
-    CharLit(char),
+    /// Char literal: parsed char value + raw source text between the quotes.
+    CharLit(char, String),
     NumberLit(String), // String representation only, type determined by context in resolver
     True,
     False,

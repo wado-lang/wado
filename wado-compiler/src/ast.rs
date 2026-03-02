@@ -729,7 +729,9 @@ pub struct LiteralExpr {
 pub enum Literal {
     Number(NumberLiteral),
     String(StringLiteral),
-    Char(char),
+    /// Char literal with the parsed value and raw source text (between quotes).
+    /// Raw text preserves the original escape sequence (e.g., `\u0041` stays `\u0041`).
+    Char(char, String),
     Bool(bool),
     Null,
     Unit,

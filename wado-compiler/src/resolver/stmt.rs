@@ -736,7 +736,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         }
                     }
                     Literal::Bool(b) => TirLiteralPattern::Bool(*b),
-                    Literal::Char(c) => TirLiteralPattern::Char(*c),
+                    Literal::Char(c, _) => TirLiteralPattern::Char(*c),
                     Literal::String(s) => TirLiteralPattern::String(s.value.clone()),
                     Literal::Null => TirLiteralPattern::Null,
                     _ => TirLiteralPattern::Null,

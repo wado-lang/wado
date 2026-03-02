@@ -455,7 +455,7 @@ fn test_char_simple() {
     let module = parse_expr("'A'").expect("parse failed");
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
-        wado_compiler::ast::Literal::Char('A') => {}
+        wado_compiler::ast::Literal::Char('A', _) => {}
         other => panic!("expected Char('A'), got {:?}", other),
     }
 }
@@ -465,7 +465,7 @@ fn test_char_escape_newline() {
     let module = parse_expr(r#"'\n'"#).expect("parse failed");
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
-        wado_compiler::ast::Literal::Char('\n') => {}
+        wado_compiler::ast::Literal::Char('\n', _) => {}
         other => panic!("expected Char('\\n'), got {:?}", other),
     }
 }
@@ -474,9 +474,10 @@ fn test_char_escape_newline() {
 fn test_char_unicode() {
     let module = parse_expr(r#"'\u0041'"#).expect("parse failed");
     let lit = extract_literal(&module).expect("no literal found");
+    // Char value is 'A' but raw text preserves the original '\u0041'
     match lit {
-        wado_compiler::ast::Literal::Char('A') => {}
-        other => panic!("expected Char('A'), got {:?}", other),
+        wado_compiler::ast::Literal::Char('A', raw) if raw == "\\u0041" => {}
+        other => panic!("expected Char('A', \"\\\\u0041\"), got {:?}", other),
     }
 }
 

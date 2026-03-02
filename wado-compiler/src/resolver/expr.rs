@@ -166,7 +166,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
             Literal::Bool(b) => (TirExprKind::BoolLiteral(*b), TypeTable::BOOL),
-            Literal::Char(c) => (TirExprKind::CharLiteral(*c), TypeTable::CHAR),
+            Literal::Char(c, _) => (TirExprKind::CharLiteral(*c), TypeTable::CHAR),
             Literal::String(s) => {
                 let string_type = self.get_string_struct_type();
                 (TirExprKind::StringLiteral(s.value.clone()), string_type)

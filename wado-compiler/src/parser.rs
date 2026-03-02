@@ -1529,10 +1529,10 @@ impl Parser {
                 value,
                 raw,
             })))
-        } else if let TokenKind::CharLit(value) = self.peek_kind().clone() {
+        } else if let TokenKind::CharLit(value, raw) = self.peek_kind().clone() {
             // Literal pattern: 'a'
             self.advance();
-            Ok(Pattern::Literal(Literal::Char(value)))
+            Ok(Pattern::Literal(Literal::Char(value, raw)))
         } else if self.check(&TokenKind::True) {
             // Literal pattern: true
             self.advance();
@@ -2420,10 +2420,10 @@ impl Parser {
                     span: start_span,
                 }))
             }
-            TokenKind::CharLit(value) => {
+            TokenKind::CharLit(value, raw) => {
                 self.advance();
                 Ok(Expr::Literal(LiteralExpr {
-                    value: Literal::Char(value),
+                    value: Literal::Char(value, raw),
                     span: start_span,
                 }))
             }

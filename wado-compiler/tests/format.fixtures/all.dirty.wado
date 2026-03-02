@@ -110,6 +110,17 @@ global PI: f64 = 3.14159265358979;
 
 pub global mut counter: i32 = 0;
 
+/// Function return types: no return, -> (), and -> !
+fn no_return_type() {
+}
+
+fn unit_return_type() -> () {
+}
+
+fn never_return_type() -> ! {
+    panic("oops");
+}
+
 /// Numeric literals — integer forms
 fn int_literals() {
     let a = 42;
@@ -133,7 +144,7 @@ fn float_literals() {
     let g = 0.0;
 }
 
-/// Char literals: ASCII, escapes, unicode normalization
+/// Char literals: ASCII, escapes, unicode (raw form preserved)
 fn char_literals() {
     let a = 'A';
     let b = 'z';
@@ -145,10 +156,10 @@ fn char_literals() {
     let h = '\\';
     let i = '\'';
     let j = '\0';
-    let k = '\u0041';    // U+0041 = 'A' (printable, no escape)
-    let l = '\u{1F600}'; // U+1F600 = '😀' (emoji, printable)
-    let m = '🦀';
-    let n = '\u001B';    // ESC control char → \u{001B}
+    let k = '\u0041';    // 4-hex unicode escape: preserved as-is
+    let l = '\u{1F600}'; // curly-brace unicode escape: preserved as-is
+    let m = '🦀';        // direct emoji: preserved as-is
+    let n = '\u001B';    // ESC: preserved as-is
 }
 
 /// String literals: escapes and multiline

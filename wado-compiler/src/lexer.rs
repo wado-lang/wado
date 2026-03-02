@@ -1110,6 +1110,7 @@ impl<'a> Lexer<'a> {
         let start_column = self.column;
 
         self.advance(); // consume opening '
+        let inner_start = self.pos;
 
         let ch = match self.peek() {
             None => {
@@ -1134,6 +1135,8 @@ impl<'a> Lexer<'a> {
             }
         };
 
+        let raw = self.input[inner_start..self.pos].to_string();
+
         // Expect closing quote
         if self.peek_char() != Some('\'') {
             return Err(LexError {
@@ -1143,7 +1146,7 @@ impl<'a> Lexer<'a> {
         }
         self.advance(); // consume closing '
 
-        Ok(TokenKind::CharLit(ch))
+        Ok(TokenKind::CharLit(ch, raw))
     }
 }
 

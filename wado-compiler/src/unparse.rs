@@ -242,8 +242,10 @@ impl<'a> Unparser<'a> {
 
         self.output.push(')');
 
-        // Return type
-        if let Some(ret) = &f.return_type {
+        // Return type: skip `-> ()` (unit return is the default)
+        if let Some(ret) = &f.return_type
+            && !matches!(ret, Type::Named(n) if n.name == "()")
+        {
             self.output.push_str(" -> ");
             self.unparse_type(ret);
         }
@@ -824,7 +826,10 @@ impl<'a> Unparser<'a> {
 
         self.output.push(')');
 
-        if let Some(ret) = &m.return_type {
+        // Return type: skip `-> ()` (unit return is the default)
+        if let Some(ret) = &m.return_type
+            && !matches!(ret, Type::Named(n) if n.name == "()")
+        {
             self.output.push_str(" -> ");
             self.unparse_type(ret);
         }
@@ -916,7 +921,10 @@ impl<'a> Unparser<'a> {
                 self.unparse_type(&param.ty);
             }
             self.output.push(')');
-            if let Some(ret) = &exp.return_type {
+            // Return type: skip `-> ()` (unit return is the default)
+            if let Some(ret) = &exp.return_type
+                && !matches!(ret, Type::Named(n) if n.name == "()")
+            {
                 self.output.push_str(" -> ");
                 self.unparse_type(ret);
             }
@@ -1453,9 +1461,9 @@ impl<'a> Unparser<'a> {
                 self.output.push_str(&s.raw);
                 self.output.push('"');
             }
-            Literal::Char(c) => {
+            Literal::Char(_, raw) => {
                 self.output.push('\'');
-                self.output.push_str(&escape_char(*c));
+                self.output.push_str(raw);
                 self.output.push('\'');
             }
             Literal::Bool(b) => self.output.push_str(if *b { "true" } else { "false" }),
@@ -2772,9 +2780,9 @@ fn unparse_literal_into(lit: &Literal, output: &mut String) {
             output.push_str(&s.raw);
             output.push('"');
         }
-        Literal::Char(c) => {
+        Literal::Char(_, raw) => {
             output.push('\'');
-            output.push_str(&escape_char(*c));
+            output.push_str(raw);
             output.push('\'');
         }
         Literal::Bool(b) => output.push_str(if *b { "true" } else { "false" }),
