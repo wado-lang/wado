@@ -165,6 +165,11 @@ fn parse_profile(s: &str) -> Result<ProfileMode, CliExit> {
     )))
 }
 
+/// Parse command-line arguments for the `run` subcommand.
+///
+/// # Errors
+///
+/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     let usage = format_usage();
     let mut input: Option<String> = None;

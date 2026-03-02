@@ -1716,8 +1716,7 @@ fn synthesize_adapter(
 
         body_stmts.push(return_stmt(Some(lifted)));
         adapter_return_type = TypeTable::I32; // placeholder, fixed up at call site
-    } else if func_info.return_type.is_some() {
-        let return_type = func_info.return_type.as_ref().unwrap();
+    } else if let Some(return_type) = &func_info.return_type {
         let resolved = wasi_registry.resolve_type(return_type);
         if needs_flat_result_lifting(&resolved) {
             // Flat return with complex type (e.g., Result<(), ()>): the raw call returns
@@ -4091,10 +4090,10 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
                         // Async export: the user function calls task-return internally via
                         // `task return expr` stmts. Expand those stmts into CM task-return
                         // calls and synthesize a simple lifting adapter.
-                        if export.return_type.is_some() {
+                        if let Some(return_type) = &export.return_type {
                             let tt = entry_type_table.borrow();
                             let flat_types = compute_export_flat_return_types(
-                                export.return_type.as_ref().unwrap(),
+                                return_type,
                                 &project.tir_modules,
                                 &tt,
                             );
@@ -4191,10 +4190,10 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
         // Result-returning exports the task-return call passes the full flattened type.
         // Store on Project so optimize_dce can use it when creating the import.
         for export in &world_info.exports {
-            if export.return_type.is_some() {
+            if let Some(return_type) = &export.return_type {
                 let tt = entry_type_table.borrow();
                 let flat_types = compute_export_flat_return_types(
-                    export.return_type.as_ref().unwrap(),
+                    return_type,
                     &project.tir_modules,
                     &tt,
                 );

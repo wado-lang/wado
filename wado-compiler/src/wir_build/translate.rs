@@ -2846,14 +2846,9 @@ impl FunctionTranslator<'_, '_> {
     ) -> Option<WirInstr> {
         // Unwrap reference wrappers to get the base type
         let mut recv_type = self.type_table.get(receiver.type_id).clone();
-        loop {
-            match &recv_type {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    let inner = *inner;
-                    recv_type = self.type_table.get(inner).clone();
-                }
-                _ => break,
-            }
+        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = &recv_type {
+            let inner = *inner;
+            recv_type = self.type_table.get(inner).clone();
         }
         if !matches!(recv_type, ResolvedType::FutureWritable(_)) {
             return None;
@@ -2985,14 +2980,9 @@ impl FunctionTranslator<'_, '_> {
         result_type_id: TypeId,
     ) -> Option<WirInstr> {
         let mut recv_type = self.type_table.get(receiver.type_id).clone();
-        loop {
-            match &recv_type {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    let inner = *inner;
-                    recv_type = self.type_table.get(inner).clone();
-                }
-                _ => break,
-            }
+        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = &recv_type {
+            let inner = *inner;
+            recv_type = self.type_table.get(inner).clone();
         }
         if !matches!(recv_type, ResolvedType::Stream(_)) {
             return None;
@@ -3356,14 +3346,9 @@ impl FunctionTranslator<'_, '_> {
         args: &[TirExpr],
     ) -> Option<WirInstr> {
         let mut recv_type = self.type_table.get(receiver.type_id).clone();
-        loop {
-            match &recv_type {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    let inner = *inner;
-                    recv_type = self.type_table.get(inner).clone();
-                }
-                _ => break,
-            }
+        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = &recv_type {
+            let inner = *inner;
+            recv_type = self.type_table.get(inner).clone();
         }
         if !matches!(recv_type, ResolvedType::StreamWritable(_)) {
             return None;

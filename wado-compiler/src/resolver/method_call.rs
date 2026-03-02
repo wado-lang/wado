@@ -1259,7 +1259,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     /// Get the operator trait and method name for a binary operator.
-
     pub(super) fn is_static_method(&self, struct_name: &str, method_name: &str) -> bool {
         let mangled_name = MethodName::format_local(struct_name, None, method_name);
 

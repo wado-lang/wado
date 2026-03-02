@@ -106,7 +106,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// This is used for lookups where we need immutable access. It only handles
     /// primitive types and newtypes. For generic types, use `resolve_type` instead.
     /// Resolve a method call
-
     pub(super) fn resolve_literal(
         &mut self,
         lit: &ast::LiteralExpr,
@@ -475,7 +474,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     /// Resolve a binary expression
-
     pub(super) fn resolve_field_access(
         &mut self,
         field_access: &ast::FieldAccessExpr,
@@ -1229,7 +1227,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// - Inside the closure, `v` is accessed as `*__ref_v` (deref of the captured reference)
     ///
     /// This allows the closure to mutate the outer variable via the shared reference.
-
     pub(super) fn resolve_cast(
         &mut self,
         cast: &ast::CastExpr,
@@ -1281,9 +1278,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                         if use_small {
                             let (inner_type, method_name, store_value) = if name == "u128" {
-                                (TypeTable::U64, "from_u64", value as u64)
+                                (
+                                    TypeTable::U64,
+                                    "from_u64",
+                                    u64::try_from(value).expect("value fits in u64"),
+                                )
                             } else {
-                                (TypeTable::I64, "from_i64", value as u64)
+                                (
+                                    TypeTable::I64,
+                                    "from_i64",
+                                    i64::try_from(value)
+                                        .expect("value fits in i64")
+                                        .cast_unsigned(),
+                                )
                             };
 
                             let inner_literal = TirExpr::new(
