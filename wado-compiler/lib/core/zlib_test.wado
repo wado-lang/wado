@@ -1,23 +1,4 @@
-use {
-    Z_OK, Z_STREAM_END, Z_NEED_DICT, Z_ERRNO, Z_STREAM_ERROR,
-    Z_DATA_ERROR, Z_MEM_ERROR, Z_BUF_ERROR, Z_VERSION_ERROR,
-    Z_NO_FLUSH, Z_PARTIAL_FLUSH, Z_SYNC_FLUSH, Z_FULL_FLUSH,
-    Z_FINISH, Z_BLOCK, Z_TREES,
-    Z_NO_COMPRESSION, Z_BEST_SPEED, Z_BEST_COMPRESSION, Z_DEFAULT_COMPRESSION,
-    Z_DEFAULT_STRATEGY, Z_FILTERED, Z_HUFFMAN_ONLY, Z_RLE, Z_FIXED,
-    Z_BINARY, Z_TEXT, Z_UNKNOWN,
-    Z_DEFLATED, MAX_WBITS,
-    adler32, adler32_init, adler32_combine,
-    crc32, crc32_init, crc32_combine,
-    zlib_compress, zlib_compress_stored, inflate_zlib,
-    compress2, compress_with_strategy, compress_bound,
-    deflate_raw, deflate_raw2, inflate_raw,
-    gzip_compress, gzip_compress2, inflate_gzip,
-    uncompress, uncompress2,
-    DeflateStream, InflateStream,
-    ZLIB_FORMAT, RAW_FORMAT, GZIP_FORMAT, AUTO_FORMAT,
-    zlib_version,
-} from "core:zlib";
+use { Z_OK, Z_STREAM_END, Z_NEED_DICT, Z_ERRNO, Z_STREAM_ERROR, Z_DATA_ERROR, Z_MEM_ERROR, Z_BUF_ERROR, Z_VERSION_ERROR, Z_NO_FLUSH, Z_PARTIAL_FLUSH, Z_SYNC_FLUSH, Z_FULL_FLUSH, Z_FINISH, Z_BLOCK, Z_TREES, Z_NO_COMPRESSION, Z_BEST_SPEED, Z_BEST_COMPRESSION, Z_DEFAULT_COMPRESSION, Z_DEFAULT_STRATEGY, Z_FILTERED, Z_HUFFMAN_ONLY, Z_RLE, Z_FIXED, Z_BINARY, Z_TEXT, Z_UNKNOWN, Z_DEFLATED, MAX_WBITS, adler32, adler32_init, adler32_combine, crc32, crc32_init, crc32_combine, zlib_compress, zlib_compress_stored, inflate_zlib, compress2, compress_with_strategy, compress_bound, deflate_raw, deflate_raw2, inflate_raw, gzip_compress, gzip_compress2, inflate_gzip, uncompress, uncompress2, DeflateStream, InflateStream, ZLIB_FORMAT, RAW_FORMAT, GZIP_FORMAT, AUTO_FORMAT, zlib_version } from "core:zlib";
 
 fn bytes_equal(a: &Array<u8>, b: &Array<u8>) -> bool {
     if a.len() != b.len() {
@@ -104,13 +85,13 @@ test "other constants" {
 }
 
 test "adler32" {
-    let data: Array<u8> = [72 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8]; // "Hello"
+    let data: Array<u8> = [72 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8];  // "Hello"
     let checksum = adler32(adler32_init(), &data, 0, 5);
     assert checksum == 93061621 as u32;
 }
 
 test "crc32" {
-    let data: Array<u8> = [72 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8]; // "Hello"
+    let data: Array<u8> = [72 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8];  // "Hello"
     let crc = crc32(crc32_init(), &data, 0, 5);
     assert crc == 4157704578 as u32;
 }

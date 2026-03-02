@@ -1,3 +1,4 @@
+#![no_prelude]
 // Float-to-String conversion using Russ Cox's unrounded scaling algorithm
 // Ported from rsc.io/fpfmt (https://research.swtch.com/fp)
 //
@@ -5,15 +6,9 @@
 // Use of this source code is governed by a BSD-style license.
 // See https://github.com/rsc/fpfmt/blob/main/LICENSE
 
-#![no_prelude]
 
 // Powers of 10 from 10^0 to 10^19
-global POW10: Array<u64> = [
-    1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000,
-    1000000000, 10000000000, 100000000000, 1000000000000, 10000000000000,
-    100000000000000, 1000000000000000, 10000000000000000, 100000000000000000,
-    1000000000000000000, 10000000000000000000,
-];
+global POW10: Array<u64> = [1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000, 100000000000, 1000000000000, 10000000000000, 100000000000000, 1000000000000000, 10000000000000000, 100000000000000000, 1000000000000000000, 10000000000000000000];
 
 pub fn pow10(n: i32) -> u64 {
     return POW10[n];
@@ -21,17 +16,17 @@ pub fn pow10(n: i32) -> u64 {
 
 // Returns the bit length of x (position of highest set bit + 1)
 pub fn u64_bit_len(x: u64) -> i32 {
-    return 64 - (builtin::i64_clz(x as i64) as i32);
+    return 64 - builtin::i64_clz(x as i64) as i32;
 }
 
 // log10_pow2(x) returns floor(log10(2^x)) = floor(x * log10(2))
 pub fn log10_pow2(x: i32) -> i32 {
-    return (x * 78913) >> 18;
+    return x * 78913 >> 18;
 }
 
 // log2_pow10(x) returns floor(log2(10^x)) = floor(x * log2(10))
 pub fn log2_pow10(x: i32) -> i32 {
-    return (x * 108853) >> 15;
+    return x * 108853 >> 15;
 }
 
 // Result of unpacking a float64
@@ -51,7 +46,7 @@ pub fn unpack64(f: f64) -> UnpackResult {
     let min_exp = -(1074 + shift);
 
     let raw_mantissa = bits & mantissa_mask;
-    let raw_exp = ((bits >> 52) & exp_mask) as i32;
+    let raw_exp = (bits >> 52 & exp_mask) as i32;
 
     if raw_exp == 0 {
         if raw_mantissa == 0 {
@@ -63,8 +58,8 @@ pub fn unpack64(f: f64) -> UnpackResult {
         return UnpackResult { mantissa: m << s, exponent: e - s as i32 };
     }
 
-    let m = (0x8000000000000000 as u64) | (raw_mantissa << shift_u64);
-    let e = (raw_exp - 1) + min_exp;
+    let m = 0x8000000000000000 as u64 | raw_mantissa << shift_u64;
+    let e = raw_exp - 1 + min_exp;
     return UnpackResult { mantissa: m, exponent: e };
 }
 
@@ -80,7 +75,7 @@ pub fn unpack32(f: f32) -> UnpackResult {
     let min_exp = -(149 + shift);
 
     let raw_mantissa = (bits & mantissa_mask) as u64;
-    let raw_exp = ((bits >> 23) & exp_mask) as i32;
+    let raw_exp = (bits >> 23 & exp_mask) as i32;
 
     if raw_exp == 0 {
         if raw_mantissa == 0 {
@@ -92,31 +87,31 @@ pub fn unpack32(f: f32) -> UnpackResult {
         return UnpackResult { mantissa: m << s, exponent: e - s as i32 };
     }
 
-    let m = (0x8000000000000000 as u64) | (raw_mantissa << shift_u64);
-    let e = (raw_exp - 1) + min_exp;
+    let m = 0x8000000000000000 as u64 | raw_mantissa << shift_u64;
+    let e = raw_exp - 1 + min_exp;
     return UnpackResult { mantissa: m, exponent: e };
 }
 
 pub fn unrounded_floor(u: u64) -> u64 {
-    return (u + 0) >> 2;
+    return u + 0 >> 2;
 }
 
 pub fn unrounded_round(u: u64) -> u64 {
-    return (u + 1 + ((u >> 2) & 1)) >> 2;
+    return u + 1 + (u >> 2 & 1) >> 2;
 }
 
 pub fn unrounded_ceil(u: u64) -> u64 {
-    return (u + 3) >> 2;
+    return u + 3 >> 2;
 }
 
 pub fn unrounded_nudge(u: u64, delta: i32) -> u64 {
-    return (u as i64 + (delta as i64)) as u64;
+    return (u as i64 + delta as i64) as u64;
 }
 
 pub fn unrounded_div(u: u64, d: u64) -> u64 {
     let q = u / d;
     let r = u % d;
-    return q | (u & 1) | ((r != 0) as u64);
+    return q | u & 1 | (r != 0) as u64;
 }
 
 pub struct PmHiLo {
@@ -214,7 +209,7 @@ fn mul_pow10(p: i32) -> PmHiLo {
     // Represented as two u64 words [c_lo_raw, c_hi_raw]
     let borrow = (c.lo != 0) as u64;
     let c_hi_raw = c.hi - borrow;
-    let c_lo_raw = (0 as u64) - c.lo;
+    let c_lo_raw = 0 as u64 - c.lo;
 
     // Product = (c_hi_raw * 2^64 + c_lo_raw) * f
     // a1 = c_hi_raw * f → [lo, hi]
@@ -242,14 +237,14 @@ fn mul_pow10(p: i32) -> PmHiLo {
     }
 
     // Normalize: ensure bit 127 is set (top_hi bit 63)
-    if (top_hi >> 63) == 0 {
-        top_hi = (top_hi << 1) | (top_lo >> 63);
+    if top_hi >> 63 == 0 {
+        top_hi = top_hi << 1 | top_lo >> 63;
         top_lo = top_lo << 1;
     }
 
     // Convert back to PmHiLo (hi<<64 - lo)
     if top_lo != 0 {
-        return PmHiLo { hi: top_hi + 1, lo: (0 as u64) - top_lo };
+        return PmHiLo { hi: top_hi + 1, lo: 0 as u64 - top_lo };
     }
     return PmHiLo { hi: top_hi, lo: 0 };
 }
@@ -269,7 +264,7 @@ pub fn uscale(x: u64, pm_hi: u64, pm_lo: u64, s: i32) -> u64 {
 
     let s_mod_64 = (s & 63) as u64;
     let check_mask = (1 as u64 << s_mod_64) - 1;
-    if (hi & check_mask) == 0 {
+    if hi & check_mask == 0 {
         // Go: mid2, _ := bits.Mul64(x, pm_lo) → mid2=high part, _=low part
         // Wado: [_, mid2] = i64_mul_wide_u(x, pm_lo) → _=low part, mid2=high part
         let [_, mid2_i64] = builtin::i64_mul_wide_u(x as i64, pm_lo as i64);
@@ -278,7 +273,7 @@ pub fn uscale(x: u64, pm_hi: u64, pm_lo: u64, s: i32) -> u64 {
         hi = hi - (mid < mid2) as u64;
     }
 
-    return (hi >> s as u64) | sticky;
+    return hi >> s as u64 | sticky;
 }
 
 // Result of formatting
@@ -330,13 +325,23 @@ pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
     let s1 = -(e + lp1 + 3);
     let u1 = uscale(m, pm1.hi, pm1.lo, s1);
     let d1_floor = unrounded_floor(u1);
-    let decimal_pos = if d1_floor >= 10 { 2 - p1 } else { 1 - p1 };
+    let decimal_pos = if d1_floor >= 10 {
+        2 - p1;
+    } else {
+        1 - p1;
+    };
 
     // Phase 2: Compute fixed_width(f, n) reusing the unpacked mantissa and exponent.
     // Use decimal_pos directly: for numbers < 1.0 (decimal_pos <= 0), the leading "0."
     // is not a significant digit, so we need exactly (decimal_pos + precision) digits.
     let total_digits = decimal_pos + precision;
-    let n = if total_digits > 18 { 18 } else if total_digits < 1 { 1 } else { total_digits };
+    let n = if total_digits > 18 {
+        18;
+    } else if total_digits < 1 {
+        1;
+    } else {
+        total_digits;
+    };
 
     let p = n - 1 - log10_e63;
     let lp = log2_pow10(p);
@@ -363,7 +368,7 @@ pub fn short(f: f64) -> FormatResult {
     let mut z = 11;
     let mut p: i32 = 0;
 
-    let m_is_power_of_2 = m == (0x8000000000000000 as u64);
+    let m_is_power_of_2 = m == 0x8000000000000000 as u64;
     if m_is_power_of_2 && e > min_exp {
         p = -skewed(e + z);
         min_m = m - (1 as u64 << (z - 2) as u64);
@@ -376,7 +381,7 @@ pub fn short(f: f64) -> FormatResult {
     }
 
     let max_m = m + (1 as u64 << (z - 1) as u64);
-    let odd = ((m >> z as u64) & 1) as i32;
+    let odd = (m >> z as u64 & 1) as i32;
 
     let lp = log2_pow10(p);
     let pm = get_pow10(p);
@@ -414,7 +419,7 @@ pub fn short32(f: f32) -> FormatResult {
     let mut z = 40;
     let mut p: i32 = 0;
 
-    let m_is_power_of_2 = m == (0x8000000000000000 as u64);
+    let m_is_power_of_2 = m == 0x8000000000000000 as u64;
     if m_is_power_of_2 && e > min_exp {
         p = -skewed(e + z);
         min_m = m - (1 as u64 << (z - 2) as u64);
@@ -427,7 +432,7 @@ pub fn short32(f: f32) -> FormatResult {
     }
 
     let max_m = m + (1 as u64 << (z - 1) as u64);
-    let odd = ((m >> z as u64) & 1) as i32;
+    let odd = (m >> z as u64 & 1) as i32;
 
     let lp = log2_pow10(p);
     let pm = get_pow10(p);
@@ -452,7 +457,7 @@ pub fn short32(f: f32) -> FormatResult {
 }
 
 pub fn skewed(e: i32) -> i32 {
-    return (e * 631305 - 261663) >> 21;
+    return e * 631305 - 261663 >> 21;
 }
 
 // Unsigned multiply (low 64 bits only, modular)
@@ -472,7 +477,7 @@ pub fn trim_zeros(x: u64, p: i32) -> [u64, i32] {
     let thresh_10 = 1844674407370955161 as u64;  // maxUint64 / 10
     let thresh_100 = 184467440737095516 as u64;  // maxUint64 / 100
     let thresh_10000 = 1844674407370955 as u64;  // maxUint64 / 10000
-    let thresh_1e8 = 184467440737 as u64;        // maxUint64 / 100000000
+    let thresh_1e8 = 184467440737 as u64;  // maxUint64 / 100000000
 
     let mut xv = x;
     let mut pv = p;
@@ -513,7 +518,7 @@ pub fn trim_zeros(x: u64, p: i32) -> [u64, i32] {
 }
 
 pub fn rotate_right(x: u64, n: u64) -> u64 {
-    return (x >> n) | (x << (64 - n));
+    return x >> n | x << 64 - n;
 }
 
 // digits returns the number of decimal digits in d
@@ -523,11 +528,11 @@ pub fn digits(d: u64) -> i32 {
 }
 
 fn i2a_first(n: i32) -> char {
-    return char::from_u32_unchecked(('0' as u32) + (n / 10) as u32);
+    return char::from_u32_unchecked('0' as u32 + (n / 10) as u32);
 }
 
 fn i2a_second(n: i32) -> char {
-    return char::from_u32_unchecked(('0' as u32) + (n % 10) as u32);
+    return char::from_u32_unchecked('0' as u32 + (n % 10) as u32);
 }
 
 // Write nd decimal digits of val into buf at offset, right-to-left using set_byte.
@@ -536,7 +541,7 @@ fn write_digits_at(buf: &mut String, offset: i32, val: u64, nd: i32) {
     let mut v = val;
     let mut idx = offset + nd - 1;
     while idx >= offset {
-        buf.set_byte(idx, ('0' as u8) + (v % 10) as u8);
+        buf.set_byte(idx, '0' as u8 + (v % 10) as u8);
         v = v / 10;
         idx = idx - 1;
     }
@@ -580,11 +585,11 @@ pub fn write_decimal(buf: &mut String, d: u64, p: i32, nd: i32) {
 pub fn format_decimal(d: u64, p: i32, nd: i32) -> String {
     let decimal_pos = nd + p;
     let total = if decimal_pos <= 0 {
-        2 + (-decimal_pos) + nd
+        2 + -decimal_pos + nd;
     } else if decimal_pos >= nd {
-        decimal_pos
+        decimal_pos;
     } else {
-        nd + 1
+        nd + 1;
     };
     let mut buf = String::with_capacity(total);
     write_decimal(&mut buf, d, p, nd);
@@ -610,19 +615,27 @@ pub fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
     }
 
     // Exponent
-    buf.append(if upper { "E" } else { "e" });
+    buf.append(if upper {
+        "E";
+    } else {
+        "e";
+    });
     if exp < 0 {
         buf.append("-");
     }
 
-    let abs_exp = if exp < 0 { -exp } else { exp };
+    let abs_exp = if exp < 0 {
+        -exp;
+    } else {
+        exp;
+    };
     if abs_exp < 10 {
-        buf.append_char(char::from_u32_unchecked(('0' as u32) + abs_exp as u32));
+        buf.append_char(char::from_u32_unchecked('0' as u32 + abs_exp as u32));
     } else if abs_exp < 100 {
         buf.append_char(i2a_first(abs_exp));
         buf.append_char(i2a_second(abs_exp));
     } else {
-        buf.append_char(char::from_u32_unchecked(('0' as u32) + (abs_exp / 100) as u32));
+        buf.append_char(char::from_u32_unchecked('0' as u32 + (abs_exp / 100) as u32));
         buf.append_char(i2a_first(abs_exp % 100));
         buf.append_char(i2a_second(abs_exp % 100));
     }
@@ -654,7 +667,11 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
         }
         fill_zeros(buf, leading_zeros);
         let remaining_prec = precision - leading_zeros;
-        let digits_to_output = if remaining_prec < nd { remaining_prec } else { nd };
+        let digits_to_output = if remaining_prec < nd {
+            remaining_prec;
+        } else {
+            nd;
+        };
         let trailing = precision - leading_zeros - digits_to_output;
         let mut trim_d = d;
         let mut skip = nd - digits_to_output;
@@ -722,7 +739,11 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
 
     if precision > 0 {
         let available = nd - 1;
-        let to_output = if precision < available { precision } else { available };
+        let to_output = if precision < available {
+            precision;
+        } else {
+            available;
+        };
         let trailing = precision - to_output;
         let digit_count = 1 + to_output;
         let start = buf.len();
@@ -751,19 +772,27 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
     }
 
     let exp = p + nd - 1;
-    buf.append(if upper { "E" } else { "e" });
+    buf.append(if upper {
+        "E";
+    } else {
+        "e";
+    });
     if exp < 0 {
         buf.append("-");
     }
 
-    let abs_exp = if exp < 0 { -exp } else { exp };
+    let abs_exp = if exp < 0 {
+        -exp;
+    } else {
+        exp;
+    };
     if abs_exp < 10 {
-        buf.append_char(char::from_u32_unchecked(('0' as u32) + abs_exp as u32));
+        buf.append_char(char::from_u32_unchecked('0' as u32 + abs_exp as u32));
     } else if abs_exp < 100 {
         buf.append_char(i2a_first(abs_exp));
         buf.append_char(i2a_second(abs_exp));
     } else {
-        buf.append_char(char::from_u32_unchecked(('0' as u32) + (abs_exp / 100) as u32));
+        buf.append_char(char::from_u32_unchecked('0' as u32 + (abs_exp / 100) as u32));
         buf.append_char(i2a_first(abs_exp % 100));
         buf.append_char(i2a_second(abs_exp % 100));
     }
@@ -806,9 +835,9 @@ pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
 
     // Check for infinity/NaN
     let exp_mask = 0x7FF0000000000000 as i64;
-    if (bits & exp_mask) == exp_mask {
+    if bits & exp_mask == exp_mask {
         let mantissa_mask = 0x000FFFFFFFFFFFFF as i64;
-        if (bits & mantissa_mask) != 0 as i64 {
+        if bits & mantissa_mask != 0 as i64 {
             return [true, false, SpecialKind::NaN];
         }
         return [true, is_neg, SpecialKind::Inf];
@@ -826,11 +855,11 @@ pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
 // and an exponent that is in range for the mantissa.
 fn pack64(m: u64, e: i32) -> f64 {
     let bit52 = 1 as u64 << 52;
-    if (m & bit52) == 0 {
+    if m & bit52 == 0 {
         return builtin::f64_reinterpret_i64(m as i64);
     }
     let mantissa_bits = m & ~bit52;
-    let exp_bits = ((1075 + e) as u64) << 52;
+    let exp_bits = (1075 + e) as u64 << 52;
     return builtin::f64_reinterpret_i64((mantissa_bits | exp_bits) as i64);
 }
 
@@ -842,13 +871,13 @@ pub fn parse(d: u64, p: i32) -> f64 {
     let mut e = i32::min(1074, 53 - b - lp);
     let x = d << (64 - b) as u64;
     let pm = get_pow10(p);
-    let s_val = -((e - (64 - b)) + lp + 3);
+    let s_val = -(e - (64 - b) + lp + 3);
     let mut u = uscale(x, pm.hi, pm.lo, s_val);
 
     // Branch-free: if round(u) >= 1<<53, shift right by 1
-    let unmin_val = ((1 as u64) << 55) - 2;
+    let unmin_val = (1 as u64 << 55) - 2;
     let shift = (u >= unmin_val) as u64;
-    u = (u >> shift) | (u & 1);
+    u = u >> shift | u & 1;
     e = e - shift as i32;
 
     return pack64(unrounded_round(u), -e);
@@ -889,9 +918,7 @@ pub fn parse_text(s: String) -> Option<f64> {
     if (c0 == 'i' as u8 || c0 == 'I' as u8) && remaining >= 3 {
         let c1 = s.get_byte(i + 1);
         let c2 = s.get_byte(i + 2);
-        if (c1 == 'n' as u8 || c1 == 'N' as u8)
-            && (c2 == 'f' as u8 || c2 == 'F' as u8)
-        {
+        if (c1 == 'n' as u8 || c1 == 'N' as u8) && (c2 == 'f' as u8 || c2 == 'F' as u8) {
             if remaining == 3 {
                 return Option::Some(builtin::f64_copysign(f64::INFINITY, sign));
             }
@@ -901,12 +928,7 @@ pub fn parse_text(s: String) -> Option<f64> {
                 let c5 = s.get_byte(i + 5);
                 let c6 = s.get_byte(i + 6);
                 let c7 = s.get_byte(i + 7);
-                if (c3 == 'i' as u8 || c3 == 'I' as u8)
-                    && (c4 == 'n' as u8 || c4 == 'N' as u8)
-                    && (c5 == 'i' as u8 || c5 == 'I' as u8)
-                    && (c6 == 't' as u8 || c6 == 'T' as u8)
-                    && (c7 == 'y' as u8 || c7 == 'Y' as u8)
-                {
+                if (c3 == 'i' as u8 || c3 == 'I' as u8) && (c4 == 'n' as u8 || c4 == 'N' as u8) && (c5 == 'i' as u8 || c5 == 'I' as u8) && (c6 == 't' as u8 || c6 == 'T' as u8) && (c7 == 'y' as u8 || c7 == 'Y' as u8) {
                     return Option::Some(builtin::f64_copysign(f64::INFINITY, sign));
                 }
             }
@@ -918,9 +940,7 @@ pub fn parse_text(s: String) -> Option<f64> {
     if (c0 == 'n' as u8 || c0 == 'N' as u8) && remaining == 3 {
         let c1 = s.get_byte(i + 1);
         let c2 = s.get_byte(i + 2);
-        if (c1 == 'a' as u8 || c1 == 'A' as u8)
-            && (c2 == 'n' as u8 || c2 == 'N' as u8)
-        {
+        if (c1 == 'a' as u8 || c1 == 'A' as u8) && (c2 == 'n' as u8 || c2 == 'N' as u8) {
             return Option::Some(f64::NAN);
         }
         return null;
@@ -941,7 +961,7 @@ pub fn parse_text(s: String) -> Option<f64> {
     // Read fractional digits
     if i < len && s.get_byte(i) == '.' as u8 {
         if int_digits == 0 {
-            return null; // leading dot not allowed
+            return null;  // leading dot not allowed
         }
         i += 1;
         let frac_start = i;
@@ -950,7 +970,7 @@ pub fn parse_text(s: String) -> Option<f64> {
             frac += 1;
         }
         if i == frac_start {
-            return null; // trailing dot not allowed
+            return null;  // trailing dot not allowed
         }
     }
 

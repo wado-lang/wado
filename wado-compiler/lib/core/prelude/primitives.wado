@@ -6,15 +6,7 @@
 // This module intentionally does NOT depend on core:internal to keep the
 // dependency structure simple.
 
-use {
-    check_special, SpecialKind,
-    short, short32, fixed_width, fixed_width_for_prec, digits,
-    format_decimal, format_exp,
-    format_decimal_prec, format_exp_prec,
-    write_decimal, write_exp,
-    write_decimal_prec, write_exp_prec,
-    parse_text,
-} from "core:prelude/fpfmt.wado";
+use { check_special, SpecialKind, short, short32, fixed_width, fixed_width_for_prec, digits, format_decimal, format_exp, format_decimal_prec, format_exp_prec, write_decimal, write_exp, write_decimal_prec, write_exp_prec, parse_text } from "core:prelude/fpfmt.wado";
 
 /// Copy bytes from linear memory to a new GC array (internal helper)
 fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
@@ -31,7 +23,9 @@ fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
 /// Count decimal digits of a non-negative i64 value.
 fn count_digits_i64(val: i64) -> i32 {
     let zero: i64 = 0;
-    if val == zero { return 1; }
+    if val == zero {
+        return 1;
+    }
     let ten: i64 = 10;
     let mut n: i32 = 0;
     for let mut t: i64 = val; t > zero; t = t / ten {
@@ -50,7 +44,7 @@ fn write_decimal_digits(arr: builtin::array<u8>, offset: i32, abs_val: i64, digi
     } else {
         for let mut temp: i64 = abs_val; temp > zero; temp = temp / ten {
             pos -= 1;
-            builtin::array_set_u8(arr, pos, (('0' as i32) + ((temp % ten) as i32)) as u8);
+            builtin::array_set_u8(arr, pos, ('0' as i32 + (temp % ten) as i32) as u8);
         }
     }
 }
@@ -67,11 +61,11 @@ fn write_base_digits(arr: builtin::array<u8>, offset: i32, abs_val: i64, digit_c
             pos -= 1;
             let digit: i32 = (temp % base64) as i32;
             let ch = if digit < 10 {
-                ('0' as i32) + digit
+                '0' as i32 + digit;
             } else if upper {
-                ('A' as i32) + digit - 10
+                'A' as i32 + digit - 10;
             } else {
-                ('a' as i32) + digit - 10
+                'a' as i32 + digit - 10;
             };
             builtin::array_set_u8(arr, pos, ch as u8);
         }
@@ -81,7 +75,9 @@ fn write_base_digits(arr: builtin::array<u8>, offset: i32, abs_val: i64, digit_c
 /// Count digits of a non-negative i64 value in the given base.
 fn count_digits_base(val: i64, base: i32) -> i32 {
     let zero: i64 = 0;
-    if val == zero { return 1; }
+    if val == zero {
+        return 1;
+    }
     let base64: i64 = base as i64;
     let mut n: i32 = 0;
     for let mut t: i64 = val; t > zero; t = t / base64 {
@@ -94,17 +90,19 @@ fn count_digits_base(val: i64, base: i32) -> i32 {
 /// `bits_per_digit` is log2(base): 1 for binary, 3 for octal, 4 for hex.
 fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
     let zero: i64 = 0;
-    if val_i64 == zero { return 1; }
+    if val_i64 == zero {
+        return 1;
+    }
     // Count leading zeros manually: find highest set bit
     let mut highest_bit: i32 = 0;
     // Check high 32 bits
-    let high32: i64 = (val_i64 >> 32) & 0xFFFFFFFF;
+    let high32: i64 = val_i64 >> 32 & 0xFFFFFFFF;
     if high32 != zero {
         // Bit is somewhere in bits 32..63
         let mut b: i32 = 63;
         while b >= 32 {
             let one: i64 = 1;
-            if (val_i64 >> (b as i64)) & one != zero {
+            if val_i64 >> b as i64 & one != zero {
                 highest_bit = b;
                 break;
             }
@@ -115,14 +113,14 @@ fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
         let mut b: i32 = 31;
         while b >= 0 {
             let one: i64 = 1;
-            if (val_i64 >> (b as i64)) & one != zero {
+            if val_i64 >> b as i64 & one != zero {
                 highest_bit = b;
                 break;
             }
             b -= 1;
         }
     }
-    return (highest_bit / bits_per_digit) + 1;
+    return highest_bit / bits_per_digit + 1;
 }
 
 /// Write digits of a u64 value (as raw i64 bits) in a power-of-2 base.
@@ -138,18 +136,18 @@ fn write_u64_base_digits(arr: builtin::array<u8>, offset: i32, val_i64: i64, dig
             pos -= 1;
             let digit: i32 = (temp & mask64) as i32;
             let ch = if digit < 10 {
-                ('0' as i32) + digit
+                '0' as i32 + digit;
             } else if upper {
-                ('A' as i32) + digit - 10
+                'A' as i32 + digit - 10;
             } else {
-                ('a' as i32) + digit - 10
+                'a' as i32 + digit - 10;
             };
             builtin::array_set_u8(arr, pos, ch as u8);
             // Unsigned right shift: use Wasm's i64.shr_u semantics
             // In Wado, >> on i64 is arithmetic shift. For unsigned shift we need:
             // (val as u64 >> bits) as i64
             let shift_u64: u64 = bits_per_digit as u64;
-            temp = ((temp as u64) >> shift_u64) as i64;
+            temp = (temp as u64 >> shift_u64) as i64;
         }
     }
 }
@@ -157,7 +155,11 @@ fn write_u64_base_digits(arr: builtin::array<u8>, offset: i32, val_i64: i64, dig
 
 impl bool {
     fn fmt_into(&self, f: &mut Formatter) {
-        f.pad(if *self { "true" } else { "false" });
+        f.pad(if *self {
+            "true";
+        } else {
+            "false";
+        });
     }
 
     pub fn to_string(&self) -> String {
@@ -225,33 +227,58 @@ impl char {
     /// Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
     pub fn is_whitespace(&self) -> bool {
         return match *self {
-            ' ' => true,              // SP
-            '\t' => true,             // HT
-            '\n' => true,             // LF
-            '\r' => true,             // CR
-            '\u{0B}' => true,         // VT
-            '\u{0C}' => true,         // FF
-            '\u{85}' => true,         // NEXT LINE
-            '\u{A0}' => true,         // NO-BREAK SPACE
-            '\u{1680}' => true,       // OGHAM SPACE MARK
-            '\u{2000}' => true,       // EN QUAD
-            '\u{2001}' => true,       // EM QUAD
-            '\u{2002}' => true,       // EN SPACE
-            '\u{2003}' => true,       // EM SPACE
-            '\u{2004}' => true,       // THREE-PER-EM SPACE
-            '\u{2005}' => true,       // FOUR-PER-EM SPACE
-            '\u{2006}' => true,       // SIX-PER-EM SPACE
-            '\u{2007}' => true,       // FIGURE SPACE
-            '\u{2008}' => true,       // PUNCTUATION SPACE
-            '\u{2009}' => true,       // THIN SPACE
-            '\u{200A}' => true,       // HAIR SPACE
-            '\u{2028}' => true,       // LINE SEPARATOR
-            '\u{2029}' => true,       // PARAGRAPH SEPARATOR
-            '\u{202F}' => true,       // NARROW NO-BREAK SPACE
-            '\u{205F}' => true,       // MEDIUM MATHEMATICAL SPACE
-            '\u{3000}' => true,       // IDEOGRAPHIC SPACE
+            ' ' => true,
+            '\t' => true,
+            '\n' => true,
+            '\r' => true,
+            '\u{0B}' => true,
+            '\u{0C}' => true,
+            '\u{85}' => true,
+            '\u{A0}' => true,
+            '\u{1680}' => true,
+            '\u{2000}' => true,
+            '\u{2001}' => true,
+            '\u{2002}' => true,
+            '\u{2003}' => true,
+            '\u{2004}' => true,
+            '\u{2005}' => true,
+            '\u{2006}' => true,
+            '\u{2007}' => true,
+            '\u{2008}' => true,
+            '\u{2009}' => true,
+            '\u{200A}' => true,
+            '\u{2028}' => true,
+            '\u{2029}' => true,
+            '\u{202F}' => true,
+            '\u{205F}' => true,
+            '\u{3000}' => true,
             _ => false,
         };
+        // SP
+        // HT
+        // LF
+        // CR
+        // VT
+        // FF
+        // NEXT LINE
+        // NO-BREAK SPACE
+        // OGHAM SPACE MARK
+        // EN QUAD
+        // EM QUAD
+        // EN SPACE
+        // EM SPACE
+        // THREE-PER-EM SPACE
+        // FOUR-PER-EM SPACE
+        // SIX-PER-EM SPACE
+        // FIGURE SPACE
+        // PUNCTUATION SPACE
+        // THIN SPACE
+        // HAIR SPACE
+        // LINE SEPARATOR
+        // PARAGRAPH SEPARATOR
+        // NARROW NO-BREAK SPACE
+        // MEDIUM MATHEMATICAL SPACE
+        // IDEOGRAPHIC SPACE
     }
 }
 
@@ -259,9 +286,13 @@ impl i8 {
     pub const MAX: i8 = 127;
     pub const MIN: i8 = -128;
 
-    pub fn max(a: i8, b: i8) -> i8 { return builtin::select::<i8>(a > b, a, b); }
+    pub fn max(a: i8, b: i8) -> i8 {
+        return builtin::select::<i8>(a > b, a, b);
+    }
 
-    pub fn min(a: i8, b: i8) -> i8 { return builtin::select::<i8>(a < b, a, b); }
+    pub fn min(a: i8, b: i8) -> i8 {
+        return builtin::select::<i8>(a < b, a, b);
+    }
 
     fn fmt_into(&self, f: &mut Formatter) {
         (*self as i32).fmt_decimal(f);
@@ -279,9 +310,13 @@ impl u8 {
     pub const MAX: u8 = 255;
     pub const MIN: u8 = 0;
 
-    pub fn max(a: u8, b: u8) -> u8 { return builtin::select::<u8>(a > b, a, b); }
+    pub fn max(a: u8, b: u8) -> u8 {
+        return builtin::select::<u8>(a > b, a, b);
+    }
 
-    pub fn min(a: u8, b: u8) -> u8 { return builtin::select::<u8>(a < b, a, b); }
+    pub fn min(a: u8, b: u8) -> u8 {
+        return builtin::select::<u8>(a < b, a, b);
+    }
 
     fn fmt_into(&self, f: &mut Formatter) {
         (*self as i32).fmt_decimal(f);
@@ -299,9 +334,13 @@ impl i16 {
     pub const MAX: i16 = 32767;
     pub const MIN: i16 = -32768;
 
-    pub fn max(a: i16, b: i16) -> i16 { return builtin::select::<i16>(a > b, a, b); }
+    pub fn max(a: i16, b: i16) -> i16 {
+        return builtin::select::<i16>(a > b, a, b);
+    }
 
-    pub fn min(a: i16, b: i16) -> i16 { return builtin::select::<i16>(a < b, a, b); }
+    pub fn min(a: i16, b: i16) -> i16 {
+        return builtin::select::<i16>(a < b, a, b);
+    }
 
     fn fmt_into(&self, f: &mut Formatter) {
         (*self as i32).fmt_decimal(f);
@@ -319,9 +358,13 @@ impl u16 {
     pub const MAX: u16 = 65535;
     pub const MIN: u16 = 0;
 
-    pub fn max(a: u16, b: u16) -> u16 { return builtin::select::<u16>(a > b, a, b); }
+    pub fn max(a: u16, b: u16) -> u16 {
+        return builtin::select::<u16>(a > b, a, b);
+    }
 
-    pub fn min(a: u16, b: u16) -> u16 { return builtin::select::<u16>(a < b, a, b); }
+    pub fn min(a: u16, b: u16) -> u16 {
+        return builtin::select::<u16>(a < b, a, b);
+    }
 
     fn fmt_into(&self, f: &mut Formatter) {
         (*self as i32).fmt_decimal(f);
@@ -339,13 +382,21 @@ impl i32 {
     pub const MAX: i32 = 2147483647;
     pub const MIN: i32 = -2147483648;
 
-    pub fn max(a: i32, b: i32) -> i32 { return builtin::select::<i32>(a > b, a, b); }
+    pub fn max(a: i32, b: i32) -> i32 {
+        return builtin::select::<i32>(a > b, a, b);
+    }
 
-    pub fn min(a: i32, b: i32) -> i32 { return builtin::select::<i32>(a < b, a, b); }
+    pub fn min(a: i32, b: i32) -> i32 {
+        return builtin::select::<i32>(a < b, a, b);
+    }
 
     fn fmt_decimal(&self, f: &mut Formatter) {
         let is_negative = *self < 0;
-        let abs_val: i64 = if is_negative { 0 - (*self as i64) } else { *self as i64 };
+        let abs_val: i64 = if is_negative {
+            0 - *self as i64;
+        } else {
+            *self as i64;
+        };
         let digit_count = count_digits_i64(abs_val);
         let offset = f.prepare_int_write(is_negative, "", digit_count);
         write_decimal_digits(f.buf.internal_raw_bytes(), offset, abs_val, digit_count);
@@ -367,16 +418,20 @@ impl u32 {
     pub const MAX: u32 = 4294967295;
     pub const MIN: u32 = 0;
 
-    pub fn max(a: u32, b: u32) -> u32 { return builtin::select::<u32>(a > b, a, b); }
+    pub fn max(a: u32, b: u32) -> u32 {
+        return builtin::select::<u32>(a > b, a, b);
+    }
 
-    pub fn min(a: u32, b: u32) -> u32 { return builtin::select::<u32>(a < b, a, b); }
+    pub fn min(a: u32, b: u32) -> u32 {
+        return builtin::select::<u32>(a < b, a, b);
+    }
 
     fn fmt_decimal(&self, f: &mut Formatter) {
         let val_i32 = *self as i32;
         let abs_val: i64 = if val_i32 < 0 {
-            (val_i32 as i64) + 4294967296
+            val_i32 as i64 + 4294967296;
         } else {
-            val_i32 as i64
+            val_i32 as i64;
         };
         let digit_count = count_digits_i64(abs_val);
         let offset = f.prepare_int_write(false, "", digit_count);
@@ -399,9 +454,13 @@ impl i64 {
     pub const MAX: i64 = 9223372036854775807;
     pub const MIN: i64 = -9223372036854775808;
 
-    pub fn max(a: i64, b: i64) -> i64 { return builtin::select::<i64>(a > b, a, b); }
+    pub fn max(a: i64, b: i64) -> i64 {
+        return builtin::select::<i64>(a > b, a, b);
+    }
 
-    pub fn min(a: i64, b: i64) -> i64 { return builtin::select::<i64>(a < b, a, b); }
+    pub fn min(a: i64, b: i64) -> i64 {
+        return builtin::select::<i64>(a < b, a, b);
+    }
 
     fn fmt_decimal(&self, f: &mut Formatter) {
         let value = *self;
@@ -421,7 +480,11 @@ impl i64 {
             write_decimal_digits(repr, offset, remaining, remaining_digits);
             builtin::array_set_u8(repr, offset + remaining_digits, '8' as u8);
         } else {
-            let abs_val: i64 = if is_negative { zero_i64 - value } else { value };
+            let abs_val: i64 = if is_negative {
+                zero_i64 - value;
+            } else {
+                value;
+            };
             let digit_count = count_digits_i64(abs_val);
             let offset = f.prepare_int_write(is_negative, "", digit_count);
             write_decimal_digits(f.buf.internal_raw_bytes(), offset, abs_val, digit_count);
@@ -432,16 +495,16 @@ impl i64 {
         let abs_val = *self;
         let prefix = if f.alternate {
             if base == 2 {
-                "0b"
+                "0b";
             } else if base == 8 {
-                "0o"
+                "0o";
             } else if upper {
-                "0X"
+                "0X";
             } else {
-                "0x"
+                "0x";
             }
         } else {
-            ""
+            "";
         };
         let digit_count = count_digits_base(abs_val, base);
         let offset = f.prepare_int_write(is_negative, prefix, digit_count);
@@ -464,9 +527,13 @@ impl u64 {
     pub const MAX: u64 = 18446744073709551615;
     pub const MIN: u64 = 0;
 
-    pub fn max(a: u64, b: u64) -> u64 { return builtin::select::<u64>(a > b, a, b); }
+    pub fn max(a: u64, b: u64) -> u64 {
+        return builtin::select::<u64>(a > b, a, b);
+    }
 
-    pub fn min(a: u64, b: u64) -> u64 { return builtin::select::<u64>(a < b, a, b); }
+    pub fn min(a: u64, b: u64) -> u64 {
+        return builtin::select::<u64>(a < b, a, b);
+    }
 
     fn fmt_decimal(&self, f: &mut Formatter) {
         let val_i64 = *self as i64;
@@ -526,26 +593,32 @@ impl u64 {
                 }
                 temp = signed_quot + offset_div + carry;
             }
-            builtin::array_set_u8(repr, pos, (('0' as i32) + digit) as u8);
+            builtin::array_set_u8(repr, pos, ('0' as i32 + digit) as u8);
         }
     }
 
     fn fmt_base(&self, f: &mut Formatter, base: i32, upper: bool) {
         let val_i64 = *self as i64;
-        let bits_per_digit = if base == 2 { 1 } else if base == 8 { 3 } else { 4 };
+        let bits_per_digit = if base == 2 {
+            1;
+        } else if base == 8 {
+            3;
+        } else {
+            4;
+        };
         let mask = base - 1;
         let prefix = if f.alternate {
             if base == 2 {
-                "0b"
+                "0b";
             } else if base == 8 {
-                "0o"
+                "0o";
             } else if upper {
-                "0X"
+                "0X";
             } else {
-                "0x"
+                "0x";
             }
         } else {
-            ""
+            "";
         };
         let digit_count = count_digits_u64_base(val_i64, bits_per_digit);
         let offset = f.prepare_int_write(false, prefix, digit_count);
@@ -565,7 +638,6 @@ impl u64 {
 }
 
 impl f32 {
-    // Constants
     pub const PI: f32 = 3.14159265358979323846;
     pub const TAU: f32 = 6.28318530717958647692;
     pub const E: f32 = 2.71828182845904523536;
@@ -581,6 +653,7 @@ impl f32 {
     pub const NEG_INFINITY: f32 = -1.0 / 0.0;
     pub const NAN: f32 = 0.0 / 0.0;
 
+    // Constants
     fn fmt_into(&self, f: &mut Formatter) {
         if f.precision >= 0 {
             self.fmt_fixed(f.precision, f);
@@ -592,22 +665,37 @@ impl f32 {
             if kind matches { NaN } {
                 f.buf.append("NaN");
             } else if kind matches { Inf } {
-                f.buf.append(if is_neg { "-inf" } else { "inf" });
+                f.buf.append(if is_neg {
+                    "-inf";
+                } else {
+                    "inf";
+                });
             } else {
-                f.buf.append(if is_neg { "-0.0" } else { "0.0" });
+                f.buf.append(if is_neg {
+                    "-0.0";
+                } else {
+                    "0.0";
+                });
             }
             f.apply_padding(mark);
             return;
         }
-        let abs_f = if is_neg { -*self } else { *self };
+        let abs_f = if is_neg {
+            -*self;
+        } else {
+            *self;
+        };
         let result = short32(abs_f);
         let d = result.digits;
         let p = result.exponent;
         let nd = digits(d);
         let exp = p + nd - 1;
         let mark = f.mark();
-        if is_neg { f.buf.append("-"); }
-        else if f.sign_plus { f.buf.append("+"); }
+        if is_neg {
+            f.buf.append("-");
+        } else if f.sign_plus {
+            f.buf.append("+");
+        }
         if exp < -4 || exp >= 16 {
             write_exp(f.buf, d, p, nd, false);
         } else if p >= 0 {
@@ -637,110 +725,179 @@ impl f32 {
     }
 
     // Wasm instruction math (direct)
-
     /// Absolute value
-    pub fn abs(x: f32) -> f32 { return builtin::f32_abs(x); }
+    pub fn abs(x: f32) -> f32 {
+        return builtin::f32_abs(x);
+    }
 
     /// Ceiling (round toward +infinity)
-    pub fn ceil(x: f32) -> f32 { return builtin::f32_ceil(x); }
+    pub fn ceil(x: f32) -> f32 {
+        return builtin::f32_ceil(x);
+    }
 
     /// Floor (round toward -infinity)
-    pub fn floor(x: f32) -> f32 { return builtin::f32_floor(x); }
+    pub fn floor(x: f32) -> f32 {
+        return builtin::f32_floor(x);
+    }
 
     /// Truncate toward zero
-    pub fn trunc(x: f32) -> f32 { return builtin::f32_trunc(x); }
+    pub fn trunc(x: f32) -> f32 {
+        return builtin::f32_trunc(x);
+    }
 
     /// Round to nearest even
-    pub fn round(x: f32) -> f32 { return builtin::f32_nearest(x); }
+    pub fn round(x: f32) -> f32 {
+        return builtin::f32_nearest(x);
+    }
 
     /// Square root
-    pub fn sqrt(x: f32) -> f32 { return builtin::f32_sqrt(x); }
+    pub fn sqrt(x: f32) -> f32 {
+        return builtin::f32_sqrt(x);
+    }
 
     /// Minimum of two values
-    pub fn min(x: f32, y: f32) -> f32 { return builtin::f32_min(x, y); }
+    pub fn min(x: f32, y: f32) -> f32 {
+        return builtin::f32_min(x, y);
+    }
 
     /// Maximum of two values
-    pub fn max(x: f32, y: f32) -> f32 { return builtin::f32_max(x, y); }
+    pub fn max(x: f32, y: f32) -> f32 {
+        return builtin::f32_max(x, y);
+    }
 
     /// Copy sign from y to x
-    pub fn copysign(x: f32, y: f32) -> f32 { return builtin::f32_copysign(x, y); }
+    pub fn copysign(x: f32, y: f32) -> f32 {
+        return builtin::f32_copysign(x, y);
+    }
 
     // Transcendental math (bundled libm)
-
     /// Sine (in radians)
-    pub fn sin(x: f32) -> f32 { return builtin::f32_sin(x); }
+    pub fn sin(x: f32) -> f32 {
+        return builtin::f32_sin(x);
+    }
 
     /// Cosine (in radians)
-    pub fn cos(x: f32) -> f32 { return builtin::f32_cos(x); }
+    pub fn cos(x: f32) -> f32 {
+        return builtin::f32_cos(x);
+    }
 
     /// Tangent (in radians)
-    pub fn tan(x: f32) -> f32 { return builtin::f32_tan(x); }
+    pub fn tan(x: f32) -> f32 {
+        return builtin::f32_tan(x);
+    }
 
     /// Arc sine (returns radians)
-    pub fn asin(x: f32) -> f32 { return builtin::f32_asin(x); }
+    pub fn asin(x: f32) -> f32 {
+        return builtin::f32_asin(x);
+    }
 
     /// Arc cosine (returns radians)
-    pub fn acos(x: f32) -> f32 { return builtin::f32_acos(x); }
+    pub fn acos(x: f32) -> f32 {
+        return builtin::f32_acos(x);
+    }
 
     /// Arc tangent (returns radians)
-    pub fn atan(x: f32) -> f32 { return builtin::f32_atan(x); }
+    pub fn atan(x: f32) -> f32 {
+        return builtin::f32_atan(x);
+    }
 
     /// Arc tangent of y/x (returns radians)
-    pub fn atan2(y: f32, x: f32) -> f32 { return builtin::f32_atan2(y, x); }
+    pub fn atan2(y: f32, x: f32) -> f32 {
+        return builtin::f32_atan2(y, x);
+    }
 
     /// Hyperbolic sine
-    pub fn sinh(x: f32) -> f32 { return builtin::f32_sinh(x); }
+    pub fn sinh(x: f32) -> f32 {
+        return builtin::f32_sinh(x);
+    }
 
     /// Hyperbolic cosine
-    pub fn cosh(x: f32) -> f32 { return builtin::f32_cosh(x); }
+    pub fn cosh(x: f32) -> f32 {
+        return builtin::f32_cosh(x);
+    }
 
     /// Hyperbolic tangent
-    pub fn tanh(x: f32) -> f32 { return builtin::f32_tanh(x); }
+    pub fn tanh(x: f32) -> f32 {
+        return builtin::f32_tanh(x);
+    }
 
     /// Inverse hyperbolic sine
-    pub fn asinh(x: f32) -> f32 { return builtin::f32_asinh(x); }
+    pub fn asinh(x: f32) -> f32 {
+        return builtin::f32_asinh(x);
+    }
 
     /// Inverse hyperbolic cosine
-    pub fn acosh(x: f32) -> f32 { return builtin::f32_acosh(x); }
+    pub fn acosh(x: f32) -> f32 {
+        return builtin::f32_acosh(x);
+    }
 
     /// Inverse hyperbolic tangent
-    pub fn atanh(x: f32) -> f32 { return builtin::f32_atanh(x); }
+    pub fn atanh(x: f32) -> f32 {
+        return builtin::f32_atanh(x);
+    }
 
     /// e raised to the power x
-    pub fn exp(x: f32) -> f32 { return builtin::f32_exp(x); }
+    pub fn exp(x: f32) -> f32 {
+        return builtin::f32_exp(x);
+    }
 
     /// 2 raised to the power x
-    pub fn exp2(x: f32) -> f32 { return builtin::f32_exp2(x); }
+    pub fn exp2(x: f32) -> f32 {
+        return builtin::f32_exp2(x);
+    }
 
     /// e^x - 1 (more accurate for small x)
-    pub fn expm1(x: f32) -> f32 { return builtin::f32_expm1(x); }
+    pub fn expm1(x: f32) -> f32 {
+        return builtin::f32_expm1(x);
+    }
 
     /// Natural logarithm (base e)
-    pub fn ln(x: f32) -> f32 { return builtin::f32_ln(x); }
+    pub fn ln(x: f32) -> f32 {
+        return builtin::f32_ln(x);
+    }
 
     /// Logarithm base 2
-    pub fn log2(x: f32) -> f32 { return builtin::f32_log2(x); }
+    pub fn log2(x: f32) -> f32 {
+        return builtin::f32_log2(x);
+    }
 
     /// Logarithm base 10
-    pub fn log10(x: f32) -> f32 { return builtin::f32_log10(x); }
+    pub fn log10(x: f32) -> f32 {
+        return builtin::f32_log10(x);
+    }
 
     /// ln(1 + x) (more accurate for small x)
-    pub fn ln1p(x: f32) -> f32 { return builtin::f32_ln1p(x); }
+    pub fn ln1p(x: f32) -> f32 {
+        return builtin::f32_ln1p(x);
+    }
 
     /// x raised to the power y
-    pub fn pow(x: f32, y: f32) -> f32 { return builtin::f32_pow(x, y); }
+    pub fn pow(x: f32, y: f32) -> f32 {
+        return builtin::f32_pow(x, y);
+    }
 
     /// Cube root
-    pub fn cbrt(x: f32) -> f32 { return builtin::f32_cbrt(x); }
+    pub fn cbrt(x: f32) -> f32 {
+        return builtin::f32_cbrt(x);
+    }
 
     /// Euclidean distance: sqrt(x^2 + y^2)
-    pub fn hypot(x: f32, y: f32) -> f32 { return builtin::f32_hypot(x, y); }
+    pub fn hypot(x: f32, y: f32) -> f32 {
+        return builtin::f32_hypot(x, y);
+    }
 
     /// Floating-point remainder of x/y
-    pub fn fmod(x: f32, y: f32) -> f32 { return builtin::f32_fmod(x, y); }
+    pub fn fmod(x: f32, y: f32) -> f32 {
+        return builtin::f32_fmod(x, y);
+    }
 
-    pub fn is_nan(&self) -> bool { return *self != *self; }
-    pub fn is_finite(&self) -> bool { return *self - *self == 0.0 as f32; }
+    pub fn is_nan(&self) -> bool {
+        return *self != *self;
+    }
+
+    pub fn is_finite(&self) -> bool {
+        return *self - *self == 0.0 as f32;
+    }
 
     pub fn parse(s: String) -> Option<f32> {
         if let Some(v) = parse_text(s) {
@@ -751,7 +908,6 @@ impl f32 {
 }
 
 impl f64 {
-    // Constants
     pub const PI: f64 = 3.14159265358979323846;
     pub const TAU: f64 = 6.28318530717958647692;
     pub const E: f64 = 2.71828182845904523536;
@@ -767,6 +923,7 @@ impl f64 {
     pub const NEG_INFINITY: f64 = -1.0 / 0.0;
     pub const NAN: f64 = 0.0 / 0.0;
 
+    // Constants
     fn fmt_into(&self, f: &mut Formatter) {
         if f.precision >= 0 {
             self.fmt_fixed(f.precision, f);
@@ -779,22 +936,37 @@ impl f64 {
             if kind matches { NaN } {
                 f.buf.append("NaN");
             } else if kind matches { Inf } {
-                f.buf.append(if is_neg { "-inf" } else { "inf" });
+                f.buf.append(if is_neg {
+                    "-inf";
+                } else {
+                    "inf";
+                });
             } else {
-                f.buf.append(if is_neg { "-0.0" } else { "0.0" });
+                f.buf.append(if is_neg {
+                    "-0.0";
+                } else {
+                    "0.0";
+                });
             }
             f.apply_padding(mark);
             return;
         }
-        let abs_f = if is_neg { -value } else { value };
+        let abs_f = if is_neg {
+            -value;
+        } else {
+            value;
+        };
         let result = short(abs_f);
         let d = result.digits;
         let p = result.exponent;
         let nd = digits(d);
         let exp = p + nd - 1;
         let mark = f.mark();
-        if is_neg { f.buf.append("-"); }
-        else if f.sign_plus { f.buf.append("+"); }
+        if is_neg {
+            f.buf.append("-");
+        } else if f.sign_plus {
+            f.buf.append("+");
+        }
         if exp < -4 || exp >= 16 {
             write_exp(f.buf, d, p, nd, false);
         } else if p >= 0 {
@@ -814,11 +986,17 @@ impl f64 {
             if kind matches { NaN } {
                 f.buf.append("NaN");
             } else if kind matches { Inf } {
-                f.buf.append(if is_neg { "-inf" } else { "inf" });
+                f.buf.append(if is_neg {
+                    "-inf";
+                } else {
+                    "inf";
+                });
             } else {
                 // Zero with precision
                 let buf = f.buf;
-                if is_neg { buf.append("-"); }
+                if is_neg {
+                    buf.append("-");
+                }
                 buf.append("0");
                 if precision > 0 {
                     buf.append(".");
@@ -828,14 +1006,21 @@ impl f64 {
             f.apply_padding(mark);
             return;
         }
-        let abs_f = if is_neg { -value } else { value };
+        let abs_f = if is_neg {
+            -value;
+        } else {
+            value;
+        };
         let result = fixed_width_for_prec(abs_f, precision);
         let d = result.digits;
         let p = result.exponent;
         let nd = digits(d);
         let mark = f.mark();
-        if is_neg { f.buf.append("-"); }
-        else if f.sign_plus { f.buf.append("+"); }
+        if is_neg {
+            f.buf.append("-");
+        } else if f.sign_plus {
+            f.buf.append("+");
+        }
         write_decimal_prec(f.buf, d, p, nd, precision);
         f.apply_padding(mark);
     }
@@ -849,29 +1034,52 @@ impl f64 {
             if kind matches { NaN } {
                 f.buf.append("NaN");
             } else if kind matches { Inf } {
-                f.buf.append(if is_neg { "-inf" } else { "inf" });
+                f.buf.append(if is_neg {
+                    "-inf";
+                } else {
+                    "inf";
+                });
             } else {
                 // Zero in exponential
                 let buf = f.buf;
-                if is_neg { buf.append("-"); }
+                if is_neg {
+                    buf.append("-");
+                }
                 buf.append("0");
                 if precision > 0 {
                     buf.append(".");
                     buf.append_byte_filled('0' as u8, precision);
                 }
-                buf.append(if upper_bool { "E" } else { "e" });
+                buf.append(if upper_bool {
+                    "E";
+                } else {
+                    "e";
+                });
                 buf.append("0");
             }
             f.apply_padding(mark);
             return;
         }
-        let abs_f = if is_neg { -value } else { value };
+        let abs_f = if is_neg {
+            -value;
+        } else {
+            value;
+        };
         let mark = f.mark();
-        if is_neg { f.buf.append("-"); }
-        else if f.sign_plus { f.buf.append("+"); }
+        if is_neg {
+            f.buf.append("-");
+        } else if f.sign_plus {
+            f.buf.append("+");
+        }
         if precision >= 0 {
             let total_digits = precision + 1;
-            let clamped = if total_digits > 18 { 18 } else if total_digits < 1 { 1 } else { total_digits };
+            let clamped = if total_digits > 18 {
+                18;
+            } else if total_digits < 1 {
+                1;
+            } else {
+                total_digits;
+            };
             let result = fixed_width(abs_f, clamped);
             let d = result.digits;
             let p = result.exponent;
@@ -895,110 +1103,179 @@ impl f64 {
     }
 
     // Wasm instruction math (direct)
-
     /// Absolute value
-    pub fn abs(x: f64) -> f64 { return builtin::f64_abs(x); }
+    pub fn abs(x: f64) -> f64 {
+        return builtin::f64_abs(x);
+    }
 
     /// Ceiling (round toward +infinity)
-    pub fn ceil(x: f64) -> f64 { return builtin::f64_ceil(x); }
+    pub fn ceil(x: f64) -> f64 {
+        return builtin::f64_ceil(x);
+    }
 
     /// Floor (round toward -infinity)
-    pub fn floor(x: f64) -> f64 { return builtin::f64_floor(x); }
+    pub fn floor(x: f64) -> f64 {
+        return builtin::f64_floor(x);
+    }
 
     /// Truncate toward zero
-    pub fn trunc(x: f64) -> f64 { return builtin::f64_trunc(x); }
+    pub fn trunc(x: f64) -> f64 {
+        return builtin::f64_trunc(x);
+    }
 
     /// Round to nearest even
-    pub fn round(x: f64) -> f64 { return builtin::f64_nearest(x); }
+    pub fn round(x: f64) -> f64 {
+        return builtin::f64_nearest(x);
+    }
 
     /// Square root
-    pub fn sqrt(x: f64) -> f64 { return builtin::f64_sqrt(x); }
+    pub fn sqrt(x: f64) -> f64 {
+        return builtin::f64_sqrt(x);
+    }
 
     /// Minimum of two values
-    pub fn min(x: f64, y: f64) -> f64 { return builtin::f64_min(x, y); }
+    pub fn min(x: f64, y: f64) -> f64 {
+        return builtin::f64_min(x, y);
+    }
 
     /// Maximum of two values
-    pub fn max(x: f64, y: f64) -> f64 { return builtin::f64_max(x, y); }
+    pub fn max(x: f64, y: f64) -> f64 {
+        return builtin::f64_max(x, y);
+    }
 
     /// Copy sign from y to x
-    pub fn copysign(x: f64, y: f64) -> f64 { return builtin::f64_copysign(x, y); }
+    pub fn copysign(x: f64, y: f64) -> f64 {
+        return builtin::f64_copysign(x, y);
+    }
 
     // Transcendental math (bundled libm)
-
     /// Sine (in radians)
-    pub fn sin(x: f64) -> f64 { return builtin::f64_sin(x); }
+    pub fn sin(x: f64) -> f64 {
+        return builtin::f64_sin(x);
+    }
 
     /// Cosine (in radians)
-    pub fn cos(x: f64) -> f64 { return builtin::f64_cos(x); }
+    pub fn cos(x: f64) -> f64 {
+        return builtin::f64_cos(x);
+    }
 
     /// Tangent (in radians)
-    pub fn tan(x: f64) -> f64 { return builtin::f64_tan(x); }
+    pub fn tan(x: f64) -> f64 {
+        return builtin::f64_tan(x);
+    }
 
     /// Arc sine (returns radians)
-    pub fn asin(x: f64) -> f64 { return builtin::f64_asin(x); }
+    pub fn asin(x: f64) -> f64 {
+        return builtin::f64_asin(x);
+    }
 
     /// Arc cosine (returns radians)
-    pub fn acos(x: f64) -> f64 { return builtin::f64_acos(x); }
+    pub fn acos(x: f64) -> f64 {
+        return builtin::f64_acos(x);
+    }
 
     /// Arc tangent (returns radians)
-    pub fn atan(x: f64) -> f64 { return builtin::f64_atan(x); }
+    pub fn atan(x: f64) -> f64 {
+        return builtin::f64_atan(x);
+    }
 
     /// Arc tangent of y/x (returns radians)
-    pub fn atan2(y: f64, x: f64) -> f64 { return builtin::f64_atan2(y, x); }
+    pub fn atan2(y: f64, x: f64) -> f64 {
+        return builtin::f64_atan2(y, x);
+    }
 
     /// Hyperbolic sine
-    pub fn sinh(x: f64) -> f64 { return builtin::f64_sinh(x); }
+    pub fn sinh(x: f64) -> f64 {
+        return builtin::f64_sinh(x);
+    }
 
     /// Hyperbolic cosine
-    pub fn cosh(x: f64) -> f64 { return builtin::f64_cosh(x); }
+    pub fn cosh(x: f64) -> f64 {
+        return builtin::f64_cosh(x);
+    }
 
     /// Hyperbolic tangent
-    pub fn tanh(x: f64) -> f64 { return builtin::f64_tanh(x); }
+    pub fn tanh(x: f64) -> f64 {
+        return builtin::f64_tanh(x);
+    }
 
     /// Inverse hyperbolic sine
-    pub fn asinh(x: f64) -> f64 { return builtin::f64_asinh(x); }
+    pub fn asinh(x: f64) -> f64 {
+        return builtin::f64_asinh(x);
+    }
 
     /// Inverse hyperbolic cosine
-    pub fn acosh(x: f64) -> f64 { return builtin::f64_acosh(x); }
+    pub fn acosh(x: f64) -> f64 {
+        return builtin::f64_acosh(x);
+    }
 
     /// Inverse hyperbolic tangent
-    pub fn atanh(x: f64) -> f64 { return builtin::f64_atanh(x); }
+    pub fn atanh(x: f64) -> f64 {
+        return builtin::f64_atanh(x);
+    }
 
     /// e raised to the power x
-    pub fn exp(x: f64) -> f64 { return builtin::f64_exp(x); }
+    pub fn exp(x: f64) -> f64 {
+        return builtin::f64_exp(x);
+    }
 
     /// 2 raised to the power x
-    pub fn exp2(x: f64) -> f64 { return builtin::f64_exp2(x); }
+    pub fn exp2(x: f64) -> f64 {
+        return builtin::f64_exp2(x);
+    }
 
     /// e^x - 1 (more accurate for small x)
-    pub fn expm1(x: f64) -> f64 { return builtin::f64_expm1(x); }
+    pub fn expm1(x: f64) -> f64 {
+        return builtin::f64_expm1(x);
+    }
 
     /// Natural logarithm (base e)
-    pub fn ln(x: f64) -> f64 { return builtin::f64_ln(x); }
+    pub fn ln(x: f64) -> f64 {
+        return builtin::f64_ln(x);
+    }
 
     /// Logarithm base 2
-    pub fn log2(x: f64) -> f64 { return builtin::f64_log2(x); }
+    pub fn log2(x: f64) -> f64 {
+        return builtin::f64_log2(x);
+    }
 
     /// Logarithm base 10
-    pub fn log10(x: f64) -> f64 { return builtin::f64_log10(x); }
+    pub fn log10(x: f64) -> f64 {
+        return builtin::f64_log10(x);
+    }
 
     /// ln(1 + x) (more accurate for small x)
-    pub fn ln1p(x: f64) -> f64 { return builtin::f64_ln1p(x); }
+    pub fn ln1p(x: f64) -> f64 {
+        return builtin::f64_ln1p(x);
+    }
 
     /// x raised to the power y
-    pub fn pow(x: f64, y: f64) -> f64 { return builtin::f64_pow(x, y); }
+    pub fn pow(x: f64, y: f64) -> f64 {
+        return builtin::f64_pow(x, y);
+    }
 
     /// Cube root
-    pub fn cbrt(x: f64) -> f64 { return builtin::f64_cbrt(x); }
+    pub fn cbrt(x: f64) -> f64 {
+        return builtin::f64_cbrt(x);
+    }
 
     /// Euclidean distance: sqrt(x^2 + y^2)
-    pub fn hypot(x: f64, y: f64) -> f64 { return builtin::f64_hypot(x, y); }
+    pub fn hypot(x: f64, y: f64) -> f64 {
+        return builtin::f64_hypot(x, y);
+    }
 
     /// Floating-point remainder of x/y
-    pub fn fmod(x: f64, y: f64) -> f64 { return builtin::f64_fmod(x, y); }
+    pub fn fmod(x: f64, y: f64) -> f64 {
+        return builtin::f64_fmod(x, y);
+    }
 
-    pub fn is_nan(&self) -> bool { return *self != *self; }
-    pub fn is_finite(&self) -> bool { return *self - *self == 0.0; }
+    pub fn is_nan(&self) -> bool {
+        return *self != *self;
+    }
+
+    pub fn is_finite(&self) -> bool {
+        return *self - *self == 0.0;
+    }
 
     pub fn parse(s: String) -> Option<f64> {
         return parse_text(s);
@@ -1204,7 +1481,11 @@ impl Binary for i8 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self as i32;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        let abs_val: i64 = if is_neg {
+            0 - v as i64;
+        } else {
+            v as i64;
+        };
         abs_val.fmt_base(is_neg, f, 2, false);
     }
 }
@@ -1219,7 +1500,11 @@ impl Binary for i16 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self as i32;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        let abs_val: i64 = if is_neg {
+            0 - v as i64;
+        } else {
+            v as i64;
+        };
         abs_val.fmt_base(is_neg, f, 2, false);
     }
 }
@@ -1234,7 +1519,11 @@ impl Binary for i32 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        let abs_val: i64 = if is_neg {
+            0 - v as i64;
+        } else {
+            v as i64;
+        };
         abs_val.fmt_base(is_neg, f, 2, false);
     }
 }
@@ -1243,9 +1532,9 @@ impl Binary for u32 {
     pub fn fmt(&self, f: &mut Formatter) {
         let val_i32 = *self as i32;
         let abs_val: i64 = if val_i32 < 0 {
-            (val_i32 as i64) + 4294967296
+            val_i32 as i64 + 4294967296;
         } else {
-            val_i32 as i64
+            val_i32 as i64;
         };
         abs_val.fmt_base(false, f, 2, false);
     }
@@ -1263,7 +1552,11 @@ impl Binary for i64 {
             let half: i64 = 4611686018427387904;
             half.fmt_base(true, f, 2, false);
         } else {
-            let abs_val: i64 = if is_neg { zero_i64 - v } else { v };
+            let abs_val: i64 = if is_neg {
+                zero_i64 - v;
+            } else {
+                v;
+            };
             abs_val.fmt_base(is_neg, f, 2, false);
         }
     }
@@ -1274,7 +1567,11 @@ impl Octal for i8 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self as i32;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        let abs_val: i64 = if is_neg {
+            0 - v as i64;
+        } else {
+            v as i64;
+        };
         abs_val.fmt_base(is_neg, f, 8, false);
     }
 }
@@ -1289,7 +1586,11 @@ impl Octal for i16 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self as i32;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        let abs_val: i64 = if is_neg {
+            0 - v as i64;
+        } else {
+            v as i64;
+        };
         abs_val.fmt_base(is_neg, f, 8, false);
     }
 }
@@ -1304,7 +1605,11 @@ impl Octal for i32 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        let abs_val: i64 = if is_neg {
+            0 - v as i64;
+        } else {
+            v as i64;
+        };
         abs_val.fmt_base(is_neg, f, 8, false);
     }
 }
@@ -1313,9 +1618,9 @@ impl Octal for u32 {
     pub fn fmt(&self, f: &mut Formatter) {
         let val_i32 = *self as i32;
         let abs_val: i64 = if val_i32 < 0 {
-            (val_i32 as i64) + 4294967296
+            val_i32 as i64 + 4294967296;
         } else {
-            val_i32 as i64
+            val_i32 as i64;
         };
         abs_val.fmt_base(false, f, 8, false);
     }
@@ -1333,7 +1638,11 @@ impl Octal for i64 {
             let half: i64 = 4611686018427387904;
             half.fmt_base(true, f, 8, false);
         } else {
-            let abs_val: i64 = if is_neg { zero_i64 - v } else { v };
+            let abs_val: i64 = if is_neg {
+                zero_i64 - v;
+            } else {
+                v;
+            };
             abs_val.fmt_base(is_neg, f, 8, false);
         }
     }
@@ -1344,7 +1653,11 @@ impl LowerHex for i8 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self as i32;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        let abs_val: i64 = if is_neg {
+            0 - v as i64;
+        } else {
+            v as i64;
+        };
         abs_val.fmt_base(is_neg, f, 16, false);
     }
 }
@@ -1359,7 +1672,11 @@ impl LowerHex for i16 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self as i32;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        let abs_val: i64 = if is_neg {
+            0 - v as i64;
+        } else {
+            v as i64;
+        };
         abs_val.fmt_base(is_neg, f, 16, false);
     }
 }
@@ -1374,7 +1691,11 @@ impl LowerHex for i32 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        let abs_val: i64 = if is_neg {
+            0 - v as i64;
+        } else {
+            v as i64;
+        };
         abs_val.fmt_base(is_neg, f, 16, false);
     }
 }
@@ -1383,9 +1704,9 @@ impl LowerHex for u32 {
     pub fn fmt(&self, f: &mut Formatter) {
         let val_i32 = *self as i32;
         let abs_val: i64 = if val_i32 < 0 {
-            (val_i32 as i64) + 4294967296
+            val_i32 as i64 + 4294967296;
         } else {
-            val_i32 as i64
+            val_i32 as i64;
         };
         abs_val.fmt_base(false, f, 16, false);
     }
@@ -1403,7 +1724,11 @@ impl LowerHex for i64 {
             let half: i64 = 4611686018427387904;
             half.fmt_base(true, f, 16, false);
         } else {
-            let abs_val: i64 = if is_neg { zero_i64 - v } else { v };
+            let abs_val: i64 = if is_neg {
+                zero_i64 - v;
+            } else {
+                v;
+            };
             abs_val.fmt_base(is_neg, f, 16, false);
         }
     }
@@ -1414,7 +1739,11 @@ impl UpperHex for i8 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self as i32;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        let abs_val: i64 = if is_neg {
+            0 - v as i64;
+        } else {
+            v as i64;
+        };
         abs_val.fmt_base(is_neg, f, 16, true);
     }
 }
@@ -1429,7 +1758,11 @@ impl UpperHex for i16 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self as i32;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        let abs_val: i64 = if is_neg {
+            0 - v as i64;
+        } else {
+            v as i64;
+        };
         abs_val.fmt_base(is_neg, f, 16, true);
     }
 }
@@ -1444,7 +1777,11 @@ impl UpperHex for i32 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self;
         let is_neg = v < 0;
-        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        let abs_val: i64 = if is_neg {
+            0 - v as i64;
+        } else {
+            v as i64;
+        };
         abs_val.fmt_base(is_neg, f, 16, true);
     }
 }
@@ -1453,9 +1790,9 @@ impl UpperHex for u32 {
     pub fn fmt(&self, f: &mut Formatter) {
         let val_i32 = *self as i32;
         let abs_val: i64 = if val_i32 < 0 {
-            (val_i32 as i64) + 4294967296
+            val_i32 as i64 + 4294967296;
         } else {
-            val_i32 as i64
+            val_i32 as i64;
         };
         abs_val.fmt_base(false, f, 16, true);
     }
@@ -1473,7 +1810,11 @@ impl UpperHex for i64 {
             let half: i64 = 4611686018427387904;
             half.fmt_base(true, f, 16, true);
         } else {
-            let abs_val: i64 = if is_neg { zero_i64 - v } else { v };
+            let abs_val: i64 = if is_neg {
+                zero_i64 - v;
+            } else {
+                v;
+            };
             abs_val.fmt_base(is_neg, f, 16, true);
         }
     }
@@ -1508,88 +1849,132 @@ impl UpperHex for u64 {
 
 impl Ord for i8 {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        if *self < *other { return Ordering::Less; }
-        if *self > *other { return Ordering::Greater; }
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
         return Ordering::Equal;
     }
 }
 
 impl Ord for u8 {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        if *self < *other { return Ordering::Less; }
-        if *self > *other { return Ordering::Greater; }
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
         return Ordering::Equal;
     }
 }
 
 impl Ord for i16 {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        if *self < *other { return Ordering::Less; }
-        if *self > *other { return Ordering::Greater; }
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
         return Ordering::Equal;
     }
 }
 
 impl Ord for u16 {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        if *self < *other { return Ordering::Less; }
-        if *self > *other { return Ordering::Greater; }
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
         return Ordering::Equal;
     }
 }
 
 impl Ord for i32 {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        if *self < *other { return Ordering::Less; }
-        if *self > *other { return Ordering::Greater; }
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
         return Ordering::Equal;
     }
 }
 
 impl Ord for u32 {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        if *self < *other { return Ordering::Less; }
-        if *self > *other { return Ordering::Greater; }
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
         return Ordering::Equal;
     }
 }
 
 impl Ord for i64 {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        if *self < *other { return Ordering::Less; }
-        if *self > *other { return Ordering::Greater; }
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
         return Ordering::Equal;
     }
 }
 
 impl Ord for u64 {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        if *self < *other { return Ordering::Less; }
-        if *self > *other { return Ordering::Greater; }
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
         return Ordering::Equal;
     }
 }
 
 impl Ord for f32 {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        if *self < *other { return Ordering::Less; }
-        if *self > *other { return Ordering::Greater; }
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
         return Ordering::Equal;
     }
 }
 
 impl Ord for f64 {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        if *self < *other { return Ordering::Less; }
-        if *self > *other { return Ordering::Greater; }
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
         return Ordering::Equal;
     }
 }
 
 impl Ord for char {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        if *self < *other { return Ordering::Less; }
-        if *self > *other { return Ordering::Greater; }
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
         return Ordering::Equal;
     }
 }
@@ -1598,8 +1983,12 @@ impl Ord for bool {
     pub fn cmp(&self, other: &Self) -> Ordering {
         let a = *self as i32;
         let b = *other as i32;
-        if a < b { return Ordering::Less; }
-        if a > b { return Ordering::Greater; }
+        if a < b {
+            return Ordering::Less;
+        }
+        if a > b {
+            return Ordering::Greater;
+        }
         return Ordering::Equal;
     }
 }

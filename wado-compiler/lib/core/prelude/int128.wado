@@ -30,7 +30,7 @@ impl u128 {
         let ten: u128 = 10;
         while i < len {
             let byte = builtin::array_get_u8(bytes, i);
-            let digit = (byte as i32) - ('0' as i32);
+            let digit = byte as i32 - '0' as i32;
             if 0 <= digit && digit <= 9 {
                 result = result * ten + u128::from_u64(digit as u64);
             }
@@ -139,10 +139,10 @@ impl u128 {
     pub fn get_bit(&self, i: i32) -> bool {
         let shift: i64 = i as i64;
         if i < 64 {
-            return ((self.low >> (shift as u64)) & 1) != 0;
+            return self.low >> shift as u64 & 1 != 0;
         } else {
             let s: i64 = (i - 64) as i64;
-            return ((self.high >> (s as u64)) & 1) != 0;
+            return self.high >> s as u64 & 1 != 0;
         }
     }
 
@@ -151,14 +151,14 @@ impl u128 {
         let shift: i64 = i as i64;
         if i < 64 {
             return u128 {
-                low: self.low | (1 << (shift as u64)),
+                low: self.low | 1 << shift as u64,
                 high: self.high,
             };
         } else {
             let s: i64 = (i - 64) as i64;
             return u128 {
                 low: self.low,
-                high: self.high | (1 << (s as u64)),
+                high: self.high | 1 << s as u64,
             };
         }
     }
@@ -199,33 +199,39 @@ impl u128 {
         let mut pos = offset + digit_count;
         for let mut temp = *self; temp > 0; temp /= ten {
             pos -= 1;
-            let digit: i32 = ((temp % ten).low() as i64) as i32;
-            builtin::array_set_u8(arr, pos, (('0' as i32) + digit) as u8);
+            let digit: i32 = (temp % ten).low() as i64 as i32;
+            builtin::array_set_u8(arr, pos, ('0' as i32 + digit) as u8);
         }
     }
 
     fn fmt_base(&self, f: &mut Formatter, base: i32, upper: bool) {
-        let bits_per_digit = if base == 2 { 1 } else if base == 8 { 3 } else { 4 };
+        let bits_per_digit = if base == 2 {
+            1;
+        } else if base == 8 {
+            3;
+        } else {
+            4;
+        };
         let mask: u64 = (base - 1) as u64;
 
         let prefix = if f.alternate {
             if base == 2 {
-                "0b"
+                "0b";
             } else if base == 8 {
-                "0o"
+                "0o";
             } else if upper {
-                "0X"
+                "0X";
             } else {
-                "0x"
+                "0x";
             }
         } else {
-            ""
+            "";
         };
 
         // Count digits
         let is_zero = self.low == 0 && self.high == 0;
         let digit_count = if is_zero {
-            1
+            1;
         } else {
             // Find highest set bit across both halves
             let mut highest_bit: i32 = 0;
@@ -236,7 +242,7 @@ impl u128 {
                 let mut b: i32 = 63;
                 while b >= 0 {
                     let one: i64 = 1;
-                    if (h >> (b as i64)) & one != zero {
+                    if h >> b as i64 & one != zero {
                         highest_bit = 64 + b;
                         break;
                     }
@@ -246,14 +252,14 @@ impl u128 {
                 let mut b: i32 = 63;
                 while b >= 0 {
                     let one: i64 = 1;
-                    if (l >> (b as i64)) & one != zero {
+                    if l >> b as i64 & one != zero {
                         highest_bit = b;
                         break;
                     }
                     b -= 1;
                 }
             }
-            (highest_bit / bits_per_digit) + 1
+            highest_bit / bits_per_digit + 1;
         };
 
         let offset = f.prepare_int_write(false, prefix, digit_count);
@@ -270,17 +276,17 @@ impl u128 {
                 pos -= 1;
                 let digit: i32 = (lo & mask) as i32;
                 let ch = if digit < 10 {
-                    ('0' as i32) + digit
+                    '0' as i32 + digit;
                 } else if upper {
-                    ('A' as i32) + digit - 10
+                    'A' as i32 + digit - 10;
                 } else {
-                    ('a' as i32) + digit - 10
+                    'a' as i32 + digit - 10;
                 };
                 builtin::array_set_u8(arr, pos, ch as u8);
                 // Shift right: move bits from hi into lo
                 // For shift amounts 1,3,4 this works correctly
-                let hi_bits = hi << (64 - shift_u64);
-                lo = (lo >> shift_u64) | hi_bits;
+                let hi_bits = hi << 64 - shift_u64;
+                lo = lo >> shift_u64 | hi_bits;
                 hi = hi >> shift_u64;
             }
         }
@@ -488,7 +494,7 @@ impl Shl for u128 {
         let inv_s = (64 - shift) as u64;
         return u128 {
             low: self.low << s,
-            high: (self.high << s) | (self.low >> inv_s),
+            high: self.high << s | self.low >> inv_s,
         };
     }
 }
@@ -517,7 +523,7 @@ impl Shr for u128 {
         let s = shift as u64;
         let inv_s = (64 - shift) as u64;
         return u128 {
-            low: (self.low >> s) | (self.high << inv_s),
+            low: self.low >> s | self.high << inv_s,
             high: self.high >> s,
         };
     }
@@ -554,7 +560,11 @@ impl i128 {
     /// Create an i128 from an i64 value (sign-extended)
     pub fn from_i64(value: i64) -> i128 {
         // Sign extend: if value is negative, high bits are all 1s (-1)
-        let high: i64 = if value < 0 { -1 } else { 0 };
+        let high: i64 = if value < 0 {
+            -1;
+        } else {
+            0;
+        };
         return i128 { low: value as u64, high };
     }
 
@@ -576,8 +586,12 @@ impl i128 {
 
         // Check for negative sign
         let first_byte = builtin::array_get_u8(bytes, 0);
-        let is_negative = first_byte == ('-' as u8);
-        let start_idx = if is_negative { 1 } else { 0 };
+        let is_negative = first_byte == '-' as u8;
+        let start_idx = if is_negative {
+            1;
+        } else {
+            0;
+        };
 
         // Parse the absolute value as u128
         let mut abs_value = u128::zero();
@@ -585,7 +599,7 @@ impl i128 {
         let ten: u128 = 10;
         while i < len {
             let byte = builtin::array_get_u8(bytes, i);
-            let digit = (byte as i32) - ('0' as i32);
+            let digit = byte as i32 - '0' as i32;
             if 0 <= digit && digit <= 9 {
                 abs_value = abs_value * ten + u128::from_u64(digit as u64);
             }
@@ -748,34 +762,40 @@ impl i128 {
         temp = abs_val;
         for let mut temp = abs_val; temp > 0; temp /= ten {
             pos -= 1;
-            let digit = ((temp % ten).low() as i64) as i32;
-            builtin::array_set_u8(arr, pos, (('0' as i32) + digit) as u8);
+            let digit = (temp % ten).low() as i64 as i32;
+            builtin::array_set_u8(arr, pos, ('0' as i32 + digit) as u8);
         }
     }
 
     fn fmt_base(&self, f: &mut Formatter, base: i32, upper: bool) {
         let is_neg = self.is_negative();
         let abs_val = self.abs_u128();
-        let bits_per_digit = if base == 2 { 1 } else if base == 8 { 3 } else { 4 };
+        let bits_per_digit = if base == 2 {
+            1;
+        } else if base == 8 {
+            3;
+        } else {
+            4;
+        };
         let mask: u64 = (base - 1) as u64;
 
         let prefix = if f.alternate {
             if base == 2 {
-                "0b"
+                "0b";
             } else if base == 8 {
-                "0o"
+                "0o";
             } else if upper {
-                "0X"
+                "0X";
             } else {
-                "0x"
+                "0x";
             }
         } else {
-            ""
+            "";
         };
 
         let is_zero = abs_val == 0;
         let digit_count = if is_zero {
-            1
+            1;
         } else {
             let mut highest_bit: i32 = 0;
             let h: i64 = abs_val.high as i64;
@@ -784,7 +804,7 @@ impl i128 {
                 let mut b: i32 = 63;
                 while b >= 0 {
                     let one: i64 = 1;
-                    if (h >> (b as i64)) & one != 0 {
+                    if h >> b as i64 & one != 0 {
                         highest_bit = 64 + b;
                         break;
                     }
@@ -794,14 +814,14 @@ impl i128 {
                 let mut b: i32 = 63;
                 while b >= 0 {
                     let one: i64 = 1;
-                    if (l >> (b as i64)) & one != 0 {
+                    if l >> b as i64 & one != 0 {
                         highest_bit = b;
                         break;
                     }
                     b -= 1;
                 }
             }
-            (highest_bit / bits_per_digit) + 1
+            highest_bit / bits_per_digit + 1;
         };
 
         let offset = f.prepare_int_write(is_neg, prefix, digit_count);
@@ -818,15 +838,15 @@ impl i128 {
                 pos -= 1;
                 let digit: i32 = (lo & mask) as i32;
                 let ch = if digit < 10 {
-                    ('0' as i32) + digit
+                    '0' as i32 + digit;
                 } else if upper {
-                    ('A' as i32) + digit - 10
+                    'A' as i32 + digit - 10;
                 } else {
-                    ('a' as i32) + digit - 10
+                    'a' as i32 + digit - 10;
                 };
                 builtin::array_set_u8(arr, pos, ch as u8);
-                let hi_bits = hi << (64 - shift_u64);
-                lo = (lo >> shift_u64) | hi_bits;
+                let hi_bits = hi << 64 - shift_u64;
+                lo = lo >> shift_u64 | hi_bits;
                 hi = hi >> shift_u64;
             }
         }
@@ -950,10 +970,10 @@ impl Mul for i128 {
 
         // aL * bH -> only need low 64 bits (will be added to high)
         // Treat as unsigned multiplication (low bits are the same)
-        let p1_low = self.low * (other.high as u64);
+        let p1_low = self.low * other.high as u64;
 
         // aH * bL -> only need low 64 bits (will be added to high)
-        let p2_low = (self.high as u64) * other.low;
+        let p2_low = self.high as u64 * other.low;
 
         // result.low = p0_low
         // result.high = p0_high + p1_low + p2_low (overflow ignored)
@@ -1047,7 +1067,7 @@ impl Shl for i128 {
         let inv_s = (64 - shift) as u64;
         return i128 {
             low: self.low << s,
-            high: ((self.high as u64) << s | (self.low >> inv_s)) as i64,
+            high: (self.high as u64 << s | self.low >> inv_s) as i64,
         };
     }
 }
@@ -1072,7 +1092,11 @@ impl Shr for i128 {
         if shift >= 64 {
             // All high bits shift into low, high becomes sign extension
             let s = (shift - 64) as i64;
-            let sign_ext: i64 = if self.high < 0 { -1 } else { 0 };
+            let sign_ext: i64 = if self.high < 0 {
+                -1;
+            } else {
+                0;
+            };
             return i128 {
                 low: (self.high >> s) as u64,
                 high: sign_ext,
@@ -1085,8 +1109,8 @@ impl Shr for i128 {
         let s = shift as u64;
         let inv_s = (64 - shift) as u64;
         return i128 {
-            low: (self.low >> s) | ((self.high as u64) << inv_s),
-            high: self.high >> (s as i64),
+            low: self.low >> s | self.high as u64 << inv_s,
+            high: self.high >> s as i64,
         };
     }
 }

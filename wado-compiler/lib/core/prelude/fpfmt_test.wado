@@ -5,15 +5,7 @@
 // Copyright 2025 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-use {
-    short, short32, fixed_width, digits, format_exp, format_decimal,
-    log10_pow2, log2_pow10, u64_bit_len, pow10,
-    unpack64, unpack32, FormatResult, UnpackResult,
-    trim_zeros, rotate_right,
-    format_decimal_prec, format_exp_prec,
-    check_special, SpecialKind,
-    parse, parse_text,
-} from "./fpfmt.wado";
+use { short, short32, fixed_width, digits, format_exp, format_decimal, log10_pow2, log2_pow10, u64_bit_len, pow10, unpack64, unpack32, FormatResult, UnpackResult, trim_zeros, rotate_right, format_decimal_prec, format_exp_prec, check_special, SpecialKind, parse, parse_text } from "./fpfmt.wado";
 
 test "log10_pow2 approximation" {
     assert log10_pow2(0) == 0;
@@ -103,9 +95,9 @@ test "unpack64 powers of 2" {
     let r_1 = unpack64(1.0);
     let r_2 = unpack64(2.0);
     let r_4 = unpack64(4.0);
-    assert (r_1.mantissa & 0x8000000000000000) != 0;
-    assert (r_2.mantissa & 0x8000000000000000) != 0;
-    assert (r_4.mantissa & 0x8000000000000000) != 0;
+    assert r_1.mantissa & 0x8000000000000000 != 0;
+    assert r_2.mantissa & 0x8000000000000000 != 0;
+    assert r_4.mantissa & 0x8000000000000000 != 0;
 }
 
 test "short integers" {
@@ -369,7 +361,7 @@ test "unpack32 zero" {
 
 test "unpack32 one" {
     let r = unpack32(1.0 as f32);
-    assert (r.mantissa & 0x8000000000000000) != 0;
+    assert r.mantissa & 0x8000000000000000 != 0;
 }
 
 test "short32 integers" {
