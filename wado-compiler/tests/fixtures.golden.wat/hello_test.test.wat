@@ -57,8 +57,6 @@
     (type (;9;) (func))
     (type (;10;) (func))
     (type (;11;) (func))
-    (type (;12;) (func))
-    (type (;13;) (func (param (ref null 5) i64)))
     (import "mem" "realloc" (func (;0;) (type 6)))
     (import "wasi" "task-return" (func (;1;) (type 7)))
     (import "mem" "memory" (memory (;0;) 1))
@@ -66,108 +64,48 @@
     (export "__test_0_greeting" (func 4))
     (export "__test_1" (func 5))
     (func (;2;) (type 8)
-      (local i32 i32 (ref null 2) (ref null 3) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3) (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3))
+      (local i32 i32 (ref null 2) (ref null 3) (ref null 5) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3) (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3))
       (block ;; label = @1
         (if ;; label = @2
           (global.get 0)
           (then
             (br 1 (;@1;))))
-        (call 6)
         (global.set 0
           (i32.const 1)))
     )
     (func (;3;) (type 9)
-      (local i32 (ref null 2) (ref null 3) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3))
+      (local i32 (ref null 2) (ref null 3) (ref null 5) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3))
       (block ;; label = @1
         (if ;; label = @2
           (global.get 0)
           (then
             (br 1 (;@1;))))
-        (call 6)
         (global.set 0
           (i32.const 1)))
     )
     (func (;4;) (type 10)
-      (local i32 i32 (ref null 2) (ref null 3) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3) (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3))
+      (local i32 i32 (ref null 2) (ref null 3) (ref null 5) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3) (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3))
       (block ;; label = @1
         (if ;; label = @2
           (global.get 0)
           (then
             (br 1 (;@1;))))
-        (call 6)
         (global.set 0
           (i32.const 1)))
       (call 1
         (i32.const 0))
     )
     (func (;5;) (type 11)
-      (local i32 (ref null 2) (ref null 3) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3))
+      (local i32 (ref null 2) (ref null 3) (ref null 5) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3))
       (block ;; label = @1
         (if ;; label = @2
           (global.get 0)
           (then
             (br 1 (;@1;))))
-        (call 6)
         (global.set 0
           (i32.const 1)))
       (call 1
         (i32.const 0))
-    )
-    (func (;6;) (type 12)
-      (local (ref null 5) i32 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i32)
-    )
-    (func (;7;) (type 13) (param (ref null 5) i64)
-      (local i32 i32 i32 (ref null 4) i32 i32)
-      (local.set 2
-        (struct.get 5 1
-          (local.get 0)))
-      (local.set 3
-        (array.len
-          (struct.get 5 0
-            (local.get 0))))
-      (if ;; label = @1
-        (i32.ge_s
-          (local.get 2)
-          (local.get 3))
-        (@metadata.code.branch_hint "\00")
-        (then
-          (local.set 4
-            (block (result i32) ;; label = @2
-              (local.set 6
-                (i32.mul
-                  (local.get 3)
-                  (i32.const 2)))
-              (br 0 (;@2;)
-                (select (result i32)
-                  (local.get 6)
-                  (i32.const 4)
-                  (i32.gt_s
-                    (local.get 6)
-                    (i32.const 4))))))
-          (local.set 5
-            (array.new_default 4
-              (local.get 4)))
-          (array.copy 4 4
-            (local.get 5)
-            (i32.const 0)
-            (struct.get 5 0
-              (local.get 0))
-            (i32.const 0)
-            (local.get 2))
-          (struct.set 5 0
-            (local.get 0)
-            (ref.as_non_null
-              (local.get 5)))))
-      (array.set 4
-        (struct.get 5 0
-          (local.get 0))
-        (local.get 2)
-        (local.get 1))
-      (struct.set 5 1
-        (local.get 0)
-        (i32.add
-          (local.get 2)
-          (i32.const 1)))
     )
     (data (;0;) "Assertion failed in ")
     (data (;1;) "__test_0_greeting")
