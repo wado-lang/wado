@@ -2466,11 +2466,12 @@ impl Parser {
                 } else {
                     self.parse_expr()?
                 };
+                let body_span = body.span();
                 Ok(Expr::Closure(Box::new(ClosureExpr {
                     params: vec![],
                     body,
                     source_text: None,
-                    span: start_span,
+                    span: start_span.merge(&body_span),
                 })))
             }
             TokenKind::LBrace => {
@@ -2796,11 +2797,12 @@ impl Parser {
             self.parse_expr()?
         };
 
+        let body_span = body.span();
         Ok(Expr::Closure(Box::new(ClosureExpr {
             params,
             body,
             source_text: None,
-            span: start_span,
+            span: start_span.merge(&body_span),
         })))
     }
 

@@ -89,7 +89,226 @@ effect MyEffect {
     fn sync_op(y: String);
 }
 
-/// Top-level function
-fn run() {
+/// Resource: opaque handle without methods
+resource Handle;
+
+/// Resource: pub with methods, self: &Self normalized
+pub resource Stream {
+    fn read(&self, len: u64) -> Array<u8>;
+    async fn write(&self, data: Array<u8>);
+    fn close(&self);
+}
+
+/// Type alias (newtype)
+type Meters = f64;
+
+/// Pub type alias
+pub type Kilograms = f64;
+
+/// Global variables
+global PI: f64 = 3.14159265358979;
+
+pub global mut counter: i32 = 0;
+
+/// Numeric literals — integer forms
+fn int_literals() {
+    let a = 42;
+    let b = 1_000_000;
+    let c = 0xFF;
+    let d = 0xff;
+    let e = 0b1010_1010;
+    let f = 0o755;
+    let g = 0;
+    let h = 0xDEAD_BEEF;
+}
+
+/// Numeric literals — float forms
+fn float_literals() {
+    let a = 3.14;
+    let b = 1.0;
+    let c = 1_000.5;
+    let d = 1e10;
+    let e = 3.14e-2;
+    let f = 1.5e+3;
+    let g = 0.0;
+}
+
+/// Char literals: ASCII, escapes, unicode normalization
+fn char_literals() {
+    let a = 'A';
+    let b = 'z';
+    let c = '0';
+    let d = ' ';
+    let e = '\n';
+    let f = '\t';
+    let g = '\r';
+    let h = '\\';
+    let i = '\'';
+    let j = '\0';
+    let k = 'A';  // U+0041 = 'A' (printable, no escape)
+    let l = '😀';  // U+1F600 = '😀' (emoji, printable)
+    let m = '🦀';
+    let n = '\u{001B}';  // ESC control char → \u{001B}
+}
+
+/// String literals: escapes and multiline
+fn string_literals() {
+    let a = "hello";
+    let b = "with \"quotes\"";
+    let c = "with\nnewline";
+    let d = "with\ttab";
+    let e = "backslash: \\";
+    let f = "multiline
+string
+literal";
+    let g = "unicode \u0041 in string";
+}
+
+/// Template strings with format specifiers
+fn template_strings(name: String, pi: f64, n: i32) {
+    let a = `Hello, {name}!`;
+    let b = `Pi is approximately {pi:0.2f}`;
+    let c = `Hex value: {n:x}`;
+    let d = `Right-aligned: {n:>10}`;
+    let e = `Zero-padded: {n:08d}`;
+    let f = `Signed: {n:+}`;
+    let g = `Alt hex: {n:#x}`;
+    let h = `{name}: {n} items`;
+    let i = `no interpolation here`;
+    let j = `debug: {n:?}`;
+    let k = `multiline
+template {name}`;
+}
+
+/// Assert statements
+fn asserts(x: i32, s: String) {
+    assert x > 0;
+    assert x < 100, "x must be less than 100";
+    assert x != 0, `x is {x} but should not be zero`;
+    assert s.len() > 0;
+}
+
+/// Match expression with variant patterns
+fn match_shape(shape: Shape) -> f64 {
+    return match shape {
+        Circle(r) => 3.14159 * r * r,
+        Rectangle([w, h]) => w * h,
+        Point => 0.0,
+    };
+}
+
+/// Match with guard conditions
+fn match_with_guard(opt: Option<i32>) -> String {
+    return match opt {
+        Some(x) && x > 100 => "large",
+        Some(x) && x > 10 => "medium",
+        Some(_) => "small",
+        None => "none",
+    };
+}
+
+/// Match with wildcard and block body
+fn match_wildcard(color: Color) -> String {
+    return match color {
+        Red => "red",
+        Green => "green",
+        _ => "other",
+    };
+}
+
+/// Match with enum and struct pattern
+fn match_struct(result: Result<Point, String>) -> i32 {
+    return match result {
+        Ok({ x, y }) => x + y,
+        Err(_) => -1,
+    };
+}
+
+/// Matches operator
+fn matches_example(opt: Option<i32>, shape: Shape) -> bool {
+    let a = opt matches { Some(_) };
+    let b = opt matches { Some(x) && x > 0 };
+    let c = shape matches { Circle(_) };
+    return a && b && c;
+}
+
+/// Closures: expression body, no capture
+fn closure_no_capture() {
+    let add_one = |x: i32| x + 1;
+    let add = |a: i32, b: i32| a + b;
+    let is_even = |x: i32| x % 2 == 0;
+    let negate = |x: i32| -x;
+}
+
+/// Closures: block body with explicit return
+fn closure_block_body() {
+    let compute = |x: i32| {
+        let doubled = x * 2;
+        return doubled + x;
+    };
+    let greet = |name: String| {
+        return `Hello, {name}!`;
+    };
+}
+
+/// Closures: capturing and mutable capture
+fn closure_capture() {
+    let multiplier = 10;
+    let scale = |x: i32| x * multiplier;
+
+    let mut count = 0;
+    let inc = &mut || {
+        count += 1;
+    };
+    inc();
+    inc();
+    let _ = count;
+    let _ = scale(5);
+}
+
+/// Struct literals: inline, shorthand, multiline
+fn struct_literals() {
     let p = Point { x: 1, y: 2 };
+
+    let x = 10;
+    let y = 20;
+    let p2 = Point { x, y };
+
+    let p3 = Point {
+        x: 100,
+        y: 200,
+    };
+
+    let p4: Point = { x: 5, y: 6 };
+}
+
+/// Tuple and array literals
+fn tuple_array_literals() {
+    let t = [1, "hello", true];
+    let pair = [42, 0];
+
+    let a: Array<i32> = [1, 2, 3];
+    let b = [1, 2, 3] as Array<i32>;
+    let empty: Array<i32> = [];
+    let nested: Array<Array<i32>> = [[1, 2], [3, 4]];
+}
+
+/// Destructuring: struct, tuple, in loops
+fn destructuring_examples() {
+    let p = Point { x: 1, y: 2 };
+
+    let { x, y } = p;
+    let Point { x: px, y: py } = p;
+    let { x: hx, y: vy } = p;
+    let { x: dx, .. } = p;
+
+    let t = [1, 2, 3];
+    let [a, b, c] = t;
+
+    let _ = x + y + px + py + hx + vy + dx + a + b + c;
+
+    let points: Array<Point> = [];
+    for let { x, y } of points {
+        let _ = x + y;
+    }
 }
