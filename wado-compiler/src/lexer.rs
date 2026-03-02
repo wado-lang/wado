@@ -467,9 +467,13 @@ impl<'a> Lexer<'a> {
         let kind = match self.peek_char() {
             // `///` but not `////` (which is a regular comment)
             Some('/') if self.input.get(self.pos + 1..self.pos + 2) != Some("/") => {
+                self.advance(); // skip the third `/`
                 CommentKind::DocLine
             }
-            Some('!') => CommentKind::ModuleDoc,
+            Some('!') => {
+                self.advance(); // skip the `!`
+                CommentKind::ModuleDoc
+            }
             _ => CommentKind::Line,
         };
 

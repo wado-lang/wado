@@ -482,8 +482,8 @@ impl Point {
 }
 
 #[test]
-fn test_format_preserves_explicit_self_type() {
-    // When user explicitly writes self: &Self, it should be preserved
+fn test_format_normalizes_explicit_self_type() {
+    // Explicit `self: &Self` should be normalized to `&self` shorthand
     let source = r#"
 struct Point {
     x: i32,
@@ -497,17 +497,18 @@ impl Point {
 }
 "#;
     let formatted = wado_compiler::format(source).expect("format failed");
-    // Explicit self: &Self should be preserved, not converted to &self
     assert!(
-        formatted.contains("fn get_x(self: &Self)"),
-        "explicit self: &Self should be preserved: {}",
+        formatted.contains("fn get_x(&self)"),
+        "explicit self: &Self should be normalized to &self: {}",
         formatted
     );
     assert!(
-        !formatted.contains("fn get_x(&self)"),
-        "&self shorthand should not appear when explicit form was used: {}",
+        !formatted.contains("self: &Self"),
+        "self: &Self should not appear after normalization: {}",
         formatted
     );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "should be idempotent");
 }
 
 #[test]
@@ -539,8 +540,8 @@ impl Point {
 }
 
 #[test]
-fn test_format_preserves_explicit_mut_self_type() {
-    // When user explicitly writes self: &mut Self, it should be preserved
+fn test_format_normalizes_explicit_mut_self_type() {
+    // Explicit `self: &mut Self` should be normalized to `&mut self` shorthand
     let source = r#"
 struct Point {
     x: i32,
@@ -554,17 +555,18 @@ impl Point {
 }
 "#;
     let formatted = wado_compiler::format(source).expect("format failed");
-    // Explicit self: &mut Self should be preserved, not converted to &mut self
     assert!(
-        formatted.contains("fn set_x(self: &mut Self"),
-        "explicit self: &mut Self should be preserved: {}",
+        formatted.contains("fn set_x(&mut self"),
+        "explicit self: &mut Self should be normalized to &mut self: {}",
         formatted
     );
     assert!(
-        !formatted.contains("fn set_x(&mut self"),
-        "&mut self shorthand should not appear when explicit form was used: {}",
+        !formatted.contains("self: &mut Self"),
+        "self: &mut Self should not appear after normalization: {}",
         formatted
     );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "should be idempotent");
 }
 
 #[test]
@@ -951,4 +953,28 @@ fn test_format_nested_labeled_blocks() {
     );
     let formatted2 = wado_compiler::format(&formatted).expect("format failed");
     assert_eq!(formatted, formatted2, "should be idempotent");
+}
+
+/// Golden test: format(dirty) == clean, and the result is idempotent.
+///
+/// `format.fixtures/all.dirty.wado` exercises all the syntax constructs whose
+/// formatting was fixed. `format.fixtures/all.clean.wado` is the expected
+/// canonical output. The test verifies:
+///   1. format(dirty) == clean   (fixes are applied)
+///   2. format(clean) == clean   (idempotency)
+#[test]
+fn test_format_golden() {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
+    let dirty = fs::read_to_string(fixtures.join("all.dirty.wado")).expect("read dirty");
+    let clean = fs::read_to_string(fixtures.join("all.clean.wado")).expect("read clean");
+
+    let formatted = wado_compiler::format(&dirty).expect("format dirty failed");
+    assert_eq!(
+        formatted, clean,
+        "format(dirty) should equal clean\n\nActual:\n{}\n\nExpected:\n{}",
+        formatted, clean
+    );
+
+    let formatted2 = wado_compiler::format(&formatted).expect("format clean failed");
+    assert_eq!(formatted, formatted2, "format(clean) should be idempotent");
 }
