@@ -1548,17 +1548,17 @@ fn rewrite_call_sites(
 
     while i < instrs.len() {
         // Skip optional DeclareLocal before the LocalSet
-        let (_skip_declare, set_idx) = match &instrs[i] {
+        let set_idx = match &instrs[i] {
             WirInstr::DeclareLocal { name: dn, .. } if i + 1 < instrs.len() => {
                 if is_candidate_call_set(&instrs[i + 1], dn, candidate_map) {
-                    (true, i + 1)
+                    i + 1
                 } else {
                     result.push(std::mem::replace(&mut instrs[i], WirInstr::Nop));
                     i += 1;
                     continue;
                 }
             }
-            _ => (false, i),
+            _ => i,
         };
 
         // Check if this is a LocalSet wrapping a Call to a candidate
