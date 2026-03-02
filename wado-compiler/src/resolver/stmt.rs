@@ -277,13 +277,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Handle different pattern types
         match &let_stmt.pattern {
-            ast::Pattern::Ident(name) => {
-                let local_index = ctx.add_local(name.clone(), type_id, let_stmt.is_mut);
+            ast::Pattern::Ident(name) | ast::Pattern::MutIdent(name) => {
+                let is_mut =
+                    let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent(_));
+                let local_index = ctx.add_local(name.clone(), type_id, is_mut);
                 TirStmt::new(
                     TirStmtKind::Let {
                         name: name.clone(),
                         local_index,
-                        is_mut: let_stmt.is_mut,
+                        is_mut,
                         is_reactive: let_stmt.is_reactive,
                         type_id,
                         value,
@@ -356,8 +358,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TirPattern {
         match pattern {
-            ast::Pattern::Ident(name) => {
-                let local_index = ctx.add_local(name.clone(), type_id, is_mut);
+            ast::Pattern::Ident(name) | ast::Pattern::MutIdent(name) => {
+                let pat_mut = is_mut || matches!(pattern, ast::Pattern::MutIdent(_));
+                let local_index = ctx.add_local(name.clone(), type_id, pat_mut);
                 TirPattern::Binding {
                     name: name.clone(),
                     local_index,
@@ -680,7 +683,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> TirPattern {
         match pattern {
             Pattern::Wildcard => TirPattern::Wildcard,
-            Pattern::Ident(name) => {
+            Pattern::Ident(name) | Pattern::MutIdent(name) => {
+                let is_mut = matches!(pattern, Pattern::MutIdent(_));
                 let binding_type = if ref_binding {
                     self.type_table
                         .borrow_mut()
@@ -688,7 +692,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 } else {
                     scrutinee_type
                 };
-                let index = ctx.add_local(name.clone(), binding_type, false);
+                let index = ctx.add_local(name.clone(), binding_type, is_mut);
                 TirPattern::Binding {
                     name: name.clone(),
                     local_index: index,

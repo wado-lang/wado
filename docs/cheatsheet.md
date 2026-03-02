@@ -45,6 +45,7 @@ foo(100);                       // integer literal coerced to i64
 // Strings
 "Hello"         // String
 `Hello, {name}` // Template string
+`\{"key"\}`     // Escaped braces in template string → {"key"}
 
 // Characters
 'A'
@@ -232,6 +233,9 @@ Line 3";
 // Template strings (interpolation)
 let name = "Alice";
 let greeting = `Hello, {name}!`;         // "Hello, Alice!"
+
+// Escaped braces in template strings
+let json = `\{"key": "{name}"\}`;   // {"key": "Alice"}
 
 // Multiline template strings
 let message = `Dear {name},
@@ -940,6 +944,20 @@ if let Some(x) = ro {       // ro: &Option<i32>, x: &i32
 }
 let val = match ro {         // ro: &Option<i32>
     Some(x) => *x,           // x: &i32, dereference to get i32
+    None => 0,
+};
+
+// Mutable pattern bindings
+if let Some(mut x) = opt {
+    x += 10;                 // x is mutable
+    println(`{x}`);
+}
+
+let result = match opt {
+    Some(mut n) => {
+        n *= 2;              // n is mutable
+        n
+    },
     None => 0,
 };
 

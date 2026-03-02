@@ -1,0 +1,118 @@
+// Test: Serialize implementation for Array<T>
+// Array<T> serializes as a sequence
+use { println, Stdout } from "core:cli";
+
+struct SerializeError {
+    message: String,
+}
+
+trait Serialize {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
+}
+
+trait SerializeSeq {
+    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
+    fn end(&mut self) -> Result<(), SerializeError>;
+}
+
+trait Serializer {
+    type SeqSerializer;
+
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>;
+    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>;
+    fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError>;
+}
+
+struct JsonSerializer {
+    buf: String,
+}
+
+struct JsonSeqSerializer {
+    ser: JsonSerializer,
+    count: i32,
+}
+
+impl Serializer for JsonSerializer {
+    type SeqSerializer = JsonSeqSerializer;
+
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
+        self.buf.append(`{v}`);
+        return Result::<(), SerializeError>::Ok(());
+    }
+
+    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
+        self.buf.append(`"{*v}"`);
+        return Result::<(), SerializeError>::Ok(());
+    }
+
+    fn begin_seq(&mut self, len: i32) -> Result<JsonSeqSerializer, SerializeError> {
+        self.buf.append("[");
+        return Result::<JsonSeqSerializer, SerializeError>::Ok(JsonSeqSerializer {
+            ser: *self,
+            count: 0,
+        });
+    }
+}
+
+impl SerializeSeq for JsonSeqSerializer {
+    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        if self.count > 0 {
+            self.ser.buf.append(",");
+        }
+        value.serialize::<JsonSerializer>(&mut self.ser);
+        self.count += 1;
+        return Result::<(), SerializeError>::Ok(());
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        self.ser.buf.append("]");
+        return Result::<(), SerializeError>::Ok(());
+    }
+}
+
+impl Serialize for i32 {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_i32(*self);
+    }
+}
+
+impl Serialize for String {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_string(self);
+    }
+}
+
+// Serialize for Array<T> — bounded impl
+impl<T: Serialize> Serialize for Array<T> {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut seq = s.begin_seq(self.len());
+        if let Ok(mut seq) = seq {
+            for let item of *self {
+                seq.element::<T>(&item);
+            }
+            return seq.end();
+        }
+        return Result::<(), SerializeError>::Err(SerializeError { message: "begin_seq failed" });
+    }
+}
+
+export fn run() with Stdout {
+    let mut ser = JsonSerializer { buf: "" };
+
+    let nums: Array<i32> = [10, 20, 30];
+    nums.serialize::<JsonSerializer>(&mut ser);
+    println(`Array<i32>: {ser.buf}`);
+
+    ser.buf = "";
+    let strs: Array<String> = ["hello", "world"];
+    strs.serialize::<JsonSerializer>(&mut ser);
+    println(`Array<String>: {ser.buf}`);
+
+    ser.buf = "";
+    let empty: Array<i32> = [];
+    empty.serialize::<JsonSerializer>(&mut ser);
+    println(`Empty: {ser.buf}`);
+}
+
+__DATA__
+{"TODO": true, "stdout": "Array<i32>: [10,20,30]\nArray<String>: [\"hello\",\"world\"]\nEmpty: []\n"}
