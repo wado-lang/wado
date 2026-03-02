@@ -208,7 +208,10 @@ fn licm_loop(
             // Create let statement for the hoisted value
             let hoist_stmt = TirStmt::new(
                 TirStmtKind::Let {
-                    name: format!("_licm_{}", candidate.field_name),
+                    name: format!(
+                        "_licm_{}_{}",
+                        candidate.field_name, candidate.new_local_index
+                    ),
                     local_index: candidate.new_local_index,
                     is_mut: false,
                     is_reactive: false,
@@ -406,8 +409,11 @@ fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut ModifiedVars) {
             collect_modified_vars_in_expr(right, modified);
         }
         TirExprKind::Unary { op, expr } => {
-            // If taking a mutable reference, the target is fully modified (caller may write anything)
-            if matches!(op, TirUnaryOp::MutRef) {
+            // &mut local: the local may be reassigned through the ref (boxed primitives).
+            // &mut local.field: in Wasm GC, this just reads the GC reference stored in the
+            // field — neither the parent local nor the field reference itself changes.
+            // Only mark the root as fully modified for a direct &mut local, not &mut local.field.
+            if matches!(op, TirUnaryOp::MutRef) && matches!(expr.kind, TirExprKind::Local { .. }) {
                 mark_local_as_fully_modified(expr, modified);
             }
             collect_modified_vars_in_expr(expr, modified);
@@ -1485,7 +1491,10 @@ fn replace_hoisted_in_expr(
                 // Replace with a reference to the hoisted local
                 expr.kind = TirExprKind::Local {
                     index: candidate.new_local_index,
-                    name: format!("_licm_{}", candidate.field_name),
+                    name: format!(
+                        "_licm_{}_{}",
+                        candidate.field_name, candidate.new_local_index
+                    ),
                 };
                 return;
             }
@@ -1499,7 +1508,10 @@ fn replace_hoisted_in_expr(
                     // Replace with a reference to the hoisted local
                     expr.kind = TirExprKind::Local {
                         index: candidate.new_local_index,
-                        name: format!("_licm_{}", candidate.field_name),
+                        name: format!(
+                            "_licm_{}_{}",
+                            candidate.field_name, candidate.new_local_index
+                        ),
                     };
                     return;
                 }

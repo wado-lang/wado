@@ -631,6 +631,8 @@ fn run_normal_test(
         target_world,
         skip_validation: false,
         retain_wir: has_wir,
+        inline_threshold: None,
+        opt_iterations: None,
     };
 
     // Try to compile the fixture

@@ -64,6 +64,8 @@ pub struct CompileOptions {
     pub log_level: LogLevel,
     pub target_world: Option<String>,
     pub skip_validation: bool,
+    pub inline_threshold: Option<usize>,
+    pub opt_iterations: Option<u32>,
 }
 
 #[derive(Clone, Copy)]
@@ -74,6 +76,8 @@ enum Opt {
     WatToStdout,
     World,
     OptLevel,
+    InlineThreshold,
+    OptIterations,
     LogLevel,
     NoValidate,
     Help,
@@ -86,6 +90,8 @@ impl Opt {
         Self::WatToStdout,
         Self::World,
         Self::OptLevel,
+        Self::InlineThreshold,
+        Self::OptIterations,
         Self::LogLevel,
         Self::NoValidate,
         Self::Help,
@@ -118,6 +124,8 @@ impl Opt {
                 desc: "Target world (default: wasi:cli/command)\nUse 'test' to export test functions only",
             },
             Self::OptLevel => args::OPT_LEVEL_SPEC,
+            Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
+            Self::OptIterations => args::OPT_ITERATIONS_SPEC,
             Self::LogLevel => args::LOG_LEVEL_SPEC,
             Self::NoValidate => args::OptSpec {
                 long: Some("no-validate"),
@@ -155,6 +163,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut log_level = LogLevel::default();
     let mut target_world: Option<String> = None;
     let mut skip_validation = false;
+    let mut inline_threshold: Option<usize> = None;
+    let mut opt_iterations: Option<u32> = None;
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
@@ -186,6 +196,18 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                         }
                     };
                 }
+                Opt::InlineThreshold => {
+                    inline_threshold = Some(args::parse_inline_threshold_arg(
+                        "--optimize-inline-threshold",
+                        &mut parser,
+                    )?);
+                }
+                Opt::OptIterations => {
+                    opt_iterations = Some(args::parse_opt_iterations_arg(
+                        "--optimize-iterations",
+                        &mut parser,
+                    )?);
+                }
                 Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
                 Opt::NoValidate => skip_validation = true,
                 Opt::Help => return Err(CliExit::help(usage)),
@@ -207,6 +229,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         log_level,
         target_world,
         skip_validation,
+        inline_threshold,
+        opt_iterations,
     })
 }
 
@@ -227,7 +251,7 @@ pub async fn compile_with_opts(
     opt_level: OptLevel,
     log_level: LogLevel,
 ) -> Vec<u8> {
-    compile_with_full_opts(filename, opt_level, log_level, None, false).await
+    compile_with_full_opts(filename, opt_level, log_level, None, false, None, None).await
 }
 
 /// Compile a Wado source file with full options including target world
@@ -237,6 +261,8 @@ pub async fn compile_with_full_opts(
     log_level: LogLevel,
     target_world: Option<String>,
     skip_validation: bool,
+    inline_threshold: Option<usize>,
+    opt_iterations: Option<u32>,
 ) -> Vec<u8> {
     let path = Path::new(filename);
 
@@ -261,6 +287,8 @@ pub async fn compile_with_full_opts(
         opt_level: to_compiler_opt_level(opt_level),
         target_world,
         skip_validation,
+        inline_threshold,
+        opt_iterations,
         ..Default::default()
     };
 
@@ -297,6 +325,8 @@ pub async fn run(opts: CompileOptions) {
         opts.log_level,
         opts.target_world,
         opts.skip_validation,
+        opts.inline_threshold,
+        opts.opt_iterations,
     )
     .await;
 

@@ -8,7 +8,6 @@
 // wasi::stream-new
 // wasi::stream-write
 // wasi::subtask-drop
-// wasi::task-return
 // wasi::waitable-join
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
@@ -22,12 +21,13 @@ struct Container {
 fn Container::add_items(self: &mut Container, count: i32) {
     __for_0: {
         let mut i: i32 = 0;
+        let _licm_items_3: Array<i32> = self.items;
         loop {
             if !(i < count) {
                 break __for_0;
             }
-            self.items."Array<i32>::append"(i);
-            self.items."Array<i32>::append"((i * 2));
+            _licm_items_3."Array<i32>::append"(i);
+            _licm_items_3."Array<i32>::append"((i * 2));
             i = (i + 1);
         }
     }
@@ -40,13 +40,13 @@ fn Container::process(self: &mut Container) {
     };
     __for_1: {
         let mut i: i32 = 0;
-        let _licm_items: Array<i32> = self.items;
-        let _licm_used: i32 = _licm_items.used;
+        let _licm_items_10: Array<i32> = self.items;
+        let _licm_used_11: i32 = _licm_items_10.used;
         loop {
-            if !(i < _licm_used) {
+            if !(i < _licm_used_11) {
                 break __for_1;
             }
-            let val: i32 = _licm_items."Array<i32>^IndexValue::index_value"(i);
+            let val: i32 = _licm_items_10."Array<i32>^IndexValue::index_value"(i);
             if ((val % 2) == 0) {
                 temp."Array<i32>::append"(val);
             }
@@ -55,12 +55,13 @@ fn Container::process(self: &mut Container) {
     }
     __for_2: {
         let mut j: i32 = 0;
-        let _licm_used: i32 = temp.used;
+        let _licm_used_12: i32 = temp.used;
+        let _licm_items_13: Array<i32> = self.items;
         loop {
-            if !(j < _licm_used) {
+            if !(j < _licm_used_12) {
                 break __for_2;
             }
-            self.items."Array<i32>::append"((temp."Array<i32>^IndexValue::index_value"(j) + 100));
+            _licm_items_13."Array<i32>::append"((temp."Array<i32>^IndexValue::index_value"(j) + 100));
             j = (j + 1);
         }
     }
@@ -97,11 +98,6 @@ export fn run() with Stdout {
         };
         break __tmpl: __r;
     });
-}
-
-export fn __cm_export__run() {
-    run();
-    cm_raw_call task-return(0);
 }
 
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {

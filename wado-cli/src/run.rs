@@ -25,6 +25,8 @@ pub struct RunOptions {
     pub preopened_dirs: Vec<(String, String)>,
     /// Arguments passed to the guest program via `wasi:cli/environment.get-arguments`.
     pub program_args: Vec<String>,
+    pub inline_threshold: Option<usize>,
+    pub opt_iterations: Option<u32>,
 }
 
 #[derive(Clone, Copy)]
@@ -33,6 +35,8 @@ enum Opt {
     Dir,
     NoDir,
     OptLevel,
+    InlineThreshold,
+    OptIterations,
     LogLevel,
     Profile,
     Help,
@@ -43,6 +47,8 @@ impl Opt {
         Self::Dir,
         Self::NoDir,
         Self::OptLevel,
+        Self::InlineThreshold,
+        Self::OptIterations,
         Self::LogLevel,
         Self::Profile,
         Self::Help,
@@ -63,6 +69,8 @@ impl Opt {
                 desc: "Do not preopen any directories (disables the default)",
             },
             Self::OptLevel => args::OPT_LEVEL_SPEC,
+            Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
+            Self::OptIterations => args::OPT_ITERATIONS_SPEC,
             Self::LogLevel => args::LOG_LEVEL_SPEC,
             Self::Profile => args::OptSpec {
                 long: Some("profile"),
@@ -167,6 +175,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     let mut program_args: Vec<String> = Vec::new();
     let mut explicit_dirs = false;
     let mut no_dir = false;
+    let mut inline_threshold: Option<usize> = None;
+    let mut opt_iterations: Option<u32> = None;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -202,6 +212,18 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
                         }
                     };
                 }
+                Opt::InlineThreshold => {
+                    inline_threshold = Some(args::parse_inline_threshold_arg(
+                        "--optimize-inline-threshold",
+                        &mut parser,
+                    )?);
+                }
+                Opt::OptIterations => {
+                    opt_iterations = Some(args::parse_opt_iterations_arg(
+                        "--optimize-iterations",
+                        &mut parser,
+                    )?);
+                }
                 Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
                 Opt::Profile => {
                     let spec = args::require_string(&mut parser)?;
@@ -234,6 +256,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
         profile,
         preopened_dirs,
         program_args,
+        inline_threshold,
+        opt_iterations,
     })
 }
 
@@ -310,7 +334,16 @@ async fn run_cli_component(
 }
 
 pub async fn run(opts: RunOptions) {
-    let wasm = compile::compile_with_opts(&opts.input, opts.opt_level, opts.log_level).await;
+    let wasm = compile::compile_with_full_opts(
+        &opts.input,
+        opts.opt_level,
+        opts.log_level,
+        None,
+        false,
+        opts.inline_threshold,
+        opts.opt_iterations,
+    )
+    .await;
 
     if let Err(e) = run_cli_component(
         &wasm,

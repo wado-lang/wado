@@ -202,13 +202,13 @@ fn "Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(self: &Array<TreeMa
 
 fn "TreeMap<String,i32>::find_index"(self: &TreeMap<String,i32>, key: String) -> i32 {
     let mut current: Option<&mut TreeMapNode<String>> = self.root;
-    let _licm_entries: Array<TreeMapEntry<String,i32>> = self.entries;
+    let _licm_entries_6: Array<TreeMapEntry<String,i32>> = self.entries;
     loop {
         let __pattern_temp_0: Option<&mut TreeMapNode<String>> = current;
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
             let n: &mut TreeMapNode<String> = __variant_payload(__pattern_temp_0, case=0);
             if key."String^Eq::eq"(&n.key) {
-                let entry: &TreeMapEntry<String,i32> = &_licm_entries."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(n.index);
+                let entry: &TreeMapEntry<String,i32> = &_licm_entries_6."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(n.index);
                 if entry.deleted {
                     return -1;
                 }

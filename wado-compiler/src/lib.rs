@@ -186,6 +186,12 @@ pub struct CompilerOptions {
     /// When true, retain the WIR module in [`CompileResult::wir_module`].
     /// Used by test infrastructure to inspect WIR without a second compilation pass.
     pub retain_wir: bool,
+    /// Override the inline threshold for the optimization pass.
+    /// When `None`, the default for the `opt_level` is used.
+    pub inline_threshold: Option<usize>,
+    /// Override the number of fixed-point optimization iterations.
+    /// When `None`, the default for the `opt_level` is used.
+    pub opt_iterations: Option<u32>,
 }
 
 /// Compile Wado source code with a `CompilerHost` for I/O operations.
@@ -323,7 +329,12 @@ pub async fn compile_with_options<H: CompilerHost>(
     // === Phase 10: Optimize (Project -> Project) ===
     let project = {
         let _span = logger.span("optimize");
-        optimize(project, options.opt_level)
+        optimize(
+            project,
+            options.opt_level,
+            options.inline_threshold,
+            options.opt_iterations,
+        )
     };
 
     // === Phase 11: Build WIR (planning + TIR → WirModule) ===
@@ -370,7 +381,7 @@ pub async fn dump_with_host<H: CompilerHost>(
     filename: Option<&str>,
     opt_level: OptLevel,
 ) -> Result<DumpResult, Bail> {
-    dump_with_host_and_world(source, host, filename, opt_level, None).await
+    dump_with_host_and_world(source, host, filename, opt_level, None, None, None).await
 }
 
 /// Dump compiler internal state with an explicit target world.
@@ -383,6 +394,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     filename: Option<&str>,
     opt_level: OptLevel,
     target_world: Option<&str>,
+    inline_threshold: Option<usize>,
+    opt_iterations: Option<u32>,
 ) -> Result<DumpResult, Bail> {
     let logger = Logger::new(host, compiler_host::LogLevel::default());
     let filename = filename.map(String::from);
@@ -534,7 +547,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         // Optimize
         let project = {
             let _span = logger.span("optimize");
-            optimize(project, opt_level)
+            optimize(project, opt_level, inline_threshold, opt_iterations)
         };
         let project = wir_build::plan_project(project);
 

@@ -24,6 +24,8 @@ pub struct DumpOptions {
     pub show_wir: bool,
     pub unparse: bool,
     pub opt_level: OptLevel,
+    pub inline_threshold: Option<usize>,
+    pub opt_iterations: Option<u32>,
     /// Output template for bulk generation, e.g., "path/to/{name}.lowered.wado"
     /// {name} is replaced with the input file's basename without extension
     pub output_template: Option<String>,
@@ -45,6 +47,8 @@ enum Opt {
     All,
     Unparse,
     OptLevel,
+    InlineThreshold,
+    OptIterations,
     Output,
     Help,
 }
@@ -64,6 +68,8 @@ impl Opt {
         Self::All,
         Self::Unparse,
         Self::OptLevel,
+        Self::InlineThreshold,
+        Self::OptIterations,
         Self::Output,
         Self::Help,
     ];
@@ -148,6 +154,8 @@ impl Opt {
                 value: Some("<n>"),
                 desc: "Optimization level (for --optimize phase)",
             },
+            Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
+            Self::OptIterations => args::OPT_ITERATIONS_SPEC,
             Self::Output => args::OptSpec {
                 long: Some("output"),
                 short: Some('o'),
@@ -250,6 +258,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let mut show_wir = false;
     let mut unparse = false;
     let mut opt_level = OptLevel::O2;
+    let mut inline_threshold: Option<usize> = None;
+    let mut opt_iterations: Option<u32> = None;
     let mut output_template: Option<String> = None;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
@@ -294,6 +304,18 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
                             )));
                         }
                     };
+                }
+                Opt::InlineThreshold => {
+                    inline_threshold = Some(args::parse_inline_threshold_arg(
+                        "--optimize-inline-threshold",
+                        &mut parser,
+                    )?);
+                }
+                Opt::OptIterations => {
+                    opt_iterations = Some(args::parse_opt_iterations_arg(
+                        "--optimize-iterations",
+                        &mut parser,
+                    )?);
                 }
                 Opt::Output => {
                     let template = args::require_value(&mut parser)
@@ -349,6 +371,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
         show_wir,
         unparse,
         opt_level,
+        inline_threshold,
+        opt_iterations,
         output_template,
     })
 }
@@ -436,6 +460,8 @@ async fn run_bulk(opts: &DumpOptions, template: &str) {
         let show_optimize = opts.show_optimize;
         let unparse = opts.unparse;
         let opt_level = opts.opt_level;
+        let inline_threshold = opts.inline_threshold;
+        let opt_iterations = opts.opt_iterations;
         let sem = semaphore.clone();
 
         let handle = tokio::runtime::Handle::current();
@@ -469,6 +495,8 @@ async fn run_bulk(opts: &DumpOptions, template: &str) {
                     show_optimize,
                     unparse,
                     opt_level,
+                    inline_threshold,
+                    opt_iterations,
                     &input,
                 )) {
                     Ok(content) => {
@@ -527,6 +555,8 @@ async fn generate_output_params(
     show_optimize: bool,
     unparse: bool,
     opt_level: OptLevel,
+    inline_threshold: Option<usize>,
+    opt_iterations: Option<u32>,
     input: &str,
 ) -> Result<String, String> {
     let path = Path::new(input);
@@ -552,6 +582,8 @@ async fn generate_output_params(
         Some(input),
         opt_level,
         target_world.as_deref(),
+        inline_threshold,
+        opt_iterations,
     )
     .await
     .map_err(|_bail| "compilation failed".to_string())?;
@@ -623,6 +655,8 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         Some(input),
         opts.opt_level,
         target_world.as_deref(),
+        opts.inline_threshold,
+        opts.opt_iterations,
     )
     .await
     {
