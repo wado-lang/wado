@@ -1439,6 +1439,11 @@ impl Parser {
     }
 
     fn parse_pattern(&mut self) -> ParseResult<Pattern> {
+        if self.check(&TokenKind::Mut) {
+            self.advance();
+            let name = self.consume_ident()?;
+            return Ok(Pattern::MutIdent(name));
+        }
         if self.check(&TokenKind::LParen) {
             // Tuple pattern with parentheses: (a, b, c)
             self.advance();

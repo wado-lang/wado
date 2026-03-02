@@ -1,0 +1,32 @@
+// Test mut bindings inside patterns
+use { println, Stdout } from "core:cli";
+
+variant Counter {
+    Value(i32),
+    Empty,
+}
+
+export fn run() with Stdout {
+    // if let with mut binding
+    let c = Counter::Value(10);
+    if let Value(mut x) = c {
+        x += 5;
+        assert x == 15;
+        println(`{x}`);
+    }
+
+    // match with mut binding
+    let c2 = Counter::Value(100);
+    let result = match c2 {
+        Value(mut n) => {
+            n *= 2;
+            n
+        },
+        Empty => 0,
+    };
+    assert result == 200;
+    println(`{result}`);
+}
+
+__DATA__
+{"stdout": "15\n200\n"}
