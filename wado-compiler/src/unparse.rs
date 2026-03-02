@@ -783,11 +783,18 @@ impl<'a> Unparser<'a> {
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
+        let saved_line = self.last_source_line;
+        self.last_source_line = e.span.line;
+
         for method in &e.methods {
+            self.emit_leading_comments(&method.span);
+            self.emit_blank_lines_to(method.span.line);
             self.unparse_effect_method(method);
+            self.last_source_line = method.span.end_line();
         }
         self.indent_level -= 1;
 
+        self.last_source_line = saved_line.max(e.span.end_line());
         self.write_indent();
         self.output.push_str("}\n");
     }

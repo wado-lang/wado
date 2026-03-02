@@ -978,3 +978,25 @@ fn test_format_golden() {
     let formatted2 = wado_compiler::format(&formatted).expect("format clean failed");
     assert_eq!(formatted, formatted2, "format(clean) should be idempotent");
 }
+
+/// Golden test for "messy" inputs: excessive blank lines, block comments in
+/// unusual positions, missing spaces in use{}, implicit self normalization, etc.
+///
+/// `format.fixtures/mess.dirty.wado` has many deliberately weird patterns.
+/// `format.fixtures/mess.clean.wado` is the expected canonical output.
+#[test]
+fn test_format_golden_mess() {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
+    let dirty = fs::read_to_string(fixtures.join("mess.dirty.wado")).expect("read mess dirty");
+    let clean = fs::read_to_string(fixtures.join("mess.clean.wado")).expect("read mess clean");
+
+    let formatted = wado_compiler::format(&dirty).expect("format mess dirty failed");
+    assert_eq!(
+        formatted, clean,
+        "format(mess dirty) should equal mess clean\n\nActual:\n{}\n\nExpected:\n{}",
+        formatted, clean
+    );
+
+    let formatted2 = wado_compiler::format(&formatted).expect("format mess clean failed");
+    assert_eq!(formatted, formatted2, "format(mess clean) should be idempotent");
+}
