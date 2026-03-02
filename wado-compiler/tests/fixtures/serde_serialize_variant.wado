@@ -15,7 +15,7 @@ trait SerializeVariant {
 }
 
 trait Serializer {
-    type VariantSerializer;
+    type VariantSerializer: SerializeVariant;
 
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError>;
     fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>;

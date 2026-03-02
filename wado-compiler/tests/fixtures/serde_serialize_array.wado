@@ -16,7 +16,7 @@ trait SerializeSeq {
 }
 
 trait Serializer {
-    type SeqSerializer;
+    type SeqSerializer: SerializeSeq;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>;
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>;
@@ -115,4 +115,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"TODO": true, "stdout": "Array<i32>: [10,20,30]\nArray<String>: [\"hello\",\"world\"]\nEmpty: []\n"}
+{"stdout": "Array<i32>: [10,20,30]\nArray<String>: [\"hello\",\"world\"]\nEmpty: []\n"}
