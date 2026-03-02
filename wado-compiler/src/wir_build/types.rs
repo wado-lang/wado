@@ -28,6 +28,10 @@ fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String>
         ResolvedType::Struct { name, .. } => vec![name.clone()],
         ResolvedType::Variant { name, .. } => vec![name.clone()],
         ResolvedType::GenericInstance { type_args, .. } => {
+            // Skip unresolved generic instances (containing type params or projections)
+            if type_args.iter().any(|t| type_table.contains_type_param(*t)) {
+                return vec![];
+            }
             let mangled_name = type_table.mangle_type_name(type_id);
             let mut deps = vec![mangled_name];
             for arg in type_args {
@@ -537,6 +541,10 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                 if ctx.tuple_type_map.contains_key(elements) {
                     continue;
                 }
+                // Skip unresolved tuples (containing type params or projections)
+                if elements.iter().any(|e| type_table.contains_type_param(*e)) {
+                    continue;
+                }
                 let elem_names: Vec<String> = elements
                     .iter()
                     .map(|&e| type_table.mangle_type_name(e))
@@ -611,6 +619,10 @@ fn register_nonmono_arrays(ctx: &mut WirContext<'_>) {
         let type_table = &*tir_mod.type_table.borrow();
         for type_id in type_table.iter_type_ids() {
             if let ResolvedType::BuiltinArray(elem_type_id) = type_table.get(type_id) {
+                // Skip unresolved arrays (containing type params or projections)
+                if type_table.contains_type_param(*elem_type_id) {
+                    continue;
+                }
                 register_raw_array_type(ctx, *elem_type_id, type_table);
             }
         }
@@ -704,12 +716,10 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                     // struct overhead. See wep-2026-02-09-variant-independent-types.md.
 
                     // Skip unresolved generic instances (e.g. Option<unknown>
-                    // from unresolved null literals)
+                    // from unresolved null literals, or Result<S::Assoc, E>
+                    // from generic trait method signatures)
                     if type_args.iter().any(|t| {
-                        matches!(
-                            type_table.get(*t),
-                            ResolvedType::Unknown | ResolvedType::Error
-                        )
+                        type_table.contains_type_param(*t)
                     }) {
                         continue;
                     }
@@ -923,6 +933,9 @@ fn register_remaining_arrays(ctx: &mut WirContext<'_>) {
         let type_table = &*tir_mod.type_table.borrow();
         for type_id in type_table.iter_type_ids() {
             if let ResolvedType::BuiltinArray(elem_type_id) = type_table.get(type_id) {
+                if type_table.contains_type_param(*elem_type_id) {
+                    continue;
+                }
                 register_raw_array_type(ctx, *elem_type_id, type_table);
             }
         }
@@ -1068,6 +1081,9 @@ fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
                 && name == "Array"
                 && type_args.len() == 1
             {
+                if type_table.contains_type_param(type_args[0]) {
+                    continue;
+                }
                 let elem_name = type_table.mangle_type_name(type_args[0]);
                 if !array_elem_types.iter().any(|(_, n)| n == &elem_name) {
                     array_elem_types.push((type_args[0], elem_name));

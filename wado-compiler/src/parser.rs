@@ -3597,14 +3597,24 @@ impl Parser {
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let attrs = self.parse_attributes()?;
 
-            // Check if this is an associated type declaration: `type Name;`
+            // Check if this is an associated type declaration: `type Name;` or `type Name: Bound1 + Bound2;`
             if self.check(&TokenKind::Type) {
                 let type_span = self.peek().span;
                 self.advance();
                 let assoc_name = self.consume_ident()?;
+                let mut bounds = Vec::new();
+                if self.check(&TokenKind::Colon) {
+                    self.advance();
+                    bounds.push(self.consume_ident()?);
+                    while self.check(&TokenKind::Plus) {
+                        self.advance();
+                        bounds.push(self.consume_ident()?);
+                    }
+                }
                 let end = self.expect(&TokenKind::Semicolon)?.span;
                 associated_types.push(AssociatedTypeDecl {
                     name: assoc_name,
+                    bounds,
                     span: type_span.merge(&end),
                 });
             } else {

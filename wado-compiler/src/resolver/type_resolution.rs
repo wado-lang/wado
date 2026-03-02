@@ -68,10 +68,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Handle T::AssociatedType where T is a type parameter in scope
         if let Some(&(_, param_type_id)) = self.current_type_params.get(&namespaced.namespace) {
+            // Look up trait bounds on the associated type from the trait declaration
+            let assoc_bounds =
+                self.find_assoc_type_bounds(param_type_id, &namespaced.name);
             return self
                 .type_table
                 .borrow_mut()
-                .make_assoc_type_projection(param_type_id, namespaced.name.clone());
+                .make_assoc_type_projection(param_type_id, namespaced.name.clone(), assoc_bounds);
         }
 
         if namespaced.namespace.as_str() == "builtin" {
@@ -292,5 +295,39 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
         }
+    }
+
+    /// Look up the trait bounds on an associated type declaration.
+    /// Given a type parameter `param_id` (e.g., `S: Serializer`), find the trait that
+    /// declares the associated type `assoc_name` and return its bounds.
+    fn find_assoc_type_bounds(&self, param_id: TypeId, assoc_name: &str) -> Vec<String> {
+        let param_type = self.type_table.borrow().get(param_id).clone();
+        if !matches!(param_type, ResolvedType::TypeParam { .. }) {
+            return Vec::new();
+        }
+
+        // Search all trait declarations for one containing this associated type
+        for (_, module) in self.loaded_modules {
+            for item in &module.items {
+                if let crate::ast::Item::Trait(trait_decl) = item {
+                    for assoc in &trait_decl.associated_types {
+                        if assoc.name == assoc_name {
+                            return assoc.bounds.clone();
+                        }
+                    }
+                }
+            }
+        }
+        for item in &self.current_module_items {
+            if let crate::ast::Item::Trait(trait_decl) = item {
+                for assoc in &trait_decl.associated_types {
+                    if assoc.name == assoc_name {
+                        return assoc.bounds.clone();
+                    }
+                }
+            }
+        }
+
+        Vec::new()
     }
 }

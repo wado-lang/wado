@@ -139,6 +139,26 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
+        // If still not found and receiver is an AssocTypeProjection, try its bounds
+        // e.g., S::SeqSerializer: SerializeSeq -> look up element() in SerializeSeq
+        if method_info.is_none() {
+            let assoc_bounds = {
+                let resolved = self.type_table.borrow().get(base_type_id).clone();
+                if let ResolvedType::AssocTypeProjection { bounds, .. } = resolved {
+                    if bounds.is_empty() { None } else { Some(bounds) }
+                } else {
+                    None
+                }
+            };
+            if let Some(bounds) = assoc_bounds
+                && let Some((found_trait, info)) =
+                    self.find_method_in_trait_bounds(&bounds, &method_call.method, base_type_id)
+            {
+                trait_name = Some(found_trait);
+                method_info = Some(info);
+            }
+        }
+
         // Get method info (error if method not found)
         let MethodInfo {
             mut return_type,
@@ -401,7 +421,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Build method_info with base struct name, then apply impl and method type args
         let is_type_param_receiver = matches!(
             self.type_table.borrow().get(base_type_id),
-            ResolvedType::TypeParam { .. }
+            ResolvedType::TypeParam { .. } | ResolvedType::AssocTypeProjection { .. }
         );
         let mut method_info = LocalMethodName::new(
             base_struct_name, // Use base struct name without type params

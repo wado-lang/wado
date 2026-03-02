@@ -1953,7 +1953,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Collect trait declarations from all modules
         for trait_name in bounds {
             // Search all loaded modules for the trait declaration
-            let mut found_trait_method: Option<(ast::Function, ModuleSource)> = None;
+            let mut found_trait_method: Option<(
+                ast::Function,
+                Vec<ast::AssociatedTypeDecl>,
+                ModuleSource,
+            )> = None;
 
             for (module_src, module) in self.loaded_modules {
                 for item in &module.items {
@@ -1962,7 +1966,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     {
                         for method in &trait_decl.methods {
                             if method.name == method_name {
-                                found_trait_method = Some((method.clone(), module_src.clone()));
+                                found_trait_method = Some((
+                                    method.clone(),
+                                    trait_decl.associated_types.clone(),
+                                    module_src.clone(),
+                                ));
                                 break;
                             }
                         }
@@ -1981,8 +1989,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     {
                         for method in &trait_decl.methods {
                             if method.name == method_name {
-                                found_trait_method =
-                                    Some((method.clone(), self.current_module_source.clone()));
+                                found_trait_method = Some((
+                                    method.clone(),
+                                    trait_decl.associated_types.clone(),
+                                    self.current_module_source.clone(),
+                                ));
                                 break;
                             }
                         }
@@ -1990,10 +2001,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
 
-            if let Some((method, _module_source)) = found_trait_method {
+            if let Some((method, trait_assoc_types, _module_source)) = found_trait_method {
                 // Resolve the method signature with Self = self_type_id (the TypeParam)
                 let old_self_type = self.current_self_type;
                 self.current_self_type = Some(self_type_id);
+
+                // Set up associated type bindings as projections so that
+                // Self::AssocType resolves to AssocTypeProjection(self_type_id, "AssocType")
+                let old_bindings =
+                    std::mem::take(&mut self.current_associated_type_bindings);
+                for assoc_decl in &trait_assoc_types {
+                    let projection = self.type_table.borrow_mut().make_assoc_type_projection(
+                        self_type_id,
+                        assoc_decl.name.clone(),
+                        assoc_decl.bounds.clone(),
+                    );
+                    self.current_associated_type_bindings
+                        .insert(assoc_decl.name.clone(), projection);
+                }
 
                 let return_type = method
                     .return_type
@@ -2007,6 +2032,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .unwrap_or(ast::SelfKind::None);
                 let param_types = self.extract_param_types(&method.params);
 
+                self.current_associated_type_bindings = old_bindings;
                 self.current_self_type = old_self_type;
 
                 return Some((
