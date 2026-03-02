@@ -37,18 +37,12 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let mut h1: PointHolder = PointHolder { point: Point { x: 0, y: 0 } };
-    let mut h2: PointHolder = PointHolder { point: Point { x: 10, y: 10 } };
-    __inline_PointHolder_IndexMut__index_mut_1: {
-        let self: &mut PointHolder = &mut &mut h1;
-        break __inline_PointHolder_IndexMut__index_mut_1: &mut self.point;
-    }.Point::move_by(5, 5);
-    __inline_PointHolder_IndexMut__index_mut_2: {
-        let self: &mut PointHolder = &mut &mut h2;
-        break __inline_PointHolder_IndexMut__index_mut_2: &mut self.point;
-    }.Point::move_by(-3, -3);
-    let p1: Point = *&h1.point;
-    let p2: Point = *&h2.point;
+    let mut __sroa_h1_point: Point = Point { x: 0, y: 0 };
+    let mut __sroa_h2_point: Point = Point { x: 10, y: 10 };
+    __sroa_h1_point.Point::move_by(5, 5);
+    __sroa_h2_point.Point::move_by(-3, -3);
+    let p1: Point = *&__sroa_h1_point;
+    let p2: Point = *&__sroa_h2_point;
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(40), used: 0 };
         __r.String::append("h1: (");

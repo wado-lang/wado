@@ -27,22 +27,13 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let mut container: Container<i32> = Container<i32> { items: __seq_lit: {
+    let mut __sroa_container_items: Array<i32> = __seq_lit: {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(0), used: 0 };
         break __seq_lit: *__b;
-    } };
-    {
-        let self: &mut Container<i32> = &mut &mut container;
-        self.items."Array<i32>::append"(10);
     };
-    {
-        let self: &mut Container<i32> = &mut &mut container;
-        self.items."Array<i32>::append"(20);
-    };
-    {
-        let self: &mut Container<i32> = &mut &mut container;
-        self.items."Array<i32>::append"(30);
-    };
+    __sroa_container_items."Array<i32>::append"(10);
+    __sroa_container_items."Array<i32>::append"(20);
+    __sroa_container_items."Array<i32>::append"(30);
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(24), used: 0 };
         __r.String::append("Length: ");
@@ -51,10 +42,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: __inline_Array_i32___len_2: {
-                let self: &Array<i32> = &container.items;
-                break __inline_Array_i32___len_2: self.used;
-            } };
+            let self: Box<i32> = Box<i32> { value: __sroa_container_items.used };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };
@@ -68,7 +56,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: container.items."Array<i32>^IndexValue::index_value"(0) };
+            let self: Box<i32> = Box<i32> { value: __sroa_container_items."Array<i32>^IndexValue::index_value"(0) };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };
@@ -82,7 +70,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: container.items."Array<i32>^IndexValue::index_value"(1) };
+            let self: Box<i32> = Box<i32> { value: __sroa_container_items."Array<i32>^IndexValue::index_value"(1) };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };
@@ -96,7 +84,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: container.items."Array<i32>^IndexValue::index_value"(2) };
+            let self: Box<i32> = Box<i32> { value: __sroa_container_items."Array<i32>^IndexValue::index_value"(2) };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };

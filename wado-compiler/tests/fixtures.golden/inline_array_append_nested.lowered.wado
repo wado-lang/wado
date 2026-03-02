@@ -22,12 +22,13 @@ struct Container {
 fn Container::add_items(self: &mut Container, count: i32) {
     __for_0: {
         let mut i: i32 = 0;
+        let _licm_items: Array<i32> = self.items;
         loop {
             if !(i < count) {
                 break __for_0;
             }
-            self.items."Array<i32>::append"(i);
-            self.items."Array<i32>::append"((i * 2));
+            _licm_items."Array<i32>::append"(i);
+            _licm_items."Array<i32>::append"((i * 2));
             i = (i + 1);
         }
     }
@@ -56,11 +57,12 @@ fn Container::process(self: &mut Container) {
     __for_2: {
         let mut j: i32 = 0;
         let _licm_used: i32 = temp.used;
+        let _licm_items: Array<i32> = self.items;
         loop {
             if !(j < _licm_used) {
                 break __for_2;
             }
-            self.items."Array<i32>::append"((temp."Array<i32>^IndexValue::index_value"(j) + 100));
+            _licm_items."Array<i32>::append"((temp."Array<i32>^IndexValue::index_value"(j) + 100));
             j = (j + 1);
         }
     }

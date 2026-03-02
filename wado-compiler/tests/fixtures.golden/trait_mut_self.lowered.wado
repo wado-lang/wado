@@ -27,7 +27,7 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let mut c: Counter = Counter { count: 42 };
+    let mut __sroa_c_count: i32 = 42;
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(24), used: 0 };
         __r.String::append("Before: ");
@@ -36,16 +36,13 @@ export fn run() with Stdout {
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: c.count };
+            let self: Box<i32> = Box<i32> { value: __sroa_c_count };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };
         break __tmpl: __r;
     });
-    {
-        let self: &mut Counter = &mut &mut c;
-        self.count = 0;
-    };
+    __sroa_c_count = 0;
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(23), used: 0 };
         __r.String::append("After: ");
@@ -54,7 +51,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: c.count };
+            let self: Box<i32> = Box<i32> { value: __sroa_c_count };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };

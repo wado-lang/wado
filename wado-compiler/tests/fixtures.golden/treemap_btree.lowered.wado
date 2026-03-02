@@ -598,32 +598,29 @@ fn "TreeMap<String,i32>::insert_non_full"(self: &mut TreeMap<String,i32>, node: 
 fn "TreeMap<String,i32>::sort_node_entries"(self: &TreeMap<String,i32>, node: &mut BTreeNode<String,i32>) {
     __for_5: {
         let mut i: i32 = 0;
+        let _licm_keys: Array<String> = node.keys;
+        let _licm_values: Array<i32> = node.values;
+        let _licm_deleted: Array<bool> = node.deleted;
         loop {
-            if !(i < __inline_Array_String___len_0: {
-                let self: &Array<String> = &node.keys;
-                break __inline_Array_String___len_0: self.used;
-            }) {
+            if !(i < _licm_keys.used) {
                 break __for_5;
             }
             __for_6: {
                 let mut j: i32 = (i + 1);
                 loop {
-                    if !(j < __inline_Array_String___len_1: {
-                        let self: &Array<String> = &node.keys;
-                        break __inline_Array_String___len_1: self.used;
-                    }) {
+                    if !(j < _licm_keys.used) {
                         break __for_6;
                     }
-                    if (node.keys."Array<String>^IndexValue::index_value"(i)."String^Ord::cmp"(&node.keys."Array<String>^IndexValue::index_value"(j)) == Ordering::Greater) {
-                        let temp_k: String = node.keys."Array<String>^IndexValue::index_value"(i);
-                        node.keys."Array<String>^IndexAssign::index_assign"(i, node.keys."Array<String>^IndexValue::index_value"(j));
-                        node.keys."Array<String>^IndexAssign::index_assign"(j, temp_k);
-                        let temp_v: i32 = node.values."Array<i32>^IndexValue::index_value"(i);
-                        node.values."Array<i32>^IndexAssign::index_assign"(i, node.values."Array<i32>^IndexValue::index_value"(j));
-                        node.values."Array<i32>^IndexAssign::index_assign"(j, temp_v);
-                        let temp_d: bool = node.deleted."Array<bool>^IndexValue::index_value"(i);
-                        node.deleted."Array<bool>^IndexAssign::index_assign"(i, node.deleted."Array<bool>^IndexValue::index_value"(j));
-                        node.deleted."Array<bool>^IndexAssign::index_assign"(j, temp_d);
+                    if (_licm_keys."Array<String>^IndexValue::index_value"(i)."String^Ord::cmp"(&_licm_keys."Array<String>^IndexValue::index_value"(j)) == Ordering::Greater) {
+                        let temp_k: String = _licm_keys."Array<String>^IndexValue::index_value"(i);
+                        _licm_keys."Array<String>^IndexAssign::index_assign"(i, _licm_keys."Array<String>^IndexValue::index_value"(j));
+                        _licm_keys."Array<String>^IndexAssign::index_assign"(j, temp_k);
+                        let temp_v: i32 = _licm_values."Array<i32>^IndexValue::index_value"(i);
+                        _licm_values."Array<i32>^IndexAssign::index_assign"(i, _licm_values."Array<i32>^IndexValue::index_value"(j));
+                        _licm_values."Array<i32>^IndexAssign::index_assign"(j, temp_v);
+                        let temp_d: bool = _licm_deleted."Array<bool>^IndexValue::index_value"(i);
+                        _licm_deleted."Array<bool>^IndexAssign::index_assign"(i, _licm_deleted."Array<bool>^IndexValue::index_value"(j));
+                        _licm_deleted."Array<bool>^IndexAssign::index_assign"(j, temp_d);
                     }
                     j = (j + 1);
                 }
@@ -657,16 +654,19 @@ fn "TreeMap<String,i32>::split_child"(self: &mut TreeMap<String,i32>, parent: &m
     __for_3: {
         let mut i: i32 = (mid + 1);
         let _licm_keys: Array<String> = full_child.keys;
+        let _licm_keys: Array<String> = new_sibling.keys;
+        let _licm_values: Array<i32> = new_sibling.values;
         let _licm_values: Array<i32> = full_child.values;
+        let _licm_deleted: Array<bool> = new_sibling.deleted;
         let _licm_deleted: Array<bool> = full_child.deleted;
         let _licm_used: i32 = _licm_keys.used;
         loop {
             if !(i < _licm_used) {
                 break __for_3;
             }
-            new_sibling.keys."Array<String>::append"(_licm_keys."Array<String>^IndexValue::index_value"(i));
-            new_sibling.values."Array<i32>::append"(_licm_values."Array<i32>^IndexValue::index_value"(i));
-            new_sibling.deleted."Array<bool>::append"(_licm_deleted."Array<bool>^IndexValue::index_value"(i));
+            _licm_keys."Array<String>::append"(_licm_keys."Array<String>^IndexValue::index_value"(i));
+            _licm_values."Array<i32>::append"(_licm_values."Array<i32>^IndexValue::index_value"(i));
+            _licm_deleted."Array<bool>::append"(_licm_deleted."Array<bool>^IndexValue::index_value"(i));
             i = (i + 1);
         }
     }
@@ -674,12 +674,13 @@ fn "TreeMap<String,i32>::split_child"(self: &mut TreeMap<String,i32>, parent: &m
         __for_4: {
             let mut i: i32 = (mid + 1);
             let _licm_children: Array<&mut BTreeNode<String,i32>> = full_child.children;
+            let _licm_children: Array<&mut BTreeNode<String,i32>> = new_sibling.children;
             let _licm_used: i32 = _licm_children.used;
             loop {
                 if !(i < _licm_used) {
                     break __for_4;
                 }
-                new_sibling.children."Array<BTreeNode<String,i32>>::append"(_licm_children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(i));
+                _licm_children."Array<BTreeNode<String,i32>>::append"(_licm_children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(i));
                 i = (i + 1);
             }
         }

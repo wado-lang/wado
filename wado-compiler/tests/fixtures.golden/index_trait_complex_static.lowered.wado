@@ -31,8 +31,8 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let mut c: Container = Container { item: Value { n: 10 } };
-    let v: Value = *&c.item;
+    let mut __sroa_c_item: Value = Value { n: 10 };
+    let v: Value = *&__sroa_c_item;
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(25), used: 0 };
         __r.String::append("Initial: ");
@@ -47,13 +47,7 @@ export fn run() with Stdout {
         };
         break __tmpl: __r;
     });
-    {
-        let self: &mut Value = &mut __inline_Container_IndexMut__index_mut_8: {
-            let self: &mut Container = &mut &mut c;
-            break __inline_Container_IndexMut__index_mut_8: &mut self.item;
-        };
-        self.n = (self.n * 2);
-    };
+    __sroa_c_item.n = (__sroa_c_item.n * 2);
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(30), used: 0 };
         __r.String::append("After double: ");
@@ -62,16 +56,15 @@ export fn run() with Stdout {
             break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: c.item.n };
+            let self: Box<i32> = Box<i32> { value: __sroa_c_item.n };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };
         break __tmpl: __r;
     });
     {
-        let self: &mut Container = &mut &mut c;
         let value: Value = Value { n: 100 };
-        self.item = value;
+        __sroa_c_item = value;
     };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(30), used: 0 };
@@ -81,7 +74,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: c.item.n };
+            let self: Box<i32> = Box<i32> { value: __sroa_c_item.n };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };

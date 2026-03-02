@@ -175,15 +175,13 @@ fn "MiniDict<String,String>::get"(self: &MiniDict<String,String>, key: String) -
 fn "MiniDict<String,String>::set"(self: &mut MiniDict<String,String>, key: String, value: String) {
     __for_0: {
         let mut i: i32 = 0;
+        let _licm_entries: Array<[String, String]> = self.entries;
         loop {
-            if !(i < __inline_Array_Tuple_String_String____len_0: {
-                let self: &Array<[String, String]> = &self.entries;
-                break __inline_Array_Tuple_String_String____len_0: self.used;
-            }) {
+            if !(i < _licm_entries.used) {
                 break __for_0;
             }
-            if self.entries."Array<Tuple<String,String>>^IndexValue::index_value"(i).0."String^Eq::eq"(&key) {
-                self.entries."Array<Tuple<String,String>>^IndexAssign::index_assign"(i, [key, value]);
+            if _licm_entries."Array<Tuple<String,String>>^IndexValue::index_value"(i).0."String^Eq::eq"(&key) {
+                _licm_entries."Array<Tuple<String,String>>^IndexAssign::index_assign"(i, [key, value]);
                 return;
             }
             i = (i + 1);

@@ -40,8 +40,8 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let mut b: Box<Point> = Box<Point> { value: Point { x: 10, y: 20 } };
-    let p: Point = b.value;
+    let mut __sroa_b_value: Point = Point { x: 10, y: 20 };
+    let p: Point = __sroa_b_value;
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(43), used: 0 };
         __r.String::append("point: (");
@@ -68,9 +68,8 @@ export fn run() with Stdout {
         break __tmpl: __r;
     });
     {
-        let self: &mut Box<Point> = &mut &mut b;
         let v: Point = Point { x: 99, y: 99 };
-        self.value = v;
+        __sroa_b_value = v;
     };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(46), used: 0 };
@@ -105,7 +104,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_18: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: b.value.x };
+            let self: Box<i32> = Box<i32> { value: __sroa_b_value.x };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };
@@ -115,7 +114,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: b.value.y };
+            let self: Box<i32> = Box<i32> { value: __sroa_b_value.y };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };

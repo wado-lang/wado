@@ -1218,15 +1218,22 @@ fn try_inline_method_call_expr(
     param_to_local.insert(first_param.local_index, self_local_index);
     let (self_type_id, self_value) =
         if matches!(type_table.get(first_param.type_id), ResolvedType::MutRef(_)) {
-            let ref_expr = TirExpr {
-                kind: TirExprKind::Unary {
-                    op: TirUnaryOp::MutRef,
-                    expr: receiver.clone(),
-                },
-                type_id: first_param.type_id,
-                span: expr.span,
-            };
-            (first_param.type_id, ref_expr)
+            if matches!(type_table.get(receiver.type_id), ResolvedType::MutRef(_)) {
+                // Receiver is already &mut T — pass through without double-wrapping.
+                // This happens when an &mut self method is called on a local whose
+                // type is already &mut T (e.g. after inlining a sequence literal builder).
+                (receiver.type_id, (**receiver).clone())
+            } else {
+                let ref_expr = TirExpr {
+                    kind: TirExprKind::Unary {
+                        op: TirUnaryOp::MutRef,
+                        expr: receiver.clone(),
+                    },
+                    type_id: first_param.type_id,
+                    span: expr.span,
+                };
+                (first_param.type_id, ref_expr)
+            }
         } else {
             (receiver.type_id, (**receiver).clone())
         };

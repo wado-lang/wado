@@ -27,7 +27,7 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let mut c: Counter = Counter { value: 0 };
+    let mut __sroa_c_value: i32 = 0;
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(21), used: 0 };
         __r.String::append("get: ");
@@ -36,24 +36,15 @@ export fn run() with Stdout {
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: c.value };
+            let self: Box<i32> = Box<i32> { value: __sroa_c_value };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };
         break __tmpl: __r;
     });
-    {
-        let self: &mut Counter = &mut &mut c;
-        self.value = (self.value + 1);
-    };
-    {
-        let self: &mut Counter = &mut &mut c;
-        self.value = (self.value + 1);
-    };
-    {
-        let self: &mut Counter = &mut &mut c;
-        self.value = (self.value + 1);
-    };
+    __sroa_c_value = (__sroa_c_value + 1);
+    __sroa_c_value = (__sroa_c_value + 1);
+    __sroa_c_value = (__sroa_c_value + 1);
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(33), used: 0 };
         __r.String::append("after increment: ");
@@ -62,7 +53,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         {
-            let self: Box<i32> = Box<i32> { value: c.value };
+            let self: Box<i32> = Box<i32> { value: __sroa_c_value };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
         };
