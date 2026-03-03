@@ -124,6 +124,7 @@ pub struct Range<T> {
 pub struct RangeInclusive<T> {
     pub start: T,
     pub end: T,
+    exhausted: bool,  // private: tracks whether the iterator has yielded `end`
 }
 ```
 
@@ -217,34 +218,28 @@ impl Iterator for RangeInclusive<T: Step + Ord> {
     type Item = T;
 
     fn next(&mut self) -> Option<T> {
+        if self.exhausted {
+            return null;
+        }
         if self.start > self.end {
             return null;
         }
         let current = self.start;
         if self.start == self.end {
-            // Last element — advance start past end to mark as exhausted
-            if let Some(next) = current.next_step() {
-                self.start = next;
-            } else {
-                // At T::MAX — use a sentinel state
-                // We set start > end by retreating end if possible,
-                // or by relying on the start > end check above next time
-                // Implementation detail: compiler can use an exhausted flag internally
-                self.start = self.end;
-                // Mark that we already yielded this element
-                // (handled via an internal exhausted flag in the compiler)
-            }
+            self.exhausted = true;
             return Option::<T>::Some(current);
         }
         if let Some(next) = current.next_step() {
             self.start = next;
+        } else {
+            self.exhausted = true;
         }
         return Option::<T>::Some(current);
     }
 }
 ```
 
-**`RangeInclusive` and T::MAX**: Following Rust's lead, `RangeInclusive` must correctly handle the case where `end == T::MAX` (e.g., `0u8..=255`). The compiler adds an internal `exhausted: bool` flag to `RangeInclusive` that is not visible in the struct definition but tracked in codegen. This is a pragmatic compromise — exposing the flag would leak implementation details; hiding it keeps the API clean.
+**`RangeInclusive` and T::MAX**: `RangeInclusive` must correctly handle the case where `end == T::MAX` (e.g., `0u8..=255`). The private `exhausted` field solves this: when `start == end`, the last element is yielded and `exhausted` is set to `true`. On the next call, `next()` returns `null` immediately — no overflow. This is the same approach used by Rust (`RangeInclusive`) and Swift (`ClosedRange.Iterator`). The `exhausted` field is private so it does not appear in the constructor syntax — the `..=` operator always initializes it to `false`.
 
 #### IntoIterator
 
@@ -479,7 +474,7 @@ Range patterns in `match` arms (e.g., `0..=9 => "digit"`) require parser and pat
 (type $RangeInclusive_i32 (struct (field $start i32) (field $end i32) (field $exhausted i32)))
 ```
 
-For iteration, the `exhausted` flag is only present in `RangeInclusive` and only when it is used as an iterator (monomorphization can elide it when only `contains` is used).
+The `exhausted` field is always present in `RangeInclusive` as a private struct field. The `..=` operator initializes it to `0` (false).
 
 ## Implementation Strategy
 
@@ -531,8 +526,8 @@ For iteration, the `exhausted` flag is only present in `RangeInclusive` and only
    - **Mitigation**: Can be added later to the `Iterator` trait
 4. **No range patterns in match**: Requires separate design work
    - **Mitigation**: Addressed in a future WEP
-5. **`RangeInclusive` hidden `exhausted` flag**: Implementation detail leaks into codegen
-   - **Mitigation**: Not visible to users; only affects compiler internals
+5. **`RangeInclusive` has extra `exhausted` field**: Adds one i32 of overhead per instance
+   - **Mitigation**: Private field, not visible in constructor syntax; same approach as Rust and Swift
 6. **New `Step` trait**: Adds one more trait to the prelude
    - **Mitigation**: Small, focused trait with obvious purpose
 
