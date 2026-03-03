@@ -1561,12 +1561,7 @@ fn rewrite_variant_struct_new_br_to_return(
                     );
                 }
                 WirInstr::Seq(items) => {
-                    rewrite_variant_struct_new_br_to_return(
-                        items,
-                        target_depth,
-                        vi,
-                        result_types,
-                    );
+                    rewrite_variant_struct_new_br_to_return(items, target_depth, vi, result_types);
                 }
                 _ => {}
             }

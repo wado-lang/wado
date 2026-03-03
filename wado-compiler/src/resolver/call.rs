@@ -5,7 +5,9 @@ use indexmap::IndexMap;
 use crate::ast::{self, Expr, Item, Type};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
-use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
+use crate::tir::{
+    FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable,
+};
 use crate::token::Span;
 
 use super::Resolver;
@@ -1016,10 +1018,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         call: &ast::CallExpr,
         _ctx: &mut FunctionContext,
     ) -> TirExpr {
-        let bounds = self
-            .current_type_param_bounds
-            .get(type_param_name)
-            .cloned();
+        let bounds = self.current_type_param_bounds.get(type_param_name).cloned();
 
         if let Some(bounds) = bounds
             && let Some((found_trait, method_info_result)) =

@@ -2727,8 +2727,7 @@ impl Monomorphizer {
                                 .type_args
                                 .iter()
                                 .map(|&tid| {
-                                    let sub =
-                                        self.substitute_type(tid, substitution, type_table);
+                                    let sub = self.substitute_type(tid, substitution, type_table);
                                     type_table.mangle_type_name(sub)
                                 })
                                 .collect();
@@ -2765,20 +2764,21 @@ impl Monomorphizer {
                                 );
                                 let generic_name = base_info.to_mangled_name();
                                 // Substitute method type arg TypeIds
-                                let method_type_arg_tids: Vec<TypeId> = if let FunctionRef::External {
-                                    monomorph_info: Some(mi),
-                                    ..
-                                } = &*static_func
-                                {
-                                    mi.type_args
-                                        .iter()
-                                        .map(|&tid| {
-                                            self.substitute_type(tid, substitution, type_table)
-                                        })
-                                        .collect()
-                                } else {
-                                    Vec::new()
-                                };
+                                let method_type_arg_tids: Vec<TypeId> =
+                                    if let FunctionRef::External {
+                                        monomorph_info: Some(mi),
+                                        ..
+                                    } = &*static_func
+                                    {
+                                        mi.type_args
+                                            .iter()
+                                            .map(|&tid| {
+                                                self.substitute_type(tid, substitution, type_table)
+                                            })
+                                            .collect()
+                                    } else {
+                                        Vec::new()
+                                    };
                                 Some(MonomorphInfo {
                                     generic_name,
                                     type_args: method_type_arg_tids,
