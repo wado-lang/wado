@@ -54,13 +54,7 @@ fn "JsonSerializer^Serializer::serialize_unit_variant"(self: &mut JsonSerializer
 }
 
 fn "JsonSerializer^Serializer::begin_variant"(self: &mut JsonSerializer, type_name: &String, variant_name: &String, disc: i32) -> Result<JsonVariantSerializer, SerializeError> {
-    self.buf.String::append(__tmpl: {
-        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(20), used: 0 };
-        __r.String::append("{\"");
-        __r.String::append(*variant_name);
-        __r.String::append("\":");
-        break __tmpl: __r;
-    });
+    self.buf.String::append(String::concat(String::concat(String::concat("{\"", *variant_name), "\""), ":"));
     return Result<JsonVariantSerializer, SerializeError>::Ok(JsonVariantSerializer { ser: *self });
 }
 
