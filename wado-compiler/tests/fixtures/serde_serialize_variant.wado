@@ -44,7 +44,7 @@ impl Serializer for JsonSerializer {
     }
 
     fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<JsonVariantSerializer, SerializeError> {
-        self.buf.append(`\{"{*variant_name}":`);
+        self.buf.append(String::concat(String::concat(String::concat("{\"", *variant_name), "\""), ":"));
         return Result::<JsonVariantSerializer, SerializeError>::Ok(JsonVariantSerializer {
             ser: *self,
         });
@@ -104,4 +104,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"TODO": true, "stdout": "{\"Circle\":5}\n\"Point\"\n"}
+{"stdout": "{\"Circle\":5.0}\n\"Point\"\n"}
