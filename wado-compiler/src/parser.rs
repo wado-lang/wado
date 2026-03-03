@@ -325,11 +325,11 @@ impl Parser {
             TokenKind::Enum => self.parse_enum_decl(is_pub, attrs).map(Item::Enum),
             TokenKind::Variant => self.parse_variant_decl(is_pub, attrs).map(Item::Variant),
             TokenKind::Flags => self.parse_flags_decl(is_pub, attrs).map(Item::Flags),
-            TokenKind::Type => self.parse_newtype(is_pub).map(Item::Type),
+            TokenKind::Type => self.parse_newtype(is_pub, attrs).map(Item::Type),
             TokenKind::Impl => self.parse_impl_block().map(Item::Impl),
             TokenKind::Trait => self.parse_trait_decl(is_pub).map(Item::Trait),
             TokenKind::Resource => self.parse_resource_decl(is_pub, attrs).map(Item::Resource),
-            TokenKind::World => self.parse_world_decl(attrs).map(Item::World),
+            TokenKind::World => self.parse_world_decl(is_pub, attrs).map(Item::World),
             TokenKind::Global => self.parse_global_decl(is_pub, attrs).map(Item::Global),
             _ => Err(ParseError {
                 message: format!("expected item, found {:?}", self.peek_kind()),
@@ -939,18 +939,20 @@ impl Parser {
         let expr = self.parse_expr()?;
 
         // Semicolon is optional if followed by `}` (end of block)
-        if self.check(&TokenKind::Semicolon) {
-            self.advance();
+        let end_span = if self.check(&TokenKind::Semicolon) {
+            self.advance().span
         } else if !self.check(&TokenKind::RBrace) {
             return Err(ParseError {
                 message: format!("expected `;` or `}}`, found {:?}", self.peek_kind()),
                 span: self.peek().span,
             });
-        }
+        } else {
+            expr.span()
+        };
 
         Ok(Stmt::Expr(ExprStmt {
             expr,
-            span: start_span,
+            span: start_span.merge(&end_span),
         }))
     }
 
@@ -991,18 +993,22 @@ impl Parser {
             None
         };
 
-        self.expect(&TokenKind::Semicolon)?;
+        let semi_span = self.expect(&TokenKind::Semicolon)?.span;
 
         Ok(Stmt::Assert(AssertStmt {
             condition,
             message,
-            span: start_span,
+            span: start_span.merge(&semi_span),
         }))
     }
 
     fn parse_let_stmt(&mut self) -> ParseResult<Stmt> {
-        let stmt = self.parse_let_stmt_inner()?;
-        self.expect(&TokenKind::Semicolon)?;
+        let mut stmt = self.parse_let_stmt_inner()?;
+        let semi_span = self.expect(&TokenKind::Semicolon)?.span;
+        // Extend let statement span to include the trailing semicolon
+        if let Stmt::Let(ref mut l) = stmt {
+            l.span = l.span.merge(&semi_span);
+        }
         Ok(stmt)
     }
 
@@ -1060,11 +1066,11 @@ impl Parser {
             Some(self.parse_expr()?)
         };
 
-        self.expect(&TokenKind::Semicolon)?;
+        let semi_span = self.expect(&TokenKind::Semicolon)?.span;
 
         Ok(Stmt::Return(ReturnStmt {
             value,
-            span: start_span,
+            span: start_span.merge(&semi_span),
         }))
     }
 
@@ -1077,11 +1083,11 @@ impl Parser {
         self.expect(&TokenKind::Return)?;
 
         let value = self.parse_expr()?;
-        self.expect(&TokenKind::Semicolon)?;
+        let semi_span = self.expect(&TokenKind::Semicolon)?.span;
 
         Ok(Stmt::TaskReturn(TaskReturnStmt {
             value,
-            span: start_span,
+            span: start_span.merge(&semi_span),
         }))
     }
 
@@ -1419,12 +1425,12 @@ impl Parser {
             (None, None)
         };
 
-        self.expect(&TokenKind::Semicolon)?;
+        let semi_span = self.expect(&TokenKind::Semicolon)?.span;
 
         Ok(Stmt::Break(BreakStmt {
             label,
             value,
-            span: start_span,
+            span: start_span.merge(&semi_span),
         }))
     }
 
@@ -2724,10 +2730,10 @@ impl Parser {
 
         // Handle empty tuple: []
         if self.check(&TokenKind::RBracket) {
-            self.advance();
+            let end_span = self.advance().span;
             return Ok(Expr::TupleLiteral(Box::new(TupleLiteralExpr {
                 elements,
-                span: start_span,
+                span: start_span.merge(&end_span),
             })));
         }
 
@@ -2744,11 +2750,12 @@ impl Parser {
             elements.push(self.parse_expr()?);
         }
 
-        self.expect(&TokenKind::RBracket)?;
+        let end_token = self.expect(&TokenKind::RBracket)?;
+        let end_span = end_token.span;
 
         Ok(Expr::TupleLiteral(Box::new(TupleLiteralExpr {
             elements,
-            span: start_span,
+            span: start_span.merge(&end_span),
         })))
     }
 
@@ -3393,7 +3400,7 @@ impl Parser {
         })
     }
 
-    fn parse_newtype(&mut self, is_pub: bool) -> ParseResult<Newtype> {
+    fn parse_newtype(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<Newtype> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Type)?;
         let name = self.consume_ident()?;
@@ -3405,6 +3412,7 @@ impl Parser {
             name,
             is_pub,
             ty,
+            attrs,
             span: start_span,
         })
     }
@@ -3646,7 +3654,7 @@ impl Parser {
     ///     export async fn run() -> Result<(), ()>;
     /// }
     /// ```
-    fn parse_world_decl(&mut self, attrs: Vec<Attribute>) -> ParseResult<WorldDecl> {
+    fn parse_world_decl(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<WorldDecl> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::World)?;
         let name = self.consume_ident()?;
@@ -3679,6 +3687,7 @@ impl Parser {
 
         Ok(WorldDecl {
             name,
+            is_pub,
             attrs,
             imports,
             exports,

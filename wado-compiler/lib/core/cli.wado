@@ -14,11 +14,11 @@
 // 5. Wait for consumer to complete
 // This ordering must be followed in each output function.
 
-use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
+use { Stdout, Stderr, Environment, Exit } from "wasi:cli";
 use { wait_for_subtask } from "core:internal";
 
 // Re-export commonly used effects for convenience
-pub use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
+pub use { Stdout, Stderr, Environment, Exit } from "wasi:cli";
 /// Writes a string to a stream tx handle.
 /// Called AFTER the consumer (write_via_stream) has been started.
 /// If add_newline is true, appends '\n' after the message.
@@ -27,7 +27,7 @@ pub fn write_to_stream(tx: i32, message: String, add_newline: bool) {
     let msg_bytes = message.internal_raw_bytes();
     let alloc_size = if add_newline { len + 1 } else { len };
     let ptr = builtin::realloc(0, 0, 1, alloc_size);
-    for (let mut i = 0; i < len; i = i + 1) {
+    for let mut i = 0; i < len; i = i + 1 {
         let byte = builtin::array_get_u8(msg_bytes, i);
         builtin::i32_store8(ptr + i, byte);
     }
@@ -108,4 +108,3 @@ pub fn exit_error() -> ! with Exit {
 pub fn exit(code: u8) -> ! with Exit {
     Exit::exit_with_code(code);
 }
-

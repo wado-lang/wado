@@ -195,6 +195,38 @@ fn add(a: i32, b: i32) -> i32 {
     return a + b;
 }
 
+// Multiline expression statement followed by comment (no extra blank lines)
+fn multiline_expr_stmt(buf: String, upper: bool) {
+    buf.append(if upper { "E" } else { "e" });
+    // next statement immediately follows
+    buf.append("0");
+}
+
+// Multiline return statement followed by comment (no extra blank lines)
+fn multiline_return_stmt(x: i32) -> i32 {
+    return match x { 0 => 100, _ => 200 };
+    // comment after return (dead code, but preserved)
+}
+
+// Multiline assert statement followed by comment
+fn multiline_assert_stmt(items: Array<i32>) {
+    assert items.len() > 0;
+    // check passed
+    let _ = items;
+}
+
+// Multiline task return (conceptual test for span)
+// Note: task return requires export async fn context which we cannot have here,
+// so we just test that break spans are correct.
+
+// Break with comment immediately after (no extra blank lines)
+fn break_with_comment() {
+    loop {
+        break;
+        // This comment follows break
+    }
+}
+
 // Too many blank lines after closures
 fn with_closures() {
     let inc = |x: i32| x + 1;

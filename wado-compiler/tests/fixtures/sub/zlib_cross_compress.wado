@@ -24,11 +24,22 @@
 use { print, println, Stdout } from "core:cli";
 use { Stdin } from "wasi:cli";
 use {
-    compress2, deflate_raw2, gzip_compress2, zlib_compress_stored,
-    compress_with_strategy, compress_bound, zlib_version,
-    adler32, adler32_init, adler32_combine,
-    crc32, crc32_init, crc32_combine,
-    DeflateStream, RAW_FORMAT, GZIP_FORMAT
+    compress2,
+    deflate_raw2,
+    gzip_compress2,
+    zlib_compress_stored,
+    compress_with_strategy,
+    compress_bound,
+    zlib_version,
+    adler32,
+    adler32_init,
+    adler32_combine,
+    crc32,
+    crc32_init,
+    crc32_combine,
+    DeflateStream,
+    RAW_FORMAT,
+    GZIP_FORMAT,
 } from "core:zlib";
 
 fn read_all_stdin() -> Array<u8> with Stdin {
@@ -49,17 +60,16 @@ fn read_all_stdin() -> Array<u8> with Stdin {
 
 fn print_bytes(data: &Array<u8>) with Stdout {
     for let mut i = 0; i < data.len(); i += 1 {
-        if i > 0 { print(" "); }
+        if i > 0 {
+            print(" ");
+        }
         print(`{data[i] as i32}`);
     }
     println("");
 }
 
 fn read_be_u32(buf: &Array<u8>, offset: i32) -> u32 {
-    return (buf[offset] as u32 << 24)
-         | (buf[offset + 1] as u32 << 16)
-         | (buf[offset + 2] as u32 << 8)
-         | (buf[offset + 3] as u32);
+    return buf[offset] as u32 << 24 | buf[offset + 1] as u32 << 16 | buf[offset + 2] as u32 << 8 | buf[offset + 3] as u32;
 }
 
 fn read_be_i32(buf: &Array<u8>, offset: i32) -> i32 {

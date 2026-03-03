@@ -52,10 +52,14 @@ impl TreeMap<K, V> {
     }
 
     /// Returns the number of key-value pairs in the map.
-    pub fn len(&self) -> i32 { return self.size; }
+    pub fn len(&self) -> i32 {
+        return self.size;
+    }
 
     /// Returns true if the map contains no elements.
-    pub fn is_empty(&self) -> bool { return self.size == 0; }
+    pub fn is_empty(&self) -> bool {
+        return self.size == 0;
+    }
 
     // Skew: right rotation to fix left horizontal link
     fn skew(&mut self, node: Option<&mut TreeMapNode<K>>) -> Option<&mut TreeMapNode<K>> {
@@ -127,12 +131,7 @@ impl TreeMap<K, V> {
         return null;
     }
 
-    fn insert_node(
-        &mut self,
-        node: Option<&mut TreeMapNode<K>>,
-        key: K,
-        index: i32,
-    ) -> Option<&mut TreeMapNode<K>> {
+    fn insert_node(&mut self, node: Option<&mut TreeMapNode<K>>, key: K, index: i32) -> Option<&mut TreeMapNode<K>> {
         if let Some(n) = node {
             if key == n.key {
                 // Key already exists, just update the index
@@ -222,7 +221,9 @@ impl TreeMap<K, V> {
 
     // Rebuild the tree and entries array, removing deleted entries
     fn compact(&mut self) {
-        if self.deleted_count == 0 { return; }
+        if self.deleted_count == 0 {
+            return;
+        }
 
         // Collect non-deleted entries in insertion order
         let mut new_entries: Array<TreeMapEntry<K, V>> = [];
@@ -294,6 +295,7 @@ impl TreeMap<K, V> {
 // IndexAssign for map[key] = value
 impl IndexAssign<K> for TreeMap<K, V> {
     type Input = V;
+
     fn index_assign(&mut self, key: K, value: Self::Input) {
         self.insert(key, value);
     }
@@ -302,6 +304,7 @@ impl IndexAssign<K> for TreeMap<K, V> {
 // IndexValue for map[key] -> V (panics if key not found)
 impl IndexValue<K> for TreeMap<K, V> {
     type Output = V;
+
     fn index_value(&self, key: K) -> Self::Output {
         let index = self.find_index(key);
         if index < 0 {
@@ -412,7 +415,7 @@ impl TreeSet<T: Ord> {
     }
 }
 
-impl IntoIterator for TreeSet<T: Ord> {
+impl<T: Ord> IntoIterator for TreeSet<T> {
     type Item = T;
     type Iter = TreeSetIter<T>;
 
@@ -426,7 +429,7 @@ impl IntoIterator for TreeSet<T: Ord> {
 
 // SequenceLiteralBuilder for [e0, e1, ...] as TreeSet<T>
 // The blanket impl in core:prelude automatically provides SequenceLiteral for TreeSet<T>.
-impl SequenceLiteralBuilder for TreeSet<T: Ord> {
+impl<T: Ord> SequenceLiteralBuilder for TreeSet<T> {
     type Element = T;
     type Output = TreeSet<T>;
 

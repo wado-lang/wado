@@ -1,3 +1,4 @@
+#![no_prelude]
 // Format Infrastructure
 //
 // This module defines the Formatter and Alignment types that
@@ -5,9 +6,8 @@
 //
 // See WEP: Format Traits (wep-2026-02-01-format-traits.md)
 
-#![no_prelude]
 
-use {Display, Inspect} from "core:prelude/traits.wado";
+use { Display, Inspect } from "core:prelude/traits.wado";
 /// Text alignment for padding.
 pub enum Alignment {
     /// Left-aligned: `{x:<5}` -> "42   "
@@ -188,8 +188,12 @@ impl Formatter {
 
         if self.width <= 0 || content_len >= self.width {
             // No padding — write sign/prefix, reserve digit area
-            if sign_len > 0 { self.buf.append(sign); }
-            if prefix_len > 0 { self.buf.append(prefix); }
+            if sign_len > 0 {
+                self.buf.append(sign);
+            }
+            if prefix_len > 0 {
+                self.buf.append(prefix);
+            }
             return self.buf.internal_reserve_uninit(digit_count);
         }
 
@@ -197,8 +201,12 @@ impl Formatter {
 
         if self.zero_pad {
             // sign + prefix + zeros + [digits]
-            if sign_len > 0 { self.buf.append(sign); }
-            if prefix_len > 0 { self.buf.append(prefix); }
+            if sign_len > 0 {
+                self.buf.append(sign);
+            }
+            if prefix_len > 0 {
+                self.buf.append(prefix);
+            }
             self.write_char_n('0', padding);
             return self.buf.internal_reserve_uninit(digit_count);
         }
@@ -206,8 +214,12 @@ impl Formatter {
         let align = self.align;
         if align matches { Left } {
             // [sign prefix digits] [fill...]
-            if sign_len > 0 { self.buf.append(sign); }
-            if prefix_len > 0 { self.buf.append(prefix); }
+            if sign_len > 0 {
+                self.buf.append(sign);
+            }
+            if prefix_len > 0 {
+                self.buf.append(prefix);
+            }
             let offset = self.buf.internal_reserve_uninit(digit_count);
             self.write_char_n(self.fill, padding);
             return offset;
@@ -216,16 +228,24 @@ impl Formatter {
             let left_pad = padding / 2;
             let right_pad = padding - left_pad;
             self.write_char_n(self.fill, left_pad);
-            if sign_len > 0 { self.buf.append(sign); }
-            if prefix_len > 0 { self.buf.append(prefix); }
+            if sign_len > 0 {
+                self.buf.append(sign);
+            }
+            if prefix_len > 0 {
+                self.buf.append(prefix);
+            }
             let offset = self.buf.internal_reserve_uninit(digit_count);
             self.write_char_n(self.fill, right_pad);
             return offset;
         } else {
             // Right: [fill...] [sign prefix digits]
             self.write_char_n(self.fill, padding);
-            if sign_len > 0 { self.buf.append(sign); }
-            if prefix_len > 0 { self.buf.append(prefix); }
+            if sign_len > 0 {
+                self.buf.append(sign);
+            }
+            if prefix_len > 0 {
+                self.buf.append(prefix);
+            }
             return self.buf.internal_reserve_uninit(digit_count);
         }
     }

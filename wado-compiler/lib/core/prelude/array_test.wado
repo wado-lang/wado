@@ -15,7 +15,7 @@ test "append triggers growth" {
     arr.append(20);
     arr.append(30);
     arr.append(40);
-    arr.append(50); // should trigger resize (capacity 4 -> 8)
+    arr.append(50);  // should trigger resize (capacity 4 -> 8)
     arr.append(60);
     assert arr.len() == 6;
     assert arr[3] == 40;
@@ -165,8 +165,12 @@ test "sort ascending" {
 test "sort_by ascending" {
     let mut a: Array<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
     a.sort_by(|x: &i32, y: &i32| {
-        if *x < *y { return Ordering::Less; }
-        if *x > *y { return Ordering::Greater; }
+        if *x < *y {
+            return Ordering::Less;
+        }
+        if *x > *y {
+            return Ordering::Greater;
+        }
         return Ordering::Equal;
     });
     assert a[0] == 1;
@@ -176,8 +180,12 @@ test "sort_by ascending" {
 test "sort_by descending" {
     let mut a: Array<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
     a.sort_by(|x: &i32, y: &i32| {
-        if *x > *y { return Ordering::Less; }
-        if *x < *y { return Ordering::Greater; }
+        if *x > *y {
+            return Ordering::Less;
+        }
+        if *x < *y {
+            return Ordering::Greater;
+        }
         return Ordering::Equal;
     });
     assert a[0] == 9;
@@ -202,8 +210,12 @@ test "sorted returns new array" {
 test "sorted_by returns new array" {
     let c: Array<i32> = [10, 30, 20, 50, 40];
     let d = c.sorted_by(|x: &i32, y: &i32| {
-        if *x < *y { return Ordering::Less; }
-        if *x > *y { return Ordering::Greater; }
+        if *x < *y {
+            return Ordering::Less;
+        }
+        if *x > *y {
+            return Ordering::Greater;
+        }
         return Ordering::Equal;
     });
     // original unchanged
@@ -240,10 +252,14 @@ test "sort stability" {
     // Sort by absolute value; -1 and 1 should keep relative order
     let mut g: Array<i32> = [3, -1, -3, 2, -2, 1];
     g.sort_by(|a: &i32, b: &i32| {
-        let va = if *a < 0 { 0 - *a; } else { *a; };
-        let vb = if *b < 0 { 0 - *b; } else { *b; };
-        if va < vb { return Ordering::Less; }
-        if va > vb { return Ordering::Greater; }
+        let va = if *a < 0 { 0 - *a } else { *a };
+        let vb = if *b < 0 { 0 - *b } else { *b };
+        if va < vb {
+            return Ordering::Less;
+        }
+        if va > vb {
+            return Ordering::Greater;
+        }
         return Ordering::Equal;
     });
     // -1 comes before 1 in original, so after stable sort by abs value:
