@@ -28,34 +28,31 @@ test "invalid JSON - empty string" {
 }
 
 test "invalid JSON - truncated string" {
-    let mut s = String::with_capacity(20);
-    s.append("{");
-    s.append("\"name\":\"Al");
-    assert deser_msg(s) == "unexpected end of input";
+    assert deser_msg(`\{"name":"Al`) == "unexpected end of input";
 }
 
 test "missing required field" {
-    assert deser_msg(`{{"name":"Alice","active":true}}`) == "required field missing";
+    assert deser_msg(`\{"name":"Alice","active":true\}`) == "required field missing";
 }
 
 test "type mismatch - string where number expected" {
-    assert deser_msg(`{{"name":"Alice","age":"thirty","active":true}}`) == "expected number";
+    assert deser_msg(`\{"name":"Alice","age":"thirty","active":true\}`) == "expected number";
 }
 
 test "type mismatch - number where string expected" {
-    assert deser_msg(`{{"name":42,"age":30,"active":true}}`) == "expected string";
+    assert deser_msg(`\{"name":42,"age":30,"active":true\}`) == "expected string";
 }
 
 test "type mismatch - number where bool expected" {
-    assert deser_msg(`{{"name":"Alice","age":30,"active":1}}`) == "expected bool";
+    assert deser_msg(`\{"name":"Alice","age":30,"active":1\}`) == "expected bool";
 }
 
 test "trailing data after valid JSON" {
-    assert deser_msg(`{{"name":"Alice","age":30,"active":true}}extra`) == "trailing data after value";
+    assert deser_msg(`\{"name":"Alice","age":30,"active":true\}extra`) == "trailing data after value";
 }
 
 test "valid input still works" {
-    let r = from_string::<User>(`{{"name":"Alice","age":30,"active":true}}`);
+    let r = from_string::<User>(`\{"name":"Alice","age":30,"active":true\}`);
     if let Ok(u) = r {
         assert u.name == "Alice";
         assert u.age == 30;

@@ -113,11 +113,9 @@ fn __test_2_invalid_json___truncated_string() {
         }
         __modules_initialized = true;
     };
-    let mut s: String = String { repr: "core::prelude/string.wado::array_new<u8>"(20), used: 0 };
-    s.String::append("{");
-    s.String::append("\"name\":\"Al");
     let __v0: String = __inline_deser_msg_0: {
-        let r: Result<User, DeserializeError> = "from_string<User>"(s);
+        let input: String = "{\"name\":\"Al";
+        let r: Result<User, DeserializeError> = "from_string<User>"(input);
         if __variant_test(r, case=1, name=Err) {
             let e: DeserializeError = __variant_payload(r, case=1);
             break __inline_deser_msg_0: e.message;
@@ -127,21 +125,21 @@ fn __test_2_invalid_json___truncated_string() {
     let __cond: bool = __v0."String^Eq::eq"(&"unexpected end of input");
     if !__cond {
         core::internal::panic(__tmpl: {
-            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(158), used: 0 };
+            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(184), used: 0 };
             __r.String::append("Assertion failed in ");
             __r.String::append("__test_2_invalid_json___truncated_string");
             __r.String::append(" at ");
             __r.String::append("wado-compiler/tests/fixtures/serde_json_deser_error.wado");
             __r.String::append(":");
-            let mut __f: Formatter = __inline_Formatter__new_4: {
+            let mut __f: Formatter = __inline_Formatter__new_3: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            let self: Box<i32> = Box<i32> { value: 34 };
+            let self: Box<i32> = Box<i32> { value: 31 };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
-            __r.String::append("\ncondition: deser_msg(s) == \"unexpected end of input\"\n");
-            __r.String::append("deser_msg(s): ");
+            __r.String::append("\ncondition: deser_msg(`\\{\"name\":\"Al`) == \"unexpected end of input\"\n");
+            __r.String::append("deser_msg(`\\{\"name\":\"Al`): ");
             __r.String::append(__v0);
             __r.String::append("\n");
             break __tmpl: __r;
@@ -178,11 +176,11 @@ fn __test_3_missing_required_field() {
                 let buf: &mut String = &mut __r;
                 break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            let self: Box<i32> = Box<i32> { value: 38 };
+            let self: Box<i32> = Box<i32> { value: 35 };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
-            __r.String::append("\ncondition: deser_msg(`{{\"name\":\"Alice\",\"active\":true}}`) == \"required field missing\"\n");
-            __r.String::append("deser_msg(`{{\"name\":\"Alice\",\"active\":true}}`): ");
+            __r.String::append("\ncondition: deser_msg(`\\{\"name\":\"Alice\",\"active\":true\\}`) == \"required field missing\"\n");
+            __r.String::append("deser_msg(`\\{\"name\":\"Alice\",\"active\":true\\}`): ");
             __r.String::append(__v0);
             __r.String::append("\n");
             break __tmpl: __r;
@@ -219,11 +217,11 @@ fn __test_4_type_mismatch___string_where_number_expected() {
                 let buf: &mut String = &mut __r;
                 break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            let self: Box<i32> = Box<i32> { value: 42 };
+            let self: Box<i32> = Box<i32> { value: 39 };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
-            __r.String::append("\ncondition: deser_msg(`{{\"name\":\"Alice\",\"age\":\"thirty\",\"active\":true}}`) == \"expected number\"\n");
-            __r.String::append("deser_msg(`{{\"name\":\"Alice\",\"age\":\"thirty\",\"active\":true}}`): ");
+            __r.String::append("\ncondition: deser_msg(`\\{\"name\":\"Alice\",\"age\":\"thirty\",\"active\":true\\}`) == \"expected number\"\n");
+            __r.String::append("deser_msg(`\\{\"name\":\"Alice\",\"age\":\"thirty\",\"active\":true\\}`): ");
             __r.String::append(__v0);
             __r.String::append("\n");
             break __tmpl: __r;
@@ -260,11 +258,11 @@ fn __test_5_type_mismatch___number_where_string_expected() {
                 let buf: &mut String = &mut __r;
                 break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            let self: Box<i32> = Box<i32> { value: 46 };
+            let self: Box<i32> = Box<i32> { value: 43 };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
-            __r.String::append("\ncondition: deser_msg(`{{\"name\":42,\"age\":30,\"active\":true}}`) == \"expected string\"\n");
-            __r.String::append("deser_msg(`{{\"name\":42,\"age\":30,\"active\":true}}`): ");
+            __r.String::append("\ncondition: deser_msg(`\\{\"name\":42,\"age\":30,\"active\":true\\}`) == \"expected string\"\n");
+            __r.String::append("deser_msg(`\\{\"name\":42,\"age\":30,\"active\":true\\}`): ");
             __r.String::append(__v0);
             __r.String::append("\n");
             break __tmpl: __r;
@@ -301,11 +299,11 @@ fn __test_6_type_mismatch___number_where_bool_expected() {
                 let buf: &mut String = &mut __r;
                 break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            let self: Box<i32> = Box<i32> { value: 50 };
+            let self: Box<i32> = Box<i32> { value: 47 };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
-            __r.String::append("\ncondition: deser_msg(`{{\"name\":\"Alice\",\"age\":30,\"active\":1}}`) == \"expected bool\"\n");
-            __r.String::append("deser_msg(`{{\"name\":\"Alice\",\"age\":30,\"active\":1}}`): ");
+            __r.String::append("\ncondition: deser_msg(`\\{\"name\":\"Alice\",\"age\":30,\"active\":1\\}`) == \"expected bool\"\n");
+            __r.String::append("deser_msg(`\\{\"name\":\"Alice\",\"age\":30,\"active\":1\\}`): ");
             __r.String::append(__v0);
             __r.String::append("\n");
             break __tmpl: __r;
@@ -342,11 +340,11 @@ fn __test_7_trailing_data_after_valid_json() {
                 let buf: &mut String = &mut __r;
                 break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            let self: Box<i32> = Box<i32> { value: 54 };
+            let self: Box<i32> = Box<i32> { value: 51 };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
-            __r.String::append("\ncondition: deser_msg(`{{\"name\":\"Alice\",\"age\":30,\"active\":true}}extra`) == \"trailing data after value\"\n");
-            __r.String::append("deser_msg(`{{\"name\":\"Alice\",\"age\":30,\"active\":true}}extra`): ");
+            __r.String::append("\ncondition: deser_msg(`\\{\"name\":\"Alice\",\"age\":30,\"active\":true\\}extra`) == \"trailing data after value\"\n");
+            __r.String::append("deser_msg(`\\{\"name\":\"Alice\",\"age\":30,\"active\":true\\}extra`): ");
             __r.String::append(__v0);
             __r.String::append("\n");
             break __tmpl: __r;
@@ -378,7 +376,7 @@ fn __test_8_valid_input_still_works() {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                let self: Box<i32> = Box<i32> { value: 60 };
+                let self: Box<i32> = Box<i32> { value: 57 };
                 let f: &mut Formatter = &mut __f;
                 self.i32::fmt_decimal(f);
                 __r.String::append("\ncondition: u.name == \"Alice\"\n");
@@ -402,7 +400,7 @@ fn __test_8_valid_input_still_works() {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                let self: Box<i32> = Box<i32> { value: 61 };
+                let self: Box<i32> = Box<i32> { value: 58 };
                 let f: &mut Formatter = &mut __f;
                 self.i32::fmt_decimal(f);
                 __r.String::append("\ncondition: u.age == 30\n");
@@ -432,7 +430,7 @@ fn __test_8_valid_input_still_works() {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                let self: Box<i32> = Box<i32> { value: 62 };
+                let self: Box<i32> = Box<i32> { value: 59 };
                 let f: &mut Formatter = &mut __f;
                 self.i32::fmt_decimal(f);
                 __r.String::append("\ncondition: u.active == true\n");
