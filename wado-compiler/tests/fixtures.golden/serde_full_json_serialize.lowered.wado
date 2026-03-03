@@ -57,94 +57,76 @@ pub struct "ArrayIter<String>" {
 }
 
 fn "JsonSerializer^Serializer::serialize_i32"(self: &mut JsonSerializer, v: i32) -> Result<(), SerializeError> {
-    {
-        let self: &mut JsonWriter = &mut self.w;
-        let s: &String = &__tmpl: {
-            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
-            let mut __f: Formatter = __inline_Formatter__new_2: {
-                let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-            };
-            {
-                let self: Box<i32> = Box<i32> { value: v };
-                let f: &mut Formatter = &mut __f;
-                self.i32::fmt_decimal(f);
-            };
-            break __tmpl: __r;
+    let self: &mut JsonWriter = &mut self.w;
+    let s: &String = &__tmpl: {
+        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
+        let mut __f: Formatter = __inline_Formatter__new_2: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        self.buf.String::append(*s);
+        let self: Box<i32> = Box<i32> { value: v };
+        let f: &mut Formatter = &mut __f;
+        self.i32::fmt_decimal(f);
+        break __tmpl: __r;
     };
+    self.buf.String::append(*s);
     return Result<(), SerializeError>::Ok(());
 }
 
 fn "JsonSerializer^Serializer::serialize_f64"(self: &mut JsonSerializer, v: f64) -> Result<(), SerializeError> {
-    {
-        let self: &mut JsonWriter = &mut self.w;
-        let s: &String = &__tmpl: {
-            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
-            let mut __f: Formatter = __inline_Formatter__new_2: {
-                let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-            };
-            {
-                let self: Box<f64> = Box<f64> { value: v };
-                let f: &mut Formatter = &mut __f;
-                self.f64::fmt_into(f);
-            };
-            break __tmpl: __r;
+    let self: &mut JsonWriter = &mut self.w;
+    let s: &String = &__tmpl: {
+        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
+        let mut __f: Formatter = __inline_Formatter__new_2: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        self.buf.String::append(*s);
+        let self: Box<f64> = Box<f64> { value: v };
+        let f: &mut Formatter = &mut __f;
+        self.f64::fmt_into(f);
+        break __tmpl: __r;
     };
+    self.buf.String::append(*s);
     return Result<(), SerializeError>::Ok(());
 }
 
 fn "JsonSerializer^Serializer::serialize_bool"(self: &mut JsonSerializer, v: bool) -> Result<(), SerializeError> {
     if v {
-        {
-            let self: &mut JsonWriter = &mut self.w;
-            let s: &String = &"true";
-            self.buf.String::append(*s);
-        };
+        let self: &mut JsonWriter = &mut self.w;
+        let s: &String = &"true";
+        self.buf.String::append(*s);
     } else {
-        {
-            let self: &mut JsonWriter = &mut self.w;
-            let s: &String = &"false";
-            self.buf.String::append(*s);
-        };
+        let self: &mut JsonWriter = &mut self.w;
+        let s: &String = &"false";
+        self.buf.String::append(*s);
     }
     return Result<(), SerializeError>::Ok(());
 }
 
 fn "JsonSerializer^Serializer::serialize_string"(self: &mut JsonSerializer, v: &String) -> Result<(), SerializeError> {
-    {
-        let self: &mut JsonWriter = &mut self.w;
-        let s: &String = &__tmpl: {
-            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(18), used: 0 };
-            __r.String::append("\"");
-            __r.String::append(*v);
-            __r.String::append("\"");
-            break __tmpl: __r;
-        };
-        self.buf.String::append(*s);
+    let self: &mut JsonWriter = &mut self.w;
+    let s: &String = &__tmpl: {
+        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(18), used: 0 };
+        __r.String::append("\"");
+        __r.String::append(*v);
+        __r.String::append("\"");
+        break __tmpl: __r;
     };
+    self.buf.String::append(*s);
     return Result<(), SerializeError>::Ok(());
 }
 
 fn "JsonSerializer^Serializer::begin_seq"(self: &mut JsonSerializer, len: i32) -> Result<JsonSeqSerializer, SerializeError> {
-    {
-        let self: &mut JsonWriter = &mut self.w;
-        let s: &String = &"[";
-        self.buf.String::append(*s);
-    };
+    let self: &mut JsonWriter = &mut self.w;
+    let s: &String = &"[";
+    self.buf.String::append(*s);
     return Result<JsonSeqSerializer, SerializeError>::Ok(JsonSeqSerializer { w: self.w, count: 0 });
 }
 
 fn "JsonSerializer^Serializer::begin_struct"(self: &mut JsonSerializer, name: &String, fields: i32) -> Result<JsonStructSerializer, SerializeError> {
-    {
-        let self: &mut JsonWriter = &mut self.w;
-        let s: &String = &"{";
-        self.buf.String::append(*s);
-    };
+    let self: &mut JsonWriter = &mut self.w;
+    let s: &String = &"{";
+    self.buf.String::append(*s);
     return Result<JsonStructSerializer, SerializeError>::Ok(JsonStructSerializer { w: self.w, count: 0 });
 }
 
@@ -178,16 +160,12 @@ export fn run() with Stdout {
     core::cli::println("to_json<Point>"(&point));
     let user: User = User { name: "Alice", age: 30, active: true, location: Option<Point>::Some(Point { x: 10.0, y: 20.0 }), tags: __seq_lit: {
         let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(2), used: 0 };
-        {
-            let self: &mut Array<String> = &mut __b;
-            let value: String = "admin";
-            self."Array<String>::append"(value);
-        };
-        {
-            let self: &mut Array<String> = &mut __b;
-            let value: String = "user";
-            self."Array<String>::append"(value);
-        };
+        let self: &mut Array<String> = &mut __b;
+        let value: String = "admin";
+        self."Array<String>::append"(value);
+        let self: &mut Array<String> = &mut __b;
+        let value: String = "user";
+        self."Array<String>::append"(value);
         break __seq_lit: *__b;
     } };
     core::cli::println("to_json<User>"(&user));
@@ -235,11 +213,9 @@ fn "User^Serialize::serialize<JsonSerializer>"(self: &User, s: &mut JsonSerializ
         st."JsonStructSerializer^SerializeStruct::field<Option<Point>>"("location", Box<Option<Point>> { value: self.location });
         st."JsonStructSerializer^SerializeStruct::field<Array<String>>"("tags", &self.tags);
         return __inline_JsonStructSerializer_SerializeStruct__end_0: {
-            {
-                let self: &mut JsonWriter = &mut st.w;
-                let s: &String = &"}";
-                self.buf.String::append(*s);
-            };
+            let self: &mut JsonWriter = &mut st.w;
+            let s: &String = &"}";
+            self.buf.String::append(*s);
             break __inline_JsonStructSerializer_SerializeStruct__end_0: Result<(), SerializeError>::Ok(());
         };
     }
@@ -248,23 +224,19 @@ fn "User^Serialize::serialize<JsonSerializer>"(self: &User, s: &mut JsonSerializ
 
 fn "JsonStructSerializer^SerializeStruct::field<Array<String>>"(self: &mut JsonStructSerializer, name: &String, value: &Array<String>) -> Result<(), SerializeError> {
     if (self.count > 0) {
-        {
-            let self: &mut JsonWriter = &mut self.w;
-            let s: &String = &",";
-            self.buf.String::append(*s);
-        };
-    }
-    {
         let self: &mut JsonWriter = &mut self.w;
-        let s: &String = &__tmpl: {
-            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(19), used: 0 };
-            __r.String::append("\"");
-            __r.String::append(*name);
-            __r.String::append("\":");
-            break __tmpl: __r;
-        };
+        let s: &String = &",";
         self.buf.String::append(*s);
+    }
+    let self: &mut JsonWriter = &mut self.w;
+    let s: &String = &__tmpl: {
+        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(19), used: 0 };
+        __r.String::append("\"");
+        __r.String::append(*name);
+        __r.String::append("\":");
+        break __tmpl: __r;
     };
+    self.buf.String::append(*s);
     let mut ser: JsonSerializer = JsonSerializer { w: self.w };
     value."Array<String>^Serialize::serialize<JsonSerializer>"(&mut ser);
     self.w = ser.w;
@@ -290,11 +262,9 @@ fn "Array<String>^Serialize::serialize<JsonSerializer>"(self: &Array<String>, s:
             }
         }
         return __inline_JsonSeqSerializer_SerializeSeq__end_2: {
-            {
-                let self: &mut JsonWriter = &mut seq.w;
-                let s: &String = &"]";
-                self.buf.String::append(*s);
-            };
+            let self: &mut JsonWriter = &mut seq.w;
+            let s: &String = &"]";
+            self.buf.String::append(*s);
             break __inline_JsonSeqSerializer_SerializeSeq__end_2: Result<(), SerializeError>::Ok(());
         };
     }
@@ -303,11 +273,9 @@ fn "Array<String>^Serialize::serialize<JsonSerializer>"(self: &Array<String>, s:
 
 fn "JsonSeqSerializer^SerializeSeq::element<String>"(self: &mut JsonSeqSerializer, value: &String) -> Result<(), SerializeError> {
     if (self.count > 0) {
-        {
-            let self: &mut JsonWriter = &mut self.w;
-            let s: &String = &",";
-            self.buf.String::append(*s);
-        };
+        let self: &mut JsonWriter = &mut self.w;
+        let s: &String = &",";
+        self.buf.String::append(*s);
     }
     let mut ser: JsonSerializer = JsonSerializer { w: self.w };
     __inline_String_Serialize__serialize_JsonSerializer__1: {
@@ -330,23 +298,19 @@ fn "ArrayIter<String>^Iterator::next"(self: &mut ArrayIter<String>) -> Option<St
 
 fn "JsonStructSerializer^SerializeStruct::field<Option<Point>>"(self: &mut JsonStructSerializer, name: &String, value: Box<Option<Point>>) -> Result<(), SerializeError> {
     if (self.count > 0) {
-        {
-            let self: &mut JsonWriter = &mut self.w;
-            let s: &String = &",";
-            self.buf.String::append(*s);
-        };
-    }
-    {
         let self: &mut JsonWriter = &mut self.w;
-        let s: &String = &__tmpl: {
-            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(19), used: 0 };
-            __r.String::append("\"");
-            __r.String::append(*name);
-            __r.String::append("\":");
-            break __tmpl: __r;
-        };
+        let s: &String = &",";
         self.buf.String::append(*s);
+    }
+    let self: &mut JsonWriter = &mut self.w;
+    let s: &String = &__tmpl: {
+        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(19), used: 0 };
+        __r.String::append("\"");
+        __r.String::append(*name);
+        __r.String::append("\":");
+        break __tmpl: __r;
     };
+    self.buf.String::append(*s);
     let mut ser: JsonSerializer = JsonSerializer { w: self.w };
     value."Option<Point>^Serialize::serialize<JsonSerializer>"(&mut ser);
     self.w = ser.w;
@@ -361,11 +325,9 @@ fn "Option<Point>^Serialize::serialize<JsonSerializer>"(self: Box<Option<Point>>
         return v."Point^Serialize::serialize<JsonSerializer>"(s);
     }
     return __inline_JsonSerializer_Serializer__serialize_null_0: {
-        {
-            let self: &mut JsonWriter = &mut s.w;
-            let s: &String = &"null";
-            self.buf.String::append(*s);
-        };
+        let self: &mut JsonWriter = &mut s.w;
+        let s: &String = &"null";
+        self.buf.String::append(*s);
         break __inline_JsonSerializer_Serializer__serialize_null_0: Result<(), SerializeError>::Ok(());
     };
 }
@@ -377,11 +339,9 @@ fn "Point^Serialize::serialize<JsonSerializer>"(self: &Point, s: &mut JsonSerial
         st."JsonStructSerializer^SerializeStruct::field<f64>"("x", Box<f64> { value: self.x });
         st."JsonStructSerializer^SerializeStruct::field<f64>"("y", Box<f64> { value: self.y });
         return __inline_JsonStructSerializer_SerializeStruct__end_0: {
-            {
-                let self: &mut JsonWriter = &mut st.w;
-                let s: &String = &"}";
-                self.buf.String::append(*s);
-            };
+            let self: &mut JsonWriter = &mut st.w;
+            let s: &String = &"}";
+            self.buf.String::append(*s);
             break __inline_JsonStructSerializer_SerializeStruct__end_0: Result<(), SerializeError>::Ok(());
         };
     }
@@ -390,23 +350,19 @@ fn "Point^Serialize::serialize<JsonSerializer>"(self: &Point, s: &mut JsonSerial
 
 fn "JsonStructSerializer^SerializeStruct::field<f64>"(self: &mut JsonStructSerializer, name: &String, value: Box<f64>) -> Result<(), SerializeError> {
     if (self.count > 0) {
-        {
-            let self: &mut JsonWriter = &mut self.w;
-            let s: &String = &",";
-            self.buf.String::append(*s);
-        };
-    }
-    {
         let self: &mut JsonWriter = &mut self.w;
-        let s: &String = &__tmpl: {
-            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(19), used: 0 };
-            __r.String::append("\"");
-            __r.String::append(*name);
-            __r.String::append("\":");
-            break __tmpl: __r;
-        };
+        let s: &String = &",";
         self.buf.String::append(*s);
+    }
+    let self: &mut JsonWriter = &mut self.w;
+    let s: &String = &__tmpl: {
+        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(19), used: 0 };
+        __r.String::append("\"");
+        __r.String::append(*name);
+        __r.String::append("\":");
+        break __tmpl: __r;
     };
+    self.buf.String::append(*s);
     let mut ser: JsonSerializer = JsonSerializer { w: self.w };
     __inline_f64_Serialize__serialize_JsonSerializer__3: {
         let s: &mut JsonSerializer = &mut ser;
@@ -419,23 +375,19 @@ fn "JsonStructSerializer^SerializeStruct::field<f64>"(self: &mut JsonStructSeria
 
 fn "JsonStructSerializer^SerializeStruct::field<bool>"(self: &mut JsonStructSerializer, name: &String, value: Box<bool>) -> Result<(), SerializeError> {
     if (self.count > 0) {
-        {
-            let self: &mut JsonWriter = &mut self.w;
-            let s: &String = &",";
-            self.buf.String::append(*s);
-        };
-    }
-    {
         let self: &mut JsonWriter = &mut self.w;
-        let s: &String = &__tmpl: {
-            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(19), used: 0 };
-            __r.String::append("\"");
-            __r.String::append(*name);
-            __r.String::append("\":");
-            break __tmpl: __r;
-        };
+        let s: &String = &",";
         self.buf.String::append(*s);
+    }
+    let self: &mut JsonWriter = &mut self.w;
+    let s: &String = &__tmpl: {
+        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(19), used: 0 };
+        __r.String::append("\"");
+        __r.String::append(*name);
+        __r.String::append("\":");
+        break __tmpl: __r;
     };
+    self.buf.String::append(*s);
     let mut ser: JsonSerializer = JsonSerializer { w: self.w };
     __inline_bool_Serialize__serialize_JsonSerializer__3: {
         let s: &mut JsonSerializer = &mut ser;
@@ -448,23 +400,19 @@ fn "JsonStructSerializer^SerializeStruct::field<bool>"(self: &mut JsonStructSeri
 
 fn "JsonStructSerializer^SerializeStruct::field<i32>"(self: &mut JsonStructSerializer, name: &String, value: Box<i32>) -> Result<(), SerializeError> {
     if (self.count > 0) {
-        {
-            let self: &mut JsonWriter = &mut self.w;
-            let s: &String = &",";
-            self.buf.String::append(*s);
-        };
-    }
-    {
         let self: &mut JsonWriter = &mut self.w;
-        let s: &String = &__tmpl: {
-            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(19), used: 0 };
-            __r.String::append("\"");
-            __r.String::append(*name);
-            __r.String::append("\":");
-            break __tmpl: __r;
-        };
+        let s: &String = &",";
         self.buf.String::append(*s);
+    }
+    let self: &mut JsonWriter = &mut self.w;
+    let s: &String = &__tmpl: {
+        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(19), used: 0 };
+        __r.String::append("\"");
+        __r.String::append(*name);
+        __r.String::append("\":");
+        break __tmpl: __r;
     };
+    self.buf.String::append(*s);
     let mut ser: JsonSerializer = JsonSerializer { w: self.w };
     __inline_i32_Serialize__serialize_JsonSerializer__3: {
         let s: &mut JsonSerializer = &mut ser;
@@ -477,23 +425,19 @@ fn "JsonStructSerializer^SerializeStruct::field<i32>"(self: &mut JsonStructSeria
 
 fn "JsonStructSerializer^SerializeStruct::field<String>"(self: &mut JsonStructSerializer, name: &String, value: &String) -> Result<(), SerializeError> {
     if (self.count > 0) {
-        {
-            let self: &mut JsonWriter = &mut self.w;
-            let s: &String = &",";
-            self.buf.String::append(*s);
-        };
-    }
-    {
         let self: &mut JsonWriter = &mut self.w;
-        let s: &String = &__tmpl: {
-            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(19), used: 0 };
-            __r.String::append("\"");
-            __r.String::append(*name);
-            __r.String::append("\":");
-            break __tmpl: __r;
-        };
+        let s: &String = &",";
         self.buf.String::append(*s);
+    }
+    let self: &mut JsonWriter = &mut self.w;
+    let s: &String = &__tmpl: {
+        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(19), used: 0 };
+        __r.String::append("\"");
+        __r.String::append(*name);
+        __r.String::append("\":");
+        break __tmpl: __r;
     };
+    self.buf.String::append(*s);
     let mut ser: JsonSerializer = JsonSerializer { w: self.w };
     __inline_String_Serialize__serialize_JsonSerializer__3: {
         let s: &mut JsonSerializer = &mut ser;
