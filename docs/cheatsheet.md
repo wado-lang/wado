@@ -1340,7 +1340,7 @@ The expression is type-checked against the declared return type of the enclosing
 
 For full API reference, see:
 
-- [Core Standard Library Reference](./cheatsheet-stdlib-core.md) - `core:prelude`, `core:cli`, `core:collections`, `core:base64`, `core:zlib`
+- [Core Standard Library Reference](./cheatsheet-stdlib-core.md) - `core:prelude`, `core:cli`, `core:collections`, `core:serde`, `core:json`, `core:base64`, `core:zlib`
 - [WASI Standard Library Reference](./cheatsheet-stdlib-wasi.md) - `wasi:cli`, `wasi:filesystem`, `wasi:http`, `wasi:clocks`, `wasi:random`, `wasi:sockets`
 
 ```wado
@@ -1359,6 +1359,24 @@ let mut map = TreeMap::<String, i32>::new();
 map["key"] = 42;          // index assignment
 let v = map["key"];       // index access (panics if key not found)
 let opt = map.get("key"); // fallible access returns Option<V>
+
+// core:serde + core:json - Serialization/deserialization
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+struct User {
+    name: String,
+    age: i32,
+}
+
+impl Serialize for User;    // compiler generates serialize method
+impl Deserialize for User;  // compiler generates deserialize method
+
+let json = to_string::<User>(&User { name: "Alice", age: 30 });
+// Ok("{\"name\":\"Alice\",\"age\":30}")
+
+let parsed = from_string::<User>(`\{"name":"Alice","age":30\}`);
+// Ok(User { name: "Alice", age: 30 })
 
 // core:base64 - Base64 encoding/decoding
 use { encode, decode } from "core:base64";
@@ -1591,6 +1609,55 @@ let result = arr.iter()
     .map(|x: i32| x * 10)
     .collect();
 // [30, 40, 50]
+```
+
+## Serialization and Deserialization
+
+See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
+
+```wado
+use { Serialize, Deserialize, SerializeError, DeserializeError } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+// Compiler-synthesized implementations
+struct Config {
+    host: String,
+    port: i32,
+    debug: bool,
+}
+
+impl Serialize for Config;    // compiler generates serialize method
+impl Deserialize for Config;  // compiler generates deserialize method
+
+// Serialize to JSON
+let c = Config { host: "localhost", port: 8080, debug: true };
+let json = to_string::<Config>(&c);
+// Ok("{\"host\":\"localhost\",\"port\":8080,\"debug\":true}")
+
+// Field names: snake_case in Wado → camelCase in JSON
+// user_name → "userName", is_active → "isActive"
+
+// Deserialize from JSON
+let parsed = from_string::<Config>(`\{"host":"localhost","port":8080,"debug":true\}`);
+if let Ok(c) = parsed {
+    assert c.host == "localhost";
+    assert c.port == 8080;
+}
+
+// Error handling
+let bad = from_string::<Config>("invalid json");
+if let Err(e) = bad {
+    // e.message: error description
+    // e.offset: byte offset in input (-1 if unavailable)
+}
+
+// Primitive types have builtin Serialize/Deserialize impls:
+// i8, i16, i32, i64, u8, u16, u32, u64, f32, f64, bool, char, String
+// Option<T: Serialize>, Array<T: Serialize>
+
+// JSON rejects NaN and Infinity
+let nan_result = to_string::<f64>(&f64::NAN);
+// Err(SerializeError { kind: UnsupportedValue, message: "NaN is not allowed in JSON" })
 ```
 
 ## Compile-Time Location Literals

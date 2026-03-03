@@ -1,0 +1,89 @@
+// Test: JSON serialization error cases (NaN, Infinity, -Infinity)
+use { Serialize, SerializeErrorKind } from "core:serde";
+use { to_string } from "core:json";
+
+fn is_unsupported(k: SerializeErrorKind) -> bool {
+    return match k { UnsupportedValue => true, _ => false };
+}
+
+test "f64 NaN" {
+    let nan = f64::NAN;
+    let r = to_string::<f64>(&nan);
+    if let Err(e) = r {
+        assert is_unsupported(e.kind);
+    } else {
+        panic("expected error for NaN");
+    }
+}
+
+test "f64 Infinity" {
+    let inf = f64::INFINITY;
+    let r = to_string::<f64>(&inf);
+    if let Err(e) = r {
+        assert is_unsupported(e.kind);
+    } else {
+        panic("expected error for Infinity");
+    }
+}
+
+test "f64 negative Infinity" {
+    let neg_inf = f64::NEG_INFINITY;
+    let r = to_string::<f64>(&neg_inf);
+    if let Err(e) = r {
+        assert is_unsupported(e.kind);
+    } else {
+        panic("expected error for -Infinity");
+    }
+}
+
+test "f32 NaN" {
+    let nan = f32::NAN;
+    let r = to_string::<f32>(&nan);
+    if let Err(e) = r {
+        assert is_unsupported(e.kind);
+    } else {
+        panic("expected error for f32 NaN");
+    }
+}
+
+test "f32 Infinity" {
+    let inf = f32::INFINITY;
+    let r = to_string::<f32>(&inf);
+    if let Err(e) = r {
+        assert is_unsupported(e.kind);
+    } else {
+        panic("expected error for f32 Infinity");
+    }
+}
+
+test "f32 negative Infinity" {
+    let neg_inf = f32::NEG_INFINITY;
+    let r = to_string::<f32>(&neg_inf);
+    if let Err(e) = r {
+        assert is_unsupported(e.kind);
+    } else {
+        panic("expected error for f32 -Infinity");
+    }
+}
+
+test "normal f64 succeeds" {
+    let r = to_string::<f64>(&3.14);
+    if let Ok(s) = r {
+        assert s == "3.14";
+    } else {
+        panic("expected success for normal f64");
+    }
+}
+
+test "normal f32 succeeds" {
+    let v: f32 = 2.5;
+    let r = to_string::<f32>(&v);
+    if let Ok(s) = r {
+        assert s == "2.5";
+    } else {
+        panic("expected success for normal f32");
+    }
+}
+
+__DATA__
+{"test": {}}

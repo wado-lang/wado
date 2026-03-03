@@ -1,0 +1,15 @@
+// Test: compile error when Serialize is not implemented for a type
+use { Serialize } from "core:serde";
+use { to_string } from "core:json";
+
+struct NoSerialize {
+    value: i32,
+}
+
+export fn run() {
+    let x = NoSerialize { value: 42 };
+    let r = to_string::<NoSerialize>(&x);
+}
+
+__DATA__
+{"compile_error": "does not implement trait 'Serialize'"}
