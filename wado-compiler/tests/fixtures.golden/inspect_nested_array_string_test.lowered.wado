@@ -24,37 +24,27 @@ export fn run() with Stdout {
     };
     let arr: Array<Array<String>> = __seq_lit: {
         let mut __b: Array<Array<String>> = Array<Array<String>> { repr: core::builtin::array_new::<Array<String>>(2), used: 0 };
-        {
-            let self: &mut Array<Array<String>> = &mut __b;
-            let value: Array<String> = __seq_lit: {
-                let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(2), used: 0 };
-                {
-                    let self: &mut Array<String> = &mut __b;
-                    let value: String = "a";
-                    self."Array<String>::append"(value);
-                };
-                {
-                    let self: &mut Array<String> = &mut __b;
-                    let value: String = "b";
-                    self."Array<String>::append"(value);
-                };
-                break __seq_lit: *__b;
-            };
-            self."Array<Array<String>>::append"(value);
+        let self: &mut Array<Array<String>> = &mut __b;
+        let value: Array<String> = __seq_lit: {
+            let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(2), used: 0 };
+            let self: &mut Array<String> = &mut __b;
+            let value: String = "a";
+            self."Array<String>::append"(value);
+            let self: &mut Array<String> = &mut __b;
+            let value: String = "b";
+            self."Array<String>::append"(value);
+            break __seq_lit: *__b;
         };
-        {
-            let self: &mut Array<Array<String>> = &mut __b;
-            let value: Array<String> = __seq_lit: {
-                let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(1), used: 0 };
-                {
-                    let self: &mut Array<String> = &mut __b;
-                    let value: String = "c";
-                    self."Array<String>::append"(value);
-                };
-                break __seq_lit: *__b;
-            };
-            self."Array<Array<String>>::append"(value);
+        self."Array<Array<String>>::append"(value);
+        let self: &mut Array<Array<String>> = &mut __b;
+        let value: Array<String> = __seq_lit: {
+            let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(1), used: 0 };
+            let self: &mut Array<String> = &mut __b;
+            let value: String = "c";
+            self."Array<String>::append"(value);
+            break __seq_lit: *__b;
         };
+        self."Array<Array<String>>::append"(value);
         break __seq_lit: *__b;
     };
     core::cli::println(__tmpl: {
@@ -90,26 +80,33 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
 }
 
 pub fn "Array<Array<String>>^Inspect::inspect"(self: &Array<Array<String>>, f: &mut Formatter) {
-    f.buf.String::append_char('[');
+    let self: &mut String = f.buf;
+    if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
+        self.String::grow((self.used + 1));
+    }
+    core::builtin::array_set_u8(self.repr, self.used, 91);
+    self.used = (self.used + 1);
     __for_5: {
         let mut i: i32 = 0;
-        let _licm_used_10: i32 = self.used;
-        let _licm_buf_11: &mut String = f.buf;
+        let _licm_used_16: i32 = self.used;
         loop {
-            if !(i < _licm_used_10) {
+            if !(i < _licm_used_16) {
                 break __for_5;
             }
             if (i > 0) {
-                {
-                    let s: String = ", ";
-                    _licm_buf_11.String::append(s);
-                };
+                let s: String = ", ";
+                f.buf.String::append(s);
             }
             self."Array<Array<String>>^IndexValue::index_value"(i)."Array<String>^Inspect::inspect"(f);
             i = (i + 1);
         }
     }
-    f.buf.String::append_char(']');
+    let self: &mut String = f.buf;
+    if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
+        self.String::grow((self.used + 1));
+    }
+    core::builtin::array_set_u8(self.repr, self.used, 93);
+    self.used = (self.used + 1);
 }
 
 fn "Array<Array<String>>^IndexValue::index_value"(self: &Array<Array<String>>, index: i32) -> Array<String> {
@@ -120,26 +117,33 @@ fn "Array<Array<String>>^IndexValue::index_value"(self: &Array<Array<String>>, i
 }
 
 pub fn "Array<String>^Inspect::inspect"(self: &Array<String>, f: &mut Formatter) {
-    f.buf.String::append_char('[');
+    let self: &mut String = f.buf;
+    if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
+        self.String::grow((self.used + 1));
+    }
+    core::builtin::array_set_u8(self.repr, self.used, 91);
+    self.used = (self.used + 1);
     __for_5: {
         let mut i: i32 = 0;
-        let _licm_used_10: i32 = self.used;
-        let _licm_buf_11: &mut String = f.buf;
+        let _licm_used_16: i32 = self.used;
         loop {
-            if !(i < _licm_used_10) {
+            if !(i < _licm_used_16) {
                 break __for_5;
             }
             if (i > 0) {
-                {
-                    let s: String = ", ";
-                    _licm_buf_11.String::append(s);
-                };
+                let s: String = ", ";
+                f.buf.String::append(s);
             }
             self."Array<String>^IndexValue::index_value"(i)."String^Inspect::inspect"(f);
             i = (i + 1);
         }
     }
-    f.buf.String::append_char(']');
+    let self: &mut String = f.buf;
+    if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
+        self.String::grow((self.used + 1));
+    }
+    core::builtin::array_set_u8(self.repr, self.used, 93);
+    self.used = (self.used + 1);
 }
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {

@@ -184,12 +184,10 @@ fn is_inline_eligible(
         return false;
     }
 
-    // Single-callsite functions get a 3x larger threshold: inlining them eliminates
-    // the call overhead and exposes cross-boundary dead-code that no other pass can
-    // see.  A multiplier of 3 is intentionally conservative — enough to capture small
-    // helper functions but not large ones that would bloat the caller.
+    // `#[inline]` hint raises the threshold by 5x, allowing functions up to 50
+    // expressions (at the default threshold of 10) to be inlined.
     let effective_threshold = if func.inline_hint == InlineHint::Hint {
-        inline_threshold * 2
+        inline_threshold * 5
     } else {
         inline_threshold
     };

@@ -21,20 +21,24 @@ struct Point {
 }
 
 pub fn "Point^Display::fmt"(self: &Point, f: &mut Formatter) {
-    f.buf.String::append_char('(');
-    {
-        let s: String = Box<i32> { value: self.x }.i32::to_string();
-        f.buf.String::append(s);
-    };
-    {
-        let s: String = ", ";
-        f.buf.String::append(s);
-    };
-    {
-        let s: String = Box<i32> { value: self.y }.i32::to_string();
-        f.buf.String::append(s);
-    };
-    f.buf.String::append_char(')');
+    let self: &mut String = f.buf;
+    if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
+        self.String::grow((self.used + 1));
+    }
+    core::builtin::array_set_u8(self.repr, self.used, 40);
+    self.used = (self.used + 1);
+    let s: String = Box<i32> { value: self.x }.i32::to_string();
+    f.buf.String::append(s);
+    let s: String = ", ";
+    f.buf.String::append(s);
+    let s: String = Box<i32> { value: self.y }.i32::to_string();
+    f.buf.String::append(s);
+    let self: &mut String = f.buf;
+    if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
+        self.String::grow((self.used + 1));
+    }
+    core::builtin::array_set_u8(self.repr, self.used, 41);
+    self.used = (self.used + 1);
 }
 
 export fn run() with Stdout {

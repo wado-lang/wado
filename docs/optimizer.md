@@ -70,7 +70,7 @@ Eligibility: pure (no effects), non-recursive, no reference parameters/returns, 
 
 Inline hints via `#[inline]` attributes override the default heuristics:
 
-- `#[inline]` — prefer inlining (treated as eligible even if slightly above threshold)
+- `#[inline]` — prefer inlining (5x threshold multiplier)
 - `#[inline(always)]` — always inline regardless of size or threshold
 - `#[inline(never)]` — never inline (useful for cold error paths or debugging)
 

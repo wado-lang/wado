@@ -282,12 +282,21 @@ struct FunctionTranslator<'a, 'b> {
 impl FunctionTranslator<'_, '_> {
     /// Get the WIR local name for a given local index.
     /// Uses the TIR variable name if available, otherwise falls back to `__local_N`.
+    ///
+    /// Parameters keep their original names (matching `WirFunction::param_names`).
+    /// Non-parameter locals that shadow a parameter name get an `_{index}` suffix.
     fn local_name(&self, index: u32) -> String {
         if let Some(name) = self.local_names.get(&index) {
-            // Disambiguate: if multiple locals share the same name, append index
             let count = self.local_names.values().filter(|n| *n == name).count();
             if count > 1 {
-                format!("{name}_{index}")
+                // Check if this index belongs to a parameter — params keep
+                // their original names so they match `WirFunction::param_names`.
+                let is_param = self.tir_func.params.iter().any(|p| p.local_index == index);
+                if is_param {
+                    name.clone()
+                } else {
+                    format!("{name}_{index}")
+                }
             } else {
                 name.clone()
             }

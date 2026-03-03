@@ -154,7 +154,7 @@ fn licm_loop(
         // Step 1: Collect all variables modified in the loop
         let mut modified_vars = ModifiedVars::default();
         modified_vars.extend_full(extra_modified);
-        collect_modified_vars_in_block(loop_body, &mut modified_vars);
+        collect_modified_vars_in_block(loop_body, &mut modified_vars, type_table);
 
         // Step 2: Collect immutable reference bindings for look-through optimization
         // This allows hoisting field accesses like `self.field` where `self: &T = &source`
@@ -241,9 +241,42 @@ fn licm_loop(
 }
 
 /// Collect all local variable indices that are modified (assigned) in a block.
-fn collect_modified_vars_in_block(block: &TirBlock, modified: &mut ModifiedVars) {
+fn collect_modified_vars_in_block(
+    block: &TirBlock,
+    modified: &mut ModifiedVars,
+    type_table: &TypeTable,
+) {
     for stmt in &block.stmts {
-        collect_modified_vars_in_stmt(stmt, modified);
+        collect_modified_vars_in_stmt(stmt, modified, type_table);
+    }
+}
+
+/// Mark a local as fully modified if it has a GC struct type and is passed to a function call.
+///
+/// In Wasm GC, struct values are passed by reference. A callee receiving a GC struct
+/// can modify any of its fields (e.g., `String::grow` reassigns `self.repr`).
+/// This prevents LICM from hoisting field accesses on locals that may be mutated
+/// by function calls within the loop.
+fn mark_gc_local_as_fully_modified(
+    expr: &TirExpr,
+    modified: &mut ModifiedVars,
+    type_table: &TypeTable,
+) {
+    if let TirExprKind::Local { index, .. } = &expr.kind
+        && is_gc_heap_type(expr.type_id, type_table)
+    {
+        modified.insert_full(*index);
+    }
+}
+
+/// Check if a type is a GC heap type whose fields can be mutated by a callee.
+fn is_gc_heap_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+    match type_table.get(type_id) {
+        ResolvedType::Struct { .. } => true,
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+            is_gc_heap_type(*inner, type_table)
+        }
+        _ => false,
     }
 }
 
@@ -296,7 +329,11 @@ fn mark_assignment_target_as_modified(expr: &TirExpr, modified: &mut ModifiedVar
     }
 }
 
-fn collect_modified_vars_in_stmt(stmt: &TirStmt, modified: &mut ModifiedVars) {
+fn collect_modified_vars_in_stmt(
+    stmt: &TirStmt,
+    modified: &mut ModifiedVars,
+    type_table: &TypeTable,
+) {
     match &stmt.kind {
         TirStmtKind::Let {
             local_index, value, ..
@@ -305,14 +342,14 @@ fn collect_modified_vars_in_stmt(stmt: &TirStmt, modified: &mut ModifiedVars) {
             // (they're not invariant within the loop where they're defined)
             modified.insert_full(*local_index);
             // Also check the value expression for mutable references
-            collect_modified_vars_in_expr(value, modified);
+            collect_modified_vars_in_expr(value, modified, type_table);
         }
         TirStmtKind::Expr(expr) => {
-            collect_modified_vars_in_expr(expr, modified);
+            collect_modified_vars_in_expr(expr, modified, type_table);
         }
         TirStmtKind::Return { value } => {
             if let Some(v) = value {
-                collect_modified_vars_in_expr(v, modified);
+                collect_modified_vars_in_expr(v, modified, type_table);
             }
         }
         TirStmtKind::If {
@@ -320,17 +357,17 @@ fn collect_modified_vars_in_stmt(stmt: &TirStmt, modified: &mut ModifiedVars) {
             then_block,
             else_block,
         } => {
-            collect_modified_vars_in_expr(condition, modified);
-            collect_modified_vars_in_block(then_block, modified);
+            collect_modified_vars_in_expr(condition, modified, type_table);
+            collect_modified_vars_in_block(then_block, modified, type_table);
             if let Some(eb) = else_block {
-                collect_modified_vars_in_block(eb, modified);
+                collect_modified_vars_in_block(eb, modified, type_table);
             }
         }
         TirStmtKind::Loop { body } => {
-            collect_modified_vars_in_block(body, modified);
+            collect_modified_vars_in_block(body, modified, type_table);
         }
         TirStmtKind::LabeledBlock { block, .. } => {
-            collect_modified_vars_in_block(block, modified);
+            collect_modified_vars_in_block(block, modified, type_table);
         }
         TirStmtKind::IfPattern {
             scrutinee,
@@ -339,18 +376,18 @@ fn collect_modified_vars_in_stmt(stmt: &TirStmt, modified: &mut ModifiedVars) {
             else_block,
             ..
         } => {
-            collect_modified_vars_in_expr(scrutinee, modified);
+            collect_modified_vars_in_expr(scrutinee, modified, type_table);
             // Pattern bindings introduce new variables that are assigned fresh each iteration
             // Mark them as modified so LICM doesn't hoist accesses to them
             collect_pattern_bindings(pattern, modified);
-            collect_modified_vars_in_block(then_block, modified);
+            collect_modified_vars_in_block(then_block, modified, type_table);
             if let Some(eb) = else_block {
-                collect_modified_vars_in_block(eb, modified);
+                collect_modified_vars_in_block(eb, modified, type_table);
             }
         }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                collect_modified_vars_in_expr(v, modified);
+                collect_modified_vars_in_expr(v, modified, type_table);
             }
         }
         TirStmtKind::Continue => {}
@@ -358,7 +395,7 @@ fn collect_modified_vars_in_stmt(stmt: &TirStmt, modified: &mut ModifiedVars) {
             // Collect pattern bindings as they are assigned
             collect_pattern_bindings(pattern, modified);
             // Also check the value expression for mutable references
-            collect_modified_vars_in_expr(value, modified);
+            collect_modified_vars_in_expr(value, modified, type_table);
         }
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
@@ -394,19 +431,23 @@ fn collect_pattern_bindings(pattern: &TirPattern, modified: &mut ModifiedVars) {
     }
 }
 
-fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut ModifiedVars) {
+fn collect_modified_vars_in_expr(
+    expr: &TirExpr,
+    modified: &mut ModifiedVars,
+    type_table: &TypeTable,
+) {
     match &expr.kind {
         TirExprKind::Assign { target, value } => {
             // Mark the assignment target appropriately.
             // Field assignment (buf.field = x) only marks that specific field as modified,
             // enabling LICM to still hoist other fields of the same object.
             mark_assignment_target_as_modified(target, modified);
-            collect_modified_vars_in_expr(target, modified);
-            collect_modified_vars_in_expr(value, modified);
+            collect_modified_vars_in_expr(target, modified, type_table);
+            collect_modified_vars_in_expr(value, modified, type_table);
         }
         TirExprKind::Binary { left, right, .. } => {
-            collect_modified_vars_in_expr(left, modified);
-            collect_modified_vars_in_expr(right, modified);
+            collect_modified_vars_in_expr(left, modified, type_table);
+            collect_modified_vars_in_expr(right, modified, type_table);
         }
         TirExprKind::Unary { op, expr } => {
             // &mut local: the local may be reassigned through the ref (boxed primitives).
@@ -416,86 +457,90 @@ fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut ModifiedVars) {
             if matches!(op, TirUnaryOp::MutRef) && matches!(expr.kind, TirExprKind::Local { .. }) {
                 mark_local_as_fully_modified(expr, modified);
             }
-            collect_modified_vars_in_expr(expr, modified);
+            collect_modified_vars_in_expr(expr, modified, type_table);
         }
         TirExprKind::Cast { expr, .. } => {
-            collect_modified_vars_in_expr(expr, modified);
+            collect_modified_vars_in_expr(expr, modified, type_table);
         }
         TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
             for arg in args {
-                collect_modified_vars_in_expr(arg, modified);
+                mark_gc_local_as_fully_modified(arg, modified, type_table);
+                collect_modified_vars_in_expr(arg, modified, type_table);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            collect_modified_vars_in_expr(receiver, modified);
+            mark_gc_local_as_fully_modified(receiver, modified, type_table);
+            collect_modified_vars_in_expr(receiver, modified, type_table);
             for arg in args {
-                collect_modified_vars_in_expr(arg, modified);
+                mark_gc_local_as_fully_modified(arg, modified, type_table);
+                collect_modified_vars_in_expr(arg, modified, type_table);
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                collect_modified_vars_in_expr(arg, modified);
+                collect_modified_vars_in_expr(arg, modified, type_table);
             }
         }
         TirExprKind::FieldAccess { expr, .. } => {
-            collect_modified_vars_in_expr(expr, modified);
+            collect_modified_vars_in_expr(expr, modified, type_table);
         }
         TirExprKind::Index { expr, index } => {
-            collect_modified_vars_in_expr(expr, modified);
-            collect_modified_vars_in_expr(index, modified);
+            collect_modified_vars_in_expr(expr, modified, type_table);
+            collect_modified_vars_in_expr(index, modified, type_table);
         }
         TirExprKind::Block(block) => {
-            collect_modified_vars_in_block(block, modified);
+            collect_modified_vars_in_block(block, modified, type_table);
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            collect_modified_vars_in_expr(condition, modified);
-            collect_modified_vars_in_block(then_branch, modified);
+            collect_modified_vars_in_expr(condition, modified, type_table);
+            collect_modified_vars_in_block(then_branch, modified, type_table);
             if let Some(eb) = else_branch {
-                collect_modified_vars_in_block(eb, modified);
+                collect_modified_vars_in_block(eb, modified, type_table);
             }
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                collect_modified_vars_in_expr(&field.value, modified);
+                collect_modified_vars_in_expr(&field.value, modified, type_table);
             }
         }
         TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
-                collect_modified_vars_in_expr(elem, modified);
+                collect_modified_vars_in_expr(elem, modified, type_table);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
-            collect_modified_vars_in_expr(callee, modified);
+            collect_modified_vars_in_expr(callee, modified, type_table);
             for arg in args {
-                collect_modified_vars_in_expr(arg, modified);
+                mark_gc_local_as_fully_modified(arg, modified, type_table);
+                collect_modified_vars_in_expr(arg, modified, type_table);
             }
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            collect_modified_vars_in_expr(functor, modified);
+            collect_modified_vars_in_expr(functor, modified, type_table);
         }
         TirExprKind::Closure { body, .. } => {
-            collect_modified_vars_in_expr(body, modified);
+            collect_modified_vars_in_expr(body, modified, type_table);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
-                collect_modified_vars_in_expr(payload_expr, modified);
+                collect_modified_vars_in_expr(payload_expr, modified, type_table);
             }
         }
         TirExprKind::LabeledBlock { block, .. } => {
-            collect_modified_vars_in_block(block, modified);
+            collect_modified_vars_in_block(block, modified, type_table);
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            collect_modified_vars_in_expr(value, modified);
+            collect_modified_vars_in_expr(value, modified, type_table);
         }
         TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
-            collect_modified_vars_in_expr(expr, modified);
+            collect_modified_vars_in_expr(expr, modified, type_table);
         }
         TirExprKind::VariantPayload { expr, .. } => {
-            collect_modified_vars_in_expr(expr, modified);
+            collect_modified_vars_in_expr(expr, modified, type_table);
         }
         TirExprKind::Switch {
             scrutinee,
@@ -503,11 +548,11 @@ fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut ModifiedVars) {
             default,
             ..
         } => {
-            collect_modified_vars_in_expr(scrutinee, modified);
+            collect_modified_vars_in_expr(scrutinee, modified, type_table);
             for arm in arms {
-                collect_modified_vars_in_block(arm, modified);
+                collect_modified_vars_in_block(arm, modified, type_table);
             }
-            collect_modified_vars_in_block(default, modified);
+            collect_modified_vars_in_block(default, modified, type_table);
         }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }

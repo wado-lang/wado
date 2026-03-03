@@ -2654,19 +2654,6 @@ fn prune_branches_in_expr(expr: &mut TirExpr) -> bool {
         changed = true;
     }
 
-    // Simplify `label: { ... }` → `{ ... }` when no break targets the label
-    if let TirExprKind::LabeledBlock { label, block, .. } = &expr.kind
-        && !block_has_break_to(label, block)
-    {
-        let TirExprKind::LabeledBlock { block, .. } =
-            std::mem::replace(&mut expr.kind, TirExprKind::Unit)
-        else {
-            unreachable!();
-        };
-        expr.kind = TirExprKind::Block(block);
-        changed = true;
-    }
-
     // Simplify `[label:] { }` → `()` (empty block, with or without label)
     if matches!(&expr.kind, TirExprKind::Block(b) | TirExprKind::LabeledBlock { block: b, .. } if b.stmts.is_empty())
     {
@@ -2695,7 +2682,10 @@ fn eliminate_dead_stmts(block: &mut TirBlock) -> bool {
                 if block.stmts.is_empty() || !block_has_break_to(label, block)
         ) || matches!(
             &s.kind,
-            TirStmtKind::Expr(e) if matches!(e.kind, TirExprKind::Unit)
+            TirStmtKind::Expr(e) if matches!(e.kind, TirExprKind::Unit | TirExprKind::Block(_))
+        ) || matches!(
+            &s.kind,
+            TirStmtKind::Expr(e) if matches!(&e.kind, TirExprKind::LabeledBlock { label, block, .. } if !block_has_break_to(label, block))
         )
     };
     if !block.stmts.iter().any(dominated) {
@@ -2740,6 +2730,33 @@ fn eliminate_dead_stmts(block: &mut TirBlock) -> bool {
         if let TirStmtKind::Expr(e) = &stmt.kind
             && matches!(e.kind, TirExprKind::Unit)
         {
+            continue;
+        }
+        // Void block expression → flatten stmts into parent.
+        // Handles both `Expr(Block { ... })` and `Expr(LabeledBlock { unused label, ... })`.
+        // The latter arises from inlining void functions whose label has no break.
+        if let TirStmtKind::Expr(e) = &stmt.kind
+            && matches!(e.kind, TirExprKind::Block(_))
+        {
+            let TirStmtKind::Expr(e) = stmt.kind else {
+                unreachable!();
+            };
+            let TirExprKind::Block(inner) = e.kind else {
+                unreachable!();
+            };
+            block.stmts.extend(inner.stmts);
+            continue;
+        }
+        if let TirStmtKind::Expr(e) = &stmt.kind
+            && matches!(&e.kind, TirExprKind::LabeledBlock { label, block, .. } if !block_has_break_to(label, block))
+        {
+            let TirStmtKind::Expr(e) = stmt.kind else {
+                unreachable!();
+            };
+            let TirExprKind::LabeledBlock { block: inner, .. } = e.kind else {
+                unreachable!();
+            };
+            block.stmts.extend(inner.stmts);
             continue;
         }
         block.stmts.push(stmt);

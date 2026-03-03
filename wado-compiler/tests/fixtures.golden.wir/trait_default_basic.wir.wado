@@ -83,7 +83,7 @@ type "functype/String::internal_reserve_uninit" = fn(ref null String, i32) -> i3
 
 type "functype/String::append" = fn(ref null String, ref null String);
 
-type "functype/String::append_char" = fn(ref null String, char);
+type "functype/String::append_unicode_scalar" = fn(ref null String, u32);
 
 type "functype/Person^Greet::greet" = fn(ref null Person) -> ref null String;
 
@@ -320,16 +320,11 @@ fn String::append(self, other) {
     self.used = new_used;
 }
 
-fn String::append_char(self, c) {
-    let code: u32;
-    code = c;
+fn String::append_unicode_scalar(self, code) {
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         String::grow(self, self.used + 4);
     };
-    if code <u 128 {
-        builtin::array_set_u8(self.repr, self.used, code & 255);
-        self.used = self.used + 1;
-    } else if code <u 2048 {
+    if code <u 2048 {
         builtin::array_set_u8(self.repr, self.used, (192 | (code >>u 6)) & 255);
         builtin::array_set_u8(self.repr, self.used + 1, (128 | (code & 63)) & 255);
         self.used = self.used + 2;
@@ -353,12 +348,9 @@ fn Person^Greet::greet(self) {
     let __local_3: ref null Person;
     return __tmpl: block -> ref null String {
         __local_1 = String { repr: ref.as_non_null(builtin::array_new<u8>(21)), used: 0 };
-        String::append_char(__local_1, 72);
-        String::append_char(__local_1, 105);
-        String::append_char(__local_1, 44);
-        String::append_char(__local_1, 32);
+        String::append(__local_1, String { repr: ref.as_non_null(array.new_data<u8>[1](0, 4)), used: 4 });
         String::append(__local_1, self.name);
-        String::append_char(__local_1, 33);
+        String::append(__local_1, String { repr: ref.as_non_null(array.new_data<u8>[2](0, 1)), used: 1 });
         break __tmpl: __local_1;
     };
 }
@@ -374,12 +366,7 @@ fn Robot^Greet::name(self) {
     let __local_8: ref null Formatter;
     return __tmpl: block -> ref null String {
         __local_1 = String { repr: ref.as_non_null(builtin::array_new<u8>(22)), used: 0 };
-        String::append_char(__local_1, 82);
-        String::append_char(__local_1, 111);
-        String::append_char(__local_1, 98);
-        String::append_char(__local_1, 111);
-        String::append_char(__local_1, 116);
-        String::append_char(__local_1, 45);
+        String::append(__local_1, String { repr: ref.as_non_null(array.new_data<u8>[3](0, 6)), used: 6 });
         __local_2 = __inline_Formatter__new_1: block -> ref null Formatter {
             __local_4 = __local_1;
             break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_4) };
@@ -396,33 +383,39 @@ fn Robot^Greet::greet(self) {
     let __local_2: i32;
     return __tmpl: block -> ref null String {
         __local_1 = String { repr: ref.as_non_null(builtin::array_new<u8>(24)), used: 0 };
-        String::append_char(__local_1, 72);
-        String::append_char(__local_1, 101);
-        String::append_char(__local_1, 108);
-        String::append_char(__local_1, 108);
-        String::append_char(__local_1, 111);
-        String::append_char(__local_1, 44);
-        String::append_char(__local_1, 32);
+        String::append(__local_1, String { repr: ref.as_non_null(array.new_data<u8>[4](0, 7)), used: 7 });
         String::append(__local_1, Robot^Greet::name(self));
-        String::append_char(__local_1, 33);
+        String::append(__local_1, String { repr: ref.as_non_null(array.new_data<u8>[2](0, 1)), used: 1 });
         break __tmpl: __local_1;
     };
 }
 
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
-    let _licm_buf_4: ref null String;
+    let __local_4: ref null String;
+    let __local_5: char;
+    let code: u32;
+    let _licm_buf_7: ref null String;
     __for_0: block {
         i = 0;
-        _licm_buf_4 = self.buf;
+        _licm_buf_7 = self.buf;
         block {
-            l25: loop {
+            l24: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                String::append_char(_licm_buf_4, c);
+                code = c;
+                if code <u 128 {
+                    if builtin::unlikely((_licm_buf_7.used + 1) > builtin::array_len(_licm_buf_7.repr)) {
+                        String::grow(_licm_buf_7, _licm_buf_7.used + 1);
+                    };
+                    builtin::array_set_u8(_licm_buf_7.repr, _licm_buf_7.used, code & 255);
+                    _licm_buf_7.used = _licm_buf_7.used + 1;
+                } else {
+                    String::append_unicode_scalar(_licm_buf_7, code);
+                };
                 i = i + 1;
-                continue l25;
+                continue l24;
             };
         };
     };

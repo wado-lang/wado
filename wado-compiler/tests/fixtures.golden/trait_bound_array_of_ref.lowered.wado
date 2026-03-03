@@ -26,14 +26,10 @@ export fn run() with Stdout {
     let b: Box<i32> = Box<i32> { value: 20 };
     let arr: Array<Box<i32>> = __seq_lit: {
         let mut __b: Array<Box<i32>> = Array<i32> { repr: core::builtin::array_new::<Box<i32>>(2), used: 0 };
-        {
-            let self: &mut Array<Box<i32>> = &mut __b;
-            self."Array<i32>::append"(a);
-        };
-        {
-            let self: &mut Array<Box<i32>> = &mut __b;
-            self."Array<i32>::append"(b);
-        };
+        let self: &mut Array<Box<i32>> = &mut __b;
+        self."Array<i32>::append"(a);
+        let self: &mut Array<Box<i32>> = &mut __b;
+        self."Array<i32>::append"(b);
         break __seq_lit: *__b;
     };
     core::cli::println(__tmpl: {
@@ -42,11 +38,9 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        {
-            let self: Box<i32> = Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(0).value };
-            let f: &mut Formatter = &mut __f;
-            self.i32::fmt_decimal(f);
-        };
+        let self: Box<i32> = Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(0).value };
+        let f: &mut Formatter = &mut __f;
+        self.i32::fmt_decimal(f);
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
@@ -55,11 +49,9 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        {
-            let self: Box<i32> = Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(1).value };
-            let f: &mut Formatter = &mut __f;
-            self.i32::fmt_decimal(f);
-        };
+        let self: Box<i32> = Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(1).value };
+        let f: &mut Formatter = &mut __f;
+        self.i32::fmt_decimal(f);
         break __tmpl: __r;
     });
 }

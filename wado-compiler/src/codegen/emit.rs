@@ -1911,7 +1911,10 @@ impl<'a> WirEmitter<'a> {
     }
 
     fn resolve_local(&self, name: &str) -> u32 {
-        self.current_locals.get(name).copied().unwrap_or(0) // fallback
+        self.current_locals
+            .get(name)
+            .copied()
+            .unwrap_or_else(|| panic!("unresolved local: {name}"))
     }
 
     fn resolve_type_index(&self, wir_idx: u32) -> u32 {

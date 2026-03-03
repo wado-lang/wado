@@ -30,16 +30,12 @@ export fn run() with Stdout {
     let mut b: Item = Item { value: 20 };
     let items: Array<&mut Item> = __seq_lit: {
         let mut __b: Array<&mut Item> = Array<Item> { repr: core::builtin::array_new::<&mut Item>(2), used: 0 };
-        {
-            let self: &mut Array<&mut Item> = &mut __b;
-            let value: &mut Item = &mut a;
-            self."Array<Item>::append"(value);
-        };
-        {
-            let self: &mut Array<&mut Item> = &mut __b;
-            let value: &mut Item = &mut b;
-            self."Array<Item>::append"(value);
-        };
+        let self: &mut Array<&mut Item> = &mut __b;
+        let value: &mut Item = &mut a;
+        self."Array<Item>::append"(value);
+        let self: &mut Array<&mut Item> = &mut __b;
+        let value: &mut Item = &mut b;
+        self."Array<Item>::append"(value);
         break __seq_lit: *__b;
     };
     __for_0: {
@@ -55,11 +51,9 @@ export fn run() with Stdout {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                {
-                    let self: Box<i32> = Box<i32> { value: items."Array<Item>^IndexValue::index_value"(i).value };
-                    let f: &mut Formatter = &mut __f;
-                    self.i32::fmt_decimal(f);
-                };
+                let self: Box<i32> = Box<i32> { value: items."Array<Item>^IndexValue::index_value"(i).value };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
                 break __tmpl: __r;
             });
             i = (i + 1);

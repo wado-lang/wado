@@ -26,15 +26,13 @@ export fn run() {
 }
 
 export fn __cm_export__run() {
-    {
-        __inline___initialize_modules_1: {
-            if __modules_initialized {
-                break __inline___initialize_modules_1;
-            }
-            __modules_initialized = true;
-        };
-        core::internal::panic("This is a panic message");
+    __inline___initialize_modules_1: {
+        if __modules_initialized {
+            break __inline___initialize_modules_1;
+        }
+        __modules_initialized = true;
     };
+    core::internal::panic("This is a panic message");
     cm_raw_call task-return(0);
 }
 

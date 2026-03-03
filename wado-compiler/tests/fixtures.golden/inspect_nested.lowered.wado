@@ -44,16 +44,12 @@ export fn run() with Stdout {
     });
     let points: Array<Point> = __seq_lit: {
         let mut __b: Array<Point> = Array<Point> { repr: core::builtin::array_new::<Point>(2), used: 0 };
-        {
-            let self: &mut Array<Point> = &mut __b;
-            let value: Point = Point { x: 1, y: 2 };
-            self."Array<Point>::append"(value);
-        };
-        {
-            let self: &mut Array<Point> = &mut __b;
-            let value: Point = Point { x: 3, y: 4 };
-            self."Array<Point>::append"(value);
-        };
+        let self: &mut Array<Point> = &mut __b;
+        let value: Point = Point { x: 1, y: 2 };
+        self."Array<Point>::append"(value);
+        let self: &mut Array<Point> = &mut __b;
+        let value: Point = Point { x: 3, y: 4 };
+        self."Array<Point>::append"(value);
         break __seq_lit: *__b;
     };
     core::cli::println(__tmpl: {
@@ -89,59 +85,35 @@ export fn run() with Stdout {
 }
 
 pub fn "Point^Inspect::inspect"(self: &Point, f: &mut Formatter) {
-    {
-        let s: String = "Point { ";
-        f.buf.String::append(s);
-    };
-    {
-        let s: String = "x: ";
-        f.buf.String::append(s);
-    };
-    {
-        let self: Box<i32> = Box<i32> { value: self.x };
-        self.i32::fmt_decimal(f);
-    };
-    {
-        let s: String = ", ";
-        f.buf.String::append(s);
-    };
-    {
-        let s: String = "y: ";
-        f.buf.String::append(s);
-    };
-    {
-        let self: Box<i32> = Box<i32> { value: self.y };
-        self.i32::fmt_decimal(f);
-    };
-    {
-        let s: String = " }";
-        f.buf.String::append(s);
-    };
+    let s: String = "Point { ";
+    f.buf.String::append(s);
+    let s: String = "x: ";
+    f.buf.String::append(s);
+    let self: Box<i32> = Box<i32> { value: self.x };
+    self.i32::fmt_decimal(f);
+    let s: String = ", ";
+    f.buf.String::append(s);
+    let s: String = "y: ";
+    f.buf.String::append(s);
+    let self: Box<i32> = Box<i32> { value: self.y };
+    self.i32::fmt_decimal(f);
+    let s: String = " }";
+    f.buf.String::append(s);
 }
 
 pub fn "Line^Inspect::inspect"(self: &Line, f: &mut Formatter) {
-    {
-        let s: String = "Line { ";
-        f.buf.String::append(s);
-    };
-    {
-        let s: String = "start: ";
-        f.buf.String::append(s);
-    };
+    let s: String = "Line { ";
+    f.buf.String::append(s);
+    let s: String = "start: ";
+    f.buf.String::append(s);
     self.start."Point^Inspect::inspect"(f);
-    {
-        let s: String = ", ";
-        f.buf.String::append(s);
-    };
-    {
-        let s: String = "end: ";
-        f.buf.String::append(s);
-    };
+    let s: String = ", ";
+    f.buf.String::append(s);
+    let s: String = "end: ";
+    f.buf.String::append(s);
     self.end."Point^Inspect::inspect"(f);
-    {
-        let s: String = " }";
-        f.buf.String::append(s);
-    };
+    let s: String = " }";
+    f.buf.String::append(s);
 }
 
 export fn __cm_export__run() {
@@ -151,46 +123,47 @@ export fn __cm_export__run() {
 
 pub fn "Option<Point>^Inspect::inspect"(self: Box<Option<Point>>, f: &mut Formatter) {
     if __variant_test(self.value, case=0, name=Some) {
-        {
-            let s: String = "Option::Some(";
-            f.buf.String::append(s);
-        };
+        let s: String = "Option::Some(";
+        f.buf.String::append(s);
         __variant_payload(self.value, case=0)."Point^Inspect::inspect"(f);
-        {
-            let s: String = ")";
-            f.buf.String::append(s);
-        };
+        let s: String = ")";
+        f.buf.String::append(s);
     } else {
         if __variant_test(self.value, case=1, name=None) {
-            {
-                let s: String = "Option::None";
-                f.buf.String::append(s);
-            };
+            let s: String = "Option::None";
+            f.buf.String::append(s);
         };
     };
 }
 
 pub fn "Array<Point>^Inspect::inspect"(self: &Array<Point>, f: &mut Formatter) {
-    f.buf.String::append_char('[');
+    let self: &mut String = f.buf;
+    if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
+        self.String::grow((self.used + 1));
+    }
+    core::builtin::array_set_u8(self.repr, self.used, 91);
+    self.used = (self.used + 1);
     __for_5: {
         let mut i: i32 = 0;
-        let _licm_used_10: i32 = self.used;
-        let _licm_buf_11: &mut String = f.buf;
+        let _licm_used_16: i32 = self.used;
         loop {
-            if !(i < _licm_used_10) {
+            if !(i < _licm_used_16) {
                 break __for_5;
             }
             if (i > 0) {
-                {
-                    let s: String = ", ";
-                    _licm_buf_11.String::append(s);
-                };
+                let s: String = ", ";
+                f.buf.String::append(s);
             }
             self."Array<Point>^IndexValue::index_value"(i)."Point^Inspect::inspect"(f);
             i = (i + 1);
         }
     }
-    f.buf.String::append_char(']');
+    let self: &mut String = f.buf;
+    if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
+        self.String::grow((self.used + 1));
+    }
+    core::builtin::array_set_u8(self.repr, self.used, 93);
+    self.used = (self.used + 1);
 }
 
 fn "Array<Point>^IndexValue::index_value"(self: &Array<Point>, index: i32) -> Point {

@@ -34,11 +34,9 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        {
-            let self: &Point = &p;
-            let f: &mut Formatter = &mut __f;
-            self."Point^Inspect::inspect"(f);
-        };
+        let self: &Point = &p;
+        let f: &mut Formatter = &mut __f;
+        self."Point^Inspect::inspect"(f);
         break __tmpl: __r;
     });
     let opt: Option<Point> = Option<Point>::Some(Point { x: 1, y: 2 });
@@ -48,45 +46,29 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        {
-            let self: Box<Option<Point>> = Box<Option<Point>> { value: opt };
-            let f: &mut Formatter = &mut __f;
-            self."Option<Point>^Inspect::inspect"(f);
-        };
+        let self: Box<Option<Point>> = Box<Option<Point>> { value: opt };
+        let f: &mut Formatter = &mut __f;
+        self."Option<Point>^Inspect::inspect"(f);
         break __tmpl: __r;
     });
     core::cli::println("ok");
 }
 
 pub fn "Point^Inspect::inspect"(self: &Point, f: &mut Formatter) {
-    {
-        let s: String = "Point { ";
-        f.buf.String::append(s);
-    };
-    {
-        let s: String = "x: ";
-        f.buf.String::append(s);
-    };
-    {
-        let self: Box<i32> = Box<i32> { value: self.x };
-        self.i32::fmt_decimal(f);
-    };
-    {
-        let s: String = ", ";
-        f.buf.String::append(s);
-    };
-    {
-        let s: String = "y: ";
-        f.buf.String::append(s);
-    };
-    {
-        let self: Box<i32> = Box<i32> { value: self.y };
-        self.i32::fmt_decimal(f);
-    };
-    {
-        let s: String = " }";
-        f.buf.String::append(s);
-    };
+    let s: String = "Point { ";
+    f.buf.String::append(s);
+    let s: String = "x: ";
+    f.buf.String::append(s);
+    let self: Box<i32> = Box<i32> { value: self.x };
+    self.i32::fmt_decimal(f);
+    let s: String = ", ";
+    f.buf.String::append(s);
+    let s: String = "y: ";
+    f.buf.String::append(s);
+    let self: Box<i32> = Box<i32> { value: self.y };
+    self.i32::fmt_decimal(f);
+    let s: String = " }";
+    f.buf.String::append(s);
 }
 
 export fn __cm_export__run() {
@@ -96,21 +78,15 @@ export fn __cm_export__run() {
 
 pub fn "Option<Point>^Inspect::inspect"(self: Box<Option<Point>>, f: &mut Formatter) {
     if __variant_test(self.value, case=0, name=Some) {
-        {
-            let s: String = "Option::Some(";
-            f.buf.String::append(s);
-        };
+        let s: String = "Option::Some(";
+        f.buf.String::append(s);
         __variant_payload(self.value, case=0)."Point^Inspect::inspect"(f);
-        {
-            let s: String = ")";
-            f.buf.String::append(s);
-        };
+        let s: String = ")";
+        f.buf.String::append(s);
     } else {
         if __variant_test(self.value, case=1, name=None) {
-            {
-                let s: String = "Option::None";
-                f.buf.String::append(s);
-            };
+            let s: String = "Option::None";
+            f.buf.String::append(s);
         };
     };
 }

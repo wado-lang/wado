@@ -23,17 +23,11 @@ fn greet(name: Name) -> String {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        {
-            let self: &Name = &name;
-            let f: &mut Formatter = &mut __f;
-            {
-                *self as String."String^Inspect::inspect"(f);
-                {
-                    let s: String = " as Name";
-                    f.buf.String::append(s);
-                };
-            };
-        };
+        let self: &Name = &name;
+        let f: &mut Formatter = &mut __f;
+        *self as String."String^Inspect::inspect"(f);
+        let s: String = " as Name";
+        f.buf.String::append(s);
         __r.String::append("!");
         break __tmpl: __r;
     };
@@ -56,11 +50,9 @@ export fn run() with Stdout {
             let buf: &mut Label = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        {
-            let self: &String = &x;
-            let f: &mut Formatter = &mut __f;
-            f.Formatter::pad(*self);
-        };
+        let self: &String = &x;
+        let f: &mut Formatter = &mut __f;
+        f.Formatter::pad(*self);
         break __tmpl: __r;
     };
     core::cli::println(label);

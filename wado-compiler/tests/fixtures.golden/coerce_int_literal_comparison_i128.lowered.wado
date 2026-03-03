@@ -24,174 +24,126 @@ export fn run() with Stdout {
     };
     let x_u128: u128 = u128 { low: 1000, high: 0 };
     let x_i128: i128 = i128 { low: 18446744073709551116, high: -1 };
-    {
-        let cond: bool = x_u128."u128^Eq::eq"(&u128 { low: 1000, high: 0 });
-        let label: String = "u128 == rhs";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = u128 { low: 1000, high: 0 }."u128^Eq::eq"(&x_u128);
-        let label: String = "lhs == u128";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = x_i128."i128^Eq::eq"(&i128 { low: 18446744073709551116, high: -1 });
-        let label: String = "i128 == rhs";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = i128 { low: 18446744073709551116, high: -1 }."i128^Eq::eq"(&x_i128);
-        let label: String = "lhs == i128";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = !x_u128."u128^Eq::eq"(&u128 { low: 999, high: 0 });
-        let label: String = "u128 != rhs";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = !u128 { low: 999, high: 0 }."u128^Eq::eq"(&x_u128);
-        let label: String = "lhs != u128";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = !x_i128."i128^Eq::eq"(&i128::from_i64(0));
-        let label: String = "i128 != rhs";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = !i128::from_i64(0)."i128^Eq::eq"(&x_i128);
-        let label: String = "lhs != i128";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = (x_u128."u128^Ord::cmp"(&u128 { low: 1001, high: 0 }) == Ordering::Less);
-        let label: String = "u128 < rhs";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = (u128 { low: 999, high: 0 }."u128^Ord::cmp"(&x_u128) == Ordering::Less);
-        let label: String = "lhs < u128";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = (x_i128."i128^Ord::cmp"(&i128::from_i64(0)) == Ordering::Less);
-        let label: String = "i128 < rhs";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = (i128 { low: 18446744073709551115, high: -1 }."i128^Ord::cmp"(&x_i128) == Ordering::Less);
-        let label: String = "lhs < i128";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = (x_u128."u128^Ord::cmp"(&u128 { low: 999, high: 0 }) == Ordering::Greater);
-        let label: String = "u128 > rhs";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = (u128 { low: 1001, high: 0 }."u128^Ord::cmp"(&x_u128) == Ordering::Greater);
-        let label: String = "lhs > u128";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = (x_i128."i128^Ord::cmp"(&i128 { low: 18446744073709551115, high: -1 }) == Ordering::Greater);
-        let label: String = "i128 > rhs";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = (i128::from_i64(0)."i128^Ord::cmp"(&x_i128) == Ordering::Greater);
-        let label: String = "lhs > i128";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = (x_u128."u128^Ord::cmp"(&u128 { low: 1000, high: 0 }) != Ordering::Greater);
-        let label: String = "u128 <= rhs";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = (u128 { low: 1000, high: 0 }."u128^Ord::cmp"(&x_u128) != Ordering::Greater);
-        let label: String = "lhs <= u128";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = (x_i128."i128^Ord::cmp"(&i128 { low: 18446744073709551116, high: -1 }) != Ordering::Greater);
-        let label: String = "i128 <= rhs";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = (i128 { low: 18446744073709551116, high: -1 }."i128^Ord::cmp"(&x_i128) != Ordering::Greater);
-        let label: String = "lhs <= i128";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = (x_u128."u128^Ord::cmp"(&u128 { low: 1000, high: 0 }) != Ordering::Less);
-        let label: String = "u128 >= rhs";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = (u128 { low: 1000, high: 0 }."u128^Ord::cmp"(&x_u128) != Ordering::Less);
-        let label: String = "lhs >= u128";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = (x_i128."i128^Ord::cmp"(&i128 { low: 18446744073709551116, high: -1 }) != Ordering::Less);
-        let label: String = "i128 >= rhs";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
-    {
-        let cond: bool = (i128 { low: 18446744073709551116, high: -1 }."i128^Ord::cmp"(&x_i128) != Ordering::Less);
-        let label: String = "lhs >= i128";
-        if !cond {
-            core::internal::panic(label);
-        }
-    };
+    let cond: bool = x_u128."u128^Eq::eq"(&u128 { low: 1000, high: 0 });
+    let label: String = "u128 == rhs";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = u128 { low: 1000, high: 0 }."u128^Eq::eq"(&x_u128);
+    let label: String = "lhs == u128";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = x_i128."i128^Eq::eq"(&i128 { low: 18446744073709551116, high: -1 });
+    let label: String = "i128 == rhs";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = i128 { low: 18446744073709551116, high: -1 }."i128^Eq::eq"(&x_i128);
+    let label: String = "lhs == i128";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = !x_u128."u128^Eq::eq"(&u128 { low: 999, high: 0 });
+    let label: String = "u128 != rhs";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = !u128 { low: 999, high: 0 }."u128^Eq::eq"(&x_u128);
+    let label: String = "lhs != u128";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = !x_i128."i128^Eq::eq"(&i128::from_i64(0));
+    let label: String = "i128 != rhs";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = !i128::from_i64(0)."i128^Eq::eq"(&x_i128);
+    let label: String = "lhs != i128";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = (x_u128."u128^Ord::cmp"(&u128 { low: 1001, high: 0 }) == Ordering::Less);
+    let label: String = "u128 < rhs";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = (u128 { low: 999, high: 0 }."u128^Ord::cmp"(&x_u128) == Ordering::Less);
+    let label: String = "lhs < u128";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = (x_i128."i128^Ord::cmp"(&i128::from_i64(0)) == Ordering::Less);
+    let label: String = "i128 < rhs";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = (i128 { low: 18446744073709551115, high: -1 }."i128^Ord::cmp"(&x_i128) == Ordering::Less);
+    let label: String = "lhs < i128";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = (x_u128."u128^Ord::cmp"(&u128 { low: 999, high: 0 }) == Ordering::Greater);
+    let label: String = "u128 > rhs";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = (u128 { low: 1001, high: 0 }."u128^Ord::cmp"(&x_u128) == Ordering::Greater);
+    let label: String = "lhs > u128";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = (x_i128."i128^Ord::cmp"(&i128 { low: 18446744073709551115, high: -1 }) == Ordering::Greater);
+    let label: String = "i128 > rhs";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = (i128::from_i64(0)."i128^Ord::cmp"(&x_i128) == Ordering::Greater);
+    let label: String = "lhs > i128";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = (x_u128."u128^Ord::cmp"(&u128 { low: 1000, high: 0 }) != Ordering::Greater);
+    let label: String = "u128 <= rhs";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = (u128 { low: 1000, high: 0 }."u128^Ord::cmp"(&x_u128) != Ordering::Greater);
+    let label: String = "lhs <= u128";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = (x_i128."i128^Ord::cmp"(&i128 { low: 18446744073709551116, high: -1 }) != Ordering::Greater);
+    let label: String = "i128 <= rhs";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = (i128 { low: 18446744073709551116, high: -1 }."i128^Ord::cmp"(&x_i128) != Ordering::Greater);
+    let label: String = "lhs <= i128";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = (x_u128."u128^Ord::cmp"(&u128 { low: 1000, high: 0 }) != Ordering::Less);
+    let label: String = "u128 >= rhs";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = (u128 { low: 1000, high: 0 }."u128^Ord::cmp"(&x_u128) != Ordering::Less);
+    let label: String = "lhs >= u128";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = (x_i128."i128^Ord::cmp"(&i128 { low: 18446744073709551116, high: -1 }) != Ordering::Less);
+    let label: String = "i128 >= rhs";
+    if !cond {
+        core::internal::panic(label);
+    }
+    let cond: bool = (i128 { low: 18446744073709551116, high: -1 }."i128^Ord::cmp"(&x_i128) != Ordering::Less);
+    let label: String = "lhs >= i128";
+    if !cond {
+        core::internal::panic(label);
+    }
     core::cli::println("ok");
 }
 

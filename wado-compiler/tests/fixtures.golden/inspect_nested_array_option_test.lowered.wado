@@ -27,18 +27,12 @@ export fn run() with Stdout {
     let c: Option<i32> = Option<i32>::Some(3);
     let arr: Array<Option<i32>> = __seq_lit: {
         let mut __b: Array<Option<i32>> = Array<Option<i32>> { repr: core::builtin::array_new::<Option<i32>>(3), used: 0 };
-        {
-            let self: &mut Array<Option<i32>> = &mut __b;
-            self."Array<Option<i32>>::append"(a);
-        };
-        {
-            let self: &mut Array<Option<i32>> = &mut __b;
-            self."Array<Option<i32>>::append"(b);
-        };
-        {
-            let self: &mut Array<Option<i32>> = &mut __b;
-            self."Array<Option<i32>>::append"(c);
-        };
+        let self: &mut Array<Option<i32>> = &mut __b;
+        self."Array<Option<i32>>::append"(a);
+        let self: &mut Array<Option<i32>> = &mut __b;
+        self."Array<Option<i32>>::append"(b);
+        let self: &mut Array<Option<i32>> = &mut __b;
+        self."Array<Option<i32>>::append"(c);
         break __seq_lit: *__b;
     };
     core::cli::println(__tmpl: {
@@ -58,26 +52,33 @@ export fn __cm_export__run() {
 }
 
 pub fn "Array<Option<i32>>^Inspect::inspect"(self: &Array<Option<i32>>, f: &mut Formatter) {
-    f.buf.String::append_char('[');
+    let self: &mut String = f.buf;
+    if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
+        self.String::grow((self.used + 1));
+    }
+    core::builtin::array_set_u8(self.repr, self.used, 91);
+    self.used = (self.used + 1);
     __for_5: {
         let mut i: i32 = 0;
-        let _licm_used_10: i32 = self.used;
-        let _licm_buf_11: &mut String = f.buf;
+        let _licm_used_16: i32 = self.used;
         loop {
-            if !(i < _licm_used_10) {
+            if !(i < _licm_used_16) {
                 break __for_5;
             }
             if (i > 0) {
-                {
-                    let s: String = ", ";
-                    _licm_buf_11.String::append(s);
-                };
+                let s: String = ", ";
+                f.buf.String::append(s);
             }
             Box<Option<i32>> { value: self."Array<Option<i32>>^IndexValue::index_value"(i) }."Option<i32>^Inspect::inspect"(f);
             i = (i + 1);
         }
     }
-    f.buf.String::append_char(']');
+    let self: &mut String = f.buf;
+    if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
+        self.String::grow((self.used + 1));
+    }
+    core::builtin::array_set_u8(self.repr, self.used, 93);
+    self.used = (self.used + 1);
 }
 
 fn "Array<Option<i32>>^IndexValue::index_value"(self: &Array<Option<i32>>, index: i32) -> Option<i32> {
@@ -89,24 +90,16 @@ fn "Array<Option<i32>>^IndexValue::index_value"(self: &Array<Option<i32>>, index
 
 pub fn "Option<i32>^Inspect::inspect"(self: Box<Option<i32>>, f: &mut Formatter) {
     if __variant_test(self.value, case=0, name=Some) {
-        {
-            let s: String = "Option::Some(";
-            f.buf.String::append(s);
-        };
-        {
-            let self: Box<i32> = Box<i32> { value: __variant_payload(self.value, case=0) };
-            self.i32::fmt_decimal(f);
-        };
-        {
-            let s: String = ")";
-            f.buf.String::append(s);
-        };
+        let s: String = "Option::Some(";
+        f.buf.String::append(s);
+        let self: Box<i32> = Box<i32> { value: __variant_payload(self.value, case=0) };
+        self.i32::fmt_decimal(f);
+        let s: String = ")";
+        f.buf.String::append(s);
     } else {
         if __variant_test(self.value, case=1, name=None) {
-            {
-                let s: String = "Option::None";
-                f.buf.String::append(s);
-            };
+            let s: String = "Option::None";
+            f.buf.String::append(s);
         };
     };
 }
