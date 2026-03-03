@@ -5,7 +5,9 @@ use indexmap::IndexMap;
 use crate::ast::{self, Expr, Item, Type};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
-use crate::tir::{FunctionRef, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
+use crate::tir::{
+    FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable,
+};
 use crate::token::Span;
 
 use super::Resolver;
@@ -195,6 +197,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // Builtin functions: resolve through core:builtin module
                     if prefix == "builtin" {
                         (Some(ModuleSource::builtin()), suffix.to_string(), true)
+                    }
+                    // Check if this is a type parameter static call (T::method where T: Trait)
+                    else if let Some(&(_param_idx, type_param_type_id)) =
+                        self.current_type_params.get(prefix)
+                    {
+                        return self.resolve_type_param_static_call(
+                            prefix,
+                            suffix,
+                            type_param_type_id,
+                            &args,
+                            call,
+                            ctx,
+                        );
                     }
                     // Check if this is a static method call (Type::method)
                     // Static methods are registered with mangled names "Type::method"
@@ -990,5 +1005,89 @@ impl<H: CompilerHost> Resolver<'_, H> {
             module_source,
             type_args,
         )
+    }
+
+    /// Resolve a static call through a type parameter: `T::method(args)`
+    /// where T is bound by a trait (e.g., `T: Constructable`).
+    fn resolve_type_param_static_call(
+        &mut self,
+        type_param_name: &str,
+        method_name: &str,
+        type_param_type_id: TypeId,
+        args: &[TirExpr],
+        call: &ast::CallExpr,
+        _ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let bounds = self.current_type_param_bounds.get(type_param_name).cloned();
+
+        if let Some(bounds) = bounds
+            && let Some((found_trait, method_info_result)) =
+                self.find_method_in_trait_bounds(&bounds, method_name, type_param_type_id)
+        {
+            let return_type = method_info_result.return_type;
+
+            // Resolve method-level type args (e.g., T::deserialize::<JsonDeserializer>)
+            let method_type_args: Vec<TypeId> = call
+                .type_args
+                .iter()
+                .map(|ty| self.resolve_type(ty))
+                .collect();
+
+            // Don't substitute method-level type params in the return type here.
+            // The return type contains function-level TypeParams (e.g., Self -> TypeParam{T})
+            // which will be substituted during monomorphization. Method-level type params
+            // (e.g., D in deserialize<D>) are handled by the monomorphizer.
+            let final_return_type = return_type;
+
+            // Build method_info with is_type_param_receiver = true
+            let method_type_arg_names: Vec<String> = method_type_args
+                .iter()
+                .map(|t| self.type_table.borrow().mangle_type_name(*t))
+                .collect();
+            let mut method_info = LocalMethodName::new(
+                type_param_name.to_string(),
+                Some(found_trait),
+                method_name.to_string(),
+            );
+            method_info.is_type_param_receiver = true;
+            if !method_type_arg_names.is_empty() {
+                method_info.method_type_args = method_type_arg_names;
+            }
+
+            let mangled_name = method_info.to_mangled_name();
+
+            // Build monomorph_info for method-level type args so the
+            // monomorphizer can substitute TypeParam type args and
+            // queue instantiations.
+            let monomorph_info = if method_type_args.is_empty() {
+                None
+            } else {
+                Some(MonomorphInfo {
+                    generic_name: mangled_name.clone(),
+                    type_args: method_type_args,
+                    is_blanket: false,
+                })
+            };
+
+            return TirExpr::new(
+                TirExprKind::StaticCall {
+                    func: FunctionRef::External {
+                        module_source: self.current_module_source.clone(),
+                        name: mangled_name,
+                        monomorph_info,
+                        method_info: Some(method_info),
+                    },
+                    args: args.to_vec(),
+                },
+                final_return_type,
+                call.span,
+            );
+        }
+
+        let _ = self.logger.error(TypeError::UnknownFunction {
+            name: format!("{type_param_name}::{method_name}"),
+            span: call.span,
+        });
+        TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span)
     }
 }

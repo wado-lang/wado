@@ -908,20 +908,86 @@ fn unwrap_to_candidate_call(instr: &WirInstr, candidate_ids: &IndexSet<u32>) -> 
 
 /// Extract a candidate call from the result position of a block body.
 /// Handles both implicit block results and explicit `Seq([value, Br])` patterns.
+///
+/// Returns `None` if the prefix instructions (everything before the result)
+/// contain `Br` instructions that target the block itself.  Removing the block
+/// wrapper in that case would corrupt those branch depths.
 fn extract_block_result_call(body: &[WirInstr], candidate_ids: &IndexSet<u32>) -> Option<u32> {
     let last = body.last()?;
+
+    // Check prefix instructions for branches targeting this block.
+    // Any `Br` in the prefix that targets this block (at relative depth 0
+    // from the block scope, accounting for nested if/block/loop) would become
+    // invalid once the block wrapper is removed.
+    let prefix = &body[..body.len() - 1];
+    if instrs_have_br_at_depth(prefix, 0) {
+        return None;
+    }
+
     match last {
         // Block ends with Seq([..., value, Br { depth }]) — break-with-value
         WirInstr::Seq(seq) => {
             if let Some((WirInstr::Br { .. }, rest)) = seq.split_last()
                 && let Some((val, _)) = rest.split_last()
             {
+                // Also check Seq items before the value for branches targeting the block.
+                let seq_prefix = &rest[..rest.len() - 1];
+                if instrs_have_br_at_depth(seq_prefix, 0) {
+                    return None;
+                }
                 return unwrap_to_candidate_call(val, candidate_ids);
             }
             None
         }
         // Block ends with the value directly (no explicit br)
         other => unwrap_to_candidate_call(other, candidate_ids),
+    }
+}
+
+/// Check if any instruction in the slice contains a `Br` that targets the block
+/// at `target_depth` levels above the current nesting position.
+///
+/// `target_depth` is 0 when checking from directly inside the block.
+/// Nested `if`/`block`/`loop` increase the depth by 1 for their bodies.
+fn instrs_have_br_at_depth(instrs: &[WirInstr], target_depth: u32) -> bool {
+    instrs
+        .iter()
+        .any(|instr| instr_has_br_at_depth(instr, target_depth))
+}
+
+fn instr_has_br_at_depth(instr: &WirInstr, target_depth: u32) -> bool {
+    match instr {
+        WirInstr::Br { depth } => *depth == target_depth,
+        WirInstr::BrIf { depth, condition } => {
+            *depth == target_depth || instr_has_br_at_depth(condition, target_depth)
+        }
+        WirInstr::BrTable {
+            index,
+            targets,
+            default,
+        } => {
+            targets.contains(&target_depth)
+                || *default == target_depth
+                || instr_has_br_at_depth(index, target_depth)
+        }
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            instr_has_br_at_depth(condition, target_depth)
+                || instrs_have_br_at_depth(then_body, target_depth + 1)
+                || else_body
+                    .as_ref()
+                    .is_some_and(|eb| instrs_have_br_at_depth(eb, target_depth + 1))
+        }
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
+            instrs_have_br_at_depth(body, target_depth + 1)
+        }
+        WirInstr::Seq(items) => instrs_have_br_at_depth(items, target_depth),
+        // All other instructions (arithmetic, struct ops, etc.) cannot contain `Br`.
+        _ => false,
     }
 }
 
@@ -1385,6 +1451,8 @@ fn rewrite_variant_returns_to_multi_value(
 }
 
 /// Pad variant fields with default values for missing payload slots.
+/// Also replaces `Nop` fields (unit/void placeholders from `StructNew`) with
+/// appropriate default values, since Nop produces no value in flat multi-value returns.
 fn pad_variant_fields(
     fields: Vec<WirInstr>,
     vi: &VariantSroaInfo,
@@ -1392,6 +1460,15 @@ fn pad_variant_fields(
 ) -> Vec<WirInstr> {
     let payload_count = fields.len() - 1; // subtract discriminant
     let mut new_fields = fields;
+    // Replace any Nop payload fields with default values for their type position
+    for (i, field) in new_fields.iter_mut().enumerate().skip(1) {
+        if matches!(field, WirInstr::Nop) {
+            let pos = i - 1; // payload position (skip discriminant)
+            if pos < result_types.len() - 1 {
+                *field = default_value_for_type(&result_types[1 + pos]);
+            }
+        }
+    }
     for pos in payload_count..vi.max_payload_count {
         let ty = &result_types[1 + pos]; // +1 to skip discriminant
         new_fields.push(default_value_for_type(ty));
@@ -1474,8 +1551,19 @@ fn rewrite_variant_struct_new_br_to_return(
             }
             i += 2;
         } else {
-            if let WirInstr::Block { body, .. } = &mut instrs[i] {
-                rewrite_variant_struct_new_br_to_return(body, target_depth + 1, vi, result_types);
+            match &mut instrs[i] {
+                WirInstr::Block { body, .. } => {
+                    rewrite_variant_struct_new_br_to_return(
+                        body,
+                        target_depth + 1,
+                        vi,
+                        result_types,
+                    );
+                }
+                WirInstr::Seq(items) => {
+                    rewrite_variant_struct_new_br_to_return(items, target_depth, vi, result_types);
+                }
+                _ => {}
             }
             i += 1;
         }
@@ -1485,17 +1573,19 @@ fn rewrite_variant_struct_new_br_to_return(
     // The `matches!` guard before `mem::replace` is intentional to avoid replacing
     // non-StructNew instructions with Nop.
     #[allow(clippy::collapsible_if)]
-    if let Some(last) = instrs.last_mut()
-        && matches!(last, WirInstr::StructNew { .. })
-    {
-        if let WirInstr::StructNew { fields, .. } = std::mem::replace(last, WirInstr::Nop) {
-            *last = WirInstr::Return {
-                value: Some(Box::new(WirInstr::Seq(pad_variant_fields(
-                    fields,
-                    vi,
-                    result_types,
-                )))),
-            };
+    if let Some(last) = instrs.last_mut() {
+        if matches!(last, WirInstr::StructNew { .. }) {
+            if let WirInstr::StructNew { fields, .. } = std::mem::replace(last, WirInstr::Nop) {
+                *last = WirInstr::Return {
+                    value: Some(Box::new(WirInstr::Seq(pad_variant_fields(
+                        fields,
+                        vi,
+                        result_types,
+                    )))),
+                };
+            }
+        } else if let WirInstr::Seq(items) = last {
+            rewrite_variant_struct_new_br_to_return(items, target_depth, vi, result_types);
         }
     }
 }

@@ -1201,11 +1201,19 @@ fn escape_json_string(s: &String) -> String {
     return result;
 }
 
+fn format_number(n: f64) -> String {
+    if !n.is_nan() && n.is_finite() && n == f64::floor(n) && f64::abs(n) < 9007199254740992.0 {
+        let i = n as i64;
+        return `{i}`;
+    }
+    return `{n}`;
+}
+
 fn stringify(value: &JsonValue) -> String {
     return match *value {
         Null => "null",
         Bool(b) => if b { "true" } else { "false" },
-        Number(n) => `{n}`,
+        Number(n) => format_number(n),
         Str(s) => escape_json_string(&s),
         Arr(items) => {
             let mut result = String::with_capacity(32);
@@ -1238,6 +1246,70 @@ fn stringify(value: &JsonValue) -> String {
     };
 }
 
+fn make_indent(level: i32, size: i32) -> String {
+    let total = level * size;
+    let mut s = String::with_capacity(total);
+    for let mut i = 0; i < total; i += 1 {
+        s.append_char(' ');
+    }
+    return s;
+}
+
+fn stringify_at_level(value: &JsonValue, level: i32, indent_size: i32) -> String {
+    return match *value {
+        Null => "null",
+        Bool(b) => if b { "true" } else { "false" },
+        Number(n) => format_number(n),
+        Str(s) => escape_json_string(&s),
+        Arr(items) => {
+            if items.len() == 0 {
+                "[]"
+            } else {
+                let mut result = String::with_capacity(64);
+                result.append("[\n");
+                for let mut i = 0; i < items.len(); i += 1 {
+                    result.append(make_indent(level + 1, indent_size));
+                    result.append(stringify_at_level(&items[i], level + 1, indent_size));
+                    if i < items.len() - 1 {
+                        result.append_char(',');
+                    }
+                    result.append_char('\n');
+                }
+                result.append(make_indent(level, indent_size));
+                result.append_char(']');
+                result
+            }
+        },
+        Obj(map) => {
+            let entries = map.entries();
+            if entries.len() == 0 {
+                "{}"
+            } else {
+                let mut result = String::with_capacity(64);
+                result.append("{\n");
+                for let mut i = 0; i < entries.len(); i += 1 {
+                    let [key, val] = entries[i];
+                    result.append(make_indent(level + 1, indent_size));
+                    result.append(escape_json_string(&key));
+                    result.append(": ");
+                    result.append(stringify_at_level(&val, level + 1, indent_size));
+                    if i < entries.len() - 1 {
+                        result.append_char(',');
+                    }
+                    result.append_char('\n');
+                }
+                result.append(make_indent(level, indent_size));
+                result.append_char('}');
+                result
+            }
+        },
+    };
+}
+
+fn stringify_pretty(value: &JsonValue) -> String {
+    return stringify_at_level(value, 0, 2);
+}
+
 
 test "stringify-null" {
     let v = JsonValue::Null;
@@ -1251,9 +1323,15 @@ test "stringify-bool" {
     assert stringify(&f) == "false";
 }
 
-test "stringify-number" {
+test "stringify-number-integer" {
     let v = JsonValue::Number(42.0);
-    assert stringify(&v) == "42.0";
+    assert stringify(&v) == "42";
+}
+
+test "stringify-number-float" {
+    let v = JsonValue::Number(3.14);
+    let s = stringify(&v);
+    assert s == "3.14";
 }
 
 test "stringify-string" {
@@ -1278,7 +1356,7 @@ test "stringify-array" {
     items.append(JsonValue::Number(2.0));
     items.append(JsonValue::Number(3.0));
     let v = JsonValue::Arr(items);
-    assert stringify(&v) == "[1.0,2.0,3.0]";
+    assert stringify(&v) == "[1,2,3]";
 }
 
 test "stringify-empty-object" {
@@ -1292,7 +1370,7 @@ test "stringify-object" {
     map["age"] = JsonValue::Number(30.0);
     let v = JsonValue::Obj(map);
     let s = stringify(&v);
-    assert s == "{\"name\":\"Alice\",\"age\":30.0}";
+    assert s == "{\"name\":\"Alice\",\"age\":30}";
 }
 
 test "roundtrip-complex" {
@@ -1326,6 +1404,70 @@ test "roundtrip-unicode" {
     }
 }
 
+test "format-number-integers" {
+    assert format_number(42.0) == "42";
+    assert format_number(-7.0) == "-7";
+    assert format_number(0.0) == "0";
+    assert format_number(1000000.0) == "1000000";
+}
+
+test "format-number-floats" {
+    assert format_number(3.14) == "3.14";
+    assert format_number(-0.5) == "-0.5";
+}
+
+test "stringify-pretty-empty" {
+    let empty_arr: Array<JsonValue> = [];
+    let v = JsonValue::Arr(empty_arr);
+    assert stringify_pretty(&v) == "[]";
+
+    let v2 = JsonValue::Obj(TreeMap::<String, JsonValue>::new());
+    assert stringify_pretty(&v2) == "{}";
+}
+
+test "stringify-pretty-array" {
+    let mut items: Array<JsonValue> = [];
+    items.append(JsonValue::Number(1.0));
+    items.append(JsonValue::Number(2.0));
+    items.append(JsonValue::Number(3.0));
+    let v = JsonValue::Arr(items);
+    assert stringify_pretty(&v) == "[\n  1,\n  2,\n  3\n]";
+}
+
+test "stringify-pretty-object" {
+    let mut map = TreeMap::<String, JsonValue>::new();
+    map["name"] = JsonValue::Str("Alice");
+    map["age"] = JsonValue::Number(30.0);
+    let v = JsonValue::Obj(map);
+    let s = stringify_pretty(&v);
+    assert s == "{\n  \"name\": \"Alice\",\n  \"age\": 30\n}";
+}
+
+test "stringify-pretty-nested" {
+    let mut inner = TreeMap::<String, JsonValue>::new();
+    inner["x"] = JsonValue::Number(1.0);
+    let mut outer = TreeMap::<String, JsonValue>::new();
+    outer["obj"] = JsonValue::Obj(inner);
+    let v = JsonValue::Obj(outer);
+    let s = stringify_pretty(&v);
+    assert s == "{\n  \"obj\": {\n    \"x\": 1\n  }\n}";
+}
+
+test "roundtrip-pretty" {
+    let input = "{\"a\":1,\"b\":[2,3],\"c\":{\"d\":true}}";
+    if let Some(parsed) = parse_json(input) {
+        let pretty = stringify_pretty(&parsed);
+        if let Some(reparsed) = parse_json(pretty) {
+            let compact = stringify(&reparsed);
+            assert compact == input;
+        } else {
+            assert false;
+        }
+    } else {
+        assert false;
+    }
+}
+
 
 export fn run() with Stdout {
     let input = "{\"name\":\"Wado\",\"version\":1,\"features\":[\"JSON\",\"UTF-8\",\"Unicode\"],\"emoji\":\"🎉\",\"nested\":{\"language\":\"日本語\",\"ok\":true},\"nothing\":null}";
@@ -1347,4 +1489,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"test": {}, "stdout": "Parsed successfully!\n{\"name\":\"Wado\",\"version\":1.0,\"features\":[\"JSON\",\"UTF-8\",\"Unicode\"],\"emoji\":\"🎉\",\"nested\":{\"language\":\"日本語\",\"ok\":true},\"nothing\":null}\nRound-trip OK\n"}
+{"test": {}, "stdout": "Parsed successfully!\n{\"name\":\"Wado\",\"version\":1,\"features\":[\"JSON\",\"UTF-8\",\"Unicode\"],\"emoji\":\"🎉\",\"nested\":{\"language\":\"日本語\",\"ok\":true},\"nothing\":null}\nRound-trip OK\n"}
