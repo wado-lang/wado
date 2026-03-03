@@ -237,9 +237,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                         if use_small {
                             let (inner_type, method_name, store_value) = if name == "u128" {
-                                (TypeTable::U64, "from_u64", value as u64)
+                                (
+                                    TypeTable::U64,
+                                    "from_u64",
+                                    u64::try_from(value).expect("value fits in u64"),
+                                )
                             } else {
-                                (TypeTable::I64, "from_i64", value as u64)
+                                (
+                                    TypeTable::I64,
+                                    "from_i64",
+                                    i64::try_from(value)
+                                        .expect("value fits in i64")
+                                        .cast_unsigned(),
+                                )
                             };
 
                             let inner_literal = TirExpr::new(

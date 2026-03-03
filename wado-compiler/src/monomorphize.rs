@@ -1292,6 +1292,22 @@ impl Monomorphizer {
                 // Fallback to GenericInstance if no monomorphized struct found
                 type_table.make_generic_instance(name, module_source, new_args)
             }
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+                ..
+            } => {
+                // Substitute the underlying type param to get the concrete type
+                let concrete_id = self.substitute_type(param_id, substitution, type_table);
+                // If the param resolved to a concrete type, look up the associated type binding
+                if concrete_id != param_id
+                    && let Some(resolved) = type_table.resolve_assoc_type(concrete_id, &assoc_name)
+                {
+                    return resolved;
+                }
+                // Fallback: return the original type (projection unresolved)
+                type_id
+            }
             // Other types don't contain type parameters
             _ => type_id,
         }
@@ -2476,13 +2492,10 @@ impl Monomorphizer {
                     let has_explicit_type_params = info.struct_name != info.base_struct_name;
                     let receiver_is_generic = {
                         let mut base = receiver.type_id;
-                        loop {
-                            match type_table.get(base).clone() {
-                                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                                    base = inner;
-                                }
-                                _ => break,
-                            }
+                        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
+                            type_table.get(base).clone()
+                        {
+                            base = inner;
                         }
                         matches!(
                             type_table.get(base),
@@ -2586,14 +2599,16 @@ impl Monomorphizer {
                             // substitute the existing type_args rather than building from
                             // the enclosing substitution map. This correctly maps
                             // ArrayIter<T> → ArrayIter<i32> instead of T → i32.
-                            let final_type_args = if existing_is_blanket
-                                && existing_type_args.is_some()
-                            {
-                                existing_type_args
-                                    .unwrap()
-                                    .iter()
-                                    .map(|&tid| self.substitute_type(tid, substitution, type_table))
-                                    .collect()
+                            let final_type_args = if existing_is_blanket {
+                                if let Some(args) = existing_type_args {
+                                    args.iter()
+                                        .map(|&tid| {
+                                            self.substitute_type(tid, substitution, type_table)
+                                        })
+                                        .collect()
+                                } else {
+                                    type_args
+                                }
                             } else {
                                 type_args
                             };

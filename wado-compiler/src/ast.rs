@@ -1175,10 +1175,12 @@ pub struct Newtype {
     pub span: Span,
 }
 
-/// Associated type declaration in a trait: `type Output;`
+/// Associated type declaration in a trait: `type Output;` or `type Output: Trait1 + Trait2;`
 #[derive(Debug, Clone)]
 pub struct AssociatedTypeDecl {
     pub name: String,
+    /// Trait bounds on this associated type (e.g., `SerializeSeq` in `type SeqSerializer: SerializeSeq;`)
+    pub bounds: Vec<String>,
     pub span: Span,
 }
 

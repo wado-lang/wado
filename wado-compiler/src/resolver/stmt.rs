@@ -661,14 +661,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> TirPattern {
         let mut peeled_type = scrutinee_type;
         let mut ref_binding = false;
-        loop {
-            match self.type_table.borrow().get(peeled_type).clone() {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    peeled_type = inner;
-                    ref_binding = true;
-                }
-                _ => break,
-            }
+        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
+            self.type_table.borrow().get(peeled_type).clone()
+        {
+            peeled_type = inner;
+            ref_binding = true;
         }
         self.resolve_if_pattern_inner(pattern, peeled_type, ctx, span, ref_binding)
     }

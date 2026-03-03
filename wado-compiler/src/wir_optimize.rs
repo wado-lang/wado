@@ -311,7 +311,7 @@ fn find_sroa_candidates(
                     candidates.push((func_id_index, candidate));
                 }
             }
-            _ => continue,
+            _ => {}
         }
     }
 
@@ -361,9 +361,7 @@ fn try_variant_sroa_candidate(
 
         if payload_count > 0 {
             // Must have a case type registered
-            let Some(&case_type_idx) = case_idx_to_type_idx.get(&case.index) else {
-                return None;
-            };
+            let &case_type_idx = case_idx_to_type_idx.get(&case.index)?;
             case_type_indices.push(Some(case_type_idx));
         } else {
             case_type_indices.push(None);
@@ -1550,17 +1548,17 @@ fn rewrite_call_sites(
 
     while i < instrs.len() {
         // Skip optional DeclareLocal before the LocalSet
-        let (skip_declare, set_idx) = match &instrs[i] {
+        let set_idx = match &instrs[i] {
             WirInstr::DeclareLocal { name: dn, .. } if i + 1 < instrs.len() => {
                 if is_candidate_call_set(&instrs[i + 1], dn, candidate_map) {
-                    (true, i + 1)
+                    i + 1
                 } else {
                     result.push(std::mem::replace(&mut instrs[i], WirInstr::Nop));
                     i += 1;
                     continue;
                 }
             }
-            _ => (false, i),
+            _ => i,
         };
 
         // Check if this is a LocalSet wrapping a Call to a candidate
@@ -1645,11 +1643,7 @@ fn rewrite_call_sites(
             locals,
         });
 
-        i = if skip_declare {
-            set_idx + 1
-        } else {
-            set_idx + 1
-        };
+        i = set_idx + 1;
     }
 
     *instrs = result;
@@ -1875,16 +1869,17 @@ fn take_call_from_local_set(instr: &mut WirInstr) -> (Vec<WirInstr>, Box<WirInst
     };
     let mut prefix = Vec::new();
     let call = unwrap_and_take_call(value, &mut prefix);
-    (prefix, call)
+    (prefix, Box::new(call))
 }
 
 /// Recursively unwrap `ValueCopy` and `Block` wrappers to extract the `Call` instruction.
 /// Collects any non-result instructions from blocks into `prefix` so they can be
 /// emitted before the call.
-fn unwrap_and_take_call(mut instr: Box<WirInstr>, prefix: &mut Vec<WirInstr>) -> Box<WirInstr> {
+#[allow(clippy::boxed_local)]
+fn unwrap_and_take_call(mut instr: Box<WirInstr>, prefix: &mut Vec<WirInstr>) -> WirInstr {
     loop {
         match *instr {
-            WirInstr::Call { .. } => return instr,
+            WirInstr::Call { .. } => return *instr,
             WirInstr::ValueCopy { expr, .. } => {
                 instr = expr;
             }
@@ -1991,7 +1986,7 @@ fn optimize_nested(instr: &mut WirInstr, types: &[WirTypeDef]) {
 /// **fresh** value — one with no pre-existing aliases. Fresh values include
 /// GC constructors (`StructNew`, `ArrayNew*`), function call return values,
 /// and block expressions whose result is itself fresh.
-fn elide_redundant_value_copies(instrs: &mut Vec<WirInstr>) {
+fn elide_redundant_value_copies(instrs: &mut [WirInstr]) {
     for instr in instrs.iter_mut() {
         let WirInstr::LocalSet { value, .. } = instr else {
             continue;
@@ -2396,11 +2391,11 @@ fn encode_constant_element(
     match (element_type, instr) {
         // 1-byte types: i8, u8, bool (stored as I32Const in WIR)
         (WirType::I8 | WirType::U8 | WirType::Bool, WirInstr::I32Const(v)) => {
-            bytes.push(*v as u8);
+            bytes.push(v.cast_unsigned() as u8);
         }
         // 2-byte types: i16, u16 (stored as I32Const in WIR)
         (WirType::I16 | WirType::U16, WirInstr::I32Const(v)) => {
-            bytes.extend_from_slice(&(*v as u16).to_le_bytes());
+            bytes.extend_from_slice(&(v.cast_unsigned() as u16).to_le_bytes());
         }
         // 4-byte i32 types: i32, u32, char, enum, flags
         (

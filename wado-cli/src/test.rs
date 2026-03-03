@@ -118,6 +118,11 @@ fn resolve_paths(paths: Vec<String>) -> Result<Vec<String>, CliExit> {
     Ok(resolved)
 }
 
+/// Parse command-line arguments for the `test` subcommand.
+///
+/// # Errors
+///
+/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let usage = format_usage();
     let mut paths: Vec<String> = Vec::new();

@@ -16,7 +16,7 @@ trait SerializeStruct {
 }
 
 trait Serializer {
-    type StructSerializer;
+    type StructSerializer: SerializeStruct;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>;
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>;
@@ -130,4 +130,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"TODO": true, "stdout": "{\"userName\":\"Alice\",\"age\":30,\"active\":true}\n"}
+{"stdout": "{\"userName\":\"Alice\",\"age\":30,\"active\":true}\n"}

@@ -108,10 +108,21 @@ impl SubstitutionContext {
                 // Direct substitution: TypeParam at index -> concrete type
                 self.substitutions.get(&index).copied().unwrap_or(type_id)
             }
-            ResolvedType::AssocTypeProjection { param_id, .. } => {
-                // Substitute the underlying type param; projection stays unresolved
-                // until method_lookup resolves it against concrete impls
-                self.substitute(param_id, type_table)
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+                ..
+            } => {
+                // Substitute the underlying type param to get the concrete type
+                let concrete_id = self.substitute(param_id, type_table);
+                // If the param resolved to a concrete type, look up the associated type binding
+                if concrete_id != param_id
+                    && let Some(resolved) = type_table.resolve_assoc_type(concrete_id, &assoc_name)
+                {
+                    return resolved;
+                }
+                // Fallback: return the concrete type (param substitution)
+                concrete_id
             }
             ResolvedType::BuiltinArray(elem) => {
                 let new_elem = self.substitute(elem, type_table);
@@ -334,6 +345,8 @@ pub enum ResolvedType {
         param_id: TypeId,
         /// Name of the associated type (e.g., `"Value"` in `T::Value`)
         assoc_name: String,
+        /// Trait bounds on this associated type (from the trait declaration)
+        bounds: Vec<String>,
     },
     /// Raw GC array intrinsic (`builtin::array<T>`)
     /// This is the underlying storage type for String and Array<T> structs
@@ -376,6 +389,9 @@ pub struct TypeTable {
     option_module_source: Option<ModuleSource>,
     /// Module source of the canonical `Result<T, E>` variant, set via `#[comp_feature("result")]`.
     result_module_source: Option<ModuleSource>,
+    /// Associated type resolutions: `(concrete_type_id, assoc_name)` → `resolved_type_id`.
+    /// Populated when impl blocks with associated type bindings are processed.
+    assoc_type_resolutions: IndexMap<(TypeId, String), TypeId>,
 }
 
 impl Default for TypeTable {
@@ -412,6 +428,7 @@ impl TypeTable {
             next_id: 0,
             option_module_source: None,
             result_module_source: None,
+            assoc_type_resolutions: IndexMap::new(),
         };
 
         // Pre-populate primitive types matching the constants above
@@ -743,11 +760,38 @@ impl TypeTable {
     }
 
     /// Create an associated type projection: `T::X` where T is a type parameter.
-    pub fn make_assoc_type_projection(&mut self, param_id: TypeId, assoc_name: String) -> TypeId {
+    pub fn make_assoc_type_projection(
+        &mut self,
+        param_id: TypeId,
+        assoc_name: String,
+        bounds: Vec<String>,
+    ) -> TypeId {
         self.intern(ResolvedType::AssocTypeProjection {
             param_id,
             assoc_name,
+            bounds,
         })
+    }
+
+    /// Register an associated type resolution: for concrete type `concrete_id` (e.g., `JsonSerializer`),
+    /// the associated type `assoc_name` (e.g., `"StructSerializer"`) resolves to `resolved_id`
+    /// (e.g., `JsonStructSerializer`).
+    pub fn register_assoc_type_resolution(
+        &mut self,
+        concrete_id: TypeId,
+        assoc_name: String,
+        resolved_id: TypeId,
+    ) {
+        self.assoc_type_resolutions
+            .insert((concrete_id, assoc_name), resolved_id);
+    }
+
+    /// Resolve an associated type for a concrete type.
+    /// Returns `Some(resolved_id)` if a resolution is registered.
+    pub fn resolve_assoc_type(&self, concrete_id: TypeId, assoc_name: &str) -> Option<TypeId> {
+        self.assoc_type_resolutions
+            .get(&(concrete_id, assoc_name.to_string()))
+            .copied()
     }
 
     /// Create a generic instance (e.g., `Box<i32>`)
@@ -901,6 +945,7 @@ impl TypeTable {
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
+                ..
             } => {
                 format!("{}::{}", self.type_name(*param_id), assoc_name)
             }
@@ -940,6 +985,7 @@ impl TypeTable {
     /// - Function: `Fn<paramCount,returnType>`
     /// - `GenericInstance`: `Name<T1,T2,...>`
     /// - Ref/MutRef: inner type (references are stripped for mangling)
+    ///
     /// Resolve through newtypes to find the base type.
     /// Returns the original `TypeId` if not a newtype.
     #[must_use]
@@ -1016,6 +1062,7 @@ impl TypeTable {
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
+                ..
             } => TypeNameInfo::Named(format!(
                 "{}::{}",
                 self.mangle_type_name(*param_id),
@@ -1476,6 +1523,7 @@ pub enum TirExprKind {
 
 /// A part of a resolved template string.
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum TirTemplatePart {
     /// A literal string segment.
     Literal(String),
@@ -1728,6 +1776,7 @@ pub struct MonomorphInfo {
 
 /// Global variable declaration in TIR
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct TirGlobal {
     pub name: String,
     pub ty: TypeId,
@@ -1750,6 +1799,7 @@ pub struct TirGlobal {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct TirFunction {
     pub name: String,
     pub is_pub: bool,
