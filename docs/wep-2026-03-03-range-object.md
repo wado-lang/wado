@@ -130,7 +130,7 @@ pub struct RangeInclusive<T> {
 
 **Why `RangeExclusive` / `RangeInclusive`**: The operators `..<` (exclusive) and `..=` (inclusive) are symmetric and self-documenting. The type names mirror this: both explicitly state the boundary rule. Unlike Rust's `Range` / `RangeInclusive` or Swift's `Range` / `ClosedRange`, Wado avoids an asymmetric "default" name.
 
-**Why two types, not six**: Wado targets pragmatic simplicity. The primary use cases (iteration and slicing) are served by `RangeExclusive` and `RangeInclusive`. Partial ranges (`a..`, `..b`, `..`) add complexity for marginal benefit — Wado already has `arr.slice(start, end)` and `arr.len()` for these cases. If partial ranges prove necessary, they can be added later without breaking changes.
+**Why two types, not six**: Wado targets pragmatic simplicity. The primary use cases (iteration, slicing, and pattern matching) are served by `RangeExclusive` and `RangeInclusive`. Partial ranges (`a..`, `..b`, `..`) add complexity for marginal benefit — Wado already has `arr.slice(start, end)` and `arr.len()` for these cases. If partial ranges prove necessary, they can be added later without breaking changes.
 
 **Why generic**: Unlike Zig's `usize`-only limitation, generic ranges allow natural expressions like `for let c of 'a'..='z'` and `if (0.0..<1.0).contains(x)`. The type parameter is inferred from the operands.
 
@@ -241,7 +241,7 @@ impl Iterator for RangeInclusive<T: Step + Ord> {
 }
 ```
 
-**`RangeInclusive` and T::MAX**: `RangeInclusive` must correctly handle the case where `end == T::MAX` (e.g., `0u8..=255`). The private `exhausted` field solves this: when `start == end`, the last element is yielded and `exhausted` is set to `true`. On the next call, `next()` returns `null` immediately — no overflow. This is the same approach used by Rust (`RangeInclusive`) and Swift (`ClosedRange.Iterator`). The `exhausted` field is private so it does not appear in the constructor syntax — the `..=` operator always initializes it to `false`.
+**`RangeInclusive` and T::MAX**: `RangeInclusive` must correctly handle the case where `end == T::MAX` (e.g., `0u8..=255`). The private `exhausted` field solves this: when `start == end`, the last element is yielded and `exhausted` is set to `true`. On the next call, `next()` returns `null` immediately — no overflow. This is the same approach used by Rust and Swift. The `exhausted` field is private so it does not appear in the constructor syntax — the `..=` operator always initializes it to `false`.
 
 #### IntoIterator
 
@@ -379,6 +379,93 @@ impl IndexValue<RangeInclusive<i32>> for Array<T> {
 }
 ```
 
+### Pattern Matching with Ranges
+
+Range patterns allow matching a value against a range in `match` arms, `if let`, and `matches`:
+
+```wado
+// Grade classification
+let grade = match score {
+    0..<60 => "F",
+    60..<70 => "D",
+    70..<80 => "C",
+    80..<90 => "B",
+    90..=100 => "A",
+    _ => "invalid",
+};
+
+// Character classification
+let kind = match c {
+    'a'..='z' => "lowercase",
+    'A'..='Z' => "uppercase",
+    '0'..='9' => "digit",
+    _ => "other",
+};
+
+// With matches operator
+if code matches { 0..<128 } {
+    println("ASCII");
+}
+
+// Can mix range patterns with other patterns
+let label = match value {
+    0 => "zero",
+    1..<10 => "small",
+    10..=100 => "medium",
+    _ => "large",
+};
+```
+
+#### Syntax
+
+Both `..<` and `..=` are allowed as pattern forms:
+
+- `a..<b` matches if `a <= scrutinee < b`
+- `a..=b` matches if `a <= scrutinee <= b`
+
+The bounds `a` and `b` must be compile-time constant expressions: integer literals, character literals, unary negation of literals (`-1`), or associated constants (`i32::MAX`).
+
+```wado
+// Negative ranges
+let sign = match n {
+    i32::MIN..<0 => "negative",
+    0 => "zero",
+    1..=i32::MAX => "positive",
+};
+
+// Empty range pattern is a compile error
+// 5..<5 => ...     // error: empty range pattern
+// 10..=5 => ...    // error: empty range pattern
+```
+
+#### Exhaustiveness
+
+Range patterns participate in exhaustiveness checking. The compiler tracks which values are covered:
+
+```wado
+// Exhaustive — no wildcard needed
+let bit: u8 = get_bit();
+let name = match bit {
+    0 => "zero",
+    1..=255 => "nonzero",
+};
+```
+
+When the compiler cannot prove exhaustiveness (large integer ranges, complex combinations), a wildcard `_` arm is required.
+
+#### Overlap Detection
+
+Overlapping range patterns are a compile error:
+
+```wado
+// Compile error: overlapping patterns
+let x = match n {
+    0..=10 => "a",
+    5..=15 => "b",   // error: range 5..=10 overlaps with previous arm
+    _ => "c",
+};
+```
+
 ### Display and Inspect
 
 ```wado
@@ -460,51 +547,6 @@ for let mut i = 9; i >= 0; i -= 1 {
 
 A general `.rev()` iterator combinator can be added later to the `Iterator` trait.
 
-#### No pattern matching with ranges
-
-Range patterns in `match` arms (e.g., `0..=9 => "digit"`) require parser and pattern matching infrastructure changes that are orthogonal to the range object design. This can be addressed in a separate WEP.
-
-### Wasm GC Representation
-
-`RangeExclusive<T>` and `RangeInclusive<T>` are struct types. For primitive `T`, the compiler monomorphizes them to simple Wasm GC structs:
-
-```wat
-;; RangeExclusive<i32>
-(type $RangeExclusive_i32 (struct (field $start i32) (field $end i32)))
-
-;; RangeInclusive<i32> (exhausted is a private field, always present)
-(type $RangeInclusive_i32 (struct (field $start i32) (field $end i32) (field $exhausted i32)))
-```
-
-The `exhausted` field is always present in `RangeInclusive` as a private struct field. The `..=` operator initializes it to `0` (false).
-
-## Implementation Strategy
-
-### Phase 1: Lexer and Parser
-
-1. Add `DotDotLt` (`..<`) and `DotDotEq` (`..=`) tokens to the lexer
-2. Add `RangeExclusive` and `RangeInclusive` expression AST nodes
-3. Parse range expressions at precedence level 14 (non-associative)
-4. Update the operator precedence WEP to reflect `..<` and `..=` (replacing `..` and `..=`)
-
-### Phase 2: Type Checking
-
-1. Define `RangeExclusive<T>` and `RangeInclusive<T>` as built-in generic structs in `core:prelude`
-2. Infer `T` from the operands (both must have the same type after literal coercion)
-3. Add `Step` trait and implement for integer types and `char`
-
-### Phase 3: Iterator Integration
-
-1. Implement `Iterator` for `RangeExclusive<T: Step + Ord>` and `RangeInclusive<T: Step + Ord>`
-2. Implement `IntoIterator` for both types
-3. Verify for-of desugaring works with range expressions
-
-### Phase 4: Methods and Traits
-
-1. Implement `contains`, `is_empty` methods
-2. Implement `Display`, `Inspect`, and `Eq` traits
-3. Implement `IndexValue<RangeExclusive<i32>>` and `IndexValue<RangeInclusive<i32>>` for `Array<T>`
-
 ## Consequences
 
 ### Positive
@@ -513,10 +555,11 @@ The `exhausted` field is always present in `RangeInclusive` as a private struct 
 2. **Works with existing iterator system**: Ranges plug directly into `for-of`, `map`, `filter`, `fold`, etc.
 3. **Type-safe membership testing**: `(0.0..<1.0).contains(&x)` works for any `Ord` type
 4. **Array slicing sugar**: `arr[1..<5]` is more natural than `arr.slice(1, 5)`
-5. **Minimal type count**: Two types cover the vast majority of use cases
-6. **Explicit syntax**: Both `..<` and `..=` are self-documenting — no ambiguous "bare" `..`
-7. **Generic**: Works with all integer types, `char`, and `Ord` types for membership testing
-8. **Frees `..` for rest syntax**: `..` remains exclusively for struct rest patterns and destructuring, avoiding ambiguity
+5. **Range patterns in match**: `0..<10 => ...` and `'a'..='z' => ...` replace verbose guard chains
+6. **Symmetric naming**: `RangeExclusive` / `RangeInclusive` mirrors the operator symmetry of `..<` / `..=`
+7. **Explicit syntax**: Both `..<` and `..=` are self-documenting — no ambiguous "bare" `..`
+8. **Generic**: Works with all integer types, `char`, and `Ord` types for membership testing
+9. **Frees `..` for rest syntax**: `..` remains exclusively for struct rest patterns and destructuring, avoiding ambiguity
 
 ### Negative
 
@@ -526,11 +569,9 @@ The `exhausted` field is always present in `RangeInclusive` as a private struct 
    - **Mitigation**: Can be added later as an iterator combinator
 3. **No reverse iteration**: Requires C-style `for` or future `.rev()` combinator
    - **Mitigation**: Can be added later to the `Iterator` trait
-4. **No range patterns in match**: Requires separate design work
-   - **Mitigation**: Addressed in a future WEP
-5. **`RangeInclusive` has extra `exhausted` field**: Adds one i32 of overhead per instance
+4. **`RangeInclusive` has extra `exhausted` field**: Adds one i32 of overhead per instance
    - **Mitigation**: Private field, not visible in constructor syntax; same approach as Rust and Swift
-6. **New `Step` trait**: Adds one more trait to the prelude
+5. **New `Step` trait**: Adds one more trait to the prelude
    - **Mitigation**: Small, focused trait with obvious purpose
 
 ## References
