@@ -1869,8 +1869,9 @@ impl<'a> Unparser<'a> {
                 }) = &else_block.stmts[0]
             {
                 // Output as `else if` instead of `else { if ... }`
+                // Use multiline directly to keep the entire chain consistent
                 self.output.push_str(" else ");
-                self.unparse_if_expr(nested_if);
+                self.unparse_if_expr_multiline(nested_if);
                 return;
             }
             self.output.push_str(" else {\n");
@@ -1892,8 +1893,15 @@ impl<'a> Unparser<'a> {
 
     /// Try to format a match expression on a single line.
     fn try_inline_match(&mut self, m: &MatchExpr) -> bool {
-        // All arms must have inline-safe bodies
+        // All arms must have inline-safe bodies, and no comments inside the match body
         if m.arms.iter().any(|arm| !is_inline_safe_expr(&arm.body)) {
+            return false;
+        }
+        if !self
+            .comments
+            .comments_in_range(m.span.start, m.span.end)
+            .is_empty()
+        {
             return false;
         }
 
@@ -1928,11 +1936,20 @@ impl<'a> Unparser<'a> {
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
+        let saved_line = self.last_source_line;
+        self.last_source_line = m.span.line;
+
         for arm in &m.arms {
+            self.emit_leading_comments(&arm.span);
+            self.emit_blank_lines_to(arm.span.line);
             self.unparse_match_arm(arm);
+            self.emit_trailing_comments_inline(&arm.span);
+            self.output.push('\n');
+            self.last_source_line = arm.span.end_line();
         }
         self.indent_level -= 1;
 
+        self.last_source_line = saved_line.max(m.span.end_line());
         self.write_indent();
         self.output.push('}');
     }
@@ -1946,7 +1963,7 @@ impl<'a> Unparser<'a> {
         }
         self.output.push_str(" => ");
         self.unparse_expr(&arm.body);
-        self.output.push_str(",\n");
+        self.output.push(',');
     }
 
     fn unparse_pattern(&mut self, pattern: &Pattern) {

@@ -299,22 +299,15 @@ fn inflate_table(codetype: i32, lens: &Array<u16>, lens_offset: i32, codes_count
     // Length codes 257..285 base
     let lbase: Array<u16> = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115,
         131, 163, 195, 227, 258, 0, 0];
-
-
     // Length codes 257..285 extra
     let lext: Array<u16> = [16, 16, 16, 16, 16, 16, 16, 16, 17, 17, 17, 17, 18, 18, 18, 18, 19, 19, 19, 19, 20, 20, 20,
         20, 21, 21, 21, 21, 16, 64, 204];
-
-
     // Distance codes 0..29 base
     let dbase: Array<u16> = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537,
         2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577, 0, 0];
-
-
     // Distance codes 0..29 extra
     let dext: Array<u16> = [16, 16, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 23, 24, 24, 25, 25, 26,
         26, 27, 27, 28, 28, 29, 29, 64, 64];
-
 
     let mut count: Array<u16> = Array::<u16>::filled(MAXBITS + 1, 0);
     let mut offs: Array<u16> = Array::<u16>::filled(MAXBITS + 1, 0);
@@ -2796,7 +2789,11 @@ fn zlib_wrap(input: &Array<u8>, deflated: &Array<u8>, level: i32) -> Array<u8> {
         0;
     } else if level <= 5 {
         1;
-    } else if level <= 6 { 2 } else { 3 };
+    } else if level <= 6 {
+        2;
+    } else {
+        3;
+    };
     let mut flg = flevel << 6;
     let rem = (cmf * 256 + flg) % 31;
     if rem != 0 {
@@ -2985,7 +2982,11 @@ pub fn gzip_compress2(input: &Array<u8>, level: i32) -> Array<u8> {
     // XFL: compression level hint
     let xfl: u8 = if level <= 1 {
         4;
-    } else if level >= 9 { 2 } else { 0 };
+    } else if level >= 9 {
+        2;
+    } else {
+        0;
+    };
     output.append(xfl);
     output.append(0xFF);  // OS = unknown
 
@@ -3147,7 +3148,11 @@ pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHea
     // XFL
     let xfl = if level <= 1 {
         4;
-    } else if level >= 9 { 2 } else { 0 };
+    } else if level >= 9 {
+        2;
+    } else {
+        0;
+    };
     output.append(xfl as u8);
 
     // OS
@@ -3237,8 +3242,6 @@ pub fn inflate_get_gzip_header(input: &Array<u8>) -> GzipHeader {
 
     // MTIME
     header.time = input[4] as u32 | input[5] as u32 << 8 | input[6] as u32 << 16 | input[7] as u32 << 24;
-
-
     header.xflags = input[8] as i32;
     header.os = input[9] as i32;
 
@@ -3396,8 +3399,6 @@ impl DeflateStream {
             comment: header.comment,
             hcrc: header.hcrc,
         };
-
-
         self.has_gzip_header = true;
     }
 
@@ -3549,7 +3550,11 @@ impl DeflateStream {
             0;
         } else if self.level <= 5 {
             1;
-        } else if self.level <= 6 { 2 } else { 3 };
+        } else if self.level <= 6 {
+            2;
+        } else {
+            3;
+        };
         let mut flg = flevel << 6 | 32;
         let rem = (cmf * 256 + flg) % 31;
         if rem != 0 {

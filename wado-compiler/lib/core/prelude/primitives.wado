@@ -79,7 +79,11 @@ fn write_base_digits(arr: builtin::array<u8>, offset: i32, abs_val: i64, digit_c
             let digit: i32 = (temp % base64) as i32;
             let ch = if digit < 10 {
                 '0' as i32 + digit;
-            } else if upper { 'A' as i32 + digit - 10 } else { 'a' as i32 + digit - 10 };
+            } else if upper {
+                'A' as i32 + digit - 10;
+            } else {
+                'a' as i32 + digit - 10;
+            };
             builtin::array_set_u8(arr, pos, ch as u8);
         }
     }
@@ -150,7 +154,11 @@ fn write_u64_base_digits(arr: builtin::array<u8>, offset: i32, val_i64: i64, dig
             let digit: i32 = (temp & mask64) as i32;
             let ch = if digit < 10 {
                 '0' as i32 + digit;
-            } else if upper { 'A' as i32 + digit - 10 } else { 'a' as i32 + digit - 10 };
+            } else if upper {
+                'A' as i32 + digit - 10;
+            } else {
+                'a' as i32 + digit - 10;
+            };
             builtin::array_set_u8(arr, pos, ch as u8);
             // Unsigned right shift: use Wasm's i64.shr_u semantics
             // In Wado, >> on i64 is arithmetic shift. For unsigned shift we need:
@@ -232,58 +240,33 @@ impl char {
     /// Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
     pub fn is_whitespace(&self) -> bool {
         return match *self {
-            ' ' => true,
-            '\t' => true,
-            '\n' => true,
-            '\r' => true,
-            '\u{0B}' => true,
-            '\u{0C}' => true,
-            '\u{85}' => true,
-            '\u{A0}' => true,
-            '\u{1680}' => true,
-            '\u{2000}' => true,
-            '\u{2001}' => true,
-            '\u{2002}' => true,
-            '\u{2003}' => true,
-            '\u{2004}' => true,
-            '\u{2005}' => true,
-            '\u{2006}' => true,
-            '\u{2007}' => true,
-            '\u{2008}' => true,
-            '\u{2009}' => true,
-            '\u{200A}' => true,
-            '\u{2028}' => true,
-            '\u{2029}' => true,
-            '\u{202F}' => true,
-            '\u{205F}' => true,
-            '\u{3000}' => true,
+            ' ' => true,  // SP
+            '\t' => true,  // HT
+            '\n' => true,  // LF
+            '\r' => true,  // CR
+            '\u{0B}' => true,  // VT
+            '\u{0C}' => true,  // FF
+            '\u{85}' => true,  // NEXT LINE
+            '\u{A0}' => true,  // NO-BREAK SPACE
+            '\u{1680}' => true,  // OGHAM SPACE MARK
+            '\u{2000}' => true,  // EN QUAD
+            '\u{2001}' => true,  // EM QUAD
+            '\u{2002}' => true,  // EN SPACE
+            '\u{2003}' => true,  // EM SPACE
+            '\u{2004}' => true,  // THREE-PER-EM SPACE
+            '\u{2005}' => true,  // FOUR-PER-EM SPACE
+            '\u{2006}' => true,  // SIX-PER-EM SPACE
+            '\u{2007}' => true,  // FIGURE SPACE
+            '\u{2008}' => true,  // PUNCTUATION SPACE
+            '\u{2009}' => true,  // THIN SPACE
+            '\u{200A}' => true,  // HAIR SPACE
+            '\u{2028}' => true,  // LINE SEPARATOR
+            '\u{2029}' => true,  // PARAGRAPH SEPARATOR
+            '\u{202F}' => true,  // NARROW NO-BREAK SPACE
+            '\u{205F}' => true,  // MEDIUM MATHEMATICAL SPACE
+            '\u{3000}' => true,  // IDEOGRAPHIC SPACE
             _ => false,
         };
-        // SP
-        // HT
-        // LF
-        // CR
-        // VT
-        // FF
-        // NEXT LINE
-        // NO-BREAK SPACE
-        // OGHAM SPACE MARK
-        // EN QUAD
-        // EM QUAD
-        // EN SPACE
-        // EM SPACE
-        // THREE-PER-EM SPACE
-        // FOUR-PER-EM SPACE
-        // SIX-PER-EM SPACE
-        // FIGURE SPACE
-        // PUNCTUATION SPACE
-        // THIN SPACE
-        // HAIR SPACE
-        // LINE SEPARATOR
-        // PARAGRAPH SEPARATOR
-        // NARROW NO-BREAK SPACE
-        // MEDIUM MATHEMATICAL SPACE
-        // IDEOGRAPHIC SPACE
     }
 }
 
@@ -594,7 +577,11 @@ impl u64 {
         let val_i64 = *self as i64;
         let bits_per_digit = if base == 2 {
             1;
-        } else if base == 8 { 3 } else { 4 };
+        } else if base == 8 {
+            3;
+        } else {
+            4;
+        };
         let mask = base - 1;
         let prefix = if f.alternate {
             if base == 2 {
@@ -1020,7 +1007,11 @@ impl f64 {
             let total_digits = precision + 1;
             let clamped = if total_digits > 18 {
                 18;
-            } else if total_digits < 1 { 1 } else { total_digits };
+            } else if total_digits < 1 {
+                1;
+            } else {
+                total_digits;
+            };
             let result = fixed_width(abs_f, clamped);
             let d = result.digits;
             let p = result.exponent;

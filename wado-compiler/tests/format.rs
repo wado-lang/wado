@@ -1057,3 +1057,57 @@ fn test_format_golden_ops_mess() {
         "format(ops.mess clean) should be idempotent"
     );
 }
+
+#[test]
+fn test_format_match_arm_trailing_comment() {
+    let source = r#"
+fn foo(c: char) -> bool {
+    return match c {
+        ' ' => true,              // SP
+        '\t' => true,             // HT
+        '\n' => true,             // LF
+        _ => false,
+    };
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("true,  // SP"),
+        "trailing comment should be preserved on match arm: {formatted}"
+    );
+    assert!(
+        formatted.contains("true,  // HT"),
+        "trailing comment should be preserved on match arm: {formatted}"
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_if_else_chain_all_multiline() {
+    // When the first branch of an if-else chain is multiline, all branches should be multiline
+    let source = r#"
+fn foo(x: i32) -> i32 {
+    let result = if x < 10 {
+        '0' as i32 + x
+    } else if x < 100 {
+        'A' as i32 + x - 10
+    } else {
+        'a' as i32 + x - 100
+    };
+    return result;
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    // The else-if and else blocks should NOT be inlined when the first branch is multiline
+    assert!(
+        !formatted.contains("} else if x < 100 { "),
+        "else-if should not be inlined when first branch is multiline: {formatted}"
+    );
+    assert!(
+        formatted.contains("} else if x < 100 {\n"),
+        "else-if should be multiline: {formatted}"
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
