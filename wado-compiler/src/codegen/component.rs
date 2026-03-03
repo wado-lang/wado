@@ -1986,7 +1986,6 @@ fn import_resource_using_interfaces(
                         }
                     } else {
                         // Resource not yet imported — skip this interface
-                        continue;
                     }
                 }
             }

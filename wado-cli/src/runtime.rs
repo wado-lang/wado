@@ -12,6 +12,10 @@ impl WasiState {
     /// Create a new WASI state with preopened directories and program arguments.
     /// `preopened_dirs`: `(host_path, guest_path)` pairs.
     /// `args`: arguments passed to the guest program via `wasi:cli/environment.get-arguments`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a preopened directory cannot be opened.
     pub fn new(preopened_dirs: &[(String, String)], args: &[String]) -> Result<Self> {
         let mut builder = WasiCtx::builder();
         builder.inherit_stdio();
@@ -88,6 +92,10 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode) -> Config {
 }
 
 /// Create a wasmtime Engine with the standard configuration.
+///
+/// # Errors
+///
+/// Returns an error if the engine cannot be created with the given configuration.
 pub fn create_engine(opt_level: OptLevel, profile: &ProfileMode) -> Result<Engine> {
     Engine::new(&create_config(opt_level, profile))
 }
@@ -95,6 +103,10 @@ pub fn create_engine(opt_level: OptLevel, profile: &ProfileMode) -> Result<Engin
 /// Create a Store with WASI state, preopened directories, and program arguments.
 /// `preopened_dirs`: `(host_path, guest_path)` pairs.
 /// `args`: arguments passed to the guest via `wasi:cli/environment.get-arguments`.
+///
+/// # Errors
+///
+/// Returns an error if a preopened directory cannot be opened.
 pub fn create_store(
     engine: &Engine,
     preopened_dirs: &[(String, String)],
@@ -104,6 +116,10 @@ pub fn create_store(
 }
 
 /// Create a Linker with WASI P3 bindings.
+///
+/// # Errors
+///
+/// Returns an error if WASI bindings cannot be added to the linker.
 pub fn create_linker(engine: &Engine) -> Result<Linker<WasiState>> {
     let mut linker: Linker<WasiState> = Linker::new(engine);
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;

@@ -1056,13 +1056,10 @@ impl<'a> PatternLowerer<'a> {
                 // Check if this is an Option, custom Variant, or Enum pattern that we can lower
                 // Match ergonomics: peel Ref/MutRef to find the underlying type
                 let mut scrutinee_type_id = scrutinee.type_id;
-                loop {
-                    match type_table.get(scrutinee_type_id) {
-                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                            scrutinee_type_id = *inner;
-                        }
-                        _ => break,
-                    }
+                while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
+                    type_table.get(scrutinee_type_id)
+                {
+                    scrutinee_type_id = *inner;
                 }
                 let scrutinee_type = type_table.get(scrutinee_type_id);
                 let can_lower = matches!(
@@ -2038,26 +2035,23 @@ impl<'a> PatternLowerer<'a> {
                 }
 
                 // Match ergonomics: insert deref if scrutinee is Ref/MutRef
-                loop {
-                    match type_table.get(scrutinee.type_id) {
-                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                            let inner = *inner;
-                            let span = scrutinee.span;
-                            let old = std::mem::replace(
-                                scrutinee.as_mut(),
-                                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
-                            );
-                            *scrutinee.as_mut() = TirExpr::new(
-                                TirExprKind::Unary {
-                                    op: TirUnaryOp::Deref,
-                                    expr: Box::new(old),
-                                },
-                                inner,
-                                span,
-                            );
-                        }
-                        _ => break,
-                    }
+                while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
+                    type_table.get(scrutinee.type_id)
+                {
+                    let inner = *inner;
+                    let span = scrutinee.span;
+                    let old = std::mem::replace(
+                        scrutinee.as_mut(),
+                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+                    );
+                    *scrutinee.as_mut() = TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Deref,
+                            expr: Box::new(old),
+                        },
+                        inner,
+                        span,
+                    );
                 }
 
                 // Analyze if this Match can be converted to Switch (for br_table)

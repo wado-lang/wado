@@ -148,10 +148,10 @@ impl WasiFunctionInfo {
     fn return_type_requires_memory(ty: &Type) -> bool {
         match ty {
             Type::Named(named) => named.name == "String",
-            Type::Generic(generic) => match generic.name.as_str() {
-                "Array" | "Option" | "Result" | "Tuple" | "Stream" | "Future" => true,
-                _ => false,
-            },
+            Type::Generic(generic) => matches!(
+                generic.name.as_str(),
+                "Array" | "Option" | "Result" | "Tuple" | "Stream" | "Future"
+            ),
             Type::Tuple(elems) => !elems.is_empty(),
             _ => false,
         }

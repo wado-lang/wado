@@ -183,7 +183,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 
     /// Resolve a module, converting AST to TIR
-
     pub fn resolve_module(
         &mut self,
         module: &Module,

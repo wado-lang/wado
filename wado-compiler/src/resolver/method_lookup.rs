@@ -116,7 +116,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     /// Check if a qualified name `struct_name::method_name` is a static method
-
     pub(super) fn get_ultimate_base_struct_name(&self, type_id: TypeId) -> String {
         let mut current = type_id;
         loop {

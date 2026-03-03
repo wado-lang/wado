@@ -368,7 +368,7 @@ fn build_template_block(
             },
             args: vec![TirExpr::new(
                 TirExprKind::IntLiteral {
-                    value: capacity_estimate as u64,
+                    value: capacity_estimate.cast_unsigned(),
                     repr: capacity_estimate.to_string(),
                 },
                 TypeTable::I32,
@@ -753,7 +753,7 @@ fn build_formatter_expr(
                     name: "width".to_string(),
                     value: TirExpr::new(
                         TirExprKind::IntLiteral {
-                            value: pf.width.unwrap_or(-1) as u64,
+                            value: pf.width.unwrap_or(-1).cast_unsigned(),
                             repr: pf.width.unwrap_or(-1).to_string(),
                         },
                         TypeTable::I32,
@@ -765,7 +765,7 @@ fn build_formatter_expr(
                     name: "precision".to_string(),
                     value: TirExpr::new(
                         TirExprKind::IntLiteral {
-                            value: pf.precision.unwrap_or(-1) as u64,
+                            value: pf.precision.unwrap_or(-1).cast_unsigned(),
                             repr: pf.precision.unwrap_or(-1).to_string(),
                         },
                         TypeTable::I32,

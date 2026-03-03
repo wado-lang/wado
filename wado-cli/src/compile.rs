@@ -153,6 +153,11 @@ pub fn print_usage() {
     eprint!("{}", format_usage());
 }
 
+/// Parse command-line arguments for the `compile` subcommand.
+///
+/// # Errors
+///
+/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit> {
     let usage = format_usage();
     let mut output: Option<String> = None;

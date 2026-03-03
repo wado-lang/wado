@@ -432,6 +432,7 @@ fn try_fold_f64_binary(lval: f64, op: TirBinaryOp, rval: f64) -> Option<FoldedEx
 fn try_fold_f32_binary(lval: f64, op: TirBinaryOp, rval: f64) -> Option<FoldedExpr> {
     let l = lval as f32;
     let r = rval as f32;
+    #[allow(clippy::float_cmp)]
     match op {
         TirBinaryOp::Add => non_nan_float(f64::from(l + r)),
         TirBinaryOp::Sub => non_nan_float(f64::from(l - r)),
@@ -453,6 +454,7 @@ fn try_fold_f32_binary(lval: f64, op: TirBinaryOp, rval: f64) -> Option<FoldedEx
 /// including NaN behavior: `NaN != NaN` is true, all other NaN
 /// comparisons are false.
 fn try_fold_float_comparison(lval: f64, op: TirBinaryOp, rval: f64) -> Option<FoldedExpr> {
+    #[allow(clippy::float_cmp)]
     match op {
         TirBinaryOp::Eq => Some(FoldedExpr::Bool(lval == rval)),
         TirBinaryOp::NotEq => Some(FoldedExpr::Bool(lval != rval)),
