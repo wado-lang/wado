@@ -396,6 +396,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Documentation Generation (`wado doc`)](./docs/wep-2026-02-28-doc-command.md)
 - [Compile-Time File Inclusion (`#include_str`)](./docs/wep-2026-03-02-include-str.md)
 - [Gale — Grammar Adaptive LL Engine](./docs/wep-2026-03-02-gale.md)
+- [Range Object](./docs/wep-2026-03-03-range-object.md)
 
 ### Structure
 

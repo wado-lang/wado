@@ -258,7 +258,7 @@ From highest to lowest precedence:
 | 11    | `==`, `<`, `>`, `<=`, `>=` (left-assoc with rules), `!=` (no chain) | **Restricted** | Comparison                  |
 | 12    | `&&`                                                                | Left-to-right  | Logical AND                 |
 | 13    | `\|\|`                                                              | Left-to-right  | Logical OR                  |
-| 14    | `..`, `..=`                                                         | N/A            | Range operators             |
+| 14    | `..<`, `..=`                                                        | N/A            | Range operators             |
 | 15    | `=`, `+=`, `-=`, etc.                                               | Right-to-left  | Assignment                  |
 
 **Key differences from Rust**:
