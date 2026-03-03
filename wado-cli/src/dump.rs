@@ -243,6 +243,11 @@ pub fn print_usage() {
 }
 
 #[allow(clippy::similar_names)] // show_tir and show_wir are intentional phase names
+/// Parse command-line arguments for the `dump` subcommand.
+///
+/// # Errors
+///
+/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let usage = format_usage();
     let mut inputs: Vec<String> = Vec::new();
@@ -974,8 +979,8 @@ fn extract_world_from_data_section(source: &str) -> Option<String> {
     let marker = "\n__DATA__\n";
     let data = if let Some(pos) = source.find(marker) {
         &source[pos + marker.len()..]
-    } else if source.starts_with("__DATA__\n") {
-        &source["__DATA__\n".len()..]
+    } else if let Some(stripped) = source.strip_prefix("__DATA__\n") {
+        stripped
     } else {
         return None;
     };

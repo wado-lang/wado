@@ -985,6 +985,7 @@ impl TypeTable {
     /// - Function: `Fn<paramCount,returnType>`
     /// - `GenericInstance`: `Name<T1,T2,...>`
     /// - Ref/MutRef: inner type (references are stripped for mangling)
+    ///
     /// Resolve through newtypes to find the base type.
     /// Returns the original `TypeId` if not a newtype.
     #[must_use]
@@ -1522,6 +1523,7 @@ pub enum TirExprKind {
 
 /// A part of a resolved template string.
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum TirTemplatePart {
     /// A literal string segment.
     Literal(String),
@@ -1774,6 +1776,7 @@ pub struct MonomorphInfo {
 
 /// Global variable declaration in TIR
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct TirGlobal {
     pub name: String,
     pub ty: TypeId,
@@ -1796,6 +1799,7 @@ pub struct TirGlobal {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct TirFunction {
     pub name: String,
     pub is_pub: bool,

@@ -2492,13 +2492,10 @@ impl Monomorphizer {
                     let has_explicit_type_params = info.struct_name != info.base_struct_name;
                     let receiver_is_generic = {
                         let mut base = receiver.type_id;
-                        loop {
-                            match type_table.get(base).clone() {
-                                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                                    base = inner;
-                                }
-                                _ => break,
-                            }
+                        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
+                            type_table.get(base).clone()
+                        {
+                            base = inner;
                         }
                         matches!(
                             type_table.get(base),
@@ -2602,14 +2599,16 @@ impl Monomorphizer {
                             // substitute the existing type_args rather than building from
                             // the enclosing substitution map. This correctly maps
                             // ArrayIter<T> → ArrayIter<i32> instead of T → i32.
-                            let final_type_args = if existing_is_blanket
-                                && existing_type_args.is_some()
-                            {
-                                existing_type_args
-                                    .unwrap()
-                                    .iter()
-                                    .map(|&tid| self.substitute_type(tid, substitution, type_table))
-                                    .collect()
+                            let final_type_args = if existing_is_blanket {
+                                if let Some(args) = existing_type_args {
+                                    args.iter()
+                                        .map(|&tid| {
+                                            self.substitute_type(tid, substitution, type_table)
+                                        })
+                                        .collect()
+                                } else {
+                                    type_args
+                                }
                             } else {
                                 type_args
                             };

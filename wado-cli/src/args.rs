@@ -57,26 +57,46 @@ pub fn exit_error(msg: &str) -> ! {
 }
 
 /// Get the next argument, returning an error on failure.
+///
+/// # Errors
+///
+/// Returns an error if the parser fails to retrieve the next argument.
 pub fn next_arg(parser: &mut Parser) -> Result<Option<lexopt::Arg<'_>>, CliExit> {
     parser.next().map_err(CliExit::error)
 }
 
 /// Get a required value for an option.
+///
+/// # Errors
+///
+/// Returns an error if no value is provided for the option.
 pub fn require_value(parser: &mut Parser) -> Result<OsString, CliExit> {
     parser.value().map_err(CliExit::error)
 }
 
 /// Get a required string value for an option.
+///
+/// # Errors
+///
+/// Returns an error if no value is provided for the option.
 pub fn require_string(parser: &mut Parser) -> Result<String, CliExit> {
     Ok(require_value(parser)?.to_string_lossy().into_owned())
 }
 
 /// Require that an input file was specified.
+///
+/// # Errors
+///
+/// Returns an error if no input file was provided.
 pub fn require_input(input: Option<String>, usage: &str) -> Result<String, CliExit> {
     input.ok_or_else(|| CliExit::error_with_usage("no input file specified", usage))
 }
 
 /// Require that at least one input file was specified.
+///
+/// # Errors
+///
+/// Returns an error if no input files were provided.
 pub fn require_inputs(inputs: Vec<String>, usage: &str) -> Result<Vec<String>, CliExit> {
     if inputs.is_empty() {
         Err(CliExit::error_with_usage("no input file specified", usage))
@@ -86,6 +106,10 @@ pub fn require_inputs(inputs: Vec<String>, usage: &str) -> Result<Vec<String>, C
 }
 
 /// Check for multiple input files and error.
+///
+/// # Errors
+///
+/// Returns an error if multiple input files were specified.
 pub fn reject_multiple_inputs(input: &Option<String>) -> Result<(), CliExit> {
     if input.is_some() {
         Err(CliExit::error("multiple input files not supported"))
@@ -236,6 +260,10 @@ pub fn parse_log_level(s: &str) -> Option<LogLevel> {
 }
 
 /// Parse `--log-level` argument value from parser.
+///
+/// # Errors
+///
+/// Returns an error if the log level string is not recognized.
 pub fn parse_log_level_arg(parser: &mut Parser) -> Result<LogLevel, CliExit> {
     let level_str = require_string(parser)?;
     parse_log_level(&level_str).ok_or_else(|| {
@@ -246,6 +274,10 @@ pub fn parse_log_level_arg(parser: &mut Parser) -> Result<LogLevel, CliExit> {
 }
 
 /// Parse `--optimize-inline-threshold <n>` argument value from parser.
+///
+/// # Errors
+///
+/// Returns an error if the value is not a valid non-negative integer.
 pub fn parse_inline_threshold_arg(opt: &str, parser: &mut Parser) -> Result<usize, CliExit> {
     let s = require_string(parser)?;
     s.parse::<usize>()
@@ -253,6 +285,10 @@ pub fn parse_inline_threshold_arg(opt: &str, parser: &mut Parser) -> Result<usiz
 }
 
 /// Parse `--optimize-iterations <n>` argument value from parser.
+///
+/// # Errors
+///
+/// Returns an error if the value is not a valid non-negative integer.
 pub fn parse_opt_iterations_arg(opt: &str, parser: &mut Parser) -> Result<u32, CliExit> {
     let s = require_string(parser)?;
     s.parse::<u32>()

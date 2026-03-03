@@ -595,13 +595,8 @@ fn analyze_expr(
             // These methods are intercepted in WIR translation and need specific builtins.
             if let Some(info) = func.method_info() {
                 let mut recv_type = type_table.get(receiver.type_id);
-                loop {
-                    match recv_type {
-                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                            recv_type = type_table.get(*inner);
-                        }
-                        _ => break,
-                    }
+                while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = recv_type {
+                    recv_type = type_table.get(*inner);
                 }
                 match recv_type {
                     ResolvedType::Stream(_) => {

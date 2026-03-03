@@ -356,6 +356,7 @@ impl<'a> Transformer<'a> {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn transform_type_def(
         &self,
         type_id: TypeId,
