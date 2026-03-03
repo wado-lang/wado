@@ -98,6 +98,11 @@ pub enum OptLevel {
 /// All levels run DCE to remove unreachable functions and types, which
 /// significantly reduces codegen work.
 ///
+/// For O1+, DCE runs twice: once before the optimization loop to reduce
+/// the working set (eliminating stdlib functions/types the program doesn't
+/// use), and once after to clean up code made dead by optimizations
+/// (e.g., functions inlined away).
+///
 /// The `inline_threshold` and `opt_iterations` parameters override the
 /// defaults for the given `opt_level` when provided.
 pub fn optimize(
@@ -109,52 +114,40 @@ pub fn optimize(
     match opt_level {
         OptLevel::O0 => {
             // No optimizations, but still run DCE to reduce codegen work
-            analyze_project(&mut project);
-            remove_unreachable_functions(&mut project);
-            remove_unreachable_globals(&mut project);
-            remove_unreachable_types(&mut project);
+            run_dce(&mut project);
         }
         OptLevel::O1 => {
-            // Development mode: all optimizations including DCE
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(2),
                 inline_threshold: inline_threshold.unwrap_or(10),
             };
+            // Early DCE: remove unreachable functions/types before optimization
+            // to reduce the working set for subsequent passes
+            run_dce(&mut project);
             run_optimization_passes(&mut project, &config);
-            // DCE: analyze and remove unreachable functions and types
-            analyze_project(&mut project);
-            remove_unreachable_functions(&mut project);
-            remove_unreachable_globals(&mut project);
-            remove_unreachable_types(&mut project);
+            // Final DCE: clean up code made dead by optimizations
+            run_dce(&mut project);
         }
         OptLevel::O2 | OptLevel::Os => {
-            // Production mode: full optimizations with DCE
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(10),
                 inline_threshold: inline_threshold.unwrap_or(10),
             };
+            run_dce(&mut project);
             run_optimization_passes(&mut project, &config);
-            // DCE: analyze and remove unreachable functions and types
-            analyze_project(&mut project);
-            remove_unreachable_functions(&mut project);
-            remove_unreachable_globals(&mut project);
-            remove_unreachable_types(&mut project);
+            run_dce(&mut project);
             if opt_level == OptLevel::Os {
                 project.strip_names = true;
             }
         }
         OptLevel::O3 => {
-            // Aggressive production mode: more fixed-point iterations
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(100),
                 inline_threshold: inline_threshold.unwrap_or(20),
             };
+            run_dce(&mut project);
             run_optimization_passes(&mut project, &config);
-            // DCE: analyze and remove unreachable functions and types
-            analyze_project(&mut project);
-            remove_unreachable_functions(&mut project);
-            remove_unreachable_globals(&mut project);
-            remove_unreachable_types(&mut project);
+            run_dce(&mut project);
         }
     }
 
@@ -162,6 +155,13 @@ pub fn optimize(
     rewrite::rewrite(&mut project);
 
     project
+}
+
+fn run_dce(project: &mut Project) {
+    analyze_project(project);
+    remove_unreachable_functions(project);
+    remove_unreachable_globals(project);
+    remove_unreachable_types(project);
 }
 
 /// Run optimization passes with a fixed-point iteration strategy.

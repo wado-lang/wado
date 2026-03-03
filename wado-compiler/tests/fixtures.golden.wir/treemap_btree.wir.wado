@@ -31,8 +31,6 @@ struct [String, i32] {
 
 array array<Tuple<String,i32>> (mut ref null "tuple/[String, i32]");
 
-array array<u64> (mut u64);
-
 array array<String> (mut ref null String);
 
 array array<BTreeNode<String,i32>> (mut ref null BTreeNode<String,i32>);
@@ -76,6 +74,8 @@ struct Array<String> {  // Array<T> with T=String
     mut repr: ref array<String>,
     mut used: i32,
 }
+
+array array<u64> (mut u64);
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
@@ -166,13 +166,9 @@ type "functype/core:internal/log_stderr" = fn(ref null String);
 
 type "functype/core:internal/panic" = fn(ref null String);
 
-type "functype/__initialize_module" = fn();
-
 type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref null array<u8>, i32, i64, i32);
-
-type "functype/Array<u64>::append" = fn(ref null Array<u64>, u64);
 
 type "functype/i32::fmt_decimal" = fn(ref null "core:internal/Box<i32>", ref null Formatter);
 
@@ -306,71 +302,71 @@ fn run() with Stdout {
     let __pattern_temp_3: ref null Option<i32>;
     let __pattern_temp_4: ref null Option<Tuple<String,i32>>;
     let __pattern_temp_5: ref null Option<Tuple<String,i32>>;
-    let __local_38: i32;
-    let __local_39: ref null String;
-    let __local_40: ref null "core:internal/Box<i32>";
-    let __local_41: ref null Formatter;
-    let __local_42: ref null TreeMap<String,i32>;
-    let __local_43: ref null "core:internal/Box<i32>";
-    let __local_44: ref null Formatter;
-    let __local_45: i32;
-    let __local_46: ref null String;
-    let __local_47: ref null "core:internal/Box<i32>";
-    let __local_48: ref null Formatter;
-    let __local_49: ref null "core:internal/Box<i32>";
-    let __local_50: ref null Formatter;
-    let __local_51: i32;
-    let __local_52: ref null String;
-    let __local_53: ref null "core:internal/Box<i32>";
-    let __local_54: ref null Formatter;
-    let __local_55: ref null "core:internal/Box<i32>";
-    let __local_56: ref null Formatter;
-    let __local_57: i32;
-    let __local_58: ref null String;
-    let __local_59: ref null "core:internal/Box<i32>";
-    let __local_60: ref null Formatter;
-    let __local_61: ref null "core:internal/Box<i32>";
-    let __local_62: ref null Formatter;
-    let __local_63: i32;
-    let __local_64: ref null String;
-    let __local_65: ref null "core:internal/Box<i32>";
-    let __local_66: ref null Formatter;
-    let __local_67: ref null TreeMap<String,i32>;
-    let __local_68: ref null "core:internal/Box<i32>";
-    let __local_69: ref null Formatter;
-    let __local_70: ref null Array<Tuple<String,i32>>;
-    let __local_71: i32;
-    let __local_72: ref null String;
-    let __local_73: ref null "core:internal/Box<i32>";
-    let __local_74: ref null Formatter;
-    let __local_75: ref null "core:internal/Box<i32>";
-    let __local_76: ref null Formatter;
-    let __local_77: i32;
-    let __local_78: ref null String;
-    let __local_79: ref null "core:internal/Box<i32>";
-    let __local_80: ref null Formatter;
-    let __local_81: ref null TreeMap<String,i32>;
-    let __local_82: ref null "core:internal/Box<i32>";
-    let __local_83: ref null Formatter;
-    let __local_84: i32;
-    let __local_85: ref null String;
-    let __local_86: ref null "core:internal/Box<i32>";
-    let __local_87: ref null Formatter;
-    let __local_88: ref null "core:internal/Box<i32>";
-    let __local_89: ref null Formatter;
-    let __local_90: ref null Array<Tuple<String,i32>>;
-    let __local_91: i32;
-    let __local_92: ref null String;
-    let __local_93: ref null "core:internal/Box<i32>";
-    let __local_94: ref null Formatter;
-    let __local_95: ref null "core:internal/Box<i32>";
-    let __local_96: ref null Formatter;
-    let __local_97: i32;
+    let __local_38: ref null Array<u64>;
+    let __local_39: i32;
+    let __local_40: ref null String;
+    let __local_41: ref null "core:internal/Box<i32>";
+    let __local_42: ref null Formatter;
+    let __local_43: ref null TreeMap<String,i32>;
+    let __local_44: ref null "core:internal/Box<i32>";
+    let __local_45: ref null Formatter;
+    let __local_46: i32;
+    let __local_47: ref null String;
+    let __local_48: ref null "core:internal/Box<i32>";
+    let __local_49: ref null Formatter;
+    let __local_50: ref null "core:internal/Box<i32>";
+    let __local_51: ref null Formatter;
+    let __local_52: i32;
+    let __local_53: ref null String;
+    let __local_54: ref null "core:internal/Box<i32>";
+    let __local_55: ref null Formatter;
+    let __local_56: ref null "core:internal/Box<i32>";
+    let __local_57: ref null Formatter;
+    let __local_58: i32;
+    let __local_59: ref null String;
+    let __local_60: ref null "core:internal/Box<i32>";
+    let __local_61: ref null Formatter;
+    let __local_62: ref null "core:internal/Box<i32>";
+    let __local_63: ref null Formatter;
+    let __local_64: i32;
+    let __local_65: ref null String;
+    let __local_66: ref null "core:internal/Box<i32>";
+    let __local_67: ref null Formatter;
+    let __local_68: ref null TreeMap<String,i32>;
+    let __local_69: ref null "core:internal/Box<i32>";
+    let __local_70: ref null Formatter;
+    let __local_71: ref null Array<Tuple<String,i32>>;
+    let __local_72: i32;
+    let __local_73: ref null String;
+    let __local_74: ref null "core:internal/Box<i32>";
+    let __local_75: ref null Formatter;
+    let __local_76: ref null "core:internal/Box<i32>";
+    let __local_77: ref null Formatter;
+    let __local_78: i32;
+    let __local_79: ref null String;
+    let __local_80: ref null "core:internal/Box<i32>";
+    let __local_81: ref null Formatter;
+    let __local_82: ref null TreeMap<String,i32>;
+    let __local_83: ref null "core:internal/Box<i32>";
+    let __local_84: ref null Formatter;
+    let __local_85: i32;
+    let __local_86: ref null String;
+    let __local_87: ref null "core:internal/Box<i32>";
+    let __local_88: ref null Formatter;
+    let __local_89: ref null "core:internal/Box<i32>";
+    let __local_90: ref null Formatter;
+    let __local_91: ref null Array<Tuple<String,i32>>;
+    let __local_92: i32;
+    let __local_93: ref null String;
+    let __local_94: ref null "core:internal/Box<i32>";
+    let __local_95: ref null Formatter;
+    let __local_96: ref null "core:internal/Box<i32>";
+    let __local_97: ref null Formatter;
+    let __local_98: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
         };
-        __initialize_module();
         __modules_initialized = 1;
     };
     map = TreeMap<String,i32> { root: ref.as_non_null(Option<BTreeNode<String,i32>> { 1 }), t: 3, size: 0, deleted_count: 0 };
@@ -382,14 +378,36 @@ fn run() with Stdout {
     "core:cli/println"(String { repr: ref.as_non_null(array.new_data<u8>[6](0, 23)), used: 23 });
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_14 = String { repr: ref.as_non_null(builtin::array_new<u8>(22)), used: 0 };
+<<<<<<< HEAD
         String::append(__local_14, String { repr: ref.as_non_null(array.new_data<u8>[7](0, 6)), used: 6 });
         __local_15 = __inline_Formatter__new_3: block -> ref null Formatter {
             __local_39 = __local_14;
             break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_39) };
+||||||| a256d91
+        String::append_char(__local_14, 83);
+        String::append_char(__local_14, 105);
+        String::append_char(__local_14, 122);
+        String::append_char(__local_14, 101);
+        String::append_char(__local_14, 58);
+        String::append_char(__local_14, 32);
+        __local_15 = __inline_Formatter__new_3: block -> ref null Formatter {
+            __local_39 = __local_14;
+            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_39) };
+=======
+        String::append_char(__local_14, 83);
+        String::append_char(__local_14, 105);
+        String::append_char(__local_14, 122);
+        String::append_char(__local_14, 101);
+        String::append_char(__local_14, 58);
+        String::append_char(__local_14, 32);
+        __local_15 = __inline_Formatter__new_4: block -> ref null Formatter {
+            __local_40 = __local_14;
+            break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_40) };
+>>>>>>> origin/main
         };
-        __local_40 = "core:internal/Box<i32>" { value: map.size };
-        __local_41 = __local_15;
-        i32::fmt_decimal(__local_40, __local_41);
+        __local_41 = "core:internal/Box<i32>" { value: map.size };
+        __local_42 = __local_15;
+        i32::fmt_decimal(__local_41, __local_42);
         break __tmpl: __local_14;
     });
     __pattern_temp_0 = TreeMap<String,i32>::get(map, String { repr: ref.as_non_null(array.new_data<u8>[2](0, 6)), used: 6 });
@@ -398,13 +416,13 @@ fn run() with Stdout {
         "core:cli/println"(__tmpl: block -> ref null String {
             __local_16 = String { repr: ref.as_non_null(builtin::array_new<u8>(25)), used: 0 };
             String::append(__local_16, String { repr: ref.as_non_null(array.new_data<u8>[8](0, 9)), used: 9 });
-            __local_17 = __inline_Formatter__new_8: block -> ref null Formatter {
-                __local_46 = __local_16;
-                break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_46) };
+            __local_17 = __inline_Formatter__new_9: block -> ref null Formatter {
+                __local_47 = __local_16;
+                break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_47) };
             };
-            __local_47 = "core:internal/Box<i32>" { value: val };
-            __local_48 = __local_17;
-            i32::fmt_decimal(__local_47, __local_48);
+            __local_48 = "core:internal/Box<i32>" { value: val };
+            __local_49 = __local_17;
+            i32::fmt_decimal(__local_48, __local_49);
             break __tmpl: __local_16;
         });
     };
@@ -413,14 +431,38 @@ fn run() with Stdout {
         val2 = ref.cast Option<i32>::Some(__pattern_temp_1).payload_0;
         "core:cli/println"(__tmpl: block -> ref null String {
             __local_18 = String { repr: ref.as_non_null(builtin::array_new<u8>(23)), used: 0 };
+<<<<<<< HEAD
             String::append(__local_18, String { repr: ref.as_non_null(array.new_data<u8>[9](0, 7)), used: 7 });
             __local_19 = __inline_Formatter__new_12: block -> ref null Formatter {
                 __local_52 = __local_18;
                 break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_52) };
+||||||| a256d91
+            String::append_char(__local_18, 100);
+            String::append_char(__local_18, 97);
+            String::append_char(__local_18, 116);
+            String::append_char(__local_18, 101);
+            String::append_char(__local_18, 32);
+            String::append_char(__local_18, 61);
+            String::append_char(__local_18, 32);
+            __local_19 = __inline_Formatter__new_12: block -> ref null Formatter {
+                __local_52 = __local_18;
+                break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_52) };
+=======
+            String::append_char(__local_18, 100);
+            String::append_char(__local_18, 97);
+            String::append_char(__local_18, 116);
+            String::append_char(__local_18, 101);
+            String::append_char(__local_18, 32);
+            String::append_char(__local_18, 61);
+            String::append_char(__local_18, 32);
+            __local_19 = __inline_Formatter__new_13: block -> ref null Formatter {
+                __local_53 = __local_18;
+                break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_53) };
+>>>>>>> origin/main
             };
-            __local_53 = "core:internal/Box<i32>" { value: val2 };
-            __local_54 = __local_19;
-            i32::fmt_decimal(__local_53, __local_54);
+            __local_54 = "core:internal/Box<i32>" { value: val2 };
+            __local_55 = __local_19;
+            i32::fmt_decimal(__local_54, __local_55);
             break __tmpl: __local_18;
         });
     };
@@ -431,13 +473,13 @@ fn run() with Stdout {
         "core:cli/println"(__tmpl: block -> ref null String {
             __local_20 = String { repr: ref.as_non_null(builtin::array_new<u8>(35)), used: 0 };
             String::append(__local_20, String { repr: ref.as_non_null(array.new_data<u8>[10](0, 19)), used: 19 });
-            __local_21 = __inline_Formatter__new_16: block -> ref null Formatter {
-                __local_58 = __local_20;
-                break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_58) };
+            __local_21 = __inline_Formatter__new_17: block -> ref null Formatter {
+                __local_59 = __local_20;
+                break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_59) };
             };
-            __local_59 = "core:internal/Box<i32>" { value: val3 };
-            __local_60 = __local_21;
-            i32::fmt_decimal(__local_59, __local_60);
+            __local_60 = "core:internal/Box<i32>" { value: val3 };
+            __local_61 = __local_21;
+            i32::fmt_decimal(__local_60, __local_61);
             break __tmpl: __local_20;
         });
     };
@@ -445,14 +487,36 @@ fn run() with Stdout {
     drop(TreeMap<String,i32>::delete(map, String { repr: ref.as_non_null(array.new_data<u8>[3](0, 6)), used: 6 }));
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_22 = String { repr: ref.as_non_null(builtin::array_new<u8>(22)), used: 0 };
+<<<<<<< HEAD
         String::append(__local_22, String { repr: ref.as_non_null(array.new_data<u8>[7](0, 6)), used: 6 });
         __local_23 = __inline_Formatter__new_20: block -> ref null Formatter {
             __local_64 = __local_22;
             break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_64) };
+||||||| a256d91
+        String::append_char(__local_22, 83);
+        String::append_char(__local_22, 105);
+        String::append_char(__local_22, 122);
+        String::append_char(__local_22, 101);
+        String::append_char(__local_22, 58);
+        String::append_char(__local_22, 32);
+        __local_23 = __inline_Formatter__new_20: block -> ref null Formatter {
+            __local_64 = __local_22;
+            break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_64) };
+=======
+        String::append_char(__local_22, 83);
+        String::append_char(__local_22, 105);
+        String::append_char(__local_22, 122);
+        String::append_char(__local_22, 101);
+        String::append_char(__local_22, 58);
+        String::append_char(__local_22, 32);
+        __local_23 = __inline_Formatter__new_21: block -> ref null Formatter {
+            __local_65 = __local_22;
+            break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_65) };
+>>>>>>> origin/main
         };
-        __local_65 = "core:internal/Box<i32>" { value: map.size };
-        __local_66 = __local_23;
-        i32::fmt_decimal(__local_65, __local_66);
+        __local_66 = "core:internal/Box<i32>" { value: map.size };
+        __local_67 = __local_23;
+        i32::fmt_decimal(__local_66, __local_67);
         break __tmpl: __local_22;
     });
     __pattern_temp_3 = TreeMap<String,i32>::get(map, String { repr: ref.as_non_null(array.new_data<u8>[3](0, 6)), used: 6 });
@@ -474,14 +538,30 @@ fn run() with Stdout {
                 "core:cli/println"(__tmpl: block -> ref null String {
                     __local_24 = String { repr: ref.as_non_null(builtin::array_new<u8>(35)), used: 0 };
                     String::append(__local_24, key_7);
+<<<<<<< HEAD
                     String::append(__local_24, String { repr: ref.as_non_null(array.new_data<u8>[14](0, 3)), used: 3 });
                     __local_25 = __inline_Formatter__new_26: block -> ref null Formatter {
                         __local_72 = __local_24;
                         break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_72) };
+||||||| a256d91
+                    String::append_char(__local_24, 32);
+                    String::append_char(__local_24, 61);
+                    String::append_char(__local_24, 32);
+                    __local_25 = __inline_Formatter__new_26: block -> ref null Formatter {
+                        __local_72 = __local_24;
+                        break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_72) };
+=======
+                    String::append_char(__local_24, 32);
+                    String::append_char(__local_24, 61);
+                    String::append_char(__local_24, 32);
+                    __local_25 = __inline_Formatter__new_27: block -> ref null Formatter {
+                        __local_73 = __local_24;
+                        break __inline_Formatter__new_27: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_73) };
+>>>>>>> origin/main
                     };
-                    __local_73 = "core:internal/Box<i32>" { value: value_8 };
-                    __local_74 = __local_25;
-                    i32::fmt_decimal(__local_73, __local_74);
+                    __local_74 = "core:internal/Box<i32>" { value: value_8 };
+                    __local_75 = __local_25;
+                    i32::fmt_decimal(__local_74, __local_75);
                     break __tmpl: __local_24;
                 });
             } else {
@@ -497,26 +577,48 @@ fn run() with Stdout {
     };
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_26 = String { repr: ref.as_non_null(builtin::array_new<u8>(22)), used: 0 };
+<<<<<<< HEAD
         String::append(__local_26, String { repr: ref.as_non_null(array.new_data<u8>[7](0, 6)), used: 6 });
         __local_27 = __inline_Formatter__new_30: block -> ref null Formatter {
             __local_78 = __local_26;
             break __inline_Formatter__new_30: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_78) };
+||||||| a256d91
+        String::append_char(__local_26, 83);
+        String::append_char(__local_26, 105);
+        String::append_char(__local_26, 122);
+        String::append_char(__local_26, 101);
+        String::append_char(__local_26, 58);
+        String::append_char(__local_26, 32);
+        __local_27 = __inline_Formatter__new_30: block -> ref null Formatter {
+            __local_78 = __local_26;
+            break __inline_Formatter__new_30: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_78) };
+=======
+        String::append_char(__local_26, 83);
+        String::append_char(__local_26, 105);
+        String::append_char(__local_26, 122);
+        String::append_char(__local_26, 101);
+        String::append_char(__local_26, 58);
+        String::append_char(__local_26, 32);
+        __local_27 = __inline_Formatter__new_31: block -> ref null Formatter {
+            __local_79 = __local_26;
+            break __inline_Formatter__new_31: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_79) };
+>>>>>>> origin/main
         };
-        __local_79 = "core:internal/Box<i32>" { value: map.size };
-        __local_80 = __local_27;
-        i32::fmt_decimal(__local_79, __local_80);
+        __local_80 = "core:internal/Box<i32>" { value: map.size };
+        __local_81 = __local_27;
+        i32::fmt_decimal(__local_80, __local_81);
         break __tmpl: __local_26;
     });
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_28 = String { repr: ref.as_non_null(builtin::array_new<u8>(31)), used: 0 };
         String::append(__local_28, String { repr: ref.as_non_null(array.new_data<u8>[17](0, 15)), used: 15 });
-        __local_29 = __inline_Formatter__new_35: block -> ref null Formatter {
-            __local_85 = __local_28;
-            break __inline_Formatter__new_35: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_85) };
+        __local_29 = __inline_Formatter__new_36: block -> ref null Formatter {
+            __local_86 = __local_28;
+            break __inline_Formatter__new_36: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_86) };
         };
-        __local_86 = "core:internal/Box<i32>" { value: map.deleted_count };
-        __local_87 = __local_29;
-        i32::fmt_decimal(__local_86, __local_87);
+        __local_87 = "core:internal/Box<i32>" { value: map.deleted_count };
+        __local_88 = __local_29;
+        i32::fmt_decimal(__local_87, __local_88);
         break __tmpl: __local_28;
     });
     "core:cli/println"(String { repr: ref.as_non_null(array.new_data<u8>[18](0, 24)), used: 24 });
@@ -534,14 +636,30 @@ fn run() with Stdout {
                 "core:cli/println"(__tmpl: block -> ref null String {
                     __local_30 = String { repr: ref.as_non_null(builtin::array_new<u8>(35)), used: 0 };
                     String::append(__local_30, key_12);
+<<<<<<< HEAD
                     String::append(__local_30, String { repr: ref.as_non_null(array.new_data<u8>[14](0, 3)), used: 3 });
                     __local_31 = __inline_Formatter__new_40: block -> ref null Formatter {
                         __local_92 = __local_30;
                         break __inline_Formatter__new_40: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_92) };
+||||||| a256d91
+                    String::append_char(__local_30, 32);
+                    String::append_char(__local_30, 61);
+                    String::append_char(__local_30, 32);
+                    __local_31 = __inline_Formatter__new_40: block -> ref null Formatter {
+                        __local_92 = __local_30;
+                        break __inline_Formatter__new_40: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_92) };
+=======
+                    String::append_char(__local_30, 32);
+                    String::append_char(__local_30, 61);
+                    String::append_char(__local_30, 32);
+                    __local_31 = __inline_Formatter__new_41: block -> ref null Formatter {
+                        __local_93 = __local_30;
+                        break __inline_Formatter__new_41: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_93) };
+>>>>>>> origin/main
                     };
-                    __local_93 = "core:internal/Box<i32>" { value: value_13 };
-                    __local_94 = __local_31;
-                    i32::fmt_decimal(__local_93, __local_94);
+                    __local_94 = "core:internal/Box<i32>" { value: value_13 };
+                    __local_95 = __local_31;
+                    i32::fmt_decimal(__local_94, __local_95);
                     break __tmpl: __local_30;
                 });
             } else {
@@ -683,53 +801,6 @@ fn "core:internal/panic"(message) {  // from core:internal
     unreachable;
 }
 
-fn __initialize_module() {
-    let __local_0: ref null Array<u64>;
-    let __local_1: i32;
-    let __local_2: ref null Array<u64>;
-    let __local_3: u64;
-    let __local_4: ref null Array<u64>;
-    let __local_5: u64;
-    let __local_6: ref null Array<u64>;
-    let __local_7: u64;
-    let __local_8: ref null Array<u64>;
-    let __local_9: u64;
-    let __local_10: ref null Array<u64>;
-    let __local_11: u64;
-    let __local_12: ref null Array<u64>;
-    let __local_13: u64;
-    let __local_14: ref null Array<u64>;
-    let __local_15: u64;
-    let __local_16: ref null Array<u64>;
-    let __local_17: u64;
-    let __local_18: ref null Array<u64>;
-    let __local_19: u64;
-    let __local_20: ref null Array<u64>;
-    let __local_21: u64;
-    let __local_22: ref null Array<u64>;
-    let __local_23: u64;
-    let __local_24: ref null Array<u64>;
-    let __local_25: u64;
-    let __local_26: ref null Array<u64>;
-    let __local_27: u64;
-    let __local_28: ref null Array<u64>;
-    let __local_29: u64;
-    let __local_30: ref null Array<u64>;
-    let __local_31: u64;
-    let __local_32: ref null Array<u64>;
-    let __local_33: u64;
-    let __local_34: ref null Array<u64>;
-    let __local_35: u64;
-    let __local_36: ref null Array<u64>;
-    let __local_37: u64;
-    let __local_38: ref null Array<u64>;
-    let __local_39: u64;
-    let __local_40: ref null Array<u64>;
-    let __local_41: u64;
-    let __local_42: ref null Array<u64>;
-    let __local_43: i32;
-}
-
 fn count_digits_i64(val) {
     let __local_1: i64;
     let __local_2: i64;
@@ -779,28 +850,6 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
             };
         };
     };
-}
-
-fn Array<u64>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref null array<u64>;
-    let __local_6: i32;
-    let __local_7: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<u64>(new_capacity);
-        builtin::array_copy<u64>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<u64>(self.repr, used, value);
-    self.used = used + 1;
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -896,7 +945,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l39: loop {
+            l38: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -904,7 +953,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l39;
+                continue l38;
             };
         };
     };
@@ -934,7 +983,7 @@ fn String^Ord::cmp(self, other) {
     __for_2: block {
         i = 0;
         block {
-            l43: loop {
+            l42: loop {
                 if (i < min_len) == 0 {
                     break __for_2;
                 };
@@ -947,7 +996,7 @@ fn String^Ord::cmp(self, other) {
                     return 2;
                 };
                 i = i + 1;
-                continue l43;
+                continue l42;
             };
         };
     };
