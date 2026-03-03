@@ -547,6 +547,47 @@ for let mut i = 9; i >= 0; i -= 1 {
 
 A general `.rev()` iterator combinator can be added later to the `Iterator` trait.
 
+### Wasm GC Representation
+
+`RangeExclusive<T>` and `RangeInclusive<T>` are struct types. For primitive `T`, the compiler monomorphizes them to simple Wasm GC structs:
+
+```wat
+;; RangeExclusive<i32>
+(type $RangeExclusive_i32 (struct (field $start i32) (field $end i32)))
+
+;; RangeInclusive<i32> (with exhausted flag for Iterator)
+(type $RangeInclusive_i32 (struct (field $start i32) (field $end i32) (field $exhausted i32)))
+```
+
+For iteration, the `exhausted` flag is only present in `RangeInclusive` and only when it is used as an iterator (monomorphization can elide it when only `contains` is used).
+
+## Implementation Strategy
+
+### Phase 1: Lexer and Parser
+
+1. Add `DotDotLt` (`..<`) and `DotDotEq` (`..=`) tokens to the lexer
+2. Add `RangeExclusive` and `RangeInclusive` expression AST nodes
+3. Parse range expressions at precedence level 14 (non-associative)
+4. Update the operator precedence WEP to reflect `..<` and `..=` (replacing `..` and `..=`)
+
+### Phase 2: Type Checking
+
+1. Define `RangeExclusive<T>` and `RangeInclusive<T>` as built-in generic structs in `core:prelude`
+2. Infer `T` from the operands (both must have the same type after literal coercion)
+3. Add `Step` trait and implement for integer types and `char`
+
+### Phase 3: Iterator Integration
+
+1. Implement `Iterator` for `RangeExclusive<T: Step + Ord>` and `RangeInclusive<T: Step + Ord>`
+2. Implement `IntoIterator` for both types
+3. Verify for-of desugaring works with range expressions
+
+### Phase 4: Methods and Traits
+
+1. Implement `contains`, `is_empty` methods
+2. Implement `Display`, `Inspect`, and `Eq` traits
+3. Implement `IndexValue<RangeExclusive<i32>>` and `IndexValue<RangeInclusive<i32>>` for `Array<T>`
+
 ## Consequences
 
 ### Positive

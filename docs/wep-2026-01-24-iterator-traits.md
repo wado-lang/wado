@@ -63,7 +63,7 @@ Understanding the difference between `Iterator` and `IntoIterator`:
 
 | Trait            | Question it answers                    | Example types                    |
 | ---------------- | -------------------------------------- | -------------------------------- |
-| **Iterator**     | "Can I call `next()` on this?"         | `ArrayIter<T>`, `Range`, `Chars` |
+| **Iterator**     | "Can I call `next()` on this?"         | `ArrayIter<T>`, `RangeExclusive<T>`, `Chars` |
 | **IntoIterator** | "Can I convert this into an iterator?" | `Array<T>`, `String`, `Stack<T>` |
 
 A collection (like `Array<T>`) is **not** an iterator itself—it doesn't have iteration state. Instead, it implements `IntoIterator` to create a separate iterator object that tracks the current position:
@@ -83,12 +83,12 @@ iter.next();  // Some(3) - advances internal index from 2 to 3
 iter.next();  // None - exhausted
 ```
 
-Some types (like `Range`) are both a collection and their own iterator:
+Some types (like `RangeExclusive`) are both a collection and their own iterator:
 
 ```wado
-// Range implements BOTH IntoIterator and Iterator
-let r = range(1, 4);
-// r.into_iter() returns self (Range is its own iterator)
+// RangeExclusive implements BOTH IntoIterator and Iterator
+let r = 1..<4;
+// r.into_iter() returns self (RangeExclusive is its own iterator)
 // r.next() works directly
 ```
 
@@ -435,37 +435,38 @@ impl IntoIterator for [T, T, T] {
 
 ### 10. Range Iterator
 
+See [WEP: Range Object](./wep-2026-03-03-range-object.md) for the full design.
+
 ```wado
 /// Half-open range [start, end)
-pub struct Range {
-    start: i32,
-    end: i32,
+pub struct RangeExclusive<T> {
+    pub start: T,
+    pub end: T,
 }
 
-/// Creates a range from start (inclusive) to end (exclusive)
-pub fn range(start: i32, end: i32) -> Range {
-    return Range { start, end };
-}
+impl Iterator for RangeExclusive<T: Step + Ord> {
+    type Item = T;
 
-impl Iterator for Range {
-    type Item = i32;
-
-    fn next(&mut self) -> Option<i32> {
+    fn next(&mut self) -> Option<T> {
         if self.start >= self.end {
             return null;
         }
         let current = self.start;
-        self.start += 1;
-        return Option::<i32>::Some(current);
+        if let Some(next) = current.next_step() {
+            self.start = next;
+        } else {
+            self.start = self.end;
+        }
+        return Option::<T>::Some(current);
     }
 }
 
-impl IntoIterator for Range {
-    type Item = i32;
-    type Iter = Range;  // Range is its own iterator
+impl IntoIterator for RangeExclusive<T: Step + Ord> {
+    type Item = T;
+    type Iter = RangeExclusive<T>;
 
-    fn into_iter(self) -> Range {
-        return self;
+    fn into_iter(&self) -> RangeExclusive<T> {
+        return *self;
     }
 }
 ```
@@ -474,12 +475,12 @@ Usage:
 
 ```wado
 // Iterate from 0 to 9
-for let i of range(0, 10) {
+for let i of 0..<10 {
     println(`{i}`);
 }
 
 // With combinators
-let sum = range(1, 101).fold(0, |acc, x| acc + x);  // 5050
+let sum = (1..<101).fold(0, |acc: i32, x: i32| acc + x);  // 5050
 ```
 
 ### 11. String Iterator
@@ -738,12 +739,12 @@ fn run() with Stdout {
 ```wado
 fn run() with Stdout {
     // Sum of 1 to 100
-    let sum = range(1, 101).fold(0, |acc, x| acc + x);
+    let sum = (1..<101).fold(0, |acc: i32, x: i32| acc + x);
     println(`Sum 1-100: {sum}`);  // 5050
 
     // Generate squares
-    let squares: Array<i32> = range(1, 6)
-        .map(|x| x * x)
+    let squares: Array<i32> = (1..<6)
+        .map(|x: i32| x * x)
         .collect();
     // [1, 4, 9, 16, 25]
 }

@@ -474,9 +474,9 @@ let result = a && b;  // ❌ Cannot overload
 
 **Note**: Compound assignment operators (`+=`, `-=`, etc.) ARE overloadable via traits like `AddAssign` (see section above).
 
-#### Range Operators: `..`, `..=`
+#### Range Operators: `..<`, `..=`
 
-**Reason**: These construct `Range` and `RangeInclusive` types, not user-overloadable.
+**Reason**: These construct `RangeExclusive` and `RangeInclusive` types, not user-overloadable.
 
 #### Member Access: `.`, `::`
 

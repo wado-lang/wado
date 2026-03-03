@@ -116,7 +116,7 @@ The compiler desugars `[]` syntax based on which traits are implemented:
 | ------------------ | --------------------------------------------- |
 | `Array<i32>`       | Returns `i32` by value - cannot return `&i32` |
 | Computed sequences | Fibonacci where `fib[n]` computes on demand   |
-| Range objects      | `range[i]` computes i-th value, no storage    |
+| `RangeExclusive`   | `range[i]` computes i-th value, no storage    |
 | Packed bit arrays  | `bits[i]` returns extracted bool              |
 
 #### IndexValue + IndexAssign (Primitive Arrays)
