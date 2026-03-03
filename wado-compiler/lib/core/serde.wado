@@ -7,7 +7,6 @@
 //! Usage:
 //!   use { Serialize, Deserialize, SerializeError, DeserializeError } from "core:serde";
 
-// --- Error types ---
 
 pub enum SerializeErrorKind {
     UnsupportedValue,
@@ -68,7 +67,6 @@ impl DeserializeError {
     }
 }
 
-// --- Sub-serializer traits ---
 
 pub trait SerializeSeq {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
@@ -91,7 +89,6 @@ pub trait SerializeVariant {
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
-// --- Serializer trait ---
 
 pub trait Serializer {
     type SeqSerializer: SerializeSeq;
@@ -116,13 +113,11 @@ pub trait Serializer {
     fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<Self::VariantSerializer, SerializeError>;
 }
 
-// --- Core Serialize trait ---
 
 pub trait Serialize {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
 }
 
-// --- Sub-deserializer traits ---
 
 pub trait DeserializeSeq {
     fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>;
@@ -150,7 +145,6 @@ pub trait DeserializeVariant {
     fn end(&mut self) -> Result<(), DeserializeError>;
 }
 
-// --- Deserializer trait ---
 
 pub trait Deserializer {
     type SeqAccess: DeserializeSeq;
@@ -174,13 +168,11 @@ pub trait Deserializer {
     fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError>;
 }
 
-// --- Core Deserialize trait ---
 
 pub trait Deserialize {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Self, DeserializeError>;
 }
 
-// --- Standard Serialize implementations ---
 
 impl Serialize for i8 {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
@@ -288,7 +280,6 @@ impl<T: Serialize> Serialize for Array<T> {
     }
 }
 
-// --- Standard Deserialize implementations ---
 
 impl Deserialize for i8 {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<i8, DeserializeError> {

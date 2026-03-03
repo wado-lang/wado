@@ -2754,7 +2754,9 @@ impl Monomorphizer {
                                 });
                             // Preserve monomorph_info when the method has type args
                             // (e.g., T::deserialize::<D> → i32::deserialize::<JsonDeserializer>)
-                            let new_monomorph = if !new_info.method_type_args.is_empty() {
+                            let new_monomorph = if new_info.method_type_args.is_empty() {
+                                None
+                            } else {
                                 // Build the generic name without method type args for lookup
                                 let base_info = LocalMethodName::new(
                                     new_info.base_struct_name.clone(),
@@ -2782,8 +2784,6 @@ impl Monomorphizer {
                                     type_args: method_type_arg_tids,
                                     is_blanket: false,
                                 })
-                            } else {
-                                None
                             };
                             *static_func = FunctionRef::External {
                                 module_source: concrete_module

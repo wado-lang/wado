@@ -27,10 +27,6 @@ use {
     DeserializeErrorKind,
 } from "core:serde";
 
-// ============================================================================
-// JSON string escaping (shared between serializer and deserializer)
-// ============================================================================
-
 fn hex_digit(v: i32) -> char {
     if v < 10 {
         return ('0' as i32 + v) as u8 as char;
@@ -38,9 +34,7 @@ fn hex_digit(v: i32) -> char {
     return ('a' as i32 + v - 10) as u8 as char;
 }
 
-fn byte_to_char(b: i32) -> char {
-    return b as u8 as char;
-}
+
 
 /// Writes a JSON-escaped string (with surrounding quotes) into buf.
 pub fn write_escaped_string(buf: &mut String, s: &String) {
@@ -68,10 +62,6 @@ pub fn write_escaped_string(buf: &mut String, s: &String) {
     }
     buf.append_char('"');
 }
-
-// ============================================================================
-// JSON Serializer
-// ============================================================================
 
 struct JsonSeqSerializer {
     buf: String,
@@ -302,10 +292,6 @@ impl Serializer for JsonSerializer {
     }
 }
 
-// ============================================================================
-// JSON Deserializer
-// ============================================================================
-
 pub struct JsonDeserializer {
     input: String,
     pos: i32,
@@ -342,7 +328,7 @@ impl JsonDeserializer {
         let b = self.input.get_byte(self.pos) as i32;
         if b != c {
             return Result::<(), DeserializeError>::Err(DeserializeError::malformed(
-                `expected '{byte_to_char(c)}', found '{byte_to_char(b)}'`,
+                `expected '{c as u8 as char}', found '{b as u8 as char}'`,
                 self.pos as i64,
             ));
         }
@@ -419,13 +405,13 @@ impl JsonDeserializer {
                     }
                 } else {
                     return Result::<String, DeserializeError>::Err(DeserializeError::malformed(
-                        `invalid escape '\\{byte_to_char(esc)}'`,
+                        `invalid escape '\\{esc as u8 as char}'`,
                         self.pos as i64,
                     ));
                 }
                 self.pos += 1;
             } else {
-                result.append_char(byte_to_char(b));
+                result.append_char(b as u8 as char);
                 self.pos += 1;
             }
         }
@@ -697,7 +683,7 @@ impl JsonDeserializer {
             return Result::<(), DeserializeError>::Ok(());
         }
         return Result::<(), DeserializeError>::Err(DeserializeError::malformed(
-            `unexpected character '{byte_to_char(b)}'`,
+            `unexpected character '{b as u8 as char}'`,
             self.pos as i64,
         ));
     }
@@ -1122,10 +1108,6 @@ impl Deserializer for JsonDeserializer {
         ));
     }
 }
-
-// ============================================================================
-// Public API
-// ============================================================================
 
 /// Serializes a value to a JSON string.
 pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError> {

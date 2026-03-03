@@ -3959,7 +3959,11 @@ impl FunctionTranslator<'_, '_> {
                     scrutinee.type_id,
                     &mut instrs,
                 );
-                let body = self.translate_expr(&arm.body);
+                let body = if has_result {
+                    self.translate_expr_as_value(&arm.body)
+                } else {
+                    self.translate_expr(&arm.body)
+                };
                 instrs.push(body);
                 // Note: `translate_expr` already appends `unreachable` for
                 // `never`-typed arm bodies, so no extra push is needed here.

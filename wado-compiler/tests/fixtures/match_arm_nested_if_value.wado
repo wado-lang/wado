@@ -1,0 +1,43 @@
+// Regression test: match arm with block body containing an if expression
+// as the tail value was dropping the if branch values instead of returning them.
+
+fn classify(x: i32) -> String {
+    return match x {
+        _ && x > 0 => {
+            if x > 10 {
+                "big"
+            } else {
+                "small"
+            }
+        },
+        _ => "zero",
+    };
+}
+
+fn classify_builder(x: i32) -> String {
+    return match x {
+        _ && x > 0 => {
+            if x > 10 {
+                let mut s = String::with_capacity(8);
+                s.append("big");
+                s
+            } else {
+                "small"
+            }
+        },
+        _ => "zero",
+    };
+}
+
+export fn run() {
+    assert classify(5) == "small";
+    assert classify(15) == "big";
+    assert classify(0) == "zero";
+
+    assert classify_builder(5) == "small";
+    assert classify_builder(15) == "big";
+    assert classify_builder(0) == "zero";
+}
+
+__DATA__
+{"stdout": ""}

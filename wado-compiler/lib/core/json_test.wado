@@ -11,10 +11,6 @@ use {
 
 use { to_string, from_string, write_escaped_string } from "core:json";
 
-// ============================================================================
-// Serialization tests
-// ============================================================================
-
 test "serialize i32" {
     let n = 42;
     let r = to_string::<i32>(&n);
@@ -184,10 +180,6 @@ test "write_escaped_string helper" {
     write_escaped_string(&mut buf, &"a\"b");
     assert buf == `"a\\"b"`;
 }
-
-// ============================================================================
-// Deserialization tests
-// ============================================================================
 
 test "deserialize i32" {
     let r = from_string::<i32>("42");

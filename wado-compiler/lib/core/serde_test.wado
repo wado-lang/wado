@@ -17,8 +17,6 @@ use {
     DeserializeErrorKind,
 } from "core:serde";
 
-// --- Mock serializer for testing ---
-
 struct MockWriter {
     buf: String,
 }
@@ -214,8 +212,6 @@ fn mock_serialize<T: Serialize>(value: &T) -> String {
     value.serialize::<MockSerializer>(&mut ser);
     return ser.w.buf;
 }
-
-// --- Tests ---
 
 test "error type construction" {
     let se = SerializeError {
