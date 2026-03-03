@@ -1,0 +1,97 @@
+name: Benchmark
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+permissions:
+  contents: write      # push benchmark data to gh-pages
+  pull-requests: write # post regression comments on PRs
+
+jobs:
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build wado
+        run: cargo build --release --bin wado
+
+      - name: Run runtime benchmarks
+        run: python3 .github/scripts/run_wado_benchmarks.py > runtime-benchmark.json
+
+      - name: Run wasm-size benchmarks
+        run: python3 .github/scripts/run_wado_wasm_size.py > wasm-size-benchmark.json
+
+      # ── main branch: record data only, no alerts ──────────────────────────
+
+      - name: Store runtime benchmark data
+        if: github.event_name == 'push'
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: customSmallerIsBetter
+          output-file-path: runtime-benchmark.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          comment-on-alert: false
+          fail-on-alert: false
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: benchmarks/runtime
+
+      - name: Store wasm-size benchmark data
+        if: github.event_name == 'push'
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: customSmallerIsBetter
+          output-file-path: wasm-size-benchmark.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          comment-on-alert: false
+          fail-on-alert: false
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: benchmarks/wasm-size
+
+      # ── PRs: compare against baseline, comment + fail on regression ───────
+
+      - name: Compare runtime benchmarks
+        if: github.event_name == 'pull_request'
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: customSmallerIsBetter
+          output-file-path: runtime-benchmark.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: false
+          save-data-file: false
+          comment-on-alert: true
+          fail-on-alert: true
+          alert-threshold: '130%'
+          fail-threshold: '200%'
+          alert-comment-cc-users: ''
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: benchmarks/runtime
+
+      - name: Compare wasm-size benchmarks
+        if: github.event_name == 'pull_request'
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: customSmallerIsBetter
+          output-file-path: wasm-size-benchmark.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: false
+          save-data-file: false
+          comment-on-alert: true
+          fail-on-alert: true
+          alert-threshold: '101%'
+          fail-threshold: '110%'
+          alert-comment-cc-users: ''
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: benchmarks/wasm-size
