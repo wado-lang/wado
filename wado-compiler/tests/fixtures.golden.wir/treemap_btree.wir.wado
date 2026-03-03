@@ -1772,7 +1772,7 @@ fn Formatter::write_char_n(self, c, n) {
     let i: i32;
     let __local_4: ref null String;
     let __local_5: char;
-    let __local_6: u32;
+    let code: u32;
     let _licm_buf_7: ref null String;
     __for_0: block {
         i = 0;
@@ -1782,15 +1782,15 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 };
-                __local_6 = c;
-                if __local_6 <u 128 {
+                code = c;
+                if code <u 128 {
                     if builtin::unlikely((_licm_buf_7.used + 1) > builtin::array_len(_licm_buf_7.repr)) {
                         String::grow(_licm_buf_7, _licm_buf_7.used + 1);
                     };
-                    builtin::array_set_u8(_licm_buf_7.repr, _licm_buf_7.used, __local_6 & 255);
+                    builtin::array_set_u8(_licm_buf_7.repr, _licm_buf_7.used, code & 255);
                     _licm_buf_7.used = _licm_buf_7.used + 1;
                 } else {
-                    String::append_unicode_scalar(_licm_buf_7, __local_6);
+                    String::append_unicode_scalar(_licm_buf_7, code);
                 };
                 i = i + 1;
                 continue l140;

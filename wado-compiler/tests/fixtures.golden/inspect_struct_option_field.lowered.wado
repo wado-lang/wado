@@ -50,19 +50,13 @@ export fn run() with Stdout {
 }
 
 pub fn "Wrapper^Inspect::inspect"(self: &Wrapper, f: &mut Formatter) {
-    {
-        let s: String = "Wrapper { ";
-        f.buf.String::append(s);
-    };
-    {
-        let s: String = "value: ";
-        f.buf.String::append(s);
-    };
+    let s: String = "Wrapper { ";
+    f.buf.String::append(s);
+    let s: String = "value: ";
+    f.buf.String::append(s);
     Box<Option<i32>> { value: self.value }."Option<i32>^Inspect::inspect"(f);
-    {
-        let s: String = " }";
-        f.buf.String::append(s);
-    };
+    let s: String = " }";
+    f.buf.String::append(s);
 }
 
 export fn __cm_export__run() {
@@ -72,24 +66,16 @@ export fn __cm_export__run() {
 
 pub fn "Option<i32>^Inspect::inspect"(self: Box<Option<i32>>, f: &mut Formatter) {
     if __variant_test(self.value, case=0, name=Some) {
-        {
-            let s: String = "Option::Some(";
-            f.buf.String::append(s);
-        };
-        {
-            let self: Box<i32> = Box<i32> { value: __variant_payload(self.value, case=0) };
-            self.i32::fmt_decimal(f);
-        };
-        {
-            let s: String = ")";
-            f.buf.String::append(s);
-        };
+        let s: String = "Option::Some(";
+        f.buf.String::append(s);
+        let self: Box<i32> = Box<i32> { value: __variant_payload(self.value, case=0) };
+        self.i32::fmt_decimal(f);
+        let s: String = ")";
+        f.buf.String::append(s);
     } else {
         if __variant_test(self.value, case=1, name=None) {
-            {
-                let s: String = "Option::None";
-                f.buf.String::append(s);
-            };
+            let s: String = "Option::None";
+            f.buf.String::append(s);
         };
     };
 }

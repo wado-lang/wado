@@ -38,14 +38,10 @@ export fn run() with Stdout {
     let p2: Point = Point { x: 3, y: 4 };
     let points: Array<Point> = __seq_lit: {
         let mut __b: Array<Point> = Array<Point> { repr: core::builtin::array_new::<Point>(2), used: 0 };
-        {
-            let self: &mut Array<Point> = &mut __b;
-            self."Array<Point>::append"(p1);
-        };
-        {
-            let self: &mut Array<Point> = &mut __b;
-            self."Array<Point>::append"(p2);
-        };
+        let self: &mut Array<Point> = &mut __b;
+        self."Array<Point>::append"(p1);
+        let self: &mut Array<Point> = &mut __b;
+        self."Array<Point>::append"(p2);
         break __seq_lit: *__b;
     };
     let mut __iter_0: ArrayIter<Point> = ArrayIter<Point> { repr: points.repr, used: points.used, index: 0 };
@@ -59,21 +55,17 @@ export fn run() with Stdout {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                {
-                    let self: Box<i32> = Box<i32> { value: p.x };
-                    let f: &mut Formatter = &mut __f;
-                    self.i32::fmt_decimal(f);
-                };
+                let self: Box<i32> = Box<i32> { value: p.x };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
                 __r.String::append(",");
                 __f = __inline_Formatter__new_10: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                {
-                    let self: Box<i32> = Box<i32> { value: p.y };
-                    let f: &mut Formatter = &mut __f;
-                    self.i32::fmt_decimal(f);
-                };
+                let self: Box<i32> = Box<i32> { value: p.y };
+                let f: &mut Formatter = &mut __f;
+                self.i32::fmt_decimal(f);
                 break __tmpl: __r;
             });
         } else {

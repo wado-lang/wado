@@ -52,24 +52,16 @@ export fn __cm_export__run() {
 
 pub fn "Option<i32>^Inspect::inspect"(self: Box<Option<i32>>, f: &mut Formatter) {
     if __variant_test(self.value, case=0, name=Some) {
-        {
-            let s: String = "Option::Some(";
-            f.buf.String::append(s);
-        };
-        {
-            let self: Box<i32> = Box<i32> { value: __variant_payload(self.value, case=0) };
-            self.i32::fmt_decimal(f);
-        };
-        {
-            let s: String = ")";
-            f.buf.String::append(s);
-        };
+        let s: String = "Option::Some(";
+        f.buf.String::append(s);
+        let self: Box<i32> = Box<i32> { value: __variant_payload(self.value, case=0) };
+        self.i32::fmt_decimal(f);
+        let s: String = ")";
+        f.buf.String::append(s);
     } else {
         if __variant_test(self.value, case=1, name=None) {
-            {
-                let s: String = "Option::None";
-                f.buf.String::append(s);
-            };
+            let s: String = "Option::None";
+            f.buf.String::append(s);
         };
     };
 }

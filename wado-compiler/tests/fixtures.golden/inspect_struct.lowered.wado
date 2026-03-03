@@ -51,34 +51,20 @@ export fn run() with Stdout {
 }
 
 pub fn "Point^Inspect::inspect"(self: &Point, f: &mut Formatter) {
-    {
-        let s: String = "Point { ";
-        f.buf.String::append(s);
-    };
-    {
-        let s: String = "x: ";
-        f.buf.String::append(s);
-    };
-    {
-        let self: Box<i32> = Box<i32> { value: self.x };
-        self.i32::fmt_decimal(f);
-    };
-    {
-        let s: String = ", ";
-        f.buf.String::append(s);
-    };
-    {
-        let s: String = "y: ";
-        f.buf.String::append(s);
-    };
-    {
-        let self: Box<i32> = Box<i32> { value: self.y };
-        self.i32::fmt_decimal(f);
-    };
-    {
-        let s: String = " }";
-        f.buf.String::append(s);
-    };
+    let s: String = "Point { ";
+    f.buf.String::append(s);
+    let s: String = "x: ";
+    f.buf.String::append(s);
+    let self: Box<i32> = Box<i32> { value: self.x };
+    self.i32::fmt_decimal(f);
+    let s: String = ", ";
+    f.buf.String::append(s);
+    let s: String = "y: ";
+    f.buf.String::append(s);
+    let self: Box<i32> = Box<i32> { value: self.y };
+    self.i32::fmt_decimal(f);
+    let s: String = " }";
+    f.buf.String::append(s);
 }
 
 export fn __cm_export__run() {

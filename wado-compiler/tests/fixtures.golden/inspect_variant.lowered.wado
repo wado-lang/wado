@@ -57,61 +57,39 @@ export fn run() with Stdout {
 
 pub fn "Shape^Inspect::inspect"(self: Box<Shape>, f: &mut Formatter) {
     if __variant_test(self.value, case=0, name=Circle) {
-        {
-            let s: String = "Shape::Circle(";
-            f.buf.String::append(s);
-        };
-        {
-            let self: Box<f64> = Box<f64> { value: __variant_payload(self.value, case=0) };
-            self.f64::fmt_into(f);
-        };
-        {
-            let s: String = ")";
-            f.buf.String::append(s);
-        };
+        let s: String = "Shape::Circle(";
+        f.buf.String::append(s);
+        let self: Box<f64> = Box<f64> { value: __variant_payload(self.value, case=0) };
+        self.f64::fmt_into(f);
+        let s: String = ")";
+        f.buf.String::append(s);
     } else {
         if __variant_test(self.value, case=1, name=Rectangle) {
-            {
-                let s: String = "Shape::Rectangle(";
-                f.buf.String::append(s);
-            };
+            let s: String = "Shape::Rectangle(";
+            f.buf.String::append(s);
             __variant_payload(self.value, case=1)."Tuple<f64,f64>^Inspect::inspect"(f);
-            {
-                let s: String = ")";
-                f.buf.String::append(s);
-            };
+            let s: String = ")";
+            f.buf.String::append(s);
         } else {
             if __variant_test(self.value, case=2, name=Point) {
-                {
-                    let s: String = "Shape::Point";
-                    f.buf.String::append(s);
-                };
+                let s: String = "Shape::Point";
+                f.buf.String::append(s);
             };
         };
     };
 }
 
 pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    {
-        let s: String = "[";
-        f.buf.String::append(s);
-    };
-    {
-        let self: Box<f64> = Box<f64> { value: *self.0 };
-        self.f64::fmt_into(f);
-    };
-    {
-        let s: String = ", ";
-        f.buf.String::append(s);
-    };
-    {
-        let self: Box<f64> = Box<f64> { value: *self.1 };
-        self.f64::fmt_into(f);
-    };
-    {
-        let s: String = "]";
-        f.buf.String::append(s);
-    };
+    let s: String = "[";
+    f.buf.String::append(s);
+    let self: Box<f64> = Box<f64> { value: *self.0 };
+    self.f64::fmt_into(f);
+    let s: String = ", ";
+    f.buf.String::append(s);
+    let self: Box<f64> = Box<f64> { value: *self.1 };
+    self.f64::fmt_into(f);
+    let s: String = "]";
+    f.buf.String::append(s);
 }
 
 export fn __cm_export__run() {

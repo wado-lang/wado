@@ -37,11 +37,9 @@ fn Value::describe(self: &Value) -> String {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        {
-            let self: Box<i32> = Box<i32> { value: self.n };
-            let f: &mut Formatter = &mut __f;
-            self.i32::fmt_decimal(f);
-        };
+        let self: Box<i32> = Box<i32> { value: self.n };
+        let f: &mut Formatter = &mut __f;
+        self.i32::fmt_decimal(f);
         break __tmpl: __r;
     };
 }
@@ -54,21 +52,17 @@ fn Container::stats(self: &Container) -> String {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        {
-            let self: Box<i32> = Box<i32> { value: self.read_count };
-            let f: &mut Formatter = &mut __f;
-            self.i32::fmt_decimal(f);
-        };
+        let self: Box<i32> = Box<i32> { value: self.read_count };
+        let f: &mut Formatter = &mut __f;
+        self.i32::fmt_decimal(f);
         __r.String::append(", writes=");
         __f = __inline_Formatter__new_4: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        {
-            let self: Box<i32> = Box<i32> { value: self.write_count };
-            let f: &mut Formatter = &mut __f;
-            self.i32::fmt_decimal(f);
-        };
+        let self: Box<i32> = Box<i32> { value: self.write_count };
+        let f: &mut Formatter = &mut __f;
+        self.i32::fmt_decimal(f);
         break __tmpl: __r;
     };
 }
@@ -152,18 +146,12 @@ export fn run() with Stdout {
         __r.String::append(v1.Value::describe());
         break __tmpl: __r;
     });
-    {
-        let self: &mut Value = c."Container^IndexMut::index_mut"(0);
-        self.n = (self.n + 1);
-    };
-    {
-        let self: &mut Value = c."Container^IndexMut::index_mut"(1);
-        self.n = (self.n + 100);
-    };
-    {
-        let self: &mut Value = c."Container^IndexMut::index_mut"(2);
-        self.n = (self.n + 200);
-    };
+    let self: &mut Value = c."Container^IndexMut::index_mut"(0);
+    self.n = (self.n + 1);
+    let self: &mut Value = c."Container^IndexMut::index_mut"(1);
+    self.n = (self.n + 100);
+    let self: &mut Value = c."Container^IndexMut::index_mut"(2);
+    self.n = (self.n + 200);
     core::cli::println("After mutations:");
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(20), used: 0 };
@@ -200,11 +188,9 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        {
-            let self: Box<i32> = Box<i32> { value: c.Container::total() };
-            let f: &mut Formatter = &mut __f;
-            self.i32::fmt_decimal(f);
-        };
+        let self: Box<i32> = Box<i32> { value: c.Container::total() };
+        let f: &mut Formatter = &mut __f;
+        self.i32::fmt_decimal(f);
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
@@ -213,24 +199,18 @@ export fn run() with Stdout {
         __r.String::append(c.Container::stats());
         break __tmpl: __r;
     });
-    {
-        c.read_count = 0;
-        c.write_count = 0;
-    };
+    c.read_count = 0;
+    c.write_count = 0;
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(29), used: 0 };
         __r.String::append("After reset: ");
         __r.String::append(c.Container::stats());
         break __tmpl: __r;
     });
-    {
-        let self: &mut Value = c."Container^IndexMut::index_mut"(0);
-        self.n = (self.n + 1);
-    };
-    {
-        let self: &mut Value = c."Container^IndexMut::index_mut"(1);
-        self.n = (self.n + 1);
-    };
+    let self: &mut Value = c."Container^IndexMut::index_mut"(0);
+    self.n = (self.n + 1);
+    let self: &mut Value = c."Container^IndexMut::index_mut"(1);
+    self.n = (self.n + 1);
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(29), used: 0 };
         __r.String::append("Final stats: ");

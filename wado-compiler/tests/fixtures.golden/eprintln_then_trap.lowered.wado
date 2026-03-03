@@ -28,17 +28,15 @@ export fn run() {
 }
 
 export fn __cm_export__run() {
-    {
-        __inline___initialize_modules_1: {
-            if __modules_initialized {
-                break __inline___initialize_modules_1;
-            }
-            "core::prelude/fpfmt.wado::__initialize_module"();
-            __modules_initialized = true;
-        };
-        core::internal::log_stderr("error message");
-        core::builtin::unreachable();
+    __inline___initialize_modules_1: {
+        if __modules_initialized {
+            break __inline___initialize_modules_1;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
     };
+    core::internal::log_stderr("error message");
+    core::builtin::unreachable();
     cm_raw_call task-return(0);
 }
 
