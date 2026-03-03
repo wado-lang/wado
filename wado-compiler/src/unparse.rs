@@ -2407,10 +2407,10 @@ fn get_stmt_span(stmt: &Stmt) -> Span {
 }
 
 fn block_single_expr(block: &Block) -> Option<&Expr> {
-    if block.stmts.len() == 1 {
-        if let Stmt::Expr(e) = &block.stmts[0] {
-            return Some(&e.expr);
-        }
+    if block.stmts.len() == 1
+        && let Stmt::Expr(e) = &block.stmts[0]
+    {
+        return Some(&e.expr);
     }
     None
 }
