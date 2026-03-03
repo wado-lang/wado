@@ -381,7 +381,7 @@ impl IndexValue<RangeInclusive<i32>> for Array<T> {
 
 ### Pattern Matching with Ranges
 
-Range patterns allow matching a value against a range in `match` arms, `if let`, and `matches`:
+Range patterns allow matching a value against a range in `match` arms and `matches` expressions:
 
 ```wado
 // Grade classification
@@ -423,7 +423,7 @@ Both `..<` and `..=` are allowed as pattern forms:
 - `a..<b` matches if `a <= scrutinee < b`
 - `a..=b` matches if `a <= scrutinee <= b`
 
-The bounds `a` and `b` must be compile-time constant expressions: integer literals, character literals, unary negation of literals (`-1`), or associated constants (`i32::MAX`).
+Range patterns are restricted to integer and `char` types (not floats — NaN breaks comparison semantics and exhaustiveness is undecidable). The bounds `a` and `b` must be compile-time constant expressions: integer literals, character literals, unary negation of literals (`-1`), or associated constants (`i32::MAX`).
 
 ```wado
 // Negative ranges
