@@ -907,8 +907,7 @@ impl<'a> Lexer<'a> {
                             current_literal.push('}');
                         }
                         _ => {
-                            let ch =
-                                self.parse_escape_sequence(start, start_line, start_column)?;
+                            let ch = self.parse_escape_sequence(start, start_line, start_column)?;
                             current_literal.push(ch);
                         }
                     }
@@ -920,11 +919,8 @@ impl<'a> Lexer<'a> {
                             &mut current_literal,
                         )));
                     }
-                    let interp = self.collect_interpolation_source(
-                        start,
-                        start_line,
-                        start_column,
-                    )?;
+                    let interp =
+                        self.collect_interpolation_source(start, start_line, start_column)?;
                     parts.push(TemplateTokenPart::Interpolation(interp));
                 }
                 Some((_, '`')) => {
@@ -987,7 +983,7 @@ impl<'a> Lexer<'a> {
                 }
                 '`' if !in_string => {
                     source.push(ch);
-                    backtick_depth = if backtick_depth == 0 { 1 } else { 0 };
+                    backtick_depth = u32::from(backtick_depth == 0);
                 }
                 '{' if !in_string && backtick_depth == 0 => {
                     source.push(ch);

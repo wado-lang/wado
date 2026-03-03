@@ -3832,8 +3832,7 @@ impl Parser {
                     parts.push(TemplatePart::String(s));
                 }
                 TemplateTokenPart::Interpolation(raw) => {
-                    let (expr_str, format_spec) =
-                        self.split_interpolation_format(&raw, span)?;
+                    let (expr_str, format_spec) = self.split_interpolation_format(&raw, span)?;
                     let expr = self.parse_interpolation_expr(expr_str, span)?;
                     parts.push(TemplatePart::Interpolation {
                         expr: Box::new(expr),
@@ -3883,7 +3882,7 @@ impl Parser {
                     in_string = !in_string;
                 }
                 '`' if !in_string => {
-                    backtick_depth = if backtick_depth == 0 { 1 } else { 0 };
+                    backtick_depth = u32::from(backtick_depth == 0);
                 }
                 '{' if !in_string && backtick_depth == 0 => {
                     brace_depth += 1;
@@ -3907,7 +3906,12 @@ impl Parser {
                             span,
                         });
                     }
-                    return Ok((expr_str, Some(FormatSpec { spec: spec.to_string() })));
+                    return Ok((
+                        expr_str,
+                        Some(FormatSpec {
+                            spec: spec.to_string(),
+                        }),
+                    ));
                 }
                 _ => {}
             }
