@@ -184,12 +184,10 @@ fn is_inline_eligible(
         return false;
     }
 
-    // Single-callsite functions get a 3x larger threshold: inlining them eliminates
-    // the call overhead and exposes cross-boundary dead-code that no other pass can
-    // see.  A multiplier of 3 is intentionally conservative — enough to capture small
-    // helper functions but not large ones that would bloat the caller.
+    // `#[inline]` hint raises the threshold by 5x, allowing functions up to 50
+    // expressions (at the default threshold of 10) to be inlined.
     let effective_threshold = if func.inline_hint == InlineHint::Hint {
-        inline_threshold * 2
+        inline_threshold * 5
     } else {
         inline_threshold
     };
@@ -713,8 +711,14 @@ fn inline_calls_in_block(
                         inlined_funcs,
                         inline_counter,
                     );
-                    // For void functions, still emit the expression for side effects
-                    new_stmts.push(TirStmt::new(TirStmtKind::Expr(inlined_expr), stmt.span));
+                    // For void functions, convert the labeled-block expression into
+                    // a labeled-block statement so DCE can flatten it properly.
+                    if let TirExprKind::LabeledBlock { label, block, .. } = inlined_expr.kind {
+                        new_stmts
+                            .push(TirStmt::new(TirStmtKind::LabeledBlock { label, block }, stmt.span));
+                    } else {
+                        new_stmts.push(TirStmt::new(TirStmtKind::Expr(inlined_expr), stmt.span));
+                    }
                 } else {
                     let mut new_expr = expr;
                     inline_calls_in_expr(

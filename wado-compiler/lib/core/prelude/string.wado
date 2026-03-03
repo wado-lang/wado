@@ -304,7 +304,7 @@ impl String {
 
     /// Append a Unicode scalar value (char) to this string.
     #[comp_feature("string_append_char")]
-    #[inline(always)]
+    #[inline]
     pub fn append_char(&mut self, c: char) {
         let code = c as u32;
 
@@ -321,7 +321,6 @@ impl String {
     }
 
     /// Slow path for appending a multi-byte UTF-8 scalar (code >= 0x80).
-    #[inline(never)]
     fn append_unicode_scalar(&mut self, code: u32) {
         // Ensure capacity for max UTF-8 length (4 bytes)
         if builtin::unlikely(self.used + 4 > builtin::array_len(self.repr)) {
