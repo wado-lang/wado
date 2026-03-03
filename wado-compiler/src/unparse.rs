@@ -1824,7 +1824,7 @@ impl<'a> Unparser<'a> {
         self.unparse_expr(else_expr);
         self.output.push_str(" }");
 
-        if self.exceeds_width_since(snap) {
+        if self.output[snap..].contains('\n') || self.exceeds_width_since(snap) {
             self.rollback(snap);
             return false;
         }
@@ -1915,7 +1915,7 @@ impl<'a> Unparser<'a> {
         }
         self.output.push_str(" }");
 
-        if self.exceeds_width_since(snap) {
+        if self.output[snap..].contains('\n') || self.exceeds_width_since(snap) {
             self.rollback(snap);
             return false;
         }
@@ -2673,20 +2673,24 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
                 output.push_str(name);
                 output.push(' ');
             }
-            output.push_str("{ ");
-            for (i, f) in s.fields.iter().enumerate() {
-                if i > 0 {
-                    output.push_str(", ");
+            if s.fields.is_empty() {
+                output.push_str("{}");
+            } else {
+                output.push_str("{ ");
+                for (i, f) in s.fields.iter().enumerate() {
+                    if i > 0 {
+                        output.push_str(", ");
+                    }
+                    if f.is_shorthand {
+                        output.push_str(&f.name);
+                    } else {
+                        output.push_str(&f.name);
+                        output.push_str(": ");
+                        unparse_expr_into(&f.value, output, false);
+                    }
                 }
-                if f.is_shorthand {
-                    output.push_str(&f.name);
-                } else {
-                    output.push_str(&f.name);
-                    output.push_str(": ");
-                    unparse_expr_into(&f.value, output, false);
-                }
+                output.push_str(" }");
             }
-            output.push_str(" }");
         }
         Expr::TupleLiteral(t) => {
             output.push('[');

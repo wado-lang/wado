@@ -126,46 +126,74 @@ pub struct PmHiLo {
 // Tables are implemented as functions for better Wasm optimization.
 
 fn pow10_coarse(i: i32) -> PmHiLo {
-    return match i { 0 => PmHiLo { hi: 0x8049a4ac0c5811af, lo: 0xdfa4769288829d87 }, 1 => PmHiLo {
-        hi: 0xcf42894a5dce35eb,
-        lo: 0xadf9b3537d798a46,
-    }, 2 => PmHiLo { hi: 0xa76c582338ed2622, lo: 0x50d50d47f5090db1 }, 3 => PmHiLo {
-        hi: 0x873e4f75e2224e69,
-        lo: 0xa588bb5917fb5d6e,
-    }, 4 => PmHiLo { hi: 0xda7f5bf590966849, lo: 0x50c65b8aaf957661 }, 5 => PmHiLo {
-        hi: 0xb080392cc4349ded,
-        lo: 0x427286b26955304c,
-    }, 6 => PmHiLo { hi: 0x8e938662882af53f, lo: 0xab814b848d7d1163 }, 7 => PmHiLo {
-        hi: 0xe65829b3046b0afb,
-        lo: 0xf34b5a5ceed5aeed,
-    }, 8 => PmHiLo { hi: 0xba121a4650e4ddec, lo: 0x6d0cb29d9e931bec }, 9 => PmHiLo {
-        hi: 0x964e858c91ba2656,
-        lo: 0xc595f8072aef0790,
-    }, 10 => PmHiLo { hi: 0xf2d56790ab41c2a3, lo: 0x051d8d66bdc0463c }, 11 => PmHiLo {
-        hi: 0xc428d05aa4751e4d,
-        lo: 0x55681eb3c3d94779,
-    }, 12 => PmHiLo { hi: 0x9e74d1b791e07e49, lo: 0x88a15d9b30aacb82 }, 13 => PmHiLo {
-        hi: 0x8000000000000000,
-        lo: 0x0000000000000000,
-    }, 14 => PmHiLo { hi: 0xcecb8f27f4200f3a, lo: 0x0000000000000000 }, 15 => PmHiLo {
-        hi: 0xa70c3c40a64e6c52,
-        lo: 0x666f6f49a09826dc,
-    }, 16 => PmHiLo { hi: 0x86f0ac99b4e8dafe, lo: 0x965fd744c2128e5c }, 17 => PmHiLo {
-        hi: 0xda01ee641a708dea,
-        lo: 0x17f190b7df336b6a,
-    }, 18 => PmHiLo { hi: 0xb01ae745b101e9e5, lo: 0xa13fa23008d18070 }, 19 => PmHiLo {
-        hi: 0x8e41ade9fbebc27e,
-        lo: 0xeba770ec417b8cf8,
-    }, 20 => PmHiLo { hi: 0xe5d3ef282a242e82, lo: 0x70e9973757925a05 }, 21 => PmHiLo {
-        hi: 0xb9a74a0637ce2ee2,
-        lo: 0x926ac1d428e8c96d,
-    }, 22 => PmHiLo { hi: 0x95f83d0a1fb69cda, lo: 0xb54250efea9b0671 }, 23 => PmHiLo {
-        hi: 0xf24a01a73cf2dcd0,
-        lo: 0x439cc4c698c37313,
-    }, 24 => PmHiLo { hi: 0xc3b8358109e84f08, lo: 0xf579d07f13b8ff37 }, 25 => PmHiLo {
-        hi: 0x9e19db92b4e31baa,
-        lo: 0x93f85d3d957cb92e,
-    }, _ => unreachable() };
+    return match i {
+        0 => PmHiLo { hi: 0x8049a4ac0c5811af, lo: 0xdfa4769288829d87 },
+        1 => PmHiLo {
+            hi: 0xcf42894a5dce35eb,
+            lo: 0xadf9b3537d798a46,
+        },
+        2 => PmHiLo { hi: 0xa76c582338ed2622, lo: 0x50d50d47f5090db1 },
+        3 => PmHiLo {
+            hi: 0x873e4f75e2224e69,
+            lo: 0xa588bb5917fb5d6e,
+        },
+        4 => PmHiLo { hi: 0xda7f5bf590966849, lo: 0x50c65b8aaf957661 },
+        5 => PmHiLo {
+            hi: 0xb080392cc4349ded,
+            lo: 0x427286b26955304c,
+        },
+        6 => PmHiLo { hi: 0x8e938662882af53f, lo: 0xab814b848d7d1163 },
+        7 => PmHiLo {
+            hi: 0xe65829b3046b0afb,
+            lo: 0xf34b5a5ceed5aeed,
+        },
+        8 => PmHiLo { hi: 0xba121a4650e4ddec, lo: 0x6d0cb29d9e931bec },
+        9 => PmHiLo {
+            hi: 0x964e858c91ba2656,
+            lo: 0xc595f8072aef0790,
+        },
+        10 => PmHiLo { hi: 0xf2d56790ab41c2a3, lo: 0x051d8d66bdc0463c },
+        11 => PmHiLo {
+            hi: 0xc428d05aa4751e4d,
+            lo: 0x55681eb3c3d94779,
+        },
+        12 => PmHiLo { hi: 0x9e74d1b791e07e49, lo: 0x88a15d9b30aacb82 },
+        13 => PmHiLo {
+            hi: 0x8000000000000000,
+            lo: 0x0000000000000000,
+        },
+        14 => PmHiLo { hi: 0xcecb8f27f4200f3a, lo: 0x0000000000000000 },
+        15 => PmHiLo {
+            hi: 0xa70c3c40a64e6c52,
+            lo: 0x666f6f49a09826dc,
+        },
+        16 => PmHiLo { hi: 0x86f0ac99b4e8dafe, lo: 0x965fd744c2128e5c },
+        17 => PmHiLo {
+            hi: 0xda01ee641a708dea,
+            lo: 0x17f190b7df336b6a,
+        },
+        18 => PmHiLo { hi: 0xb01ae745b101e9e5, lo: 0xa13fa23008d18070 },
+        19 => PmHiLo {
+            hi: 0x8e41ade9fbebc27e,
+            lo: 0xeba770ec417b8cf8,
+        },
+        20 => PmHiLo { hi: 0xe5d3ef282a242e82, lo: 0x70e9973757925a05 },
+        21 => PmHiLo {
+            hi: 0xb9a74a0637ce2ee2,
+            lo: 0x926ac1d428e8c96d,
+        },
+        22 => PmHiLo { hi: 0x95f83d0a1fb69cda, lo: 0xb54250efea9b0671 },
+        23 => PmHiLo {
+            hi: 0xf24a01a73cf2dcd0,
+            lo: 0x439cc4c698c37313,
+        },
+        24 => PmHiLo { hi: 0xc3b8358109e84f08, lo: 0xf579d07f13b8ff37 },
+        25 => PmHiLo {
+            hi: 0x9e19db92b4e31baa,
+            lo: 0x93f85d3d957cb92e,
+        },
+        _ => unreachable(),
+    };
 }
 
 fn pow10_fine(i: i32) -> u64 {
