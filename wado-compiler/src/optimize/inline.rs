@@ -711,14 +711,8 @@ fn inline_calls_in_block(
                         inlined_funcs,
                         inline_counter,
                     );
-                    // For void functions, convert the labeled-block expression into
-                    // a labeled-block statement so DCE can flatten it properly.
-                    if let TirExprKind::LabeledBlock { label, block, .. } = inlined_expr.kind {
-                        new_stmts
-                            .push(TirStmt::new(TirStmtKind::LabeledBlock { label, block }, stmt.span));
-                    } else {
-                        new_stmts.push(TirStmt::new(TirStmtKind::Expr(inlined_expr), stmt.span));
-                    }
+                    // For void functions, still emit the expression for side effects
+                    new_stmts.push(TirStmt::new(TirStmtKind::Expr(inlined_expr), stmt.span));
                 } else {
                     let mut new_expr = expr;
                     inline_calls_in_expr(

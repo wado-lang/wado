@@ -2700,7 +2700,7 @@ fn eliminate_dead_stmts(block: &mut TirBlock) -> bool {
                 if block.stmts.is_empty() || !block_has_break_to(label, block)
         ) || matches!(
             &s.kind,
-            TirStmtKind::Expr(e) if matches!(e.kind, TirExprKind::Unit)
+            TirStmtKind::Expr(e) if matches!(e.kind, TirExprKind::Unit | TirExprKind::Block(_))
         )
     };
     if !block.stmts.iter().any(dominated) {
@@ -2745,6 +2745,21 @@ fn eliminate_dead_stmts(block: &mut TirBlock) -> bool {
         if let TirStmtKind::Expr(e) = &stmt.kind
             && matches!(e.kind, TirExprKind::Unit)
         {
+            continue;
+        }
+        // Void block expression → flatten stmts into parent.
+        // This pattern arises when DCE strips the label from an inlined
+        // void function: `Expr(LabeledBlock { ... })` → `Expr(Block { ... })`.
+        if let TirStmtKind::Expr(e) = &stmt.kind
+            && matches!(e.kind, TirExprKind::Block(_))
+        {
+            let TirStmtKind::Expr(e) = stmt.kind else {
+                unreachable!();
+            };
+            let TirExprKind::Block(inner) = e.kind else {
+                unreachable!();
+            };
+            block.stmts.extend(inner.stmts);
             continue;
         }
         block.stmts.push(stmt);
