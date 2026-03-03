@@ -1,11 +1,11 @@
 # benchmark
 
-Performance benchmarks comparing Wado against C, JavaScript, Python, and Ruby.
+Performance benchmarks comparing Wado against C and JavaScript.
 
 ## Setup
 
 ```sh
-mise install  # node, python, ruby
+mise install  # node, zig
 ```
 
 C compiler (`cc`) and Rust (`cargo`) are expected from the system.

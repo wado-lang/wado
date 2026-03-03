@@ -6,8 +6,6 @@
 
 [tools]
 node = "latest"
-python = "latest"
-ruby = "latest"
 zig = "latest"
 
 [tasks.count-prime]
@@ -27,12 +25,6 @@ echo "=== C ==="
 
 echo "=== JavaScript ==="
 node count_prime/count_prime.js
-
-echo "=== Python ==="
-python3 count_prime/count_prime.py
-
-echo "=== Ruby ==="
-ruby count_prime/count_prime.rb
 
 echo "=== Wado ==="
 cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 count_prime/count_prime.wado
@@ -56,12 +48,6 @@ echo "=== C ==="
 echo "=== JavaScript ==="
 node mandelbrot/mandelbrot.js
 
-echo "=== Python ==="
-python3 mandelbrot/mandelbrot.py
-
-echo "=== Ruby ==="
-ruby mandelbrot/mandelbrot.rb
-
 echo "=== Wado ==="
 cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 mandelbrot/mandelbrot.wado
 """
@@ -83,12 +69,6 @@ echo "=== C ==="
 
 echo "=== JavaScript ==="
 node sieve/sieve.js
-
-echo "=== Python ==="
-python3 sieve/sieve.py
-
-echo "=== Ruby ==="
-ruby sieve/sieve.rb
 
 echo "=== Wado ==="
 cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 sieve/sieve.wado
@@ -141,15 +121,15 @@ cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 ft
 """
 
 [tasks.all]
-description = "Run all benchmarks"
+description = "Run all benchmarks serially"
 run = """
 #!/usr/bin/env bash
 set -e
-mise run count-prime
-mise run mandelbrot
-mise run sieve
-mise run zlib
-mise run fts
+MISE_JOBS=1 mise run count-prime
+MISE_JOBS=1 mise run mandelbrot
+MISE_JOBS=1 mise run sieve
+MISE_JOBS=1 mise run zlib
+MISE_JOBS=1 mise run fts
 """
 
 [tasks.clean]
