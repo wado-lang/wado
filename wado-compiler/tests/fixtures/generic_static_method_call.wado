@@ -1,0 +1,34 @@
+// Test: calling a static trait method through a generic type parameter
+// T::method() where T is a type parameter bound by a trait
+use { println, Stdout } from "core:cli";
+
+trait Constructable {
+    fn create(val: i32) -> Self;
+}
+
+impl Constructable for i32 {
+    fn create(val: i32) -> i32 {
+        return val;
+    }
+}
+
+impl Constructable for String {
+    fn create(val: i32) -> String {
+        return `{val}`;
+    }
+}
+
+fn make<T: Constructable>(val: i32) -> T {
+    return T::create(val);
+}
+
+export fn run() with Stdout {
+    let a = make::<i32>(42);
+    println(`i32: {a}`);
+
+    let b = make::<String>(99);
+    println(`String: {b}`);
+}
+
+__DATA__
+{"stdout": "i32: 42\nString: 99\n"}

@@ -1093,7 +1093,12 @@ fn expand_struct_let(
                         is_reactive: false,
                         type_id: *field_type,
                         value: field.value,
-                        skip_value_copy: false,
+                        // The original struct/tuple literal was a fresh value, so
+                        // its fields don't need value_copy — the field expressions
+                        // are directly consumed by the fresh construction. Without
+                        // this flag, the WIR builder would insert a deep copy for
+                        // each field, breaking reference sharing semantics.
+                        skip_value_copy: true,
                     },
                     span,
                 ));
@@ -1120,7 +1125,7 @@ fn expand_struct_let(
                         is_reactive: false,
                         type_id: *field_type,
                         value: elem,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 ));

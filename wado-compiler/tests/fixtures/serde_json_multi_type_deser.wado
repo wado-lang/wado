@@ -1,0 +1,24 @@
+// Test: JSON from_string with multiple type monomorphizations (i32 + String)
+// Regression test for SROA type mismatch when inlined blocks have multiple exits
+use { DeserializeError } from "core:serde";
+use { from_string } from "core:json";
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let r = from_string::<i32>("42");
+    if let Ok(v) = r {
+        println(`i32: {v}`);
+    } else {
+        panic("deserialize i32 failed");
+    }
+
+    let r2 = from_string::<String>(`"hello"`);
+    if let Ok(v2) = r2 {
+        println(`string: {v2}`);
+    } else {
+        panic("deserialize string failed");
+    }
+}
+
+__DATA__
+{"stdout": "i32: 42\nstring: hello\n"}

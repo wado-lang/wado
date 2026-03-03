@@ -2714,7 +2714,27 @@ impl Monomorphizer {
                     // Apply type args to get monomorphized method info
                     // Skip for non-generic structs that don't use the enclosing type params.
                     let new_info = if info.is_type_param_receiver && !type_names.is_empty() {
-                        info.with_substituted_struct_name(&type_names[0])
+                        let mut substituted = info.with_substituted_struct_name(&type_names[0]);
+                        // Also substitute method type args that may contain TypeParam references.
+                        // The monomorph_info stores method type args as TypeIds which can be
+                        // substituted, then we regenerate the mangled names.
+                        if let FunctionRef::External {
+                            monomorph_info: Some(mi),
+                            ..
+                        } = &*static_func
+                        {
+                            let new_method_type_args: Vec<String> = mi
+                                .type_args
+                                .iter()
+                                .map(|&tid| {
+                                    let sub =
+                                        self.substitute_type(tid, substitution, type_table);
+                                    type_table.mangle_type_name(sub)
+                                })
+                                .collect();
+                            substituted.method_type_args = new_method_type_args;
+                        }
+                        substituted
                     } else if needs_struct_type_args {
                         info.with_struct_type_args(&type_names)
                     } else {
@@ -2732,11 +2752,44 @@ impl Monomorphizer {
                                     let concrete_type_id = sorted_entries[0].1;
                                     module_source_for_trait_impl(type_table, *concrete_type_id)
                                 });
+                            // Preserve monomorph_info when the method has type args
+                            // (e.g., T::deserialize::<D> → i32::deserialize::<JsonDeserializer>)
+                            let new_monomorph = if !new_info.method_type_args.is_empty() {
+                                // Build the generic name without method type args for lookup
+                                let base_info = LocalMethodName::new(
+                                    new_info.base_struct_name.clone(),
+                                    new_info.trait_name.clone(),
+                                    new_info.method_name.clone(),
+                                );
+                                let generic_name = base_info.to_mangled_name();
+                                // Substitute method type arg TypeIds
+                                let method_type_arg_tids: Vec<TypeId> = if let FunctionRef::External {
+                                    monomorph_info: Some(mi),
+                                    ..
+                                } = &*static_func
+                                {
+                                    mi.type_args
+                                        .iter()
+                                        .map(|&tid| {
+                                            self.substitute_type(tid, substitution, type_table)
+                                        })
+                                        .collect()
+                                } else {
+                                    Vec::new()
+                                };
+                                Some(MonomorphInfo {
+                                    generic_name,
+                                    type_args: method_type_arg_tids,
+                                    is_blanket: false,
+                                })
+                            } else {
+                                None
+                            };
                             *static_func = FunctionRef::External {
                                 module_source: concrete_module
                                     .unwrap_or_else(|| module_source.clone()),
                                 name: new_func_name,
-                                monomorph_info: None,
+                                monomorph_info: new_monomorph,
                                 method_info: Some(new_info),
                             };
                         } else {

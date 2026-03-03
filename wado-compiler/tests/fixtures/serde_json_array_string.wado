@@ -1,0 +1,43 @@
+// Regression test: Array<String> serialization at O1+ was broken due to
+// TIR SROA inserting value_copy on decomposed struct literal fields, and
+// WIR SROA not handling Seq([StructNew, Br]) in variant returns.
+use { Serialize, Serializer, SerializeError } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+test "serialize Array<String>" {
+    let v: Array<String> = ["hello", "world"];
+    let r = to_string::<Array<String>>(&v);
+    if let Ok(s) = r {
+        assert s == `["hello","world"]`;
+    } else {
+        panic("serialize Array<String> failed");
+    }
+}
+
+test "serialize Array<i32>" {
+    let v: Array<i32> = [1, 2, 3];
+    let r = to_string::<Array<i32>>(&v);
+    if let Ok(s) = r {
+        assert s == "[1,2,3]";
+    } else {
+        panic("serialize Array<i32> failed");
+    }
+}
+
+test "roundtrip i32" {
+    let n = 42;
+    let json = to_string::<i32>(&n);
+    if let Ok(s) = json {
+        let parsed = from_string::<i32>(s);
+        if let Ok(v) = parsed {
+            assert v == 42;
+        } else {
+            panic("from_string failed");
+        }
+    } else {
+        panic("to_string failed");
+    }
+}
+
+__DATA__
+{"test": {}}
