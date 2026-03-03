@@ -4319,11 +4319,17 @@ impl FunctionTranslator<'_, '_> {
                             ..
                         } = binding
                         {
-                            // Match ergonomics: if the binding's WIR type is a
-                            // ref (Box<T>) but the payload field is a value type,
-                            // create a StructNew to box the extracted value.
+                            // Check the local's actual type (which may have been
+                            // promoted to Box<T> by the address-taken boxing pass)
+                            // rather than the pattern binding's original type_id.
+                            let local_type_id =
+                                if (*local_index as usize) < self.tir_func.local_types.len() {
+                                    self.tir_func.local_types[*local_index as usize]
+                                } else {
+                                    *type_id
+                                };
                             let binding_wir =
-                                self.ctx.type_id_to_wir_type(self.type_table, *type_id);
+                                self.ctx.type_id_to_wir_type(self.type_table, local_type_id);
                             let payload_field_wir =
                                 self.get_case_payload_wir_type(&case_type_id, i);
                             let needs_boxing = matches!(binding_wir, WirType::Ref { .. })
