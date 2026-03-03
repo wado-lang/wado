@@ -1,0 +1,52 @@
+// Test: compiler-synthesized Deserialize for a struct
+use { Deserialize, DeserializeError } from "core:serde";
+use { from_string } from "core:json";
+
+struct Point {
+    x: f64,
+    y: f64,
+}
+
+impl Deserialize for Point;
+
+test "synthesized deserialize Point" {
+    let r = from_string::<Point>(`\{"x":1.5,"y":2.5\}`);
+    if let Ok(p) = r {
+        assert p.x == 1.5;
+        assert p.y == 2.5;
+    } else {
+        panic("deserialize Point failed");
+    }
+}
+
+test "synthesized deserialize Point out-of-order fields" {
+    let r = from_string::<Point>(`\{"y":3.0,"x":7.0\}`);
+    if let Ok(p) = r {
+        assert p.x == 7.0;
+        assert p.y == 3.0;
+    } else {
+        panic("deserialize Point with out-of-order fields failed");
+    }
+}
+
+struct User {
+    user_name: String,
+    age: i32,
+    active: bool,
+}
+
+impl Deserialize for User;
+
+test "synthesized deserialize User with camelCase keys" {
+    let r = from_string::<User>(`\{"userName":"Alice","age":30,"active":true\}`);
+    if let Ok(u) = r {
+        assert u.user_name == "Alice";
+        assert u.age == 30;
+        assert u.active == true;
+    } else {
+        panic("deserialize User failed");
+    }
+}
+
+__DATA__
+{"test": {}}

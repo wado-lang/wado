@@ -679,6 +679,11 @@ impl<'a> Unparser<'a> {
             self.unparse_impl_inherent_type(&i.ty, &i.type_params);
         }
 
+        if i.is_synthesize_request {
+            self.output.push_str(";\n");
+            return;
+        }
+
         self.output.push_str(" {\n");
 
         self.indent_level += 1;

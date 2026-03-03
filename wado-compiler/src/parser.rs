@@ -3437,6 +3437,27 @@ impl Parser {
             (None, first_type)
         };
 
+        // `impl Trait for Type;` — synthesis request (compiler generates the body)
+        if self.check(&TokenKind::Semicolon) {
+            let end_span = self.advance().span;
+            if trait_type.is_none() {
+                return Err(self.error_at_span(
+                    start_span.merge(&end_span),
+                    "synthesis request requires a trait: `impl Trait for Type;`",
+                ));
+            }
+            return Ok(ImplBlock {
+                type_params,
+                trait_type,
+                ty,
+                associated_types: Vec::new(),
+                constants: Vec::new(),
+                methods: Vec::new(),
+                is_synthesize_request: true,
+                span: start_span.merge(&end_span),
+            });
+        }
+
         self.expect(&TokenKind::LBrace)?;
 
         let mut associated_types = Vec::new();
@@ -3499,6 +3520,7 @@ impl Parser {
             associated_types,
             constants,
             methods,
+            is_synthesize_request: false,
             span: start_span.merge(&end_span),
         })
     }
