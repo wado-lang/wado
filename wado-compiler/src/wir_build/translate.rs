@@ -3962,7 +3962,15 @@ impl FunctionTranslator<'_, '_> {
                 let body = if has_result {
                     self.translate_expr_as_value(&arm.body)
                 } else {
-                    self.translate_expr(&arm.body)
+                    let instr = self.translate_expr(&arm.body);
+                    // If the arm body produces a non-unit value (e.g. after inlining
+                    // transforms a Block into a bare call), drop it to avoid leaving
+                    // values on the Wasm stack.
+                    if arm.body.type_id != TypeTable::UNIT && arm.body.type_id != TypeTable::NEVER {
+                        WirInstr::Drop(Box::new(instr))
+                    } else {
+                        instr
+                    }
                 };
                 instrs.push(body);
                 // Note: `translate_expr` already appends `unreachable` for

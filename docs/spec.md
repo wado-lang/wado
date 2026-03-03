@@ -2664,6 +2664,47 @@ map["key"]        // panics if key not found
 map.get("key")    // returns Option<V>
 ```
 
+## Serialization and Deserialization
+
+Wado provides a format-agnostic serialization framework via `core:serde` and a JSON implementation via `core:json`. See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
+
+### Compiler-Synthesized `impl`
+
+The syntax `impl Trait for Type;` (semicolon instead of block) signals that the compiler generates the method body:
+
+```wado
+use { Serialize, Deserialize } from "core:serde";
+
+struct User {
+    name: String,
+    age: i32,
+}
+
+impl Serialize for User;      // compiler generates serialize method
+impl Deserialize for User;    // compiler generates deserialize method
+```
+
+The compiler inspects the struct definition and synthesizes the appropriate method body. This is a compile error if:
+
+- The type is not a struct (enums and variants are not yet supported for synthesis)
+- The struct contains fields whose types don't implement the required trait
+
+Struct field names are converted from `snake_case` to `camelCase` for serialization (e.g., `user_name` → `"userName"`).
+
+### JSON Module (`core:json`)
+
+```wado
+use { to_string, from_string } from "core:json";
+
+// Serialize to JSON string
+let json = to_string::<User>(&user);   // Result<String, SerializeError>
+
+// Deserialize from JSON string
+let user = from_string::<User>(json);  // Result<User, DeserializeError>
+```
+
+JSON serialization returns `Err` for `NaN` and `Infinity` float values. JSON deserialization returns `Err` for malformed input, missing required fields, type mismatches, and trailing data.
+
 ## Module System
 
 Wado uses an ESM-like import syntax with `use {...} from "module"`. This aligns with JavaScript/TypeScript conventions, as JavaScript is a primary host environment for Wado.
@@ -2896,6 +2937,11 @@ The prelude is automatically imported into every module, making `Option`, `Resul
 core            # core: namespace for the core library
 ├── prelude     # Automatically imported (Option, Result, Stream, Future, Pollable)
 ├── cli         # CLI helpers (println, eprintln, args, env, exit, ...)
+├── serde       # Serialization traits (Serialize, Deserialize, Serializer, Deserializer)
+├── json        # JSON format implementation (to_string, from_string)
+├── collections # TreeMap
+├── base64      # Base64 encoding/decoding
+├── zlib        # Compression
 ├── ...
 wasi            # wasi: namespace for system interfaces
 ├── cli

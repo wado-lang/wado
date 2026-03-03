@@ -1,6 +1,14 @@
 // Token definitions for Wado lexer
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum TemplateTokenPart {
+    /// Literal text with escape sequences resolved (e.g. `\{` → `{`).
+    Literal(String),
+    /// Raw source text of an interpolation expression (without enclosing braces).
+    Interpolation(String),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     // Keywords
     Use,
@@ -49,7 +57,7 @@ pub enum TokenKind {
     Ident(String),
     /// String literal: raw source text between the quotes (escape sequences not interpreted).
     StringLit(String),
-    TemplateStringLit(String), // Raw template string content (without backticks)
+    TemplateStringLit(Vec<TemplateTokenPart>), // Structured template string parts
     /// Char literal: raw source text between the quotes (escape sequences not interpreted).
     CharLit(String),
     NumberLit(String), // String representation only, type determined by context in resolver

@@ -1,0 +1,41 @@
+// Test: compiler-synthesized Serialize for a struct
+use { Serialize, SerializeError } from "core:serde";
+use { to_string } from "core:json";
+
+struct Point {
+    x: f64,
+    y: f64,
+}
+
+impl Serialize for Point;
+
+test "synthesized serialize Point" {
+    let p = Point { x: 1.5, y: 2.5 };
+    let r = to_string::<Point>(&p);
+    if let Ok(s) = r {
+        assert s == `\{"x":1.5,"y":2.5\}`;
+    } else {
+        panic("serialize Point failed");
+    }
+}
+
+struct User {
+    user_name: String,
+    age: i32,
+    active: bool,
+}
+
+impl Serialize for User;
+
+test "synthesized serialize User with snake_case -> camelCase" {
+    let u = User { user_name: "Alice", age: 30, active: true };
+    let r = to_string::<User>(&u);
+    if let Ok(s) = r {
+        assert s == `\{"userName":"Alice","age":30,"active":true\}`;
+    } else {
+        panic("serialize User failed");
+    }
+}
+
+__DATA__
+{"test": {}}

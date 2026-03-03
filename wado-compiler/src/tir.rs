@@ -2051,6 +2051,17 @@ pub struct TirImpl {
     pub span: Span,
 }
 
+/// `impl Trait for Type;` — request the compiler to synthesize the trait implementation.
+#[derive(Debug, Clone)]
+pub struct SynthesisRequest {
+    pub trait_name: String,
+    pub target_type_name: String,
+    pub target_type_id: TypeId,
+    /// Type parameters: `(name, index, type_id)`
+    pub type_params: Vec<(String, u32, TypeId)>,
+    pub span: Span,
+}
+
 /// Metadata about a closure for optimization (especially inlining).
 ///
 /// This is populated by the lower phase and used by the optimizer to inline
@@ -2136,6 +2147,8 @@ pub struct TirModule {
     pub effects: Vec<TirEffect>,
     pub traits: Vec<TirTrait>,
     pub impls: Vec<TirImpl>,
+    /// `impl Trait for Type;` — synthesis requests (populated by resolver, consumed by synthesis)
+    pub synthesis_requests: Vec<SynthesisRequest>,
     /// Test declarations with their metadata
     pub tests: Vec<TirTest>,
     /// Global variable declarations
@@ -2174,6 +2187,7 @@ impl TirModule {
             effects: Vec::new(),
             traits: Vec::new(),
             impls: Vec::new(),
+            synthesis_requests: Vec::new(),
             tests: Vec::new(),
             globals: Vec::new(),
             data_section: None,
@@ -2204,6 +2218,7 @@ impl TirModule {
             effects: Vec::new(),
             traits: Vec::new(),
             impls: Vec::new(),
+            synthesis_requests: Vec::new(),
             tests: Vec::new(),
             globals: Vec::new(),
             data_section: None,

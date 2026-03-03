@@ -1229,5 +1229,7 @@ pub struct ImplBlock {
     /// Associated constants: `pub const PI: f64 = 3.14159;`
     pub constants: Vec<AssociatedConst>,
     pub methods: Vec<Function>,
+    /// `impl Trait for Type;` — synthesis request (compiler generates the body)
+    pub is_synthesize_request: bool,
     pub span: Span,
 }

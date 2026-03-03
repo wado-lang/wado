@@ -348,6 +348,30 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         }
                     }
 
+                    // `impl Trait for Type;` — record synthesis request and skip
+                    if impl_block.is_synthesize_request {
+                        if let Some(ref tn) = trait_name {
+                            let target_type_id = self.resolve_type(&impl_block.ty);
+                            let type_params: Vec<_> = self
+                                .current_type_params
+                                .iter()
+                                .map(|(name, &(index, type_id))| (name.clone(), index, type_id))
+                                .collect();
+                            tir_module
+                                .synthesis_requests
+                                .push(crate::tir::SynthesisRequest {
+                                    trait_name: tn.clone(),
+                                    target_type_name: struct_name.clone(),
+                                    target_type_id,
+                                    type_params,
+                                    span: impl_block.span,
+                                });
+                        }
+                        self.current_type_params = old_type_params;
+                        self.current_type_param_bounds = old_type_param_bounds;
+                        continue;
+                    }
+
                     // Set up associated type bindings for trait implementations
                     // This now works because type params (like T) are registered above
                     let old_associated_type_bindings =

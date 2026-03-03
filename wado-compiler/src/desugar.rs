@@ -117,6 +117,7 @@ fn desugar_impl(impl_block: &ImplBlock, ctx: &mut DesugarContext) -> ImplBlock {
             .iter()
             .map(|m| desugar_function(m, ctx))
             .collect(),
+        is_synthesize_request: impl_block.is_synthesize_request,
         span: impl_block.span,
     }
 }

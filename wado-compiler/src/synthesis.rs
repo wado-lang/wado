@@ -13,6 +13,7 @@
 pub mod cm_adapter;
 pub mod common;
 pub mod inspect;
+pub mod serde_synth;
 pub mod template;
 pub mod traits;
 
@@ -26,6 +27,10 @@ use crate::project::Project;
 /// 3. CM adapters — generates Component Model boundary adapters
 pub fn synthesize(project: Project) -> Result<Project, String> {
     let project = traits::synthesize_traits(project);
+
+    // Generate Serialize/Deserialize impls from `impl Trait for Type;` requests.
+    let mut project = project;
+    serde_synth::synthesize_serde(&mut project);
 
     // Expand template strings into Display/Inspect trait calls.
     // This must run after traits synthesis (which generates the impls)

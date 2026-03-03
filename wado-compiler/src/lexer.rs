@@ -876,15 +876,16 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_template_string(&mut self) -> Result<TokenKind, LexError> {
+        use crate::token::TemplateTokenPart;
+
         let start = self.pos;
         let start_line = self.line;
         let start_column = self.column;
 
         self.advance(); // consume opening `
 
-        let mut value = String::new();
-        let mut brace_depth = 0; // Track { } nesting to handle nested template strings
-        let mut in_string = false;
+        let mut parts = Vec::new();
+        let mut current_literal = String::new();
 
         loop {
             match self.peek() {
@@ -896,54 +897,110 @@ impl<'a> Lexer<'a> {
                 }
                 Some((_, '\\')) => {
                     self.advance();
-                    // \{ and \} produce literal braces in template strings.
-                    // Emit as {{ / }} so the parser's existing doubling rule handles them.
                     match self.peek_char() {
                         Some('{') => {
                             self.advance();
-                            value.push_str("{{");
+                            current_literal.push('{');
                         }
                         Some('}') => {
                             self.advance();
-                            value.push_str("}}");
+                            current_literal.push('}');
                         }
                         _ => {
                             let ch = self.parse_escape_sequence(start, start_line, start_column)?;
-                            value.push(ch);
+                            current_literal.push(ch);
                         }
                     }
                 }
-                Some((_, '"')) if !in_string || brace_depth > 0 => {
-                    // Track string literals inside interpolations
+                Some((_, '{')) => {
                     self.advance();
-                    value.push('"');
-                    in_string = !in_string;
+                    if !current_literal.is_empty() {
+                        parts.push(TemplateTokenPart::Literal(std::mem::take(
+                            &mut current_literal,
+                        )));
+                    }
+                    let interp =
+                        self.collect_interpolation_source(start, start_line, start_column)?;
+                    parts.push(TemplateTokenPart::Interpolation(interp));
                 }
-                Some((_, '{')) if !in_string => {
-                    // Entering an interpolation
-                    self.advance();
-                    value.push('{');
-                    brace_depth += 1;
-                }
-                Some((_, '}')) if !in_string && brace_depth > 0 => {
-                    // Exiting an interpolation
-                    self.advance();
-                    value.push('}');
-                    brace_depth -= 1;
-                }
-                Some((_, '`')) if brace_depth == 0 => {
-                    // Only end template if we're not inside an interpolation
+                Some((_, '`')) => {
                     self.advance();
                     break;
                 }
                 Some((_, ch)) => {
                     self.advance();
-                    value.push(ch);
+                    current_literal.push(ch);
                 }
             }
         }
 
-        Ok(TokenKind::TemplateStringLit(value))
+        if !current_literal.is_empty() {
+            parts.push(TemplateTokenPart::Literal(current_literal));
+        }
+
+        Ok(TokenKind::TemplateStringLit(parts))
+    }
+
+    /// Collect the raw source text of an interpolation expression.
+    /// Called after consuming the opening `{`. Consumes up to and including the closing `}`.
+    fn collect_interpolation_source(
+        &mut self,
+        start: usize,
+        start_line: usize,
+        start_column: usize,
+    ) -> Result<String, LexError> {
+        let mut source = String::new();
+        let mut brace_depth = 1u32;
+        let mut in_string = false;
+        let mut backtick_depth = 0u32;
+        let mut escape_next = false;
+
+        loop {
+            let Some((_, ch)) = self.peek() else {
+                return Err(LexError {
+                    message: "unterminated template string".to_string(),
+                    span: Span::new(start, self.pos, start_line, start_column),
+                });
+            };
+            self.advance();
+
+            if escape_next {
+                source.push(ch);
+                escape_next = false;
+                continue;
+            }
+
+            match ch {
+                '\\' => {
+                    source.push(ch);
+                    if in_string || backtick_depth > 0 {
+                        escape_next = true;
+                    }
+                }
+                '"' if backtick_depth == 0 => {
+                    source.push(ch);
+                    in_string = !in_string;
+                }
+                '`' if !in_string => {
+                    source.push(ch);
+                    backtick_depth = u32::from(backtick_depth == 0);
+                }
+                '{' if !in_string && backtick_depth == 0 => {
+                    source.push(ch);
+                    brace_depth += 1;
+                }
+                '}' if !in_string && backtick_depth == 0 => {
+                    brace_depth -= 1;
+                    if brace_depth == 0 {
+                        return Ok(source);
+                    }
+                    source.push(ch);
+                }
+                _ => {
+                    source.push(ch);
+                }
+            }
+        }
     }
 
     fn lex_char(&mut self) -> Result<TokenKind, LexError> {

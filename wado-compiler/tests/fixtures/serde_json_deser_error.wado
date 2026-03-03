@@ -1,0 +1,66 @@
+// Test: JSON deserialization error cases (invalid JSON, missing field, type mismatch)
+use { Serialize, Deserialize } from "core:serde";
+use { from_string } from "core:json";
+
+struct User {
+    name: String,
+    age: i32,
+    active: bool,
+}
+
+impl Serialize for User;
+impl Deserialize for User;
+
+fn deser_msg(input: String) -> String {
+    let r = from_string::<User>(input);
+    if let Err(e) = r {
+        return e.message;
+    }
+    return "OK";
+}
+
+test "invalid JSON - not an object" {
+    assert deser_msg("not json at all") == "begin_struct failed";
+}
+
+test "invalid JSON - empty string" {
+    assert deser_msg("") == "begin_struct failed";
+}
+
+test "invalid JSON - truncated string" {
+    assert deser_msg(`\{"name":"Al`) == "unexpected end of input";
+}
+
+test "missing required field" {
+    assert deser_msg(`\{"name":"Alice","active":true\}`) == "required field missing";
+}
+
+test "type mismatch - string where number expected" {
+    assert deser_msg(`\{"name":"Alice","age":"thirty","active":true\}`) == "expected number";
+}
+
+test "type mismatch - number where string expected" {
+    assert deser_msg(`\{"name":42,"age":30,"active":true\}`) == "expected string";
+}
+
+test "type mismatch - number where bool expected" {
+    assert deser_msg(`\{"name":"Alice","age":30,"active":1\}`) == "expected bool";
+}
+
+test "trailing data after valid JSON" {
+    assert deser_msg(`\{"name":"Alice","age":30,"active":true\}extra`) == "trailing data after value";
+}
+
+test "valid input still works" {
+    let r = from_string::<User>(`\{"name":"Alice","age":30,"active":true\}`);
+    if let Ok(u) = r {
+        assert u.name == "Alice";
+        assert u.age == 30;
+        assert u.active == true;
+    } else {
+        panic("expected success");
+    }
+}
+
+__DATA__
+{"test": {}}

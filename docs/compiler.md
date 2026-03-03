@@ -21,7 +21,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Analyze      | All modules   | Symbol table    | Build symbol table, validate imports                      |
 | Resolve      | AST + Symbols | Project         | Type resolution, produce Project                          |
 | Effect Check | Project       | Project         | Validate function effect requirements                     |
-| Synthesis    | Project       | Project         | Enum traits, CM adapter synthesis                         |
+| Synthesis    | Project       | Project         | Enum traits, serde, CM adapter synthesis                  |
 | Monomorphize | Project       | Project         | Instantiate generics with concrete types                  |
 | Post-Mono    | Project       | Project         | Template expansion, inspect debug output synthesis        |
 | Lower        | Project       | Project         | Closure, i128 match, global init, string literal lowering |
@@ -54,6 +54,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | TIR             | `tir.rs`                             | Typed Intermediate Representation                           |
 | Synthesis       | `synthesis.rs`                       | Unified synthesis phase (`synthesis/`)                      |
 | SynthCommon     | `synthesis/common.rs`                | Shared TIR builders for synthesis phases                    |
+| SynthSerde      | `synthesis/serde_synth.rs`           | Synthesized Serialize/Deserialize for structs               |
 | SynthTraits     | `synthesis/traits.rs`                | Auto-derived Eq/Ord/Display/Inspect for types               |
 | SynthTemplate   | `synthesis/template.rs`              | Template string expansion (pre-monomorphize)                |
 | SynthInspect    | `synthesis/inspect.rs`               | Inspect debug output synthesis (type→TIR)                   |
@@ -1080,6 +1081,25 @@ Template strings are expanded before monomorphization. The resolver emits `TirEx
 - Direct `Formatter::write_str` for optimized paths (e.g., String append, closure source text)
 
 Template expansion emits generic trait method calls that the monomorphizer resolves to concrete implementations.
+
+### Serde Synthesis (`synthesis/serde_synth.rs`)
+
+The synthesis phase generates `Serialize` and `Deserialize` trait implementations for structs that use `impl Serialize for Type;` or `impl Deserialize for Type;` (semicolon instead of block body).
+
+**How it works:**
+
+1. The resolver detects `impl Trait for Type;` declarations and records them as `SynthesisRequest` entries in the TIR module.
+2. `serde_synth.rs` processes each request, inspects the struct's fields, and generates complete TIR method bodies.
+3. For `Serialize`: generates a `serialize` method that calls `begin_struct`, then `field` for each field (with `snake_case` → `camelCase` name conversion), then `end`.
+4. For `Deserialize`: generates a `deserialize` static method with a field lookup function, golden-mask bitmask tracking for required fields, and a loop that processes fields in any order.
+5. A lookup function (`_typename_field_lookup`) is generated alongside each `Deserialize` impl to map camelCase JSON keys to field indices.
+
+**Generated Deserialize pattern (golden mask):**
+
+- Each field gets one bit in a `u32` bitmask (supports up to 32 fields).
+- Unknown fields are skipped via `skip()`.
+- After the loop, a single `seen & mask != mask` check verifies all required fields are present.
+- Missing fields produce a `DeserializeError` with `MissingField` kind.
 
 ### Inspect/Display Synthesis (`synthesis/traits.rs`)
 

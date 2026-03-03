@@ -1,0 +1,14 @@
+// Test: compile error when Deserialize is not implemented for a type
+use { Deserialize } from "core:serde";
+use { from_string } from "core:json";
+
+struct NoDeserialize {
+    value: i32,
+}
+
+export fn run() {
+    let r = from_string::<NoDeserialize>(`\{"value":42\}`);
+}
+
+__DATA__
+{"compile_error": "does not implement trait 'Deserialize'"}
