@@ -355,9 +355,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             let type_params: Vec<_> = self
                                 .current_type_params
                                 .iter()
-                                .map(|(name, &(index, type_id))| {
-                                    (name.clone(), index, type_id)
-                                })
+                                .map(|(name, &(index, type_id))| (name.clone(), index, type_id))
                                 .collect();
                             tir_module
                                 .synthesis_requests

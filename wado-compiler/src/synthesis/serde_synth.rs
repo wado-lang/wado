@@ -18,8 +18,8 @@ use crate::token::Span;
 
 use super::common::{
     alloc_local, block, break_stmt, deref_expr, expr_stmt, field_access, i32_const, if_stmt,
-    let_mut_stmt, local_ref, loop_stmt, null_expr, option_none, option_some, ref_expr,
-    return_stmt, string_lit, synth_span,
+    let_mut_stmt, local_ref, loop_stmt, null_expr, option_none, option_some, ref_expr, return_stmt,
+    string_lit, synth_span,
 };
 
 fn snake_to_camel(s: &str) -> String {
@@ -111,10 +111,7 @@ fn collect_existing_trait_methods(module: &TirModule) -> IndexSet<String> {
         .collect()
 }
 
-fn find_struct<'a>(
-    module: &'a TirModule,
-    name: &str,
-) -> Option<&'a crate::tir::TirStruct> {
+fn find_struct<'a>(module: &'a TirModule, name: &str) -> Option<&'a crate::tir::TirStruct> {
     module.structs.iter().find(|s| s.name == name)
 }
 
@@ -377,14 +374,20 @@ fn default_value_for_type(type_id: TypeId, string_type: TypeId, span: Span) -> T
         || type_id == TypeTable::U64
     {
         return TirExpr::new(
-            TirExprKind::IntLiteral { value: 0, repr: "0".to_string() },
+            TirExprKind::IntLiteral {
+                value: 0,
+                repr: "0".to_string(),
+            },
             type_id,
             span,
         );
     }
     if type_id == TypeTable::F32 || type_id == TypeTable::F64 {
         return TirExpr::new(
-            TirExprKind::FloatLiteral { value: 0.0, repr: "0.0".to_string() },
+            TirExprKind::FloatLiteral {
+                value: 0.0,
+                repr: "0.0".to_string(),
+            },
             type_id,
             span,
         );
@@ -460,13 +463,22 @@ fn generate_struct_serialize(
         vec![],
         vec![],
         vec![
-            ref_expr(string_lit(&req.target_type_name, string_type, span), ref_string_type, span),
+            ref_expr(
+                string_lit(&req.target_type_name, string_type, span),
+                ref_string_type,
+                span,
+            ),
             i32_const(field_count as i32),
         ],
         result_ss_err,
         span,
     );
-    stmts.push(let_mut_stmt("__result", result_tmp, result_ss_err, begin_call));
+    stmts.push(let_mut_stmt(
+        "__result",
+        result_tmp,
+        result_ss_err,
+        begin_call,
+    ));
 
     let mut then_stmts = Vec::new();
     for (i, (field_name, camel_name, field_type, field_index)) in fields.iter().enumerate() {
@@ -484,7 +496,11 @@ fn generate_struct_serialize(
             vec![field_type_names[i].clone()],
             vec![*field_type],
             vec![
-                ref_expr(string_lit(camel_name, string_type, span), ref_string_type, span),
+                ref_expr(
+                    string_lit(camel_name, string_type, span),
+                    ref_string_type,
+                    span,
+                ),
                 field_ref,
             ],
             result_unit_err,
@@ -508,9 +524,17 @@ fn generate_struct_serialize(
     then_stmts.push(return_stmt(Some(end_call)));
 
     let err_val = serialize_error_literal(
-        ser_error_type, ser_error_kind_type, "begin_struct failed", string_type, span,
+        ser_error_type,
+        ser_error_kind_type,
+        "begin_struct failed",
+        string_type,
+        span,
     );
-    let else_stmts = vec![return_stmt(Some(variant_err(err_val, result_unit_err, span)))];
+    let else_stmts = vec![return_stmt(Some(variant_err(
+        err_val,
+        result_unit_err,
+        span,
+    )))];
 
     stmts.push(if_let_ok(
         local_ref(result_tmp, "__result", result_ss_err),
@@ -546,8 +570,18 @@ fn generate_struct_serialize(
         monomorph_info: None,
         method_info: Some(method_info),
         params: vec![
-            TirParam { name: "self".to_string(), type_id: ref_self_type, local_index: 0, span },
-            TirParam { name: "s".to_string(), type_id: mut_ref_s, local_index: 1, span },
+            TirParam {
+                name: "self".to_string(),
+                type_id: ref_self_type,
+                local_index: 0,
+                span,
+            },
+            TirParam {
+                name: "s".to_string(),
+                type_id: mut_ref_s,
+                local_index: 1,
+                span,
+            },
         ],
         return_type: result_unit_err,
         effects: Vec::new(),
@@ -613,7 +647,12 @@ fn generate_struct_deserialize(
     drop(tt);
 
     let lookup_func = generate_lookup_function(
-        &req.target_type_name, &fields, string_type, ref_string_type, option_i32, span,
+        &req.target_type_name,
+        &fields,
+        string_type,
+        ref_string_type,
+        option_i32,
+        span,
     );
 
     let lookup_fn_name = format!("_{}_field_lookup", req.target_type_name.to_lowercase());
@@ -663,25 +702,48 @@ fn generate_struct_deserialize(
         vec![],
         vec![],
         vec![
-            ref_expr(string_lit(&req.target_type_name, string_type, span), ref_string_type, span),
+            ref_expr(
+                string_lit(&req.target_type_name, string_type, span),
+                ref_string_type,
+                span,
+            ),
             i32_const(field_count as i32),
             lookup_closure,
         ],
         result_sa_err,
         span,
     );
-    stmts.push(let_mut_stmt("__result", result_tmp, result_sa_err, begin_call));
+    stmts.push(let_mut_stmt(
+        "__result",
+        result_tmp,
+        result_sa_err,
+        begin_call,
+    ));
 
     let mut then_stmts = Vec::new();
 
     then_stmts.push(let_mut_stmt(
-        "seen", seen_local, TypeTable::U32,
-        TirExpr::new(TirExprKind::IntLiteral { value: 0, repr: "0".to_string() }, TypeTable::U32, span),
+        "seen",
+        seen_local,
+        TypeTable::U32,
+        TirExpr::new(
+            TirExprKind::IntLiteral {
+                value: 0,
+                repr: "0".to_string(),
+            },
+            TypeTable::U32,
+            span,
+        ),
     ));
 
     for (i, (field_name, _, type_id, _)) in fields.iter().enumerate() {
         let default_val = default_value_for_type(*type_id, string_type, span);
-        then_stmts.push(let_mut_stmt(field_name, field_locals[i], *type_id, default_val));
+        then_stmts.push(let_mut_stmt(
+            field_name,
+            field_locals[i],
+            *type_id,
+            default_val,
+        ));
     }
 
     // Build loop body
@@ -703,7 +765,12 @@ fn generate_struct_deserialize(
         result_opt_i32_err,
         span,
     );
-    loop_stmts.push(let_mut_stmt("__next", next_result_local, result_opt_i32_err, next_field_call));
+    loop_stmts.push(let_mut_stmt(
+        "__next",
+        next_result_local,
+        result_opt_i32_err,
+        next_field_call,
+    ));
 
     // Build match arms
     let mut match_arms = Vec::new();
@@ -721,7 +788,8 @@ fn generate_struct_deserialize(
             field_result_types[i],
             span,
         );
-        let val_result_local = alloc_local(&mut next_local, &mut local_types, field_result_types[i]);
+        let val_result_local =
+            alloc_local(&mut next_local, &mut local_types, field_result_types[i]);
         let val_ok_local = alloc_local(&mut next_local, &mut local_types, *type_id);
 
         let assign_block = block(vec![
@@ -741,7 +809,10 @@ fn generate_struct_deserialize(
                             op: crate::tir::TirBinaryOp::BitOr,
                             left: Box::new(local_ref(seen_local, "seen", TypeTable::U32)),
                             right: Box::new(TirExpr::new(
-                                TirExprKind::IntLiteral { value: u64::from(bit), repr: bit.to_string() },
+                                TirExprKind::IntLiteral {
+                                    value: u64::from(bit),
+                                    repr: bit.to_string(),
+                                },
                                 TypeTable::U32,
                                 span,
                             )),
@@ -765,8 +836,12 @@ fn generate_struct_deserialize(
                 "__val",
                 assign_block,
                 propagate_err_block(
-                    val_result_local, "__vr", field_result_types[i],
-                    deser_error_type, result_struct_err, span,
+                    val_result_local,
+                    "__vr",
+                    field_result_types[i],
+                    deser_error_type,
+                    result_struct_err,
+                    span,
                 ),
                 span,
             ),
@@ -831,8 +906,12 @@ fn generate_struct_deserialize(
         "__opt",
         block(vec![if_some]),
         propagate_err_block(
-            next_result_local, "__next", result_opt_i32_err,
-            deser_error_type, result_struct_err, span,
+            next_result_local,
+            "__next",
+            result_opt_i32_err,
+            deser_error_type,
+            result_struct_err,
+            span,
         ),
         span,
     );
@@ -851,26 +930,45 @@ fn generate_struct_deserialize(
                         op: crate::tir::TirBinaryOp::BitAnd,
                         left: Box::new(local_ref(seen_local, "seen", TypeTable::U32)),
                         right: Box::new(TirExpr::new(
-                            TirExprKind::IntLiteral { value: u64::from(full_mask), repr: full_mask.to_string() },
-                            TypeTable::U32, span,
+                            TirExprKind::IntLiteral {
+                                value: u64::from(full_mask),
+                                repr: full_mask.to_string(),
+                            },
+                            TypeTable::U32,
+                            span,
                         )),
                     },
-                    TypeTable::U32, span,
+                    TypeTable::U32,
+                    span,
                 )),
                 right: Box::new(TirExpr::new(
-                    TirExprKind::IntLiteral { value: u64::from(full_mask), repr: full_mask.to_string() },
-                    TypeTable::U32, span,
+                    TirExprKind::IntLiteral {
+                        value: u64::from(full_mask),
+                        repr: full_mask.to_string(),
+                    },
+                    TypeTable::U32,
+                    span,
                 )),
             },
-            TypeTable::BOOL, span,
+            TypeTable::BOOL,
+            span,
         );
         let missing_err = deserialize_error_literal(
-            deser_error_type, deser_error_kind_type, "MissingField", 1,
-            "required field missing", string_type, span,
+            deser_error_type,
+            deser_error_kind_type,
+            "MissingField",
+            1,
+            "required field missing",
+            string_type,
+            span,
         );
         then_stmts.push(if_stmt(
             ne_check,
-            block(vec![return_stmt(Some(variant_err(missing_err, result_struct_err, span)))]),
+            block(vec![return_stmt(Some(variant_err(
+                missing_err,
+                result_struct_err,
+                span,
+            )))]),
             None,
         ));
     }
@@ -906,21 +1004,40 @@ fn generate_struct_deserialize(
             struct_name: req.target_type_name.clone(),
             fields: struct_fields,
         },
-        struct_type, span,
+        struct_type,
+        span,
     );
-    then_stmts.push(return_stmt(Some(variant_ok(struct_lit, result_struct_err, span))));
+    then_stmts.push(return_stmt(Some(variant_ok(
+        struct_lit,
+        result_struct_err,
+        span,
+    ))));
 
     // else block
     let begin_err = deserialize_error_literal(
-        deser_error_type, deser_error_kind_type, "Custom", 9,
-        "begin_struct failed", string_type, span,
+        deser_error_type,
+        deser_error_kind_type,
+        "Custom",
+        9,
+        "begin_struct failed",
+        string_type,
+        span,
     );
-    let else_block = block(vec![return_stmt(Some(variant_err(begin_err, result_struct_err, span)))]);
+    let else_block = block(vec![return_stmt(Some(variant_err(
+        begin_err,
+        result_struct_err,
+        span,
+    )))]);
 
     stmts.push(if_let_ok(
         local_ref(result_tmp, "__result", result_sa_err),
-        result_sa_err, struct_access_type, sd_local, "sd",
-        block(then_stmts), else_block, span,
+        result_sa_err,
+        struct_access_type,
+        sd_local,
+        "sd",
+        block(then_stmts),
+        else_block,
+        span,
     ));
 
     let method_info = LocalMethodName::new(
@@ -982,7 +1099,11 @@ fn generate_lookup_function(
     for (i, (_, camel_name, _, _)) in fields.iter().enumerate() {
         // Call String^Eq::eq(&key, &"camelName") — both operands are &String
         let key_ref = local_ref(0, "key", ref_string_type);
-        let lit_ref = ref_expr(string_lit(camel_name, string_type, span), ref_string_type, span);
+        let lit_ref = ref_expr(
+            string_lit(camel_name, string_type, span),
+            ref_string_type,
+            span,
+        );
         let eq_method = LocalMethodName::new(
             "String".to_string(),
             Some("Eq".to_string()),
@@ -1000,11 +1121,15 @@ fn generate_lookup_function(
                 type_args: vec![],
                 args: vec![lit_ref],
             },
-            TypeTable::BOOL, span,
+            TypeTable::BOOL,
+            span,
         );
         stmts.push(if_stmt(
             condition,
-            block(vec![return_stmt(Some(option_some(i32_const(i as i32), option_i32)))]),
+            block(vec![return_stmt(Some(option_some(
+                i32_const(i as i32),
+                option_i32,
+            )))]),
             None,
         ));
     }

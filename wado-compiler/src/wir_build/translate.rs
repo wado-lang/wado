@@ -3966,9 +3966,7 @@ impl FunctionTranslator<'_, '_> {
                     // If the arm body produces a non-unit value (e.g. after inlining
                     // transforms a Block into a bare call), drop it to avoid leaving
                     // values on the Wasm stack.
-                    if arm.body.type_id != TypeTable::UNIT
-                        && arm.body.type_id != TypeTable::NEVER
-                    {
+                    if arm.body.type_id != TypeTable::UNIT && arm.body.type_id != TypeTable::NEVER {
                         WirInstr::Drop(Box::new(instr))
                     } else {
                         instr
