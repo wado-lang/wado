@@ -26,16 +26,17 @@ The operator precedence WEP reserves `..` and `..=` at level 14; this WEP revise
 
 Rust has the most comprehensive range system with six distinct types:
 
-| Type | Syntax | Interval | Iterable |
-|------|--------|----------|----------|
-| `Range<Idx>` | `a..b` | [a, b) | Yes (when `Idx: Step`) |
-| `RangeInclusive<Idx>` | `a..=b` | [a, b] | Yes (when `Idx: Step`) |
-| `RangeFrom<Idx>` | `a..` | [a, +inf) | Yes (infinite) |
-| `RangeTo<Idx>` | `..b` | (-inf, b) | No |
-| `RangeToInclusive<Idx>` | `..=b` | (-inf, b] | No |
-| `RangeFull` | `..` | (-inf, +inf) | No |
+| Type                    | Syntax  | Interval     | Iterable               |
+| ----------------------- | ------- | ------------ | ---------------------- |
+| `Range<Idx>`            | `a..b`  | [a, b)       | Yes (when `Idx: Step`) |
+| `RangeInclusive<Idx>`   | `a..=b` | [a, b]       | Yes (when `Idx: Step`) |
+| `RangeFrom<Idx>`        | `a..`   | [a, +inf)    | Yes (infinite)         |
+| `RangeTo<Idx>`          | `..b`   | (-inf, b)    | No                     |
+| `RangeToInclusive<Idx>` | `..=b`  | (-inf, b]    | No                     |
+| `RangeFull`             | `..`    | (-inf, +inf) | No                     |
 
 Key design elements:
+
 - All types are generic structs in `std::ops`
 - The `Step` trait (unstable) enables integer/char iteration
 - `RangeBounds` trait unifies all range types for generic code accepting any range
@@ -51,15 +52,16 @@ Key design elements:
 
 Swift has five range types with different operators:
 
-| Type | Syntax | Interval |
-|------|--------|----------|
-| `Range<Bound>` | `a..<b` | [a, b) |
-| `ClosedRange<Bound>` | `a...b` | [a, b] |
-| `PartialRangeFrom<Bound>` | `a...` | [a, +inf) |
-| `PartialRangeThrough<Bound>` | `...b` | (-inf, b] |
-| `PartialRangeUpTo<Bound>` | `..<b` | (-inf, b) |
+| Type                         | Syntax  | Interval  |
+| ---------------------------- | ------- | --------- |
+| `Range<Bound>`               | `a..<b` | [a, b)    |
+| `ClosedRange<Bound>`         | `a...b` | [a, b]    |
+| `PartialRangeFrom<Bound>`    | `a...`  | [a, +inf) |
+| `PartialRangeThrough<Bound>` | `...b`  | (-inf, b] |
+| `PartialRangeUpTo<Bound>`    | `..<b`  | (-inf, b) |
 
 Key design elements:
+
 - All require `Bound: Comparable` — any comparable type can form a range
 - Only iterable when `Bound: Strideable & Comparable` (integers, not floats by default)
 - `stride(from:to:by:)` and `stride(from:through:by:)` provide stepping
@@ -94,18 +96,18 @@ Zig treats ranges as syntax, not types:
 
 ### Summary
 
-| | Rust | Swift | Go | Zig |
-|---|---|---|---|---|
-| Range as type | Yes (6 types) | Yes (5 types) | No (keyword) | No (syntax) |
-| Half-open syntax | `a..b` | `a..<b` | N/A | `a..b` |
-| Inclusive syntax | `a..=b` | `a...b` | N/A | `a...b` (switch only) |
-| Generic | Yes | Yes | N/A | No (usize only) |
-| Iterable | Via Step trait | Via Strideable | Built-in | Built-in |
-| Slicing | Yes | Yes | No | Yes |
-| Contains | Yes | Yes | No | No |
-| Pattern matching | Yes (inclusive only) | Yes (switch/case) | No | Yes (switch) |
-| Custom step | `.step_by(n)` | `stride(from:to:by:)` | N/A | No |
-| Reverse iteration | `.rev()` | `.reversed()` | N/A | No |
+|                   | Rust                 | Swift                 | Go           | Zig                   |
+| ----------------- | -------------------- | --------------------- | ------------ | --------------------- |
+| Range as type     | Yes (6 types)        | Yes (5 types)         | No (keyword) | No (syntax)           |
+| Half-open syntax  | `a..b`               | `a..<b`               | N/A          | `a..b`                |
+| Inclusive syntax  | `a..=b`              | `a...b`               | N/A          | `a...b` (switch only) |
+| Generic           | Yes                  | Yes                   | N/A          | No (usize only)       |
+| Iterable          | Via Step trait       | Via Strideable        | Built-in     | Built-in              |
+| Slicing           | Yes                  | Yes                   | No           | Yes                   |
+| Contains          | Yes                  | Yes                   | No           | No                    |
+| Pattern matching  | Yes (inclusive only) | Yes (switch/case)     | No           | Yes (switch)          |
+| Custom step       | `.step_by(n)`        | `stride(from:to:by:)` | N/A          | No                    |
+| Reverse iteration | `.rev()`             | `.reversed()`         | N/A          | No                    |
 
 ## Decision
 
@@ -153,6 +155,7 @@ pub struct RangeInclusive<T> {
 Range operators `..<` and `..=` sit at precedence level 14 (between logical OR and assignment). They are non-associative — `a..<b..<c` is a compile error.
 
 **Why `..<` and `..=`**:
+
 - **Both operators are explicit about the bound**: `..<` clearly reads as "less than" (exclusive end), `..=` clearly reads as "equals" (inclusive end). There is no ambiguous "bare" `..` operator — both sides state the boundary rule.
 - **Reduces off-by-one bugs**: With `..` and `..=`, forgetting `=` silently gives a different range. With `..<` and `..=`, there is no "default" form to accidentally misuse.
 - **Frees `..` for other syntax**: Wado already uses `..` for struct rest patterns (`let { name, .. } = p`). Keeping `..` out of range syntax avoids ambiguity.

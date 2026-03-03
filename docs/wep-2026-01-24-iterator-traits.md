@@ -61,10 +61,10 @@ Rust requires three iteration methods (`iter()`, `iter_mut()`, `into_iter()`) be
 
 Understanding the difference between `Iterator` and `IntoIterator`:
 
-| Trait            | Question it answers                    | Example types                    |
-| ---------------- | -------------------------------------- | -------------------------------- |
+| Trait            | Question it answers                    | Example types                                |
+| ---------------- | -------------------------------------- | -------------------------------------------- |
 | **Iterator**     | "Can I call `next()` on this?"         | `ArrayIter<T>`, `RangeExclusive<T>`, `Chars` |
-| **IntoIterator** | "Can I convert this into an iterator?" | `Array<T>`, `String`, `Stack<T>` |
+| **IntoIterator** | "Can I convert this into an iterator?" | `Array<T>`, `String`, `Stack<T>`             |
 
 A collection (like `Array<T>`) is **not** an iterator itself—it doesn't have iteration state. Instead, it implements `IntoIterator` to create a separate iterator object that tracks the current position:
 
