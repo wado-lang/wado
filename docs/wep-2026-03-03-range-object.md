@@ -13,12 +13,12 @@ for let mut i = 0; i < 10; i += 1 {
 A range object would enable the more idiomatic:
 
 ```wado
-for let i of 0..10 {
+for let i of 0..<10 {
     println(`{i}`);
 }
 ```
 
-The operator precedence WEP already reserves `..` and `..=` at level 14 (between logical OR and assignment). The iterator traits WEP sketches a non-generic `Range` struct for `i32` only. This WEP defines the full design.
+The operator precedence WEP reserves `..` and `..=` at level 14; this WEP revises the syntax to `..<` (half-open) and `..=` (inclusive) for clarity. The iterator traits WEP sketches a non-generic `Range` struct for `i32` only. This WEP defines the full design.
 
 ### Language Survey
 
@@ -129,31 +129,32 @@ pub struct RangeInclusive<T> {
 
 **Why two types, not six**: Wado targets pragmatic simplicity. The primary use cases (iteration and slicing) are served by `Range` and `RangeInclusive`. Partial ranges (`a..`, `..b`, `..`) add complexity for marginal benefit — Wado already has `arr.slice(start, end)` and `arr.len()` for these cases. If partial ranges prove necessary, they can be added later without breaking changes.
 
-**Why generic**: Unlike Zig's `usize`-only limitation, generic ranges allow natural expressions like `for let c of 'a'..='z'` and `if (0.0..1.0).contains(x)`. The type parameter is inferred from the operands.
+**Why generic**: Unlike Zig's `usize`-only limitation, generic ranges allow natural expressions like `for let c of 'a'..='z'` and `if (0.0..<1.0).contains(x)`. The type parameter is inferred from the operands.
 
 ### Syntax
 
 ```wado
 // Half-open range [start, end)
-0..10             // Range<i32>
-0 as i64..100     // Range<i64>
+0..<10             // Range<i32>
+0 as i64..<100     // Range<i64>
 
 // Inclusive range [start, end]
 0..=10            // RangeInclusive<i32>
 'a'..='z'         // RangeInclusive<char>
 
-// With expressions (parentheses needed due to low precedence)
-0..arr.len()      // Range<i32>
-(x + 1)..(y - 1) // Range<i32>
+// With expressions
+0..<arr.len()      // Range<i32>
+(x + 1)..<(y - 1) // Range<i32>
 ```
 
-Range operators `..` and `..=` sit at precedence level 14 (between logical OR and assignment), following the existing operator precedence WEP. They are non-associative — `a..b..c` is a compile error.
+Range operators `..<` and `..=` sit at precedence level 14 (between logical OR and assignment). They are non-associative — `a..<b..<c` is a compile error.
 
-**Why `..` and `..=` (Rust-style), not `..<` and `...` (Swift-style)**:
-- `..` is more concise and widely recognized (Rust, Zig, Kotlin, Ruby)
-- `...` conflicts with potential future variadic syntax and is visually similar to `..` — easy to misread
-- `..<` is unique to Swift and unfamiliar to most developers
-- The existing operator precedence WEP already specifies `..` and `..=`
+**Why `..<` and `..=`**:
+- **Both operators are explicit about the bound**: `..<` clearly reads as "less than" (exclusive end), `..=` clearly reads as "equals" (inclusive end). There is no ambiguous "bare" `..` operator — both sides state the boundary rule.
+- **Reduces off-by-one bugs**: With `..` and `..=`, forgetting `=` silently gives a different range. With `..<` and `..=`, there is no "default" form to accidentally misuse.
+- **Frees `..` for other syntax**: Wado already uses `..` for struct rest patterns (`let { name, .. } = p`). Keeping `..` out of range syntax avoids ambiguity.
+- **Familiar components**: `..<` is from Swift; `..=` is from Rust. The combination takes the clearest element from each.
+- `...` (Swift/Zig inclusive) is avoided because it conflicts with potential variadic syntax and is visually similar to `..`.
 
 ### Iteration
 
@@ -275,7 +276,7 @@ Since ranges have value semantics, copying a range into the iterator is safe and
 
 ```wado
 // Count from 0 to 9
-for let i of 0..10 {
+for let i of 0..<10 {
     println(`{i}`);
 }
 
@@ -293,7 +294,7 @@ for let c of 'a'..='z' {
 // With iterator combinators
 let sum = (1..=100).fold(0, |acc: i32, x: i32| acc + x);  // 5050
 
-let evens = (0..20).filter(|x: i32| x % 2 == 0).collect();
+let evens = (0..<20).filter(|x: i32| x % 2 == 0).collect();
 // [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
 ```
 
@@ -329,19 +330,19 @@ impl RangeInclusive<T: Ord> {
 
 ```wado
 // Float membership testing (not iterable, but contains works)
-let unit_range = 0.0..1.0;
+let unit_range = 0.0..<1.0;
 if unit_range.contains(&x) {
     println("x is in [0, 1)");
 }
 
 // Integer membership testing
-if (0..256).contains(&code) {
+if (0..<256).contains(&code) {
     println("valid byte");
 }
 
 // Comparison chaining is often clearer for simple cases:
 if 0 <= x && x < 256 {
-    // equivalent to (0..256).contains(&x)
+    // equivalent to (0..<256).contains(&x)
 }
 // Or with Wado's comparison chaining:
 if 0 <= x < 256 {
@@ -357,7 +358,7 @@ Ranges can be used as array index types to produce slices:
 let arr: Array<i32> = [10, 20, 30, 40, 50];
 
 // Range slicing (produces ArraySlice<T>)
-let slice = arr[1..4];    // ArraySlice<i32> containing [20, 30, 40]
+let slice = arr[1..<4];    // ArraySlice<i32> containing [20, 30, 40]
 let slice = arr[2..=4];   // ArraySlice<i32> containing [30, 40, 50]
 ```
 
@@ -386,7 +387,7 @@ impl IndexValue<RangeInclusive<i32>> for Array<T> {
 ```wado
 impl Display for Range<T: Display> {
     fn fmt(&self, f: &mut Formatter) {
-        f.write(`{self.start}..{self.end}`);
+        f.write(`{self.start}..<{self.end}`);
     }
 }
 
@@ -398,8 +399,8 @@ impl Display for RangeInclusive<T: Display> {
 ```
 
 ```wado
-let r = 0..10;
-println(`{r}`);   // "0..10"
+let r = 0..<10;
+println(`{r}`);   // "0..<10"
 
 let r = 1..=5;
 println(`{r}`);   // "1..=5"
@@ -423,15 +424,15 @@ impl Eq for RangeInclusive<T: Eq> {
 
 ### What Is NOT Included (and Why)
 
-#### No partial ranges (`a..`, `..b`, `..`)
+#### No partial ranges (`a..<`, `..<b`, `..`)
 
 Partial ranges add three more types for limited benefit. The primary use case is slicing sugar:
 
 ```wado
 // These are NOT supported:
-arr[2..]     // use arr.slice(2, arr.len()) instead
-arr[..3]     // use arr.slice(0, 3) instead
-arr[..]      // use arr directly (already value semantics)
+arr[2..<]     // use arr.slice(2, arr.len()) instead
+arr[..<3]     // use arr.slice(0, 3) instead
+arr[..]       // use arr directly (already value semantics)
 ```
 
 If demand arises, partial ranges can be added as separate types without breaking existing code.
@@ -441,7 +442,7 @@ If demand arises, partial ranges can be added as separate types without breaking
 Custom step sizes add complexity. Use C-style `for` for non-unit steps:
 
 ```wado
-// Instead of (0..100).step_by(2)
+// Instead of (0..<100).step_by(2)
 for let mut i = 0; i < 100; i += 2 {
     // every other number
 }
@@ -454,7 +455,7 @@ A `step_by` combinator can be added later as a method on iterators (not range-sp
 Reverse ranges can use C-style `for`:
 
 ```wado
-// Instead of (0..10).rev()
+// Instead of (0..<10).rev()
 for let mut i = 9; i >= 0; i -= 1 {
     println(`{i}`);
 }
@@ -484,9 +485,10 @@ For iteration, the `exhausted` flag is only present in `RangeInclusive` and only
 
 ### Phase 1: Lexer and Parser
 
-1. Add `DotDot` (`..`) and `DotDotEq` (`..=`) tokens to the lexer
+1. Add `DotDotLt` (`..<`) and `DotDotEq` (`..=`) tokens to the lexer
 2. Add `Range` and `RangeInclusive` expression AST nodes
 3. Parse range expressions at precedence level 14 (non-associative)
+4. Update the operator precedence WEP to reflect `..<` and `..=` (replacing `..` and `..=`)
 
 ### Phase 2: Type Checking
 
@@ -510,17 +512,18 @@ For iteration, the `exhausted` flag is only present in `RangeInclusive` and only
 
 ### Positive
 
-1. **Idiomatic counted loops**: `for let i of 0..10` is clearer and more concise than C-style `for`
+1. **Idiomatic counted loops**: `for let i of 0..<10` is clearer and more concise than C-style `for`
 2. **Works with existing iterator system**: Ranges plug directly into `for-of`, `map`, `filter`, `fold`, etc.
-3. **Type-safe membership testing**: `(0.0..1.0).contains(&x)` works for any `Ord` type
-4. **Array slicing sugar**: `arr[1..5]` is more natural than `arr.slice(1, 5)`
+3. **Type-safe membership testing**: `(0.0..<1.0).contains(&x)` works for any `Ord` type
+4. **Array slicing sugar**: `arr[1..<5]` is more natural than `arr.slice(1, 5)`
 5. **Minimal type count**: Two types cover the vast majority of use cases
-6. **Familiar syntax**: `..` and `..=` are familiar from Rust and other languages
+6. **Explicit syntax**: Both `..<` and `..=` are self-documenting — no ambiguous "bare" `..`
 7. **Generic**: Works with all integer types, `char`, and `Ord` types for membership testing
+8. **Frees `..` for rest syntax**: `..` remains exclusively for struct rest patterns and destructuring, avoiding ambiguity
 
 ### Negative
 
-1. **No partial ranges**: Users must write `arr.slice(2, arr.len())` instead of `arr[2..]`
+1. **No partial ranges**: Users must write `arr.slice(2, arr.len())` instead of `arr[2..<]`
    - **Mitigation**: Can be added later without breaking changes
 2. **No step_by**: Custom step sizes require C-style `for` loops
    - **Mitigation**: Can be added later as an iterator combinator
@@ -535,7 +538,7 @@ For iteration, the `exhausted` flag is only present in `RangeInclusive` and only
 
 ## References
 
-- [WEP: Operator Precedence and Associativity](./wep-2026-01-11-operator-precedence.md) — defines `..` and `..=` at level 14
+- [WEP: Operator Precedence and Associativity](./wep-2026-01-11-operator-precedence.md) — precedence level 14 (this WEP revises `..` to `..<`)
 - [WEP: Iterator Traits Design](./wep-2026-01-24-iterator-traits.md) — iterator system that ranges integrate with
 - [WEP: Indexing Traits Design](./wep-2026-01-20-indexing-traits.md) — `IndexValue` trait for range-based slicing
 - [Rust `std::ops::Range` documentation](https://doc.rust-lang.org/std/ops/struct.Range.html)
