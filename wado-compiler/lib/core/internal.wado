@@ -13,7 +13,7 @@
 /// Copies bytes from linear memory to a new GC array.
 pub fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
     let arr = builtin::array_new::<u8>(len);
-    for (let mut i = 0; i < len; i += 1) {
+    for let mut i = 0; i < len; i += 1 {
         builtin::array_set_u8(arr, i, builtin::i32_load8_u(ptr + i) as u8);
     }
     return arr;
@@ -27,7 +27,7 @@ pub fn memory_to_gc_string(ptr: i32, len: i32) -> String {
 
 /// Copies bytes from a GC array to linear memory.
 pub fn gc_array_to_memory(arr: builtin::array<u8>, ptr: i32, len: i32) {
-    for (let mut i = 0; i < len; i += 1) {
+    for let mut i = 0; i < len; i += 1 {
         builtin::i32_store8(ptr + i, builtin::array_get_u8(arr, i));
     }
 }
@@ -112,7 +112,7 @@ pub fn cm_lower_string(s: String) -> i64 {
     let bytes = s.internal_raw_bytes();
     let ptr = builtin::realloc(0, 0, 1, len);
     gc_array_to_memory(bytes, ptr, len);
-    return (ptr as i64) | ((len as i64) << 32);
+    return ptr as i64 | len as i64 << 32;
 }
 
 /// Lowers a GC Array<u8> to CM linear memory representation.
@@ -121,7 +121,7 @@ pub fn cm_lower_string(s: String) -> i64 {
 pub fn cm_lower_list_u8(data: builtin::array<u8>, len: i32) -> i64 {
     let ptr = builtin::realloc(0, 0, 1, len);
     gc_array_to_memory(data, ptr, len);
-    return (ptr as i64) | ((len as i64) << 32);
+    return ptr as i64 | len as i64 << 32;
 }
 
 /// Lowers a GC Array<u8> (e.g., FieldValue) to CM linear memory representation.

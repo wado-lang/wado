@@ -17,6 +17,14 @@ use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::token::Span;
 use indexmap::IndexSet;
 
+const MAX_LINE_WIDTH: usize = 120;
+
+fn effective_start_line(attrs: &[Attribute], span_line: usize) -> usize {
+    attrs
+        .first()
+        .map_or(span_line, |attr| attr.span.line.min(span_line))
+}
+
 pub struct Unparser<'a> {
     comments: &'a CommentMap,
     output: String,
@@ -128,21 +136,39 @@ impl<'a> Unparser<'a> {
 
         if is_wildcard {
             self.output.push_str("use _ from \"");
+            self.output.push_str(&u.source);
+            self.output.push('"');
         } else {
+            // Try single-line first
+            let snap = self.snapshot();
             self.output.push_str("use { ");
-
             for (i, item) in u.items.iter().enumerate() {
                 if i > 0 {
                     self.output.push_str(", ");
                 }
                 self.unparse_use_item(item);
             }
-
             self.output.push_str(" } from \"");
-        }
+            self.output.push_str(&u.source);
+            self.output.push('"');
 
-        self.output.push_str(&u.source);
-        self.output.push('"');
+            if self.exceeds_width_since(snap) {
+                // Rollback and format multi-line
+                self.rollback(snap);
+                self.output.push_str("use {\n");
+                self.indent_level += 1;
+                for item in &u.items {
+                    self.write_indent();
+                    self.unparse_use_item(item);
+                    self.output.push_str(",\n");
+                }
+                self.indent_level -= 1;
+                self.write_indent();
+                self.output.push_str("} from \"");
+                self.output.push_str(&u.source);
+                self.output.push('"');
+            }
+        }
 
         if let Some(attrs) = &u.attributes {
             self.unparse_import_attributes(attrs);
@@ -344,8 +370,9 @@ impl<'a> Unparser<'a> {
         self.last_source_line = s.span.line;
 
         for field in &s.fields {
+            let effective_line = effective_start_line(&field.attrs, field.span.line);
             self.emit_leading_comments(&field.span);
-            self.emit_blank_lines_to(field.span.line);
+            self.emit_blank_lines_to(effective_line);
             self.unparse_struct_field(field);
             self.emit_trailing_comments_inline(&field.span);
             self.output.push('\n');
@@ -437,8 +464,9 @@ impl<'a> Unparser<'a> {
         self.last_source_line = e.span.line;
 
         for case in &e.cases {
+            let effective_line = effective_start_line(&case.attrs, case.span.line);
             self.emit_leading_comments(&case.span);
-            self.emit_blank_lines_to(case.span.line);
+            self.emit_blank_lines_to(effective_line);
             self.unparse_enum_case(case);
             self.emit_trailing_comments_inline(&case.span);
             self.output.push('\n');
@@ -487,8 +515,9 @@ impl<'a> Unparser<'a> {
         self.last_source_line = v.span.line;
 
         for case in &v.cases {
+            let effective_line = effective_start_line(&case.attrs, case.span.line);
             self.emit_leading_comments(&case.span);
-            self.emit_blank_lines_to(case.span.line);
+            self.emit_blank_lines_to(effective_line);
             self.unparse_variant_case(case);
             self.emit_trailing_comments_inline(&case.span);
             self.output.push('\n');
@@ -542,8 +571,9 @@ impl<'a> Unparser<'a> {
         self.last_source_line = f.span.line;
 
         for flag in &f.flags {
+            let effective_line = effective_start_line(&flag.attrs, flag.span.line);
             self.emit_leading_comments(&flag.span);
-            self.emit_blank_lines_to(flag.span.line);
+            self.emit_blank_lines_to(effective_line);
             self.write_indent();
             for attr in &flag.attrs {
                 self.unparse_attribute(attr);
@@ -565,6 +595,12 @@ impl<'a> Unparser<'a> {
 
     fn unparse_newtype(&mut self, t: &Newtype) {
         self.write_indent();
+
+        for attr in &t.attrs {
+            self.unparse_attribute(attr);
+            self.output.push('\n');
+            self.write_indent();
+        }
 
         if t.is_pub {
             self.output.push_str("pub ");
@@ -736,21 +772,17 @@ impl<'a> Unparser<'a> {
 
         self.indent_level += 1;
 
+        let saved_line = self.last_source_line;
+        self.last_source_line = t.span.line;
+
         // Unparse associated type declarations
         for assoc in &t.associated_types {
             self.write_indent();
             self.output.push_str("type ");
             self.output.push_str(&assoc.name);
             self.output.push_str(";\n");
+            self.last_source_line = assoc.span.end_line();
         }
-
-        // Add blank line between associated types and methods if both present
-        if !t.associated_types.is_empty() && !t.methods.is_empty() {
-            self.output.push('\n');
-        }
-
-        let saved_line = self.last_source_line;
-        self.last_source_line = t.span.line;
 
         for method in &t.methods {
             self.emit_leading_comments(&method.span);
@@ -789,8 +821,9 @@ impl<'a> Unparser<'a> {
         self.last_source_line = e.span.line;
 
         for method in &e.methods {
+            let effective_line = effective_start_line(&method.attrs, method.span.line);
             self.emit_leading_comments(&method.span);
-            self.emit_blank_lines_to(method.span.line);
+            self.emit_blank_lines_to(effective_line);
             self.unparse_effect_method(method);
             self.last_source_line = method.span.end_line();
         }
@@ -860,9 +893,14 @@ impl<'a> Unparser<'a> {
             self.output.push_str(" {\n");
 
             self.indent_level += 1;
+            let saved_line = self.last_source_line;
+            self.last_source_line = r.span.line;
             for method in &r.methods {
+                self.emit_leading_comments(&method.span);
                 self.unparse_effect_method(method);
+                self.last_source_line = method.span.end_line();
             }
+            self.last_source_line = saved_line.max(r.span.end_line());
             self.indent_level -= 1;
 
             self.write_indent();
@@ -877,6 +915,10 @@ impl<'a> Unparser<'a> {
             self.unparse_attribute(attr);
             self.output.push('\n');
             self.write_indent();
+        }
+
+        if w.is_pub {
+            self.output.push_str("pub ");
         }
 
         self.output.push_str("world ");
@@ -1442,6 +1484,13 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_tuple_literal(&mut self, tuple_lit: &TupleLiteralExpr) {
+        if tuple_lit.elements.is_empty() {
+            self.output.push_str("[]");
+            return;
+        }
+
+        // Try single-line first
+        let snap = self.snapshot();
         self.output.push('[');
         for (i, elem) in tuple_lit.elements.iter().enumerate() {
             if i > 0 {
@@ -1450,6 +1499,32 @@ impl<'a> Unparser<'a> {
             self.unparse_expr(elem);
         }
         self.output.push(']');
+
+        if !self.exceeds_width_since(snap) {
+            return;
+        }
+
+        // Rollback and format fill-style: pack elements onto lines up to MAX_LINE_WIDTH
+        self.rollback(snap);
+        self.output.push('[');
+        self.indent_level += 1;
+        for (i, elem) in tuple_lit.elements.iter().enumerate() {
+            let elem_snap = self.snapshot();
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            self.unparse_expr(elem);
+            // Check if this element pushed past the width limit
+            if self.exceeds_width_since(elem_snap) && i > 0 {
+                // Rollback and start a new line
+                self.rollback(elem_snap);
+                self.output.push_str(",\n");
+                self.write_indent();
+                self.unparse_expr(elem);
+            }
+        }
+        self.output.push(']');
+        self.indent_level -= 1;
     }
 
     fn unparse_literal(&mut self, lit: &Literal) {
@@ -1517,7 +1592,7 @@ impl<'a> Unparser<'a> {
 
         let needs_parens = matches!(
             &u.expr,
-            Expr::Binary(_) | Expr::Assign(_) | Expr::CompoundAssign(_)
+            Expr::Binary(_) | Expr::Assign(_) | Expr::CompoundAssign(_) | Expr::ComparisonChain(_)
         );
         if needs_parens {
             self.output.push('(');
@@ -1553,7 +1628,16 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_call(&mut self, c: &CallExpr) {
+        // Field access as callee needs parentheses: (self.f)(args)
+        // Without parens, `self.f(args)` would be parsed as a method call.
+        let needs_parens = matches!(&c.callee, Expr::FieldAccess(_));
+        if needs_parens {
+            self.output.push('(');
+        }
         self.unparse_expr(&c.callee);
+        if needs_parens {
+            self.output.push(')');
+        }
         // Output turbofish syntax if there are type arguments
         if !c.type_args.is_empty() {
             self.output.push_str("::<");
@@ -1628,7 +1712,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_call_args(&mut self, args: &[Expr], has_trailing_comma: bool) {
         if has_trailing_comma && !args.is_empty() {
-            // Multiline format with trailing comma
+            // Multiline format with trailing comma (explicitly requested)
             self.output.push_str("(\n");
             self.indent_level += 1;
             for arg in args {
@@ -1640,7 +1724,8 @@ impl<'a> Unparser<'a> {
             self.write_indent();
             self.output.push(')');
         } else {
-            // Single-line format
+            // Try single-line first
+            let snap = self.snapshot();
             self.output.push('(');
             for (i, arg) in args.iter().enumerate() {
                 if i > 0 {
@@ -1649,6 +1734,21 @@ impl<'a> Unparser<'a> {
                 self.unparse_expr(arg);
             }
             self.output.push(')');
+
+            if args.len() > 1 && self.exceeds_width_since(snap) {
+                // Rollback and format multi-line
+                self.rollback(snap);
+                self.output.push_str("(\n");
+                self.indent_level += 1;
+                for arg in args {
+                    self.write_indent();
+                    self.unparse_expr(arg);
+                    self.output.push_str(",\n");
+                }
+                self.indent_level -= 1;
+                self.write_indent();
+                self.output.push(')');
+            }
         }
     }
 
@@ -1675,6 +1775,63 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_if_expr(&mut self, i: &IfExpr) {
+        // Try inline format: `if cond { expr } else { expr }`
+        if self.try_inline_if_expr(i) {
+            return;
+        }
+        self.unparse_if_expr_multiline(i);
+    }
+
+    /// Try to format an if expression on a single line.
+    /// Returns true if successful, false if it should fall back to multiline.
+    fn try_inline_if_expr(&mut self, i: &IfExpr) -> bool {
+        // Only eligible when: no init, else exists, both arms are single expressions,
+        // and neither expression is a compound construct
+        if i.init.is_some() {
+            return false;
+        }
+        let Some(else_block) = &i.else_block else {
+            return false;
+        };
+        // No else-if chains
+        if else_block.stmts.len() == 1
+            && matches!(
+                &else_block.stmts[0],
+                Stmt::Expr(ExprStmt {
+                    expr: Expr::If(_),
+                    ..
+                })
+            )
+        {
+            return false;
+        }
+        let Some(then_expr) = block_single_expr(&i.then_block) else {
+            return false;
+        };
+        let Some(else_expr) = block_single_expr(else_block) else {
+            return false;
+        };
+        if !is_inline_safe_expr(then_expr) || !is_inline_safe_expr(else_expr) {
+            return false;
+        }
+
+        let snap = self.snapshot();
+        self.output.push_str("if ");
+        self.unparse_condition(&i.condition);
+        self.output.push_str(" { ");
+        self.unparse_expr(then_expr);
+        self.output.push_str(" } else { ");
+        self.unparse_expr(else_expr);
+        self.output.push_str(" }");
+
+        if self.output[snap..].contains('\n') || self.exceeds_width_since(snap) {
+            self.rollback(snap);
+            return false;
+        }
+        true
+    }
+
+    fn unparse_if_expr_multiline(&mut self, i: &IfExpr) {
         self.output.push_str("if ");
 
         // Handle optional init binding
@@ -1712,8 +1869,9 @@ impl<'a> Unparser<'a> {
                 }) = &else_block.stmts[0]
             {
                 // Output as `else if` instead of `else { if ... }`
+                // Use multiline directly to keep the entire chain consistent
                 self.output.push_str(" else ");
-                self.unparse_if_expr(nested_if);
+                self.unparse_if_expr_multiline(nested_if);
                 return;
             }
             self.output.push_str(" else {\n");
@@ -1726,16 +1884,72 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_match(&mut self, m: &MatchExpr) {
+        // Try inline format: `match expr { P1 => e1, P2 => e2 }`
+        if self.try_inline_match(m) {
+            return;
+        }
+        self.unparse_match_multiline(m);
+    }
+
+    /// Try to format a match expression on a single line.
+    fn try_inline_match(&mut self, m: &MatchExpr) -> bool {
+        // All arms must have inline-safe bodies, and no comments inside the match body
+        if m.arms.iter().any(|arm| !is_inline_safe_expr(&arm.body)) {
+            return false;
+        }
+        if !self
+            .comments
+            .comments_in_range(m.span.start, m.span.end)
+            .is_empty()
+        {
+            return false;
+        }
+
+        let snap = self.snapshot();
+        self.output.push_str("match ");
+        self.unparse_expr(&m.expr);
+        self.output.push_str(" { ");
+        for (i, arm) in m.arms.iter().enumerate() {
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            self.unparse_pattern(&arm.pattern);
+            if let Some(guard) = &arm.guard {
+                self.output.push_str(" && ");
+                self.unparse_expr(guard);
+            }
+            self.output.push_str(" => ");
+            self.unparse_expr(&arm.body);
+        }
+        self.output.push_str(" }");
+
+        if self.output[snap..].contains('\n') || self.exceeds_width_since(snap) {
+            self.rollback(snap);
+            return false;
+        }
+        true
+    }
+
+    fn unparse_match_multiline(&mut self, m: &MatchExpr) {
         self.output.push_str("match ");
         self.unparse_expr(&m.expr);
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
+        let saved_line = self.last_source_line;
+        self.last_source_line = m.span.line;
+
         for arm in &m.arms {
+            self.emit_leading_comments(&arm.span);
+            self.emit_blank_lines_to(arm.span.line);
             self.unparse_match_arm(arm);
+            self.emit_trailing_comments_inline(&arm.span);
+            self.output.push('\n');
+            self.last_source_line = arm.span.end_line();
         }
         self.indent_level -= 1;
 
+        self.last_source_line = saved_line.max(m.span.end_line());
         self.write_indent();
         self.output.push('}');
     }
@@ -1749,7 +1963,7 @@ impl<'a> Unparser<'a> {
         }
         self.output.push_str(" => ");
         self.unparse_expr(&arm.body);
-        self.output.push_str(",\n");
+        self.output.push(',');
     }
 
     fn unparse_pattern(&mut self, pattern: &Pattern) {
@@ -1960,7 +2174,7 @@ impl<'a> Unparser<'a> {
         }
 
         if s.has_trailing_comma && !s.fields.is_empty() {
-            // Multiline format with trailing comma
+            // Multiline format with trailing comma (explicitly requested)
             self.output.push_str("{\n");
             self.indent_level += 1;
             for field in &s.fields {
@@ -1975,8 +2189,11 @@ impl<'a> Unparser<'a> {
             self.indent_level -= 1;
             self.write_indent();
             self.output.push('}');
+        } else if s.fields.is_empty() {
+            self.output.push_str("{}");
         } else {
-            // Single-line format without trailing comma
+            // Try single-line first
+            let snap = self.snapshot();
             self.output.push_str("{ ");
             for (i, field) in s.fields.iter().enumerate() {
                 if i > 0 {
@@ -1989,6 +2206,25 @@ impl<'a> Unparser<'a> {
                 }
             }
             self.output.push_str(" }");
+
+            if s.fields.len() > 1 && self.exceeds_width_since(snap) {
+                // Rollback and format multi-line
+                self.rollback(snap);
+                self.output.push_str("{\n");
+                self.indent_level += 1;
+                for field in &s.fields {
+                    self.write_indent();
+                    self.output.push_str(&field.name);
+                    if !field.is_shorthand {
+                        self.output.push_str(": ");
+                        self.unparse_expr(&field.value);
+                    }
+                    self.output.push_str(",\n");
+                }
+                self.indent_level -= 1;
+                self.write_indent();
+                self.output.push('}');
+            }
         }
     }
 
@@ -1998,6 +2234,32 @@ impl<'a> Unparser<'a> {
         for _ in 0..self.indent_level {
             self.output.push_str("    ");
         }
+    }
+
+    /// Save current output position for snapshot/rollback.
+    fn snapshot(&self) -> usize {
+        self.output.len()
+    }
+
+    /// Rollback output to a saved snapshot.
+    fn rollback(&mut self, snapshot: usize) {
+        self.output.truncate(snapshot);
+    }
+
+    /// Check if any line since snapshot exceeds `MAX_LINE_WIDTH`.
+    fn exceeds_width_since(&self, snapshot: usize) -> bool {
+        let added = &self.output[snapshot..];
+        added.split('\n').any(|line| {
+            if line.as_ptr() == added.as_ptr() {
+                // First chunk: column = position before snapshot + this chunk
+                self.output[..snapshot]
+                    .rfind('\n')
+                    .map_or(snapshot + line.len(), |nl| snapshot - nl - 1 + line.len())
+                    > MAX_LINE_WIDTH
+            } else {
+                line.len() > MAX_LINE_WIDTH
+            }
+        })
     }
 
     fn emit_leading_comments(&mut self, span: &Span) {
@@ -2114,6 +2376,9 @@ fn get_item_first_line(item: &Item) -> usize {
         Item::Effect(e) => first_attr_line(&e.attrs),
         Item::Resource(r) => first_attr_line(&r.attrs),
         Item::Function(f) => first_attr_line(&f.attrs),
+        Item::Type(t) => first_attr_line(&t.attrs),
+        Item::World(w) => first_attr_line(&w.attrs),
+        Item::Global(g) => first_attr_line(&g.attributes),
         Item::Flags(f) => f
             .attributes
             .as_deref()
@@ -2139,6 +2404,22 @@ fn get_stmt_span(stmt: &Stmt) -> Span {
         Stmt::Assert(a) => a.span,
         Stmt::LabeledBlock(lb) => lb.span,
     }
+}
+
+fn block_single_expr(block: &Block) -> Option<&Expr> {
+    if block.stmts.len() == 1
+        && let Stmt::Expr(e) = &block.stmts[0]
+    {
+        return Some(&e.expr);
+    }
+    None
+}
+
+fn is_inline_safe_expr(expr: &Expr) -> bool {
+    !matches!(
+        expr,
+        Expr::Block(_) | Expr::If(_) | Expr::Match(_) | Expr::Closure(_) | Expr::LabeledBlock(_)
+    )
 }
 
 fn binary_op_str(op: BinaryOp) -> &'static str {
@@ -2409,20 +2690,24 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
                 output.push_str(name);
                 output.push(' ');
             }
-            output.push_str("{ ");
-            for (i, f) in s.fields.iter().enumerate() {
-                if i > 0 {
-                    output.push_str(", ");
+            if s.fields.is_empty() {
+                output.push_str("{}");
+            } else {
+                output.push_str("{ ");
+                for (i, f) in s.fields.iter().enumerate() {
+                    if i > 0 {
+                        output.push_str(", ");
+                    }
+                    if f.is_shorthand {
+                        output.push_str(&f.name);
+                    } else {
+                        output.push_str(&f.name);
+                        output.push_str(": ");
+                        unparse_expr_into(&f.value, output, false);
+                    }
                 }
-                if f.is_shorthand {
-                    output.push_str(&f.name);
-                } else {
-                    output.push_str(&f.name);
-                    output.push_str(": ");
-                    unparse_expr_into(&f.value, output, false);
-                }
+                output.push_str(" }");
             }
-            output.push_str(" }");
         }
         Expr::TupleLiteral(t) => {
             output.push('[');

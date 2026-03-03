@@ -334,7 +334,7 @@ test "u128 remainder with large dividend" {
 }
 
 test "u128 bitwise OR sets high bits" {
-    let a: u128 = 18446744073709551616; // 2^64 (high=1, low=0)
+    let a: u128 = 18446744073709551616;  // 2^64 (high=1, low=0)
     let b: u128 = 1;
     let result = a | b;
     assert result.low() == 1;
@@ -342,16 +342,16 @@ test "u128 bitwise OR sets high bits" {
 }
 
 test "u128 bitwise AND with high bits" {
-    let a: u128 = 18446744073709551617; // 2^64 + 1 (high=1, low=1)
-    let b: u128 = 18446744073709551619; // 2^64 + 3 (high=1, low=3)
+    let a: u128 = 18446744073709551617;  // 2^64 + 1 (high=1, low=1)
+    let b: u128 = 18446744073709551619;  // 2^64 + 3 (high=1, low=3)
     let result = a & b;
     assert result.low() == 1;
     assert result.high() == 1;
 }
 
 test "u128 bitwise XOR clears high bits" {
-    let a: u128 = 18446744073709551617; // 2^64 + 1 (high=1, low=1)
-    let b: u128 = 18446744073709551618; // 2^64 + 2 (high=1, low=2)
+    let a: u128 = 18446744073709551617;  // 2^64 + 1 (high=1, low=1)
+    let b: u128 = 18446744073709551618;  // 2^64 + 2 (high=1, low=2)
     let result = a ^ b;
     assert result.low() == 3;
     assert result.high() == 0;
@@ -571,12 +571,14 @@ test "i128 div_rem both negative" {
     assert result[1] == r;
 }
 
+
 #[expect_trap]
 test "u128 division by zero traps" {
     let a: u128 = 1;
     let b: u128 = 0;
     let _ = a / b;
 }
+
 
 #[expect_trap]
 test "i128 division by zero traps" {
@@ -598,7 +600,7 @@ test "u128 shift left by 128 returns zero" {
 }
 
 test "u128 shift right by 128 returns zero" {
-    let a: u128 = 18446744073709551616; // 2^64
+    let a: u128 = 18446744073709551616;  // 2^64
     let zero: u128 = 0;
     assert a >> 128 == zero;
 }

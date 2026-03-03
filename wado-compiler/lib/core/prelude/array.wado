@@ -1,18 +1,18 @@
+#![no_prelude]
 // Array type and iterators for Wado.
 // Provides Array<T>, ArrayIter<T>, and iterator combinators.
 
-#![no_prelude]
 
-use {
-    Ordering, Eq, Ord,
-    IndexValue, IndexAssign,
-    Iterator, IntoIterator, FromIterator,
-} from "core:prelude/traits.wado";
+use { Ordering, Eq, Ord, IndexValue, IndexAssign, Iterator, IntoIterator, FromIterator } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
 use { panic } from "core:internal";
 
-fn i32_min(a: i32, b: i32) -> i32 { return builtin::select::<i32>(a < b, a, b); }
-fn i32_max(a: i32, b: i32) -> i32 { return builtin::select::<i32>(a > b, a, b); }
+fn i32_min(a: i32, b: i32) -> i32 {
+    return builtin::select::<i32>(a < b, a, b);
+}
+fn i32_max(a: i32, b: i32) -> i32 {
+    return builtin::select::<i32>(a > b, a, b);
+}
 
 pub struct Array<T> {
     repr: builtin::array<T>,
@@ -109,11 +109,19 @@ impl<T: Ord> Ord for Array<T> {
         for let mut i = 0; i < min_len; i += 1 {
             let a = builtin::array_get::<T>(self.repr, i);
             let b = builtin::array_get::<T>(other.repr, i);
-            if a < b { return Ordering::Less; }
-            if a > b { return Ordering::Greater; }
+            if a < b {
+                return Ordering::Less;
+            }
+            if a > b {
+                return Ordering::Greater;
+            }
         }
-        if self.used < other.used { return Ordering::Less; }
-        if self.used > other.used { return Ordering::Greater; }
+        if self.used < other.used {
+            return Ordering::Less;
+        }
+        if self.used > other.used {
+            return Ordering::Greater;
+        }
         return Ordering::Equal;
     }
 }
@@ -541,7 +549,6 @@ impl Iterator for MapIter<T, U> {
 
 impl MapIter<T, U> {
     // collect() uses Iterator::collect() default method
-
     pub fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, U) -> Acc) -> Acc {
         let mut acc = init;
         for let item of *self {
@@ -576,7 +583,6 @@ impl Iterator for FilterIter<T> {
 
 impl FilterIter<T> {
     // collect() uses Iterator::collect() default method
-
     pub fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, T) -> Acc) -> Acc {
         let mut acc = init;
         for let item of *self {
@@ -619,12 +625,10 @@ impl Iterator for FilterMapIter<T, U> {
             }
         }
     }
-
 }
 
 impl FilterMapIter<T, U> {
     // collect() uses Iterator::collect() default method
-
     pub fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, U) -> Acc) -> Acc {
         let mut acc = init;
         for let item of *self {

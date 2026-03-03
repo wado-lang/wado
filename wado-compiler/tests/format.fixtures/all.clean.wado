@@ -72,6 +72,14 @@ trait Greet {
     fn name(&self) -> String;
 }
 
+/// Trait with associated type then method (no extra blank lines)
+trait Container {
+    type Item;
+
+    /// Get the contained item
+    fn get(&self) -> Self::Item;
+}
+
 /// self: &Self normalized to &self
 impl Point {
     fn get_x(&self) -> i32 {
@@ -94,8 +102,11 @@ resource Handle;
 
 /// Resource: pub with methods, self: &Self normalized
 pub resource Stream {
+    /// Read data from stream
     fn read(&self, len: u64) -> Array<u8>;
+    /// Write data to stream
     async fn write(&self, data: Array<u8>);
+    /// Close the stream
     fn close(&self);
 }
 
@@ -104,6 +115,43 @@ type Meters = f64;
 
 /// Pub type alias
 pub type Kilograms = f64;
+
+/// Type alias with attribute preserved
+#[wasi("wasi:http/types#field-name")]
+pub type FieldName = String;
+
+/// Type alias with attribute and no visibility
+#[wasi("wasi:http/types#status-code")]
+type StatusCode = u16;
+
+/// Enum with attributed cases (no extra blank lines)
+#[wasi("wasi:sockets/types#ip-address-family")]
+enum IpFamily {
+    #[wasi("ipv4")]
+    Ipv4,
+    #[wasi("ipv6")]
+    Ipv6,
+}
+
+/// Variant with attributed cases (no extra blank lines)
+#[wasi("wasi:http/types#scheme")]
+variant Scheme {
+    #[wasi("HTTP")]
+    Http,
+    #[wasi("HTTPS")]
+    Https,
+    #[wasi("other")]
+    Other(String),
+}
+
+/// Struct with attributed fields (no extra blank lines)
+#[wasi("wasi:http/types#dns-error-payload")]
+struct DnsError {
+    #[wasi("rcode")]
+    pub rcode: Option<String>,
+    #[wasi("info-code")]
+    pub info_code: Option<u16>,
+}
 
 /// Global variables
 global PI: f64 = 3.14159265358979;
@@ -201,11 +249,7 @@ fn asserts(x: i32, s: String) {
 
 /// Match expression with variant patterns
 fn match_shape(shape: Shape) -> f64 {
-    return match shape {
-        Circle(r) => 3.14159 * r * r,
-        Rectangle([w, h]) => w * h,
-        Point => 0.0,
-    };
+    return match shape { Circle(r) => 3.14159 * r * r, Rectangle([w, h]) => w * h, Point => 0.0 };
 }
 
 /// Match with guard conditions
@@ -220,19 +264,12 @@ fn match_with_guard(opt: Option<i32>) -> String {
 
 /// Match with wildcard and block body
 fn match_wildcard(color: Color) -> String {
-    return match color {
-        Red => "red",
-        Green => "green",
-        _ => "other",
-    };
+    return match color { Red => "red", Green => "green", _ => "other" };
 }
 
 /// Match with enum and struct pattern
 fn match_struct(result: Result<Point, String>) -> i32 {
-    return match result {
-        Ok({ x, y }) => x + y,
-        Err(_) => -1,
-    };
+    return match result { Ok({ x, y }) => x + y, Err(_) => -1 };
 }
 
 /// Matches operator
@@ -241,6 +278,28 @@ fn matches_example(opt: Option<i32>, shape: Shape) -> bool {
     let b = opt matches { Some(x) && x > 0 };
     let c = shape matches { Circle(_) };
     return a && b && c;
+}
+
+/// Inline if expression (single-line when short enough)
+fn inline_if_expr(upper: bool) -> String {
+    let letter = if upper { "E" } else { "e" };
+    return letter;
+}
+
+/// Inline match expression (single-line when short enough)
+fn inline_match_expr(color: Color) -> String {
+    let name = match color { Red => "red", Blue => "blue" };
+    return name;
+}
+
+/// Multiline if expression (too long to inline)
+fn multiline_if_expr(some_very_long_condition_name: bool) -> String {
+    let result = if some_very_long_condition_name {
+        "this_is_a_somewhat_long_value_for_the_then_branch";
+    } else {
+        "this_is_a_somewhat_long_value_for_the_else_branch";
+    };
+    return result;
 }
 
 /// Closures: expression body, no capture
@@ -260,6 +319,17 @@ fn closure_block_body() {
     let greet = |name: String| {
         return `Hello, {name}!`;
     };
+}
+
+/// Calling a closure field requires parens: (self.f)(item)
+struct Mapper {
+    f: fn(i32) -> i32,
+}
+
+impl Mapper {
+    fn apply(&self, x: i32) -> i32 {
+        return (self.f)(x);
+    }
 }
 
 /// Closures: capturing and mutable capture
