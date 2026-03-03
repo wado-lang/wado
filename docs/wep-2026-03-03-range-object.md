@@ -18,7 +18,7 @@ for let i of 0..<10 {
 }
 ```
 
-The operator precedence WEP reserves `..` and `..=` at level 14; this WEP revises the syntax to `..<` (half-open) and `..=` (inclusive) for clarity. The iterator traits WEP sketches a non-generic `Range` struct for `i32` only. This WEP defines the full design.
+The operator precedence WEP reserves `..` and `..=` at level 14; this WEP revises the syntax to `..<` (half-open) and `..=` (inclusive) for clarity. The iterator traits WEP sketches a non-generic `RangeExclusive` struct for `i32` only. This WEP defines the full design.
 
 ### Language Survey
 
@@ -115,7 +115,7 @@ Wado defines two range types as generic structs in `core:prelude`:
 
 ```wado
 /// Half-open range [start, end)
-pub struct Range<T> {
+pub struct RangeExclusive<T> {
     pub start: T,
     pub end: T,
 }
@@ -128,7 +128,9 @@ pub struct RangeInclusive<T> {
 }
 ```
 
-**Why two types, not six**: Wado targets pragmatic simplicity. The primary use cases (iteration and slicing) are served by `Range` and `RangeInclusive`. Partial ranges (`a..`, `..b`, `..`) add complexity for marginal benefit — Wado already has `arr.slice(start, end)` and `arr.len()` for these cases. If partial ranges prove necessary, they can be added later without breaking changes.
+**Why `RangeExclusive` / `RangeInclusive`**: The operators `..<` (exclusive) and `..=` (inclusive) are symmetric and self-documenting. The type names mirror this: both explicitly state the boundary rule. Unlike Rust's `Range` / `RangeInclusive` or Swift's `Range` / `ClosedRange`, Wado avoids an asymmetric "default" name.
+
+**Why two types, not six**: Wado targets pragmatic simplicity. The primary use cases (iteration and slicing) are served by `RangeExclusive` and `RangeInclusive`. Partial ranges (`a..`, `..b`, `..`) add complexity for marginal benefit — Wado already has `arr.slice(start, end)` and `arr.len()` for these cases. If partial ranges prove necessary, they can be added later without breaking changes.
 
 **Why generic**: Unlike Zig's `usize`-only limitation, generic ranges allow natural expressions like `for let c of 'a'..='z'` and `if (0.0..<1.0).contains(x)`. The type parameter is inferred from the operands.
 
@@ -136,16 +138,16 @@ pub struct RangeInclusive<T> {
 
 ```wado
 // Half-open range [start, end)
-0..<10             // Range<i32>
-0 as i64..<100     // Range<i64>
+0..<10             // RangeExclusive<i32>
+0 as i64..<100     // RangeExclusive<i64>
 
 // Inclusive range [start, end]
 0..=10            // RangeInclusive<i32>
 'a'..='z'         // RangeInclusive<char>
 
 // With expressions
-0..<arr.len()      // Range<i32>
-(x + 1)..<(y - 1) // Range<i32>
+0..<arr.len()      // RangeExclusive<i32>
+(x + 1)..<(y - 1) // RangeExclusive<i32>
 ```
 
 Range operators `..<` and `..=` sit at precedence level 14 (between logical OR and assignment). They are non-associative — `a..<b..<c` is a compile error.
@@ -196,7 +198,7 @@ impl Step for char {
 #### Iterator Implementations
 
 ```wado
-impl Iterator for Range<T: Step + Ord> {
+impl Iterator for RangeExclusive<T: Step + Ord> {
     type Item = T;
 
     fn next(&mut self) -> Option<T> {
@@ -243,14 +245,14 @@ impl Iterator for RangeInclusive<T: Step + Ord> {
 
 #### IntoIterator
 
-Both range types are their own iterators (Range itself implements Iterator), so IntoIterator returns self:
+Both range types are their own iterators (the range struct itself implements Iterator), so IntoIterator returns self:
 
 ```wado
-impl IntoIterator for Range<T: Step + Ord> {
+impl IntoIterator for RangeExclusive<T: Step + Ord> {
     type Item = T;
-    type Iter = Range<T>;
+    type Iter = RangeExclusive<T>;
 
-    fn into_iter(&self) -> Range<T> {
+    fn into_iter(&self) -> RangeExclusive<T> {
         return *self;  // Copy (value semantics)
     }
 }
@@ -298,7 +300,7 @@ let evens = (0..<20).filter(|x: i32| x % 2 == 0).collect();
 All ranges support `contains` for any `Ord` type, including non-iterable types like floats:
 
 ```wado
-impl Range<T: Ord> {
+impl RangeExclusive<T: Ord> {
     /// Returns true if the value is within [start, end).
     pub fn contains(&self, value: &T) -> bool {
         return *value >= self.start && *value < self.end;
@@ -360,10 +362,10 @@ let slice = arr[2..=4];   // ArraySlice<i32> containing [30, 40, 50]
 This is implemented via `IndexValue` trait:
 
 ```wado
-impl IndexValue<Range<i32>> for Array<T> {
+impl IndexValue<RangeExclusive<i32>> for Array<T> {
     type Output = ArraySlice<T>;
 
-    fn index_value(&self, range: Range<i32>) -> ArraySlice<T> {
+    fn index_value(&self, range: RangeExclusive<i32>) -> ArraySlice<T> {
         return self.slice(range.start, range.end);
     }
 }
@@ -380,7 +382,7 @@ impl IndexValue<RangeInclusive<i32>> for Array<T> {
 ### Display and Inspect
 
 ```wado
-impl Display for Range<T: Display> {
+impl Display for RangeExclusive<T: Display> {
     fn fmt(&self, f: &mut Formatter) {
         f.write(`{self.start}..<{self.end}`);
     }
@@ -404,7 +406,7 @@ println(`{r}`);   // "1..=5"
 ### Eq for Ranges
 
 ```wado
-impl Eq for Range<T: Eq> {
+impl Eq for RangeExclusive<T: Eq> {
     fn eq(&self, other: &Self) -> bool {
         return self.start == other.start && self.end == other.end;
     }
@@ -464,13 +466,13 @@ Range patterns in `match` arms (e.g., `0..=9 => "digit"`) require parser and pat
 
 ### Wasm GC Representation
 
-`Range<T>` and `RangeInclusive<T>` are struct types. For primitive `T`, the compiler monomorphizes them to simple Wasm GC structs:
+`RangeExclusive<T>` and `RangeInclusive<T>` are struct types. For primitive `T`, the compiler monomorphizes them to simple Wasm GC structs:
 
 ```wat
-;; Range<i32>
-(type $Range_i32 (struct (field $start i32) (field $end i32)))
+;; RangeExclusive<i32>
+(type $RangeExclusive_i32 (struct (field $start i32) (field $end i32)))
 
-;; RangeInclusive<i32> (with exhausted flag for Iterator)
+;; RangeInclusive<i32> (exhausted is a private field, always present)
 (type $RangeInclusive_i32 (struct (field $start i32) (field $end i32) (field $exhausted i32)))
 ```
 
@@ -481,19 +483,19 @@ The `exhausted` field is always present in `RangeInclusive` as a private struct 
 ### Phase 1: Lexer and Parser
 
 1. Add `DotDotLt` (`..<`) and `DotDotEq` (`..=`) tokens to the lexer
-2. Add `Range` and `RangeInclusive` expression AST nodes
+2. Add `RangeExclusive` and `RangeInclusive` expression AST nodes
 3. Parse range expressions at precedence level 14 (non-associative)
 4. Update the operator precedence WEP to reflect `..<` and `..=` (replacing `..` and `..=`)
 
 ### Phase 2: Type Checking
 
-1. Define `Range<T>` and `RangeInclusive<T>` as built-in generic structs in `core:prelude`
+1. Define `RangeExclusive<T>` and `RangeInclusive<T>` as built-in generic structs in `core:prelude`
 2. Infer `T` from the operands (both must have the same type after literal coercion)
 3. Add `Step` trait and implement for integer types and `char`
 
 ### Phase 3: Iterator Integration
 
-1. Implement `Iterator` for `Range<T: Step + Ord>` and `RangeInclusive<T: Step + Ord>`
+1. Implement `Iterator` for `RangeExclusive<T: Step + Ord>` and `RangeInclusive<T: Step + Ord>`
 2. Implement `IntoIterator` for both types
 3. Verify for-of desugaring works with range expressions
 
@@ -501,7 +503,7 @@ The `exhausted` field is always present in `RangeInclusive` as a private struct 
 
 1. Implement `contains`, `is_empty` methods
 2. Implement `Display`, `Inspect`, and `Eq` traits
-3. Implement `IndexValue<Range<i32>>` and `IndexValue<RangeInclusive<i32>>` for `Array<T>`
+3. Implement `IndexValue<RangeExclusive<i32>>` and `IndexValue<RangeInclusive<i32>>` for `Array<T>`
 
 ## Consequences
 
