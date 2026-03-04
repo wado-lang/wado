@@ -455,27 +455,27 @@ impl JsonDeserializer {
                 if seq_len == 1 {
                     result.append_char(b as u8 as char);
                 } else if seq_len == 2 {
-                    let b0 = b;
-                    let b1 = self.input.get_byte(self.pos + 1) as i32;
+                    let b0 = b as u32;
+                    let b1 = self.input.get_byte(self.pos + 1) as u32;
                     let code = ((b0 & 0x1F) << 6) | (b1 & 0x3F);
-                    if let Some(c) = char::from_u32(code as u32) {
+                    if let Some(c) = char::from_u32(code) {
                         result.append_char(c);
                     }
                 } else if seq_len == 3 {
-                    let b0 = b;
-                    let b1 = self.input.get_byte(self.pos + 1) as i32;
-                    let b2 = self.input.get_byte(self.pos + 2) as i32;
+                    let b0 = b as u32;
+                    let b1 = self.input.get_byte(self.pos + 1) as u32;
+                    let b2 = self.input.get_byte(self.pos + 2) as u32;
                     let code = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F);
-                    if let Some(c) = char::from_u32(code as u32) {
+                    if let Some(c) = char::from_u32(code) {
                         result.append_char(c);
                     }
                 } else {
-                    let b0 = b;
-                    let b1 = self.input.get_byte(self.pos + 1) as i32;
-                    let b2 = self.input.get_byte(self.pos + 2) as i32;
-                    let b3 = self.input.get_byte(self.pos + 3) as i32;
+                    let b0 = b as u32;
+                    let b1 = self.input.get_byte(self.pos + 1) as u32;
+                    let b2 = self.input.get_byte(self.pos + 2) as u32;
+                    let b3 = self.input.get_byte(self.pos + 3) as u32;
                     let code = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
-                    if let Some(c) = char::from_u32(code as u32) {
+                    if let Some(c) = char::from_u32(code) {
                         result.append_char(c);
                     }
                 }
@@ -491,16 +491,16 @@ impl JsonDeserializer {
         if self.pos + 4 > self.input.len() {
             return Result::<char, DeserializeError>::Err(DeserializeError::eof(self.pos as i64));
         }
-        let mut code = 0;
+        let mut code: u32 = 0;
         for let mut i = 0; i < 4; i += 1 {
-            let b = self.input.get_byte(self.pos + i) as i32;
+            let b = self.input.get_byte(self.pos + i) as u32;
             code = code * 16;
-            if b >= '0' as i32 && b <= '9' as i32 {
-                code = code + b - '0' as i32;
-            } else if b >= 'a' as i32 && b <= 'f' as i32 {
-                code = code + 10 + b - 'a' as i32;
-            } else if b >= 'A' as i32 && b <= 'F' as i32 {
-                code = code + 10 + b - 'A' as i32;
+            if b >= '0' as u32 && b <= '9' as u32 {
+                code = code + b - '0' as u32;
+            } else if b >= 'a' as u32 && b <= 'f' as u32 {
+                code = code + 10 + b - 'a' as u32;
+            } else if b >= 'A' as u32 && b <= 'F' as u32 {
+                code = code + 10 + b - 'A' as u32;
             } else {
                 return Result::<char, DeserializeError>::Err(DeserializeError::malformed(
                     "invalid unicode escape",
@@ -509,7 +509,7 @@ impl JsonDeserializer {
             }
         }
         self.pos += 3;
-        if let Some(c) = char::from_u32(code as u32) {
+        if let Some(c) = char::from_u32(code) {
             return Result::<char, DeserializeError>::Ok(c);
         }
         return Result::<char, DeserializeError>::Err(DeserializeError::malformed(
