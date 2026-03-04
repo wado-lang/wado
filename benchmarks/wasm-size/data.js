@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772621778640,
+  "lastUpdate": 1772623591220,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62,6 +62,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/48e02e7af4688a6420da2c0e26f63ace875336d8"
         },
         "date": 1772621778299,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1386,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9905,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 14295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "64061512075a9c539992d602dbc5b96b9b7d505c",
+          "message": "Merge pull request #498 from wado-lang/gfx/link_to_benchmarks\n\nAdd Benchmarks section to README with GitHub Pages links",
+          "timestamp": "2026-03-04T20:24:25+09:00",
+          "tree_id": "50df733ca5488de48c79af5ba8137c4d17d925f4",
+          "url": "https://github.com/wado-lang/wado/commit/64061512075a9c539992d602dbc5b96b9b7d505c"
+        },
+        "date": 1772623591151,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
