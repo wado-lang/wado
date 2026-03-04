@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772621777462,
+  "lastUpdate": 1772623590077,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -107,6 +107,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib/decompress",
             "value": 589,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "64061512075a9c539992d602dbc5b96b9b7d505c",
+          "message": "Merge pull request #498 from wado-lang/gfx/link_to_benchmarks\n\nAdd Benchmarks section to README with GitHub Pages links",
+          "timestamp": "2026-03-04T20:24:25+09:00",
+          "tree_id": "50df733ca5488de48c79af5ba8137c4d17d925f4",
+          "url": "https://github.com/wado-lang/wado/commit/64061512075a9c539992d602dbc5b96b9b7d505c"
+        },
+        "date": 1772623589940,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "count_prime",
+            "value": 3305,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot",
+            "value": 150,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve",
+            "value": 209,
+            "unit": "ms"
+          },
+          {
+            "name": "fts",
+            "value": 170,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress",
+            "value": 69,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress",
+            "value": 610,
             "unit": "ms"
           }
         ]
