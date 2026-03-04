@@ -1034,6 +1034,7 @@ impl TypeTable {
                 ..
             } => base.clone(),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.base_type_name(*inner),
+            ResolvedType::Tuple(_) => "Tuple".to_string(),
             _ => self.mangle_type_name(id),
         }
     }

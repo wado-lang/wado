@@ -486,6 +486,7 @@ fn check_return_variant_struct_new(instr: &WirInstr, valid_type_indices: &IndexS
                     .is_none_or(|eb| all_returns_are_variant_struct_new(eb, valid_type_indices))
         }
         WirInstr::Seq(body) => all_returns_are_variant_struct_new(body, valid_type_indices),
+        WirInstr::Drop(inner) => check_return_variant_struct_new(inner, valid_type_indices),
         _ => true,
     }
 }
@@ -532,6 +533,7 @@ fn check_return_struct_new(instr: &WirInstr, expected_type_idx: u32) -> bool {
                     .is_none_or(|eb| all_returns_are_struct_new(eb, expected_type_idx))
         }
         WirInstr::Seq(body) => all_returns_are_struct_new(body, expected_type_idx),
+        WirInstr::Drop(inner) => check_return_struct_new(inner, expected_type_idx),
         _ => true,
     }
 }
@@ -1292,6 +1294,16 @@ fn rewrite_returns_to_multi_value(instrs: &mut [WirInstr]) {
             WirInstr::Seq(body) => {
                 rewrite_returns_to_multi_value(body);
             }
+            WirInstr::Drop(inner) => {
+                if inner.always_diverges() {
+                    let mut unwrapped = std::mem::replace(inner.as_mut(), WirInstr::Nop);
+                    clear_result_types_on_divergent(&mut unwrapped);
+                    rewrite_returns_to_multi_value(std::slice::from_mut(&mut unwrapped));
+                    *instr = unwrapped;
+                } else {
+                    rewrite_returns_to_multi_value(std::slice::from_mut(inner.as_mut()));
+                }
+            }
             _ => {}
         }
     }
@@ -1463,8 +1475,77 @@ fn rewrite_variant_returns_to_multi_value(
             WirInstr::Seq(body) => {
                 rewrite_variant_returns_to_multi_value(body, vi, result_types);
             }
+            WirInstr::Drop(inner) => {
+                // Drop wraps an expression whose value is discarded.
+                // If the inner expression is fully divergent (all paths return),
+                // the Drop never executes. We must unwrap it because the inner
+                // expression no longer produces a value after return rewriting.
+                // If not divergent (e.g., drop(call(...))), keep the Drop.
+                if inner.always_diverges() {
+                    let mut unwrapped = std::mem::replace(inner.as_mut(), WirInstr::Nop);
+                    clear_result_types_on_divergent(&mut unwrapped);
+                    rewrite_variant_returns_to_multi_value(
+                        std::slice::from_mut(&mut unwrapped),
+                        vi,
+                        result_types,
+                    );
+                    *instr = unwrapped;
+                } else {
+                    rewrite_variant_returns_to_multi_value(
+                        std::slice::from_mut(inner.as_mut()),
+                        vi,
+                        result_types,
+                    );
+                }
+            }
             _ => {}
         }
+    }
+}
+
+/// Clear result types on If/Block nodes that are fully divergent,
+/// so they don't declare values that are never produced.
+fn clear_result_types_on_divergent(instr: &mut WirInstr) {
+    match instr {
+        WirInstr::If {
+            result,
+            then_body,
+            else_body,
+            ..
+        } => {
+            for child in then_body.iter_mut() {
+                clear_result_types_on_divergent(child);
+            }
+            if let Some(eb) = else_body {
+                for child in eb.iter_mut() {
+                    clear_result_types_on_divergent(child);
+                }
+            }
+            if then_body.iter().any(WirInstr::always_diverges)
+                && else_body
+                    .as_ref()
+                    .is_some_and(|eb| eb.iter().any(WirInstr::always_diverges))
+            {
+                *result = None;
+            }
+        }
+        WirInstr::Block { result, body, .. } => {
+            for child in body.iter_mut() {
+                clear_result_types_on_divergent(child);
+            }
+            if body.iter().any(WirInstr::always_diverges) {
+                *result = None;
+            }
+        }
+        WirInstr::Seq(body) => {
+            for child in body.iter_mut() {
+                clear_result_types_on_divergent(child);
+            }
+        }
+        WirInstr::Drop(inner) => {
+            clear_result_types_on_divergent(inner);
+        }
+        _ => {}
     }
 }
 
