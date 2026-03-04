@@ -2718,7 +2718,8 @@ impl Monomorphizer {
                     // Skip for non-generic structs that don't use the enclosing type params.
                     let new_info = if info.is_type_param_receiver && !type_names.is_empty() {
                         let base = type_table.base_type_name(*sorted_entries[0].1);
-                        let mut substituted = info.with_substituted_struct_name(&type_names[0], &base);
+                        let mut substituted =
+                            info.with_substituted_struct_name(&type_names[0], &base);
                         // Also substitute method type args that may contain TypeParam references.
                         // The monomorph_info stores method type args as TypeIds which can be
                         // substituted, then we regenerate the mangled names.

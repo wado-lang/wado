@@ -1018,9 +1018,7 @@ impl TypeTable {
                 base_name: Some(base),
                 ..
             } => base.clone(),
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                self.base_type_name(*inner)
-            }
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.base_type_name(*inner),
             _ => self.mangle_type_name(id),
         }
     }

@@ -1664,12 +1664,9 @@ fn generate_variant_serialize(
             });
         } else {
             // Payload case: begin_variant, payload, end
-            let payload_local =
-                alloc_local(&mut next_local, &mut local_types, *payload_type);
-            let vs_result_local =
-                alloc_local(&mut next_local, &mut local_types, result_vs_err);
-            let vs_local =
-                alloc_local(&mut next_local, &mut local_types, variant_ser_type);
+            let payload_local = alloc_local(&mut next_local, &mut local_types, *payload_type);
+            let vs_result_local = alloc_local(&mut next_local, &mut local_types, result_vs_err);
+            let vs_local = alloc_local(&mut next_local, &mut local_types, variant_ser_type);
 
             let begin_call = type_param_method_call(
                 local_ref(1, "s", mut_ref_s),
@@ -1735,10 +1732,7 @@ fn generate_variant_serialize(
                 span,
             );
 
-            let then_block = block(vec![
-                expr_stmt(payload_call),
-                return_stmt(Some(end_call)),
-            ]);
+            let then_block = block(vec![expr_stmt(payload_call), return_stmt(Some(end_call))]);
             let else_block = block(vec![return_stmt(Some(variant_err(
                 err_val,
                 result_unit_err,
@@ -1771,11 +1765,7 @@ fn generate_variant_serialize(
                     payload_type: *payload_type,
                 },
                 guard: None,
-                body: TirExpr::new(
-                    TirExprKind::Block(block(body_stmts)),
-                    result_unit_err,
-                    span,
-                ),
+                body: TirExpr::new(TirExprKind::Block(block(body_stmts)), result_unit_err, span),
                 span,
             });
         }
@@ -2016,8 +2006,7 @@ fn generate_variant_deserialize(
             name_then_stmts.push(if_stmt(condition, if_body, None));
         } else {
             // let __p_r = va.payload::<PayloadType>()
-            let payload_local =
-                alloc_local(&mut next_local, &mut local_types, *payload_type);
+            let payload_local = alloc_local(&mut next_local, &mut local_types, *payload_type);
             let p_result_local =
                 alloc_local(&mut next_local, &mut local_types, payload_result_types[i]);
 

@@ -1211,6 +1211,14 @@ impl KeyValueLiteralBuilder for TreeMap<String, V> {
     fn insert_literal(&mut self, key: String, value: Self::Value);
     fn build(&self) -> TreeMap<String, V>;
 }
+
+impl Serialize for TreeMap<String, V> {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
+}
+
+impl Deserialize for TreeMap<String, V> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeMap<String, V>, DeserializeError>;
+}
 ```
 
 ```wado
