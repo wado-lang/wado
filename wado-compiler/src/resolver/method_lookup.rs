@@ -1842,7 +1842,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Get the type name and type args for looking up implementations
         let (type_name, type_args) = match &resolved {
-            ResolvedType::Struct { name, .. } => (name.clone(), None),
+            ResolvedType::Struct { name, .. }
+            | ResolvedType::Enum { name, .. }
+            | ResolvedType::Variant { name, .. } => (name.clone(), None),
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => (

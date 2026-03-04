@@ -283,6 +283,7 @@ impl<T: Serialize> Serialize for Array<T> {
 }
 
 
+
 impl<T: Serialize, E: Serialize> Serialize for Result<T, E> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         if let Ok(v) = self {
@@ -310,32 +311,6 @@ impl<T: Serialize, E: Serialize> Serialize for Result<T, E> {
             if let Err(e) = var {
                 return Result::<(), SerializeError>::Err(e);
             }
-        }
-        unreachable();
-    }
-}
-
-impl<T: Serialize, V: Serialize> Serialize for TreeMap<String, V> {
-    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        let entries = self.entries();
-        let map_r = s.begin_map(entries.len());
-        if let Ok(mut m) = map_r {
-            for let entry of entries {
-                let k = entry.0;
-                let v = entry.1;
-                let kr = m.key::<String>(&k);
-                if let Err(e) = kr {
-                    return Result::<(), SerializeError>::Err(e);
-                }
-                let vr = m.value::<V>(&v);
-                if let Err(e) = vr {
-                    return Result::<(), SerializeError>::Err(e);
-                }
-            }
-            return m.end();
-        }
-        if let Err(e) = map_r {
-            return Result::<(), SerializeError>::Err(e);
         }
         unreachable();
     }
@@ -553,6 +528,32 @@ impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
         }
         if let Err(e) = va_r {
             return Result::<Result<T, E>, DeserializeError>::Err(e);
+        }
+        unreachable();
+    }
+}
+
+impl<T: Serialize, V: Serialize> Serialize for TreeMap<String, V> {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let entries = self.entries();
+        let map_r = s.begin_map(entries.len());
+        if let Ok(mut m) = map_r {
+            for let entry of entries {
+                let k = entry.0;
+                let v = entry.1;
+                let kr = m.key::<String>(&k);
+                if let Err(e) = kr {
+                    return Result::<(), SerializeError>::Err(e);
+                }
+                let vr = m.value::<V>(&v);
+                if let Err(e) = vr {
+                    return Result::<(), SerializeError>::Err(e);
+                }
+            }
+            return m.end();
+        }
+        if let Err(e) = map_r {
+            return Result::<(), SerializeError>::Err(e);
         }
         unreachable();
     }
