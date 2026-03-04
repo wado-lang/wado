@@ -281,6 +281,39 @@ impl<T: Serialize> Serialize for Array<T> {
 }
 
 
+
+impl<T: Serialize, E: Serialize> Serialize for Result<T, E> {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        if let Ok(v) = self {
+            let var = s.begin_variant(&"Result", &"Ok", 0);
+            if let Ok(mut vs) = var {
+                let r = vs.payload::<T>(v);
+                if let Err(e) = r {
+                    return Result::<(), SerializeError>::Err(e);
+                }
+                return vs.end();
+            }
+            if let Err(e) = var {
+                return Result::<(), SerializeError>::Err(e);
+            }
+        }
+        if let Err(v) = self {
+            let var = s.begin_variant(&"Result", &"Err", 1);
+            if let Ok(mut vs) = var {
+                let r = vs.payload::<E>(v);
+                if let Err(e) = r {
+                    return Result::<(), SerializeError>::Err(e);
+                }
+                return vs.end();
+            }
+            if let Err(e) = var {
+                return Result::<(), SerializeError>::Err(e);
+            }
+        }
+        unreachable();
+    }
+}
+
 impl Deserialize for i8 {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<i8, DeserializeError> {
         let r = d.deserialize_i32();
@@ -450,3 +483,51 @@ impl<T: Deserialize> Deserialize for Array<T> {
         unreachable();
     }
 }
+
+impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Result<T, E>, DeserializeError> {
+        let va_r = d.begin_variant(&"Result", 2);
+        if let Ok(mut va) = va_r {
+            let name_r = va.variant_name();
+            if let Ok(name) = name_r {
+                if name == "Ok" {
+                    let val_r = va.payload::<T>();
+                    if let Ok(val) = val_r {
+                        let end_r = va.end();
+                        if let Err(e) = end_r {
+                            return Result::<Result<T, E>, DeserializeError>::Err(e);
+                        }
+                        return Result::<Result<T, E>, DeserializeError>::Ok(Result::<T, E>::Ok(val));
+                    }
+                    if let Err(e) = val_r {
+                        return Result::<Result<T, E>, DeserializeError>::Err(e);
+                    }
+                }
+                if name == "Err" {
+                    let val_r = va.payload::<E>();
+                    if let Ok(val) = val_r {
+                        let end_r = va.end();
+                        if let Err(e) = end_r {
+                            return Result::<Result<T, E>, DeserializeError>::Err(e);
+                        }
+                        return Result::<Result<T, E>, DeserializeError>::Ok(Result::<T, E>::Err(val));
+                    }
+                    if let Err(e) = val_r {
+                        return Result::<Result<T, E>, DeserializeError>::Err(e);
+                    }
+                }
+                return Result::<Result<T, E>, DeserializeError>::Err(
+                    DeserializeError { kind: DeserializeErrorKind::UnknownVariant, message: `unknown Result variant: {name}`, offset: -1 as i64 }
+                );
+            }
+            if let Err(e) = name_r {
+                return Result::<Result<T, E>, DeserializeError>::Err(e);
+            }
+        }
+        if let Err(e) = va_r {
+            return Result::<Result<T, E>, DeserializeError>::Err(e);
+        }
+        unreachable();
+    }
+}
+

@@ -60,8 +60,11 @@ pub fn synthesize_serde(project: &mut Project) {
                     if existing.contains(&key) {
                         continue;
                     }
-                    if let Some(func) = generate_struct_serialize(module, req) {
-                        generated.push(Rc::new(RefCell::new(func)));
+                    let func = generate_struct_serialize(module, req)
+                        .or_else(|| generate_enum_serialize(module, req))
+                        .or_else(|| generate_variant_serialize(module, req));
+                    if let Some(f) = func {
+                        generated.push(Rc::new(RefCell::new(f)));
                     }
                 }
                 "Deserialize" => {
@@ -78,6 +81,12 @@ pub fn synthesize_serde(project: &mut Project) {
                     {
                         generated.push(Rc::new(RefCell::new(lookup_func)));
                         generated.push(Rc::new(RefCell::new(deser_func)));
+                    } else {
+                        let func = generate_enum_deserialize(module, req)
+                            .or_else(|| generate_variant_deserialize(module, req));
+                        if let Some(f) = func {
+                            generated.push(Rc::new(RefCell::new(f)));
+                        }
                     }
                 }
                 other => {
@@ -363,40 +372,70 @@ fn deserialize_error_literal(
 /// Generate a `T::default()` static call for the field's initial value.
 /// Only emits the call when the `Default` trait is registered via `#[comp_feature("default")]`.
 /// The module source for resolution comes from the type itself (where `impl Default for T` lives).
-fn default_value_for_type(
-    type_id: TypeId,
-    type_name: &str,
-    type_table: &TypeTable,
-    span: Span,
-) -> TirExpr {
+fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -> TirExpr {
     // Gate: only generate Default calls if the trait is registered via comp_feature.
     if type_table.default_trait_module_source().is_none() {
         return null_expr(type_id);
     }
-    // Use the type's own module_source for resolution — the `impl Default for T`
-    // lives in the same module as the type definition.
-    let module_source = match type_table.get(type_id) {
-        crate::tir::ResolvedType::Primitive(_) => Some(ModuleSource::primitives()),
-        crate::tir::ResolvedType::Struct { module_source, .. }
-        | crate::tir::ResolvedType::GenericInstance { module_source, .. }
-        | crate::tir::ResolvedType::Newtype { module_source, .. } => Some(module_source.clone()),
-        _ => None,
+    // Extract base type name and module_source from the resolved type.
+    // Only generate Default::default() calls for types known to have Default impls
+    // (primitives and stdlib types). User-defined structs fall back to null.
+    let (base_name, module_source, type_args) = match type_table.get(type_id) {
+        crate::tir::ResolvedType::Primitive(p) => {
+            (p.as_str().to_string(), ModuleSource::primitives(), vec![])
+        }
+        crate::tir::ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } => {
+            if matches!(module_source, ModuleSource::Core { .. }) {
+                (name.clone(), module_source.clone(), vec![])
+            } else {
+                return null_expr(type_id);
+            }
+        }
+        crate::tir::ResolvedType::GenericInstance {
+            name,
+            module_source,
+            type_args,
+            ..
+        } => (name.clone(), module_source.clone(), type_args.clone()),
+        crate::tir::ResolvedType::Newtype {
+            name,
+            module_source,
+            ..
+        } => (name.clone(), module_source.clone(), vec![]),
+        _ => return null_expr(type_id),
     };
-    let Some(module_source) = module_source else {
-        return null_expr(type_id);
-    };
-    let method_info = LocalMethodName::new(
-        type_name.to_string(),
+    let mut method_info = LocalMethodName::new(
+        base_name,
         Some("Default".to_string()),
         "default".to_string(),
     );
+    if !type_args.is_empty() {
+        let arg_names: Vec<String> = type_args.iter().map(|t| type_table.type_name(*t)).collect();
+        method_info = method_info.with_type_args(&arg_names, &[]);
+    }
     let mangled_name = method_info.to_mangled_name();
+    // For generic types (Option<String>, Array<i32>, etc.), set monomorph_info with
+    // the concrete type_args so the monomorphizer substitutes them correctly instead of
+    // blindly replacing with the enclosing function's type parameters.
+    let monomorph_info = if type_args.is_empty() {
+        None
+    } else {
+        Some(crate::tir::MonomorphInfo {
+            generic_name: method_info.base_struct_name.clone(),
+            type_args,
+            is_blanket: false,
+        })
+    };
     TirExpr::new(
         TirExprKind::StaticCall {
             func: FunctionRef::External {
                 module_source,
                 name: mangled_name,
-                monomorph_info: None,
+                monomorph_info,
                 method_info: Some(method_info),
             },
             args: vec![],
@@ -744,7 +783,7 @@ fn generate_struct_deserialize(
     {
         let tt = module.type_table.borrow();
         for (i, (field_name, _, type_id, _)) in fields.iter().enumerate() {
-            let default_val = default_value_for_type(*type_id, &field_type_names[i], &tt, span);
+            let default_val = default_value_for_type(*type_id, &tt, span);
             then_stmts.push(let_mut_stmt(
                 field_name,
                 field_locals[i],
@@ -1169,6 +1208,1016 @@ fn generate_lookup_function(
         inline_hint: InlineHint::Auto,
         comp_features: 0,
     }
+}
+
+fn find_enum<'a>(module: &'a TirModule, name: &str) -> Option<&'a crate::tir::TirEnum> {
+    module.enums.iter().find(|e| e.name == name)
+}
+
+fn find_variant<'a>(module: &'a TirModule, name: &str) -> Option<&'a crate::tir::TirVariantDecl> {
+    module.variants.iter().find(|v| v.name == name)
+}
+
+fn generate_enum_serialize(
+    module: &TirModule,
+    req: &crate::tir::SynthesisRequest,
+) -> Option<TirFunction> {
+    let enum_def = find_enum(module, &req.target_type_name)?;
+    let span = synth_span();
+    let serde_module = ModuleSource::core("serde");
+
+    let mut tt = module.type_table.borrow_mut();
+
+    let enum_type = req.target_type_id;
+    let ref_self_type = tt.make_ref(enum_type);
+    let s_type_param = tt.make_type_param("S".to_string(), 0);
+    let mut_ref_s = tt.make_mut_ref(s_type_param);
+    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let ref_string_type = tt.make_ref(string_type);
+    let ser_error_type = tt.make_struct("SerializeError".to_string(), serde_module.clone());
+    let result_unit_err = tt.make_result(TypeTable::UNIT, ser_error_type);
+
+    let cases: Vec<(String, u32)> = enum_def
+        .cases
+        .iter()
+        .map(|c| (c.name.clone(), c.index))
+        .collect();
+
+    drop(tt);
+
+    let local_types = vec![ref_self_type, mut_ref_s];
+    let next_local: u32 = 2;
+
+    // Build match arms: one per enum case calling serialize_unit_variant
+    let mut match_arms = Vec::new();
+    for (case_name, case_index) in &cases {
+        let call = type_param_method_call(
+            local_ref(1, "s", mut_ref_s),
+            "S",
+            "Serializer",
+            "serialize_unit_variant",
+            serde_module.clone(),
+            vec![],
+            vec![],
+            vec![
+                ref_expr(
+                    string_lit(&req.target_type_name, string_type, span),
+                    ref_string_type,
+                    span,
+                ),
+                ref_expr(
+                    string_lit(case_name, string_type, span),
+                    ref_string_type,
+                    span,
+                ),
+                i32_const(*case_index as i32),
+            ],
+            result_unit_err,
+            span,
+        );
+        match_arms.push(TirMatchArm {
+            pattern: TirPattern::Enum {
+                enum_type,
+                case_name: case_name.clone(),
+                case_index: *case_index,
+            },
+            guard: None,
+            body: call,
+            span,
+        });
+    }
+
+    let self_deref = deref_expr(local_ref(0, "self", ref_self_type), enum_type, span);
+    let match_expr = TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(self_deref),
+            arms: match_arms,
+        },
+        result_unit_err,
+        span,
+    );
+
+    let stmts = vec![return_stmt(Some(match_expr))];
+
+    let method_info = LocalMethodName::new(
+        req.target_type_name.clone(),
+        Some("Serialize".to_string()),
+        "serialize".to_string(),
+    );
+    let qualified_name =
+        MethodName::format_local(&req.target_type_name, Some("Serialize"), "serialize");
+
+    Some(TirFunction {
+        name: qualified_name,
+        is_pub: true,
+        is_export: false,
+        is_async: false,
+        type_params: vec![TirTypeParam {
+            name: "S".to_string(),
+            bounds: vec!["Serializer".to_string()],
+            default: None,
+            index: 0,
+        }],
+        impl_type_params: Vec::new(),
+        monomorph_info: None,
+        method_info: Some(method_info),
+        params: vec![
+            TirParam {
+                name: "self".to_string(),
+                type_id: ref_self_type,
+                local_index: 0,
+                span,
+            },
+            TirParam {
+                name: "s".to_string(),
+                type_id: mut_ref_s,
+                local_index: 1,
+                span,
+            },
+        ],
+        return_type: result_unit_err,
+        effects: Vec::new(),
+        body: Some(block(stmts)),
+        span,
+        local_count: next_local,
+        local_types,
+        address_taken_locals: IndexSet::new(),
+        is_cm_adapter: false,
+        inline_hint: InlineHint::Auto,
+        comp_features: 0,
+    })
+}
+
+fn generate_enum_deserialize(
+    module: &TirModule,
+    req: &crate::tir::SynthesisRequest,
+) -> Option<TirFunction> {
+    let enum_def = find_enum(module, &req.target_type_name)?;
+    let span = synth_span();
+    let serde_module = ModuleSource::core("serde");
+
+    let mut tt = module.type_table.borrow_mut();
+
+    let enum_type = req.target_type_id;
+    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let ref_string_type = tt.make_ref(string_type);
+    let deser_error_type = tt.make_struct("DeserializeError".to_string(), serde_module.clone());
+    let deser_error_kind_type = tt
+        .find_enum_type_by_name("DeserializeErrorKind")
+        .unwrap_or(TypeTable::I32);
+    let result_enum_err = tt.make_result(enum_type, deser_error_type);
+    let d_type_param = tt.make_type_param("D".to_string(), 0);
+    let mut_ref_d = tt.make_mut_ref(d_type_param);
+    let variant_access_type = tt.make_assoc_type_projection(
+        d_type_param,
+        "VariantAccess".to_string(),
+        vec!["DeserializeVariant".to_string()],
+    );
+    let result_va_err = tt.make_result(variant_access_type, deser_error_type);
+    let mut_ref_va = tt.make_mut_ref(variant_access_type);
+    let result_string_err = tt.make_result(string_type, deser_error_type);
+    let result_unit_err = tt.make_result(TypeTable::UNIT, deser_error_type);
+
+    let cases: Vec<(String, u32)> = enum_def
+        .cases
+        .iter()
+        .map(|c| (c.name.clone(), c.index))
+        .collect();
+    let num_cases = cases.len();
+
+    drop(tt);
+
+    let mut local_types = vec![mut_ref_d];
+    let mut next_local: u32 = 1;
+    let va_result_local = alloc_local(&mut next_local, &mut local_types, result_va_err);
+    let va_local = alloc_local(&mut next_local, &mut local_types, variant_access_type);
+    let name_result_local = alloc_local(&mut next_local, &mut local_types, result_string_err);
+    let name_local = alloc_local(&mut next_local, &mut local_types, string_type);
+
+    let mut stmts = Vec::new();
+
+    // let __va_r = d.begin_variant(&"TypeName", num_cases)
+    let begin_call = type_param_method_call(
+        local_ref(0, "d", mut_ref_d),
+        "D",
+        "Deserializer",
+        "begin_variant",
+        serde_module.clone(),
+        vec![],
+        vec![],
+        vec![
+            ref_expr(
+                string_lit(&req.target_type_name, string_type, span),
+                ref_string_type,
+                span,
+            ),
+            i32_const(num_cases as i32),
+        ],
+        result_va_err,
+        span,
+    );
+    stmts.push(let_mut_stmt(
+        "__va_r",
+        va_result_local,
+        result_va_err,
+        begin_call,
+    ));
+
+    // if let Ok(mut va) = __va_r { ... }
+    let mut then_stmts = Vec::new();
+
+    // let __name_r = va.variant_name()
+    let name_call = type_param_method_call(
+        local_ref(va_local, "va", mut_ref_va),
+        "D::VariantAccess",
+        "DeserializeVariant",
+        "variant_name",
+        serde_module.clone(),
+        vec![],
+        vec![],
+        vec![],
+        result_string_err,
+        span,
+    );
+    then_stmts.push(let_mut_stmt(
+        "__name_r",
+        name_result_local,
+        result_string_err,
+        name_call,
+    ));
+
+    // if let Ok(name) = __name_r { ... match on name ... }
+    let mut name_then_stmts = Vec::new();
+
+    // For each case: if name == "CaseName" { ... end(); return Ok(EnumConstruct) }
+    for (case_name, case_index) in &cases {
+        let key_ref = ref_expr(
+            local_ref(name_local, "__name", string_type),
+            ref_string_type,
+            span,
+        );
+        let lit_ref = ref_expr(
+            string_lit(case_name, string_type, span),
+            ref_string_type,
+            span,
+        );
+        let eq_method = LocalMethodName::new(
+            "String".to_string(),
+            Some("Eq".to_string()),
+            "eq".to_string(),
+        );
+        let condition = TirExpr::new(
+            TirExprKind::MethodCall {
+                receiver: Box::new(key_ref),
+                func: FunctionRef::External {
+                    module_source: ModuleSource::prelude(),
+                    name: eq_method.to_mangled_name(),
+                    monomorph_info: None,
+                    method_info: Some(eq_method),
+                },
+                type_args: vec![],
+                args: vec![lit_ref],
+            },
+            TypeTable::BOOL,
+            span,
+        );
+
+        // va.end()
+        let end_call = type_param_method_call(
+            local_ref(va_local, "va", mut_ref_va),
+            "D::VariantAccess",
+            "DeserializeVariant",
+            "end",
+            serde_module.clone(),
+            vec![],
+            vec![],
+            vec![],
+            result_unit_err,
+            span,
+        );
+
+        let enum_construct = TirExpr::new(
+            TirExprKind::EnumConstruct {
+                enum_type,
+                case_index: *case_index,
+                case_name: case_name.clone(),
+            },
+            enum_type,
+            span,
+        );
+
+        let if_body = block(vec![
+            expr_stmt(end_call),
+            return_stmt(Some(variant_ok(enum_construct, result_enum_err, span))),
+        ]);
+        name_then_stmts.push(if_stmt(condition, if_body, None));
+    }
+
+    // Unknown variant error
+    let unknown_err = deserialize_error_literal(
+        deser_error_type,
+        deser_error_kind_type,
+        "UnknownVariant",
+        2,
+        "unknown variant",
+        string_type,
+        span,
+    );
+    name_then_stmts.push(return_stmt(Some(variant_err(
+        unknown_err,
+        result_enum_err,
+        span,
+    ))));
+
+    // Wire up: if let Ok(__name) = __name_r { name_then_stmts } else { propagate err }
+    then_stmts.push(if_let_ok(
+        local_ref(name_result_local, "__name_r", result_string_err),
+        result_string_err,
+        string_type,
+        name_local,
+        "__name",
+        block(name_then_stmts),
+        propagate_err_block(
+            name_result_local,
+            "__name_r",
+            result_string_err,
+            deser_error_type,
+            result_enum_err,
+            span,
+        ),
+        span,
+    ));
+
+    // Wire up: if let Ok(mut va) = __va_r { then_stmts } else { propagate err }
+    stmts.push(if_let_ok(
+        local_ref(va_result_local, "__va_r", result_va_err),
+        result_va_err,
+        variant_access_type,
+        va_local,
+        "va",
+        block(then_stmts),
+        propagate_err_block(
+            va_result_local,
+            "__va_r",
+            result_va_err,
+            deser_error_type,
+            result_enum_err,
+            span,
+        ),
+        span,
+    ));
+
+    let method_info = LocalMethodName::new(
+        req.target_type_name.clone(),
+        Some("Deserialize".to_string()),
+        "deserialize".to_string(),
+    );
+    let qualified_name =
+        MethodName::format_local(&req.target_type_name, Some("Deserialize"), "deserialize");
+
+    Some(TirFunction {
+        name: qualified_name,
+        is_pub: true,
+        is_export: false,
+        is_async: false,
+        type_params: vec![TirTypeParam {
+            name: "D".to_string(),
+            bounds: vec!["Deserializer".to_string()],
+            default: None,
+            index: 0,
+        }],
+        impl_type_params: Vec::new(),
+        monomorph_info: None,
+        method_info: Some(method_info),
+        params: vec![TirParam {
+            name: "d".to_string(),
+            type_id: mut_ref_d,
+            local_index: 0,
+            span,
+        }],
+        return_type: result_enum_err,
+        effects: Vec::new(),
+        body: Some(block(stmts)),
+        span,
+        local_count: next_local,
+        local_types,
+        address_taken_locals: IndexSet::new(),
+        is_cm_adapter: false,
+        inline_hint: InlineHint::Auto,
+        comp_features: 0,
+    })
+}
+
+fn generate_variant_serialize(
+    module: &TirModule,
+    req: &crate::tir::SynthesisRequest,
+) -> Option<TirFunction> {
+    let variant_def = find_variant(module, &req.target_type_name)?;
+    let span = synth_span();
+    let serde_module = ModuleSource::core("serde");
+
+    let mut tt = module.type_table.borrow_mut();
+
+    let variant_type = req.target_type_id;
+    let ref_self_type = tt.make_ref(variant_type);
+    let s_type_param = tt.make_type_param("S".to_string(), 0);
+    let mut_ref_s = tt.make_mut_ref(s_type_param);
+    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let ref_string_type = tt.make_ref(string_type);
+    let ser_error_type = tt.make_struct("SerializeError".to_string(), serde_module.clone());
+    let ser_error_kind_type = tt
+        .find_enum_type_by_name("SerializeErrorKind")
+        .unwrap_or(TypeTable::I32);
+    let result_unit_err = tt.make_result(TypeTable::UNIT, ser_error_type);
+    let variant_ser_type = tt.make_assoc_type_projection(
+        s_type_param,
+        "VariantSerializer".to_string(),
+        vec!["SerializeVariant".to_string()],
+    );
+    let result_vs_err = tt.make_result(variant_ser_type, ser_error_type);
+    let mut_ref_vs = tt.make_mut_ref(variant_ser_type);
+
+    let cases: Vec<(String, u32, TypeId)> = variant_def
+        .cases
+        .iter()
+        .map(|c| (c.name.clone(), c.index, c.payload))
+        .collect();
+    let payload_ref_types: Vec<TypeId> = cases
+        .iter()
+        .map(|(_, _, payload)| tt.make_ref(*payload))
+        .collect();
+    let payload_type_names: Vec<String> = cases
+        .iter()
+        .map(|(_, _, payload)| tt.type_name(*payload))
+        .collect();
+
+    drop(tt);
+
+    let mut local_types = vec![ref_self_type, mut_ref_s];
+    let mut next_local: u32 = 2;
+
+    // Build match arms
+    let mut match_arms = Vec::new();
+    for (i, (case_name, case_index, payload_type)) in cases.iter().enumerate() {
+        let is_unit = *payload_type == TypeTable::UNIT;
+
+        if is_unit {
+            // Unit case: serialize_unit_variant
+            let call = type_param_method_call(
+                local_ref(1, "s", mut_ref_s),
+                "S",
+                "Serializer",
+                "serialize_unit_variant",
+                serde_module.clone(),
+                vec![],
+                vec![],
+                vec![
+                    ref_expr(
+                        string_lit(&req.target_type_name, string_type, span),
+                        ref_string_type,
+                        span,
+                    ),
+                    ref_expr(
+                        string_lit(case_name, string_type, span),
+                        ref_string_type,
+                        span,
+                    ),
+                    i32_const(*case_index as i32),
+                ],
+                result_unit_err,
+                span,
+            );
+            let body = TirExpr::new(
+                TirExprKind::Block(block(vec![return_stmt(Some(call))])),
+                result_unit_err,
+                span,
+            );
+            match_arms.push(TirMatchArm {
+                pattern: TirPattern::Variant {
+                    enum_type: variant_type,
+                    variant_name: case_name.clone(),
+                    bindings: vec![],
+                    payload_type: TypeTable::UNIT,
+                },
+                guard: None,
+                body,
+                span,
+            });
+        } else {
+            // Payload case: begin_variant, payload, end
+            let payload_local = alloc_local(&mut next_local, &mut local_types, *payload_type);
+            let vs_result_local = alloc_local(&mut next_local, &mut local_types, result_vs_err);
+            let vs_local = alloc_local(&mut next_local, &mut local_types, variant_ser_type);
+
+            let begin_call = type_param_method_call(
+                local_ref(1, "s", mut_ref_s),
+                "S",
+                "Serializer",
+                "begin_variant",
+                serde_module.clone(),
+                vec![],
+                vec![],
+                vec![
+                    ref_expr(
+                        string_lit(&req.target_type_name, string_type, span),
+                        ref_string_type,
+                        span,
+                    ),
+                    ref_expr(
+                        string_lit(case_name, string_type, span),
+                        ref_string_type,
+                        span,
+                    ),
+                    i32_const(*case_index as i32),
+                ],
+                result_vs_err,
+                span,
+            );
+
+            let payload_ref = ref_expr(
+                local_ref(payload_local, "__payload", *payload_type),
+                payload_ref_types[i],
+                span,
+            );
+            let payload_call = type_param_method_call(
+                local_ref(vs_local, "__vs", mut_ref_vs),
+                "S::VariantSerializer",
+                "SerializeVariant",
+                "payload",
+                serde_module.clone(),
+                vec![payload_type_names[i].clone()],
+                vec![*payload_type],
+                vec![payload_ref],
+                result_unit_err,
+                span,
+            );
+
+            let end_call = type_param_method_call(
+                local_ref(vs_local, "__vs", mut_ref_vs),
+                "S::VariantSerializer",
+                "SerializeVariant",
+                "end",
+                serde_module.clone(),
+                vec![],
+                vec![],
+                vec![],
+                result_unit_err,
+                span,
+            );
+
+            let err_val = serialize_error_literal(
+                ser_error_type,
+                ser_error_kind_type,
+                "begin_variant failed",
+                string_type,
+                span,
+            );
+
+            let then_block = block(vec![expr_stmt(payload_call), return_stmt(Some(end_call))]);
+            let else_block = block(vec![return_stmt(Some(variant_err(
+                err_val,
+                result_unit_err,
+                span,
+            )))]);
+
+            let body_stmts = vec![
+                let_mut_stmt("__vs_r", vs_result_local, result_vs_err, begin_call),
+                if_let_ok(
+                    local_ref(vs_result_local, "__vs_r", result_vs_err),
+                    result_vs_err,
+                    variant_ser_type,
+                    vs_local,
+                    "__vs",
+                    then_block,
+                    else_block,
+                    span,
+                ),
+            ];
+
+            match_arms.push(TirMatchArm {
+                pattern: TirPattern::Variant {
+                    enum_type: variant_type,
+                    variant_name: case_name.clone(),
+                    bindings: vec![TirPattern::Binding {
+                        name: "__payload".to_string(),
+                        local_index: payload_local,
+                        type_id: *payload_type,
+                    }],
+                    payload_type: *payload_type,
+                },
+                guard: None,
+                body: TirExpr::new(TirExprKind::Block(block(body_stmts)), result_unit_err, span),
+                span,
+            });
+        }
+    }
+
+    let self_deref = deref_expr(local_ref(0, "self", ref_self_type), variant_type, span);
+    let match_expr = TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(self_deref),
+            arms: match_arms,
+        },
+        TypeTable::UNIT,
+        span,
+    );
+
+    let stmts = vec![expr_stmt(match_expr)];
+
+    let method_info = LocalMethodName::new(
+        req.target_type_name.clone(),
+        Some("Serialize".to_string()),
+        "serialize".to_string(),
+    );
+    let qualified_name =
+        MethodName::format_local(&req.target_type_name, Some("Serialize"), "serialize");
+
+    Some(TirFunction {
+        name: qualified_name,
+        is_pub: true,
+        is_export: false,
+        is_async: false,
+        type_params: vec![TirTypeParam {
+            name: "S".to_string(),
+            bounds: vec!["Serializer".to_string()],
+            default: None,
+            index: 0,
+        }],
+        impl_type_params: Vec::new(),
+        monomorph_info: None,
+        method_info: Some(method_info),
+        params: vec![
+            TirParam {
+                name: "self".to_string(),
+                type_id: ref_self_type,
+                local_index: 0,
+                span,
+            },
+            TirParam {
+                name: "s".to_string(),
+                type_id: mut_ref_s,
+                local_index: 1,
+                span,
+            },
+        ],
+        return_type: result_unit_err,
+        effects: Vec::new(),
+        body: Some(block(stmts)),
+        span,
+        local_count: next_local,
+        local_types,
+        address_taken_locals: IndexSet::new(),
+        is_cm_adapter: false,
+        inline_hint: InlineHint::Auto,
+        comp_features: 0,
+    })
+}
+
+fn generate_variant_deserialize(
+    module: &TirModule,
+    req: &crate::tir::SynthesisRequest,
+) -> Option<TirFunction> {
+    let variant_def = find_variant(module, &req.target_type_name)?;
+    let span = synth_span();
+    let serde_module = ModuleSource::core("serde");
+
+    let mut tt = module.type_table.borrow_mut();
+
+    let variant_type = req.target_type_id;
+    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let ref_string_type = tt.make_ref(string_type);
+    let deser_error_type = tt.make_struct("DeserializeError".to_string(), serde_module.clone());
+    let deser_error_kind_type = tt
+        .find_enum_type_by_name("DeserializeErrorKind")
+        .unwrap_or(TypeTable::I32);
+    let result_variant_err = tt.make_result(variant_type, deser_error_type);
+    let d_type_param = tt.make_type_param("D".to_string(), 0);
+    let mut_ref_d = tt.make_mut_ref(d_type_param);
+    let variant_access_type = tt.make_assoc_type_projection(
+        d_type_param,
+        "VariantAccess".to_string(),
+        vec!["DeserializeVariant".to_string()],
+    );
+    let result_va_err = tt.make_result(variant_access_type, deser_error_type);
+    let mut_ref_va = tt.make_mut_ref(variant_access_type);
+    let result_string_err = tt.make_result(string_type, deser_error_type);
+    let result_unit_err = tt.make_result(TypeTable::UNIT, deser_error_type);
+
+    let cases: Vec<(String, u32, TypeId)> = variant_def
+        .cases
+        .iter()
+        .map(|c| (c.name.clone(), c.index, c.payload))
+        .collect();
+    let num_cases = cases.len();
+    let payload_result_types: Vec<TypeId> = cases
+        .iter()
+        .map(|(_, _, payload)| tt.make_result(*payload, deser_error_type))
+        .collect();
+    let payload_type_names: Vec<String> = cases
+        .iter()
+        .map(|(_, _, payload)| tt.type_name(*payload))
+        .collect();
+
+    drop(tt);
+
+    let mut local_types = vec![mut_ref_d];
+    let mut next_local: u32 = 1;
+    let va_result_local = alloc_local(&mut next_local, &mut local_types, result_va_err);
+    let va_local = alloc_local(&mut next_local, &mut local_types, variant_access_type);
+    let name_result_local = alloc_local(&mut next_local, &mut local_types, result_string_err);
+    let name_local = alloc_local(&mut next_local, &mut local_types, string_type);
+
+    let mut stmts = Vec::new();
+
+    // let __va_r = d.begin_variant(&"TypeName", num_cases)
+    let begin_call = type_param_method_call(
+        local_ref(0, "d", mut_ref_d),
+        "D",
+        "Deserializer",
+        "begin_variant",
+        serde_module.clone(),
+        vec![],
+        vec![],
+        vec![
+            ref_expr(
+                string_lit(&req.target_type_name, string_type, span),
+                ref_string_type,
+                span,
+            ),
+            i32_const(num_cases as i32),
+        ],
+        result_va_err,
+        span,
+    );
+    stmts.push(let_mut_stmt(
+        "__va_r",
+        va_result_local,
+        result_va_err,
+        begin_call,
+    ));
+
+    let mut then_stmts = Vec::new();
+
+    // let __name_r = va.variant_name()
+    let name_call = type_param_method_call(
+        local_ref(va_local, "va", mut_ref_va),
+        "D::VariantAccess",
+        "DeserializeVariant",
+        "variant_name",
+        serde_module.clone(),
+        vec![],
+        vec![],
+        vec![],
+        result_string_err,
+        span,
+    );
+    then_stmts.push(let_mut_stmt(
+        "__name_r",
+        name_result_local,
+        result_string_err,
+        name_call,
+    ));
+
+    let mut name_then_stmts = Vec::new();
+
+    for (i, (case_name, case_index, payload_type)) in cases.iter().enumerate() {
+        let is_unit = *payload_type == TypeTable::UNIT;
+
+        let key_ref = ref_expr(
+            local_ref(name_local, "__name", string_type),
+            ref_string_type,
+            span,
+        );
+        let lit_ref = ref_expr(
+            string_lit(case_name, string_type, span),
+            ref_string_type,
+            span,
+        );
+        let eq_method = LocalMethodName::new(
+            "String".to_string(),
+            Some("Eq".to_string()),
+            "eq".to_string(),
+        );
+        let condition = TirExpr::new(
+            TirExprKind::MethodCall {
+                receiver: Box::new(key_ref),
+                func: FunctionRef::External {
+                    module_source: ModuleSource::prelude(),
+                    name: eq_method.to_mangled_name(),
+                    monomorph_info: None,
+                    method_info: Some(eq_method),
+                },
+                type_args: vec![],
+                args: vec![lit_ref],
+            },
+            TypeTable::BOOL,
+            span,
+        );
+
+        if is_unit {
+            // va.end(); return Ok(Variant::CaseName)
+            let end_call = type_param_method_call(
+                local_ref(va_local, "va", mut_ref_va),
+                "D::VariantAccess",
+                "DeserializeVariant",
+                "end",
+                serde_module.clone(),
+                vec![],
+                vec![],
+                vec![],
+                result_unit_err,
+                span,
+            );
+
+            let construct = TirExpr::new(
+                TirExprKind::VariantConstruct {
+                    variant_type,
+                    case_index: *case_index,
+                    case_name: case_name.clone(),
+                    payload: None,
+                },
+                variant_type,
+                span,
+            );
+
+            let if_body = block(vec![
+                expr_stmt(end_call),
+                return_stmt(Some(variant_ok(construct, result_variant_err, span))),
+            ]);
+            name_then_stmts.push(if_stmt(condition, if_body, None));
+        } else {
+            // let __p_r = va.payload::<PayloadType>()
+            let payload_local = alloc_local(&mut next_local, &mut local_types, *payload_type);
+            let p_result_local =
+                alloc_local(&mut next_local, &mut local_types, payload_result_types[i]);
+
+            let payload_call = type_param_method_call(
+                local_ref(va_local, "va", mut_ref_va),
+                "D::VariantAccess",
+                "DeserializeVariant",
+                "payload",
+                serde_module.clone(),
+                vec![payload_type_names[i].clone()],
+                vec![*payload_type],
+                vec![],
+                payload_result_types[i],
+                span,
+            );
+
+            let end_call = type_param_method_call(
+                local_ref(va_local, "va", mut_ref_va),
+                "D::VariantAccess",
+                "DeserializeVariant",
+                "end",
+                serde_module.clone(),
+                vec![],
+                vec![],
+                vec![],
+                result_unit_err,
+                span,
+            );
+
+            let construct = TirExpr::new(
+                TirExprKind::VariantConstruct {
+                    variant_type,
+                    case_index: *case_index,
+                    case_name: case_name.clone(),
+                    payload: Some(Box::new(local_ref(
+                        payload_local,
+                        "__payload",
+                        *payload_type,
+                    ))),
+                },
+                variant_type,
+                span,
+            );
+
+            let ok_block = block(vec![
+                expr_stmt(end_call),
+                return_stmt(Some(variant_ok(construct, result_variant_err, span))),
+            ]);
+
+            let if_body = block(vec![
+                let_mut_stmt(
+                    "__p_r",
+                    p_result_local,
+                    payload_result_types[i],
+                    payload_call,
+                ),
+                if_let_ok(
+                    local_ref(p_result_local, "__p_r", payload_result_types[i]),
+                    payload_result_types[i],
+                    *payload_type,
+                    payload_local,
+                    "__payload",
+                    ok_block,
+                    propagate_err_block(
+                        p_result_local,
+                        "__p_r",
+                        payload_result_types[i],
+                        deser_error_type,
+                        result_variant_err,
+                        span,
+                    ),
+                    span,
+                ),
+            ]);
+            name_then_stmts.push(if_stmt(condition, if_body, None));
+        }
+    }
+
+    // Unknown variant error
+    let unknown_err = deserialize_error_literal(
+        deser_error_type,
+        deser_error_kind_type,
+        "UnknownVariant",
+        2,
+        "unknown variant",
+        string_type,
+        span,
+    );
+    name_then_stmts.push(return_stmt(Some(variant_err(
+        unknown_err,
+        result_variant_err,
+        span,
+    ))));
+
+    // Wire up
+    then_stmts.push(if_let_ok(
+        local_ref(name_result_local, "__name_r", result_string_err),
+        result_string_err,
+        string_type,
+        name_local,
+        "__name",
+        block(name_then_stmts),
+        propagate_err_block(
+            name_result_local,
+            "__name_r",
+            result_string_err,
+            deser_error_type,
+            result_variant_err,
+            span,
+        ),
+        span,
+    ));
+
+    stmts.push(if_let_ok(
+        local_ref(va_result_local, "__va_r", result_va_err),
+        result_va_err,
+        variant_access_type,
+        va_local,
+        "va",
+        block(then_stmts),
+        propagate_err_block(
+            va_result_local,
+            "__va_r",
+            result_va_err,
+            deser_error_type,
+            result_variant_err,
+            span,
+        ),
+        span,
+    ));
+
+    let method_info = LocalMethodName::new(
+        req.target_type_name.clone(),
+        Some("Deserialize".to_string()),
+        "deserialize".to_string(),
+    );
+    let qualified_name =
+        MethodName::format_local(&req.target_type_name, Some("Deserialize"), "deserialize");
+
+    Some(TirFunction {
+        name: qualified_name,
+        is_pub: true,
+        is_export: false,
+        is_async: false,
+        type_params: vec![TirTypeParam {
+            name: "D".to_string(),
+            bounds: vec!["Deserializer".to_string()],
+            default: None,
+            index: 0,
+        }],
+        impl_type_params: Vec::new(),
+        monomorph_info: None,
+        method_info: Some(method_info),
+        params: vec![TirParam {
+            name: "d".to_string(),
+            type_id: mut_ref_d,
+            local_index: 0,
+            span,
+        }],
+        return_type: result_variant_err,
+        effects: Vec::new(),
+        body: Some(block(stmts)),
+        span,
+        local_count: next_local,
+        local_types,
+        address_taken_locals: IndexSet::new(),
+        is_cm_adapter: false,
+        inline_hint: InlineHint::Auto,
+        comp_features: 0,
+    })
 }
 
 #[cfg(test)]

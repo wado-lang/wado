@@ -1,0 +1,43 @@
+// TODO test: tuple Serialize/Deserialize via begin_seq
+// Tuples should serialize as JSON arrays: [T, U, V] → [val1, val2, val3]
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+test "tuple serialize [i32, String, bool]" {
+    let t = [42, "hello", true];
+    let r = to_string::<[i32, String, bool]>(&t);
+    if let Ok(s) = r {
+        assert s == `[42,"hello",true]`;
+    } else {
+        panic("serialize tuple failed");
+    }
+}
+
+test "tuple roundtrip [i32, String]" {
+    let t = [10, "world"];
+    let json_r = to_string::<[i32, String]>(&t);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<[i32, String]>(json);
+        if let Ok(parsed) = parsed_r {
+            assert parsed.0 == 10;
+            assert parsed.1 == "world";
+        } else {
+            panic("from_string tuple failed");
+        }
+    } else {
+        panic("to_string tuple failed");
+    }
+}
+
+test "pair tuple serialize" {
+    let pair = [3.14, 2.72];
+    let r = to_string::<[f64, f64]>(&pair);
+    if let Ok(s) = r {
+        assert s == "[3.14,2.72]";
+    } else {
+        panic("serialize pair failed");
+    }
+}
+
+__DATA__
+{"TODO": true, "test": {}}

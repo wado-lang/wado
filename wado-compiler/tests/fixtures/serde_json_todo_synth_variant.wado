@@ -1,0 +1,71 @@
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+variant Shape {
+    Circle(f64),
+    Point,
+}
+
+impl Serialize for Shape;
+impl Deserialize for Shape;
+
+test "variant serialize unit case" {
+    let s = Shape::Point;
+    let r = to_string::<Shape>(&s);
+    if let Ok(json) = r {
+        assert json == `"Point"`;
+    } else {
+        panic("serialize Shape::Point failed");
+    }
+}
+
+test "variant serialize payload case" {
+    let s = Shape::Circle(5.0);
+    let r = to_string::<Shape>(&s);
+    if let Ok(json) = r {
+        assert json == `\{"Circle":5.0\}`;
+    } else {
+        panic("serialize Shape::Circle failed");
+    }
+}
+
+test "variant roundtrip unit case" {
+    let s = Shape::Point;
+    let json_r = to_string::<Shape>(&s);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<Shape>(json);
+        if let Ok(parsed) = parsed_r {
+            if let Point = parsed {
+                // OK
+            } else {
+                panic("expected Point");
+            }
+        } else {
+            panic("from_string Shape::Point failed");
+        }
+    } else {
+        panic("to_string Shape::Point failed");
+    }
+}
+
+test "variant roundtrip payload case" {
+    let s = Shape::Circle(3.14);
+    let json_r = to_string::<Shape>(&s);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<Shape>(json);
+        if let Ok(parsed) = parsed_r {
+            if let Circle(r) = parsed {
+                assert r == 3.14;
+            } else {
+                panic("expected Circle");
+            }
+        } else {
+            panic("from_string Shape::Circle failed");
+        }
+    } else {
+        panic("to_string Shape::Circle failed");
+    }
+}
+
+__DATA__
+{"TODO": true, "test": {}}

@@ -1,0 +1,95 @@
+// TODO test: synthesized struct with Option and Array fields roundtrip
+// Struct fields of type Option<T> and Array<T> should work with synthesis.
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+struct User {
+    name: String,
+    email: Option<String>,
+    scores: Array<i32>,
+}
+
+impl Serialize for User;
+impl Deserialize for User;
+
+test "serialize with Some and non-empty array" {
+    let u = User {
+        name: "Alice",
+        email: Option::<String>::Some("alice@example.com"),
+        scores: [95, 87, 92],
+    };
+    let r = to_string::<User>(&u);
+    if let Ok(s) = r {
+        assert s == `\{"name":"Alice","email":"alice@example.com","scores":[95,87,92]\}`;
+    } else {
+        panic("serialize User failed");
+    }
+}
+
+test "serialize with None and empty array" {
+    let u = User {
+        name: "Bob",
+        email: null,
+        scores: [],
+    };
+    let r = to_string::<User>(&u);
+    if let Ok(s) = r {
+        assert s == `\{"name":"Bob","email":null,"scores":[]\}`;
+    } else {
+        panic("serialize User with nulls failed");
+    }
+}
+
+test "roundtrip with Some" {
+    let orig = User {
+        name: "Charlie",
+        email: Option::<String>::Some("charlie@test.com"),
+        scores: [100],
+    };
+    let json_r = to_string::<User>(&orig);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<User>(json);
+        if let Ok(parsed) = parsed_r {
+            assert parsed.name == "Charlie";
+            if let Some(e) = parsed.email {
+                assert e == "charlie@test.com";
+            } else {
+                panic("expected Some for email");
+            }
+            assert parsed.scores.len() == 1;
+            assert parsed.scores[0] == 100;
+        } else {
+            panic("from_string User failed");
+        }
+    } else {
+        panic("to_string User failed");
+    }
+}
+
+test "roundtrip with None" {
+    let orig = User {
+        name: "Dave",
+        email: null,
+        scores: [],
+    };
+    let json_r = to_string::<User>(&orig);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<User>(json);
+        if let Ok(parsed) = parsed_r {
+            assert parsed.name == "Dave";
+            if let None = parsed.email {
+                // OK
+            } else {
+                panic("expected None for email");
+            }
+            assert parsed.scores.len() == 0;
+        } else {
+            panic("from_string User with nulls failed");
+        }
+    } else {
+        panic("to_string User with nulls failed");
+    }
+}
+
+__DATA__
+{"test": {}}

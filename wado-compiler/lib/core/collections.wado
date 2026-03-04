@@ -1,5 +1,7 @@
 //! Collection types: `TreeMap<K, V>` and `TreeSet<T>` (insertion-order preserved).
 
+use { Serialize, Deserialize, Serializer, Deserializer, SerializeError, DeserializeError, DeserializeErrorKind, SerializeErrorKind } from "core:serde";
+
 // Collections module for Wado.
 //
 // This module provides collection types beyond the built-in Array.//
@@ -443,6 +445,68 @@ impl<T: Ord> SequenceLiteralBuilder for TreeSet<T> {
 
     fn build(&self) -> TreeSet<T> {
         return *self;
+    }
+}
+
+impl<T: Serialize, V: Serialize> Serialize for TreeMap<String, V> {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let entries = self.entries();
+        let map_r = s.begin_map(entries.len());
+        if let Ok(mut m) = map_r {
+            for let entry of entries {
+                let k = entry.0;
+                let v = entry.1;
+                let kr = m.key::<String>(&k);
+                if let Err(e) = kr {
+                    return Result::<(), SerializeError>::Err(e);
+                }
+                let vr = m.value::<V>(&v);
+                if let Err(e) = vr {
+                    return Result::<(), SerializeError>::Err(e);
+                }
+            }
+            return m.end();
+        }
+        if let Err(e) = map_r {
+            return Result::<(), SerializeError>::Err(e);
+        }
+        unreachable();
+    }
+}
+
+impl<V: Deserialize> Deserialize for TreeMap<String, V> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeMap<String, V>, DeserializeError> {
+        let map_r = d.begin_map();
+        if let Ok(mut ma) = map_r {
+            let mut result = TreeMap::<String, V>::new();
+            loop {
+                let key_r = ma.next_key_string();
+                if let Ok(key_opt) = key_r {
+                    if let Some(key) = key_opt {
+                        let val_r = ma.next_value::<V>();
+                        if let Ok(val) = val_r {
+                            result.insert(key, val);
+                        }
+                        if let Err(e) = val_r {
+                            return Result::<TreeMap<String, V>, DeserializeError>::Err(e);
+                        }
+                    } else {
+                        let end_r = ma.end();
+                        if let Err(e) = end_r {
+                            return Result::<TreeMap<String, V>, DeserializeError>::Err(e);
+                        }
+                        return Result::<TreeMap<String, V>, DeserializeError>::Ok(result);
+                    }
+                }
+                if let Err(e) = key_r {
+                    return Result::<TreeMap<String, V>, DeserializeError>::Err(e);
+                }
+            }
+        }
+        if let Err(e) = map_r {
+            return Result::<TreeMap<String, V>, DeserializeError>::Err(e);
+        }
+        unreachable();
     }
 }
 

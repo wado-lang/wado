@@ -1,0 +1,65 @@
+// TODO test: Result<T, E> Serialize/Deserialize
+// Result should serialize as variant: Ok(v) → {"Ok": v}, Err(e) → {"Err": e}
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+test "result serialize Ok" {
+    let r: Result<i32, String> = Result::<i32, String>::Ok(42);
+    let json_r = to_string::<Result<i32, String>>(&r);
+    if let Ok(s) = json_r {
+        assert s == `\{"Ok":42\}`;
+    } else {
+        panic("serialize Result::Ok failed");
+    }
+}
+
+test "result serialize Err" {
+    let r: Result<i32, String> = Result::<i32, String>::Err("not found");
+    let json_r = to_string::<Result<i32, String>>(&r);
+    if let Ok(s) = json_r {
+        assert s == `\{"Err":"not found"\}`;
+    } else {
+        panic("serialize Result::Err failed");
+    }
+}
+
+test "result roundtrip Ok" {
+    let orig: Result<i32, String> = Result::<i32, String>::Ok(100);
+    let json_r = to_string::<Result<i32, String>>(&orig);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<Result<i32, String>>(json);
+        if let Ok(parsed) = parsed_r {
+            if let Ok(v) = parsed {
+                assert v == 100;
+            } else {
+                panic("expected Ok variant");
+            }
+        } else {
+            panic("from_string Result failed");
+        }
+    } else {
+        panic("to_string Result failed");
+    }
+}
+
+test "result roundtrip Err" {
+    let orig: Result<i32, String> = Result::<i32, String>::Err("fail");
+    let json_r = to_string::<Result<i32, String>>(&orig);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<Result<i32, String>>(json);
+        if let Ok(parsed) = parsed_r {
+            if let Err(e) = parsed {
+                assert e == "fail";
+            } else {
+                panic("expected Err variant");
+            }
+        } else {
+            panic("from_string Result failed");
+        }
+    } else {
+        panic("to_string Result failed");
+    }
+}
+
+__DATA__
+{"test": {}}

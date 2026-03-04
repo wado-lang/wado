@@ -1,0 +1,99 @@
+// TODO test: large integer JSON string encoding
+// i64/u64/i128/u128 values > 2^53 should serialize as JSON strings
+// to avoid JavaScript Number precision loss.
+// Values <= 2^53 - 1 should remain as JSON numbers.
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+test "i64 small value as number" {
+    let v = 42 as i64;
+    let r = to_string::<i64>(&v);
+    if let Ok(s) = r {
+        assert s == "42";
+    } else {
+        panic("serialize small i64 failed");
+    }
+}
+
+test "i64 at MAX_SAFE_INTEGER as number" {
+    // 2^53 - 1 = 9007199254740991
+    let v = 9007199254740991 as i64;
+    let r = to_string::<i64>(&v);
+    if let Ok(s) = r {
+        assert s == "9007199254740991";
+    } else {
+        panic("serialize i64 at safe limit failed");
+    }
+}
+
+test "i64 above MAX_SAFE_INTEGER as string" {
+    // 2^53 = 9007199254740992
+    let v = 9007199254740992 as i64;
+    let r = to_string::<i64>(&v);
+    if let Ok(s) = r {
+        assert s == `"9007199254740992"`;
+    } else {
+        panic("serialize large i64 failed");
+    }
+}
+
+test "u64 large value as string" {
+    let v = 18446744073709551615 as u64;  // u64::MAX
+    let r = to_string::<u64>(&v);
+    if let Ok(s) = r {
+        assert s == `"18446744073709551615"`;
+    } else {
+        panic("serialize u64::MAX failed");
+    }
+}
+
+test "i64 negative large value as string" {
+    let v = -9007199254740992 as i64;
+    let r = to_string::<i64>(&v);
+    if let Ok(s) = r {
+        assert s == `"-9007199254740992"`;
+    } else {
+        panic("serialize large negative i64 failed");
+    }
+}
+
+test "deserialize i64 from string" {
+    let r = from_string::<i64>(`"9007199254740992"`);
+    if let Ok(v) = r {
+        assert v == 9007199254740992 as i64;
+    } else {
+        panic("deserialize i64 from string failed");
+    }
+}
+
+test "deserialize u64 from string" {
+    let r = from_string::<u64>(`"18446744073709551615"`);
+    if let Ok(v) = r {
+        assert v == 18446744073709551615 as u64;
+    } else {
+        panic("deserialize u64 from string failed");
+    }
+}
+
+test "i128 large value as string" {
+    let v: i128 = 170141183460469231731687303715884105727;  // i128::MAX
+    let r = to_string::<i128>(&v);
+    if let Ok(s) = r {
+        assert s == `"170141183460469231731687303715884105727"`;
+    } else {
+        panic("serialize i128::MAX failed");
+    }
+}
+
+test "u128 large value as string" {
+    let v: u128 = 340282366920938463463374607431768211455;  // u128::MAX
+    let r = to_string::<u128>(&v);
+    if let Ok(s) = r {
+        assert s == `"340282366920938463463374607431768211455"`;
+    } else {
+        panic("serialize u128::MAX failed");
+    }
+}
+
+__DATA__
+{"TODO": true, "test": {}}

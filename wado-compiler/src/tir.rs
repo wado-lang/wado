@@ -1020,6 +1020,24 @@ impl TypeTable {
         format_type_name(info)
     }
 
+    /// Return the base type name without type arguments.
+    ///
+    /// For `GenericInstance { name: "Option", type_args: [String] }` → `"Option"`.
+    /// For monomorphized `Struct { base_name: Some("Option"), .. }` → `"Option"`.
+    /// For everything else, falls back to `mangle_type_name`.
+    #[must_use]
+    pub fn base_type_name(&self, id: TypeId) -> String {
+        match self.get(id) {
+            ResolvedType::GenericInstance { name, .. } => name.clone(),
+            ResolvedType::Struct {
+                base_name: Some(base),
+                ..
+            } => base.clone(),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.base_type_name(*inner),
+            _ => self.mangle_type_name(id),
+        }
+    }
+
     /// Convert a resolved type to its name info for formatting.
     ///
     /// This separates type resolution (here in tir.rs) from name formatting

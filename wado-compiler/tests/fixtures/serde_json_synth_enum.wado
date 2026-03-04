@@ -1,0 +1,49 @@
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+impl Serialize for Color;
+impl Deserialize for Color;
+
+test "enum serialize Red" {
+    let c = Color::Red;
+    let r = to_string::<Color>(&c);
+    if let Ok(s) = r {
+        assert s == `"Red"`;
+    } else {
+        panic("serialize Color::Red failed");
+    }
+}
+
+test "enum roundtrip Green" {
+    let c = Color::Green;
+    let json_r = to_string::<Color>(&c);
+    if let Ok(json) = json_r {
+        assert json == `"Green"`;
+        let parsed_r = from_string::<Color>(json);
+        if let Ok(parsed) = parsed_r {
+            assert parsed == Color::Green;
+        } else {
+            panic("from_string Color failed");
+        }
+    } else {
+        panic("to_string Color failed");
+    }
+}
+
+test "enum deserialize unknown variant" {
+    let r = from_string::<Color>(`"Yellow"`);
+    if let Err(e) = r {
+        assert e.message == "unknown variant" || e.message == "UnknownVariant";
+    } else {
+        panic("expected error for unknown variant");
+    }
+}
+
+__DATA__
+{"test": {}}

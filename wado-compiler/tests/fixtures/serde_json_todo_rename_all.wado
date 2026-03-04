@@ -1,0 +1,39 @@
+// TODO test: #[serde(rename_all = "snake_case")] attribute
+// Overrides the default camelCase conversion for all fields in a struct.
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+#[serde(rename_all = "snake_case")]
+struct Config {
+    max_retries: i32,
+    timeout_ms: i64,
+    is_verbose: bool,
+}
+
+impl Serialize for Config;
+impl Deserialize for Config;
+
+test "serialize with rename_all snake_case" {
+    let c = Config { max_retries: 3, timeout_ms: 5000 as i64, is_verbose: true };
+    let r = to_string::<Config>(&c);
+    if let Ok(s) = r {
+        // Fields keep snake_case instead of converting to camelCase
+        assert s == `\{"max_retries":3,"timeout_ms":5000,"is_verbose":true\}`;
+    } else {
+        panic("serialize with rename_all failed");
+    }
+}
+
+test "deserialize with rename_all snake_case" {
+    let r = from_string::<Config>(`\{"max_retries":3,"timeout_ms":5000,"is_verbose":true\}`);
+    if let Ok(c) = r {
+        assert c.max_retries == 3;
+        assert c.timeout_ms == 5000 as i64;
+        assert c.is_verbose == true;
+    } else {
+        panic("deserialize with rename_all failed");
+    }
+}
+
+__DATA__
+{"TODO": true, "test": {}}
