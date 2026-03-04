@@ -36,6 +36,9 @@ jobs:
       - name: Run wasm-size benchmarks
         run: node .github/scripts/run_wado_wasm_size.ts > wasm-size-benchmark.json
 
+      - name: Force-fetch gh-pages branch
+        run: git fetch origin gh-pages:gh-pages --force
+
       # ── main branch: record data only, no alerts ──────────────────────────
 
       - name: Store runtime benchmark data
@@ -50,6 +53,7 @@ jobs:
           fail-on-alert: false
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: benchmarks/runtime
+          skip-fetch-gh-pages: true
 
       - name: Store wasm-size benchmark data
         if: github.event_name == 'push'
@@ -63,6 +67,7 @@ jobs:
           fail-on-alert: false
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: benchmarks/wasm-size
+          skip-fetch-gh-pages: true
 
       # ── PRs: compare against baseline, comment + fail on regression ───────
 
@@ -82,6 +87,7 @@ jobs:
           alert-comment-cc-users: ''
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: benchmarks/runtime
+          skip-fetch-gh-pages: true
 
       - name: Compare wasm-size benchmarks
         if: github.event_name == 'pull_request'
@@ -99,3 +105,4 @@ jobs:
           alert-comment-cc-users: ''
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: benchmarks/wasm-size
+          skip-fetch-gh-pages: true
