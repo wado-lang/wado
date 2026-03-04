@@ -53,7 +53,7 @@ test "treemap empty roundtrip" {
         assert json == `\{\}`;
         let parsed_r = from_string::<TreeMap<String, i32>>(json);
         if let Ok(parsed) = parsed_r {
-            assert parsed.size() == 0;
+            assert parsed.len() == 0;
         } else {
             panic("from_string empty TreeMap failed");
         }
@@ -163,7 +163,7 @@ test "treemap many entries roundtrip" {
     if let Ok(json) = json_r {
         let parsed_r = from_string::<TreeMap<String, i32>>(json);
         if let Ok(parsed) = parsed_r {
-            assert parsed.size() == 10;
+            assert parsed.len() == 10;
             assert parsed["key0"] == 0;
             assert parsed["key9"] == 9;
         } else {
@@ -182,11 +182,11 @@ test "treemap deserialize from any key order" {
         assert map["a"] == 1;
         assert map["b"] == 2;
         assert map["c"] == 3;
-        assert map.size() == 3;
+        assert map.len() == 3;
     } else {
         panic("from_string any key order failed");
     }
 }
 
 __DATA__
-{"TODO": true, "test": {}}
+{"test": {}}
