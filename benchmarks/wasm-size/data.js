@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772623591220,
+  "lastUpdate": 1772629643231,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -101,6 +101,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/64061512075a9c539992d602dbc5b96b9b7d505c"
         },
         "date": 1772623591151,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1386,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9905,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 14295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "651a98a90070701bf839a22ee06f1601785b5ff1",
+          "message": "Merge pull request #500 from wado-lang/claude/add-default-trait-bbOuz\n\nImplement Default trait with compiler support via comp_feature",
+          "timestamp": "2026-03-04T22:05:22+09:00",
+          "tree_id": "9715afa7c7f27ced5faae90b795509f80c674ce4",
+          "url": "https://github.com/wado-lang/wado/commit/651a98a90070701bf839a22ee06f1601785b5ff1"
+        },
+        "date": 1772629643158,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
