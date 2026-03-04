@@ -846,7 +846,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             TirExprKind::MethodCall {
                                 receiver: Box::new(receiver),
                                 func: FunctionRef::External {
-                                    module_source: self.current_module_source.clone(),
+                                    module_source: trait_info.impl_module_source.clone(),
                                     name: mangled_method_name,
                                     monomorph_info: None,
                                     method_info: Some(LocalMethodName::new(

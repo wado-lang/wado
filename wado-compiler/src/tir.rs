@@ -1188,10 +1188,10 @@ impl FunctionRef {
                 name,
                 ..
             } => {
-                let path = module_source.to_path();
-                if path.is_empty() {
+                if module_source.is_entry_point() {
                     name.clone()
                 } else {
+                    let path = module_source.to_path();
                     format!("{}/{}", path.join("/"), name)
                 }
             }

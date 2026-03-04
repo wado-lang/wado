@@ -701,6 +701,8 @@ pub(super) struct IndexTraitInfo {
     pub(super) self_kind: ast::SelfKind,
     /// The trait name (e.g., "Index<i32>")
     pub(super) trait_name: String,
+    /// Module where the impl block is defined
+    pub(super) impl_module_source: crate::name::ModuleSource,
 }
 
 /// Info about an `IndexAssign` trait implementation
@@ -711,6 +713,8 @@ pub(super) struct IndexAssignTraitInfo {
     pub(super) self_kind: ast::SelfKind,
     /// The trait name (e.g., "`IndexAssign`<i32>")
     pub(super) trait_name: String,
+    /// Module where the impl block is defined
+    pub(super) impl_module_source: crate::name::ModuleSource,
 }
 
 /// Info about an `IndexMut` trait implementation
@@ -721,6 +725,8 @@ pub(super) struct IndexMutTraitInfo {
     pub(super) self_kind: ast::SelfKind,
     /// The trait name (e.g., "`IndexMut`")
     pub(super) trait_name: String,
+    /// Module where the impl block is defined
+    pub(super) impl_module_source: crate::name::ModuleSource,
 }
 
 /// Info about an `IndexValue` trait implementation
@@ -731,6 +737,8 @@ pub(super) struct IndexValueTraitInfo {
     pub(super) self_kind: ast::SelfKind,
     /// The trait name (e.g., "`IndexValue`<i32>")
     pub(super) trait_name: String,
+    /// Module where the impl block is defined
+    pub(super) impl_module_source: crate::name::ModuleSource,
 }
 
 /// Info about a comparison trait implementation (`Eq` or `Ord`)
@@ -771,6 +779,5 @@ pub(super) struct SequenceLiteralTraitInfo {
     /// The trait name used for method mangling (e.g., "`SequenceLiteralBuilder`")
     pub(super) trait_name: String,
     /// The module where the `SequenceLiteralBuilder` impl is defined.
-    /// `None` means it's in the current module.
-    pub(super) impl_module_source: Option<ModuleSource>,
+    pub(super) impl_module_source: ModuleSource,
 }
