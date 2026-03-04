@@ -50,15 +50,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         for (index, field) in struct_decl.fields.iter().enumerate() {
             let type_id = self.resolve_type(&field.ty);
             let serde_rename = field.attrs.iter().find_map(|a| {
-                if a.name == "serde" && a.args.first().map_or(false, |s| s == "rename") {
+                if a.name == "serde" && a.args.first().is_some_and(|s| s == "rename") {
                     a.args.get(1).cloned()
                 } else {
                     None
                 }
             });
-            let serde_default = field.attrs.iter().any(|a| {
-                a.name == "serde" && a.args.first().map_or(false, |s| s == "default")
-            });
+            let serde_default = field
+                .attrs
+                .iter()
+                .any(|a| a.name == "serde" && a.args.first().is_some_and(|s| s == "default"));
             fields.push(crate::tir::TirField {
                 name: field.name.clone(),
                 is_pub: field.is_pub,
@@ -88,7 +89,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         self.current_type_params = old_type_params;
 
         let serde_rename_all = struct_decl.attrs.iter().find_map(|a| {
-            if a.name == "serde" && a.args.first().map_or(false, |s| s == "rename_all") {
+            if a.name == "serde" && a.args.first().is_some_and(|s| s == "rename_all") {
                 a.args.get(1).cloned()
             } else {
                 None

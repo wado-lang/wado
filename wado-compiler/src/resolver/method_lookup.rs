@@ -1869,7 +1869,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             ResolvedType::Tuple(elems) => {
                 // Tuples implement a trait when all elements implement it
                 let elems = elems.clone();
-                return elems.iter().all(|e| self.type_implements_trait(*e, trait_name));
+                return elems
+                    .iter()
+                    .all(|e| self.type_implements_trait(*e, trait_name));
             }
             _ => return false,
         };

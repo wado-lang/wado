@@ -1526,11 +1526,8 @@ impl Monomorphizer {
                         let mut found = false;
                         for (full_method_name, tn) in &names_to_try {
                             if let Some(gf) = generic_functions.get(full_method_name) {
-                                let method_info = gf
-                                    .borrow()
-                                    .method_info
-                                    .clone()
-                                    .unwrap_or_else(|| {
+                                let method_info =
+                                    gf.borrow().method_info.clone().unwrap_or_else(|| {
                                         LocalMethodName::new(
                                             struct_name.clone(),
                                             tn.clone(),
@@ -3031,8 +3028,7 @@ impl Monomorphizer {
                 if let ResolvedType::Variant { ref name, .. } =
                     type_table.get(*variant_type).clone()
                     && let Some(payload_expr) = payload
-                    && original_payload_type
-                        .is_some_and(|orig| orig != payload_expr.type_id)
+                    && original_payload_type.is_some_and(|orig| orig != payload_expr.type_id)
                 {
                     // Use make_option for Option to ensure canonical module_source
                     let new_id = if name == "Option" {

@@ -513,16 +513,13 @@ fn generate_struct_serialize(
         .fields
         .iter()
         .map(|f| {
-            let serialized_name = f
-                .serde_rename
-                .clone()
-                .unwrap_or_else(|| {
-                    if let Some(strategy) = &struct_def.serde_rename_all {
-                        apply_rename_all(&f.name, strategy)
-                    } else {
-                        snake_to_camel(&f.name)
-                    }
-                });
+            let serialized_name = f.serde_rename.clone().unwrap_or_else(|| {
+                if let Some(strategy) = &struct_def.serde_rename_all {
+                    apply_rename_all(&f.name, strategy)
+                } else {
+                    snake_to_camel(&f.name)
+                }
+            });
             (f.name.clone(), serialized_name, f.type_id, f.index)
         })
         .collect();
@@ -724,16 +721,13 @@ fn generate_struct_deserialize(
         .fields
         .iter()
         .map(|f| {
-            let serialized_name = f
-                .serde_rename
-                .clone()
-                .unwrap_or_else(|| {
-                    if let Some(strategy) = &struct_def.serde_rename_all {
-                        apply_rename_all(&f.name, strategy)
-                    } else {
-                        snake_to_camel(&f.name)
-                    }
-                });
+            let serialized_name = f.serde_rename.clone().unwrap_or_else(|| {
+                if let Some(strategy) = &struct_def.serde_rename_all {
+                    apply_rename_all(&f.name, strategy)
+                } else {
+                    snake_to_camel(&f.name)
+                }
+            });
             (f.name.clone(), serialized_name, f.type_id, f.index)
         })
         .collect();
@@ -2383,7 +2377,12 @@ fn generate_tuple_serialize(
         result_seq_err,
         span,
     );
-    stmts.push(let_mut_stmt("__result", result_tmp, result_seq_err, begin_call));
+    stmts.push(let_mut_stmt(
+        "__result",
+        result_tmp,
+        result_seq_err,
+        begin_call,
+    ));
 
     // if let Ok(seq) = __result { ... } else { return Err(...) }
     let mut then_stmts = Vec::new();
@@ -2391,7 +2390,7 @@ fn generate_tuple_serialize(
         // &(*self).i
         let self_ref = local_ref(0, "self", ref_self_type);
         let self_deref = deref_expr(self_ref, tuple_type_id, span);
-        let elem_val = field_access(self_deref, i as u32, &i.to_string(), *elem_type, span);
+        let elem_val = field_access(self_deref, i as u32, i.to_string(), *elem_type, span);
         let elem_ref = ref_expr(elem_val, elem_ref_types[i], span);
 
         let elem_call = type_param_method_call(
@@ -2431,7 +2430,11 @@ fn generate_tuple_serialize(
         string_type,
         span,
     );
-    let else_stmts = vec![return_stmt(Some(variant_err(err_val, result_unit_err, span)))];
+    let else_stmts = vec![return_stmt(Some(variant_err(
+        err_val,
+        result_unit_err,
+        span,
+    )))];
 
     stmts.push(if_let_ok(
         local_ref(result_tmp, "__result", result_seq_err),
@@ -2568,7 +2571,12 @@ fn generate_tuple_deserialize(
         result_seq_err,
         span,
     );
-    stmts.push(let_mut_stmt("__result", result_tmp, result_seq_err, begin_call));
+    stmts.push(let_mut_stmt(
+        "__result",
+        result_tmp,
+        result_seq_err,
+        begin_call,
+    ));
 
     // if let Ok(seq) = __result { ... } else { return Err(...) }
     let mut then_stmts = Vec::new();
