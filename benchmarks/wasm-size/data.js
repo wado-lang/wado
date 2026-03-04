@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772636447123,
+  "lastUpdate": 1772637062468,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -218,6 +218,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/da78d7c36c7c91b4a1c92195d4d66c2f4a5c49ca"
         },
         "date": 1772636446995,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1386,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9905,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 14295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ace7dddec55f927ec8ed775de484b5acc6284fa6",
+          "message": "Merge pull request #501 from wado-lang/claude/serde-json-todo-tests-HpFD3\n\nAdd Serialize/Deserialize synthesis for enums and variants",
+          "timestamp": "2026-03-05T00:08:11+09:00",
+          "tree_id": "8bda6ef84d4966701c208b177faadcbbf708fa78",
+          "url": "https://github.com/wado-lang/wado/commit/ace7dddec55f927ec8ed775de484b5acc6284fa6"
+        },
+        "date": 1772637062341,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
