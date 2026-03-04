@@ -127,10 +127,10 @@ fn run() with Stdout {
         };
         __modules_initialized = 1;
     };
-    p = Person { name: ref.as_non_null(String { repr: ref.as_non_null(array.new_data<u8>[5](0, 5)), used: 5 }) };
-    "core:cli/println"(Person^Greet::greet(p.name));
-    r = Robot { id: 42 };
-    "core:cli/println"(Robot^Greet::greet(r.id));
+    nop;
+    "core:cli/println"(Person^Greet::greet(ref.as_non_null(String { repr: ref.as_non_null(array.new_data<u8>[5](0, 5)), used: 5 })));
+    nop;
+    "core:cli/println"(Robot^Greet::greet(42));
 }
 
 fn __cm_export__run() {
@@ -392,9 +392,9 @@ fn Robot^Greet::name(self) {
             __local_4 = __local_1;
             break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_4) };
         };
-        __local_5 = "core:internal/Box<i32>" { value: self };
+        nop;
         __local_6 = __local_2;
-        i32::fmt_decimal(__local_5.value, __local_6);
+        i32::fmt_decimal(self, __local_6);
         break __tmpl: __local_1;
     };
 }
