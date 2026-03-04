@@ -1,0 +1,139 @@
+// Test: Newtype parameter SROA
+// Verifies that newtype `&self` methods and functions taking `&Newtype`
+// parameters are correctly SROA'd — the Box<T> wrapper is eliminated
+// and scalar values are passed directly.
+//
+// Newtypes of primitives (e.g., `type Meters = f64`) use Box<T> for
+// reference semantics at the WIR level, same as regular primitive refs.
+// Single-field parameter SROA should unwrap these identically to Box<T>.
+
+use { println, Stdout } from "core:cli";
+
+type Meters = f64;
+type Seconds = f64;
+type Count = i32;
+
+impl Meters {
+    #[inline("never")]
+    fn raw(&self) -> f64 {
+        return *self as f64;
+    }
+
+    #[inline("never")]
+    fn add(&self, other: &Meters) -> Meters {
+        return ((*self as f64) + (*other as f64)) as Meters;
+    }
+}
+
+impl Count {
+    #[inline("never")]
+    fn raw(&self) -> i32 {
+        return *self as i32;
+    }
+
+    #[inline("never")]
+    fn inc(&self) -> Count {
+        return ((*self as i32) + 1) as Count;
+    }
+
+    #[inline("never")]
+    fn add_raw(&self, n: i32) -> Count {
+        return ((*self as i32) + n) as Count;
+    }
+}
+
+// Two newtype params of same underlying type but different newtypes
+#[inline("never")]
+fn speed(dist: &Meters, time: &Seconds) -> f64 {
+    return (*dist as f64) / (*time as f64);
+}
+
+// Newtype in conditional
+#[inline("never")]
+fn abs_meters(m: &Meters) -> Meters {
+    let v = *m as f64;
+    if v < 0.0 {
+        let neg = -v;
+        return neg as Meters;
+    }
+    return *m;
+}
+
+// Newtype in loop
+#[inline("never")]
+fn sum_n_counts(n: i32) -> Count {
+    let mut total: Count = 0 as Count;
+    for let mut i = 0; i < n; i += 1 {
+        total = total.add_raw(1);
+    }
+    return total;
+}
+
+// Chain of newtype method calls
+#[inline("never")]
+fn triple_inc(c: &Count) -> Count {
+    let c1 = c.inc();
+    let c2 = c1.inc();
+    return c2.inc();
+}
+
+export fn run() with Stdout {
+    // Basic newtype &self methods
+    let m: Meters = 42.5 as Meters;
+    assert m.raw() == 42.5;
+
+    let c: Count = 10 as Count;
+    assert c.raw() == 10;
+
+    // Newtype method returning newtype
+    let c2 = c.inc();
+    assert c2.raw() == 11;
+
+    // Two different newtypes of same base type as params
+    let dist: Meters = 100.0 as Meters;
+    let time: Seconds = 5.0 as Seconds;
+    assert speed(&dist, &time) == 20.0;
+
+    // Newtype add (two newtype &self params)
+    let m1: Meters = 30.0 as Meters;
+    let m2: Meters = 12.5 as Meters;
+    let m3 = m1.add(&m2);
+    assert m3.raw() == 42.5;
+
+    // Conditional with newtype
+    let neg: Meters = -5.0 as Meters;
+    let pos = abs_meters(&neg);
+    assert pos.raw() == 5.0;
+
+    let already_pos: Meters = 3.0 as Meters;
+    let still_pos = abs_meters(&already_pos);
+    assert still_pos.raw() == 3.0;
+
+    // Loop with newtype
+    let total = sum_n_counts(5);
+    assert total.raw() == 5;
+
+    // Chain of newtype method calls
+    let start: Count = 0 as Count;
+    assert triple_inc(&start).raw() == 3;
+
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_expect:O2": [
+        "\"functype/Meters::raw\" = fn(f64) -> f64",
+        "\"functype/Meters::add\" = fn(f64, f64) -> f64",
+        "\"functype/Count::raw\" = fn(i32) -> i32",
+        "\"functype/Count::inc\" = fn(i32) -> i32",
+        "\"functype/Count::add_raw\" = fn(i32, i32) -> i32",
+        "\"functype/speed\" = fn(f64, f64) -> f64",
+        "\"functype/abs_meters\" = fn(f64) -> f64",
+        "\"functype/triple_inc\" = fn(i32) -> i32"
+    ],
+    "wir_not_expect:O2": [
+        "fn Meters::raw(self) {\n    return self.value;"
+    ]
+}
