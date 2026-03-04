@@ -32,17 +32,26 @@ struct Point {
 
 // Edge case 1: Basic single-field struct with &self method
 impl Wrapper {
+    #[inline("never")]
     fn get(&self) -> i32 {
         return self.inner;
     }
 
+    #[inline("never")]
     fn doubled(&self) -> i32 {
         return self.inner * 2;
+    }
+
+    // Edge case 11: &mut self should NOT be SROA'd (StructSet on the param)
+    #[inline("never")]
+    fn set(&mut self, v: i32) {
+        self.inner = v;
     }
 }
 
 // Edge case 2: Single-field struct with f64 field
 impl Amount {
+    #[inline("never")]
     fn as_cents(&self) -> i32 {
         return (self.value * 100.0) as i32;
     }
@@ -50,6 +59,7 @@ impl Amount {
 
 // Edge case 3: Single-field struct with String field (GC ref type)
 impl Label {
+    #[inline("never")]
     fn len(&self) -> i32 {
         return self.text.len();
     }
@@ -57,21 +67,25 @@ impl Label {
 
 // Edge case 4: Single-field struct with bool field
 impl Flag {
+    #[inline("never")]
     fn is_set(&self) -> bool {
         return self.set;
     }
 }
 
 // Edge case 5: Chain of single-field struct method calls
+#[inline("never")]
 fn double_wrapper(w: &Wrapper) -> i32 {
     return w.inner * 2;
 }
 
+#[inline("never")]
 fn triple_wrapper(w: &Wrapper) -> i32 {
     return w.inner * 3;
 }
 
 // Edge case 6: Single-field struct passed to multiple functions
+#[inline("never")]
 fn process_wrapper(w: &Wrapper) -> i32 {
     let d = double_wrapper(w);
     let t = triple_wrapper(w);
@@ -79,6 +93,7 @@ fn process_wrapper(w: &Wrapper) -> i32 {
 }
 
 // Edge case 7: Wrapper constructed in branch, method called after
+#[inline("never")]
 fn conditional_wrapper(flag: bool) -> i32 {
     let w = if flag {
         Wrapper { inner: 10 }
@@ -88,12 +103,14 @@ fn conditional_wrapper(flag: bool) -> i32 {
     return w.get();
 }
 
-// Edge case 8: Nested function calls with single-field structs
+// Edge case 8: Two params of different single-field struct types
+#[inline("never")]
 fn add_amounts(a: &Amount, b: &Amount) -> f64 {
     return a.value + b.value;
 }
 
 // Edge case 9: Single-field struct in a loop
+#[inline("never")]
 fn sum_wrappers() -> i32 {
     let mut total = 0;
     for let mut i = 0; i < 5; i += 1 {
@@ -104,6 +121,7 @@ fn sum_wrappers() -> i32 {
 }
 
 // Edge case 10: Multiple different single-field structs in same function
+#[inline("never")]
 fn mixed_single_fields() -> i32 {
     let w = Wrapper { inner: 42 };
     let f = Flag { set: true };
@@ -160,6 +178,11 @@ export fn run() with Stdout {
     let w2 = Wrapper { inner: 99 };
     assert `{w2.inner}` == "99";
 
+    // &mut self should NOT be SROA'd but must work correctly
+    let mut w3 = Wrapper { inner: 0 };
+    w3.set(77);
+    assert w3.inner == 77;
+
     // Verify multi-field structs still work correctly
     let p = Point { x: 10, y: 20 };
     assert p.x + p.y == 30;
@@ -168,4 +191,19 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"stdout": "ok\n"}
+{
+    "stdout": "ok\n",
+    "wir_expect:O2": [
+        "\"functype/Wrapper::get\" = fn(i32) -> i32",
+        "\"functype/Wrapper::doubled\" = fn(i32) -> i32",
+        "\"functype/Amount::as_cents\" = fn(f64) -> i32",
+        "\"functype/Label::len\" = fn(ref String) -> i32",
+        "\"functype/Flag::is_set\" = fn(bool) -> bool",
+        "\"functype/double_wrapper\" = fn(i32) -> i32",
+        "\"functype/triple_wrapper\" = fn(i32) -> i32",
+        "\"functype/add_amounts\" = fn(f64, f64) -> f64"
+    ],
+    "wir_not_expect:O2": [
+        "return self.inner;"
+    ]
+}
