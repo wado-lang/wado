@@ -34,30 +34,42 @@ fn hex_digit(v: i32) -> char {
     return ('a' as i32 + v - 10) as u8 as char;
 }
 
-
+fn utf8_sequence_length(leading_byte: i32) -> i32 {
+    if leading_byte < 0x80 {
+        return 1;
+    }
+    if leading_byte < 0xE0 {
+        return 2;
+    }
+    if leading_byte < 0xF0 {
+        return 3;
+    }
+    return 4;
+}
 
 /// Writes a JSON-escaped string (with surrounding quotes) into buf.
 pub fn write_escaped_string(buf: &mut String, s: &String) {
     buf.append_char('"');
-    for let b of s.bytes() {
-        if b == '"' as u8 {
+    for let c of s.chars() {
+        if c == '"' {
             buf.append("\\\"");
-        } else if b == '\\' as u8 {
+        } else if c == '\\' {
             buf.append("\\\\");
-        } else if b == '\n' as u8 {
+        } else if c == '\n' {
             buf.append("\\n");
-        } else if b == '\r' as u8 {
+        } else if c == '\r' {
             buf.append("\\r");
-        } else if b == '\t' as u8 {
+        } else if c == '\t' {
             buf.append("\\t");
-        } else if b < 0x20 as u8 {
+        } else if (c as u32) < 0x20 {
             buf.append("\\u00");
-            let hi = (b as i32 >> 4) & 0xF;
-            let lo = b as i32 & 0xF;
+            let code = c as i32;
+            let hi = (code >> 4) & 0xF;
+            let lo = code & 0xF;
             buf.append_char(hex_digit(hi));
             buf.append_char(hex_digit(lo));
         } else {
-            buf.append_char(b as char);
+            buf.append_char(c);
         }
     }
     buf.append_char('"');
@@ -433,8 +445,41 @@ impl JsonDeserializer {
                 }
                 self.pos += 1;
             } else {
-                result.append_char(b as u8 as char);
-                self.pos += 1;
+                // Decode a full UTF-8 character from the input bytes.
+                // The input String is valid UTF-8, so we determine the sequence
+                // length from the leading byte, read all bytes, and build a char.
+                let seq_len = utf8_sequence_length(b);
+                if self.pos + seq_len > self.input.len() {
+                    return Result::<String, DeserializeError>::Err(DeserializeError::eof(self.pos as i64));
+                }
+                if seq_len == 1 {
+                    result.append_char(b as u8 as char);
+                } else if seq_len == 2 {
+                    let b0 = b;
+                    let b1 = self.input.get_byte(self.pos + 1) as i32;
+                    let code = ((b0 & 0x1F) << 6) | (b1 & 0x3F);
+                    if let Some(c) = char::from_i32(code) {
+                        result.append_char(c);
+                    }
+                } else if seq_len == 3 {
+                    let b0 = b;
+                    let b1 = self.input.get_byte(self.pos + 1) as i32;
+                    let b2 = self.input.get_byte(self.pos + 2) as i32;
+                    let code = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F);
+                    if let Some(c) = char::from_i32(code) {
+                        result.append_char(c);
+                    }
+                } else {
+                    let b0 = b;
+                    let b1 = self.input.get_byte(self.pos + 1) as i32;
+                    let b2 = self.input.get_byte(self.pos + 2) as i32;
+                    let b3 = self.input.get_byte(self.pos + 3) as i32;
+                    let code = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
+                    if let Some(c) = char::from_i32(code) {
+                        result.append_char(c);
+                    }
+                }
+                self.pos += seq_len;
             }
         }
         return Result::<String, DeserializeError>::Err(DeserializeError::eof(self.pos as i64));
