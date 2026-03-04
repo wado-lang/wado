@@ -360,42 +360,50 @@ fn deserialize_error_literal(
     )
 }
 
-fn default_value_for_type(type_id: TypeId, string_type: TypeId, span: Span) -> TirExpr {
-    if type_id == TypeTable::I8
-        || type_id == TypeTable::I16
-        || type_id == TypeTable::I32
-        || type_id == TypeTable::I64
-        || type_id == TypeTable::U8
-        || type_id == TypeTable::U16
-        || type_id == TypeTable::U32
-        || type_id == TypeTable::U64
-    {
-        return TirExpr::new(
-            TirExprKind::IntLiteral {
-                value: 0,
-                repr: "0".to_string(),
+/// Generate a `T::default()` static call for the field's initial value.
+/// Only emits the call when the `Default` trait is registered via `#[comp_feature("default")]`.
+/// The module source for resolution comes from the type itself (where `impl Default for T` lives).
+fn default_value_for_type(
+    type_id: TypeId,
+    type_name: &str,
+    type_table: &TypeTable,
+    span: Span,
+) -> TirExpr {
+    // Gate: only generate Default calls if the trait is registered via comp_feature.
+    if type_table.default_trait_module_source().is_none() {
+        return null_expr(type_id);
+    }
+    // Use the type's own module_source for resolution — the `impl Default for T`
+    // lives in the same module as the type definition.
+    let module_source = match type_table.get(type_id) {
+        crate::tir::ResolvedType::Primitive(_) => Some(ModuleSource::primitives()),
+        crate::tir::ResolvedType::Struct { module_source, .. }
+        | crate::tir::ResolvedType::GenericInstance { module_source, .. }
+        | crate::tir::ResolvedType::Newtype { module_source, .. } => Some(module_source.clone()),
+        _ => None,
+    };
+    let Some(module_source) = module_source else {
+        return null_expr(type_id);
+    };
+    let method_info = LocalMethodName::new(
+        type_name.to_string(),
+        Some("Default".to_string()),
+        "default".to_string(),
+    );
+    let mangled_name = method_info.to_mangled_name();
+    TirExpr::new(
+        TirExprKind::StaticCall {
+            func: FunctionRef::External {
+                module_source,
+                name: mangled_name,
+                monomorph_info: None,
+                method_info: Some(method_info),
             },
-            type_id,
-            span,
-        );
-    }
-    if type_id == TypeTable::F32 || type_id == TypeTable::F64 {
-        return TirExpr::new(
-            TirExprKind::FloatLiteral {
-                value: 0.0,
-                repr: "0.0".to_string(),
-            },
-            type_id,
-            span,
-        );
-    }
-    if type_id == TypeTable::BOOL {
-        return TirExpr::new(TirExprKind::BoolLiteral(false), TypeTable::BOOL, span);
-    }
-    if type_id == string_type {
-        return string_lit("", string_type, span);
-    }
-    null_expr(type_id)
+            args: vec![],
+        },
+        type_id,
+        span,
+    )
 }
 
 fn generate_struct_serialize(
@@ -733,14 +741,17 @@ fn generate_struct_deserialize(
         ),
     ));
 
-    for (i, (field_name, _, type_id, _)) in fields.iter().enumerate() {
-        let default_val = default_value_for_type(*type_id, string_type, span);
-        then_stmts.push(let_mut_stmt(
-            field_name,
-            field_locals[i],
-            *type_id,
-            default_val,
-        ));
+    {
+        let tt = module.type_table.borrow();
+        for (i, (field_name, _, type_id, _)) in fields.iter().enumerate() {
+            let default_val = default_value_for_type(*type_id, &field_type_names[i], &tt, span);
+            then_stmts.push(let_mut_stmt(
+                field_name,
+                field_locals[i],
+                *type_id,
+                default_val,
+            ));
+        }
     }
 
     // Build loop body

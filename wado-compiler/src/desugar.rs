@@ -133,6 +133,7 @@ fn desugar_trait(trait_decl: &TraitDecl, ctx: &mut DesugarContext) -> TraitDecl 
             .iter()
             .map(|m| desugar_function(m, ctx))
             .collect(),
+        attrs: trait_decl.attrs.clone(),
         span: trait_decl.span,
     }
 }
