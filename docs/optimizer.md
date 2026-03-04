@@ -417,6 +417,12 @@ WIR-level optimizations run after WIR build and before Wasm emission, operating 
 
 Rewrites internal functions that return small scalar structs (2–4 fields) to use Wasm multi-value returns, eliminating GC struct allocation at function boundaries. A companion tuple elision pass replaces `MultiValueStructNew` + `StructGet` sequences with `MultiValueLocalBind` at call sites.
 
+### Box Parameter SROA
+
+Rewrites functions that take `ref null Box<T>` parameters to take the scalar `T` directly. `Box<T>` is a single-field GC struct synthesized by the lower phase to wrap primitives for reference semantics (e.g., `Display::fmt` receives `&self` as `ref null Box<T>`). This optimization eliminates the GC struct allocation at call sites where `StructNew(Box<T>, [val])` is passed — the value is passed directly as a scalar. For call sites that pass an existing Box reference, a `StructGet` extracts the scalar value.
+
+Impacts all code paths that use template string interpolation (`\`{value}\``), which is the primary trigger for `Box<T>` creation. Covers `i32`, `u32`, `i64`, `u64`, `f32`, `f64`, `char`, and any other type wrapped in `Box<T>`.
+
 ### Split Large Array Literals
 
 Rewrites `array.new_fixed` with more than 256 elements into `array.new_default` + per-element `array.set`. This prevents pathological JIT compilation time in Cranelift's register allocator, which degrades severely when thousands of values are simultaneously on the operand stack. The rewrite preserves each element expression as-is, so dynamic expressions (variable references, function calls, arithmetic) work correctly.

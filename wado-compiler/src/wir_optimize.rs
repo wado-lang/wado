@@ -5,6 +5,9 @@
 //! Current passes:
 //! - **Multi-value return SROA**: rewrites functions that return small scalar structs
 //!   to use Wasm multi-value returns, eliminating GC struct allocation.
+//! - **Box parameter SROA**: rewrites functions that take `ref null Box<T>` parameters
+//!   (where Box<T> is a single-field wrapper struct) to take the scalar `T` directly,
+//!   eliminating GC struct allocation at every call site.
 //! - **Multi-value tuple elision**: replaces `MultiValueStructNew` + `StructGet`
 //!   sequences with `MultiValueLocalBind` to skip intermediate struct allocation.
 //! - **Constant array data promotion**: replaces `ArrayNewFixed` of constant primitive
@@ -28,6 +31,9 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
     }
     // Whole-module pass: rewrite struct-returning functions to multi-value.
     sroa_multi_value_returns(module);
+
+    // Whole-module pass: rewrite Box<T> parameters from `ref null Box<T>` to scalar `T`.
+    sroa_box_parameters(module);
 
     // Whole-module pass: collapse inlined Array::append sequences back to ArrayNewFixed.
     // Runs before promote/split so that recovered ArrayNewFixed nodes are eligible
@@ -2030,6 +2036,384 @@ fn take_block_result_call(
         other => {
             let taken = std::mem::replace(other, WirInstr::Nop);
             Some(Box::new(taken))
+        }
+    }
+}
+
+/// Box<T> parameter SROA.
+///
+/// Rewrites internal functions that take `ref null Box<T>` parameters (single-field
+/// wrapper structs) to take the inner scalar `T` directly. At call sites, the
+/// `StructNew { value: expr }` allocation is replaced with just `expr`.
+///
+/// A parameter is eligible when:
+/// - Its type is `Ref { nullable: true }` to a struct with `generic_origin.base_name == "Box"`
+/// - The struct has exactly one field named "value"
+/// - Within the function body, the parameter is only used via:
+///   a. `StructGet { field_name: "value", expr: LocalGet(param) }` — scalar read
+///   b. As an argument to another function at a position that is also being SROA'd
+/// - The function is not exported, not in an element table, and not `RefFunc`'d
+fn sroa_box_parameters(module: &mut WirModule) {
+    let import_func_count = module
+        .imports
+        .iter()
+        .filter(|i| matches!(i.desc, WirImportDesc::Func { .. }))
+        .count() as u32;
+
+    let pinned = collect_pinned_func_ids(module);
+
+    // Phase 1: identify candidate (func_id, param_index) pairs.
+    let mut candidates: IndexSet<(u32, usize)> = IndexSet::new();
+    // Map from (func_id, param_idx) → (box_type_id_index, inner WirType).
+    let mut candidate_info: indexmap::IndexMap<(u32, usize), (u32, WirType)> =
+        indexmap::IndexMap::new();
+
+    for (i, func) in module.functions.iter().enumerate() {
+        let func_id_index = import_func_count + u32::try_from(i).unwrap();
+        if pinned.contains(&func_id_index) || func.body.is_none() {
+            continue;
+        }
+        let type_idx = func.type_id.index();
+        let Some(WirTypeDef::Func(func_type)) = module.types.get(type_idx as usize) else {
+            continue;
+        };
+        for (pi, param_ty) in func_type.params.iter().enumerate() {
+            let WirType::Ref {
+                type_id: box_type_id,
+                nullable: true,
+            } = param_ty
+            else {
+                continue;
+            };
+            let box_type_idx = box_type_id.index();
+            let Some(WirTypeDef::Struct(st)) = module.types.get(box_type_idx as usize) else {
+                continue;
+            };
+            let Some(ref origin) = st.generic_origin else {
+                continue;
+            };
+            if origin.base_name != "Box" || st.fields.len() != 1 || st.fields[0].name != "value" {
+                continue;
+            }
+            candidates.insert((func_id_index, pi));
+            candidate_info.insert(
+                (func_id_index, pi),
+                (box_type_idx, st.fields[0].ty.clone()),
+            );
+        }
+    }
+
+    if candidates.is_empty() {
+        return;
+    }
+
+    // Phase 2: validate uses — eliminate candidates whose parameter escapes.
+    loop {
+        let mut invalid: IndexSet<(u32, usize)> = IndexSet::new();
+
+        for &(func_id_index, param_idx) in &candidates {
+            let func_array_idx = (func_id_index - import_func_count) as usize;
+            let func = &module.functions[func_array_idx];
+            let param_name = &func.param_names[param_idx];
+            let body = func.body.as_ref().unwrap();
+            if !box_param_uses_valid(body, param_name, func_id_index, param_idx, &candidates) {
+                invalid.insert((func_id_index, param_idx));
+            }
+        }
+
+        if invalid.is_empty() {
+            break;
+        }
+        for key in &invalid {
+            candidates.swap_remove(key);
+        }
+    }
+
+    if candidates.is_empty() {
+        return;
+    }
+
+    // Phase 3: apply rewrites.
+    // Step A: rewrite function signatures and bodies.
+    for &(func_id_index, param_idx) in &candidates {
+        let func_array_idx = (func_id_index - import_func_count) as usize;
+        let param_name = module.functions[func_array_idx].param_names[param_idx].clone();
+        let (_, ref inner_ty) = candidate_info[&(func_id_index, param_idx)];
+        let inner_ty = inner_ty.clone();
+
+        // Create new func type with the scalar param.
+        let old_type_idx = module.functions[func_array_idx].type_id.index() as usize;
+        let old_func_type = match &module.types[old_type_idx] {
+            WirTypeDef::Func(ft) => ft,
+            _ => unreachable!(),
+        };
+        let mut new_params = old_func_type.params.clone();
+        new_params[param_idx] = inner_ty;
+        let new_func_type = WirFuncType {
+            name: old_func_type.name.clone(),
+            params: new_params,
+            results: old_func_type.results.clone(),
+        };
+        let new_type_idx = u32::try_from(module.types.len()).unwrap();
+        module.types.push(WirTypeDef::Func(new_func_type));
+
+        let fq: std::rc::Rc<str> = module.functions[func_array_idx].type_id.fq().into();
+        let new_type_id = WirTypeId::new(new_type_idx, fq);
+        module.functions[func_array_idx].type_id = new_type_id;
+
+        // Rewrite body: replace StructGet(LocalGet(param), "value") → LocalGet(param).
+        if let Some(body) = &mut module.functions[func_array_idx].body {
+            for instr in body.iter_mut() {
+                rewrite_box_param_reads(instr, &param_name);
+            }
+        }
+    }
+
+    // Step B: rewrite call sites in ALL function bodies.
+    // Build lookup: func_id_index → set of SROA'd param indices.
+    let mut sroa_params: indexmap::IndexMap<u32, IndexSet<usize>> = indexmap::IndexMap::new();
+    for &(func_id_index, param_idx) in &candidates {
+        sroa_params
+            .entry(func_id_index)
+            .or_default()
+            .insert(param_idx);
+    }
+
+    // Build (func_id, param_idx) → WirTypeId of the Box struct type.
+    let mut param_box_type_id: indexmap::IndexMap<(u32, usize), WirTypeId> =
+        indexmap::IndexMap::new();
+    for &(func_id_index, param_idx) in &candidates {
+        let (box_type_idx, _) = &candidate_info[&(func_id_index, param_idx)];
+        if let Some(WirTypeDef::Struct(st)) = module.types.get(*box_type_idx as usize) {
+            let type_id = WirTypeId::new(*box_type_idx, st.name.fq.as_str().into());
+            param_box_type_id.insert((func_id_index, param_idx), type_id);
+        }
+    }
+
+    // Build per-function set of param names that are already scalar (SROA'd).
+    let mut func_scalar_params: indexmap::IndexMap<u32, IndexSet<String>> =
+        indexmap::IndexMap::new();
+    for &(func_id_index, param_idx) in &candidates {
+        let func_array_idx = (func_id_index - import_func_count) as usize;
+        let param_name = module.functions[func_array_idx].param_names[param_idx].clone();
+        func_scalar_params
+            .entry(func_id_index)
+            .or_default()
+            .insert(param_name);
+    }
+
+    for (i, func) in module.functions.iter_mut().enumerate() {
+        let func_id_index = import_func_count + u32::try_from(i).unwrap();
+        let scalar_params = func_scalar_params
+            .get(&func_id_index)
+            .cloned()
+            .unwrap_or_default();
+        if let Some(body) = &mut func.body {
+            // Rewrite call arguments at SROA'd positions.
+            for instr in body.iter_mut() {
+                rewrite_box_args_at_call_sites(
+                    instr,
+                    &sroa_params,
+                    &param_box_type_id,
+                    &scalar_params,
+                );
+            }
+        }
+    }
+}
+
+/// Check that every use of `param_name` in the body is a valid Box SROA use.
+fn box_param_uses_valid(
+    instrs: &[WirInstr],
+    param_name: &str,
+    _self_func_id: u32,
+    _self_param_idx: usize,
+    candidates: &IndexSet<(u32, usize)>,
+) -> bool {
+    for instr in instrs {
+        if !box_param_use_valid_instr(instr, param_name, candidates, BoxCheckCtx::None) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Context for tracking where we encounter a `LocalGet(param_name)`.
+#[derive(Clone, Copy)]
+enum BoxCheckCtx {
+    None,
+    /// Inside a `StructGet { field_name: "value" }` — `LocalGet` is valid.
+    InsideStructGetValue,
+}
+
+/// Recursively check that all uses of `param_name` are valid Box SROA patterns.
+fn box_param_use_valid_instr(
+    instr: &WirInstr,
+    param_name: &str,
+    candidates: &IndexSet<(u32, usize)>,
+    ctx: BoxCheckCtx,
+) -> bool {
+    match instr {
+        // LocalGet of the param: only valid inside StructGet("value") or as call arg
+        WirInstr::LocalGet { name } if name == param_name => {
+            matches!(ctx, BoxCheckCtx::InsideStructGetValue)
+        }
+        // StructGet with field "value": mark context and check inner
+        WirInstr::StructGet {
+            field_name, expr, ..
+        } if field_name == "value" => box_param_use_valid_instr(
+            expr,
+            param_name,
+            candidates,
+            BoxCheckCtx::InsideStructGetValue,
+        ),
+        // Call: a direct LocalGet(param) as a call arg is valid only at SROA'd positions.
+        // Non-LocalGet args (e.g., StructGet("value", LocalGet(param))) are validated recursively.
+        WirInstr::Call { func_id, args } => {
+            for (ai, arg) in args.iter().enumerate() {
+                if let WirInstr::LocalGet { name } = arg
+                    && name == param_name
+                {
+                    // Bare param reference at a call position — only valid if SROA'd.
+                    if !candidates.contains(&(func_id.index(), ai)) {
+                        return false;
+                    }
+                } else if !box_param_use_valid_instr(
+                    arg,
+                    param_name,
+                    candidates,
+                    BoxCheckCtx::None,
+                ) {
+                    return false;
+                }
+            }
+            true
+        }
+        // Recurse into nested blocks
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+            for child in body {
+                if !box_param_use_valid_instr(child, param_name, candidates, BoxCheckCtx::None) {
+                    return false;
+                }
+            }
+            true
+        }
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            if !box_param_use_valid_instr(condition, param_name, candidates, BoxCheckCtx::None) {
+                return false;
+            }
+            for child in then_body {
+                if !box_param_use_valid_instr(child, param_name, candidates, BoxCheckCtx::None) {
+                    return false;
+                }
+            }
+            if let Some(eb) = else_body {
+                for child in eb {
+                    if !box_param_use_valid_instr(
+                        child,
+                        param_name,
+                        candidates,
+                        BoxCheckCtx::None,
+                    ) {
+                        return false;
+                    }
+                }
+            }
+            true
+        }
+        // Any other instruction: check subtree for escaping uses
+        _ => {
+            let mut ok = true;
+            instr.for_each_child(&mut |child| {
+                if ok
+                    && !box_param_use_valid_instr(child, param_name, candidates, BoxCheckCtx::None)
+                {
+                    ok = false;
+                }
+            });
+            ok
+        }
+    }
+}
+
+/// Rewrite `StructGet { field: "value", expr: LocalGet(param) }` → `LocalGet(param)`
+/// within a function body after SROA (param is now scalar).
+fn rewrite_box_param_reads(instr: &mut WirInstr, param_name: &str) {
+    // Check StructGet(LocalGet(param), "value") pattern
+    if let WirInstr::StructGet {
+        field_name,
+        expr,
+        ..
+    } = instr
+        && field_name == "value"
+        && matches!(expr.as_ref(), WirInstr::LocalGet { name } if name == param_name)
+    {
+        *instr = WirInstr::LocalGet {
+            name: param_name.to_string(),
+        };
+        return;
+    }
+
+    // Recurse
+    instr.for_each_boxed_child_mut(&mut |child| rewrite_box_param_reads(child, param_name));
+}
+
+
+/// Rewrite arguments at SROA'd Call positions to pass the scalar value instead of a Box ref.
+///
+/// - `StructNew(Box<T>, [val])` → `val` (unwrap allocation, eliminate heap alloc)
+/// - `LocalGet(x)` where x is already scalar (SROA'd param) → leave as-is
+/// - Other expressions → `StructGet(expr, "value")` (extract scalar from existing Box ref)
+fn rewrite_box_args_at_call_sites(
+    instr: &mut WirInstr,
+    sroa_params: &indexmap::IndexMap<u32, IndexSet<usize>>,
+    param_box_type_id: &indexmap::IndexMap<(u32, usize), WirTypeId>,
+    scalar_params: &IndexSet<String>,
+) {
+    // Recurse first (bottom-up)
+    instr.for_each_boxed_child_mut(&mut |child| {
+        rewrite_box_args_at_call_sites(child, sroa_params, param_box_type_id, scalar_params);
+    });
+
+    let WirInstr::Call { func_id, args } = instr else {
+        return;
+    };
+    let Some(param_indices) = sroa_params.get(&func_id.index()) else {
+        return;
+    };
+    let func_id_idx = func_id.index();
+    for &pi in param_indices {
+        if pi >= args.len() {
+            continue;
+        }
+        let arg = &mut args[pi];
+        if let WirInstr::StructNew { fields, .. } = arg
+            && fields.len() == 1
+        {
+            // Unwrap StructNew: skip Box allocation entirely.
+            let inner = std::mem::replace(&mut fields[0], WirInstr::Nop);
+            *arg = inner;
+        } else if let WirInstr::LocalGet { name } = arg
+            && scalar_params.contains(name.as_str())
+        {
+            // Already scalar (this function's own SROA'd param) — no change needed.
+        } else {
+            // The argument is an existing Box reference (e.g., from a local variable).
+            // Extract the scalar value via StructGet("value").
+            let Some(box_type_id) = param_box_type_id.get(&(func_id_idx, pi)) else {
+                continue;
+            };
+            let old_arg = std::mem::replace(arg, WirInstr::Nop);
+            *arg = WirInstr::StructGet {
+                type_id: box_type_id.clone(),
+                field_name: "value".to_string(),
+                expr: Box::new(old_arg),
+            };
         }
     }
 }
