@@ -1,0 +1,238 @@
+// Test: SROA edge cases
+// Covers subtle patterns that have historically caused bugs in SROA.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+struct Wrapper {
+    inner: i32,
+}
+
+struct FloatWrapper {
+    value: f64,
+}
+
+struct Nested {
+    p: Point,
+    z: i32,
+}
+
+// Edge case 1: Struct constructed inside a loop, used per-iteration
+#[inline("never")]
+fn sroa_in_loop() -> i32 {
+    let mut sum = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        let p = Point { x: i, y: i * 2 };
+        sum += p.x + p.y;
+    }
+    return sum;
+}
+
+// Edge case 2: Struct field write then conditional field access
+#[inline("never")]
+fn conditional_field_access(flag: bool) -> i32 {
+    let mut p = Point { x: 10, y: 20 };
+    if flag {
+        p.x = 100;
+    }
+    return p.x + p.y;
+}
+
+// Edge case 3: Two structs of different types with same field pattern
+#[inline("never")]
+fn different_struct_types() -> i32 {
+    let p = Point { x: 3, y: 7 };
+    let q = Pair { a: 5, b: 11 };
+    return p.x * q.a + p.y * q.b;
+}
+
+// Edge case 4: Struct constructed from function result, then fields accessed
+#[inline("never")]
+fn make_point(x: i32, y: i32) -> Point {
+    return Point { x, y };
+}
+
+#[inline("never")]
+fn struct_from_call() -> i32 {
+    let p = make_point(42, 58);
+    return p.x + p.y;
+}
+
+// Edge case 5: Multiple field writes interleaved with reads
+#[inline("never")]
+fn interleaved_field_ops() -> i32 {
+    let mut p = Point { x: 1, y: 2 };
+    let a = p.x;       // read x (1)
+    p.x = 10;          // write x
+    let b = p.y;       // read y (2)
+    p.y = 20;          // write y
+    let c = p.x + p.y; // read both (10 + 20 = 30)
+    return a + b + c;   // 1 + 2 + 30 = 33
+}
+
+// Edge case 6: Struct used in match expression
+#[inline("never")]
+fn struct_in_match(n: i32) -> i32 {
+    let p = match n {
+        0 => Point { x: 1, y: 2 },
+        1 => Point { x: 10, y: 20 },
+        _ => Point { x: 100, y: 200 },
+    };
+    return p.x + p.y;
+}
+
+// Edge case 7: Struct fields used as arguments to another function
+#[inline("never")]
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+#[inline("never")]
+fn fields_as_args() -> i32 {
+    let p = Point { x: 13, y: 17 };
+    return add(p.x, p.y);
+}
+
+// Edge case 8: Nested struct, accessing inner struct fields
+#[inline("never")]
+fn nested_field_access() -> i32 {
+    let n = Nested { p: Point { x: 5, y: 10 }, z: 100 };
+    return n.p.x + n.p.y + n.z;
+}
+
+// Edge case 9: Single-field wrapper struct with field access
+#[inline("never")]
+fn single_field_wrapper() -> i32 {
+    let w = Wrapper { inner: 42 };
+    return w.inner;
+}
+
+// Edge case 10: Struct where one field depends on another during construction
+#[inline("never")]
+fn dependent_field_construction(base: i32) -> i32 {
+    let x = base * 2;
+    let p = Point { x, y: x + 1 };
+    return p.x + p.y;
+}
+
+// Edge case 11: Struct constructed in both branches of if, used after
+#[inline("never")]
+fn struct_from_conditional(flag: bool) -> i32 {
+    let p = if flag {
+        Point { x: 10, y: 20 }
+    } else {
+        Point { x: 30, y: 40 }
+    };
+    return p.x + p.y;
+}
+
+// Edge case 12: Same struct type re-assigned to same variable (mutable)
+#[inline("never")]
+fn struct_reassignment() -> i32 {
+    let mut p = Point { x: 1, y: 2 };
+    let first = p.x + p.y;
+    p = Point { x: 10, y: 20 };
+    let second = p.x + p.y;
+    return first + second;
+}
+
+// Edge case 13: Struct constructed with all same values
+#[inline("never")]
+fn same_value_fields() -> i32 {
+    let val = 42;
+    let p = Point { x: val, y: val };
+    return p.x + p.y;
+}
+
+// Edge case 14: Deeply nested field access chain
+#[inline("never")]
+fn deep_nesting() -> i32 {
+    let inner = Point { x: 3, y: 4 };
+    let outer = Nested { p: inner, z: 5 };
+    // Access chain: outer.p.x
+    return outer.p.x * outer.p.x + outer.p.y * outer.p.y;
+}
+
+// Edge case 15: Float wrapper with arithmetic
+#[inline("never")]
+fn float_wrapper_ops() -> f64 {
+    let w = FloatWrapper { value: 3.14 };
+    return w.value * 2.0;
+}
+
+// Edge case 16: Struct field used as loop bound
+#[inline("never")]
+fn field_as_loop_bound() -> i32 {
+    let p = Point { x: 0, y: 5 };
+    let mut sum = 0;
+    for let mut i = p.x; i < p.y; i += 1 {
+        sum += i;
+    }
+    return sum; // 0+1+2+3+4 = 10
+}
+
+// Edge case 17: Struct passed to two different functions (soft escape)
+#[inline("never")]
+fn sum_fields(p: Point) -> i32 {
+    return p.x + p.y;
+}
+
+#[inline("never")]
+fn mul_fields(p: Point) -> i32 {
+    return p.x * p.y;
+}
+
+#[inline("never")]
+fn struct_to_multiple_calls() -> i32 {
+    let p = Point { x: 3, y: 7 };
+    let s = sum_fields(p);
+    let m = mul_fields(p);
+    return s + m; // 10 + 21 = 31
+}
+
+// Edge case 18: Struct returned from function and immediately field-accessed
+// (interprocedural: return SROA + field decomposition)
+#[inline("never")]
+fn make_pair(a: i32, b: i32) -> Pair {
+    return Pair { a, b };
+}
+
+#[inline("never")]
+fn immediate_field_of_return() -> i32 {
+    return make_pair(10, 20).a + make_pair(30, 40).b;
+}
+
+export fn run() {
+    assert sroa_in_loop() == 30;        // 0+0 + 1+2 + 2+4 + 3+6 + 4+8 = 30
+    assert conditional_field_access(true) == 120;
+    assert conditional_field_access(false) == 30;
+    assert different_struct_types() == 92;  // 3*5 + 7*11 = 15+77 = 92
+    assert struct_from_call() == 100;
+    assert interleaved_field_ops() == 33;
+    assert struct_in_match(0) == 3;
+    assert struct_in_match(1) == 30;
+    assert struct_in_match(2) == 300;
+    assert fields_as_args() == 30;
+    assert nested_field_access() == 115;
+    assert single_field_wrapper() == 42;
+    assert dependent_field_construction(5) == 21;  // 10 + 11
+    assert struct_from_conditional(true) == 30;
+    assert struct_from_conditional(false) == 70;
+    assert struct_reassignment() == 33;   // 3 + 30
+    assert same_value_fields() == 84;     // 42 + 42
+    assert deep_nesting() == 25;          // 9 + 16
+    assert float_wrapper_ops() == 6.28;
+    assert field_as_loop_bound() == 10;
+    assert struct_to_multiple_calls() == 31;
+    assert immediate_field_of_return() == 50; // 10 + 40
+}
+
+__DATA__
+{"stdout": ""}

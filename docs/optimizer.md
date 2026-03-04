@@ -417,11 +417,13 @@ WIR-level optimizations run after WIR build and before Wasm emission, operating 
 
 Rewrites internal functions that return small scalar structs (2–4 fields) to use Wasm multi-value returns, eliminating GC struct allocation at function boundaries. A companion tuple elision pass replaces `MultiValueStructNew` + `StructGet` sequences with `MultiValueLocalBind` at call sites.
 
-### Box Parameter SROA
+### Single-Field Parameter SROA
 
-Rewrites functions that take `ref null Box<T>` parameters to take the scalar `T` directly. `Box<T>` is a single-field GC struct synthesized by the lower phase to wrap primitives for reference semantics (e.g., `Display::fmt` receives `&self` as `ref null Box<T>`). This optimization eliminates the GC struct allocation at call sites where `StructNew(Box<T>, [val])` is passed — the value is passed directly as a scalar. For call sites that pass an existing Box reference, a `StructGet` extracts the scalar value.
+Rewrites functions that take `ref null S` parameters (where `S` is any single-field struct) to take the scalar field value directly, eliminating GC struct allocation at call sites. This generalizes the original Box-specific optimization to all single-field structs.
 
-Impacts all code paths that use template string interpolation (`\`{value}\``), which is the primary trigger for `Box<T>` creation. Covers `i32`, `u32`, `i64`, `u64`, `f32`, `f64`, `char`, and any other type wrapped in `Box<T>`.
+The primary trigger is `Box<T>`, a single-field GC struct synthesized by the lower phase to wrap primitives for reference semantics (e.g., `Display::fmt` receives `&self` as `ref null Box<T>`). At call sites where `StructNew(S, [val])` is passed, the value is passed directly as a scalar. For call sites that pass an existing struct reference, a `StructGet` extracts the scalar value.
+
+Impacts all code paths that use template string interpolation (`\`{value}\``), which is the primary trigger for `Box<T>` creation, as well as any user-defined single-field structs with `&self` methods.
 
 ### Split Large Array Literals
 

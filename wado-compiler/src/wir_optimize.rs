@@ -5,9 +5,9 @@
 //! Current passes:
 //! - **Multi-value return SROA**: rewrites functions that return small scalar structs
 //!   to use Wasm multi-value returns, eliminating GC struct allocation.
-//! - **Box parameter SROA**: rewrites functions that take `ref null Box<T>` parameters
-//!   (where Box<T> is a single-field wrapper struct) to take the scalar `T` directly,
-//!   eliminating GC struct allocation at every call site.
+//! - **Single-field parameter SROA**: rewrites functions that take `ref null S` parameters
+//!   (where S is any single-field struct, including Box<T>) to take the scalar field
+//!   value directly, eliminating GC struct allocation at every call site.
 //! - **Multi-value tuple elision**: replaces `MultiValueStructNew` + `StructGet`
 //!   sequences with `MultiValueLocalBind` to skip intermediate struct allocation.
 //! - **Constant array data promotion**: replaces `ArrayNewFixed` of constant primitive
@@ -32,8 +32,9 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
     // Whole-module pass: rewrite struct-returning functions to multi-value.
     sroa_multi_value_returns(module);
 
-    // Whole-module pass: rewrite Box<T> parameters from `ref null Box<T>` to scalar `T`.
-    sroa_box_parameters(module);
+    // Whole-module pass: rewrite single-field struct parameters (including Box<T>)
+    // from `ref null S` to scalar `T`, eliminating GC allocation at call sites.
+    sroa_single_field_parameters(module);
 
     // Whole-module pass: collapse inlined Array::append sequences back to ArrayNewFixed.
     // Runs before promote/split so that recovered ArrayNewFixed nodes are eligible
@@ -72,6 +73,8 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
 ///   with 2–4 fields, all scalar (no `Ref` or `AbstractRef` fields).
 /// - Every `Return` in the body wraps a `StructNew` of the matching type.
 /// - Every call site stores the result into a temp and reads only via `StructGet`.
+///
+/// Note: 1-field structs are handled by `sroa_single_field_parameters` instead.
 fn sroa_multi_value_returns(module: &mut WirModule) {
     let import_func_count = module
         .imports
@@ -2053,7 +2056,7 @@ fn take_block_result_call(
 ///   a. `StructGet { field_name: "value", expr: LocalGet(param) }` — scalar read
 ///   b. As an argument to another function at a position that is also being SROA'd
 /// - The function is not exported, not in an element table, and not `RefFunc`'d
-fn sroa_box_parameters(module: &mut WirModule) {
+fn sroa_single_field_parameters(module: &mut WirModule) {
     let import_func_count = module
         .imports
         .iter()
@@ -2064,8 +2067,8 @@ fn sroa_box_parameters(module: &mut WirModule) {
 
     // Phase 1: identify candidate (func_id, param_index) pairs.
     let mut candidates: IndexSet<(u32, usize)> = IndexSet::new();
-    // Map from (func_id, param_idx) → (box_type_id_index, inner WirType).
-    let mut candidate_info: indexmap::IndexMap<(u32, usize), (u32, WirType)> =
+    // Map from (func_id, param_idx) → (struct_type_id_index, inner WirType, field_name).
+    let mut candidate_info: indexmap::IndexMap<(u32, usize), (u32, WirType, String)> =
         indexmap::IndexMap::new();
 
     for (i, func) in module.functions.iter().enumerate() {
@@ -2079,26 +2082,28 @@ fn sroa_box_parameters(module: &mut WirModule) {
         };
         for (pi, param_ty) in func_type.params.iter().enumerate() {
             let WirType::Ref {
-                type_id: box_type_id,
+                type_id: struct_type_id,
                 nullable: true,
             } = param_ty
             else {
                 continue;
             };
-            let box_type_idx = box_type_id.index();
-            let Some(WirTypeDef::Struct(st)) = module.types.get(box_type_idx as usize) else {
+            let struct_type_idx = struct_type_id.index();
+            let Some(WirTypeDef::Struct(st)) = module.types.get(struct_type_idx as usize) else {
                 continue;
             };
-            let Some(ref origin) = st.generic_origin else {
-                continue;
-            };
-            if origin.base_name != "Box" || st.fields.len() != 1 || st.fields[0].name != "value" {
+            // Any single-field struct with an eligible (scalar/ref) inner type.
+            if st.fields.len() != 1 || !is_eligible_field_type(&st.fields[0].ty) {
                 continue;
             }
             candidates.insert((func_id_index, pi));
             candidate_info.insert(
                 (func_id_index, pi),
-                (box_type_idx, st.fields[0].ty.clone()),
+                (
+                    struct_type_idx,
+                    st.fields[0].ty.clone(),
+                    st.fields[0].name.clone(),
+                ),
             );
         }
     }
@@ -2115,8 +2120,17 @@ fn sroa_box_parameters(module: &mut WirModule) {
             let func_array_idx = (func_id_index - import_func_count) as usize;
             let func = &module.functions[func_array_idx];
             let param_name = &func.param_names[param_idx];
+            let (_, _, ref field_name) = candidate_info[&(func_id_index, param_idx)];
+            let field_name = field_name.clone();
             let body = func.body.as_ref().unwrap();
-            if !box_param_uses_valid(body, param_name, func_id_index, param_idx, &candidates) {
+            if !single_field_param_uses_valid(
+                body,
+                param_name,
+                &field_name,
+                func_id_index,
+                param_idx,
+                &candidates,
+            ) {
                 invalid.insert((func_id_index, param_idx));
             }
         }
@@ -2138,8 +2152,9 @@ fn sroa_box_parameters(module: &mut WirModule) {
     for &(func_id_index, param_idx) in &candidates {
         let func_array_idx = (func_id_index - import_func_count) as usize;
         let param_name = module.functions[func_array_idx].param_names[param_idx].clone();
-        let (_, ref inner_ty) = candidate_info[&(func_id_index, param_idx)];
+        let (_, ref inner_ty, ref field_name) = candidate_info[&(func_id_index, param_idx)];
         let inner_ty = inner_ty.clone();
+        let field_name = field_name.clone();
 
         // Create new func type with the scalar param.
         let old_type_idx = module.functions[func_array_idx].type_id.index() as usize;
@@ -2161,10 +2176,10 @@ fn sroa_box_parameters(module: &mut WirModule) {
         let new_type_id = WirTypeId::new(new_type_idx, fq);
         module.functions[func_array_idx].type_id = new_type_id;
 
-        // Rewrite body: replace StructGet(LocalGet(param), "value") → LocalGet(param).
+        // Rewrite body: replace StructGet(LocalGet(param), field) → LocalGet(param).
         if let Some(body) = &mut module.functions[func_array_idx].body {
             for instr in body.iter_mut() {
-                rewrite_box_param_reads(instr, &param_name);
+                rewrite_single_field_param_reads(instr, &param_name, &field_name);
             }
         }
     }
@@ -2179,14 +2194,18 @@ fn sroa_box_parameters(module: &mut WirModule) {
             .insert(param_idx);
     }
 
-    // Build (func_id, param_idx) → WirTypeId of the Box struct type.
-    let mut param_box_type_id: indexmap::IndexMap<(u32, usize), WirTypeId> =
+    // Build (func_id, param_idx) → (WirTypeId of the struct type, field name).
+    let mut param_struct_info: indexmap::IndexMap<(u32, usize), (WirTypeId, String)> =
         indexmap::IndexMap::new();
     for &(func_id_index, param_idx) in &candidates {
-        let (box_type_idx, _) = &candidate_info[&(func_id_index, param_idx)];
-        if let Some(WirTypeDef::Struct(st)) = module.types.get(*box_type_idx as usize) {
-            let type_id = WirTypeId::new(*box_type_idx, st.name.fq.as_str().into());
-            param_box_type_id.insert((func_id_index, param_idx), type_id);
+        let (ref struct_type_idx, _, ref field_name) =
+            candidate_info[&(func_id_index, param_idx)];
+        if let Some(WirTypeDef::Struct(st)) = module.types.get(*struct_type_idx as usize) {
+            let type_id = WirTypeId::new(*struct_type_idx, st.name.fq.as_str().into());
+            param_struct_info.insert(
+                (func_id_index, param_idx),
+                (type_id, field_name.clone()),
+            );
         }
     }
 
@@ -2211,10 +2230,10 @@ fn sroa_box_parameters(module: &mut WirModule) {
         if let Some(body) = &mut func.body {
             // Rewrite call arguments at SROA'd positions.
             for instr in body.iter_mut() {
-                rewrite_box_args_at_call_sites(
+                rewrite_single_field_args_at_call_sites(
                     instr,
                     &sroa_params,
-                    &param_box_type_id,
+                    &param_struct_info,
                     &scalar_params,
                 );
             }
@@ -2222,16 +2241,23 @@ fn sroa_box_parameters(module: &mut WirModule) {
     }
 }
 
-/// Check that every use of `param_name` in the body is a valid Box SROA use.
-fn box_param_uses_valid(
+/// Check that every use of `param_name` in the body is a valid single-field SROA use.
+fn single_field_param_uses_valid(
     instrs: &[WirInstr],
     param_name: &str,
+    field_name: &str,
     _self_func_id: u32,
     _self_param_idx: usize,
     candidates: &IndexSet<(u32, usize)>,
 ) -> bool {
     for instr in instrs {
-        if !box_param_use_valid_instr(instr, param_name, candidates, BoxCheckCtx::None) {
+        if !single_field_param_use_valid_instr(
+            instr,
+            param_name,
+            field_name,
+            candidates,
+            SingleFieldCheckCtx::None,
+        ) {
             return false;
         }
     }
@@ -2240,35 +2266,37 @@ fn box_param_uses_valid(
 
 /// Context for tracking where we encounter a `LocalGet(param_name)`.
 #[derive(Clone, Copy)]
-enum BoxCheckCtx {
+enum SingleFieldCheckCtx {
     None,
-    /// Inside a `StructGet { field_name: "value" }` — `LocalGet` is valid.
-    InsideStructGetValue,
+    /// Inside a `StructGet { field_name }` matching the single field — `LocalGet` is valid.
+    InsideStructGetField,
 }
 
-/// Recursively check that all uses of `param_name` are valid Box SROA patterns.
-fn box_param_use_valid_instr(
+/// Recursively check that all uses of `param_name` are valid single-field SROA patterns.
+fn single_field_param_use_valid_instr(
     instr: &WirInstr,
     param_name: &str,
+    expected_field: &str,
     candidates: &IndexSet<(u32, usize)>,
-    ctx: BoxCheckCtx,
+    ctx: SingleFieldCheckCtx,
 ) -> bool {
     match instr {
-        // LocalGet of the param: only valid inside StructGet("value") or as call arg
+        // LocalGet of the param: only valid inside StructGet(field) or as call arg
         WirInstr::LocalGet { name } if name == param_name => {
-            matches!(ctx, BoxCheckCtx::InsideStructGetValue)
+            matches!(ctx, SingleFieldCheckCtx::InsideStructGetField)
         }
-        // StructGet with field "value": mark context and check inner
+        // StructGet with the expected field name: mark context and check inner
         WirInstr::StructGet {
             field_name, expr, ..
-        } if field_name == "value" => box_param_use_valid_instr(
+        } if field_name == expected_field => single_field_param_use_valid_instr(
             expr,
             param_name,
+            expected_field,
             candidates,
-            BoxCheckCtx::InsideStructGetValue,
+            SingleFieldCheckCtx::InsideStructGetField,
         ),
         // Call: a direct LocalGet(param) as a call arg is valid only at SROA'd positions.
-        // Non-LocalGet args (e.g., StructGet("value", LocalGet(param))) are validated recursively.
+        // Non-LocalGet args are validated recursively.
         WirInstr::Call { func_id, args } => {
             for (ai, arg) in args.iter().enumerate() {
                 if let WirInstr::LocalGet { name } = arg
@@ -2278,11 +2306,12 @@ fn box_param_use_valid_instr(
                     if !candidates.contains(&(func_id.index(), ai)) {
                         return false;
                     }
-                } else if !box_param_use_valid_instr(
+                } else if !single_field_param_use_valid_instr(
                     arg,
                     param_name,
+                    expected_field,
                     candidates,
-                    BoxCheckCtx::None,
+                    SingleFieldCheckCtx::None,
                 ) {
                     return false;
                 }
@@ -2292,7 +2321,13 @@ fn box_param_use_valid_instr(
         // Recurse into nested blocks
         WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
             for child in body {
-                if !box_param_use_valid_instr(child, param_name, candidates, BoxCheckCtx::None) {
+                if !single_field_param_use_valid_instr(
+                    child,
+                    param_name,
+                    expected_field,
+                    candidates,
+                    SingleFieldCheckCtx::None,
+                ) {
                     return false;
                 }
             }
@@ -2304,21 +2339,34 @@ fn box_param_use_valid_instr(
             else_body,
             ..
         } => {
-            if !box_param_use_valid_instr(condition, param_name, candidates, BoxCheckCtx::None) {
+            if !single_field_param_use_valid_instr(
+                condition,
+                param_name,
+                expected_field,
+                candidates,
+                SingleFieldCheckCtx::None,
+            ) {
                 return false;
             }
             for child in then_body {
-                if !box_param_use_valid_instr(child, param_name, candidates, BoxCheckCtx::None) {
+                if !single_field_param_use_valid_instr(
+                    child,
+                    param_name,
+                    expected_field,
+                    candidates,
+                    SingleFieldCheckCtx::None,
+                ) {
                     return false;
                 }
             }
             if let Some(eb) = else_body {
                 for child in eb {
-                    if !box_param_use_valid_instr(
+                    if !single_field_param_use_valid_instr(
                         child,
                         param_name,
+                        expected_field,
                         candidates,
-                        BoxCheckCtx::None,
+                        SingleFieldCheckCtx::None,
                     ) {
                         return false;
                     }
@@ -2331,7 +2379,13 @@ fn box_param_use_valid_instr(
             let mut ok = true;
             instr.for_each_child(&mut |child| {
                 if ok
-                    && !box_param_use_valid_instr(child, param_name, candidates, BoxCheckCtx::None)
+                    && !single_field_param_use_valid_instr(
+                        child,
+                        param_name,
+                        expected_field,
+                        candidates,
+                        SingleFieldCheckCtx::None,
+                    )
                 {
                     ok = false;
                 }
@@ -2341,16 +2395,20 @@ fn box_param_use_valid_instr(
     }
 }
 
-/// Rewrite `StructGet { field: "value", expr: LocalGet(param) }` → `LocalGet(param)`
+/// Rewrite `StructGet { field, expr: LocalGet(param) }` → `LocalGet(param)`
 /// within a function body after SROA (param is now scalar).
-fn rewrite_box_param_reads(instr: &mut WirInstr, param_name: &str) {
-    // Check StructGet(LocalGet(param), "value") pattern
+fn rewrite_single_field_param_reads(
+    instr: &mut WirInstr,
+    param_name: &str,
+    expected_field: &str,
+) {
+    // Check StructGet(LocalGet(param), field) pattern
     if let WirInstr::StructGet {
         field_name,
         expr,
         ..
     } = instr
-        && field_name == "value"
+        && field_name == expected_field
         && matches!(expr.as_ref(), WirInstr::LocalGet { name } if name == param_name)
     {
         *instr = WirInstr::LocalGet {
@@ -2360,24 +2418,30 @@ fn rewrite_box_param_reads(instr: &mut WirInstr, param_name: &str) {
     }
 
     // Recurse
-    instr.for_each_boxed_child_mut(&mut |child| rewrite_box_param_reads(child, param_name));
+    instr.for_each_boxed_child_mut(&mut |child| {
+        rewrite_single_field_param_reads(child, param_name, expected_field);
+    });
 }
 
-
-/// Rewrite arguments at SROA'd Call positions to pass the scalar value instead of a Box ref.
+/// Rewrite arguments at SROA'd Call positions to pass the scalar value instead of a struct ref.
 ///
-/// - `StructNew(Box<T>, [val])` → `val` (unwrap allocation, eliminate heap alloc)
+/// - `StructNew(S, [val])` → `val` (unwrap allocation, eliminate heap alloc)
 /// - `LocalGet(x)` where x is already scalar (SROA'd param) → leave as-is
-/// - Other expressions → `StructGet(expr, "value")` (extract scalar from existing Box ref)
-fn rewrite_box_args_at_call_sites(
+/// - Other expressions → `StructGet(expr, field_name)` (extract scalar from existing ref)
+fn rewrite_single_field_args_at_call_sites(
     instr: &mut WirInstr,
     sroa_params: &indexmap::IndexMap<u32, IndexSet<usize>>,
-    param_box_type_id: &indexmap::IndexMap<(u32, usize), WirTypeId>,
+    param_struct_info: &indexmap::IndexMap<(u32, usize), (WirTypeId, String)>,
     scalar_params: &IndexSet<String>,
 ) {
     // Recurse first (bottom-up)
     instr.for_each_boxed_child_mut(&mut |child| {
-        rewrite_box_args_at_call_sites(child, sroa_params, param_box_type_id, scalar_params);
+        rewrite_single_field_args_at_call_sites(
+            child,
+            sroa_params,
+            param_struct_info,
+            scalar_params,
+        );
     });
 
     let WirInstr::Call { func_id, args } = instr else {
@@ -2395,7 +2459,7 @@ fn rewrite_box_args_at_call_sites(
         if let WirInstr::StructNew { fields, .. } = arg
             && fields.len() == 1
         {
-            // Unwrap StructNew: skip Box allocation entirely.
+            // Unwrap StructNew: skip struct allocation entirely.
             let inner = std::mem::replace(&mut fields[0], WirInstr::Nop);
             *arg = inner;
         } else if let WirInstr::LocalGet { name } = arg
@@ -2403,15 +2467,17 @@ fn rewrite_box_args_at_call_sites(
         {
             // Already scalar (this function's own SROA'd param) — no change needed.
         } else {
-            // The argument is an existing Box reference (e.g., from a local variable).
-            // Extract the scalar value via StructGet("value").
-            let Some(box_type_id) = param_box_type_id.get(&(func_id_idx, pi)) else {
+            // The argument is an existing struct reference (e.g., from a local variable).
+            // Extract the scalar value via StructGet(field_name).
+            let Some((struct_type_id, field_name)) =
+                param_struct_info.get(&(func_id_idx, pi))
+            else {
                 continue;
             };
             let old_arg = std::mem::replace(arg, WirInstr::Nop);
             *arg = WirInstr::StructGet {
-                type_id: box_type_id.clone(),
-                field_name: "value".to_string(),
+                type_id: struct_type_id.clone(),
+                field_name: field_name.clone(),
                 expr: Box::new(old_arg),
             };
         }
