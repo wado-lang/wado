@@ -1031,7 +1031,20 @@ fn find_inline_candidate<'a>(
     };
 
     let key = (target_module, func_name.to_string());
-    candidates.get(&key).map(|c| (c, key))
+    if let Some(c) = candidates.get(&key) {
+        return Some((c, key));
+    }
+
+    // Fallback: the resolver sometimes sets module_source to the calling module
+    // rather than the defining module for trait method calls (e.g., IndexValue::index_value,
+    // IndexAssign::index_assign). Search all candidates by function name alone.
+    for (candidate_key, candidate) in candidates {
+        if candidate_key.1 == func_name {
+            return Some((candidate, candidate_key.clone()));
+        }
+    }
+
+    None
 }
 
 /// Try to inline a call expression, returning the inlined expression and key

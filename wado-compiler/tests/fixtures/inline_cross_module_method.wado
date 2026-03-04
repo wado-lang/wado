@@ -1,0 +1,30 @@
+// Test: cross-module method calls should be inlined when small enough.
+// Array<T>'s IndexValue::index_value and append are small methods that
+// should be inlined at -O2 to avoid function call overhead.
+
+export fn run() {
+    let mut arr: Array<i32> = [10, 20, 30];
+
+    // IndexValue::index_value should be inlined (bounds check + array_get)
+    let x = arr[0];
+
+    // IndexAssign::index_assign should be inlined (bounds check + array_set)
+    arr[1] = 99;
+
+    // Array::append should be inlined (capacity check + array_set)
+    arr.append(40);
+
+    assert x == 10;
+    assert arr[1] == 99;
+    assert arr.len() == 4;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": [
+        "IndexValue::index_value(",
+        "IndexAssign::index_assign(",
+        "Array<i32>::append("
+    ]
+}
