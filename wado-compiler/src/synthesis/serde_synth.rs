@@ -374,7 +374,6 @@ fn deserialize_error_literal(
 /// The module source for resolution comes from the type itself (where `impl Default for T` lives).
 fn default_value_for_type(
     type_id: TypeId,
-    type_name: &str,
     type_table: &TypeTable,
     span: Span,
 ) -> TirExpr {
@@ -382,30 +381,68 @@ fn default_value_for_type(
     if type_table.default_trait_module_source().is_none() {
         return null_expr(type_id);
     }
-    // Use the type's own module_source for resolution — the `impl Default for T`
-    // lives in the same module as the type definition.
-    let module_source = match type_table.get(type_id) {
-        crate::tir::ResolvedType::Primitive(_) => Some(ModuleSource::primitives()),
-        crate::tir::ResolvedType::Struct { module_source, .. }
-        | crate::tir::ResolvedType::GenericInstance { module_source, .. }
-        | crate::tir::ResolvedType::Newtype { module_source, .. } => Some(module_source.clone()),
-        _ => None,
+    // Extract base type name and module_source from the resolved type.
+    // Only generate Default::default() calls for types known to have Default impls
+    // (primitives and stdlib types). User-defined structs fall back to null.
+    let (base_name, module_source, type_args) = match type_table.get(type_id) {
+        crate::tir::ResolvedType::Primitive(p) => {
+            (p.as_str().to_string(), ModuleSource::primitives(), vec![])
+        }
+        crate::tir::ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } => {
+            if matches!(module_source, ModuleSource::Core { .. }) {
+                (name.clone(), module_source.clone(), vec![])
+            } else {
+                return null_expr(type_id);
+            }
+        }
+        crate::tir::ResolvedType::GenericInstance {
+            name,
+            module_source,
+            type_args,
+            ..
+        } => (name.clone(), module_source.clone(), type_args.clone()),
+        crate::tir::ResolvedType::Newtype {
+            name,
+            module_source,
+            ..
+        } => (name.clone(), module_source.clone(), vec![]),
+        _ => return null_expr(type_id),
     };
-    let Some(module_source) = module_source else {
-        return null_expr(type_id);
-    };
-    let method_info = LocalMethodName::new(
-        type_name.to_string(),
+    let mut method_info = LocalMethodName::new(
+        base_name,
         Some("Default".to_string()),
         "default".to_string(),
     );
+    if !type_args.is_empty() {
+        let arg_names: Vec<String> = type_args
+            .iter()
+            .map(|t| type_table.type_name(*t))
+            .collect();
+        method_info = method_info.with_type_args(&arg_names, &[]);
+    }
     let mangled_name = method_info.to_mangled_name();
+    // For generic types (Option<String>, Array<i32>, etc.), set monomorph_info with
+    // the concrete type_args so the monomorphizer substitutes them correctly instead of
+    // blindly replacing with the enclosing function's type parameters.
+    let monomorph_info = if type_args.is_empty() {
+        None
+    } else {
+        Some(crate::tir::MonomorphInfo {
+            generic_name: method_info.base_struct_name.clone(),
+            type_args,
+            is_blanket: false,
+        })
+    };
     TirExpr::new(
         TirExprKind::StaticCall {
             func: FunctionRef::External {
                 module_source,
                 name: mangled_name,
-                monomorph_info: None,
+                monomorph_info,
                 method_info: Some(method_info),
             },
             args: vec![],
@@ -753,7 +790,7 @@ fn generate_struct_deserialize(
     {
         let tt = module.type_table.borrow();
         for (i, (field_name, _, type_id, _)) in fields.iter().enumerate() {
-            let default_val = default_value_for_type(*type_id, &field_type_names[i], &tt, span);
+            let default_val = default_value_for_type(*type_id, &tt, span);
             then_stmts.push(let_mut_stmt(
                 field_name,
                 field_locals[i],
