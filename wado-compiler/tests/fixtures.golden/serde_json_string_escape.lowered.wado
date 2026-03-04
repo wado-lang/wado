@@ -40,7 +40,7 @@ fn __test_0_serialize_string_with_quotes() {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                let self: Box<i32> = Box<i32> { value: 9 };
+                let self: Box<i32> = Box<i32> { value: 8 };
                 let f: &mut Formatter = &mut __f;
                 self.i32::fmt_decimal(f);
                 __r.String::append("\ncondition: json == `\"say \\\\\"hello\\\\\"\"`\n");
@@ -80,7 +80,7 @@ fn __test_1_serialize_string_with_backslash() {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                let self: Box<i32> = Box<i32> { value: 19 };
+                let self: Box<i32> = Box<i32> { value: 18 };
                 let f: &mut Formatter = &mut __f;
                 self.i32::fmt_decimal(f);
                 __r.String::append("\ncondition: json == `\"path\\\\\\\\to\\\\\\\\file\"`\n");
@@ -120,7 +120,7 @@ fn __test_2_serialize_string_with_newline() {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                let self: Box<i32> = Box<i32> { value: 29 };
+                let self: Box<i32> = Box<i32> { value: 28 };
                 let f: &mut Formatter = &mut __f;
                 self.i32::fmt_decimal(f);
                 __r.String::append("\ncondition: json == `\"line1\\\\nline2\"`\n");
@@ -160,7 +160,7 @@ fn __test_3_serialize_string_with_tab() {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                let self: Box<i32> = Box<i32> { value: 39 };
+                let self: Box<i32> = Box<i32> { value: 38 };
                 let f: &mut Formatter = &mut __f;
                 self.i32::fmt_decimal(f);
                 __r.String::append("\ncondition: json == `\"col1\\\\tcol2\"`\n");
@@ -199,7 +199,7 @@ fn __test_4_deserialize_string_with_unicode_escape() {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                let self: Box<i32> = Box<i32> { value: 49 };
+                let self: Box<i32> = Box<i32> { value: 48 };
                 let f: &mut Formatter = &mut __f;
                 self.i32::fmt_decimal(f);
                 __r.String::append("\ncondition: s == \"A\"\n");
@@ -243,7 +243,7 @@ fn __test_5_roundtrip_string_with_special_chars() {
                         let buf: &mut String = &mut __r;
                         break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
-                    let self: Box<i32> = Box<i32> { value: 61 };
+                    let self: Box<i32> = Box<i32> { value: 60 };
                     let f: &mut Formatter = &mut __f;
                     self.i32::fmt_decimal(f);
                     __r.String::append("\ncondition: parsed == orig\n");
@@ -264,7 +264,57 @@ fn __test_5_roundtrip_string_with_special_chars() {
     }
 }
 
-fn __test_6_roundtrip_empty_string() {
+fn __test_6_roundtrip_multibyte_utf8_string() {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        __modules_initialized = true;
+    };
+    let orig: String = "café 日本語 🎉";
+    let json_r: Result<String, SerializeError> = "to_string<String>"(&orig);
+    if __variant_test(json_r, case=0, name=Ok) {
+        let json: String = __variant_payload(json_r, case=0);
+        let parsed_r: Result<String, DeserializeError> = "from_string<String>"(json);
+        if __variant_test(parsed_r, case=0, name=Ok) {
+            let parsed: String = __variant_payload(parsed_r, case=0);
+            let __v0: String = parsed;
+            let __v1: String = orig;
+            let __cond: bool = __v0."String^Eq::eq"(&__v1);
+            if !__cond {
+                core::internal::panic(__tmpl: {
+                    let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(148), used: 0 };
+                    __r.String::append("Assertion failed in ");
+                    __r.String::append("__test_6_roundtrip_multibyte_utf8_string");
+                    __r.String::append(" at ");
+                    __r.String::append("wado-compiler/tests/fixtures/serde_json_string_escape.wado");
+                    __r.String::append(":");
+                    let mut __f: Formatter = __inline_Formatter__new_3: {
+                        let buf: &mut String = &mut __r;
+                        break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    };
+                    let self: Box<i32> = Box<i32> { value: 76 };
+                    let f: &mut Formatter = &mut __f;
+                    self.i32::fmt_decimal(f);
+                    __r.String::append("\ncondition: parsed == orig\n");
+                    __r.String::append("parsed: ");
+                    __r.String::append(__v0);
+                    __r.String::append("\n");
+                    __r.String::append("orig: ");
+                    __r.String::append(__v1);
+                    __r.String::append("\n");
+                    break __tmpl: __r;
+                });
+            }
+        } else {
+            core::internal::panic("roundtrip multibyte deserialize failed");
+        }
+    } else {
+        core::internal::panic("roundtrip multibyte serialize failed");
+    }
+}
+
+fn __test_7_roundtrip_empty_string() {
     __inline___initialize_modules_0: {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -281,7 +331,7 @@ fn __test_6_roundtrip_empty_string() {
             core::internal::panic(__tmpl: {
                 let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(121), used: 0 };
                 __r.String::append("Assertion failed in ");
-                __r.String::append("__test_6_roundtrip_empty_string");
+                __r.String::append("__test_7_roundtrip_empty_string");
                 __r.String::append(" at ");
                 __r.String::append("wado-compiler/tests/fixtures/serde_json_string_escape.wado");
                 __r.String::append(":");
@@ -289,7 +339,7 @@ fn __test_6_roundtrip_empty_string() {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                let self: Box<i32> = Box<i32> { value: 74 };
+                let self: Box<i32> = Box<i32> { value: 89 };
                 let f: &mut Formatter = &mut __f;
                 self.i32::fmt_decimal(f);
                 __r.String::append("\ncondition: json == `\"\"`\n");
@@ -308,7 +358,7 @@ fn __test_6_roundtrip_empty_string() {
                 core::internal::panic(__tmpl: {
                     let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(123), used: 0 };
                     __r.String::append("Assertion failed in ");
-                    __r.String::append("__test_6_roundtrip_empty_string");
+                    __r.String::append("__test_7_roundtrip_empty_string");
                     __r.String::append(" at ");
                     __r.String::append("wado-compiler/tests/fixtures/serde_json_string_escape.wado");
                     __r.String::append(":");
@@ -316,7 +366,7 @@ fn __test_6_roundtrip_empty_string() {
                         let buf: &mut String = &mut __r;
                         break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
-                    let self: Box<i32> = Box<i32> { value: 77 };
+                    let self: Box<i32> = Box<i32> { value: 92 };
                     let f: &mut Formatter = &mut __f;
                     self.i32::fmt_decimal(f);
                     __r.String::append("\ncondition: parsed == \"\"\n");
@@ -364,8 +414,13 @@ export fn __cm_export____test_5_roundtrip_string_with_special_chars() {
     cm_raw_call task-return(0);
 }
 
-export fn __cm_export____test_6_roundtrip_empty_string() {
-    __test_6_roundtrip_empty_string();
+export fn __cm_export____test_6_roundtrip_multibyte_utf8_string() {
+    __test_6_roundtrip_multibyte_utf8_string();
+    cm_raw_call task-return(0);
+}
+
+export fn __cm_export____test_7_roundtrip_empty_string() {
+    __test_7_roundtrip_empty_string();
     cm_raw_call task-return(0);
 }
 
