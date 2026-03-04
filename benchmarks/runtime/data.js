@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772629642365,
+  "lastUpdate": 1772634362382,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -215,6 +215,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib/decompress",
             "value": 584,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c2922d2456f777f0b2bb6cfed398717c54cb9070",
+          "message": "Merge pull request #502 from wado-lang/claude/optimize-benchmark-zlib-lTFyU\n\nReplace module_path with ModuleSource for accurate cross-module tracking",
+          "timestamp": "2026-03-04T23:23:59+09:00",
+          "tree_id": "1c22ea83888ccb633a0262d5900bf1ec14ab9df4",
+          "url": "https://github.com/wado-lang/wado/commit/c2922d2456f777f0b2bb6cfed398717c54cb9070"
+        },
+        "date": 1772634362294,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "count_prime",
+            "value": 3315,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot",
+            "value": 148,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve",
+            "value": 215,
+            "unit": "ms"
+          },
+          {
+            "name": "fts",
+            "value": 163,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress",
+            "value": 69,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress",
+            "value": 604,
             "unit": "ms"
           }
         ]
