@@ -21,16 +21,20 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
       - uses: Swatinem/rust-cache@v2
 
       - name: Build wado
         run: cargo build --release --bin wado
 
       - name: Run runtime benchmarks
-        run: python3 .github/scripts/run_wado_benchmarks.py > runtime-benchmark.json
+        run: node .github/scripts/run_wado_benchmarks.ts > runtime-benchmark.json
 
       - name: Run wasm-size benchmarks
-        run: python3 .github/scripts/run_wado_wasm_size.py > wasm-size-benchmark.json
+        run: node .github/scripts/run_wado_wasm_size.ts > wasm-size-benchmark.json
 
       # ── main branch: record data only, no alerts ──────────────────────────
 
