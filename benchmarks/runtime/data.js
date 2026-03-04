@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772620320906,
+  "lastUpdate": 1772621777462,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53,6 +53,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib/decompress",
             "value": 587,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "48e02e7af4688a6420da2c0e26f63ace875336d8",
+          "message": "Merge pull request #499 from wado-lang/gfx/update-npm-deps\n\nupdate npm deps",
+          "timestamp": "2026-03-04T19:54:18+09:00",
+          "tree_id": "d482adaaee49e48700ab190f84ea7472bf9b3e72",
+          "url": "https://github.com/wado-lang/wado/commit/48e02e7af4688a6420da2c0e26f63ace875336d8"
+        },
+        "date": 1772621776993,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "count_prime",
+            "value": 3302,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot",
+            "value": 148,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve",
+            "value": 204,
+            "unit": "ms"
+          },
+          {
+            "name": "fts",
+            "value": 166,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress",
+            "value": 68,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress",
+            "value": 589,
             "unit": "ms"
           }
         ]
