@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772634362382,
+  "lastUpdate": 1772636446126,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -269,6 +269,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib/decompress",
             "value": 604,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "da78d7c36c7c91b4a1c92195d4d66c2f4a5c49ca",
+          "message": "Merge pull request #503 from wado-lang/gfx/fix_docs\n\ncleanup docs and mention to TDD",
+          "timestamp": "2026-03-04T23:58:45+09:00",
+          "tree_id": "23d01412b3e199438127a9ae5f92f1602287dc57",
+          "url": "https://github.com/wado-lang/wado/commit/da78d7c36c7c91b4a1c92195d4d66c2f4a5c49ca"
+        },
+        "date": 1772636445982,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "count_prime",
+            "value": 3301,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot",
+            "value": 148,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve",
+            "value": 212,
+            "unit": "ms"
+          },
+          {
+            "name": "fts",
+            "value": 167,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress",
+            "value": 69,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress",
+            "value": 609,
             "unit": "ms"
           }
         ]
