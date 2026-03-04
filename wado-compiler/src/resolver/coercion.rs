@@ -704,9 +704,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let trait_name = seq_info.trait_name.clone();
         let builder_type = seq_info.builder_type;
         let output_type = seq_info.output_type;
-        let impl_module_source = seq_info
-            .impl_module_source
-            .unwrap_or_else(|| self.current_module_source.clone());
+        let impl_module_source = seq_info.impl_module_source.clone();
         let builder_base_name = self
             .struct_name_for_type(builder_type)
             .unwrap_or_else(|| base_name.clone());

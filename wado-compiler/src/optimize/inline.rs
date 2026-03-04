@@ -143,7 +143,7 @@ fn count_block_exprs(block: &TirBlock) -> usize {
 fn is_inline_eligible(
     func: &TirFunction,
     recursive_functions: &IndexSet<String>,
-    _module_path: &[String],
+    _module_source: &ModuleSource,
     type_table: &TypeTable,
     inline_threshold: usize,
 ) -> bool {
@@ -465,21 +465,20 @@ pub fn inline_functions(project: &mut Project, inline_threshold: usize) -> bool 
     let recursive_functions = find_recursive_functions(&project.tir_modules);
 
     // Collect inline candidates from all modules
-    // Key: (module_path, func_name), Value: cloned function
-    let mut inline_candidates: IndexMap<(Vec<String>, String), TirFunction> = IndexMap::new();
+    // Key: (module_source, func_name), Value: cloned function
+    let mut inline_candidates: IndexMap<(ModuleSource, String), TirFunction> = IndexMap::new();
 
     // Also collect function_strings for each candidate (to update caller's strings after inlining)
-    let mut candidate_strings: IndexMap<(Vec<String>, String), Vec<String>> = IndexMap::new();
+    let mut candidate_strings: IndexMap<(ModuleSource, String), Vec<String>> = IndexMap::new();
 
     for (module_source, module) in &project.tir_modules {
-        let module_path = module_source.to_path();
         for func_rc in &module.functions {
             let func = func_rc.borrow();
-            let key = (module_path.clone(), func.name.clone());
+            let key = (module_source.clone(), func.name.clone());
             if is_inline_eligible(
                 &func,
                 &recursive_functions,
-                &module_path,
+                module_source,
                 &module.type_table.borrow(),
                 inline_threshold,
             ) {
@@ -500,13 +499,13 @@ pub fn inline_functions(project: &mut Project, inline_threshold: usize) -> bool 
 
     // Inline at call sites in each module
     for module in project.tir_modules.values_mut() {
-        let module_path = module.module_source.to_path();
+        let caller_module_source = module.module_source.clone();
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
             let func_name = func.name.clone();
             if let Some(mut body) = func.body.take() {
                 // Track which functions were inlined into this function
-                let mut inlined_funcs: Vec<(Vec<String>, String)> = Vec::new();
+                let mut inlined_funcs: Vec<(ModuleSource, String)> = Vec::new();
                 // Take ownership of local_count and local_types to avoid borrow conflicts
                 let mut local_count = func.local_count;
                 let mut local_types = std::mem::take(&mut func.local_types);
@@ -515,7 +514,7 @@ pub fn inline_functions(project: &mut Project, inline_threshold: usize) -> bool 
                 inline_calls_in_block(
                     &mut body,
                     &inline_candidates,
-                    &module_path,
+                    &caller_module_source,
                     &mut local_count,
                     &mut local_types,
                     &module.type_table.borrow(),
@@ -571,12 +570,12 @@ pub fn inline_functions(project: &mut Project, inline_threshold: usize) -> bool 
 /// Inline function calls in a block
 fn inline_calls_in_block(
     block: &mut TirBlock,
-    candidates: &IndexMap<(Vec<String>, String), TirFunction>,
-    current_module: &[String],
+    candidates: &IndexMap<(ModuleSource, String), TirFunction>,
+    current_module: &ModuleSource,
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
     type_table: &TypeTable,
-    inlined_funcs: &mut Vec<(Vec<String>, String)>,
+    inlined_funcs: &mut Vec<(ModuleSource, String)>,
     inline_counter: &mut u32,
 ) {
     let mut new_stmts = Vec::new();
@@ -1019,15 +1018,16 @@ fn create_default_value(type_id: TypeId, type_table: &TypeTable, span: crate::Sp
 
 /// Look up an inline candidate by module path and function name.
 fn find_inline_candidate<'a>(
-    candidates: &'a IndexMap<(Vec<String>, String), TirFunction>,
-    call_module_path: &[String],
-    current_module: &[String],
+    candidates: &'a IndexMap<(ModuleSource, String), TirFunction>,
+    call_module_source: &ModuleSource,
+    current_module: &ModuleSource,
     func_name: &str,
-) -> Option<(&'a TirFunction, (Vec<String>, String))> {
-    let target_module = if call_module_path.is_empty() {
-        current_module.to_vec()
+) -> Option<(&'a TirFunction, (ModuleSource, String))> {
+    // Use the call's module_source directly; fall back to caller's module for local calls
+    let target_module = if call_module_source.is_entry_point() {
+        current_module.clone()
     } else {
-        call_module_path.to_vec()
+        call_module_source.clone()
     };
 
     let key = (target_module, func_name.to_string());
@@ -1037,23 +1037,23 @@ fn find_inline_candidate<'a>(
 /// Try to inline a call expression, returning the inlined expression and key
 fn try_inline_call_expr(
     expr: &TirExpr,
-    candidates: &IndexMap<(Vec<String>, String), TirFunction>,
-    current_module: &[String],
+    candidates: &IndexMap<(ModuleSource, String), TirFunction>,
+    current_module: &ModuleSource,
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
     _type_table: &TypeTable,
     inline_counter: &mut u32,
-) -> Option<(TirExpr, (Vec<String>, String))> {
+) -> Option<(TirExpr, (ModuleSource, String))> {
     let TirExprKind::Call { func, args, .. } = &expr.kind else {
         return None;
     };
 
-    let module_path = func.module_path();
+    let call_module_source = func.module_source();
     let func_name = func.name();
 
     // Look up the candidate function.
     let (candidate, inlined_key) =
-        find_inline_candidate(candidates, &module_path, current_module, &func_name)?;
+        find_inline_candidate(candidates, &call_module_source, current_module, &func_name)?;
 
     // Get the function body
     let body = candidate.body.as_ref()?;
@@ -1150,13 +1150,13 @@ fn try_inline_call_expr(
 /// Try to inline a method call expression, returning the inlined expression and key
 fn try_inline_method_call_expr(
     expr: &TirExpr,
-    candidates: &IndexMap<(Vec<String>, String), TirFunction>,
-    current_module: &[String],
+    candidates: &IndexMap<(ModuleSource, String), TirFunction>,
+    current_module: &ModuleSource,
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
     type_table: &TypeTable,
     inline_counter: &mut u32,
-) -> Option<(TirExpr, (Vec<String>, String))> {
+) -> Option<(TirExpr, (ModuleSource, String))> {
     let TirExprKind::MethodCall {
         receiver,
         func,
@@ -1167,12 +1167,12 @@ fn try_inline_method_call_expr(
         return None;
     };
 
-    let module_path = func.module_path();
+    let call_module_source = func.module_source();
     let func_name = func.name();
 
     // Look up the candidate function.
     let (candidate, inlined_key) =
-        find_inline_candidate(candidates, &module_path, current_module, &func_name)?;
+        find_inline_candidate(candidates, &call_module_source, current_module, &func_name)?;
 
     // Get the function body
     let body = candidate.body.as_ref()?;
@@ -1317,23 +1317,23 @@ fn try_inline_method_call_expr(
 #[allow(clippy::too_many_arguments)]
 fn try_inline_static_call_expr(
     expr: &TirExpr,
-    candidates: &IndexMap<(Vec<String>, String), TirFunction>,
-    current_module: &[String],
+    candidates: &IndexMap<(ModuleSource, String), TirFunction>,
+    current_module: &ModuleSource,
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
     _type_table: &TypeTable,
     inline_counter: &mut u32,
-) -> Option<(TirExpr, (Vec<String>, String))> {
+) -> Option<(TirExpr, (ModuleSource, String))> {
     let TirExprKind::StaticCall { func, args } = &expr.kind else {
         return None;
     };
 
-    let module_path = func.module_path();
+    let call_module_source = func.module_source();
     let func_name = func.name();
 
     // Look up the candidate function.
     let (candidate, inlined_key) =
-        find_inline_candidate(candidates, &module_path, current_module, &func_name)?;
+        find_inline_candidate(candidates, &call_module_source, current_module, &func_name)?;
 
     // Get the function body
     let body = candidate.body.as_ref()?;
@@ -1440,7 +1440,7 @@ fn remap_and_convert_returns(
     local_offset: u32,
     param_count: u32,
     label: &str,
-    source_module: &[String],
+    source_module: &ModuleSource,
 ) -> Vec<TirStmt> {
     let mut stmts = Vec::new();
 
@@ -1567,7 +1567,7 @@ fn remap_stmt_with_label(
     local_offset: u32,
     param_count: u32,
     label: &str,
-    source_module: &[String],
+    source_module: &ModuleSource,
 ) -> TirStmt {
     let kind = match &stmt.kind {
         TirStmtKind::Let {
@@ -1811,7 +1811,7 @@ fn remap_block_with_label(
     local_offset: u32,
     param_count: u32,
     label: &str,
-    source_module: &[String],
+    source_module: &ModuleSource,
 ) -> TirBlock {
     let mut stmts = Vec::new();
     for stmt in &block.stmts {
@@ -1873,7 +1873,7 @@ fn remap_expr(
     param_to_local: &IndexMap<u32, u32>,
     local_offset: u32,
     param_count: u32,
-    source_module: &[String],
+    source_module: &ModuleSource,
 ) -> TirExpr {
     let kind = match &expr.kind {
         TirExprKind::Local { index, name } => {
@@ -2308,12 +2308,12 @@ fn remap_expr(
     TirExpr::new(kind, expr.type_id, expr.span)
 }
 
-/// Remap a function reference to use the source module path for local calls.
-/// When inlining from module A into module B, local calls (empty `module_path`)
-/// need to be converted to use module A's path.
-fn remap_function_ref(func: &FunctionRef, source_module: &[String]) -> FunctionRef {
-    // Skip if the source module is empty (no remapping needed)
-    if source_module.is_empty() {
+/// Remap a function reference to use the source module for local calls.
+/// When inlining from module A into module B, local calls (entry-point module)
+/// need to be converted to use module A's source.
+fn remap_function_ref(func: &FunctionRef, source_module: &ModuleSource) -> FunctionRef {
+    // Skip if the source module is the entry point (no remapping needed)
+    if source_module.is_entry_point() {
         return func.clone();
     }
 
@@ -2323,12 +2323,12 @@ fn remap_function_ref(func: &FunctionRef, source_module: &[String]) -> FunctionR
         return func.clone();
     }
 
-    // Only remap if the func has an empty module path (local call)
-    if func.module_path().is_empty() {
-        // Convert to External with the source module path
+    // Only remap if the func has an entry-point module source (local call)
+    if func.module_source().is_entry_point() {
+        // Convert to External with the source module
         // Local calls within a module are not monomorphized, so monomorph_info is None
         FunctionRef::External {
-            module_source: ModuleSource::from_path(source_module),
+            module_source: source_module.clone(),
             name: func.name(),
             monomorph_info: None,
             method_info: func.method_info(),
@@ -2344,7 +2344,7 @@ fn remap_block(
     param_to_local: &IndexMap<u32, u32>,
     local_offset: u32,
     param_count: u32,
-    source_module: &[String],
+    source_module: &ModuleSource,
 ) -> TirBlock {
     TirBlock::new(
         block
@@ -2362,7 +2362,7 @@ fn remap_stmt(
     param_to_local: &IndexMap<u32, u32>,
     local_offset: u32,
     param_count: u32,
-    source_module: &[String],
+    source_module: &ModuleSource,
 ) -> TirStmt {
     let kind = match &stmt.kind {
         TirStmtKind::Let {
@@ -2504,13 +2504,13 @@ fn remap_stmt(
 /// Recursively inline calls within an expression
 fn inline_calls_in_expr(
     expr: &mut TirExpr,
-    candidates: &IndexMap<(Vec<String>, String), TirFunction>,
-    current_module: &[String],
+    candidates: &IndexMap<(ModuleSource, String), TirFunction>,
+    current_module: &ModuleSource,
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
     type_table: &TypeTable,
     pre_stmts: &mut Vec<TirStmt>,
-    inlined_funcs: &mut Vec<(Vec<String>, String)>,
+    inlined_funcs: &mut Vec<(ModuleSource, String)>,
     inline_counter: &mut u32,
 ) {
     match &mut expr.kind {
