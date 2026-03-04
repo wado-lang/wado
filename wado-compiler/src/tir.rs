@@ -1034,6 +1034,7 @@ impl TypeTable {
                 ..
             } => base.clone(),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.base_type_name(*inner),
+            ResolvedType::Tuple(_) => "Tuple".to_string(),
             _ => self.mangle_type_name(id),
         }
     }
@@ -1921,6 +1922,8 @@ pub struct TirStruct {
     pub monomorph_info: Option<MonomorphInfo>,
     pub fields: Vec<TirField>,
     pub span: Span,
+    /// `#[serde(rename_all = "...")]` — naming strategy for all fields.
+    pub serde_rename_all: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -1932,6 +1935,10 @@ pub struct TirField {
     pub span: Span,
     /// `#[hidden]` — field not shown in debug inspect output.
     pub is_hidden: bool,
+    /// `#[serde(rename = "name")]` — custom serialization name for this field.
+    pub serde_rename: Option<String>,
+    /// `#[serde(default)]` — use default value when field is missing during deserialization.
+    pub serde_default: bool,
 }
 
 #[derive(Debug, Clone)]

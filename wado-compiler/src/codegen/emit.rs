@@ -1299,7 +1299,9 @@ impl<'a> WirEmitter<'a> {
             }
             WirInstr::Drop(o) => {
                 self.emit_instr(f, o);
-                f.instruction(&Instruction::Drop);
+                if !o.always_diverges() {
+                    f.instruction(&Instruction::Drop);
+                }
             }
 
             // Calls

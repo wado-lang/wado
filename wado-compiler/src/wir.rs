@@ -1011,6 +1011,31 @@ pub enum WirInstr {
 }
 
 impl WirInstr {
+    /// Returns true if this instruction always diverges (all execution paths
+    /// end with `return` or `unreachable` before producing a value).
+    pub fn always_diverges(&self) -> bool {
+        match self {
+            Self::Return { .. } | Self::Unreachable => true,
+            Self::If {
+                then_body,
+                else_body,
+                ..
+            } => {
+                Self::seq_always_diverges(then_body)
+                    && else_body
+                        .as_ref()
+                        .is_some_and(|eb| Self::seq_always_diverges(eb))
+            }
+            Self::Seq(body) => Self::seq_always_diverges(body),
+            Self::Drop(inner) => inner.always_diverges(),
+            _ => false,
+        }
+    }
+
+    fn seq_always_diverges(instrs: &[Self]) -> bool {
+        instrs.iter().any(Self::always_diverges)
+    }
+
     /// Visit all child instructions of this node (non-recursive).
     /// Used by the emitter for pre-scanning (e.g., collecting `DeclareLocal`).
     #[allow(clippy::many_single_char_names)]

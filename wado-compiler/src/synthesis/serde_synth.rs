@@ -11,8 +11,9 @@ use indexmap::IndexSet;
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_local_trait_method};
 use crate::project::Project;
 use crate::tir::{
-    FunctionRef, InlineHint, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm, TirModule,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField, TirTypeParam, TypeId, TypeTable,
+    FunctionRef, InlineHint, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField,
+    TirTypeParam, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -21,6 +22,34 @@ use super::common::{
     let_mut_stmt, local_ref, loop_stmt, null_expr, option_none, option_some, ref_expr, return_stmt,
     string_lit, synth_span,
 };
+
+fn apply_rename_all(s: &str, strategy: &str) -> String {
+    match strategy {
+        "camelCase" => snake_to_camel(s),
+        "snake_case" => s.to_string(),
+        "PascalCase" => {
+            let mut result = String::with_capacity(s.len());
+            let mut capitalize_next = true;
+            for c in s.chars() {
+                if c == '_' {
+                    capitalize_next = true;
+                } else if capitalize_next {
+                    for upper in c.to_uppercase() {
+                        result.push(upper);
+                    }
+                    capitalize_next = false;
+                } else {
+                    result.push(c);
+                }
+            }
+            result
+        }
+        "SCREAMING_SNAKE_CASE" => s.to_uppercase(),
+        "kebab-case" => s.replace('_', "-"),
+        "SCREAMING-KEBAB-CASE" => s.replace('_', "-").to_uppercase(),
+        _ => snake_to_camel(s), // default to camelCase
+    }
+}
 
 fn snake_to_camel(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
@@ -100,6 +129,12 @@ pub fn synthesize_serde(project: &mut Project) {
 
         module.functions.extend(generated);
     }
+
+    // Generate Serialize/Deserialize impls for tuple types.
+    // Tuples are anonymous types that can't have `impl Trait for Type;` syntax,
+    // so we auto-detect them from the shared type table and generate serde
+    // impls in the core:serde module.
+    synthesize_tuple_serde(project);
 }
 
 fn collect_existing_trait_methods(module: &TirModule) -> IndexSet<String> {
@@ -477,7 +512,16 @@ fn generate_struct_serialize(
     let fields: Vec<(String, String, TypeId, u32)> = struct_def
         .fields
         .iter()
-        .map(|f| (f.name.clone(), snake_to_camel(&f.name), f.type_id, f.index))
+        .map(|f| {
+            let serialized_name = f.serde_rename.clone().unwrap_or_else(|| {
+                if let Some(strategy) = &struct_def.serde_rename_all {
+                    apply_rename_all(&f.name, strategy)
+                } else {
+                    snake_to_camel(&f.name)
+                }
+            });
+            (f.name.clone(), serialized_name, f.type_id, f.index)
+        })
         .collect();
     let field_count = fields.len();
     let field_ref_types: Vec<TypeId> = fields
@@ -676,7 +720,16 @@ fn generate_struct_deserialize(
     let fields: Vec<(String, String, TypeId, u32)> = struct_def
         .fields
         .iter()
-        .map(|f| (f.name.clone(), snake_to_camel(&f.name), f.type_id, f.index))
+        .map(|f| {
+            let serialized_name = f.serde_rename.clone().unwrap_or_else(|| {
+                if let Some(strategy) = &struct_def.serde_rename_all {
+                    apply_rename_all(&f.name, strategy)
+                } else {
+                    snake_to_camel(&f.name)
+                }
+            });
+            (f.name.clone(), serialized_name, f.type_id, f.index)
+        })
         .collect();
     let field_count = fields.len();
     let field_result_types: Vec<TypeId> = fields
@@ -966,58 +1019,65 @@ fn generate_struct_deserialize(
 
     then_stmts.push(loop_stmt(block(loop_stmts.clone())));
 
-    // Check seen mask
+    // Check seen mask — only require non-default fields
     if field_count > 0 {
-        let full_mask = (1u32 << field_count) - 1;
-        let ne_check = TirExpr::new(
-            TirExprKind::Binary {
-                op: crate::tir::TirBinaryOp::NotEq,
-                left: Box::new(TirExpr::new(
-                    TirExprKind::Binary {
-                        op: crate::tir::TirBinaryOp::BitAnd,
-                        left: Box::new(local_ref(seen_local, "seen", TypeTable::U32)),
-                        right: Box::new(TirExpr::new(
-                            TirExprKind::IntLiteral {
-                                value: u64::from(full_mask),
-                                repr: full_mask.to_string(),
-                            },
-                            TypeTable::U32,
-                            span,
-                        )),
-                    },
-                    TypeTable::U32,
-                    span,
-                )),
-                right: Box::new(TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: u64::from(full_mask),
-                        repr: full_mask.to_string(),
-                    },
-                    TypeTable::U32,
-                    span,
-                )),
-            },
-            TypeTable::BOOL,
-            span,
-        );
-        let missing_err = deserialize_error_literal(
-            deser_error_type,
-            deser_error_kind_type,
-            "MissingField",
-            1,
-            "required field missing",
-            string_type,
-            span,
-        );
-        then_stmts.push(if_stmt(
-            ne_check,
-            block(vec![return_stmt(Some(variant_err(
-                missing_err,
-                result_struct_err,
+        let mut required_mask = 0u32;
+        for (i, f) in struct_def.fields.iter().enumerate() {
+            if !f.serde_default {
+                required_mask |= 1u32 << i;
+            }
+        }
+        if required_mask != 0 {
+            let ne_check = TirExpr::new(
+                TirExprKind::Binary {
+                    op: crate::tir::TirBinaryOp::NotEq,
+                    left: Box::new(TirExpr::new(
+                        TirExprKind::Binary {
+                            op: crate::tir::TirBinaryOp::BitAnd,
+                            left: Box::new(local_ref(seen_local, "seen", TypeTable::U32)),
+                            right: Box::new(TirExpr::new(
+                                TirExprKind::IntLiteral {
+                                    value: u64::from(required_mask),
+                                    repr: required_mask.to_string(),
+                                },
+                                TypeTable::U32,
+                                span,
+                            )),
+                        },
+                        TypeTable::U32,
+                        span,
+                    )),
+                    right: Box::new(TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: u64::from(required_mask),
+                            repr: required_mask.to_string(),
+                        },
+                        TypeTable::U32,
+                        span,
+                    )),
+                },
+                TypeTable::BOOL,
                 span,
-            )))]),
-            None,
-        ));
+            );
+            let missing_err = deserialize_error_literal(
+                deser_error_type,
+                deser_error_kind_type,
+                "MissingField",
+                1,
+                "required field missing",
+                string_type,
+                span,
+            );
+            then_stmts.push(if_stmt(
+                ne_check,
+                block(vec![return_stmt(Some(variant_err(
+                    missing_err,
+                    result_struct_err,
+                    span,
+                )))]),
+                None,
+            ));
+        }
     }
 
     // sd.end()
@@ -2208,6 +2268,492 @@ fn generate_variant_deserialize(
             span,
         }],
         return_type: result_variant_err,
+        effects: Vec::new(),
+        body: Some(block(stmts)),
+        span,
+        local_count: next_local,
+        local_types,
+        address_taken_locals: IndexSet::new(),
+        is_cm_adapter: false,
+        inline_hint: InlineHint::Auto,
+        comp_features: 0,
+    })
+}
+
+fn synthesize_tuple_serde(project: &mut Project) {
+    // Find the core:serde module to add tuple serde functions into.
+    let serde_source = ModuleSource::core("serde");
+    let serde_module = match project.tir_modules.get(&serde_source) {
+        Some(m) => m,
+        None => return,
+    };
+
+    // Collect all tuple types from the shared type table.
+    let tuple_types: Vec<(TypeId, Vec<TypeId>)> = {
+        let tt = serde_module.type_table.borrow();
+        tt.all_types()
+            .filter_map(|(&id, resolved)| {
+                if let ResolvedType::Tuple(elems) = resolved {
+                    Some((id, elems.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    };
+
+    if tuple_types.is_empty() {
+        return;
+    }
+
+    let mut generated = Vec::new();
+    for (tuple_type_id, elem_ids) in &tuple_types {
+        if let Some(f) = generate_tuple_serialize(serde_module, *tuple_type_id, elem_ids) {
+            generated.push(Rc::new(RefCell::new(f)));
+        }
+        if let Some(f) = generate_tuple_deserialize(serde_module, *tuple_type_id, elem_ids) {
+            generated.push(Rc::new(RefCell::new(f)));
+        }
+    }
+
+    if let Some(module) = project.tir_modules.get_mut(&serde_source) {
+        module.functions.extend(generated);
+    }
+}
+
+fn generate_tuple_serialize(
+    module: &TirModule,
+    tuple_type_id: TypeId,
+    elem_ids: &[TypeId],
+) -> Option<TirFunction> {
+    if elem_ids.is_empty() {
+        return None;
+    }
+    let span = synth_span();
+    let serde_module = ModuleSource::core("serde");
+
+    let mut tt = module.type_table.borrow_mut();
+
+    let tuple_name = tt.mangle_type_name(tuple_type_id);
+    let ref_self_type = tt.make_ref(tuple_type_id);
+    let s_type_param = tt.make_type_param("S".to_string(), 0);
+    let mut_ref_s = tt.make_mut_ref(s_type_param);
+    let ser_error_type = tt.make_struct("SerializeError".to_string(), serde_module.clone());
+    let ser_error_kind_type = tt
+        .find_enum_type_by_name("SerializeErrorKind")
+        .unwrap_or(TypeTable::I32);
+    let result_unit_err = tt.make_result(TypeTable::UNIT, ser_error_type);
+    let seq_ser_type = tt.make_assoc_type_projection(
+        s_type_param,
+        "SeqSerializer".to_string(),
+        vec!["SerializeSeq".to_string()],
+    );
+    let result_seq_err = tt.make_result(seq_ser_type, ser_error_type);
+    let mut_ref_seq = tt.make_mut_ref(seq_ser_type);
+    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+
+    let elem_ref_types: Vec<TypeId> = elem_ids.iter().map(|&id| tt.make_ref(id)).collect();
+    let elem_type_names: Vec<String> = elem_ids.iter().map(|&id| tt.type_name(id)).collect();
+
+    drop(tt);
+
+    let mut local_types = vec![ref_self_type, mut_ref_s];
+    let mut next_local: u32 = 2;
+    let result_tmp = alloc_local(&mut next_local, &mut local_types, result_seq_err);
+    let seq_local = alloc_local(&mut next_local, &mut local_types, seq_ser_type);
+
+    let mut stmts = Vec::new();
+
+    // let __result = s.begin_seq(len);
+    let begin_call = type_param_method_call(
+        local_ref(1, "s", mut_ref_s),
+        "S",
+        "Serializer",
+        "begin_seq",
+        serde_module.clone(),
+        vec![],
+        vec![],
+        vec![i32_const(elem_ids.len() as i32)],
+        result_seq_err,
+        span,
+    );
+    stmts.push(let_mut_stmt(
+        "__result",
+        result_tmp,
+        result_seq_err,
+        begin_call,
+    ));
+
+    // if let Ok(seq) = __result { ... } else { return Err(...) }
+    let mut then_stmts = Vec::new();
+    for (i, elem_type) in elem_ids.iter().enumerate() {
+        // &(*self).i
+        let self_ref = local_ref(0, "self", ref_self_type);
+        let self_deref = deref_expr(self_ref, tuple_type_id, span);
+        let elem_val = field_access(self_deref, i as u32, i.to_string(), *elem_type, span);
+        let elem_ref = ref_expr(elem_val, elem_ref_types[i], span);
+
+        let elem_call = type_param_method_call(
+            local_ref(seq_local, "seq", mut_ref_seq),
+            "S::SeqSerializer",
+            "SerializeSeq",
+            "element",
+            serde_module.clone(),
+            vec![elem_type_names[i].clone()],
+            vec![*elem_type],
+            vec![elem_ref],
+            result_unit_err,
+            span,
+        );
+        then_stmts.push(expr_stmt(elem_call));
+    }
+
+    // return seq.end();
+    let end_call = type_param_method_call(
+        local_ref(seq_local, "seq", mut_ref_seq),
+        "S::SeqSerializer",
+        "SerializeSeq",
+        "end",
+        serde_module.clone(),
+        vec![],
+        vec![],
+        vec![],
+        result_unit_err,
+        span,
+    );
+    then_stmts.push(return_stmt(Some(end_call)));
+
+    let err_val = serialize_error_literal(
+        ser_error_type,
+        ser_error_kind_type,
+        "begin_seq failed",
+        string_type,
+        span,
+    );
+    let else_stmts = vec![return_stmt(Some(variant_err(
+        err_val,
+        result_unit_err,
+        span,
+    )))];
+
+    stmts.push(if_let_ok(
+        local_ref(result_tmp, "__result", result_seq_err),
+        result_seq_err,
+        seq_ser_type,
+        seq_local,
+        "seq",
+        block(then_stmts),
+        block(else_stmts),
+        span,
+    ));
+
+    let method_info = LocalMethodName::new(
+        "Tuple".to_string(),
+        Some("Serialize".to_string()),
+        "serialize".to_string(),
+    )
+    .with_struct_type_args(&elem_type_names);
+    let qualified_name = MethodName::format_local(&tuple_name, Some("Serialize"), "serialize");
+
+    Some(TirFunction {
+        name: qualified_name,
+        is_pub: true,
+        is_export: false,
+        is_async: false,
+        type_params: vec![TirTypeParam {
+            name: "S".to_string(),
+            bounds: vec!["Serializer".to_string()],
+            default: None,
+            index: 0,
+        }],
+        impl_type_params: Vec::new(),
+        monomorph_info: None,
+        method_info: Some(method_info),
+        params: vec![
+            TirParam {
+                name: "self".to_string(),
+                type_id: ref_self_type,
+                local_index: 0,
+                span,
+            },
+            TirParam {
+                name: "s".to_string(),
+                type_id: mut_ref_s,
+                local_index: 1,
+                span,
+            },
+        ],
+        return_type: result_unit_err,
+        effects: Vec::new(),
+        body: Some(block(stmts)),
+        span,
+        local_count: next_local,
+        local_types,
+        address_taken_locals: IndexSet::new(),
+        is_cm_adapter: false,
+        inline_hint: InlineHint::Auto,
+        comp_features: 0,
+    })
+}
+
+fn generate_tuple_deserialize(
+    module: &TirModule,
+    tuple_type_id: TypeId,
+    elem_ids: &[TypeId],
+) -> Option<TirFunction> {
+    if elem_ids.is_empty() {
+        return None;
+    }
+    let span = synth_span();
+    let serde_module = ModuleSource::core("serde");
+
+    let mut tt = module.type_table.borrow_mut();
+
+    let tuple_name = tt.mangle_type_name(tuple_type_id);
+    let d_type_param = tt.make_type_param("D".to_string(), 0);
+    let mut_ref_d = tt.make_mut_ref(d_type_param);
+    let deser_error_type = tt.make_struct("DeserializeError".to_string(), serde_module.clone());
+    let deser_error_kind_type = tt
+        .find_enum_type_by_name("DeserializeErrorKind")
+        .unwrap_or(TypeTable::I32);
+    let result_tuple_err = tt.make_result(tuple_type_id, deser_error_type);
+    let seq_access_type = tt.make_assoc_type_projection(
+        d_type_param,
+        "SeqAccess".to_string(),
+        vec!["DeserializeSeq".to_string()],
+    );
+    let result_seq_err = tt.make_result(seq_access_type, deser_error_type);
+    let mut_ref_seq = tt.make_mut_ref(seq_access_type);
+    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let result_unit_err = tt.make_result(TypeTable::UNIT, deser_error_type);
+
+    let elem_option_types: Vec<TypeId> = elem_ids.iter().map(|&id| tt.make_option(id)).collect();
+    let elem_result_option_types: Vec<TypeId> = elem_option_types
+        .iter()
+        .map(|&opt| tt.make_result(opt, deser_error_type))
+        .collect();
+    let elem_type_names: Vec<String> = elem_ids.iter().map(|&id| tt.type_name(id)).collect();
+
+    drop(tt);
+
+    let mut local_types = vec![mut_ref_d];
+    let mut next_local: u32 = 1;
+    let result_tmp = alloc_local(&mut next_local, &mut local_types, result_seq_err);
+    let seq_local = alloc_local(&mut next_local, &mut local_types, seq_access_type);
+
+    // Allocate locals for each deserialized element
+    let elem_locals: Vec<u32> = elem_ids
+        .iter()
+        .map(|&id| alloc_local(&mut next_local, &mut local_types, id))
+        .collect();
+    // Allocate locals for intermediate results
+    let elem_result_locals: Vec<u32> = elem_result_option_types
+        .iter()
+        .map(|&t| alloc_local(&mut next_local, &mut local_types, t))
+        .collect();
+    let elem_option_locals: Vec<u32> = elem_option_types
+        .iter()
+        .map(|&t| alloc_local(&mut next_local, &mut local_types, t))
+        .collect();
+
+    let mut stmts = Vec::new();
+
+    // let __result = d.begin_seq();
+    let begin_call = type_param_method_call(
+        local_ref(0, "d", mut_ref_d),
+        "D",
+        "Deserializer",
+        "begin_seq",
+        serde_module.clone(),
+        vec![],
+        vec![],
+        vec![],
+        result_seq_err,
+        span,
+    );
+    stmts.push(let_mut_stmt(
+        "__result",
+        result_tmp,
+        result_seq_err,
+        begin_call,
+    ));
+
+    // if let Ok(seq) = __result { ... } else { return Err(...) }
+    let mut then_stmts = Vec::new();
+
+    for (i, elem_type) in elem_ids.iter().enumerate() {
+        let result_opt_name = format!("__r{i}");
+        let opt_name = format!("__opt{i}");
+        let elem_name = format!("__e{i}");
+
+        // let __ri = seq.next_element::<Ti>();
+        let next_call = type_param_method_call(
+            local_ref(seq_local, "seq", mut_ref_seq),
+            "D::SeqAccess",
+            "DeserializeSeq",
+            "next_element",
+            serde_module.clone(),
+            vec![elem_type_names[i].clone()],
+            vec![*elem_type],
+            vec![],
+            elem_result_option_types[i],
+            span,
+        );
+        then_stmts.push(let_mut_stmt(
+            &result_opt_name,
+            elem_result_locals[i],
+            elem_result_option_types[i],
+            next_call,
+        ));
+
+        // if let Ok(opt) = __ri { ... } else { return Err(...) }
+        let mut ok_stmts = Vec::new();
+        // if let Some(val) = opt { __ei = val; } else { return Err("expected element") }
+        let val_local = alloc_local(&mut next_local, &mut local_types, *elem_type);
+        ok_stmts.push(if_let_some(
+            local_ref(elem_option_locals[i], &opt_name, elem_option_types[i]),
+            elem_option_types[i],
+            *elem_type,
+            val_local,
+            "__val",
+            block(vec![expr_stmt(TirExpr::new(
+                TirExprKind::Assign {
+                    target: Box::new(local_ref(elem_locals[i], &elem_name, *elem_type)),
+                    value: Box::new(local_ref(val_local, "__val", *elem_type)),
+                },
+                TypeTable::UNIT,
+                span,
+            ))]),
+            block(vec![return_stmt(Some(variant_err(
+                deserialize_error_literal(
+                    deser_error_type,
+                    deser_error_kind_type,
+                    "Eof",
+                    8,
+                    &format!("expected tuple element at index {i}"),
+                    string_type,
+                    span,
+                ),
+                result_tuple_err,
+                span,
+            )))]),
+            span,
+        ));
+
+        let err_propagate = propagate_err_block(
+            elem_result_locals[i],
+            &result_opt_name,
+            elem_result_option_types[i],
+            deser_error_type,
+            result_tuple_err,
+            span,
+        );
+
+        then_stmts.push(if_let_ok(
+            local_ref(
+                elem_result_locals[i],
+                &result_opt_name,
+                elem_result_option_types[i],
+            ),
+            elem_result_option_types[i],
+            elem_option_types[i],
+            elem_option_locals[i],
+            &opt_name,
+            block(ok_stmts),
+            err_propagate,
+            span,
+        ));
+    }
+
+    // seq.end();
+    let end_call = type_param_method_call(
+        local_ref(seq_local, "seq", mut_ref_seq),
+        "D::SeqAccess",
+        "DeserializeSeq",
+        "end",
+        serde_module.clone(),
+        vec![],
+        vec![],
+        vec![],
+        result_unit_err,
+        span,
+    );
+    then_stmts.push(expr_stmt(end_call));
+
+    // Construct tuple from deserialized elements
+    let tuple_elements: Vec<TirExpr> = elem_ids
+        .iter()
+        .enumerate()
+        .map(|(i, &elem_type)| local_ref(elem_locals[i], &format!("__e{i}"), elem_type))
+        .collect();
+    let tuple_literal = TirExpr::new(
+        TirExprKind::TupleLiteral {
+            elements: tuple_elements,
+        },
+        tuple_type_id,
+        span,
+    );
+    then_stmts.push(return_stmt(Some(variant_ok(
+        tuple_literal,
+        result_tuple_err,
+        span,
+    ))));
+
+    let err_val = deserialize_error_literal(
+        deser_error_type,
+        deser_error_kind_type,
+        "Custom",
+        9,
+        "begin_seq failed",
+        string_type,
+        span,
+    );
+    let else_stmts = vec![return_stmt(Some(variant_err(
+        err_val,
+        result_tuple_err,
+        span,
+    )))];
+
+    stmts.push(if_let_ok(
+        local_ref(result_tmp, "__result", result_seq_err),
+        result_seq_err,
+        seq_access_type,
+        seq_local,
+        "seq",
+        block(then_stmts),
+        block(else_stmts),
+        span,
+    ));
+
+    let method_info = LocalMethodName::new(
+        "Tuple".to_string(),
+        Some("Deserialize".to_string()),
+        "deserialize".to_string(),
+    )
+    .with_struct_type_args(&elem_type_names);
+    let qualified_name = MethodName::format_local(&tuple_name, Some("Deserialize"), "deserialize");
+
+    Some(TirFunction {
+        name: qualified_name,
+        is_pub: true,
+        is_export: false,
+        is_async: false,
+        type_params: vec![TirTypeParam {
+            name: "D".to_string(),
+            bounds: vec!["Deserializer".to_string()],
+            default: None,
+            index: 0,
+        }],
+        impl_type_params: Vec::new(),
+        monomorph_info: None,
+        method_info: Some(method_info),
+        params: vec![TirParam {
+            name: "d".to_string(),
+            type_id: mut_ref_d,
+            local_index: 0,
+            span,
+        }],
+        return_type: result_tuple_err,
         effects: Vec::new(),
         body: Some(block(stmts)),
         span,

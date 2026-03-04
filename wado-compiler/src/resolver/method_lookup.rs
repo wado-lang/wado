@@ -1866,6 +1866,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // For references, check if the inner type implements the trait
                 return self.type_implements_trait(*inner, trait_name);
             }
+            ResolvedType::Tuple(elems) => {
+                // Tuples implement a trait when all elements implement it
+                let elems = elems.clone();
+                return elems
+                    .iter()
+                    .all(|e| self.type_implements_trait(*e, trait_name));
+            }
             _ => return false,
         };
 

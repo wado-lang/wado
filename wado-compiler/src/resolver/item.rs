@@ -49,6 +49,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let mut fields = Vec::new();
         for (index, field) in struct_decl.fields.iter().enumerate() {
             let type_id = self.resolve_type(&field.ty);
+            let serde_rename = field.attrs.iter().find_map(|a| {
+                if a.name == "serde" && a.args.first().is_some_and(|s| s == "rename") {
+                    a.args.get(1).cloned()
+                } else {
+                    None
+                }
+            });
+            let serde_default = field
+                .attrs
+                .iter()
+                .any(|a| a.name == "serde" && a.args.first().is_some_and(|s| s == "default"));
             fields.push(crate::tir::TirField {
                 name: field.name.clone(),
                 is_pub: field.is_pub,
@@ -56,6 +67,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 index: index as u32,
                 span: field.span,
                 is_hidden: field.attrs.iter().any(|a| a.name == "hidden"),
+                serde_rename,
+                serde_default,
             });
         }
 
@@ -75,6 +88,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Restore previous type params scope
         self.current_type_params = old_type_params;
 
+        let serde_rename_all = struct_decl.attrs.iter().find_map(|a| {
+            if a.name == "serde" && a.args.first().is_some_and(|s| s == "rename_all") {
+                a.args.get(1).cloned()
+            } else {
+                None
+            }
+        });
+
         TirStruct {
             name: struct_decl.name.clone(),
             is_pub: struct_decl.is_pub,
@@ -82,6 +103,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             monomorph_info: None, // Not from monomorphization
             fields,
             span: struct_decl.span,
+            serde_rename_all,
         }
     }
 

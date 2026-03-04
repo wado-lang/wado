@@ -458,6 +458,8 @@ impl Parser {
         let args = if self.check(&TokenKind::LParen) {
             self.advance();
             // Parse comma-separated arguments (string literals or identifiers)
+            // Also supports key=value pairs: #[serde(rename = "name")]
+            // which produces args ["rename", "name"]
             let mut args = Vec::new();
             loop {
                 match self.peek_kind().clone() {
@@ -470,6 +472,11 @@ impl Parser {
                         args.push(value);
                     }
                     _ => break,
+                }
+                // Handle key = value syntax: skip '=' and continue to parse the value
+                if self.check(&TokenKind::Eq) {
+                    self.advance();
+                    continue;
                 }
                 if self.check(&TokenKind::Comma) {
                     self.advance();
