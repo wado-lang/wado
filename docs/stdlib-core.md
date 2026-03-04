@@ -611,6 +611,10 @@ Convert u128 to String (for template string interpolation)
 
 ###### `pub fn rem(&self, other: &Self) -> Self::Output`
 
+##### `impl Default for u128`
+
+###### `pub fn default() -> u128`
+
 #### `pub struct i128`
 
 Signed 128-bit integer
@@ -765,6 +769,10 @@ Convert i128 to String (for template string interpolation)
 
 ###### `pub fn rem(&self, other: &Self) -> Self::Output`
 
+##### `impl Default for i128`
+
+###### `pub fn default() -> i128`
+
 #### `pub struct String`
 
 UTF-8 encoded string type with O(1) amortized append
@@ -890,6 +898,10 @@ Returns a new string with leading and trailing Unicode whitespace removed.
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+##### `impl Default for String`
+
+###### `pub fn default() -> String`
+
 #### `pub struct StrUtf8ByteIter`
 
 Iterator over UTF-8 bytes of a String.
@@ -975,6 +987,10 @@ In-place sort with comparator. Stable, O(n log n) worst case.
 ###### `fn push_literal(&mut self, value: T)`
 
 ###### `fn build(&self) -> Array<T>`
+
+##### `impl Default for Array<T>`
+
+###### `pub fn default() -> Array<T>`
 
 #### `pub struct ArrayIter<T>`
 
@@ -1070,6 +1086,10 @@ _Fields are private._
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+##### `impl Default for bool`
+
+###### `pub fn default() -> bool`
+
 #### `char`
 
 ##### `pub fn from_u32(value: u32) -> Option<char>`
@@ -1116,6 +1136,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+##### `impl Default for char`
+
+###### `pub fn default() -> char`
+
 #### `i8`
 
 ##### `pub const MAX: i8`
@@ -1155,6 +1179,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 ##### `impl Ord for i8`
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+##### `impl Default for i8`
+
+###### `pub fn default() -> i8`
 
 #### `u8`
 
@@ -1196,6 +1224,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+##### `impl Default for u8`
+
+###### `pub fn default() -> u8`
+
 #### `i16`
 
 ##### `pub const MAX: i16`
@@ -1235,6 +1267,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 ##### `impl Ord for i16`
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+##### `impl Default for i16`
+
+###### `pub fn default() -> i16`
 
 #### `u16`
 
@@ -1276,6 +1312,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+##### `impl Default for u16`
+
+###### `pub fn default() -> u16`
+
 #### `i32`
 
 ##### `pub const MAX: i32`
@@ -1315,6 +1355,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 ##### `impl Ord for i32`
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+##### `impl Default for i32`
+
+###### `pub fn default() -> i32`
 
 #### `u32`
 
@@ -1356,6 +1400,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+##### `impl Default for u32`
+
+###### `pub fn default() -> u32`
+
 #### `i64`
 
 ##### `pub const MAX: i64`
@@ -1396,6 +1444,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+##### `impl Default for i64`
+
+###### `pub fn default() -> i64`
+
 #### `u64`
 
 ##### `pub const MAX: u64`
@@ -1435,6 +1487,10 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 ##### `impl Ord for u64`
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+##### `impl Default for u64`
+
+###### `pub fn default() -> u64`
 
 #### `f32`
 
@@ -1626,6 +1682,10 @@ Floating-point remainder of x/y
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+##### `impl Default for f32`
+
+###### `pub fn default() -> f32`
+
 #### `f64`
 
 ##### `pub const PI: f64`
@@ -1815,6 +1875,10 @@ Floating-point remainder of x/y
 ##### `impl Ord for f64`
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+##### `impl Default for f64`
+
+###### `pub fn default() -> f64`
 
 ### Variants
 
@@ -2039,6 +2103,10 @@ Removes all key-value pairs from the map.
 
 ###### `fn build(&self) -> TreeMap<String, V>`
 
+##### `impl Default for TreeMap<K, V>`
+
+###### `pub fn default() -> TreeMap<K, V>`
+
 #### `pub struct TreeSet<T>`
 
 A set that iterates in insertion order.
@@ -2100,6 +2168,10 @@ Returns an iterator over the elements in insertion order.
 ###### `fn push_literal(&mut self, value: T)`
 
 ###### `fn build(&self) -> TreeSet<T>`
+
+##### `impl Default for TreeSet<T>`
+
+###### `pub fn default() -> TreeSet<T>`
 
 ## core:base64
 

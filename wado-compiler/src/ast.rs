@@ -1213,6 +1213,7 @@ pub struct TraitDecl {
     pub associated_types: Vec<AssociatedTypeDecl>,
     /// Trait methods. Body is None for required methods.
     pub methods: Vec<Function>,
+    pub attrs: Vec<Attribute>,
     pub span: Span,
 }
 

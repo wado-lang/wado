@@ -327,7 +327,7 @@ impl Parser {
             TokenKind::Flags => self.parse_flags_decl(is_pub, attrs).map(Item::Flags),
             TokenKind::Type => self.parse_newtype(is_pub, attrs).map(Item::Type),
             TokenKind::Impl => self.parse_impl_block().map(Item::Impl),
-            TokenKind::Trait => self.parse_trait_decl(is_pub).map(Item::Trait),
+            TokenKind::Trait => self.parse_trait_decl(is_pub, attrs).map(Item::Trait),
             TokenKind::Resource => self.parse_resource_decl(is_pub, attrs).map(Item::Resource),
             TokenKind::World => self.parse_world_decl(is_pub, attrs).map(Item::World),
             TokenKind::Global => self.parse_global_decl(is_pub, attrs).map(Item::Global),
@@ -3611,7 +3611,7 @@ impl Parser {
     ///     fn display(&self) -> String;
     /// }
     /// ```
-    fn parse_trait_decl(&mut self, is_pub: bool) -> ParseResult<TraitDecl> {
+    fn parse_trait_decl(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<TraitDecl> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Trait)?;
 
@@ -3663,6 +3663,7 @@ impl Parser {
             type_params,
             associated_types,
             methods,
+            attrs,
             span: start_span.merge(&end_span),
         })
     }

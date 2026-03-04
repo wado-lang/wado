@@ -524,6 +524,8 @@ pub const COMP_FEATURE_STRING_APPEND_CHAR: u32 = 1 << 2;
 pub const COMP_FEATURE_OPTION: u32 = 1 << 3;
 /// Compiler feature flag: variant is the canonical `Result<T, E>` type.
 pub const COMP_FEATURE_RESULT: u32 = 1 << 4;
+/// Compiler feature flag: trait is the canonical `Default` trait.
+pub const COMP_FEATURE_DEFAULT: u32 = 1 << 5;
 
 /// A function declaration with optional body.
 #[derive(Debug)]

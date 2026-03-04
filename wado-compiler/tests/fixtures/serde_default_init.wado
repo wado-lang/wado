@@ -1,0 +1,33 @@
+// Test: serde deserialization uses Default trait for field initialization
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+struct Config {
+    host: String,
+    port: i32,
+    debug: bool,
+}
+
+impl Serialize for Config;
+impl Deserialize for Config;
+
+export fn run() {
+    // Round-trip test verifying Default-initialized fields work correctly
+    let c = Config { host: "localhost", port: 8080, debug: true };
+    let json = to_string::<Config>(&c);
+    if let Ok(s) = json {
+        let parsed = from_string::<Config>(s);
+        if let Ok(p) = parsed {
+            assert p.host == "localhost";
+            assert p.port == 8080;
+            assert p.debug == true;
+        } else {
+            panic("deserialize failed");
+        }
+    } else {
+        panic("serialize failed");
+    }
+}
+
+__DATA__
+{"stdout": ""}

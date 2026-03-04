@@ -751,6 +751,11 @@ trait Ord {
     fn cmp(&self, other: &Self) -> Ordering;
 }
 
+// Default - provides a default value for a type
+trait Default {
+    fn default() -> Self;
+}
+
 // IndexValue - value-based index access (panics if index/key not found)
 trait IndexValue<IndexType> {
     type Output;

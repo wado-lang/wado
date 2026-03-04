@@ -23,6 +23,14 @@ pub trait Ord {
     /// Compares self with other and returns an Ordering.
     fn cmp(&self, other: &Self) -> Ordering;
 }
+/// Trait for providing a default value for a type.
+/// Types implementing this trait can produce a sensible "zero" or "empty" value.
+#[comp_feature("default")]
+pub trait Default {
+    /// Returns the default value for this type.
+    fn default() -> Self;
+}
+
 /// Trait for immutable indexing operations.
 /// Types implementing this trait can be indexed with the `[]` operator for reading.
 pub trait Index<IndexType> {

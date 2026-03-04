@@ -33,18 +33,18 @@ Unlike `Serialize`/`Deserialize`, there is **no** compiler-synthesized implement
 
 The following types implement `Default` in the standard library:
 
-| Type | `default()` |
-|---|---|
-| `i8`, `i16`, `i32`, `i64` | `0` |
-| `u8`, `u16`, `u32`, `u64` | `0` |
-| `i128`, `u128` | `0` |
-| `f32`, `f64` | `0.0` |
-| `bool` | `false` |
-| `char` | `'\0'` |
-| `String` | `""` |
-| `Array<T>` | `[]` |
-| `Option<T>` | `null` |
-| `TreeMap<K, V>` | `{}` |
+| Type                      | `default()` |
+| ------------------------- | ----------- |
+| `i8`, `i16`, `i32`, `i64` | `0`         |
+| `u8`, `u16`, `u32`, `u64` | `0`         |
+| `i128`, `u128`            | `0`         |
+| `f32`, `f64`              | `0.0`       |
+| `bool`                    | `false`     |
+| `char`                    | `'\0'`      |
+| `String`                  | `""`        |
+| `Array<T>`                | `[]`        |
+| `Option<T>`               | `null`      |
+| `TreeMap<K, V>`           | `{}`        |
 
 `Result<T, E>` does **not** implement `Default` because there is no obvious choice between `Ok` and `Err`.
 
