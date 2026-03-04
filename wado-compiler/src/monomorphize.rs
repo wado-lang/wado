@@ -2302,7 +2302,8 @@ impl Monomorphizer {
                     .iter()
                     .any(|p| p.name == info.base_struct_name);
                 if is_blanket && !impl_type_args.is_empty() {
-                    info.with_substituted_struct_name(&impl_type_args[0])
+                    let base = type_table.base_type_name(key.type_args[0]);
+                    info.with_substituted_struct_name(&impl_type_args[0], &base)
                 } else {
                     info.with_type_args(&impl_type_args, &method_type_args)
                 }
@@ -2543,7 +2544,9 @@ impl Monomorphizer {
                         {
                             inner = t;
                         }
-                        info.with_substituted_struct_name(&type_table.mangle_type_name(inner))
+                        let mangled = type_table.mangle_type_name(inner);
+                        let base = type_table.base_type_name(inner);
+                        info.with_substituted_struct_name(&mangled, &base)
                     } else if needs_struct_type_args {
                         info.with_struct_type_args(&type_names)
                     } else {
@@ -2714,7 +2717,8 @@ impl Monomorphizer {
                     // Apply type args to get monomorphized method info
                     // Skip for non-generic structs that don't use the enclosing type params.
                     let new_info = if info.is_type_param_receiver && !type_names.is_empty() {
-                        let mut substituted = info.with_substituted_struct_name(&type_names[0]);
+                        let base = type_table.base_type_name(*sorted_entries[0].1);
+                        let mut substituted = info.with_substituted_struct_name(&type_names[0], &base);
                         // Also substitute method type args that may contain TypeParam references.
                         // The monomorph_info stores method type args as TypeIds which can be
                         // substituted, then we regenerate the mangled names.

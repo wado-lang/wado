@@ -733,11 +733,14 @@ impl LocalMethodName {
 
     /// Create a version with the struct name directly substituted (not wrapped with type args).
     /// Used when the struct name is a type parameter (e.g., `T^Ord::cmp` → `i32^Ord::cmp`).
+    ///
+    /// `new_name` is the full mangled name (e.g., `"Option<String>"`).
+    /// `base_name` is the name without type parameters (e.g., `"Option"`).
     #[must_use]
-    pub fn with_substituted_struct_name(&self, new_name: &str) -> Self {
+    pub fn with_substituted_struct_name(&self, new_name: &str, base_name: &str) -> Self {
         Self {
             struct_name: new_name.to_string(),
-            base_struct_name: new_name.to_string(),
+            base_struct_name: base_name.to_string(),
             trait_name: self.trait_name.clone(),
             method_name: self.method_name.clone(),
             method_type_args: self.method_type_args.clone(),
