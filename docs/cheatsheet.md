@@ -2,6 +2,14 @@
 
 Quick reference for Wado syntax.
 
+## Shebang
+
+```wado
+#!/usr/bin/env wado
+// Shebang is only valid on the first line and is ignored by the compiler.
+// Note: #![ is an inner attribute, not a shebang.
+```
+
 ## Comments
 
 ```wado
@@ -10,14 +18,6 @@ Quick reference for Wado syntax.
 
 //! Module doc comment
 /// Doc comment
-```
-
-## Shebang
-
-```wado
-#!/usr/bin/env wado
-// Shebang is only valid on the first line and is ignored by the compiler.
-// Note: #![ is an inner attribute, not a shebang.
 ```
 
 ## Literals
@@ -33,8 +33,7 @@ Quick reference for Wado syntax.
 0b1010          // binary
 0o755           // octal
 
-// Numeric literal coercion: integer/float literals have no fixed type until
-// the type context is known (annotation, function argument, etc.)
+// Numeric literal coercion
 let x: i64 = 42;               // integer literal → i64
 let y: u8 = 255;               // integer literal → u8
 let z: u128 = 1_000_000_000;   // integer literal → u128
@@ -87,11 +86,11 @@ pub global VERSION: i32 = 1;        // accessible from other modules
 global DOUBLED: i32 = 21 * 2;
 
 // Object type globals
-global mut MESSAGE: String = "Hello, World!";
-global mut ITEMS: Array<i32> = [1, 2, 3];
+global MESSAGE: String = "Hello, World!";
+global ITEMS: Array<i32> = [1, 2, 3];
 
 struct Point { x: i32, y: i32 }
-global mut ORIGIN: Point = Point { x: 0, y: 0 };
+global ORIGIN: Point = Point { x: 0, y: 0 };
 
 // Usage
 fn example() {
@@ -420,7 +419,7 @@ impl Color {
 
 ## Flags
 
-Flags are bitmask types where each member represents a single bit. They are used for WASI permission flags and similar bitfield values.
+Flags are bitmask types where each member represents a single bit.
 
 ```wado
 pub flags Perms {
@@ -543,7 +542,7 @@ pub fn api_function() -> i32 {
 export fn run() { ... }
 ```
 
-A function must have `return` if it returns a value. This is applied to methods and closures as well.
+A function must have `return` if it returns a value.
 
 ## Visibility
 
@@ -933,7 +932,7 @@ if let x = get_value(); x > 0 {
 // x is not in scope here
 
 // If let pattern matching (Rust-style)
-let opt: Option<i32> = Option::<i32>::Some(42);
+let opt = Option::Some(42);
 if let Some(x) = opt {
     println(`Got: {x}`);
 } else {
@@ -982,13 +981,7 @@ for let mut i = 0; i < 10; i += 1 {
     println(`{i}`);
 }
 
-// For with pattern condition
-let mut iter = items.iter();
-for ; let Some(x) = iter.next(); {
-    println(`{x}`);
-}
-
-// For with pattern and update expression
+// For with pattern
 let mut iter = items.iter();
 for let mut count = 0; let Some(x) = iter.next(); count += 1 {
     println(`item {count}: {x}`);
@@ -1026,7 +1019,7 @@ outer: {
 }
 
 // Match expression
-let opt: Option<i32> = Option::<i32>::Some(42);
+let opt = Option::Some(42);
 let result = match opt {
     Some(x) => x * 2,
     None => 0,
@@ -1096,15 +1089,10 @@ See [WEP: Operator Precedence and Associativity](./wep-2026-01-11-operator-prece
 // Arithmetic
 + - * / %
 
-// Comparison (can be chained with restrictions)
+// Comparison (can be chained)
 == != < <= > >=
 a < b < c       // same as: a < b && b < c
 a == b == c     // same as: a == b && b == c
-
-// Chaining restrictions:
-// - `!=` CANNOT be chained: `a != b != c` is an error
-// - Cannot mix `==` with inequalities: `a == b < c` is an error
-// - Same-direction only: `a < b < c` OK, `a < b > c` is an error
 
 // Logical
 && || !
@@ -1119,7 +1107,7 @@ a == b == c     // same as: a == b && b == c
 42 as f64
 'A' as i32              // char -> i32: 65
 'A' as u32              // char -> u32: 65
-// 65 as char            // compile error: use char::from_i32()
+// 65 as char           // compile error: use char::from_i32()
 
 // Pattern testing (returns bool)
 opt matches { Some(_) }
@@ -1141,7 +1129,7 @@ let mut y = 0;
 let mr = &mut y;      // mutable reference
 *mr = 10;             // assign through reference
 
-// Reference to reference (GC-managed)
+// Reference to reference
 let rr = &r;          // &&i32
 let val = **rr;       // double dereference
 
@@ -1182,7 +1170,7 @@ assert x > 0;
 assert x > 0, "x must be positive";
 ```
 
-## Tests
+## Test Blocks
 
 ```wado
 // Named test
@@ -1190,13 +1178,13 @@ test "addition works" {
     assert 1 + 1 == 2;
 }
 
-// Unnamed test (identified by file:line)
+// Unnamed test
 test {
     let result = fib(10);
     assert result == 55;
 }
 
-// Expect-trap test: passes when the body traps (panics/unreachable/failed assert)
+// Expect-trap test: passes when the body traps
 #[expect_trap]
 test "panics on invalid input" {
     panic("bad input");
@@ -1270,7 +1258,7 @@ fn for_each(items: Array<i32>, f: fn(i32) with Stdout) with Stdout {
 }
 ```
 
-## Reference Storage (`stores`)
+## Reference Storage
 
 > Not yet implemented. See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
 
@@ -1385,7 +1373,7 @@ let parsed = from_string::<User>(`\{"name":"Alice","age":30\}`);
 
 // core:base64 - Base64 encoding/decoding
 use { encode, decode } from "core:base64";
-let data: Array<u8> = [72, 101, 108, 108, 111] as Array<u8>;
+let data: Array<u8> = [72, 101, 108, 108, 111];
 let b64 = encode(&data);             // "SGVsbG8="
 ```
 
@@ -1448,14 +1436,6 @@ let inc = &mut || { count += 1; };
 inc();
 inc();
 println(`{count}`);  // 2
-
-// Multiple closures sharing the same mutable variable
-let mut count = 0;
-let inc = &mut || { count += 1; };
-let get = || count;
-inc();
-inc();
-println(`{get()}`);  // 2
 ```
 
 ## Iterators
@@ -1499,7 +1479,7 @@ trait FromIterator<T> {
 // Array<T> implements IntoIterator
 let arr: Array<i32> = [1, 2, 3, 4, 5];
 
-// for-of uses IntoIterator automatically
+// for-of uses IntoIterator
 for let x of arr {
     println(`{x}`);
 }
@@ -1510,12 +1490,6 @@ let mut iter = arr.iter();
 // Iterators implement IntoIterator via blanket impl,
 // so for-of works directly on any iterator
 for let x of iter {
-    println(`{x}`);
-}
-
-// Manual iteration with while let
-let mut iter2 = arr.iter();
-while let Some(x) = iter2.next() {
     println(`{x}`);
 }
 
@@ -1620,56 +1594,11 @@ let result = arr.iter()
 
 See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
 
-```wado
-use { Serialize, Deserialize, SerializeError, DeserializeError } from "core:serde";
-use { to_string, from_string } from "core:json";
-
-// Compiler-synthesized implementations
-struct Config {
-    host: String,
-    port: i32,
-    debug: bool,
-}
-
-impl Serialize for Config;    // compiler generates serialize method
-impl Deserialize for Config;  // compiler generates deserialize method
-
-// Serialize to JSON
-let c = Config { host: "localhost", port: 8080, debug: true };
-let json = to_string::<Config>(&c);
-// Ok("{\"host\":\"localhost\",\"port\":8080,\"debug\":true}")
-
-// Field names: snake_case in Wado → camelCase in JSON
-// user_name → "userName", is_active → "isActive"
-
-// Deserialize from JSON
-let parsed = from_string::<Config>(`\{"host":"localhost","port":8080,"debug":true\}`);
-if let Ok(c) = parsed {
-    assert c.host == "localhost";
-    assert c.port == 8080;
-}
-
-// Error handling
-let bad = from_string::<Config>("invalid json");
-if let Err(e) = bad {
-    // e.message: error description
-    // e.offset: byte offset in input (-1 if unavailable)
-}
-
-// Primitive types have builtin Serialize/Deserialize impls:
-// i8, i16, i32, i64, u8, u16, u32, u64, f32, f64, bool, char, String
-// Option<T: Serialize>, Array<T: Serialize>
-
-// JSON rejects NaN and Infinity
-let nan_result = to_string::<f64>(&f64::NAN);
-// Err(SerializeError { kind: UnsupportedValue, message: "NaN is not allowed in JSON" })
-```
-
 ## Compile-Time Location Literals
 
 ```wado
 // Get current source file
-let file = #file;           // "<entry>" or "./module.wado"
+let file = #file;           // "./module.wado"
 
 // Get current line number (1-indexed)
 let line = #line;           // i32
@@ -1706,17 +1635,6 @@ fn critical_path() -> i32 { return 1; }
 
 #[inline(never)]       // never inline (useful for cold paths, debugging)
 fn error_handler() { panic("error"); }
-
-// Test attributes
-#[expect_trap]
-test "should panic" {
-    panic("intentional");  // test passes because it traps
-}
-
-#[TODO]
-test "not yet implemented" {
-    panic("TODO");  // passes while trapping; runner warns when it stops trapping
-}
 ```
 
 ## Macros

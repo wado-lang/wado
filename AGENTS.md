@@ -318,6 +318,7 @@ Wado is designed on the following Wasm features:
 - YAGNI. Do the simplest thing that could possibly work.
 - Do not use `HashMap` or `HashSet` from `std::collections`. Use `IndexMap` and `IndexSet` from the `indexmap` crate instead, to ensure deterministic iteration order.
 - Do not use any comment sections to separate or organize code. Use Rust's natural structure (modules, impl blocks, trait definitions) instead.
+- Follow Test-Driven Development: write a failing test case first, then implement the concern.
 
 ### Rules for the Compiler Code Base
 
@@ -409,7 +410,7 @@ WEPs combine language specification and implementation strategy in a single docu
 
 ### Tool Management
 
-This project uses [mise](https://mise.jdx.dev/) for development tool version management. Project tasks are defined in `mise.toml`. Run `mise tasks ls` to list available tasks.
+This project uses `mise` to manage dev tools. Project tasks are defined in `mise.toml`. Run `mise tasks ls` to list available tasks.
 
 Run `make on-task-started` to install mise and all required development tools automatically.
 
@@ -418,7 +419,7 @@ Run `make on-task-started` to install mise and all required development tools au
 ```sh
 make test
 make build
-make format      # format Rust files and markdown files
+make format      # format Rust files and Markdown files
 make format-wado # format Wado source files
 
 make benchmark-count-prime # use integer arithmetic
@@ -433,10 +434,6 @@ make report-wasm-size
 ## Compilation Log and Timing
 
 The compiler emits timestamped diagnostics to stderr. Use `--log-level` to control verbosity.
-
-### Log Levels
-
-`compile`, `run`, and `serve` subcommands has `--log-level`, which accepts `off`, `error`, `warn`, `info` (default), and `debug`, for example:
 
 ```sh
 wado compile --log-level debug file.wado # all messages including phase spans
