@@ -313,6 +313,10 @@ impl Div for u128 {
 impl Rem for u128 {
     pub fn rem(&self, other: &Self) -> Self::Output;
 }
+
+impl Default for u128 {
+    pub fn default() -> u128;
+}
 ```
 
 ```wado
@@ -417,6 +421,10 @@ impl Div for i128 {
 impl Rem for i128 {
     pub fn rem(&self, other: &Self) -> Self::Output;
 }
+
+impl Default for i128 {
+    pub fn default() -> i128;
+}
 ```
 
 ```wado
@@ -457,6 +465,10 @@ impl Eq for String {
 
 impl Ord for String {
     pub fn cmp(&self, other: &Self) -> Ordering;
+}
+
+impl Default for String {
+    pub fn default() -> String;
 }
 ```
 
@@ -529,6 +541,10 @@ impl SequenceLiteralBuilder for Array<T> {
     fn new_literal(capacity: i32) -> Array<T>;
     fn push_literal(&mut self, value: T);
     fn build(&self) -> Array<T>;
+}
+
+impl Default for Array<T> {
+    pub fn default() -> Array<T>;
 }
 ```
 
@@ -621,6 +637,10 @@ impl Inspect for bool {
 impl Ord for bool {
     pub fn cmp(&self, other: &Self) -> Ordering;
 }
+
+impl Default for bool {
+    pub fn default() -> bool;
+}
 ```
 
 ```wado
@@ -643,6 +663,10 @@ impl Inspect for char {
 
 impl Ord for char {
     pub fn cmp(&self, other: &Self) -> Ordering;
+}
+
+impl Default for char {
+    pub fn default() -> char;
 }
 ```
 
@@ -682,6 +706,10 @@ impl UpperHex for i8 {
 impl Ord for i8 {
     pub fn cmp(&self, other: &Self) -> Ordering;
 }
+
+impl Default for i8 {
+    pub fn default() -> i8;
+}
 ```
 
 ```wado
@@ -719,6 +747,10 @@ impl UpperHex for u8 {
 
 impl Ord for u8 {
     pub fn cmp(&self, other: &Self) -> Ordering;
+}
+
+impl Default for u8 {
+    pub fn default() -> u8;
 }
 ```
 
@@ -758,6 +790,10 @@ impl UpperHex for i16 {
 impl Ord for i16 {
     pub fn cmp(&self, other: &Self) -> Ordering;
 }
+
+impl Default for i16 {
+    pub fn default() -> i16;
+}
 ```
 
 ```wado
@@ -795,6 +831,10 @@ impl UpperHex for u16 {
 
 impl Ord for u16 {
     pub fn cmp(&self, other: &Self) -> Ordering;
+}
+
+impl Default for u16 {
+    pub fn default() -> u16;
 }
 ```
 
@@ -834,6 +874,10 @@ impl UpperHex for i32 {
 impl Ord for i32 {
     pub fn cmp(&self, other: &Self) -> Ordering;
 }
+
+impl Default for i32 {
+    pub fn default() -> i32;
+}
 ```
 
 ```wado
@@ -871,6 +915,10 @@ impl UpperHex for u32 {
 
 impl Ord for u32 {
     pub fn cmp(&self, other: &Self) -> Ordering;
+}
+
+impl Default for u32 {
+    pub fn default() -> u32;
 }
 ```
 
@@ -910,6 +958,10 @@ impl UpperHex for i64 {
 impl Ord for i64 {
     pub fn cmp(&self, other: &Self) -> Ordering;
 }
+
+impl Default for i64 {
+    pub fn default() -> i64;
+}
 ```
 
 ```wado
@@ -947,6 +999,10 @@ impl UpperHex for u64 {
 
 impl Ord for u64 {
     pub fn cmp(&self, other: &Self) -> Ordering;
+}
+
+impl Default for u64 {
+    pub fn default() -> u64;
 }
 ```
 
@@ -1024,6 +1080,10 @@ impl UpperExp for f32 {
 impl Ord for f32 {
     pub fn cmp(&self, other: &Self) -> Ordering;
 }
+
+impl Default for f32 {
+    pub fn default() -> f32;
+}
 ```
 
 ```wado
@@ -1099,6 +1159,10 @@ impl UpperExp for f64 {
 
 impl Ord for f64 {
     pub fn cmp(&self, other: &Self) -> Ordering;
+}
+
+impl Default for f64 {
+    pub fn default() -> f64;
 }
 ```
 
@@ -1212,12 +1276,18 @@ impl KeyValueLiteralBuilder for TreeMap<String, V> {
     fn build(&self) -> TreeMap<String, V>;
 }
 
+<<<<<<< HEAD
 impl Serialize for TreeMap<String, V> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
 }
 
 impl Deserialize for TreeMap<String, V> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeMap<String, V>, DeserializeError>;
+||||||| 6406151
+=======
+impl Default for TreeMap<K, V> {
+    pub fn default() -> TreeMap<K, V>;
+>>>>>>> origin/main
 }
 ```
 
@@ -1245,6 +1315,10 @@ impl SequenceLiteralBuilder for TreeSet<T> {
     fn new_literal(capacity: i32) -> TreeSet<T>;
     fn push_literal(&mut self, value: T);
     fn build(&self) -> TreeSet<T>;
+}
+
+impl Default for TreeSet<T> {
+    pub fn default() -> TreeSet<T>;
 }
 ```
 

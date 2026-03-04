@@ -560,25 +560,11 @@ fn analyze_expr(
             analysis.callees.insert(callee_id);
 
             // Detect effect calls: Effects have a single-element path with PascalCase name
-            // (e.g., ["Stdout"], ["Stderr"], ["MonotonicClock"])
-            // Check using the original module path to detect effect-style paths
-            let module_path = original_callee_module.to_path();
-            if module_path.len() == 1 {
-                let potential_effect = &module_path[0];
-                // Check if it looks like an effect name (starts with uppercase, no file path chars)
-                if potential_effect
-                    .chars()
-                    .next()
-                    .is_some_and(|c: char| c.is_ascii_uppercase())
-                    && !potential_effect.contains('/')
-                    && !potential_effect.contains('.')
-                {
-                    analysis
-                        .effect_calls
-                        .insert((potential_effect.clone(), func_name.clone()));
-
-                    // Terminal effects return Option<i32> - boxing is now handled by the lower phase
-                }
+            // (e.g., "Stdout", "Stderr", "MonotonicClock")
+            if let Some(effect_name) = original_callee_module.effect_name() {
+                analysis
+                    .effect_calls
+                    .insert((effect_name, func_name.clone()));
             }
 
             for arg in args {

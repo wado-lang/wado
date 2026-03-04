@@ -1308,11 +1308,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> Option<IndexTraitInfo> {
         // Look for impl Index<...> for StructName
         self.find_indexing_trait_impl(struct_name, base_type_id, "Index", "index", "Output")
-            .map(|(output_type, self_kind, trait_name, _)| IndexTraitInfo {
-                output_type,
-                self_kind,
-                trait_name,
-            })
+            .map(
+                |(output_type, self_kind, trait_name, impl_module_source)| IndexTraitInfo {
+                    output_type,
+                    self_kind,
+                    trait_name,
+                    impl_module_source,
+                },
+            )
     }
 
     /// Find `KeyValueLiteralBuilder` trait implementation for a type.
@@ -1566,10 +1569,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             "Input",
         )
         .map(
-            |(input_type, self_kind, trait_name, _)| IndexAssignTraitInfo {
+            |(input_type, self_kind, trait_name, impl_module_source)| IndexAssignTraitInfo {
                 input_type,
                 self_kind,
                 trait_name,
+                impl_module_source,
             },
         )
     }
@@ -1584,10 +1588,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Look for impl IndexMut<...> for StructName
         self.find_indexing_trait_impl(struct_name, base_type_id, "IndexMut", "index_mut", "Output")
             .map(
-                |(output_type, self_kind, trait_name, _)| IndexMutTraitInfo {
+                |(output_type, self_kind, trait_name, impl_module_source)| IndexMutTraitInfo {
                     output_type,
                     self_kind,
                     trait_name,
+                    impl_module_source,
                 },
             )
     }
@@ -1608,10 +1613,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             "Output",
         )
         .map(
-            |(output_type, self_kind, trait_name, _)| IndexValueTraitInfo {
+            |(output_type, self_kind, trait_name, impl_module_source)| IndexValueTraitInfo {
                 output_type,
                 self_kind,
                 trait_name,
+                impl_module_source,
             },
         )
     }
@@ -2222,12 +2228,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         trait_base_name: &str,
         method_name: &str,
         assoc_type_name: &str,
-    ) -> Option<(
-        TypeId,
-        ast::SelfKind,
-        String,
-        Option<crate::name::ModuleSource>,
-    )> {
+    ) -> Option<(TypeId, ast::SelfKind, String, crate::name::ModuleSource)> {
         // Get concrete type arguments from the base type (for generic instances like Triple<i32>)
         let concrete_type_args: Vec<TypeId> =
             if let ResolvedType::GenericInstance { type_args, .. } =
@@ -2238,14 +2239,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 Vec::new()
             };
         // Collect impl blocks to check — use pre-built index for O(1) lookup by type name.
-        // The Option<ModuleSource> tracks where the impl was found (None = current module).
         let mut impl_blocks_to_check: Vec<(
             Type,
             Type,
             Vec<Function>,
             Vec<crate::ast::AssociatedTypeBinding>,
             Vec<crate::ast::GenericParam>,
-            Option<crate::name::ModuleSource>,
+            crate::name::ModuleSource,
         )> = Vec::new();
 
         if let Some(entries) = self.trait_impl_index.get(struct_name) {
@@ -2260,7 +2260,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         impl_block.methods.clone(),
                         impl_block.associated_types.clone(),
                         impl_block.type_params.clone(),
-                        Some(module_src.clone()),
+                        module_src.clone(),
                     ));
                 }
             }
@@ -2278,7 +2278,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     impl_block.methods.clone(),
                     impl_block.associated_types.clone(),
                     impl_block.type_params.clone(),
-                    None,
+                    self.current_module_source.clone(),
                 ));
             }
         }
@@ -2789,7 +2789,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             TirExprKind::MethodCall {
                 receiver: Box::new(receiver_for_index_mut),
                 func: FunctionRef::External {
-                    module_source: self.current_module_source.clone(),
+                    module_source: index_mut_info.impl_module_source.clone(),
                     name: mangled_index_mut_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(

@@ -3678,9 +3678,8 @@ impl<'a> TirUnparser<'a> {
                 name,
                 module_source,
             } => {
-                let module_path = module_source.to_path();
-                if !module_path.is_empty() {
-                    self.output.push_str(&module_path.join("::"));
+                if !module_source.is_entry_point() {
+                    self.output.push_str(&module_source.to_path().join("::"));
                     self.output.push_str("::");
                 }
                 self.output.push_str(name);
@@ -3689,9 +3688,8 @@ impl<'a> TirUnparser<'a> {
                 name,
                 module_source,
             } => {
-                let module_path = module_source.to_path();
-                if !module_path.is_empty() {
-                    self.output.push_str(&module_path.join("::"));
+                if !module_source.is_entry_point() {
+                    self.output.push_str(&module_source.to_path().join("::"));
                     self.output.push_str("::");
                 }
                 self.output.push_str(name);
@@ -3701,9 +3699,8 @@ impl<'a> TirUnparser<'a> {
                 module_source,
                 value,
             } => {
-                let module_path = module_source.to_path();
-                if !module_path.is_empty() {
-                    self.output.push_str(&module_path.join("::"));
+                if !module_source.is_entry_point() {
+                    self.output.push_str(&module_source.to_path().join("::"));
                     self.output.push_str("::");
                 }
                 self.output.push_str(name);
@@ -3746,11 +3743,11 @@ impl<'a> TirUnparser<'a> {
                 type_args,
                 args,
             } => {
-                let module_path = func.module_path();
                 let func_name = func.name();
-                let full_name = if module_path.is_empty() {
+                let full_name = if func.module_source().is_entry_point() {
                     func_name
                 } else {
+                    let module_path = func.module_path();
                     format!("{}::{func_name}", module_path.join("::"))
                 };
                 self.output.push_str(&Self::quote_if_needed(&full_name));

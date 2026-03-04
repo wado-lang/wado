@@ -55,7 +55,7 @@ pub fn monomorphize_modules_indexed(
 ) -> IndexMap<ModuleSource, TirModule> {
     // First pass: collect all generic functions from all modules
     let mut all_generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::new();
-    for module in modules.values() {
+    for (_, module) in &modules {
         for func_rc in &module.functions {
             let func = func_rc.borrow();
             if !func.type_params.is_empty() || !func.impl_type_params.is_empty() {
@@ -2620,11 +2620,11 @@ impl Monomorphizer {
                                 type_args: final_type_args,
                                 is_blanket: existing_is_blanket,
                             });
-                            // Use current_module_source: the monomorphized method lives
-                            // in the module that triggered monomorphization, not the
-                            // original module where the generic was defined.
+                            // Use the original module_source: the monomorphized method
+                            // belongs to the module where the generic was defined, not the
+                            // module that triggered monomorphization.
                             *method_func = FunctionRef::External {
-                                module_source: self.current_module_source.clone(),
+                                module_source: module_source.clone(),
                                 name: new_func_name,
                                 monomorph_info,
                                 method_info: Some(new_info),
@@ -2817,10 +2817,10 @@ impl Monomorphizer {
                                 type_args,
                                 is_blanket: false,
                             });
-                            // Use current_module_source: the monomorphized method lives
-                            // in the module that triggered monomorphization.
+                            // Use the original module_source: the monomorphized method
+                            // belongs to the module where the generic was defined.
                             *static_func = FunctionRef::External {
-                                module_source: self.current_module_source.clone(),
+                                module_source: module_source.clone(),
                                 name: new_func_name,
                                 monomorph_info,
                                 method_info: Some(new_info),
@@ -3339,8 +3339,6 @@ impl Monomorphizer {
                         method_info: original_method_info.clone(),
                     };
                     if let Some(mangled) = self.function_instantiated.get(&key) {
-                        // Use current module source — monomorphized functions are
-                        // generated in the module that uses them.
                         *func = FunctionRef::External {
                             module_source: self.current_module_source.clone(),
                             name: mangled.clone(),

@@ -80,9 +80,8 @@ pub enum ModuleSource {
     },
     /// Entry point module (the main file being compiled)
     EntryPoint {
-        /// Filename of the entry point (e.g., "hello.wado")
-        /// None for inline/embedded code
-        filename: Option<String>,
+        /// Filename of the entry point (e.g., "hello.wado", "<stdin>", "<entry>")
+        filename: String,
     },
 }
 
@@ -214,7 +213,7 @@ impl ModuleSource {
     #[must_use]
     pub fn entry_point_with_filename(filename: impl Into<String>) -> Self {
         Self::EntryPoint {
-            filename: Some(filename.into()),
+            filename: filename.into(),
         }
     }
 
@@ -255,7 +254,7 @@ impl ModuleSource {
             Self::Wasi { interface } => vec!["wasi".to_string(), interface.clone()],
             Self::Local { path } => vec![path.clone()],
             Self::Remote { url } => vec![url.clone()],
-            Self::EntryPoint { .. } => vec![],
+            Self::EntryPoint { filename } => vec![filename.clone()],
         }
     }
 
@@ -311,6 +310,9 @@ impl ModuleSource {
     /// Effects are represented as Local paths with a single element like "Stdout".
     #[must_use]
     pub fn is_effect_like(&self) -> bool {
+        if self.is_entry_point() {
+            return false;
+        }
         let path = self.to_path();
         path.len() == 1
             && path[0]
@@ -335,7 +337,7 @@ impl ModuleSource {
     /// Convert to a path string format used for method name mangling.
     ///
     /// Returns `self.to_path().join("/")`:
-    /// - `EntryPoint` → `""`
+    /// - `EntryPoint { filename }` → `"{filename}"`
     /// - `Local { path }` → `"{path}"`
     /// - `Core { name }` → `"core/{name}"`
     /// - `Wasi { interface }` → `"wasi/{interface}"`
@@ -368,9 +370,10 @@ impl ModuleSource {
     pub fn diagnostic_filename(&self) -> String {
         match self {
             Self::EntryPoint { filename } => {
-                match filename.as_deref() {
-                    Some(name) if !name.starts_with('<') => name.to_string(),
-                    _ => String::new(), // synthetic names like <stdin>, <entry>
+                if filename.starts_with('<') {
+                    String::new() // synthetic names like <stdin>, <entry>
+                } else {
+                    filename.clone()
                 }
             }
             other => other.to_string(),
@@ -386,11 +389,7 @@ impl fmt::Display for ModuleSource {
             Self::Local { path } => write!(f, "{path}"),
             Self::Remote { url } => write!(f, "{url}"),
             Self::EntryPoint { filename } => {
-                if let Some(name) = filename {
-                    write!(f, "{name}")
-                } else {
-                    write!(f, "<entry>")
-                }
+                write!(f, "{filename}")
             }
         }
     }
@@ -1565,7 +1564,7 @@ mod tests {
         assert_eq!(source.to_path(), vec!["./geometry.wado"]);
 
         let source = ModuleSource::entry_point_with_filename("test.wado");
-        assert!(source.to_path().is_empty());
+        assert_eq!(source.to_path(), vec!["test.wado"]);
     }
 
     #[test]

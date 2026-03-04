@@ -1,0 +1,77 @@
+use { TreeMap, TreeSet } from "core:collections";
+
+test "i32 default is 0" {
+    assert i32::default() == 0;
+}
+
+test "i64 default is 0" {
+    assert i64::default() == 0 as i64;
+}
+
+test "u8 default is 0" {
+    assert u8::default() == 0 as u8;
+}
+
+test "f64 default is 0.0" {
+    assert f64::default() == 0.0;
+}
+
+test "f32 default is 0.0" {
+    assert f32::default() == 0.0 as f32;
+}
+
+test "bool default is false" {
+    assert bool::default() == false;
+}
+
+test "char default is null char" {
+    assert char::default() == '\0';
+}
+
+test "String default is empty" {
+    let s = String::default();
+    assert s == "";
+    assert s.len() == 0;
+}
+
+test "Array<i32> default is empty" {
+    let a = Array::<i32>::default();
+    assert a.len() == 0;
+}
+
+test "TreeMap default is empty" {
+    let m = TreeMap::<String, i32>::default();
+    assert m.len() == 0;
+}
+
+test "TreeSet default is empty" {
+    let s = TreeSet::<i32>::default();
+    assert s.len() == 0;
+}
+
+test "u128 default is 0" {
+    let v = u128::default();
+    assert v == 0 as u128;
+}
+
+test "i128 default is 0" {
+    let v = i128::default();
+    assert v == 0 as i128;
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Default for Point {
+    pub fn default() -> Point {
+        return Point { x: 0, y: 0 };
+    }
+}
+
+test "user-defined Default" {
+    let p = Point::default();
+    assert p.x == 0;
+    assert p.y == 0;
+}

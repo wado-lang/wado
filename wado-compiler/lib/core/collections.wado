@@ -448,6 +448,7 @@ impl<T: Ord> SequenceLiteralBuilder for TreeSet<T> {
     }
 }
 
+<<<<<<< HEAD
 impl<T: Serialize, V: Serialize> Serialize for TreeMap<String, V> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         let entries = self.entries();
@@ -508,4 +509,13 @@ impl<V: Deserialize> Deserialize for TreeMap<String, V> {
         }
         unreachable();
     }
+||||||| 6406151
+=======
+impl<K: Ord, V> Default for TreeMap<K, V> {
+    pub fn default() -> TreeMap<K, V> { return TreeMap::<K, V>::new(); }
+}
+
+impl<T: Ord> Default for TreeSet<T> {
+    pub fn default() -> TreeSet<T> { return TreeSet::<T>::new(); }
+>>>>>>> origin/main
 }

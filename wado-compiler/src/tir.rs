@@ -389,6 +389,8 @@ pub struct TypeTable {
     option_module_source: Option<ModuleSource>,
     /// Module source of the canonical `Result<T, E>` variant, set via `#[comp_feature("result")]`.
     result_module_source: Option<ModuleSource>,
+    /// Module source of the canonical `Default` trait, set via `#[comp_feature("default")]`.
+    default_trait_module_source: Option<ModuleSource>,
     /// Associated type resolutions: `(concrete_type_id, assoc_name)` → `resolved_type_id`.
     /// Populated when impl blocks with associated type bindings are processed.
     assoc_type_resolutions: IndexMap<(TypeId, String), TypeId>,
@@ -428,6 +430,7 @@ impl TypeTable {
             next_id: 0,
             option_module_source: None,
             result_module_source: None,
+            default_trait_module_source: None,
             assoc_type_resolutions: IndexMap::new(),
         };
 
@@ -578,6 +581,18 @@ impl TypeTable {
         if comp_features & crate::wir::COMP_FEATURE_RESULT != 0 {
             self.result_module_source = Some(module_source);
         }
+    }
+
+    /// Register the defining module source for a trait marked with `#[comp_feature("default")]`.
+    pub fn register_comp_feature_trait(&mut self, comp_features: u32, module_source: ModuleSource) {
+        if comp_features & crate::wir::COMP_FEATURE_DEFAULT != 0 {
+            self.default_trait_module_source = Some(module_source);
+        }
+    }
+
+    /// Get the module source where the `Default` trait is defined.
+    pub fn default_trait_module_source(&self) -> Option<&ModuleSource> {
+        self.default_trait_module_source.as_ref()
     }
 
     /// Create an `Option<T>` type using the module source registered via `#[comp_feature("option")]`.
@@ -1191,10 +1206,10 @@ impl FunctionRef {
                 name,
                 ..
             } => {
-                let path = module_source.to_path();
-                if path.is_empty() {
+                if module_source.is_entry_point() {
                     name.clone()
                 } else {
+                    let path = module_source.to_path();
                     format!("{}/{}", path.join("/"), name)
                 }
             }

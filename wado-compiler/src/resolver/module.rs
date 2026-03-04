@@ -228,6 +228,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         },
                     );
                 }
+                Item::Trait(trait_decl) => {
+                    let comp_features = super::item::extract_comp_features(&trait_decl.attrs);
+                    if comp_features != 0 {
+                        self.type_table.borrow_mut().register_comp_feature_trait(
+                            comp_features,
+                            self.current_module_source.clone(),
+                        );
+                    }
+                }
                 _ => {}
             }
         }
