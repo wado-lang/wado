@@ -19,14 +19,10 @@ function parseMs(output: string, pattern: RegExp = /Elapsed: (\d+) ms/): number 
 
 const OPT_LEVELS = ['-O1', '-O2', '-O3'] as const;
 
-function optLabel(opt: string): string {
-  return opt.replace('-', '');
-}
-
 const benchmarks: BenchResult[] = [];
 
 for (const opt of OPT_LEVELS) {
-  const label = optLabel(opt);
+  const label = opt;
 
   let output = runBench('benchmark/count_prime/count_prime.wado', opt);
   benchmarks.push({ name: `count_prime (${label})`, unit: 'ms', value: parseMs(output) });
