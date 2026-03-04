@@ -733,7 +733,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                         leave = true;
                         break;
                     }
-                    state.hold = state.hold | input.internal_get_unchecked(inp) as u32 << state.bits as u32;
+                    state.hold = state.hold | input[inp] as u32 << state.bits as u32;
                     state.bits += 8;
                     inp += 1;
                     have -= 1;
@@ -772,7 +772,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                     leave = true;
                     break;
                 }
-                state.hold = state.hold | input.internal_get_unchecked(inp) as u32 << state.bits as u32;
+                state.hold = state.hold | input[inp] as u32 << state.bits as u32;
                 state.bits += 8;
                 inp += 1;
                 have -= 1;
@@ -798,7 +798,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                     copy = have;
                 }
                 for let mut i = 0; i < copy; i += 1 {
-                    output.append(input.internal_get_unchecked(inp + i));
+                    output.append(input[inp + i]);
                 }
                 have -= copy;
                 inp += copy;
@@ -816,7 +816,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                     leave = true;
                     break;
                 }
-                state.hold = state.hold | input.internal_get_unchecked(inp) as u32 << state.bits as u32;
+                state.hold = state.hold | input[inp] as u32 << state.bits as u32;
                 state.bits += 8;
                 inp += 1;
                 have -= 1;
@@ -848,7 +848,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                         leave = true;
                         break;
                     }
-                    state.hold = state.hold | input.internal_get_unchecked(inp) as u32 << state.bits as u32;
+                    state.hold = state.hold | input[inp] as u32 << state.bits as u32;
                     state.bits += 8;
                     inp += 1;
                     have -= 1;
@@ -894,7 +894,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                         leave = true;
                         break;
                     }
-                    state.hold = state.hold | input.internal_get_unchecked(inp) as u32 << state.bits as u32;
+                    state.hold = state.hold | input[inp] as u32 << state.bits as u32;
                     state.bits += 8;
                     inp += 1;
                     have -= 1;
@@ -904,9 +904,8 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                 }
 
                 let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
-                let here = state.codes[idx];
-                let here_val = here.val as i32;
-                let here_bits = here.bits as i32;
+                let here_val = state.codes[idx].val as i32;
+                let here_bits = state.codes[idx].bits as i32;
 
                 if here_val < 16 {
                     state.hold = state.hold >> here_bits as u32;
@@ -923,7 +922,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                                 leave = true;
                                 break;
                             }
-                            state.hold = state.hold | input.internal_get_unchecked(inp) as u32 << state.bits as u32;
+                            state.hold = state.hold | input[inp] as u32 << state.bits as u32;
                             state.bits += 8;
                             inp += 1;
                             have -= 1;
@@ -947,7 +946,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                                 leave = true;
                                 break;
                             }
-                            state.hold = state.hold | input.internal_get_unchecked(inp) as u32 << state.bits as u32;
+                            state.hold = state.hold | input[inp] as u32 << state.bits as u32;
                             state.bits += 8;
                             inp += 1;
                             have -= 1;
@@ -967,7 +966,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                                 leave = true;
                                 break;
                             }
-                            state.hold = state.hold | input.internal_get_unchecked(inp) as u32 << state.bits as u32;
+                            state.hold = state.hold | input[inp] as u32 << state.bits as u32;
                             state.bits += 8;
                             inp += 1;
                             have -= 1;
@@ -1051,7 +1050,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                     leave = true;
                     break;
                 }
-                state.hold = state.hold | input.internal_get_unchecked(inp) as u32 << state.bits as u32;
+                state.hold = state.hold | input[inp] as u32 << state.bits as u32;
                 state.bits += 8;
                 inp += 1;
                 have -= 1;
@@ -1061,10 +1060,9 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
             }
 
             let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
-            let here = state.codes[idx];
-            let mut here_op = here.op;
-            let mut here_bits = here.bits;
-            let mut here_val = here.val;
+            let mut here_op = state.codes[idx].op;
+            let mut here_bits = state.codes[idx].bits;
+            let mut here_val = state.codes[idx].val;
 
 
             // handle 2nd level length code
@@ -1074,10 +1072,9 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                 let last_val = here_val;
                 loop {
                     let idx2 = state.lencode_off + last_val as i32 + ((state.hold & (1 as u32 << last_bits as u32 + last_op as u32) - 1) >> last_bits as u32) as i32;
-                    let here2 = state.codes[idx2];
-                    here_op = here2.op;
-                    here_bits = here2.bits;
-                    here_val = here2.val;
+                    here_op = state.codes[idx2].op;
+                    here_bits = state.codes[idx2].bits;
+                    here_val = state.codes[idx2].val;
                     if last_bits as i32 + here_bits as i32 <= state.bits {
                         break;
                     }
@@ -1085,7 +1082,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                         leave = true;
                         break;
                     }
-                    state.hold = state.hold | input.internal_get_unchecked(inp) as u32 << state.bits as u32;
+                    state.hold = state.hold | input[inp] as u32 << state.bits as u32;
                     state.bits += 8;
                     inp += 1;
                     have -= 1;
@@ -1121,7 +1118,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                         leave = true;
                         break;
                     }
-                    state.hold = state.hold | input.internal_get_unchecked(inp) as u32 << state.bits as u32;
+                    state.hold = state.hold | input[inp] as u32 << state.bits as u32;
                     state.bits += 8;
                     inp += 1;
                     have -= 1;
@@ -1147,7 +1144,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                     leave = true;
                     break;
                 }
-                state.hold = state.hold | input.internal_get_unchecked(inp) as u32 << state.bits as u32;
+                state.hold = state.hold | input[inp] as u32 << state.bits as u32;
                 state.bits += 8;
                 inp += 1;
                 have -= 1;
@@ -1157,10 +1154,9 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
             }
 
             let idx = state.distcode_off + (state.hold & (1 as u32 << state.distbits as u32) - 1) as i32;
-            let here = state.codes[idx];
-            let mut here_op = here.op;
-            let mut here_bits = here.bits;
-            let mut here_val = here.val;
+            let mut here_op = state.codes[idx].op;
+            let mut here_bits = state.codes[idx].bits;
+            let mut here_val = state.codes[idx].val;
 
             // handle 2nd level distance code
             if here_op & 0xF0 == 0 {
@@ -1169,10 +1165,9 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                 let last_val = here_val;
                 loop {
                     let idx2 = state.distcode_off + last_val as i32 + ((state.hold & (1 as u32 << last_bits as u32 + last_op as u32) - 1) >> last_bits as u32) as i32;
-                    let here2 = state.codes[idx2];
-                    here_op = here2.op;
-                    here_bits = here2.bits;
-                    here_val = here2.val;
+                    here_op = state.codes[idx2].op;
+                    here_bits = state.codes[idx2].bits;
+                    here_val = state.codes[idx2].val;
                     if last_bits as i32 + here_bits as i32 <= state.bits {
                         break;
                     }
@@ -1180,7 +1175,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                         leave = true;
                         break;
                     }
-                    state.hold = state.hold | input.internal_get_unchecked(inp) as u32 << state.bits as u32;
+                    state.hold = state.hold | input[inp] as u32 << state.bits as u32;
                     state.bits += 8;
                     inp += 1;
                     have -= 1;
@@ -1209,7 +1204,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                         leave = true;
                         break;
                     }
-                    state.hold = state.hold | input.internal_get_unchecked(inp) as u32 << state.bits as u32;
+                    state.hold = state.hold | input[inp] as u32 << state.bits as u32;
                     state.bits += 8;
                     inp += 1;
                     have -= 1;
@@ -1281,7 +1276,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                         leave = true;
                         break;
                     }
-                    state.hold = state.hold | input.internal_get_unchecked(inp) as u32 << state.bits as u32;
+                    state.hold = state.hold | input[inp] as u32 << state.bits as u32;
                     state.bits += 8;
                     inp += 1;
                     have -= 1;

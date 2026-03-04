@@ -33,12 +33,10 @@ impl Array<T> {
         return Array { repr, used: n };
     }
 
-    #[inline]
     pub fn len(&self) -> i32 {
         return self.used;
     }
 
-    #[inline]
     pub fn is_empty(&self) -> bool {
         return self.used == 0;
     }
@@ -47,56 +45,7 @@ impl Array<T> {
         return self.repr;
     }
 
-    #[inline(always)]
-    pub fn internal_get_unchecked(&self, index: i32) -> T {
-        return builtin::array_get::<T>(self.repr, index);
-    }
-
-    #[inline(always)]
-    pub fn internal_ensure_capacity(&mut self, min_capacity: i32) {
-        let capacity = builtin::array_len(self.repr);
-        if min_capacity > capacity {
-            let new_capacity = i32_max(capacity * 2, min_capacity);
-            let new_repr = builtin::array_new::<T>(new_capacity);
-            builtin::array_copy::<T>(new_repr, 0, self.repr, 0, self.used);
-            self.repr = new_repr;
-        }
-    }
-
-    #[inline(always)]
-    pub fn internal_append_unchecked(&mut self, value: T) {
-        builtin::array_set::<T>(self.repr, self.used, value);
-        self.used += 1;
-    }
-
-    pub fn internal_extend_from_self(&mut self, src_start: i32, count: i32) {
-        if count <= 0 {
-            return;
-        }
-        self.internal_ensure_capacity(self.used + count);
-        let dist = self.used - src_start;
-        if dist >= count {
-            builtin::array_copy::<T>(self.repr, self.used, self.repr, src_start, count);
-            self.used += count;
-        } else {
-            for let mut i = 0; i < count; i += 1 {
-                builtin::array_set::<T>(self.repr, self.used, builtin::array_get::<T>(self.repr, src_start + i));
-                self.used += 1;
-            }
-        }
-    }
-
-    pub fn internal_extend_from(&mut self, src: &Array<T>, src_start: i32, count: i32) {
-        if count <= 0 {
-            return;
-        }
-        self.internal_ensure_capacity(self.used + count);
-        builtin::array_copy::<T>(self.repr, self.used, src.repr, src_start, count);
-        self.used += count;
-    }
-
     #[comp_feature("array_append")]
-    #[inline]
     pub fn append(&mut self, value: T) {
         let used = self.used;
         let capacity = builtin::array_len(self.repr);
@@ -121,7 +70,6 @@ impl Array<T> {
 impl IndexValue<i32> for Array<T> {
     type Output = T;
 
-    #[inline]
     fn index_value(&self, index: i32) -> Self::Output {
         if index >= self.used {
             panic("index out of bounds");
@@ -133,7 +81,6 @@ impl IndexValue<i32> for Array<T> {
 impl IndexAssign<i32> for Array<T> {
     type Input = T;
 
-    #[inline]
     fn index_assign(&mut self, index: i32, value: Self::Input) {
         if index >= self.used {
             panic("index out of bounds");
