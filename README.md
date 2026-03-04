@@ -213,6 +213,15 @@ The result: a language where common agentic coding pitfalls are eliminated by de
 - [Benchmarks](benchmark/README.md) - Performance benchmarks vs C and JavaScript, and so on
 - [Other Documentation](docs) - WEP, research notes, TODOs, etc.
 
+## Benchmarks
+
+Per-commit performance tracking is published to GitHub Pages. Every push to `main` records runtime and binary size metrics.
+
+- [Runtime Performance](https://wado-lang.github.io/wado/benchmarks/runtime/) — execution time for integer, float, array, string, and compression workloads (compiled at `-O2`, run on wasmtime)
+- [Wasm Binary Size](https://wado-lang.github.io/wado/benchmarks/wasm-size/) — `.wasm` output size for representative programs (compiled at `-Os`)
+
+See [benchmark/README.md](benchmark/README.md) for local benchmark instructions and comparison results against C, Rust, Zig, and JavaScript.
+
 ## Development
 
 Wado is developed entirely through agentic coding — AI agents write all the code while the human handles language design and project management.
@@ -256,10 +265,10 @@ cargo test
 
 ### The Wado CLI
 
-- [x] `wado compile FILE` - Compile Wado source to Wasm/WAT
-- [x] `wado run FILE` - Run Wado source directly using Wasmtime
-- [x] `wado dump FILE` - Dump internal compiler state for debugging
-- [x] `wado format FILE` - Format Wado source code
+- `wado compile FILE` - Compile Wado source to Wasm/WAT
+- `wado run FILE` - Run Wado source directly using Wasmtime
+- `wado dump FILE` - Dump internal compiler state for debugging
+- `wado format FILE` - Format Wado source code
 
 ### Examples That Already Work
 
