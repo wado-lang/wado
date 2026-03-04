@@ -5,12 +5,19 @@
 //! Current passes:
 //! - **Multi-value return SROA**: rewrites functions that return small scalar structs
 //!   to use Wasm multi-value returns, eliminating GC struct allocation.
+//! - **Single-field parameter SROA**: rewrites functions that take `ref null S` parameters
+//!   (where S is any single-field struct, including Box<T>) to take the scalar field
+//!   value directly, eliminating GC struct allocation at every call site.
+//! - **Dead single-field struct local elimination**: after parameter SROA, call sites
+//!   may hold `LocalSet(x, StructNew { [inner] })` where every use of `x` is
+//!   `StructGet(LocalGet(x), field)`. Substitutes `inner` directly and nops the
+//!   dead allocation, eliminating the GC heap object entirely.
 //! - **Multi-value tuple elision**: replaces `MultiValueStructNew` + `StructGet`
 //!   sequences with `MultiValueLocalBind` to skip intermediate struct allocation.
 //! - **Constant array data promotion**: replaces `ArrayNewFixed` of constant primitive
 //!   values with `ArrayNewData` backed by a passive data segment.
 
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 
 use crate::optimize::OptLevel;
 use crate::wir::{
@@ -28,6 +35,15 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
     }
     // Whole-module pass: rewrite struct-returning functions to multi-value.
     sroa_multi_value_returns(module);
+
+    // Whole-module pass: rewrite single-field struct parameters (including Box<T>)
+    // from `ref null S` to scalar `T`, eliminating GC allocation at call sites.
+    sroa_single_field_parameters(module);
+
+    // Whole-module pass: after parameter SROA, call sites may still hold
+    // `LocalSet(x, StructNew { [inner] })` where every use of `x` is via StructGet.
+    // Substitute `inner` directly and nop the dead allocation.
+    elide_dead_single_field_struct_locals(module);
 
     // Whole-module pass: collapse inlined Array::append sequences back to ArrayNewFixed.
     // Runs before promote/split so that recovered ArrayNewFixed nodes are eligible
@@ -66,6 +82,8 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
 ///   with 2–4 fields, all scalar (no `Ref` or `AbstractRef` fields).
 /// - Every `Return` in the body wraps a `StructNew` of the matching type.
 /// - Every call site stores the result into a temp and reads only via `StructGet`.
+///
+/// Note: 1-field structs are handled by `sroa_single_field_parameters` instead.
 fn sroa_multi_value_returns(module: &mut WirModule) {
     let import_func_count = module
         .imports
@@ -2032,6 +2050,616 @@ fn take_block_result_call(
             Some(Box::new(taken))
         }
     }
+}
+
+/// Box<T> parameter SROA.
+///
+/// Rewrites internal functions that take `ref null Box<T>` parameters (single-field
+/// wrapper structs) to take the inner scalar `T` directly. At call sites, the
+/// `StructNew { value: expr }` allocation is replaced with just `expr`.
+///
+/// A parameter is eligible when:
+/// - Its type is `Ref { nullable: true }` to a struct with `generic_origin.base_name == "Box"`
+/// - The struct has exactly one field named "value"
+/// - Within the function body, the parameter is only used via:
+///   a. `StructGet { field_name: "value", expr: LocalGet(param) }` — scalar read
+///   b. As an argument to another function at a position that is also being SROA'd
+/// - The function is not exported, not in an element table, and not `RefFunc`'d
+fn sroa_single_field_parameters(module: &mut WirModule) {
+    let import_func_count = module
+        .imports
+        .iter()
+        .filter(|i| matches!(i.desc, WirImportDesc::Func { .. }))
+        .count() as u32;
+
+    let pinned = collect_pinned_func_ids(module);
+
+    // Phase 1: identify candidate (func_id, param_index) pairs.
+    let mut candidates: IndexSet<(u32, usize)> = IndexSet::new();
+    // Map from (func_id, param_idx) → (struct_type_id_index, inner WirType, field_name).
+    let mut candidate_info: indexmap::IndexMap<(u32, usize), (u32, WirType, String)> =
+        indexmap::IndexMap::new();
+
+    for (i, func) in module.functions.iter().enumerate() {
+        let func_id_index = import_func_count + u32::try_from(i).unwrap();
+        if pinned.contains(&func_id_index) || func.body.is_none() {
+            continue;
+        }
+        let type_idx = func.type_id.index();
+        let Some(WirTypeDef::Func(func_type)) = module.types.get(type_idx as usize) else {
+            continue;
+        };
+        for (pi, param_ty) in func_type.params.iter().enumerate() {
+            let WirType::Ref {
+                type_id: struct_type_id,
+                nullable: true,
+            } = param_ty
+            else {
+                continue;
+            };
+            let struct_type_idx = struct_type_id.index();
+            let Some(WirTypeDef::Struct(st)) = module.types.get(struct_type_idx as usize) else {
+                continue;
+            };
+            // Any single-field struct with an eligible (scalar/ref) inner type.
+            if st.fields.len() != 1 || !is_eligible_field_type(&st.fields[0].ty) {
+                continue;
+            }
+            candidates.insert((func_id_index, pi));
+            candidate_info.insert(
+                (func_id_index, pi),
+                (
+                    struct_type_idx,
+                    st.fields[0].ty.clone(),
+                    st.fields[0].name.clone(),
+                ),
+            );
+        }
+    }
+
+    if candidates.is_empty() {
+        return;
+    }
+
+    // Phase 2: validate uses — eliminate candidates whose parameter escapes.
+    loop {
+        let mut invalid: IndexSet<(u32, usize)> = IndexSet::new();
+
+        for &(func_id_index, param_idx) in &candidates {
+            let func_array_idx = (func_id_index - import_func_count) as usize;
+            let func = &module.functions[func_array_idx];
+            let param_name = &func.param_names[param_idx];
+            let (_, _, ref field_name) = candidate_info[&(func_id_index, param_idx)];
+            let field_name = field_name.clone();
+            let body = func.body.as_ref().unwrap();
+            if !single_field_param_uses_valid(
+                body,
+                param_name,
+                &field_name,
+                func_id_index,
+                param_idx,
+                &candidates,
+            ) {
+                invalid.insert((func_id_index, param_idx));
+            }
+        }
+
+        if invalid.is_empty() {
+            break;
+        }
+        for key in &invalid {
+            candidates.swap_remove(key);
+        }
+    }
+
+    if candidates.is_empty() {
+        return;
+    }
+
+    // Phase 3: apply rewrites.
+    // Step A: rewrite function signatures and bodies.
+    for &(func_id_index, param_idx) in &candidates {
+        let func_array_idx = (func_id_index - import_func_count) as usize;
+        let param_name = module.functions[func_array_idx].param_names[param_idx].clone();
+        let (_, ref inner_ty, ref field_name) = candidate_info[&(func_id_index, param_idx)];
+        let inner_ty = inner_ty.clone();
+        let field_name = field_name.clone();
+
+        // Create new func type with the scalar param.
+        let old_type_idx = module.functions[func_array_idx].type_id.index() as usize;
+        let old_func_type = match &module.types[old_type_idx] {
+            WirTypeDef::Func(ft) => ft,
+            _ => unreachable!(),
+        };
+        let mut new_params = old_func_type.params.clone();
+        new_params[param_idx] = inner_ty;
+        let new_func_type = WirFuncType {
+            name: old_func_type.name.clone(),
+            params: new_params,
+            results: old_func_type.results.clone(),
+        };
+        let new_type_idx = u32::try_from(module.types.len()).unwrap();
+        module.types.push(WirTypeDef::Func(new_func_type));
+
+        let fq: std::rc::Rc<str> = module.functions[func_array_idx].type_id.fq().into();
+        let new_type_id = WirTypeId::new(new_type_idx, fq);
+        module.functions[func_array_idx].type_id = new_type_id;
+
+        // Rewrite body: replace StructGet(LocalGet(param), field) → LocalGet(param).
+        if let Some(body) = &mut module.functions[func_array_idx].body {
+            for instr in body.iter_mut() {
+                rewrite_single_field_param_reads(instr, &param_name, &field_name);
+            }
+        }
+    }
+
+    // Step B: rewrite call sites in ALL function bodies.
+    // Build lookup: func_id_index → set of SROA'd param indices.
+    let mut sroa_params: indexmap::IndexMap<u32, IndexSet<usize>> = indexmap::IndexMap::new();
+    for &(func_id_index, param_idx) in &candidates {
+        sroa_params
+            .entry(func_id_index)
+            .or_default()
+            .insert(param_idx);
+    }
+
+    // Build (func_id, param_idx) → (WirTypeId of the struct type, field name).
+    let mut param_struct_info: indexmap::IndexMap<(u32, usize), (WirTypeId, String)> =
+        indexmap::IndexMap::new();
+    for &(func_id_index, param_idx) in &candidates {
+        let (ref struct_type_idx, _, ref field_name) = candidate_info[&(func_id_index, param_idx)];
+        if let Some(WirTypeDef::Struct(st)) = module.types.get(*struct_type_idx as usize) {
+            let type_id = WirTypeId::new(*struct_type_idx, st.name.fq.as_str().into());
+            param_struct_info.insert((func_id_index, param_idx), (type_id, field_name.clone()));
+        }
+    }
+
+    // Build per-function set of param names that are already scalar (SROA'd).
+    let mut func_scalar_params: indexmap::IndexMap<u32, IndexSet<String>> =
+        indexmap::IndexMap::new();
+    for &(func_id_index, param_idx) in &candidates {
+        let func_array_idx = (func_id_index - import_func_count) as usize;
+        let param_name = module.functions[func_array_idx].param_names[param_idx].clone();
+        func_scalar_params
+            .entry(func_id_index)
+            .or_default()
+            .insert(param_name);
+    }
+
+    for (i, func) in module.functions.iter_mut().enumerate() {
+        let func_id_index = import_func_count + u32::try_from(i).unwrap();
+        let scalar_params = func_scalar_params
+            .get(&func_id_index)
+            .cloned()
+            .unwrap_or_default();
+        if let Some(body) = &mut func.body {
+            // Rewrite call arguments at SROA'd positions.
+            for instr in body.iter_mut() {
+                rewrite_single_field_args_at_call_sites(
+                    instr,
+                    &sroa_params,
+                    &param_struct_info,
+                    &scalar_params,
+                );
+            }
+        }
+    }
+}
+
+/// Check that every use of `param_name` in the body is a valid single-field SROA use.
+fn single_field_param_uses_valid(
+    instrs: &[WirInstr],
+    param_name: &str,
+    field_name: &str,
+    _self_func_id: u32,
+    _self_param_idx: usize,
+    candidates: &IndexSet<(u32, usize)>,
+) -> bool {
+    for instr in instrs {
+        if !single_field_param_use_valid_instr(
+            instr,
+            param_name,
+            field_name,
+            candidates,
+            SingleFieldCheckCtx::None,
+        ) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Context for tracking where we encounter a `LocalGet(param_name)`.
+#[derive(Clone, Copy)]
+enum SingleFieldCheckCtx {
+    None,
+    /// Inside a `StructGet { field_name }` matching the single field — `LocalGet` is valid.
+    InsideStructGetField,
+}
+
+/// Recursively check that all uses of `param_name` are valid single-field SROA patterns.
+fn single_field_param_use_valid_instr(
+    instr: &WirInstr,
+    param_name: &str,
+    expected_field: &str,
+    candidates: &IndexSet<(u32, usize)>,
+    ctx: SingleFieldCheckCtx,
+) -> bool {
+    match instr {
+        // LocalGet of the param: only valid inside StructGet(field) or as call arg
+        WirInstr::LocalGet { name } if name == param_name => {
+            matches!(ctx, SingleFieldCheckCtx::InsideStructGetField)
+        }
+        // StructGet with the expected field name: mark context and check inner
+        WirInstr::StructGet {
+            field_name, expr, ..
+        } if field_name == expected_field => single_field_param_use_valid_instr(
+            expr,
+            param_name,
+            expected_field,
+            candidates,
+            SingleFieldCheckCtx::InsideStructGetField,
+        ),
+        // Call: a direct LocalGet(param) as a call arg is valid only at SROA'd positions.
+        // Non-LocalGet args are validated recursively.
+        WirInstr::Call { func_id, args } => {
+            for (ai, arg) in args.iter().enumerate() {
+                if let WirInstr::LocalGet { name } = arg
+                    && name == param_name
+                {
+                    // Bare param reference at a call position — only valid if SROA'd.
+                    if !candidates.contains(&(func_id.index(), ai)) {
+                        return false;
+                    }
+                } else if !single_field_param_use_valid_instr(
+                    arg,
+                    param_name,
+                    expected_field,
+                    candidates,
+                    SingleFieldCheckCtx::None,
+                ) {
+                    return false;
+                }
+            }
+            true
+        }
+        // Recurse into nested blocks
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+            for child in body {
+                if !single_field_param_use_valid_instr(
+                    child,
+                    param_name,
+                    expected_field,
+                    candidates,
+                    SingleFieldCheckCtx::None,
+                ) {
+                    return false;
+                }
+            }
+            true
+        }
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            if !single_field_param_use_valid_instr(
+                condition,
+                param_name,
+                expected_field,
+                candidates,
+                SingleFieldCheckCtx::None,
+            ) {
+                return false;
+            }
+            for child in then_body {
+                if !single_field_param_use_valid_instr(
+                    child,
+                    param_name,
+                    expected_field,
+                    candidates,
+                    SingleFieldCheckCtx::None,
+                ) {
+                    return false;
+                }
+            }
+            if let Some(eb) = else_body {
+                for child in eb {
+                    if !single_field_param_use_valid_instr(
+                        child,
+                        param_name,
+                        expected_field,
+                        candidates,
+                        SingleFieldCheckCtx::None,
+                    ) {
+                        return false;
+                    }
+                }
+            }
+            true
+        }
+        // Any other instruction: check subtree for escaping uses
+        _ => {
+            let mut ok = true;
+            instr.for_each_child(&mut |child| {
+                if ok
+                    && !single_field_param_use_valid_instr(
+                        child,
+                        param_name,
+                        expected_field,
+                        candidates,
+                        SingleFieldCheckCtx::None,
+                    )
+                {
+                    ok = false;
+                }
+            });
+            ok
+        }
+    }
+}
+
+/// Rewrite `StructGet { field, expr: LocalGet(param) }` → `LocalGet(param)`
+/// within a function body after SROA (param is now scalar).
+fn rewrite_single_field_param_reads(instr: &mut WirInstr, param_name: &str, expected_field: &str) {
+    // Check StructGet(LocalGet(param), field) pattern
+    if let WirInstr::StructGet {
+        field_name, expr, ..
+    } = instr
+        && field_name == expected_field
+        && matches!(expr.as_ref(), WirInstr::LocalGet { name } if name == param_name)
+    {
+        *instr = WirInstr::LocalGet {
+            name: param_name.to_string(),
+        };
+        return;
+    }
+
+    // Recurse
+    instr.for_each_boxed_child_mut(&mut |child| {
+        rewrite_single_field_param_reads(child, param_name, expected_field);
+    });
+}
+
+/// Rewrite arguments at SROA'd Call positions to pass the scalar value instead of a struct ref.
+///
+/// - `StructNew(S, [val])` → `val` (unwrap allocation, eliminate heap alloc)
+/// - `LocalGet(x)` where x is already scalar (SROA'd param) → leave as-is
+/// - Other expressions → `StructGet(expr, field_name)` (extract scalar from existing ref)
+fn rewrite_single_field_args_at_call_sites(
+    instr: &mut WirInstr,
+    sroa_params: &indexmap::IndexMap<u32, IndexSet<usize>>,
+    param_struct_info: &indexmap::IndexMap<(u32, usize), (WirTypeId, String)>,
+    scalar_params: &IndexSet<String>,
+) {
+    // Recurse first (bottom-up)
+    instr.for_each_boxed_child_mut(&mut |child| {
+        rewrite_single_field_args_at_call_sites(
+            child,
+            sroa_params,
+            param_struct_info,
+            scalar_params,
+        );
+    });
+
+    let WirInstr::Call { func_id, args } = instr else {
+        return;
+    };
+    let Some(param_indices) = sroa_params.get(&func_id.index()) else {
+        return;
+    };
+    let func_id_idx = func_id.index();
+    for &pi in param_indices {
+        if pi >= args.len() {
+            continue;
+        }
+        let arg = &mut args[pi];
+        if let WirInstr::StructNew { fields, .. } = arg
+            && fields.len() == 1
+        {
+            // Unwrap StructNew: skip struct allocation entirely.
+            let inner = std::mem::replace(&mut fields[0], WirInstr::Nop);
+            *arg = inner;
+        } else if let WirInstr::LocalGet { name } = arg
+            && scalar_params.contains(name.as_str())
+        {
+            // Already scalar (this function's own SROA'd param) — no change needed.
+        } else {
+            // The argument is an existing struct reference (e.g., from a local variable).
+            // Extract the scalar value via StructGet(field_name).
+            let Some((struct_type_id, field_name)) = param_struct_info.get(&(func_id_idx, pi))
+            else {
+                continue;
+            };
+            let old_arg = std::mem::replace(arg, WirInstr::Nop);
+            *arg = WirInstr::StructGet {
+                type_id: struct_type_id.clone(),
+                field_name: field_name.clone(),
+                expr: Box::new(old_arg),
+            };
+        }
+    }
+}
+
+/// Eliminate dead single-field struct locals after parameter SROA.
+///
+/// After `sroa_single_field_parameters`, call sites contain patterns like:
+/// ```text
+///   __local = StructNew { fields: [inner] }        // dead Box allocation
+///   ... call(StructGet(LocalGet(__local), f), ...) ...
+/// ```
+/// Since the only use of `__local` is to extract its single field, `inner` is
+/// substituted directly and the dead `LocalSet` is removed.
+///
+/// Runs iteratively to handle chains (e.g., `ValueCopy` builds one Box from
+/// another Box's field; after the first Box is eliminated the second becomes
+/// a leaf and is eliminated on the next iteration).
+fn elide_dead_single_field_struct_locals(module: &mut WirModule) {
+    for func in &mut module.functions {
+        let Some(body) = &mut func.body else {
+            continue;
+        };
+        while elide_struct_locals_one_pass(body) {}
+    }
+}
+
+/// One pass: collect candidates, validate, rewrite. Returns `true` if anything changed.
+fn elide_struct_locals_one_pass(body: &mut Vec<WirInstr>) -> bool {
+    // Step 1: collect LocalSet(name, StructNew { [inner] }) at any depth.
+    let mut all_defs: IndexMap<String, WirInstr> = IndexMap::new();
+    for instr in body.iter() {
+        collect_struct_single_field_defs(instr, &mut all_defs);
+    }
+    if all_defs.is_empty() {
+        return false;
+    }
+
+    // Names of all candidates (used for leaf check).
+    let candidate_names: IndexSet<String> = all_defs.keys().cloned().collect();
+
+    // Step 2: filter to valid leaf candidates.
+    //   - exactly one LocalSet/LocalTee of this name in the whole tree
+    //   - every LocalGet(name) is the direct expr of a StructGet
+    //   - exactly one StructGet use (safe to inline inner without duplicating effects)
+    //   - inner value does not reference any other candidate (process leaves first)
+    let valid: IndexMap<String, WirInstr> = all_defs
+        .into_iter()
+        .filter(|(name, inner)| {
+            let def_count: usize = body.iter().map(|i| count_local_defs(i, name)).sum();
+            if def_count != 1 {
+                return false;
+            }
+            if !body.iter().all(|i| local_used_only_via_struct_get(i, name)) {
+                return false;
+            }
+            let use_count: usize = body.iter().map(|i| count_struct_get_uses(i, name)).sum();
+            if use_count != 1 {
+                return false;
+            }
+            !inner_refs_any_candidate(inner, &candidate_names, name)
+        })
+        .collect();
+
+    if valid.is_empty() {
+        return false;
+    }
+
+    // Step 3: substitute inner at StructGet use sites, nop the defining LocalSet.
+    for (name, inner) in &valid {
+        for instr in body.iter_mut() {
+            substitute_struct_get_local(instr, name, inner);
+            nop_local_set_of(instr, name);
+        }
+    }
+    true
+}
+
+/// Recursively collect `LocalSet(name, StructNew { [inner] })` at any depth,
+/// including inside `Call` args and nested block bodies.
+fn collect_struct_single_field_defs(instr: &WirInstr, defs: &mut IndexMap<String, WirInstr>) {
+    if let WirInstr::LocalSet { name, value } = instr
+        && let WirInstr::StructNew { fields, .. } = value.as_ref()
+        && fields.len() == 1
+    {
+        defs.insert(name.clone(), fields[0].clone());
+    }
+    instr.for_each_child(&mut |child| collect_struct_single_field_defs(child, defs));
+}
+
+/// Count `LocalSet(name, ..)` and `LocalTee(name, ..)` occurrences at any depth.
+fn count_local_defs(instr: &WirInstr, name: &str) -> usize {
+    let self_count = usize::from(matches!(
+        instr,
+        WirInstr::LocalSet { name: n, .. } | WirInstr::LocalTee { name: n, .. } if n == name
+    ));
+    let mut child_count = 0usize;
+    instr.for_each_child(&mut |child| {
+        child_count += count_local_defs(child, name);
+    });
+    self_count + child_count
+}
+
+/// Count `StructGet(LocalGet(name), _)` occurrences at any depth.
+fn count_struct_get_uses(instr: &WirInstr, name: &str) -> usize {
+    if let WirInstr::StructGet { expr, .. } = instr
+        && let WirInstr::LocalGet { name: n } = expr.as_ref()
+        && n == name
+    {
+        return 1;
+    }
+    let mut count = 0usize;
+    instr.for_each_child(&mut |child| {
+        count += count_struct_get_uses(child, name);
+    });
+    count
+}
+
+/// Returns `true` if every `LocalGet(name)` in the tree is the direct `expr`
+/// of a `StructGet` (any field).  A bare `LocalGet(name)` in any other position
+/// returns `false`.
+fn local_used_only_via_struct_get(instr: &WirInstr, name: &str) -> bool {
+    match instr {
+        // Bare LocalGet of our name — invalid.
+        WirInstr::LocalGet { name: n } => n != name,
+        // StructGet whose expr IS exactly LocalGet(name) — valid; don't recurse into expr.
+        WirInstr::StructGet { expr, .. } if matches!(expr.as_ref(), WirInstr::LocalGet { name: n } if n == name) => {
+            true
+        }
+        // All other nodes: check children.
+        _ => {
+            let mut ok = true;
+            instr.for_each_child(&mut |child| {
+                if !local_used_only_via_struct_get(child, name) {
+                    ok = false;
+                }
+            });
+            ok
+        }
+    }
+}
+
+/// Returns `true` if `instr` contains a `LocalGet` of any name that is in
+/// `candidates`, excluding `exclude` (the candidate being checked).
+fn inner_refs_any_candidate(
+    instr: &WirInstr,
+    candidates: &IndexSet<String>,
+    exclude: &str,
+) -> bool {
+    if let WirInstr::LocalGet { name } = instr {
+        candidates.contains(name) && name != exclude
+    } else {
+        let mut found = false;
+        instr.for_each_child(&mut |child| {
+            if inner_refs_any_candidate(child, candidates, exclude) {
+                found = true;
+            }
+        });
+        found
+    }
+}
+
+/// Replace every `StructGet(LocalGet(name), _)` in the tree with a clone of `value`.
+fn substitute_struct_get_local(instr: &mut WirInstr, name: &str, value: &WirInstr) {
+    if let WirInstr::StructGet { expr, .. } = instr
+        && let WirInstr::LocalGet { name: n } = expr.as_ref()
+        && n == name
+    {
+        *instr = value.clone();
+        return;
+    }
+    instr.for_each_boxed_child_mut(&mut |child| substitute_struct_get_local(child, name, value));
+}
+
+/// Replace the first `LocalSet(name, ..)` found in the tree with `Nop`.
+fn nop_local_set_of(instr: &mut WirInstr, name: &str) {
+    if let WirInstr::LocalSet { name: n, .. } = instr
+        && n == name
+    {
+        *instr = WirInstr::Nop;
+        return;
+    }
+    instr.for_each_boxed_child_mut(&mut |child| nop_local_set_of(child, name));
 }
 
 /// Recursively optimize a list of instructions.

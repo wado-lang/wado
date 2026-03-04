@@ -218,17 +218,12 @@ export fn __cm_export__run() {
 }
 
 pub fn "Array<Point>^Inspect::inspect"(self: &Array<Point>, f: &mut Formatter) {
-    let self: &mut String = f.buf;
-    if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
-        self.String::grow((self.used + 1));
-    }
-    core::builtin::array_set_u8(self.repr, self.used, 91);
-    self.used = (self.used + 1);
+    f.buf.String::append_char('[');
     __for_5: {
         let mut i: i32 = 0;
-        let _licm_used_16: i32 = self.used;
+        let _licm_used_10: i32 = self.used;
         loop {
-            if !(i < _licm_used_16) {
+            if !(i < _licm_used_10) {
                 break __for_5;
             }
             if (i > 0) {
@@ -239,12 +234,7 @@ pub fn "Array<Point>^Inspect::inspect"(self: &Array<Point>, f: &mut Formatter) {
             i = (i + 1);
         }
     }
-    let self: &mut String = f.buf;
-    if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
-        self.String::grow((self.used + 1));
-    }
-    core::builtin::array_set_u8(self.repr, self.used, 93);
-    self.used = (self.used + 1);
+    f.buf.String::append_char(']');
 }
 
 fn "Array<Point>^IndexValue::index_value"(self: &Array<Point>, index: i32) -> Point {

@@ -80,17 +80,12 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
 }
 
 pub fn "Array<Array<String>>^Inspect::inspect"(self: &Array<Array<String>>, f: &mut Formatter) {
-    let self: &mut String = f.buf;
-    if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
-        self.String::grow((self.used + 1));
-    }
-    core::builtin::array_set_u8(self.repr, self.used, 91);
-    self.used = (self.used + 1);
+    f.buf.String::append_char('[');
     __for_5: {
         let mut i: i32 = 0;
-        let _licm_used_16: i32 = self.used;
+        let _licm_used_10: i32 = self.used;
         loop {
-            if !(i < _licm_used_16) {
+            if !(i < _licm_used_10) {
                 break __for_5;
             }
             if (i > 0) {
@@ -101,12 +96,7 @@ pub fn "Array<Array<String>>^Inspect::inspect"(self: &Array<Array<String>>, f: &
             i = (i + 1);
         }
     }
-    let self: &mut String = f.buf;
-    if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
-        self.String::grow((self.used + 1));
-    }
-    core::builtin::array_set_u8(self.repr, self.used, 93);
-    self.used = (self.used + 1);
+    f.buf.String::append_char(']');
 }
 
 fn "Array<Array<String>>^IndexValue::index_value"(self: &Array<Array<String>>, index: i32) -> Array<String> {
@@ -117,17 +107,12 @@ fn "Array<Array<String>>^IndexValue::index_value"(self: &Array<Array<String>>, i
 }
 
 pub fn "Array<String>^Inspect::inspect"(self: &Array<String>, f: &mut Formatter) {
-    let self: &mut String = f.buf;
-    if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
-        self.String::grow((self.used + 1));
-    }
-    core::builtin::array_set_u8(self.repr, self.used, 91);
-    self.used = (self.used + 1);
+    f.buf.String::append_char('[');
     __for_5: {
         let mut i: i32 = 0;
-        let _licm_used_16: i32 = self.used;
+        let _licm_used_10: i32 = self.used;
         loop {
-            if !(i < _licm_used_16) {
+            if !(i < _licm_used_10) {
                 break __for_5;
             }
             if (i > 0) {
@@ -138,12 +123,7 @@ pub fn "Array<String>^Inspect::inspect"(self: &Array<String>, f: &mut Formatter)
             i = (i + 1);
         }
     }
-    let self: &mut String = f.buf;
-    if core::builtin::unlikely(((self.used + 1) > core::builtin::array_len(self.repr))) {
-        self.String::grow((self.used + 1));
-    }
-    core::builtin::array_set_u8(self.repr, self.used, 93);
-    self.used = (self.used + 1);
+    f.buf.String::append_char(']');
 }
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {

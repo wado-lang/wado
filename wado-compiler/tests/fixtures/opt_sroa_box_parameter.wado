@@ -1,0 +1,193 @@
+// Test: Box<T> parameter SROA optimization
+// Verifies that functions taking `ref null Box<T>` parameters are rewritten
+// to take the scalar `T` directly, eliminating GC struct allocation at call sites.
+//
+// Box<T> is synthesized by the lower phase to wrap primitives for reference
+// semantics (e.g., Display::fmt receives `&self` → `ref null Box<T>`).
+// Template string interpolation is the primary trigger for Box<T> creation.
+//
+// bool Display is fully inlined (Formatter::pad with constant string),
+// so no Box<bool> function call exists — only correctness is tested.
+
+use { println, Stdout } from "core:cli";
+
+fn check_i32(x: i32, expected: String) {
+    assert `{x}` == expected;
+}
+
+fn check_i64(x: i64, expected: String) {
+    assert `{x}` == expected;
+}
+
+fn check_f32(x: f32, expected: String) {
+    assert `{x}` == expected;
+}
+
+fn check_f64(x: f64, expected: String) {
+    assert `{x}` == expected;
+}
+
+export fn run() with Stdout {
+    // === All primitive types (basic interpolation) ===
+    let i8_val: i8 = 42;
+    let i16_val: i16 = 1000;
+    let i32_val: i32 = 100000;
+    let i64_val: i64 = 999999999;
+    let u8_val: u8 = 255;
+    let u16_val: u16 = 60000;
+    let u32_val: u32 = 4000000000;
+    let u64_val: u64 = 18000000000000000000;
+    let f32_val: f32 = 3.14;
+    let f64_val: f64 = 2.71828;
+    let bool_val = true;
+    let char_val = 'Z';
+
+    assert `{i8_val}` == "42";
+    assert `{i16_val}` == "1000";
+    assert `{i32_val}` == "100000";
+    assert `{i64_val}` == "999999999";
+    assert `{u8_val}` == "255";
+    assert `{u16_val}` == "60000";
+    assert `{u32_val}` == "4000000000";
+    assert `{u64_val}` == "18000000000000000000";
+    assert `{f32_val}` == "3.14";
+    assert `{f64_val}` == "2.71828";
+    assert `{bool_val}` == "true";
+    assert `{char_val}` == "Z";
+
+    // Format specifiers also go through Box<T> paths
+    assert `{f64_val:0.2f}` == "2.72";
+    assert `{i32_val:x}` == "186a0";
+
+    // === 1. Inside if blocks ===
+    if true {
+        let a: i32 = 42;
+        let b: i64 = 9999999999;
+        let c: f32 = 1.5;
+        let d: f64 = 2.5;
+        let e = false;
+        assert `{a}` == "42";
+        assert `{b}` == "9999999999";
+        assert `{c}` == "1.5";
+        assert `{d}` == "2.5";
+        assert `{e}` == "false";
+    }
+
+    if i32_val > 0 {
+        assert `{i32_val}` == "100000";
+        assert `{f64_val:0.1f}` == "2.7";
+    } else {
+        assert `{i32_val}` == "negative";
+    }
+
+    // === 2. Match arms ===
+    let opt_i32: Option<i32> = Option::<i32>::Some(77);
+    let opt_i64: Option<i64> = Option::<i64>::Some(123456789);
+    let opt_f32: Option<f32> = Option::<f32>::Some(6.28);
+    let opt_f64: Option<f64> = Option::<f64>::Some(1.414);
+    let opt_bool: Option<bool> = Option::<bool>::Some(true);
+
+    let r1 = match opt_i32 {
+        Some(v) => `{v}`,
+        None => "none",
+    };
+    assert r1 == "77";
+
+    let r2 = match opt_i64 {
+        Some(v) => `{v}`,
+        None => "none",
+    };
+    assert r2 == "123456789";
+
+    let r3 = match opt_f32 {
+        Some(v) => `{v}`,
+        None => "none",
+    };
+    assert r3 == "6.28";
+
+    let r4 = match opt_f64 {
+        Some(v) => `{v}`,
+        None => "none",
+    };
+    assert r4 == "1.414";
+
+    let r5 = match opt_bool {
+        Some(v) => `{v}`,
+        None => "none",
+    };
+    assert r5 == "true";
+
+    // === 3. Go-style if-let with condition ===
+    if let s = `{i32_val}`; s == "100000" {
+        assert s == "100000";
+    } else {
+        panic("i32 if-let failed");
+    }
+
+    if let s = `{i64_val}`; s == "999999999" {
+        assert s == "999999999";
+    } else {
+        panic("i64 if-let failed");
+    }
+
+    if let s = `{f32_val}`; s == "3.14" {
+        assert s == "3.14";
+    } else {
+        panic("f32 if-let failed");
+    }
+
+    if let s = `{f64_val}`; s == "2.71828" {
+        assert s == "2.71828";
+    } else {
+        panic("f64 if-let failed");
+    }
+
+    if let s = `{bool_val}`; s == "true" {
+        assert s == "true";
+    } else {
+        panic("bool if-let failed");
+    }
+
+    // === 4. In closures ===
+    let fmt_i32 = |x: i32| `{x}`;
+    let fmt_i64 = |x: i64| `{x}`;
+    let fmt_f32 = |x: f32| `{x}`;
+    let fmt_f64 = |x: f64| `{x}`;
+    let fmt_bool = |x: bool| `{x}`;
+
+    assert fmt_i32(42) == "42";
+    assert fmt_i64(123456789) == "123456789";
+    assert fmt_f32(2.5) == "2.5";
+    assert fmt_f64(3.14159) == "3.14159";
+    assert fmt_bool(false) == "false";
+
+    // Closure capturing outer variable
+    let captured_i32: i32 = 999;
+    let captured_f64: f64 = 1.618;
+    let fmt_captured = || `{captured_i32}, {captured_f64}`;
+    assert fmt_captured() == "999, 1.618";
+
+    // Passed to higher-order function
+    check_i32(12345, "12345");
+    check_i64(9876543210, "9876543210");
+    check_f32(0.5, "0.5");
+    check_f64(0.123456, "0.123456");
+
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_expect:O2": [
+        "\"functype/i32::fmt_decimal\" = fn(i32, ref null Formatter)",
+        "\"functype/u32::fmt_decimal\" = fn(u32, ref null Formatter)",
+        "\"functype/i64::fmt_decimal\" = fn(i64, ref null Formatter)",
+        "\"functype/u64::fmt_decimal\" = fn(u64, ref null Formatter)",
+        "\"functype/f32::fmt_into\" = fn(f32, ref null Formatter)",
+        "\"functype/f64::fmt_into\" = fn(f64, ref null Formatter)",
+        "\"functype/f64::fmt_fixed\" = fn(f64, i32, ref null Formatter)",
+        "\"functype/char^Display::fmt\" = fn(char, ref null Formatter)",
+        "f64::fmt_fixed(self, f.precision, f)"
+    ]
+}
