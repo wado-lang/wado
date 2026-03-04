@@ -372,11 +372,7 @@ fn deserialize_error_literal(
 /// Generate a `T::default()` static call for the field's initial value.
 /// Only emits the call when the `Default` trait is registered via `#[comp_feature("default")]`.
 /// The module source for resolution comes from the type itself (where `impl Default for T` lives).
-fn default_value_for_type(
-    type_id: TypeId,
-    type_table: &TypeTable,
-    span: Span,
-) -> TirExpr {
+fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -> TirExpr {
     // Gate: only generate Default calls if the trait is registered via comp_feature.
     if type_table.default_trait_module_source().is_none() {
         return null_expr(type_id);
@@ -418,10 +414,7 @@ fn default_value_for_type(
         "default".to_string(),
     );
     if !type_args.is_empty() {
-        let arg_names: Vec<String> = type_args
-            .iter()
-            .map(|t| type_table.type_name(*t))
-            .collect();
+        let arg_names: Vec<String> = type_args.iter().map(|t| type_table.type_name(*t)).collect();
         method_info = method_info.with_type_args(&arg_names, &[]);
     }
     let mangled_name = method_info.to_mangled_name();
