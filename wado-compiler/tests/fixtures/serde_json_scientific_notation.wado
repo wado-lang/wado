@@ -1,0 +1,242 @@
+// Tests for deserializing JSON numbers with scientific notation into integer types.
+// JSON numbers like 1e10, 1E2, 1.5e1 should be accepted as integers when the
+// result is an exact integer value.
+use { Serialize, Deserialize, DeserializeError, DeserializeErrorKind } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+// --- i32 with scientific notation ---
+
+test "i32 from 1e2" {
+    let r = from_string::<i32>("1e2");
+    if let Ok(v) = r {
+        assert v == 100;
+    } else {
+        panic("deserialize 1e2 as i32 failed");
+    }
+}
+
+test "i32 from 1E2" {
+    let r = from_string::<i32>("1E2");
+    if let Ok(v) = r {
+        assert v == 100;
+    } else {
+        panic("deserialize 1E2 as i32 failed");
+    }
+}
+
+test "i32 from 5e0" {
+    let r = from_string::<i32>("5e0");
+    if let Ok(v) = r {
+        assert v == 5;
+    } else {
+        panic("deserialize 5e0 as i32 failed");
+    }
+}
+
+test "i32 from 15e1" {
+    let r = from_string::<i32>("15e1");
+    if let Ok(v) = r {
+        assert v == 150;
+    } else {
+        panic("deserialize 15e1 as i32 failed");
+    }
+}
+
+test "i32 from 1.5e1" {
+    let r = from_string::<i32>("1.5e1");
+    if let Ok(v) = r {
+        assert v == 15;
+    } else {
+        panic("deserialize 1.5e1 as i32 failed");
+    }
+}
+
+test "i32 from 1.0e3" {
+    let r = from_string::<i32>("1.0e3");
+    if let Ok(v) = r {
+        assert v == 1000;
+    } else {
+        panic("deserialize 1.0e3 as i32 failed");
+    }
+}
+
+test "i32 from negative scientific" {
+    let r = from_string::<i32>("-5e2");
+    if let Ok(v) = r {
+        assert v == -500;
+    } else {
+        panic("deserialize -5e2 as i32 failed");
+    }
+}
+
+test "i32 from explicit positive exponent" {
+    let r = from_string::<i32>("2e+3");
+    if let Ok(v) = r {
+        assert v == 2000;
+    } else {
+        panic("deserialize 2e+3 as i32 failed");
+    }
+}
+
+test "i32 rejects non-integer scientific" {
+    // 1.5e0 = 1.5, not an integer
+    let r = from_string::<i32>("1.5e0");
+    if let Err(_) = r {
+        // expected: not an integer
+    } else {
+        panic("expected error for 1.5e0 as i32");
+    }
+}
+
+test "i32 rejects negative exponent non-integer" {
+    // 1e-1 = 0.1, not an integer
+    let r = from_string::<i32>("1e-1");
+    if let Err(_) = r {
+        // expected: not an integer
+    } else {
+        panic("expected error for 1e-1 as i32");
+    }
+}
+
+// --- i64 with scientific notation ---
+
+test "i64 from 1e10" {
+    let r = from_string::<i64>("1e10");
+    if let Ok(v) = r {
+        assert v == 10000000000 as i64;
+    } else {
+        panic("deserialize 1e10 as i64 failed");
+    }
+}
+
+test "i64 from 1e15" {
+    let r = from_string::<i64>("1e15");
+    if let Ok(v) = r {
+        assert v == 1000000000000000 as i64;
+    } else {
+        panic("deserialize 1e15 as i64 failed");
+    }
+}
+
+test "i64 from 9.007199254740991e15" {
+    // MAX_SAFE_INTEGER = 9007199254740991
+    let r = from_string::<i64>("9.007199254740991e15");
+    if let Ok(v) = r {
+        assert v == 9007199254740991 as i64;
+    } else {
+        panic("deserialize 9.007199254740991e15 as i64 failed");
+    }
+}
+
+test "i64 from -1e10" {
+    let r = from_string::<i64>("-1e10");
+    if let Ok(v) = r {
+        assert v == -10000000000 as i64;
+    } else {
+        panic("deserialize -1e10 as i64 failed");
+    }
+}
+
+// --- u32 with scientific notation ---
+
+test "u32 from 1e3" {
+    let r = from_string::<u32>("1e3");
+    if let Ok(v) = r {
+        assert v == 1000 as u32;
+    } else {
+        panic("deserialize 1e3 as u32 failed");
+    }
+}
+
+test "u32 from 4.294967295e9" {
+    // u32::MAX = 4294967295
+    let r = from_string::<u32>("4.294967295e9");
+    if let Ok(v) = r {
+        assert v == 4294967295 as u32;
+    } else {
+        panic("deserialize u32 max via scientific failed");
+    }
+}
+
+// --- u64 with scientific notation ---
+
+test "u64 from 1e10" {
+    let r = from_string::<u64>("1e10");
+    if let Ok(v) = r {
+        assert v == 10000000000 as u64;
+    } else {
+        panic("deserialize 1e10 as u64 failed");
+    }
+}
+
+test "u64 rejects negative scientific" {
+    let r = from_string::<u64>("-1e2");
+    if let Err(_) = r {
+        // expected: negative value for u64
+    } else {
+        panic("expected error for -1e2 as u64");
+    }
+}
+
+// --- f64 with scientific notation ---
+
+test "f64 from 1e10" {
+    let r = from_string::<f64>("1e10");
+    if let Ok(v) = r {
+        assert v == 10000000000.0;
+    } else {
+        panic("failed");
+    }
+}
+
+test "f64 from 2.5e-3" {
+    let r = from_string::<f64>("2.5e-3");
+    if let Ok(v) = r {
+        assert v == 0.0025;
+    } else {
+        panic("failed");
+    }
+}
+
+test "f64 from -1.23E4" {
+    let r = from_string::<f64>("-1.23E4");
+    if let Ok(v) = r {
+        assert v == -12300.0;
+    } else {
+        panic("failed");
+    }
+}
+
+// --- f32 with scientific notation ---
+
+test "f32 from 1e2" {
+    let r = from_string::<f32>("1e2");
+    if let Ok(v) = r {
+        assert v == 100.0 as f32;
+    } else {
+        panic("failed");
+    }
+}
+
+// --- Plain integer deserialization still works ---
+
+test "i32 plain integer still works" {
+    let r = from_string::<i32>("42");
+    if let Ok(v) = r {
+        assert v == 42;
+    } else {
+        panic("failed");
+    }
+}
+
+test "i64 plain integer still works" {
+    let r = from_string::<i64>("1000000");
+    if let Ok(v) = r {
+        assert v == 1000000 as i64;
+    } else {
+        panic("failed");
+    }
+}
+
+__DATA__
+{"test": {}}

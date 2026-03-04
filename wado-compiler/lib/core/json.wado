@@ -538,7 +538,41 @@ impl JsonDeserializer {
         return Result::<String, DeserializeError>::Ok(raw);
     }
 
+    fn has_exp_or_dot(&self, raw: &String) -> bool {
+        for let mut i = 0; i < raw.len(); i += 1 {
+            let b = raw.get_byte(i) as i32;
+            if b == '.' as i32 || b == 'e' as i32 || b == 'E' as i32 {
+                return true;
+            }
+        }
+        return false;
+    }
+
     fn parse_i32_from(&self, raw: &String, start: i64) -> Result<i32, DeserializeError> {
+        let has_exp = self.has_exp_or_dot(raw);
+        if has_exp {
+            // Parse via f64 for scientific notation (e.g. 1e2 → 100)
+            let parsed = f64::parse(*raw);
+            if let Some(v) = parsed {
+                if v != f64::floor(v) {
+                    return Result::<i32, DeserializeError>::Err(DeserializeError::unexpected_type(
+                        "expected integer, got float",
+                        start,
+                    ));
+                }
+                if v < -2147483648.0 || v > 2147483647.0 {
+                    return Result::<i32, DeserializeError>::Err(DeserializeError::overflow(
+                        "value out of range for i32",
+                        start,
+                    ));
+                }
+                return Result::<i32, DeserializeError>::Ok(v as i32);
+            }
+            return Result::<i32, DeserializeError>::Err(DeserializeError::invalid_value(
+                "invalid number",
+                start,
+            ));
+        }
         let mut neg = false;
         let mut idx = 0;
         let len = raw.len();
@@ -549,12 +583,6 @@ impl JsonDeserializer {
         let mut result = 0;
         while idx < len {
             let b = raw.get_byte(idx) as i32;
-            if b == '.' as i32 || b == 'e' as i32 || b == 'E' as i32 {
-                return Result::<i32, DeserializeError>::Err(DeserializeError::unexpected_type(
-                    "expected integer, got float",
-                    start,
-                ));
-            }
             if b < '0' as i32 || b > '9' as i32 {
                 return Result::<i32, DeserializeError>::Err(DeserializeError::invalid_value(
                     "invalid digit in number",
@@ -572,6 +600,24 @@ impl JsonDeserializer {
     }
 
     fn parse_i64_from(&self, raw: &String, start: i64) -> Result<i64, DeserializeError> {
+        let has_exp = self.has_exp_or_dot(raw);
+        if has_exp {
+            let parsed = f64::parse(*raw);
+            if let Some(v) = parsed {
+                if v != f64::floor(v) {
+                    return Result::<i64, DeserializeError>::Err(DeserializeError::unexpected_type(
+                        "expected integer, got float",
+                        start,
+                    ));
+                }
+                // f64 can represent integers exactly up to 2^53
+                return Result::<i64, DeserializeError>::Ok(v as i64);
+            }
+            return Result::<i64, DeserializeError>::Err(DeserializeError::invalid_value(
+                "invalid number",
+                start,
+            ));
+        }
         let mut neg = false;
         let mut idx = 0;
         let len = raw.len();
@@ -582,12 +628,6 @@ impl JsonDeserializer {
         let mut result: i64 = 0 as i64;
         while idx < len {
             let b = raw.get_byte(idx) as i32;
-            if b == '.' as i32 || b == 'e' as i32 || b == 'E' as i32 {
-                return Result::<i64, DeserializeError>::Err(DeserializeError::unexpected_type(
-                    "expected integer, got float",
-                    start,
-                ));
-            }
             if b < '0' as i32 || b > '9' as i32 {
                 return Result::<i64, DeserializeError>::Err(DeserializeError::invalid_value(
                     "invalid digit in number",
@@ -969,17 +1009,28 @@ impl Deserializer for JsonDeserializer {
     }
 
     fn parse_u64_from(&self, raw: &String, start: i64) -> Result<u64, DeserializeError> {
-        let mut idx = 0;
-        let len = raw.len();
-        if len > 0 && raw.get_byte(0) as i32 == '-' as i32 {
+        if raw.len() > 0 && raw.get_byte(0) as i32 == '-' as i32 {
             return Result::<u64, DeserializeError>::Err(DeserializeError::overflow("negative value for u64", start));
         }
+        let has_exp = self.has_exp_or_dot(raw);
+        if has_exp {
+            let parsed = f64::parse(*raw);
+            if let Some(v) = parsed {
+                if v < 0.0 {
+                    return Result::<u64, DeserializeError>::Err(DeserializeError::overflow("negative value for u64", start));
+                }
+                if v != f64::floor(v) {
+                    return Result::<u64, DeserializeError>::Err(DeserializeError::unexpected_type("expected integer, got float", start));
+                }
+                return Result::<u64, DeserializeError>::Ok(v as u64);
+            }
+            return Result::<u64, DeserializeError>::Err(DeserializeError::invalid_value("invalid number", start));
+        }
+        let mut idx = 0;
+        let len = raw.len();
         let mut result: u64 = 0 as u64;
         while idx < len {
             let b = raw.get_byte(idx) as i32;
-            if b == '.' as i32 || b == 'e' as i32 || b == 'E' as i32 {
-                return Result::<u64, DeserializeError>::Err(DeserializeError::unexpected_type("expected integer, got float", start));
-            }
             if b < '0' as i32 || b > '9' as i32 {
                 return Result::<u64, DeserializeError>::Err(DeserializeError::invalid_value("invalid digit", start));
             }
