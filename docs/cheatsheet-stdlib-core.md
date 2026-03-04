@@ -1276,18 +1276,16 @@ impl KeyValueLiteralBuilder for TreeMap<String, V> {
     fn build(&self) -> TreeMap<String, V>;
 }
 
-<<<<<<< HEAD
 impl Serialize for TreeMap<String, V> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
 }
 
 impl Deserialize for TreeMap<String, V> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeMap<String, V>, DeserializeError>;
-||||||| 6406151
-=======
+}
+
 impl Default for TreeMap<K, V> {
     pub fn default() -> TreeMap<K, V>;
->>>>>>> origin/main
 }
 ```
 
