@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772637062468,
+  "lastUpdate": 1772637757615,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -257,6 +257,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ace7dddec55f927ec8ed775de484b5acc6284fa6"
         },
         "date": 1772637062341,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1386,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9905,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 14295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3f93a028cc718921a11746e75dffffc89584f91e",
+          "message": "Merge pull request #504 from wado-lang/claude/benchmark-optimization-levels-aSnYP\n\nRun benchmarks at multiple optimization levels (-O1, -O2, -O3)",
+          "timestamp": "2026-03-05T00:20:23+09:00",
+          "tree_id": "50115f2b44e5e8116ce74b93a6524da82e6920ac",
+          "url": "https://github.com/wado-lang/wado/commit/3f93a028cc718921a11746e75dffffc89584f91e"
+        },
+        "date": 1772637757479,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
