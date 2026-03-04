@@ -2131,15 +2131,7 @@ impl<'a> Unparser<'a> {
         for part in &t.parts {
             match part {
                 TemplatePart::String(s) => {
-                    // Escape ` and { in template strings
-                    for c in s.chars() {
-                        match c {
-                            '`' => self.output.push_str("\\`"),
-                            '{' => self.output.push_str("\\{"),
-                            '}' => self.output.push_str("\\}"),
-                            _ => self.output.push(c),
-                        }
-                    }
+                    escape_template_literal_into(s, &mut self.output);
                 }
                 TemplatePart::Interpolation { expr, format } => {
                     self.output.push('{');
@@ -2744,20 +2736,25 @@ fn unparse_closure_into(c: &ClosureExpr, output: &mut String) {
     unparse_expr_into(&c.body, output, false);
 }
 
+fn escape_template_literal_into(s: &str, output: &mut String) {
+    for c in s.chars() {
+        match c {
+            '\\' => output.push_str("\\\\"),
+            '`' => output.push_str("\\`"),
+            '{' => output.push_str("\\{"),
+            '}' => output.push_str("\\}"),
+            _ => output.push(c),
+        }
+    }
+}
+
 fn unparse_template_string_into(t: &TemplateStringExpr, output: &mut String) {
     use crate::ast::TemplatePart;
     output.push('`');
     for part in &t.parts {
         match part {
             TemplatePart::String(s) => {
-                for c in s.chars() {
-                    match c {
-                        '`' => output.push_str("\\`"),
-                        '{' => output.push_str("\\{"),
-                        '}' => output.push_str("\\}"),
-                        _ => output.push(c),
-                    }
-                }
+                escape_template_literal_into(s, output);
             }
             TemplatePart::Interpolation { expr, format } => {
                 output.push('{');
