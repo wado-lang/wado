@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772637757615,
+  "lastUpdate": 1772660833226,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -296,6 +296,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3f93a028cc718921a11746e75dffffc89584f91e"
         },
         "date": 1772637757479,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1386,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9905,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 14295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d596ed10aaed7cced08c4da82ae060493c43c9f1",
+          "message": "Merge pull request #505 from wado-lang/claude/implement-serde-pJg9O\n\nAdd serde support for tuples, field rename/default, and large integers",
+          "timestamp": "2026-03-05T06:44:44+09:00",
+          "tree_id": "1ab7461ab9f259826c638ac0629388a6e13a30eb",
+          "url": "https://github.com/wado-lang/wado/commit/d596ed10aaed7cced08c4da82ae060493c43c9f1"
+        },
+        "date": 1772660833095,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
