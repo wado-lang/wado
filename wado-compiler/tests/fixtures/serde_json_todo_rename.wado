@@ -1,0 +1,56 @@
+// TODO test: #[serde(rename = "name")] attribute for per-field rename
+// Overrides the default camelCase conversion for individual fields.
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+struct ApiResponse {
+    #[serde(rename = "status_code")]
+    status_code: i32,
+
+    #[serde(rename = "data")]
+    response_data: String,
+}
+
+impl Serialize for ApiResponse;
+impl Deserialize for ApiResponse;
+
+test "serialize with rename" {
+    let resp = ApiResponse { status_code: 200, response_data: "ok" };
+    let r = to_string::<ApiResponse>(&resp);
+    if let Ok(s) = r {
+        // status_code stays as "status_code" (not "statusCode")
+        // response_data becomes "data" (not "responseData")
+        assert s == `\{"status_code":200,"data":"ok"\}`;
+    } else {
+        panic("serialize with rename failed");
+    }
+}
+
+test "deserialize with rename" {
+    let r = from_string::<ApiResponse>(`\{"status_code":200,"data":"ok"\}`);
+    if let Ok(resp) = r {
+        assert resp.status_code == 200;
+        assert resp.response_data == "ok";
+    } else {
+        panic("deserialize with rename failed");
+    }
+}
+
+test "roundtrip with rename" {
+    let orig = ApiResponse { status_code: 404, response_data: "not found" };
+    let json_r = to_string::<ApiResponse>(&orig);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<ApiResponse>(json);
+        if let Ok(parsed) = parsed_r {
+            assert parsed.status_code == 404;
+            assert parsed.response_data == "not found";
+        } else {
+            panic("roundtrip deserialize failed");
+        }
+    } else {
+        panic("roundtrip serialize failed");
+    }
+}
+
+__DATA__
+{"TODO": true, "test": {}}

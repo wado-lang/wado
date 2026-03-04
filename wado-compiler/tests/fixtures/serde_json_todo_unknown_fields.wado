@@ -1,0 +1,44 @@
+// TODO test: unknown fields are silently ignored during deserialization
+// Extra fields in JSON that don't match any struct field should be skipped.
+use { Serialize, Deserialize } from "core:serde";
+use { from_string } from "core:json";
+
+struct Point {
+    x: f64,
+    y: f64,
+}
+
+impl Deserialize for Point;
+
+test "unknown fields ignored" {
+    let r = from_string::<Point>(`\{"x":1.0,"z":999,"y":2.0,"extra":"ignored"\}`);
+    if let Ok(p) = r {
+        assert p.x == 1.0;
+        assert p.y == 2.0;
+    } else {
+        panic("expected unknown fields to be silently ignored");
+    }
+}
+
+test "unknown field with object value" {
+    let r = from_string::<Point>(`\{"x":1.0,"meta":\{"a":1,"b":2\},"y":2.0\}`);
+    if let Ok(p) = r {
+        assert p.x == 1.0;
+        assert p.y == 2.0;
+    } else {
+        panic("expected nested unknown object to be skipped");
+    }
+}
+
+test "unknown field with array value" {
+    let r = from_string::<Point>(`\{"x":1.0,"items":[1,2,3],"y":2.0\}`);
+    if let Ok(p) = r {
+        assert p.x == 1.0;
+        assert p.y == 2.0;
+    } else {
+        panic("expected unknown array to be skipped");
+    }
+}
+
+__DATA__
+{"TODO": true, "test": {}}

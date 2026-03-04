@@ -1,0 +1,87 @@
+// TODO test: JSON string escaping edge cases in serialization and deserialization
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+test "serialize string with quotes" {
+    let s = "say \"hello\"";
+    let r = to_string::<String>(&s);
+    if let Ok(json) = r {
+        assert json == `"say \\"hello\\""`;
+    } else {
+        panic("serialize string with quotes failed");
+    }
+}
+
+test "serialize string with backslash" {
+    let s = "path\\to\\file";
+    let r = to_string::<String>(&s);
+    if let Ok(json) = r {
+        assert json == `"path\\\\to\\\\file"`;
+    } else {
+        panic("serialize string with backslash failed");
+    }
+}
+
+test "serialize string with newline" {
+    let s = "line1\nline2";
+    let r = to_string::<String>(&s);
+    if let Ok(json) = r {
+        assert json == `"line1\\nline2"`;
+    } else {
+        panic("serialize string with newline failed");
+    }
+}
+
+test "serialize string with tab" {
+    let s = "col1\tcol2";
+    let r = to_string::<String>(&s);
+    if let Ok(json) = r {
+        assert json == `"col1\\tcol2"`;
+    } else {
+        panic("serialize string with tab failed");
+    }
+}
+
+test "deserialize string with unicode escape" {
+    // \u0041 = 'A'
+    let r = from_string::<String>(`"\\u0041"`);
+    if let Ok(s) = r {
+        assert s == "A";
+    } else {
+        panic("deserialize unicode escape failed");
+    }
+}
+
+test "roundtrip string with special chars" {
+    let orig = "tab:\there\nnewline";
+    let json_r = to_string::<String>(&orig);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<String>(json);
+        if let Ok(parsed) = parsed_r {
+            assert parsed == orig;
+        } else {
+            panic("roundtrip deserialize failed");
+        }
+    } else {
+        panic("roundtrip serialize failed");
+    }
+}
+
+test "roundtrip empty string" {
+    let orig = "";
+    let json_r = to_string::<String>(&orig);
+    if let Ok(json) = json_r {
+        assert json == `""`;
+        let parsed_r = from_string::<String>(json);
+        if let Ok(parsed) = parsed_r {
+            assert parsed == "";
+        } else {
+            panic("roundtrip empty string deserialize failed");
+        }
+    } else {
+        panic("roundtrip empty string serialize failed");
+    }
+}
+
+__DATA__
+{"TODO": true, "test": {}}

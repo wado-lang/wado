@@ -1,0 +1,57 @@
+// TODO test: synthesized Serialize/Deserialize for nested structs
+// A struct containing another struct field should work with synthesis.
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+struct Point {
+    x: f64,
+    y: f64,
+}
+
+impl Serialize for Point;
+impl Deserialize for Point;
+
+struct Line {
+    start_point: Point,
+    end_point: Point,
+}
+
+impl Serialize for Line;
+impl Deserialize for Line;
+
+test "nested struct serialize" {
+    let line = Line {
+        start_point: Point { x: 1.0, y: 2.0 },
+        end_point: Point { x: 3.0, y: 4.0 },
+    };
+    let r = to_string::<Line>(&line);
+    if let Ok(s) = r {
+        assert s == `\{"startPoint":\{"x":1.0,"y":2.0\},"endPoint":\{"x":3.0,"y":4.0\}\}`;
+    } else {
+        panic("serialize nested struct failed");
+    }
+}
+
+test "nested struct roundtrip" {
+    let line = Line {
+        start_point: Point { x: 10.5, y: 20.5 },
+        end_point: Point { x: 30.5, y: 40.5 },
+    };
+    let json_r = to_string::<Line>(&line);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<Line>(json);
+        if let Ok(parsed) = parsed_r {
+            assert parsed.start_point.x == 10.5;
+            assert parsed.start_point.y == 20.5;
+            assert parsed.end_point.x == 30.5;
+            assert parsed.end_point.y == 40.5;
+        } else {
+            panic("from_string nested struct failed");
+        }
+    } else {
+        panic("to_string nested struct failed");
+    }
+}
+
+__DATA__
+{"TODO": true, "test": {}}

@@ -1,0 +1,49 @@
+// TODO test: TreeMap Serialize/Deserialize via begin_map
+// TreeMap<String, T> should serialize as JSON objects: {"key1": val1, "key2": val2}
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+use { TreeMap } from "core:collections";
+
+test "treemap serialize String keys" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["alice"] = 30;
+    map["bob"] = 25;
+    let r = to_string::<TreeMap<String, i32>>(&map);
+    if let Ok(s) = r {
+        // TreeMap preserves insertion order
+        assert s == `\{"alice":30,"bob":25\}`;
+    } else {
+        panic("serialize TreeMap failed");
+    }
+}
+
+test "treemap roundtrip" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["x"] = 1;
+    map["y"] = 2;
+    let json_r = to_string::<TreeMap<String, i32>>(&map);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<TreeMap<String, i32>>(json);
+        if let Ok(parsed) = parsed_r {
+            assert parsed["x"] == 1;
+            assert parsed["y"] == 2;
+        } else {
+            panic("from_string TreeMap failed");
+        }
+    } else {
+        panic("to_string TreeMap failed");
+    }
+}
+
+test "treemap empty" {
+    let map = TreeMap::<String, i32>::new();
+    let r = to_string::<TreeMap<String, i32>>(&map);
+    if let Ok(s) = r {
+        assert s == `\{\}`;
+    } else {
+        panic("serialize empty TreeMap failed");
+    }
+}
+
+__DATA__
+{"TODO": true, "test": {}}

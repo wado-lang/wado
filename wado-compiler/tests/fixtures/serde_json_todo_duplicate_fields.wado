@@ -1,0 +1,26 @@
+// TODO test: duplicate fields during JSON deserialization
+// When the same field appears twice in JSON, the last value should win
+// (consistent with JSON RFC 8259 which says names SHOULD be unique,
+// but behavior for duplicates is implementation-defined).
+use { Serialize, Deserialize } from "core:serde";
+use { from_string } from "core:json";
+
+struct Point {
+    x: f64,
+    y: f64,
+}
+
+impl Deserialize for Point;
+
+test "duplicate field last value wins" {
+    let r = from_string::<Point>(`\{"x":1.0,"y":2.0,"x":99.0\}`);
+    if let Ok(p) = r {
+        assert p.x == 99.0;
+        assert p.y == 2.0;
+    } else {
+        panic("expected duplicate field to succeed with last-value-wins");
+    }
+}
+
+__DATA__
+{"TODO": true, "test": {}}
