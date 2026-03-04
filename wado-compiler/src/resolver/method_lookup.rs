@@ -1308,12 +1308,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> Option<IndexTraitInfo> {
         // Look for impl Index<...> for StructName
         self.find_indexing_trait_impl(struct_name, base_type_id, "Index", "index", "Output")
-            .map(|(output_type, self_kind, trait_name, impl_module_source)| IndexTraitInfo {
-                output_type,
-                self_kind,
-                trait_name,
-                impl_module_source,
-            })
+            .map(
+                |(output_type, self_kind, trait_name, impl_module_source)| IndexTraitInfo {
+                    output_type,
+                    self_kind,
+                    trait_name,
+                    impl_module_source,
+                },
+            )
     }
 
     /// Find `KeyValueLiteralBuilder` trait implementation for a type.
