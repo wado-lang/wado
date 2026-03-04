@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772637756491,
+  "lastUpdate": 1772660831897,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -491,6 +491,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib/decompress (-O3)",
             "value": 692,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d596ed10aaed7cced08c4da82ae060493c43c9f1",
+          "message": "Merge pull request #505 from wado-lang/claude/implement-serde-pJg9O\n\nAdd serde support for tuples, field rename/default, and large integers",
+          "timestamp": "2026-03-05T06:44:44+09:00",
+          "tree_id": "1ab7461ab9f259826c638ac0629388a6e13a30eb",
+          "url": "https://github.com/wado-lang/wado/commit/d596ed10aaed7cced08c4da82ae060493c43c9f1"
+        },
+        "date": 1772660831760,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "count_prime (-O1)",
+            "value": 3303,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O1)",
+            "value": 148,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O1)",
+            "value": 206,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O1)",
+            "value": 162,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O1)",
+            "value": 68,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O1)",
+            "value": 588,
+            "unit": "ms"
+          },
+          {
+            "name": "count_prime (-O2)",
+            "value": 3300,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O2)",
+            "value": 148,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O2)",
+            "value": 209,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O2)",
+            "value": 160,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O2)",
+            "value": 68,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O2)",
+            "value": 589,
+            "unit": "ms"
+          },
+          {
+            "name": "count_prime (-O3)",
+            "value": 3298,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O3)",
+            "value": 148,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O3)",
+            "value": 65,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O3)",
+            "value": 160,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O3)",
+            "value": 40,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O3)",
+            "value": 599,
             "unit": "ms"
           }
         ]
