@@ -2198,14 +2198,10 @@ fn sroa_single_field_parameters(module: &mut WirModule) {
     let mut param_struct_info: indexmap::IndexMap<(u32, usize), (WirTypeId, String)> =
         indexmap::IndexMap::new();
     for &(func_id_index, param_idx) in &candidates {
-        let (ref struct_type_idx, _, ref field_name) =
-            candidate_info[&(func_id_index, param_idx)];
+        let (ref struct_type_idx, _, ref field_name) = candidate_info[&(func_id_index, param_idx)];
         if let Some(WirTypeDef::Struct(st)) = module.types.get(*struct_type_idx as usize) {
             let type_id = WirTypeId::new(*struct_type_idx, st.name.fq.as_str().into());
-            param_struct_info.insert(
-                (func_id_index, param_idx),
-                (type_id, field_name.clone()),
-            );
+            param_struct_info.insert((func_id_index, param_idx), (type_id, field_name.clone()));
         }
     }
 
@@ -2397,16 +2393,10 @@ fn single_field_param_use_valid_instr(
 
 /// Rewrite `StructGet { field, expr: LocalGet(param) }` → `LocalGet(param)`
 /// within a function body after SROA (param is now scalar).
-fn rewrite_single_field_param_reads(
-    instr: &mut WirInstr,
-    param_name: &str,
-    expected_field: &str,
-) {
+fn rewrite_single_field_param_reads(instr: &mut WirInstr, param_name: &str, expected_field: &str) {
     // Check StructGet(LocalGet(param), field) pattern
     if let WirInstr::StructGet {
-        field_name,
-        expr,
-        ..
+        field_name, expr, ..
     } = instr
         && field_name == expected_field
         && matches!(expr.as_ref(), WirInstr::LocalGet { name } if name == param_name)
@@ -2469,8 +2459,7 @@ fn rewrite_single_field_args_at_call_sites(
         } else {
             // The argument is an existing struct reference (e.g., from a local variable).
             // Extract the scalar value via StructGet(field_name).
-            let Some((struct_type_id, field_name)) =
-                param_struct_info.get(&(func_id_idx, pi))
+            let Some((struct_type_id, field_name)) = param_struct_info.get(&(func_id_idx, pi))
             else {
                 continue;
             };

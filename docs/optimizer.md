@@ -423,7 +423,7 @@ Rewrites functions that take `ref null S` parameters (where `S` is any single-fi
 
 The primary trigger is `Box<T>`, a single-field GC struct synthesized by the lower phase to wrap primitives for reference semantics (e.g., `Display::fmt` receives `&self` as `ref null Box<T>`). At call sites where `StructNew(S, [val])` is passed, the value is passed directly as a scalar. For call sites that pass an existing struct reference, a `StructGet` extracts the scalar value.
 
-Impacts all code paths that use template string interpolation (`\`{value}\``), which is the primary trigger for `Box<T>` creation, as well as any user-defined single-field structs with `&self` methods.
+Impacts all code paths that use template string interpolation (`\`{value}\``), which is the primary trigger for`Box<T>`creation, as well as any user-defined single-field structs with`&self` methods.
 
 ### Split Large Array Literals
 
