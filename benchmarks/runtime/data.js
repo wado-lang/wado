@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772637061213,
+  "lastUpdate": 1772637756491,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -377,6 +377,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib/decompress",
             "value": 605,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3f93a028cc718921a11746e75dffffc89584f91e",
+          "message": "Merge pull request #504 from wado-lang/claude/benchmark-optimization-levels-aSnYP\n\nRun benchmarks at multiple optimization levels (-O1, -O2, -O3)",
+          "timestamp": "2026-03-05T00:20:23+09:00",
+          "tree_id": "50115f2b44e5e8116ce74b93a6524da82e6920ac",
+          "url": "https://github.com/wado-lang/wado/commit/3f93a028cc718921a11746e75dffffc89584f91e"
+        },
+        "date": 1772637756371,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "count_prime (-O1)",
+            "value": 3736,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O1)",
+            "value": 162,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O1)",
+            "value": 200,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O1)",
+            "value": 172,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O1)",
+            "value": 73,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O1)",
+            "value": 690,
+            "unit": "ms"
+          },
+          {
+            "name": "count_prime (-O2)",
+            "value": 3729,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O2)",
+            "value": 162,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O2)",
+            "value": 204,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O2)",
+            "value": 177,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O2)",
+            "value": 73,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O2)",
+            "value": 690,
+            "unit": "ms"
+          },
+          {
+            "name": "count_prime (-O3)",
+            "value": 3728,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O3)",
+            "value": 162,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O3)",
+            "value": 63,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O3)",
+            "value": 166,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O3)",
+            "value": 43,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O3)",
+            "value": 692,
             "unit": "ms"
           }
         ]
