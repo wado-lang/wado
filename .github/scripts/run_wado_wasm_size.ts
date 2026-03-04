@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Compile Wado programs at -O2 and measure wasm binary sizes.
+// Compile Wado programs at -Os and measure wasm binary sizes.
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, statSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -20,7 +20,7 @@ const tmp = mkdtempSync(join(tmpdir(), 'wasm-size-'));
 function measureSize(name: string, src: string): SizeResult {
   const wasm = join(tmp, `${name}.wasm`);
   try {
-    execFileSync(WADO, ['compile', '-O2', '-o', wasm, src], { stdio: 'ignore' });
+    execFileSync(WADO, ['compile', '-Os', '-o', wasm, src], { stdio: 'ignore' });
     const { size } = statSync(wasm);
     return { name, unit: 'bytes', value: size };
   } finally {
