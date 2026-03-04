@@ -1922,6 +1922,8 @@ pub struct TirStruct {
     pub monomorph_info: Option<MonomorphInfo>,
     pub fields: Vec<TirField>,
     pub span: Span,
+    /// `#[serde(rename_all = "...")]` — naming strategy for all fields.
+    pub serde_rename_all: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -1933,6 +1935,10 @@ pub struct TirField {
     pub span: Span,
     /// `#[hidden]` — field not shown in debug inspect output.
     pub is_hidden: bool,
+    /// `#[serde(rename = "name")]` — custom serialization name for this field.
+    pub serde_rename: Option<String>,
+    /// `#[serde(default)]` — use default value when field is missing during deserialization.
+    pub serde_default: bool,
 }
 
 #[derive(Debug, Clone)]

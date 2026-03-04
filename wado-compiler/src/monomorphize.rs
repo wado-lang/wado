@@ -1144,6 +1144,8 @@ impl Monomorphizer {
                     index: field.index,
                     span: field.span,
                     is_hidden: field.is_hidden,
+                    serde_rename: field.serde_rename.clone(),
+                    serde_default: field.serde_default,
                 }
             })
             .collect();
@@ -1160,6 +1162,7 @@ impl Monomorphizer {
             }),
             fields,
             span: generic.span,
+            serde_rename_all: generic.serde_rename_all.clone(),
         };
 
         Some(concrete)

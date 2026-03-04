@@ -23,6 +23,34 @@ use super::common::{
     string_lit, synth_span,
 };
 
+fn apply_rename_all(s: &str, strategy: &str) -> String {
+    match strategy {
+        "camelCase" => snake_to_camel(s),
+        "snake_case" => s.to_string(),
+        "PascalCase" => {
+            let mut result = String::with_capacity(s.len());
+            let mut capitalize_next = true;
+            for c in s.chars() {
+                if c == '_' {
+                    capitalize_next = true;
+                } else if capitalize_next {
+                    for upper in c.to_uppercase() {
+                        result.push(upper);
+                    }
+                    capitalize_next = false;
+                } else {
+                    result.push(c);
+                }
+            }
+            result
+        }
+        "SCREAMING_SNAKE_CASE" => s.to_uppercase(),
+        "kebab-case" => s.replace('_', "-"),
+        "SCREAMING-KEBAB-CASE" => s.replace('_', "-").to_uppercase(),
+        _ => snake_to_camel(s), // default to camelCase
+    }
+}
+
 fn snake_to_camel(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut capitalize_next = false;
@@ -484,7 +512,19 @@ fn generate_struct_serialize(
     let fields: Vec<(String, String, TypeId, u32)> = struct_def
         .fields
         .iter()
-        .map(|f| (f.name.clone(), snake_to_camel(&f.name), f.type_id, f.index))
+        .map(|f| {
+            let serialized_name = f
+                .serde_rename
+                .clone()
+                .unwrap_or_else(|| {
+                    if let Some(strategy) = &struct_def.serde_rename_all {
+                        apply_rename_all(&f.name, strategy)
+                    } else {
+                        snake_to_camel(&f.name)
+                    }
+                });
+            (f.name.clone(), serialized_name, f.type_id, f.index)
+        })
         .collect();
     let field_count = fields.len();
     let field_ref_types: Vec<TypeId> = fields
@@ -683,7 +723,19 @@ fn generate_struct_deserialize(
     let fields: Vec<(String, String, TypeId, u32)> = struct_def
         .fields
         .iter()
-        .map(|f| (f.name.clone(), snake_to_camel(&f.name), f.type_id, f.index))
+        .map(|f| {
+            let serialized_name = f
+                .serde_rename
+                .clone()
+                .unwrap_or_else(|| {
+                    if let Some(strategy) = &struct_def.serde_rename_all {
+                        apply_rename_all(&f.name, strategy)
+                    } else {
+                        snake_to_camel(&f.name)
+                    }
+                });
+            (f.name.clone(), serialized_name, f.type_id, f.index)
+        })
         .collect();
     let field_count = fields.len();
     let field_result_types: Vec<TypeId> = fields
@@ -973,58 +1025,65 @@ fn generate_struct_deserialize(
 
     then_stmts.push(loop_stmt(block(loop_stmts.clone())));
 
-    // Check seen mask
+    // Check seen mask — only require non-default fields
     if field_count > 0 {
-        let full_mask = (1u32 << field_count) - 1;
-        let ne_check = TirExpr::new(
-            TirExprKind::Binary {
-                op: crate::tir::TirBinaryOp::NotEq,
-                left: Box::new(TirExpr::new(
-                    TirExprKind::Binary {
-                        op: crate::tir::TirBinaryOp::BitAnd,
-                        left: Box::new(local_ref(seen_local, "seen", TypeTable::U32)),
-                        right: Box::new(TirExpr::new(
-                            TirExprKind::IntLiteral {
-                                value: u64::from(full_mask),
-                                repr: full_mask.to_string(),
-                            },
-                            TypeTable::U32,
-                            span,
-                        )),
-                    },
-                    TypeTable::U32,
-                    span,
-                )),
-                right: Box::new(TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: u64::from(full_mask),
-                        repr: full_mask.to_string(),
-                    },
-                    TypeTable::U32,
-                    span,
-                )),
-            },
-            TypeTable::BOOL,
-            span,
-        );
-        let missing_err = deserialize_error_literal(
-            deser_error_type,
-            deser_error_kind_type,
-            "MissingField",
-            1,
-            "required field missing",
-            string_type,
-            span,
-        );
-        then_stmts.push(if_stmt(
-            ne_check,
-            block(vec![return_stmt(Some(variant_err(
-                missing_err,
-                result_struct_err,
+        let mut required_mask = 0u32;
+        for (i, f) in struct_def.fields.iter().enumerate() {
+            if !f.serde_default {
+                required_mask |= 1u32 << i;
+            }
+        }
+        if required_mask != 0 {
+            let ne_check = TirExpr::new(
+                TirExprKind::Binary {
+                    op: crate::tir::TirBinaryOp::NotEq,
+                    left: Box::new(TirExpr::new(
+                        TirExprKind::Binary {
+                            op: crate::tir::TirBinaryOp::BitAnd,
+                            left: Box::new(local_ref(seen_local, "seen", TypeTable::U32)),
+                            right: Box::new(TirExpr::new(
+                                TirExprKind::IntLiteral {
+                                    value: u64::from(required_mask),
+                                    repr: required_mask.to_string(),
+                                },
+                                TypeTable::U32,
+                                span,
+                            )),
+                        },
+                        TypeTable::U32,
+                        span,
+                    )),
+                    right: Box::new(TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: u64::from(required_mask),
+                            repr: required_mask.to_string(),
+                        },
+                        TypeTable::U32,
+                        span,
+                    )),
+                },
+                TypeTable::BOOL,
                 span,
-            )))]),
-            None,
-        ));
+            );
+            let missing_err = deserialize_error_literal(
+                deser_error_type,
+                deser_error_kind_type,
+                "MissingField",
+                1,
+                "required field missing",
+                string_type,
+                span,
+            );
+            then_stmts.push(if_stmt(
+                ne_check,
+                block(vec![return_stmt(Some(variant_err(
+                    missing_err,
+                    result_struct_err,
+                    span,
+                )))]),
+                None,
+            ));
+        }
     }
 
     // sd.end()

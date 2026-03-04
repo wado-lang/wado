@@ -100,6 +100,8 @@ pub trait Serializer {
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError>;
     fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError>;
     fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError>;
+    fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError>;
+    fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError>;
     fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError>;
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError>;
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError>;
@@ -156,6 +158,8 @@ pub trait Deserializer {
     fn deserialize_i64(&mut self) -> Result<i64, DeserializeError>;
     fn deserialize_u32(&mut self) -> Result<u32, DeserializeError>;
     fn deserialize_u64(&mut self) -> Result<u64, DeserializeError>;
+    fn deserialize_i128(&mut self) -> Result<i128, DeserializeError>;
+    fn deserialize_u128(&mut self) -> Result<u128, DeserializeError>;
     fn deserialize_f32(&mut self) -> Result<f32, DeserializeError>;
     fn deserialize_f64(&mut self) -> Result<f64, DeserializeError>;
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError>;
@@ -219,6 +223,18 @@ impl Serialize for u32 {
 impl Serialize for u64 {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         return s.serialize_u64(*self);
+    }
+}
+
+impl Serialize for i128 {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_i128(*self);
+    }
+}
+
+impl Serialize for u128 {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_u128(*self);
     }
 }
 
@@ -399,6 +415,18 @@ impl Deserialize for u32 {
 impl Deserialize for u64 {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<u64, DeserializeError> {
         return d.deserialize_u64();
+    }
+}
+
+impl Deserialize for i128 {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<i128, DeserializeError> {
+        return d.deserialize_i128();
+    }
+}
+
+impl Deserialize for u128 {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<u128, DeserializeError> {
+        return d.deserialize_u128();
     }
 }
 

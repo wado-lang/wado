@@ -2984,8 +2984,11 @@ impl BoxLowerer {
                 index: 0,
                 span: Span::new(0, 0, 0, 0),
                 is_hidden: false,
+                serde_rename: None,
+                serde_default: false,
             }],
             span: Span::new(0, 0, 0, 0),
+            serde_rename_all: None,
         };
 
         self.generated_structs.push(tir_struct);
@@ -4495,6 +4498,8 @@ impl ClosureLowerer {
                     index: i as u32,
                     span: collected.span,
                     is_hidden: false,
+                    serde_rename: None,
+                    serde_default: false,
                 })
                 .collect();
 
@@ -4505,6 +4510,7 @@ impl ClosureLowerer {
                 monomorph_info: None,
                 fields,
                 span: collected.span,
+                serde_rename_all: None,
             };
             self.generated_structs.push(tir_struct);
 
