@@ -458,7 +458,7 @@ impl JsonDeserializer {
                     let b0 = b;
                     let b1 = self.input.get_byte(self.pos + 1) as i32;
                     let code = ((b0 & 0x1F) << 6) | (b1 & 0x3F);
-                    if let Some(c) = char::from_i32(code) {
+                    if let Some(c) = char::from_u32(code as u32) {
                         result.append_char(c);
                     }
                 } else if seq_len == 3 {
@@ -466,7 +466,7 @@ impl JsonDeserializer {
                     let b1 = self.input.get_byte(self.pos + 1) as i32;
                     let b2 = self.input.get_byte(self.pos + 2) as i32;
                     let code = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F);
-                    if let Some(c) = char::from_i32(code) {
+                    if let Some(c) = char::from_u32(code as u32) {
                         result.append_char(c);
                     }
                 } else {
@@ -475,7 +475,7 @@ impl JsonDeserializer {
                     let b2 = self.input.get_byte(self.pos + 2) as i32;
                     let b3 = self.input.get_byte(self.pos + 3) as i32;
                     let code = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
-                    if let Some(c) = char::from_i32(code) {
+                    if let Some(c) = char::from_u32(code as u32) {
                         result.append_char(c);
                     }
                 }
@@ -509,7 +509,7 @@ impl JsonDeserializer {
             }
         }
         self.pos += 3;
-        if let Some(c) = char::from_i32(code) {
+        if let Some(c) = char::from_u32(code as u32) {
             return Result::<char, DeserializeError>::Ok(c);
         }
         return Result::<char, DeserializeError>::Err(DeserializeError::malformed(
