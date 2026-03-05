@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772720245672,
+  "lastUpdate": 1772747296761,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -618,6 +618,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "pi_approx",
             "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 14295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5a1f7f98c23fa502875be46b09c40b386bd8b800",
+          "message": "Merge pull request #514 from wado-lang/claude/refactor-float-primitives-6jrAL\n\nRefactor float formatting to extract special value and sign handling",
+          "timestamp": "2026-03-06T06:46:04+09:00",
+          "tree_id": "903e23138724c48f8282648f44333f5f52d93a50",
+          "url": "https://github.com/wado-lang/wado/commit/5a1f7f98c23fa502875be46b09c40b386bd8b800"
+        },
+        "date": 1772747296630,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1386,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8929,
             "unit": "bytes"
           },
           {
