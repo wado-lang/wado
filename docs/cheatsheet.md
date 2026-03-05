@@ -1195,7 +1195,7 @@ test {
     unreachable();
 }
 
-// TODO test: like #[expect_trap] but with a distinct runner message when it passes
+// TODO test: like #[expect_trap], but should be solved in the future
 #[TODO]
 test "not yet implemented" {
     panic("TODO: implement this");
@@ -1664,7 +1664,4 @@ Wado intentionally does not support macros.
 - [Language Specification](./spec.md) - Full language specification
 - [Core Standard Library Reference](./cheatsheet-stdlib-core.md) - Core stdlib quick reference
 - [WASI Standard Library Reference](./cheatsheet-stdlib-wasi.md) - WASI stdlib quick reference
-- [Core Standard Library Documentation](./stdlib-core.md) - Full core stdlib documentation
-- [WASI Standard Library Documentation](./stdlib-wasi.md) - Full WASI stdlib documentation
-- [Wado Evolution Proposals](../CLAUDE.md#wado-evolution-proposals-wep) - Design decisions and rationale
 - [wado-compiler/tests/fixtures/\*.wado](wado-compiler/tests/fixtures) - E2E test fixtures
