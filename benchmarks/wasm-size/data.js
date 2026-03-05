@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772747296761,
+  "lastUpdate": 1772753592831,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -647,6 +647,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5a1f7f98c23fa502875be46b09c40b386bd8b800"
         },
         "date": 1772747296630,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1386,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8929,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 14295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "58b034d7c6db918483cd3c5f8f0d608be3854b9b",
+          "message": "Merge pull request #513 from wado-lang/claude/add-json-benchmarks-h8UNg\n\nAdd JSON parsing benchmarks with real-world datasets",
+          "timestamp": "2026-03-06T08:30:55+09:00",
+          "tree_id": "3a2f301eab7c946e15e4325832c69db5ec7305b0",
+          "url": "https://github.com/wado-lang/wado/commit/58b034d7c6db918483cd3c5f8f0d608be3854b9b"
+        },
+        "date": 1772753592689,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
