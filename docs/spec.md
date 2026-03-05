@@ -2705,6 +2705,22 @@ let user = from_string::<User>(json);  // Result<User, DeserializeError>
 
 JSON serialization returns `Err` for `NaN` and `Infinity` float values. JSON deserialization returns `Err` for malformed input, missing required fields, type mismatches, and trailing data.
 
+### JSON NSD Module (`core:json_nsd`)
+
+Non-self-describing JSON format. Structs are encoded as positional arrays (field names omitted), unit variants as discriminant integers, and payload variants as `[disc, payload]`.
+
+```wado
+use { to_string, from_string } from "core:json_nsd";
+
+// Struct as positional array
+let json = to_string::<User>(&user);   // Result: Ok("[\"Alice\",30]")
+
+// Deserialize from positional array
+let user = from_string::<User>(`["Alice",30]`);  // Result<User, DeserializeError>
+```
+
+The same `Serialize` and `Deserialize` trait impls work with both `core:json` and `core:json_nsd`.
+
 ## Module System
 
 Wado uses an ESM-like import syntax with `use {...} from "module"`. This aligns with JavaScript/TypeScript conventions, as JavaScript is a primary host environment for Wado.
