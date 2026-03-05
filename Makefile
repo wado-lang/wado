@@ -192,6 +192,18 @@ benchmark-zlib:
 benchmark-fts:
 	mise run -C benchmark fts
 
+.PHONY: benchmark-json-twitter
+benchmark-json-twitter:
+	mise run -C benchmark json-twitter
+
+.PHONY: benchmark-json-canada
+benchmark-json-canada:
+	mise run -C benchmark json-canada
+
+.PHONY: benchmark-json-catalog
+benchmark-json-catalog:
+	mise run -C benchmark json-catalog
+
 .PHONY: report-wasm-size
 report-wasm-size:
 	mise run -C wasm-size report-wasm-size
