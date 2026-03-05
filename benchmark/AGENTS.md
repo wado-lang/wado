@@ -13,11 +13,15 @@ C compiler (`cc`) and Rust (`cargo`) are expected from the system.
 ## Tasks
 
 ```sh
-mise run count-prime  # integer arithmetic (count primes to 10M)
-mise run mandelbrot   # float arithmetic (1024x768 fractal)
-mise run sieve        # array operations (sieve of Eratosthenes to 10M)
-mise run zlib         # compression (zlib-rs native vs Wado)
-mise run clean        # remove build artifacts
+mise run count-prime   # integer arithmetic (count primes to 10M)
+mise run mandelbrot    # float arithmetic (1024x768 fractal)
+mise run sieve         # array operations (sieve of Eratosthenes to 10M)
+mise run zlib          # compression (zlib-rs native vs Wado)
+mise run fts           # float-to-string conversion
+mise run json-twitter  # JSON deserialization (twitter.json)
+mise run json-canada   # JSON deserialization (canada.json)
+mise run json-catalog  # JSON deserialization (citm_catalog.json)
+mise run clean         # remove build artifacts
 ```
 
 ## Profiling
@@ -31,6 +35,10 @@ perf record -k mono wado run --profile perfmap prog.wado  # Linux perf (simple)
 
 View guest profiles at https://profiler.firefox.com/. See `README.md` for full documentation.
 
+## Updating Results
+
+After running benchmarks, update `README.md` with the new results. Use the `/benchmark` skill or run `make benchmark-all` and `make report-wasm-size`, then update the tables in `README.md` accordingly.
+
 ## Structure
 
-Each benchmark has its own directory with implementations in all languages side by side. The `zlib/` directory also contains a Rust (`Cargo.toml` + `zlib_rs.rs`) native reference.
+Each benchmark has its own directory with implementations in all languages side by side. The `zlib/` directory also contains a Rust (`Cargo.toml` + `zlib_rs.rs`) native reference. The `json_*` directories contain JSON parsing benchmarks with Rust `serde_json` as the native reference.
