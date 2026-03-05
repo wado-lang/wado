@@ -1163,8 +1163,8 @@ pub enum TypeNameInfo {
         param_count: usize,
         return_type: String,
     },
-    /// Array<T> with element type name
-    Array(String),
+    /// `builtin::array<T>` (raw Wasm GC array, NOT the user-facing `Array<T>` struct)
+    BuiltinArray(String),
     /// Stream<T> with inner type name
     Stream(String),
     /// `StreamWritable`<T> with inner type name
@@ -1198,7 +1198,7 @@ pub fn format_type_name(info: TypeNameInfo) -> String {
             param_count,
             return_type,
         } => mangle_fn_type(param_count, &return_type),
-        TypeNameInfo::Array(elem) => mangle_array_type(&elem),
+        TypeNameInfo::BuiltinArray(elem) => mangle_builtin_array_type(&elem),
         TypeNameInfo::Stream(inner) => mangle_generic_name("Stream", &[inner]),
         TypeNameInfo::StreamWritable(inner) => mangle_generic_name("StreamWritable", &[inner]),
         TypeNameInfo::Future(inner) => mangle_generic_name("Future", &[inner]),
@@ -1258,12 +1258,12 @@ pub fn mangle_option_type(inner_type: &str) -> String {
     format!("Option<{inner_type}>")
 }
 
-/// Build an Array type name from element type name.
+/// Build a `builtin::array` type name from element type name.
 ///
 /// Examples:
-/// - `mangle_array_type("i32")` → `"Array<i32>"`
-pub fn mangle_array_type(elem_type: &str) -> String {
-    format!("Array<{elem_type}>")
+/// - `mangle_builtin_array_type("i32")` → `"builtin::array<i32>"`
+pub fn mangle_builtin_array_type(elem_type: &str) -> String {
+    format!("builtin::array<{elem_type}>")
 }
 
 /// Build a local method name from struct name and method name.

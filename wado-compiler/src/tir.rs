@@ -1079,7 +1079,7 @@ impl TypeTable {
                 param_count: params.len(),
                 return_type: self.mangle_type_name(*return_type),
             },
-            ResolvedType::BuiltinArray(elem) => TypeNameInfo::Array(self.mangle_type_name(*elem)),
+            ResolvedType::BuiltinArray(elem) => TypeNameInfo::BuiltinArray(self.mangle_type_name(*elem)),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 // For references, use the inner type's name (strip reference)
                 TypeNameInfo::Ref(self.mangle_type_name(*inner))

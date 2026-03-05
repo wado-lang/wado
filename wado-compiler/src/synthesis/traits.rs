@@ -2072,7 +2072,7 @@ fn decompose_type_for_method_name(
     match resolved {
         ResolvedType::TypeParam { name, .. } => (name.clone(), true, vec![]),
         ResolvedType::BuiltinArray(elem) => {
-            ("Array".to_string(), false, vec![tt.mangle_type_name(*elem)])
+            ("builtin::array".to_string(), false, vec![tt.mangle_type_name(*elem)])
         }
         ResolvedType::GenericInstance {
             name, type_args, ..
@@ -2135,7 +2135,6 @@ fn inspect_impl_module(type_id: TypeId, tt: &TypeTable, default: &ModuleSource) 
     match tt.get(type_id).clone() {
         ResolvedType::Primitive(_) => ModuleSource::primitives(),
         ResolvedType::Struct { ref name, .. } if name == "String" => ModuleSource::format(),
-        ResolvedType::BuiltinArray(_) => ModuleSource::format(),
         ResolvedType::Struct {
             ref module_source, ..
         }
