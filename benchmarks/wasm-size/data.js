@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772719444459,
+  "lastUpdate": 1772720229862,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -530,6 +530,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/89a26f0baf868078bf71da52679906ecbbb963c6"
         },
         "date": 1772719444327,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1386,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 14295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e579d043463e5aea7bd97feddd613aab6a915a65",
+          "message": "Merge pull request #512 from wado-lang/gfx/docs\n\ntweak docs",
+          "timestamp": "2026-03-05T23:14:51+09:00",
+          "tree_id": "563cc5d3525c9091e03d76af27648a7da7296a0c",
+          "url": "https://github.com/wado-lang/wado/commit/e579d043463e5aea7bd97feddd613aab6a915a65"
+        },
+        "date": 1772720229725,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
