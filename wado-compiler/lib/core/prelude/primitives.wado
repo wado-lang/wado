@@ -613,6 +613,29 @@ impl u64 {
     }
 }
 
+/// Format a special float (NaN, Inf, or zero) with padding.
+fn fmt_float_special(f: &mut Formatter, is_neg: bool, kind: SpecialKind, zero_repr: String) {
+    let mark = f.mark();
+    if kind matches { NaN } {
+        f.buf.append("NaN");
+    } else if kind matches { Inf } {
+        f.buf.append(if is_neg { "-inf" } else { "inf" });
+    } else {
+        f.buf.append(if is_neg { "-" } else { "" });
+        f.buf.append(zero_repr);
+    }
+    f.apply_padding(mark);
+}
+
+/// Write sign prefix ("-" or "+").
+fn fmt_float_sign(f: &mut Formatter, is_neg: bool) {
+    if is_neg {
+        f.buf.append("-");
+    } else if f.sign_plus {
+        f.buf.append("+");
+    }
+}
+
 impl f32 {
     pub const PI: f32 = 3.14159265358979323846;
     pub const TAU: f32 = 6.28318530717958647692;
@@ -629,7 +652,6 @@ impl f32 {
     pub const NEG_INFINITY: f32 = -1.0 / 0.0;
     pub const NAN: f32 = 0.0 / 0.0;
 
-    // Constants
     fn fmt_into(&self, f: &mut Formatter) {
         if f.precision >= 0 {
             self.fmt_fixed(f.precision, f);
@@ -637,15 +659,7 @@ impl f32 {
         }
         let [is_special, is_neg, kind] = check_special(*self as f64);
         if is_special {
-            let mark = f.mark();
-            if kind matches { NaN } {
-                f.buf.append("NaN");
-            } else if kind matches { Inf } {
-                f.buf.append(if is_neg { "-inf" } else { "inf" });
-            } else {
-                f.buf.append(if is_neg { "-0" } else { "0" });
-            }
-            f.apply_padding(mark);
+            fmt_float_special(f, is_neg, kind, "0");
             return;
         }
         let abs_f = if is_neg { -*self } else { *self };
@@ -654,11 +668,7 @@ impl f32 {
         let p = result.exponent;
         let nd = digits(d);
         let mark = f.mark();
-        if is_neg {
-            f.buf.append("-");
-        } else if f.sign_plus {
-            f.buf.append("+");
-        }
+        fmt_float_sign(f, is_neg);
         write_decimal(f.buf, d, p, nd);
         f.apply_padding(mark);
     }
@@ -670,15 +680,7 @@ impl f32 {
         }
         let [is_special, is_neg, kind] = check_special(*self as f64);
         if is_special {
-            let mark = f.mark();
-            if kind matches { NaN } {
-                f.buf.append("NaN");
-            } else if kind matches { Inf } {
-                f.buf.append(if is_neg { "-inf" } else { "inf" });
-            } else {
-                f.buf.append(if is_neg { "-0.0" } else { "0.0" });
-            }
-            f.apply_padding(mark);
+            fmt_float_special(f, is_neg, kind, "0.0");
             return;
         }
         let abs_f = if is_neg { -*self } else { *self };
@@ -688,11 +690,7 @@ impl f32 {
         let nd = digits(d);
         let exp = p + nd - 1;
         let mark = f.mark();
-        if is_neg {
-            f.buf.append("-");
-        } else if f.sign_plus {
-            f.buf.append("+");
-        }
+        fmt_float_sign(f, is_neg);
         if exp < -4 || exp >= 16 {
             write_exp(f.buf, d, p, nd, false);
         } else if p >= 0 {
@@ -721,7 +719,6 @@ impl f32 {
         return buf;
     }
 
-    // Wasm instruction math (direct)
     /// Absolute value
     pub fn abs(x: f32) -> f32 {
         return builtin::f32_abs(x);
@@ -767,7 +764,6 @@ impl f32 {
         return builtin::f32_copysign(x, y);
     }
 
-    // Transcendental math (bundled libm)
     /// Sine (in radians)
     pub fn sin(x: f32) -> f32 {
         return builtin::f32_sin(x);
@@ -920,7 +916,6 @@ impl f64 {
     pub const NEG_INFINITY: f64 = -1.0 / 0.0;
     pub const NAN: f64 = 0.0 / 0.0;
 
-    // Constants
     fn fmt_into(&self, f: &mut Formatter) {
         if f.precision >= 0 {
             self.fmt_fixed(f.precision, f);
@@ -929,15 +924,7 @@ impl f64 {
         let value = *self;
         let [is_special, is_neg, kind] = check_special(value);
         if is_special {
-            let mark = f.mark();
-            if kind matches { NaN } {
-                f.buf.append("NaN");
-            } else if kind matches { Inf } {
-                f.buf.append(if is_neg { "-inf" } else { "inf" });
-            } else {
-                f.buf.append(if is_neg { "-0" } else { "0" });
-            }
-            f.apply_padding(mark);
+            fmt_float_special(f, is_neg, kind, "0");
             return;
         }
         let abs_f = if is_neg { -value } else { value };
@@ -946,11 +933,7 @@ impl f64 {
         let p = result.exponent;
         let nd = digits(d);
         let mark = f.mark();
-        if is_neg {
-            f.buf.append("-");
-        } else if f.sign_plus {
-            f.buf.append("+");
-        }
+        fmt_float_sign(f, is_neg);
         write_decimal(f.buf, d, p, nd);
         f.apply_padding(mark);
     }
@@ -963,15 +946,7 @@ impl f64 {
         let value = *self;
         let [is_special, is_neg, kind] = check_special(value);
         if is_special {
-            let mark = f.mark();
-            if kind matches { NaN } {
-                f.buf.append("NaN");
-            } else if kind matches { Inf } {
-                f.buf.append(if is_neg { "-inf" } else { "inf" });
-            } else {
-                f.buf.append(if is_neg { "-0.0" } else { "0.0" });
-            }
-            f.apply_padding(mark);
+            fmt_float_special(f, is_neg, kind, "0.0");
             return;
         }
         let abs_f = if is_neg { -value } else { value };
@@ -981,11 +956,7 @@ impl f64 {
         let nd = digits(d);
         let exp = p + nd - 1;
         let mark = f.mark();
-        if is_neg {
-            f.buf.append("-");
-        } else if f.sign_plus {
-            f.buf.append("+");
-        }
+        fmt_float_sign(f, is_neg);
         if exp < -4 || exp >= 16 {
             write_exp(f.buf, d, p, nd, false);
         } else if p >= 0 {
@@ -1001,22 +972,16 @@ impl f64 {
         let value = *self;
         let [is_special, is_neg, kind] = check_special(value);
         if is_special {
+            if kind matches { NaN } || kind matches { Inf } {
+                fmt_float_special(f, is_neg, kind, "0");
+                return;
+            }
             let mark = f.mark();
-            if kind matches { NaN } {
-                f.buf.append("NaN");
-            } else if kind matches { Inf } {
-                f.buf.append(if is_neg { "-inf" } else { "inf" });
-            } else {
-                // Zero with precision
-                let buf = f.buf;
-                if is_neg {
-                    buf.append("-");
-                }
-                buf.append("0");
-                if precision > 0 {
-                    buf.append(".");
-                    buf.append_byte_filled('0' as u8, precision);
-                }
+            fmt_float_sign(f, is_neg);
+            f.buf.append("0");
+            if precision > 0 {
+                f.buf.append(".");
+                f.buf.append_byte_filled('0' as u8, precision);
             }
             f.apply_padding(mark);
             return;
@@ -1027,11 +992,7 @@ impl f64 {
         let p = result.exponent;
         let nd = digits(d);
         let mark = f.mark();
-        if is_neg {
-            f.buf.append("-");
-        } else if f.sign_plus {
-            f.buf.append("+");
-        }
+        fmt_float_sign(f, is_neg);
         write_decimal_prec(f.buf, d, p, nd, precision);
         f.apply_padding(mark);
     }
@@ -1041,35 +1002,25 @@ impl f64 {
         let upper_bool = upper != 0;
         let [is_special, is_neg, kind] = check_special(value);
         if is_special {
-            let mark = f.mark();
-            if kind matches { NaN } {
-                f.buf.append("NaN");
-            } else if kind matches { Inf } {
-                f.buf.append(if is_neg { "-inf" } else { "inf" });
-            } else {
-                // Zero in exponential
-                let buf = f.buf;
-                if is_neg {
-                    buf.append("-");
-                }
-                buf.append("0");
-                if precision > 0 {
-                    buf.append(".");
-                    buf.append_byte_filled('0' as u8, precision);
-                }
-                buf.append(if upper_bool { "E" } else { "e" });
-                buf.append("0");
+            if kind matches { NaN } || kind matches { Inf } {
+                fmt_float_special(f, is_neg, kind, "0");
+                return;
             }
+            let mark = f.mark();
+            fmt_float_sign(f, is_neg);
+            f.buf.append("0");
+            if precision > 0 {
+                f.buf.append(".");
+                f.buf.append_byte_filled('0' as u8, precision);
+            }
+            f.buf.append(if upper_bool { "E" } else { "e" });
+            f.buf.append("0");
             f.apply_padding(mark);
             return;
         }
         let abs_f = if is_neg { -value } else { value };
         let mark = f.mark();
-        if is_neg {
-            f.buf.append("-");
-        } else if f.sign_plus {
-            f.buf.append("+");
-        }
+        fmt_float_sign(f, is_neg);
         if precision >= 0 {
             let total_digits = precision + 1;
             let clamped = if total_digits > 18 {
@@ -1101,7 +1052,6 @@ impl f64 {
         return buf;
     }
 
-    // Wasm instruction math (direct)
     /// Absolute value
     pub fn abs(x: f64) -> f64 {
         return builtin::f64_abs(x);
@@ -1147,7 +1097,6 @@ impl f64 {
         return builtin::f64_copysign(x, y);
     }
 
-    // Transcendental math (bundled libm)
     /// Sine (in radians)
     pub fn sin(x: f64) -> f64 {
         return builtin::f64_sin(x);
