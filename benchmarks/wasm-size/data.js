@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772672297031,
+  "lastUpdate": 1772702544019,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -374,6 +374,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4be8755b5b3e07e87932445124a79346294cc440"
         },
         "date": 1772672296902,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1386,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9905,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 14295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ecd60ef44daf80205159d2f6a3c2ca28f0971ed1",
+          "message": "Merge pull request #507 from wado-lang/claude/add-json-nsd-support-IWesF\n\nAdd JSON NSD (Non-Self-Describing) serialization format",
+          "timestamp": "2026-03-05T18:20:06+09:00",
+          "tree_id": "94249ffc5883db2609bc82979886b65acf1ec479",
+          "url": "https://github.com/wado-lang/wado/commit/ecd60ef44daf80205159d2f6a3c2ca28f0971ed1"
+        },
+        "date": 1772702543890,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
