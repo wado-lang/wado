@@ -1,0 +1,22 @@
+use {
+    Deserialize,
+    DeserializeError,
+    DeserializeErrorKind,
+} from "core:serde";
+
+use { from_string } from "core:json";
+
+test "enum field access on cross-module struct" {
+    let r: Result<i32, DeserializeError> = from_string::<i32>("42 extra");
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::TrailingData };
+}
+
+test "enum field compared directly" {
+    let r: Result<i32, DeserializeError> = from_string::<i32>("abc");
+    if let Err(e) = r {
+        assert e.kind == DeserializeErrorKind::UnexpectedType;
+    }
+}
+
+__DATA__
+{"test": {}}

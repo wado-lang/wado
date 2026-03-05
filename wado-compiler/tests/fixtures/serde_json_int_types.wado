@@ -1,0 +1,120 @@
+// Tests for sub-integer types (i8, i16, u8, u16) and i64/u64 safe integer boundary.
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+// --- i8 ---
+
+test "i8 max and min" {
+    let v: i8 = 127 as i8;
+    let r = to_string::<i8>(&v);
+    if let Ok(s) = r {
+        assert s == "127";
+    } else {
+        panic("failed");
+    }
+    let v2: i8 = -128 as i8;
+    let r2 = to_string::<i8>(&v2);
+    if let Ok(s2) = r2 {
+        assert s2 == "-128";
+    } else {
+        panic("failed");
+    }
+}
+
+// --- i16 ---
+
+test "i16 max" {
+    let v: i16 = 32767 as i16;
+    let r = to_string::<i16>(&v);
+    if let Ok(s) = r {
+        assert s == "32767";
+    } else {
+        panic("failed");
+    }
+}
+
+// --- u8 ---
+
+test "u8 max" {
+    let v: u8 = 255 as u8;
+    let r = to_string::<u8>(&v);
+    if let Ok(s) = r {
+        assert s == "255";
+    } else {
+        panic("failed");
+    }
+}
+
+// --- u16 ---
+
+test "u16 max" {
+    let v: u16 = 65535 as u16;
+    let r = to_string::<u16>(&v);
+    if let Ok(s) = r {
+        assert s == "65535";
+    } else {
+        panic("failed");
+    }
+}
+
+// --- i64 safe/unsafe boundary ---
+
+test "i64 at safe limit as number" {
+    let v = 9007199254740991 as i64;
+    let r = to_string::<i64>(&v);
+    if let Ok(s) = r {
+        assert s == "9007199254740991";
+    } else {
+        panic("failed");
+    }
+}
+
+test "i64 above safe limit as string" {
+    let v = 9007199254740992 as i64;
+    let r = to_string::<i64>(&v);
+    if let Ok(s) = r {
+        assert s == `"9007199254740992"`;
+    } else {
+        panic("failed");
+    }
+}
+
+test "i64 deserialize from string" {
+    let r = from_string::<i64>(`"9007199254740992"`);
+    if let Ok(v) = r {
+        assert v == 9007199254740992 as i64;
+    } else {
+        panic("failed");
+    }
+}
+
+// --- u64 safe/unsafe boundary ---
+
+test "u64 at safe limit as number" {
+    let v: u64 = 9007199254740991 as u64;
+    let r = to_string::<u64>(&v);
+    if let Ok(s) = r {
+        assert s == "9007199254740991";
+    } else {
+        panic("failed");
+    }
+}
+
+test "u64 max as string" {
+    let v: u64 = 18446744073709551615 as u64;
+    let r = to_string::<u64>(&v);
+    if let Ok(s) = r {
+        assert s == `"18446744073709551615"`;
+    } else {
+        panic("failed");
+    }
+    let d = from_string::<u64>(`"18446744073709551615"`);
+    if let Ok(v2) = d {
+        assert v2 == 18446744073709551615 as u64;
+    } else {
+        panic("failed");
+    }
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,267 @@
+// Comprehensive tests for primitive type Serialize/Deserialize via JSON.
+// Tests i32, i64, u32, u64, f32, f64, bool, char, String.
+use { Serialize, Deserialize, SerializeError, DeserializeError } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+// --- i32 ---
+
+test "i32 zero roundtrip" {
+    let v = 0;
+    let r = to_string::<i32>(&v);
+    if let Ok(s) = r {
+        assert s == "0";
+    } else {
+        panic("serialize i32 zero failed");
+    }
+    let d = from_string::<i32>("0");
+    if let Ok(v2) = d {
+        assert v2 == 0;
+    } else {
+        panic("deserialize i32 zero failed");
+    }
+}
+
+test "i32 max" {
+    let v = 2147483647;
+    let r = to_string::<i32>(&v);
+    if let Ok(s) = r {
+        assert s == "2147483647";
+    } else {
+        panic("failed");
+    }
+    let d = from_string::<i32>("2147483647");
+    if let Ok(v2) = d {
+        assert v2 == 2147483647;
+    } else {
+        panic("failed");
+    }
+}
+
+test "i32 min" {
+    let v = -2147483648;
+    let r = to_string::<i32>(&v);
+    if let Ok(s) = r {
+        assert s == "-2147483648";
+    } else {
+        panic("failed");
+    }
+    let d = from_string::<i32>("-2147483648");
+    if let Ok(v2) = d {
+        assert v2 == -2147483648;
+    } else {
+        panic("failed");
+    }
+}
+
+// --- u32 ---
+
+test "u32 zero and max" {
+    let v: u32 = 0 as u32;
+    let r = to_string::<u32>(&v);
+    if let Ok(s) = r {
+        assert s == "0";
+    } else {
+        panic("failed");
+    }
+    let v2: u32 = 4294967295 as u32;
+    let r2 = to_string::<u32>(&v2);
+    if let Ok(s2) = r2 {
+        assert s2 == "4294967295";
+    } else {
+        panic("failed");
+    }
+}
+
+// --- f64 ---
+
+test "f64 positive and negative" {
+    let v = 3.14159;
+    let r = to_string::<f64>(&v);
+    if let Ok(s) = r {
+        assert s == "3.14159";
+    } else {
+        panic("failed");
+    }
+    let v2 = -0.001;
+    let r2 = to_string::<f64>(&v2);
+    if let Ok(s2) = r2 {
+        assert s2 == "-0.001";
+    } else {
+        panic("failed");
+    }
+}
+
+test "f64 integer value" {
+    let v = 42.0;
+    let r = to_string::<f64>(&v);
+    if let Ok(s) = r {
+        assert s == "42.0";
+    } else {
+        panic("failed");
+    }
+}
+
+test "f64 deserialize with exponent" {
+    let d = from_string::<f64>("1.5e2");
+    if let Ok(v) = d {
+        assert v == 150.0;
+    } else {
+        panic("failed");
+    }
+    let d2 = from_string::<f64>("1.5e-1");
+    if let Ok(v2) = d2 {
+        assert v2 == 0.15;
+    } else {
+        panic("failed");
+    }
+}
+
+// --- f32 ---
+
+test "f32 roundtrip" {
+    let v: f32 = 1.5 as f32;
+    let r = to_string::<f32>(&v);
+    if let Ok(s) = r {
+        assert s == "1.5";
+    } else {
+        panic("failed");
+    }
+    let d = from_string::<f32>("1.5");
+    if let Ok(v2) = d {
+        assert v2 == 1.5 as f32;
+    } else {
+        panic("failed");
+    }
+}
+
+test "f32 zero and negative" {
+    let v: f32 = 0.0 as f32;
+    let r = to_string::<f32>(&v);
+    if let Ok(s) = r {
+        assert s == "0.0";
+    } else {
+        panic("failed");
+    }
+    let v2: f32 = -2.5 as f32;
+    let r2 = to_string::<f32>(&v2);
+    if let Ok(s2) = r2 {
+        assert s2 == "-2.5";
+    } else {
+        panic("failed");
+    }
+}
+
+// --- bool ---
+
+test "bool true roundtrip" {
+    let v = true;
+    let r = to_string::<bool>(&v);
+    if let Ok(s) = r {
+        assert s == "true";
+    } else {
+        panic("failed");
+    }
+    let d = from_string::<bool>("true");
+    if let Ok(v2) = d {
+        assert v2 == true;
+    } else {
+        panic("failed");
+    }
+}
+
+test "bool false roundtrip" {
+    let v = false;
+    let r = to_string::<bool>(&v);
+    if let Ok(s) = r {
+        assert s == "false";
+    } else {
+        panic("failed");
+    }
+    let d = from_string::<bool>("false");
+    if let Ok(v2) = d {
+        assert v2 == false;
+    } else {
+        panic("failed");
+    }
+}
+
+// --- char ---
+
+test "char ascii and special" {
+    let v = 'A';
+    let r = to_string::<char>(&v);
+    if let Ok(s) = r {
+        assert s == `"A"`;
+    } else {
+        panic("failed");
+    }
+    let v2 = '\n';
+    let r2 = to_string::<char>(&v2);
+    if let Ok(s2) = r2 {
+        assert s2 == `"\\n"`;
+    } else {
+        panic("failed");
+    }
+    let v3 = '"';
+    let r3 = to_string::<char>(&v3);
+    if let Ok(s3) = r3 {
+        assert s3 == `"\\""`;
+    } else {
+        panic("failed");
+    }
+}
+
+// --- String ---
+
+test "string empty roundtrip" {
+    let v = "";
+    let r = to_string::<String>(&v);
+    if let Ok(s) = r {
+        assert s == `""`;
+    } else {
+        panic("failed");
+    }
+    let d = from_string::<String>(`""`);
+    if let Ok(v2) = d {
+        assert v2 == "";
+    } else {
+        panic("failed");
+    }
+}
+
+test "string with escapes roundtrip" {
+    let v = "tab\there\nnew\rreturn";
+    let json_r = to_string::<String>(&v);
+    if let Ok(json) = json_r {
+        let d = from_string::<String>(json);
+        if let Ok(v2) = d {
+            assert v2 == v;
+        } else {
+            panic("roundtrip failed");
+        }
+    } else {
+        panic("failed");
+    }
+}
+
+// --- Option ---
+
+test "Option Some and None" {
+    let v = Option::<i32>::Some(99);
+    let r = to_string::<Option<i32>>(&v);
+    if let Ok(s) = r {
+        assert s == "99";
+    } else {
+        panic("failed");
+    }
+    let v2: Option<String> = null;
+    let r2 = to_string::<Option<String>>(&v2);
+    if let Ok(s2) = r2 {
+        assert s2 == "null";
+    } else {
+        panic("failed");
+    }
+}
+
+__DATA__
+{"test": {}}

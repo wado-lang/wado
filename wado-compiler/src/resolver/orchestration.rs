@@ -172,6 +172,24 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 &imported_type_sources,
                 &import_original_names,
             );
+            let flat_enum_cases = Self::build_module_map(
+                &all_enum_cases,
+                module_source,
+                &imported_type_sources,
+                &import_original_names,
+            );
+            let flat_variant_cases = Self::build_module_map(
+                &all_variant_cases,
+                module_source,
+                &imported_type_sources,
+                &import_original_names,
+            );
+            let flat_flags_cases = Self::build_module_map(
+                &all_flags_cases,
+                module_source,
+                &imported_type_sources,
+                &import_original_names,
+            );
 
             for item in &module.items {
                 match item {
@@ -193,6 +211,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     &flat_newtypes,
                                     &flat_struct_fields,
                                     &flat_resource_types,
+                                    &flat_enum_cases,
+                                    &flat_variant_cases,
+                                    &flat_flags_cases,
                                 )
                             } else {
                                 Self::resolve_type_static_with_params(
@@ -201,6 +222,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     &flat_newtypes,
                                     &flat_struct_fields,
                                     &flat_resource_types,
+                                    &flat_enum_cases,
+                                    &flat_variant_cases,
+                                    &flat_flags_cases,
                                     &type_params,
                                 )
                             };
@@ -252,6 +276,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             &flat_newtypes,
                             &flat_struct_fields,
                             &flat_resource_types,
+                            &flat_enum_cases,
+                            &flat_variant_cases,
+                            &flat_flags_cases,
                         );
                         // Create a newtype wrapping the base type
                         let newtype_id = type_table.borrow_mut().make_newtype(
@@ -286,6 +313,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     &flat_newtypes,
                                     &flat_struct_fields,
                                     &flat_resource_types,
+                                    &flat_enum_cases,
+                                    &flat_variant_cases,
+                                    &flat_flags_cases,
                                     &type_params,
                                 )
                             } else {
@@ -451,6 +481,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             &newtypes,
                             &struct_fields,
                             &resource_types,
+                            &enum_cases,
+                            &variant_cases,
+                            &flags_cases,
                         )
                     } else {
                         TypeTable::UNIT
@@ -807,6 +840,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         newtypes: &IndexMap<String, TypeId>,
         struct_fields: &IndexMap<String, StructFieldInfo>,
         resource_types: &IndexMap<String, ResourceInfo>,
+        enum_cases: &IndexMap<String, EnumInfo>,
+        variant_cases: &IndexMap<String, VariantInfo>,
+        flags_cases: &IndexMap<String, FlagsInfo>,
     ) -> TypeId {
         match ty {
             Type::Named(named) => {
@@ -837,6 +873,14 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             type_table.make_struct(named.name.clone(), info.module_source.clone())
                         } else if let Some(info) = resource_types.get(&named.name) {
                             type_table.make_resource(named.name.clone(), info.module_source.clone())
+                        } else if let Some(info) = enum_cases.get(&named.name) {
+                            type_table.make_enum(named.name.clone(), info.module_source.clone())
+                        } else if let Some(info) = variant_cases.get(&named.name) {
+                            type_table.make_variant(named.name.clone(), info.module_source.clone())
+                        } else if flags_cases.contains_key(&named.name) {
+                            // Flags are newtypes over u32, should be handled by newtypes check above.
+                            // This is a fallback in case the newtype wasn't registered yet.
+                            TypeTable::UNKNOWN
                         } else {
                             TypeTable::UNKNOWN
                         }
@@ -851,6 +895,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         newtypes,
                         struct_fields,
                         resource_types,
+                        enum_cases,
+                        variant_cases,
+                        flags_cases,
                     );
                     type_table.make_option(inner)
                 }
@@ -868,6 +915,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     newtypes,
                                     struct_fields,
                                     resource_types,
+                                    enum_cases,
+                                    variant_cases,
+                                    flags_cases,
                                 )
                             })
                             .collect();
@@ -888,6 +938,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     newtypes,
                     struct_fields,
                     resource_types,
+                    enum_cases,
+                    variant_cases,
+                    flags_cases,
                 );
                 type_table.make_ref(inner_type)
             }
@@ -898,6 +951,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     newtypes,
                     struct_fields,
                     resource_types,
+                    enum_cases,
+                    variant_cases,
+                    flags_cases,
                 );
                 type_table.make_mut_ref(inner_type)
             }
@@ -913,6 +969,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         newtypes,
                         struct_fields,
                         resource_types,
+                        enum_cases,
+                        variant_cases,
+                        flags_cases,
                     );
                     return type_table.make_builtin_array(elem);
                 }
@@ -931,6 +990,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         newtypes: &IndexMap<String, TypeId>,
         struct_fields: &IndexMap<String, StructFieldInfo>,
         resource_types: &IndexMap<String, ResourceInfo>,
+        enum_cases: &IndexMap<String, EnumInfo>,
+        variant_cases: &IndexMap<String, VariantInfo>,
+        flags_cases: &IndexMap<String, FlagsInfo>,
         type_params: &[String],
     ) -> TypeId {
         match ty {
@@ -967,6 +1029,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             type_table.make_struct(named.name.clone(), info.module_source.clone())
                         } else if let Some(info) = resource_types.get(&named.name) {
                             type_table.make_resource(named.name.clone(), info.module_source.clone())
+                        } else if let Some(info) = enum_cases.get(&named.name) {
+                            type_table.make_enum(named.name.clone(), info.module_source.clone())
+                        } else if let Some(info) = variant_cases.get(&named.name) {
+                            type_table.make_variant(named.name.clone(), info.module_source.clone())
+                        } else if flags_cases.contains_key(&named.name) {
+                            TypeTable::UNKNOWN
                         } else {
                             TypeTable::UNKNOWN
                         }
@@ -981,6 +1049,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         newtypes,
                         struct_fields,
                         resource_types,
+                        enum_cases,
+                        variant_cases,
+                        flags_cases,
                         type_params,
                     );
                     type_table.make_option(inner)
@@ -999,6 +1070,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     newtypes,
                                     struct_fields,
                                     resource_types,
+                                    enum_cases,
+                                    variant_cases,
+                                    flags_cases,
                                     type_params,
                                 )
                             })
@@ -1020,6 +1094,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     newtypes,
                     struct_fields,
                     resource_types,
+                    enum_cases,
+                    variant_cases,
+                    flags_cases,
                     type_params,
                 );
                 type_table.make_ref(inner_type)
@@ -1031,6 +1108,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     newtypes,
                     struct_fields,
                     resource_types,
+                    enum_cases,
+                    variant_cases,
+                    flags_cases,
                     type_params,
                 );
                 type_table.make_mut_ref(inner_type)
@@ -1047,6 +1127,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         newtypes,
                         struct_fields,
                         resource_types,
+                        enum_cases,
+                        variant_cases,
+                        flags_cases,
                         type_params,
                     );
                     return type_table.make_builtin_array(elem);

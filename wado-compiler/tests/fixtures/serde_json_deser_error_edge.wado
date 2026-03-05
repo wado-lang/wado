@@ -1,0 +1,313 @@
+// Comprehensive error edge cases for JSON deserialization.
+use { Serialize, Deserialize, DeserializeError } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+// --- Type mismatch errors ---
+
+test "string where i32 expected" {
+    let r = from_string::<i32>(`"hello"`);
+    if let Err(_) = r {
+        // expected error
+    } else {
+        panic("expected error");
+    }
+}
+
+test "bool where i32 expected" {
+    let r = from_string::<i32>("true");
+    if let Err(_) = r {
+        // expected error
+    } else {
+        panic("expected error");
+    }
+}
+
+test "number where bool expected" {
+    let r = from_string::<bool>("42");
+    if let Err(e) = r {
+        assert e.message == "expected bool";
+    } else {
+        panic("expected error");
+    }
+}
+
+test "number where string expected" {
+    let r = from_string::<String>("42");
+    if let Err(e) = r {
+        assert e.message == "expected string";
+    } else {
+        panic("expected error");
+    }
+}
+
+test "null where i32 expected" {
+    let r = from_string::<i32>("null");
+    if let Err(_) = r {
+        // expected error
+    } else {
+        panic("expected error");
+    }
+}
+
+test "array where i32 expected" {
+    let r = from_string::<i32>("[1,2]");
+    if let Err(_) = r {
+        // expected error
+    } else {
+        panic("expected error");
+    }
+}
+
+test "object where i32 expected" {
+    let r = from_string::<i32>(`\{"a":1\}`);
+    if let Err(_) = r {
+        // expected error
+    } else {
+        panic("expected error");
+    }
+}
+
+// --- Malformed JSON ---
+
+test "empty input" {
+    let r = from_string::<i32>("");
+    if let Err(_) = r {
+        // expected EOF error
+    } else {
+        panic("expected error");
+    }
+}
+
+test "whitespace only" {
+    let r = from_string::<i32>("   ");
+    if let Err(_) = r {
+        // expected EOF error
+    } else {
+        panic("expected error");
+    }
+}
+
+test "truncated string" {
+    let r = from_string::<String>(`"hello`);
+    if let Err(e) = r {
+        assert e.message == "unexpected end of input";
+    } else {
+        panic("expected error");
+    }
+}
+
+test "trailing garbage" {
+    let r: Result<i32, DeserializeError> = from_string::<i32>("42 garbage");
+    if let Err(e) = r {
+        assert e.message == "trailing data after value";
+    } else {
+        panic("expected error");
+    }
+}
+
+test "multiple values" {
+    let r: Result<i32, DeserializeError> = from_string::<i32>("1 2");
+    if let Err(e) = r {
+        assert e.message == "trailing data after value";
+    } else {
+        panic("expected error");
+    }
+}
+
+// --- u32 overflow ---
+
+test "u32 negative value" {
+    let r = from_string::<u32>("-1");
+    if let Err(_) = r {
+        // expected: out of range
+    } else {
+        panic("expected error");
+    }
+}
+
+test "u32 too large" {
+    let r = from_string::<u32>("4294967296");
+    if let Err(e) = r {
+        assert e.message == "value out of range for u32";
+    } else {
+        panic("expected error");
+    }
+}
+
+// --- f64 / f32 error cases ---
+
+test "f64 NaN serialize error" {
+    let v = f64::NAN;
+    let r = to_string::<f64>(&v);
+    if let Err(e) = r {
+        assert e.message == "NaN is not allowed in JSON";
+    } else {
+        panic("expected error for NaN");
+    }
+}
+
+test "f64 Infinity serialize error" {
+    let v = f64::INFINITY;
+    let r = to_string::<f64>(&v);
+    if let Err(e) = r {
+        assert e.message == "Infinity is not allowed in JSON";
+    } else {
+        panic("expected error for Infinity");
+    }
+}
+
+test "f64 negative Infinity serialize error" {
+    let v = f64::NEG_INFINITY;
+    let r = to_string::<f64>(&v);
+    if let Err(e) = r {
+        assert e.message == "Infinity is not allowed in JSON";
+    } else {
+        panic("expected error for -Infinity");
+    }
+}
+
+test "f32 NaN serialize error" {
+    let v = f32::NAN;
+    let r = to_string::<f32>(&v);
+    if let Err(e) = r {
+        assert e.message == "NaN is not allowed in JSON";
+    } else {
+        panic("expected error for f32 NaN");
+    }
+}
+
+test "f32 Infinity serialize error" {
+    let v = f32::INFINITY;
+    let r = to_string::<f32>(&v);
+    if let Err(e) = r {
+        assert e.message == "Infinity is not allowed in JSON";
+    } else {
+        panic("expected error for f32 Infinity");
+    }
+}
+
+// --- Struct deserialization errors ---
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Serialize for Point;
+impl Deserialize for Point;
+
+test "struct from non-object" {
+    let r = from_string::<Point>("42");
+    if let Err(_) = r {
+        // expected
+    } else {
+        panic("expected error");
+    }
+}
+
+test "struct from array" {
+    let r = from_string::<Point>("[1,2]");
+    if let Err(_) = r {
+        // expected
+    } else {
+        panic("expected error");
+    }
+}
+
+test "struct missing required field" {
+    let r = from_string::<Point>(`\{"x":1\}`);
+    if let Err(e) = r {
+        assert e.message == "required field missing";
+    } else {
+        panic("expected error for missing field");
+    }
+}
+
+test "struct wrong field type" {
+    let r = from_string::<Point>(`\{"x":"one","y":2\}`);
+    if let Err(_) = r {
+        // expected: type mismatch
+    } else {
+        panic("expected error for wrong field type");
+    }
+}
+
+// --- Array deserialization errors ---
+
+test "array malformed" {
+    let r = from_string::<Array<i32>>("[1,2,");
+    if let Err(_) = r {
+        // expected
+    } else {
+        panic("expected error for malformed array");
+    }
+}
+
+test "array wrong element type" {
+    let r = from_string::<Array<i32>>(`[1,"two",3]`);
+    if let Err(_) = r {
+        // expected
+    } else {
+        panic("expected error for wrong element type");
+    }
+}
+
+// --- Option deserialization ---
+
+test "Option null deserialize" {
+    let r = from_string::<Option<i32>>("null");
+    if let Ok(v) = r {
+        if let None = v {
+            // OK
+        } else {
+            panic("expected None");
+        }
+    } else {
+        panic("deserialize null as Option failed");
+    }
+}
+
+test "Option Some deserialize" {
+    let r = from_string::<Option<i32>>("42");
+    if let Ok(v) = r {
+        if let Some(n) = v {
+            assert n == 42;
+        } else {
+            panic("expected Some");
+        }
+    } else {
+        panic("deserialize Option Some failed");
+    }
+}
+
+// --- Enum error ---
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+impl Serialize for Color;
+impl Deserialize for Color;
+
+test "enum unknown variant" {
+    let r = from_string::<Color>(`"Yellow"`);
+    if let Err(e) = r {
+        assert e.message == "unknown variant";
+    } else {
+        panic("expected error for unknown variant");
+    }
+}
+
+test "enum non-string value" {
+    let r = from_string::<Color>("42");
+    if let Err(_) = r {
+        // expected
+    } else {
+        panic("expected error for non-string enum value");
+    }
+}
+
+__DATA__
+{"test": {}}

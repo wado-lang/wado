@@ -1,0 +1,548 @@
+// Complex roundtrip tests: serialize → deserialize → verify for compound types.
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+use { TreeMap } from "core:collections";
+
+// --- Struct with all common field types ---
+
+struct FullStruct {
+    name: String,
+    age: i32,
+    score: f64,
+    active: bool,
+    tags: Array<String>,
+    address: Option<String>,
+    rating: Option<i32>,
+}
+
+impl Serialize for FullStruct;
+impl Deserialize for FullStruct;
+
+test "full struct roundtrip with all fields" {
+    let orig = FullStruct {
+        name: "Alice",
+        age: 30,
+        score: 95.5,
+        active: true,
+        tags: ["dev", "lead"],
+        address: Option::<String>::Some("123 Main St"),
+        rating: Option::<i32>::Some(5),
+    };
+    let json_r = to_string::<FullStruct>(&orig);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<FullStruct>(json);
+        if let Ok(p) = parsed_r {
+            assert p.name == "Alice";
+            assert p.age == 30;
+            assert p.score == 95.5;
+            assert p.active == true;
+            assert p.tags.len() == 2;
+            assert p.tags[0] == "dev";
+            assert p.tags[1] == "lead";
+            if let Some(addr) = p.address {
+                assert addr == "123 Main St";
+            } else {
+                panic("expected address");
+            }
+            if let Some(r) = p.rating {
+                assert r == 5;
+            } else {
+                panic("expected rating");
+            }
+        } else {
+            panic("deserialize full struct failed");
+        }
+    } else {
+        panic("serialize full struct failed");
+    }
+}
+
+test "full struct roundtrip with None fields" {
+    let orig = FullStruct {
+        name: "Bob",
+        age: 25,
+        score: 0.0,
+        active: false,
+        tags: [],
+        address: null,
+        rating: null,
+    };
+    let json_r = to_string::<FullStruct>(&orig);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<FullStruct>(json);
+        if let Ok(p) = parsed_r {
+            assert p.name == "Bob";
+            assert p.age == 25;
+            assert p.score == 0.0;
+            assert p.active == false;
+            assert p.tags.len() == 0;
+            if let None = p.address {
+                // OK
+            } else {
+                panic("expected None address");
+            }
+            if let None = p.rating {
+                // OK
+            } else {
+                panic("expected None rating");
+            }
+        } else {
+            panic("deserialize failed");
+        }
+    } else {
+        panic("serialize failed");
+    }
+}
+
+// --- Nested structs ---
+
+struct Inner {
+    value: i32,
+    label: String,
+}
+
+struct Outer {
+    inner: Inner,
+    count: i32,
+}
+
+impl Serialize for Inner;
+impl Deserialize for Inner;
+impl Serialize for Outer;
+impl Deserialize for Outer;
+
+test "nested struct roundtrip" {
+    let orig = Outer {
+        inner: Inner { value: 42, label: "test" },
+        count: 3,
+    };
+    let json_r = to_string::<Outer>(&orig);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<Outer>(json);
+        if let Ok(p) = parsed_r {
+            assert p.inner.value == 42;
+            assert p.inner.label == "test";
+            assert p.count == 3;
+        } else {
+            panic("deserialize nested struct failed");
+        }
+    } else {
+        panic("serialize nested struct failed");
+    }
+}
+
+// --- Array of structs ---
+
+test "array of structs roundtrip" {
+    let items: Array<Inner> = [
+        Inner { value: 1, label: "a" },
+        Inner { value: 2, label: "b" },
+        Inner { value: 3, label: "c" },
+    ];
+    let json_r = to_string::<Array<Inner>>(&items);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<Array<Inner>>(json);
+        if let Ok(arr) = parsed_r {
+            assert arr.len() == 3;
+            assert arr[0].value == 1;
+            assert arr[0].label == "a";
+            assert arr[1].value == 2;
+            assert arr[2].value == 3;
+        } else {
+            panic("deserialize array of structs failed");
+        }
+    } else {
+        panic("serialize array of structs failed");
+    }
+}
+
+test "empty array roundtrip" {
+    let items: Array<Inner> = [];
+    let json_r = to_string::<Array<Inner>>(&items);
+    if let Ok(json) = json_r {
+        assert json == "[]";
+        let parsed_r = from_string::<Array<Inner>>(json);
+        if let Ok(arr) = parsed_r {
+            assert arr.len() == 0;
+        } else {
+            panic("deserialize empty array failed");
+        }
+    } else {
+        panic("serialize empty array failed");
+    }
+}
+
+// --- Result roundtrip ---
+
+test "Result Ok roundtrip" {
+    let v: Result<i32, String> = Result::<i32, String>::Ok(42);
+    let json_r = to_string::<Result<i32, String>>(&v);
+    if let Ok(json) = json_r {
+        assert json == `\{"Ok":42\}`;
+        let parsed_r = from_string::<Result<i32, String>>(json);
+        if let Ok(result) = parsed_r {
+            if let Ok(n) = result {
+                assert n == 42;
+            } else {
+                panic("expected Ok");
+            }
+        } else {
+            panic("deserialize Result Ok failed");
+        }
+    } else {
+        panic("serialize Result Ok failed");
+    }
+}
+
+test "Result Err roundtrip" {
+    let v: Result<i32, String> = Result::<i32, String>::Err("not found");
+    let json_r = to_string::<Result<i32, String>>(&v);
+    if let Ok(json) = json_r {
+        assert json == `\{"Err":"not found"\}`;
+        let parsed_r = from_string::<Result<i32, String>>(json);
+        if let Ok(result) = parsed_r {
+            if let Err(msg) = result {
+                assert msg == "not found";
+            } else {
+                panic("expected Err");
+            }
+        } else {
+            panic("deserialize Result Err failed");
+        }
+    } else {
+        panic("serialize Result Err failed");
+    }
+}
+
+// --- TreeMap roundtrip ---
+
+test "TreeMap string values roundtrip" {
+    let mut map = TreeMap::<String, String>::new();
+    map["name"] = "Alice";
+    map["city"] = "Tokyo";
+    let json_r = to_string::<TreeMap<String, String>>(&map);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<TreeMap<String, String>>(json);
+        if let Ok(m) = parsed_r {
+            assert m["name"] == "Alice";
+            assert m["city"] == "Tokyo";
+        } else {
+            panic("deserialize TreeMap failed");
+        }
+    } else {
+        panic("serialize TreeMap failed");
+    }
+}
+
+test "TreeMap i32 values roundtrip" {
+    let mut map = TreeMap::<String, i32>::new();
+    map["x"] = 10;
+    map["y"] = 20;
+    let json_r = to_string::<TreeMap<String, i32>>(&map);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<TreeMap<String, i32>>(json);
+        if let Ok(m) = parsed_r {
+            assert m["x"] == 10;
+            assert m["y"] == 20;
+        } else {
+            panic("deserialize TreeMap i32 failed");
+        }
+    } else {
+        panic("serialize TreeMap i32 failed");
+    }
+}
+
+test "empty TreeMap roundtrip" {
+    let map = TreeMap::<String, i32>::new();
+    let json_r = to_string::<TreeMap<String, i32>>(&map);
+    if let Ok(json) = json_r {
+        assert json == "{}";
+        let parsed_r = from_string::<TreeMap<String, i32>>(json);
+        if let Ok(m) = parsed_r {
+            assert m.len() == 0;
+        } else {
+            panic("deserialize empty TreeMap failed");
+        }
+    } else {
+        panic("serialize empty TreeMap failed");
+    }
+}
+
+// --- Enum roundtrip ---
+
+enum Direction {
+    North,
+    South,
+    East,
+    West,
+}
+
+impl Serialize for Direction;
+impl Deserialize for Direction;
+
+test "enum roundtrip" {
+    let v = Direction::North;
+    let json_r = to_string::<Direction>(&v);
+    if let Ok(json) = json_r {
+        assert json == `"North"`;
+        let parsed_r = from_string::<Direction>(json);
+        if let Ok(d) = parsed_r {
+            if let North = d {
+                // OK
+            } else {
+                panic("expected North");
+            }
+        } else {
+            panic("deserialize enum failed");
+        }
+    } else {
+        panic("serialize enum failed");
+    }
+}
+
+test "all enum variants roundtrip" {
+    let variants: Array<Direction> = [
+        Direction::North,
+        Direction::South,
+        Direction::East,
+        Direction::West,
+    ];
+    let names: Array<String> = ["North", "South", "East", "West"];
+    for let mut i = 0; i < 4; i += 1 {
+        let json_r = to_string::<Direction>(&variants[i]);
+        if let Ok(json) = json_r {
+            assert json == `"{names[i]}"`;
+        } else {
+            panic("serialize enum variant failed");
+        }
+    }
+}
+
+// --- Variant roundtrip ---
+
+variant Shape {
+    Circle(f64),
+    Rectangle(Inner),
+    Point,
+}
+
+impl Serialize for Shape;
+impl Deserialize for Shape;
+
+test "variant unit case roundtrip" {
+    let s = Shape::Point;
+    let json_r = to_string::<Shape>(&s);
+    if let Ok(json) = json_r {
+        assert json == `"Point"`;
+        let parsed_r = from_string::<Shape>(json);
+        if let Ok(parsed) = parsed_r {
+            if let Point = parsed {
+                // OK
+            } else {
+                panic("expected Point");
+            }
+        } else {
+            panic("deserialize variant Point failed");
+        }
+    } else {
+        panic("serialize variant Point failed");
+    }
+}
+
+test "variant payload f64 roundtrip" {
+    let s = Shape::Circle(2.5);
+    let json_r = to_string::<Shape>(&s);
+    if let Ok(json) = json_r {
+        assert json == `\{"Circle":2.5\}`;
+        let parsed_r = from_string::<Shape>(json);
+        if let Ok(parsed) = parsed_r {
+            if let Circle(r) = parsed {
+                assert r == 2.5;
+            } else {
+                panic("expected Circle");
+            }
+        } else {
+            panic("deserialize variant Circle failed");
+        }
+    } else {
+        panic("serialize variant Circle failed");
+    }
+}
+
+test "variant payload struct roundtrip" {
+    let s = Shape::Rectangle(Inner { value: 10, label: "rect" });
+    let json_r = to_string::<Shape>(&s);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<Shape>(json);
+        if let Ok(parsed) = parsed_r {
+            if let Rectangle(inner) = parsed {
+                assert inner.value == 10;
+                assert inner.label == "rect";
+            } else {
+                panic("expected Rectangle");
+            }
+        } else {
+            panic("deserialize variant Rectangle failed");
+        }
+    } else {
+        panic("serialize variant Rectangle failed");
+    }
+}
+
+// --- Struct with TreeMap field ---
+
+struct Config {
+    settings: TreeMap<String, i32>,
+}
+
+impl Serialize for Config;
+impl Deserialize for Config;
+
+test "struct with treemap field roundtrip" {
+    let mut settings = TreeMap::<String, i32>::new();
+    settings["port"] = 8080;
+    settings["timeout"] = 30;
+    let orig = Config { settings };
+    let json_r = to_string::<Config>(&orig);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<Config>(json);
+        if let Ok(p) = parsed_r {
+            assert p.settings["port"] == 8080;
+            assert p.settings["timeout"] == 30;
+        } else {
+            panic("deserialize struct with treemap failed");
+        }
+    } else {
+        panic("serialize struct with treemap failed");
+    }
+}
+
+// --- Strings with special JSON characters ---
+
+test "string with special chars roundtrip" {
+    let v = `\{"key": "value"\}`;
+    let json_r = to_string::<String>(&v);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<String>(json);
+        if let Ok(p) = parsed_r {
+            assert p == v;
+        } else {
+            panic("roundtrip special chars failed");
+        }
+    } else {
+        panic("serialize special chars failed");
+    }
+}
+
+test "string with backslash roundtrip" {
+    let v = "path\\to\\file";
+    let json_r = to_string::<String>(&v);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<String>(json);
+        if let Ok(p) = parsed_r {
+            assert p == v;
+        } else {
+            panic("roundtrip backslash failed");
+        }
+    } else {
+        panic("serialize backslash failed");
+    }
+}
+
+test "string with newlines roundtrip" {
+    let v = "line1\nline2\rline3\ttab";
+    let json_r = to_string::<String>(&v);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<String>(json);
+        if let Ok(p) = parsed_r {
+            assert p == v;
+        } else {
+            panic("roundtrip newlines failed");
+        }
+    } else {
+        panic("serialize newlines failed");
+    }
+}
+
+// --- Option<Array<T>> roundtrip ---
+
+test "Option Some Array roundtrip" {
+    let v = Option::<Array<i32>>::Some([1, 2, 3]);
+    let json_r = to_string::<Option<Array<i32>>>(&v);
+    if let Ok(json) = json_r {
+        assert json == "[1,2,3]";
+        let parsed_r = from_string::<Option<Array<i32>>>(json);
+        if let Ok(p) = parsed_r {
+            if let Some(arr) = p {
+                assert arr.len() == 3;
+                assert arr[0] == 1;
+            } else {
+                panic("expected Some");
+            }
+        } else {
+            panic("deserialize Option Array failed");
+        }
+    } else {
+        panic("serialize Option Array failed");
+    }
+}
+
+test "Option None Array roundtrip" {
+    let v: Option<Array<i32>> = null;
+    let json_r = to_string::<Option<Array<i32>>>(&v);
+    if let Ok(json) = json_r {
+        assert json == "null";
+        let parsed_r = from_string::<Option<Array<i32>>>(json);
+        if let Ok(p) = parsed_r {
+            if let None = p {
+                // OK
+            } else {
+                panic("expected None");
+            }
+        } else {
+            panic("deserialize Option None Array failed");
+        }
+    } else {
+        panic("serialize Option None Array failed");
+    }
+}
+
+// --- Array<Option<T>> roundtrip ---
+
+test "Array of Options roundtrip" {
+    let v: Array<Option<i32>> = [
+        Option::<i32>::Some(1),
+        null,
+        Option::<i32>::Some(3),
+    ];
+    let json_r = to_string::<Array<Option<i32>>>(&v);
+    if let Ok(json) = json_r {
+        assert json == "[1,null,3]";
+        let parsed_r = from_string::<Array<Option<i32>>>(json);
+        if let Ok(arr) = parsed_r {
+            assert arr.len() == 3;
+            if let Some(n) = arr[0] {
+                assert n == 1;
+            } else {
+                panic("expected Some at 0");
+            }
+            if let None = arr[1] {
+                // OK
+            } else {
+                panic("expected None at 1");
+            }
+            if let Some(n) = arr[2] {
+                assert n == 3;
+            } else {
+                panic("expected Some at 2");
+            }
+        } else {
+            panic("deserialize Array Options failed");
+        }
+    } else {
+        panic("serialize Array Options failed");
+    }
+}
+
+__DATA__
+{"test": {}}
