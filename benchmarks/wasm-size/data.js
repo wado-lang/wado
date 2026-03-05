@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772711878769,
+  "lastUpdate": 1772714755192,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -452,6 +452,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/62385998bedd83618a93160885b3d774ae9933f1"
         },
         "date": 1772711878639,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1386,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9905,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 14295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cb499ef3309bcc8cc77bc8655d2ae5b3f7505134",
+          "message": "Merge pull request #509 from wado-lang/claude/benchmark-combined-graphs-Sp301\n\nAdd combined runtime benchmark visualization page",
+          "timestamp": "2026-03-05T21:43:32+09:00",
+          "tree_id": "ea690f3c2670ee2ac525befe0b53994aa6c1ef59",
+          "url": "https://github.com/wado-lang/wado/commit/cb499ef3309bcc8cc77bc8655d2ae5b3f7505134"
+        },
+        "date": 1772714755144,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
