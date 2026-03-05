@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772702544019,
+  "lastUpdate": 1772711878769,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -413,6 +413,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ecd60ef44daf80205159d2f6a3c2ca28f0971ed1"
         },
         "date": 1772702543890,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1386,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9905,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 14295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "62385998bedd83618a93160885b3d774ae9933f1",
+          "message": "Merge pull request #508 from wado-lang/claude/check-builtinarray-handling-E0iZZ\n\nRemove BuiltinArray special handling from method resolution",
+          "timestamp": "2026-03-05T20:55:41+09:00",
+          "tree_id": "2ea363e0158bf369c8bccf74f1b696ca7b65ab83",
+          "url": "https://github.com/wado-lang/wado/commit/62385998bedd83618a93160885b3d774ae9933f1"
+        },
+        "date": 1772711878639,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
