@@ -489,7 +489,7 @@ fn build_memory_module(strip_names: bool) -> Vec<u8> {
 
     let mut memories = MemorySection::new();
     memories.memory(MemoryType {
-        minimum: 17,
+        minimum: 64,
         maximum: None,
         memory64: false,
         shared: false,
