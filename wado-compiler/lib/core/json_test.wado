@@ -180,27 +180,15 @@ test "deserialize string with unicode" {
 
 test "deserialize trailing data error" {
     let r: Result<i32, DeserializeError> = from_string::<i32>("42 extra");
-    assert r matches { Err(_) };
-    if let Err(e) = r {
-        let kind: DeserializeErrorKind = e.kind;
-        assert kind == DeserializeErrorKind::TrailingData;
-    }
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::TrailingData };
 }
 
 test "deserialize malformed error" {
     let r: Result<i32, DeserializeError> = from_string::<i32>("abc");
-    assert r matches { Err(_) };
-    if let Err(e) = r {
-        let kind: DeserializeErrorKind = e.kind;
-        assert kind == DeserializeErrorKind::UnexpectedType;
-    }
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
 }
 
 test "deserialize eof error" {
     let r: Result<String, DeserializeError> = from_string::<String>(`"`);
-    assert r matches { Err(_) };
-    if let Err(e) = r {
-        let kind: DeserializeErrorKind = e.kind;
-        assert kind == DeserializeErrorKind::Eof;
-    }
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::Eof };
 }
