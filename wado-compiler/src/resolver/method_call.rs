@@ -338,9 +338,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
                 ResolvedType::BuiltinArray(elem) => {
                     let elem_name = self.type_table.borrow().mangle_type_name(elem);
-                    let _mangled = format!("Array<{elem_name}>");
+                    let mangled = format!("Array<{elem_name}>");
                     (
-                        "Array".to_string(),
+                        mangled,
                         "Array".to_string(),
                         vec![elem_name],
                         Some(vec![elem]),
