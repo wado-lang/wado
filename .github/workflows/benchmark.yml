@@ -75,6 +75,8 @@ jobs:
           git worktree add /tmp/gh-pages gh-pages
           cp .github/pages/runtime-index.html /tmp/gh-pages/benchmarks/runtime/index.html
           cd /tmp/gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add benchmarks/runtime/index.html
           git diff --cached --quiet || {
             git commit -m "Deploy combined benchmark graphs"
