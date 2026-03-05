@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772660831897,
+  "lastUpdate": 1772672295877,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -605,6 +605,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib/decompress (-O3)",
             "value": 599,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4be8755b5b3e07e87932445124a79346294cc440",
+          "message": "Merge pull request #506 from wado-lang/claude/review-serde-json-status-tB7HS\n\nAdd comprehensive JSON serialization/deserialization test suite",
+          "timestamp": "2026-03-05T09:56:04+09:00",
+          "tree_id": "3b6f88516934dea2e1eed5bf43aa23a7e59032a4",
+          "url": "https://github.com/wado-lang/wado/commit/4be8755b5b3e07e87932445124a79346294cc440"
+        },
+        "date": 1772672295735,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "count_prime (-O1)",
+            "value": 3310,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O1)",
+            "value": 148,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O1)",
+            "value": 206,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O1)",
+            "value": 165,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O1)",
+            "value": 68,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O1)",
+            "value": 602,
+            "unit": "ms"
+          },
+          {
+            "name": "count_prime (-O2)",
+            "value": 3304,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O2)",
+            "value": 150,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O2)",
+            "value": 213,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O2)",
+            "value": 168,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O2)",
+            "value": 69,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O2)",
+            "value": 600,
+            "unit": "ms"
+          },
+          {
+            "name": "count_prime (-O3)",
+            "value": 3312,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O3)",
+            "value": 148,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O3)",
+            "value": 65,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O3)",
+            "value": 155,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O3)",
+            "value": 40,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O3)",
+            "value": 671,
             "unit": "ms"
           }
         ]
