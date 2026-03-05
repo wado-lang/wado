@@ -1063,10 +1063,10 @@ impl TypeTable {
                         type_args,
                         ..
                     } = self.get(tid)
+                        && gi_name == base_name
+                        && self.mangle_type_name(tid) == *name
                     {
-                        if gi_name == base_name && self.mangle_type_name(tid) == *name {
-                            return Some(type_args.clone());
-                        }
+                        return Some(type_args.clone());
                     }
                 }
                 None

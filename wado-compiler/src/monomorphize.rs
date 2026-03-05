@@ -2821,10 +2821,9 @@ impl Monomorphizer {
                                 // (e.g., [String]) so the generic impl is correctly
                                 // monomorphized with both impl and method type args.
                                 let concrete_type_id = *sorted_entries[0].1;
-                                let impl_type_arg_tids: Vec<TypeId> =
-                                    type_table
-                                        .generic_type_args(concrete_type_id)
-                                        .unwrap_or_default();
+                                let impl_type_arg_tids: Vec<TypeId> = type_table
+                                    .generic_type_args(concrete_type_id)
+                                    .unwrap_or_default();
                                 let mut all_type_args = impl_type_arg_tids;
                                 all_type_args.extend(method_type_arg_tids);
                                 Some(MonomorphInfo {
