@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772720229862,
+  "lastUpdate": 1772720245672,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -569,6 +569,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e579d043463e5aea7bd97feddd613aab6a915a65"
         },
         "date": 1772720229725,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1386,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 14295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c3c32276ab61f293ab1492be2f56899d4f6a570c",
+          "message": "Merge pull request #511 from wado-lang/claude/fix-benchmark-workflow-aALTu\n\nFix benchmark workflow: set git user identity for deploy step",
+          "timestamp": "2026-03-05T23:15:01+09:00",
+          "tree_id": "e3cfd55434913672c82879d239ad81873aff91ff",
+          "url": "https://github.com/wado-lang/wado/commit/c3c32276ab61f293ab1492be2f56899d4f6a570c"
+        },
+        "date": 1772720245540,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
