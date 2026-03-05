@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772714755192,
+  "lastUpdate": 1772719444459,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -501,6 +501,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "pi_approx",
             "value": 9905,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 14295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "89a26f0baf868078bf71da52679906ecbbb963c6",
+          "message": "Merge pull request #510 from wado-lang/claude/float-stringification-review-rrMWd\n\nImplement shortest decimal representation for float formatting",
+          "timestamp": "2026-03-05T23:01:40+09:00",
+          "tree_id": "71987c247cb1c7c3d750ae6aa2834bab070d6481",
+          "url": "https://github.com/wado-lang/wado/commit/89a26f0baf868078bf71da52679906ecbbb963c6"
+        },
+        "date": 1772719444327,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1386,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
             "unit": "bytes"
           },
           {
