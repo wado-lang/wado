@@ -1039,6 +1039,42 @@ impl TypeTable {
         }
     }
 
+    /// Extract the type arguments for a generic type.
+    ///
+    /// Works for both `GenericInstance` (which stores `type_args` directly) and
+    /// monomorphized `Struct` types (which require searching for the original
+    /// `GenericInstance` in the type table).
+    ///
+    /// Returns `None` for non-generic types.
+    #[must_use]
+    pub fn generic_type_args(&self, id: TypeId) -> Option<Vec<TypeId>> {
+        match self.get(id) {
+            ResolvedType::GenericInstance { type_args, .. } => Some(type_args.clone()),
+            ResolvedType::Struct {
+                name,
+                is_monomorphized: true,
+                base_name: Some(base_name),
+                ..
+            } => {
+                // Search for a GenericInstance with matching base name and mangled name
+                for tid in self.iter_type_ids() {
+                    if let ResolvedType::GenericInstance {
+                        name: gi_name,
+                        type_args,
+                        ..
+                    } = self.get(tid)
+                    {
+                        if gi_name == base_name && self.mangle_type_name(tid) == *name {
+                            return Some(type_args.clone());
+                        }
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
     /// Convert a resolved type to its name info for formatting.
     ///
     /// This separates type resolution (here in tir.rs) from name formatting
