@@ -60,8 +60,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self.type_table.borrow().mangle_type_name(base_type_id),
                 ModuleSource::primitives(),
             ),
-            // BuiltinArray is Array - impl blocks are in core:prelude/array.wado
-            ResolvedType::BuiltinArray(_) => ("Array".to_string(), ModuleSource::array()),
             // Enum types - use enum name and its defining module
             ResolvedType::Enum {
                 name,
@@ -94,8 +92,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
                     Some(type_args)
                 }
-                // BuiltinArray(elem) is Array<elem>, so type args = [elem]
-                ResolvedType::BuiltinArray(elem) => Some(vec![elem]),
                 _ => None,
             };
 
@@ -262,11 +258,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     impl_offset = receiver_type_args.len() as u32;
                     subst_ctx = subst_ctx.with_impl_args(&receiver_type_args);
                 }
-                // BuiltinArray(elem) is Array<elem>, so type args = [elem]
-                ResolvedType::BuiltinArray(elem) => {
-                    impl_offset = 1;
-                    subst_ctx = subst_ctx.with_impl_args(&[elem]);
-                }
                 // Stream<T> has one type param T
                 ResolvedType::Stream(inner) => {
                     impl_offset = 1;
@@ -290,8 +281,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
                     impl_offset = type_args.len() as u32;
                 }
-                ResolvedType::BuiltinArray(_)
-                | ResolvedType::Stream(_)
+                ResolvedType::Stream(_)
                 | ResolvedType::StreamWritable(_)
                 | ResolvedType::FutureWritable(_) => {
                     impl_offset = 1;
@@ -334,16 +324,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         name.clone(),
                         type_arg_names,
                         Some(type_args.clone()),
-                    )
-                }
-                ResolvedType::BuiltinArray(elem) => {
-                    let elem_name = self.type_table.borrow().mangle_type_name(elem);
-                    let _mangled = format!("Array<{elem_name}>");
-                    (
-                        "Array".to_string(),
-                        "Array".to_string(),
-                        vec![elem_name],
-                        Some(vec![elem]),
                     )
                 }
                 // Stream<T>: base name is "Stream", one type arg

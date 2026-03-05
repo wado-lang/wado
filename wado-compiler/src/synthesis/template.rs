@@ -1011,7 +1011,6 @@ fn inspect_impl_module(type_id: TypeId, tt: &Rc<RefCell<TypeTable>>) -> ModuleSo
     match tt.borrow().get(type_id).clone() {
         ResolvedType::Primitive(_) => ModuleSource::primitives(),
         ResolvedType::Struct { ref name, .. } if name == "String" => ModuleSource::format(),
-        ResolvedType::BuiltinArray(_) => ModuleSource::format(),
         ResolvedType::Struct {
             ref module_source, ..
         }
@@ -1034,7 +1033,7 @@ fn inspect_impl_module(type_id: TypeId, tt: &Rc<RefCell<TypeTable>>) -> ModuleSo
 /// Build a `LocalMethodName` for a concrete (post-mono) type.
 ///
 /// Extracts the base name from the resolved type and applies type args
-/// for parameterized types like `GenericInstance`, `BuiltinArray`, etc.
+/// for parameterized types like `GenericInstance`, etc.
 fn method_name_for_type(
     type_id: TypeId,
     trait_name: &str,
@@ -1052,15 +1051,6 @@ fn method_name_for_type(
             );
             info.is_type_param_receiver = true;
             info
-        }
-        ResolvedType::BuiltinArray(elem) => {
-            let elem_name = tt_ref.mangle_type_name(elem);
-            LocalMethodName::new(
-                "Array".to_string(),
-                Some(trait_name.to_string()),
-                method_name.to_string(),
-            )
-            .with_struct_type_args(&[elem_name])
         }
         ResolvedType::GenericInstance {
             name, type_args, ..

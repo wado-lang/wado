@@ -1861,7 +1861,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     Some(type_args.clone())
                 },
             ),
-            ResolvedType::BuiltinArray(elem) => ("Array".to_string(), Some(vec![*elem])),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 // For references, check if the inner type implements the trait
                 return self.type_implements_trait(*inner, trait_name);

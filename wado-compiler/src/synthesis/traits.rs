@@ -212,9 +212,6 @@ fn generate_inspect_impls(module: &mut TirModule) {
         .collect();
 
     for (name, type_params, fields, has_hidden, sspan) in &generic_struct_infos {
-        if name == "Array" {
-            continue;
-        }
         let key = MethodName::format_local(name, Some("Inspect"), "inspect");
         if existing.contains(&key) {
             continue;
@@ -2071,9 +2068,11 @@ fn decompose_type_for_method_name(
 ) -> (String, bool, Vec<String>) {
     match resolved {
         ResolvedType::TypeParam { name, .. } => (name.clone(), true, vec![]),
-        ResolvedType::BuiltinArray(elem) => {
-            ("Array".to_string(), false, vec![tt.mangle_type_name(*elem)])
-        }
+        ResolvedType::BuiltinArray(elem) => (
+            "builtin::array".to_string(),
+            false,
+            vec![tt.mangle_type_name(*elem)],
+        ),
         ResolvedType::GenericInstance {
             name, type_args, ..
         } => {
@@ -2135,7 +2134,6 @@ fn inspect_impl_module(type_id: TypeId, tt: &TypeTable, default: &ModuleSource) 
     match tt.get(type_id).clone() {
         ResolvedType::Primitive(_) => ModuleSource::primitives(),
         ResolvedType::Struct { ref name, .. } if name == "String" => ModuleSource::format(),
-        ResolvedType::BuiltinArray(_) => ModuleSource::format(),
         ResolvedType::Struct {
             ref module_source, ..
         }

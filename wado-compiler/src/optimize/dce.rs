@@ -789,29 +789,6 @@ fn analyze_expr(
                         ));
                         analysis.callees.insert(callee_id);
                     }
-                    ResolvedType::BuiltinArray(elem_type) => {
-                        // Array<T> method call (e.g., arr.len(), arr.append())
-                        let elem_name = type_table.mangle_type_name(elem_type);
-                        // Include trait name for trait methods (e.g., Array<i32>^Index::index)
-                        let (mangled_func_name, base_name) = if let Some(ref trait_n) = trait_name {
-                            let array_name = mangle_generic_name("Array", &[elem_name]);
-                            let mangled =
-                                mangle_local_trait_method(&array_name, trait_n, &method_name);
-                            let base = mangle_local_trait_method("Array", trait_n, &method_name);
-                            (mangled, base)
-                        } else {
-                            let mangled =
-                                mangle_method_generic("Array", &[elem_name], &method_name);
-                            let base = mangle_local_method("Array", &method_name);
-                            (mangled, base)
-                        };
-                        let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                            current_module.clone(),
-                            mangled_func_name,
-                            base_name,
-                        ));
-                        analysis.callees.insert(callee_id);
-                    }
                     ResolvedType::Enum {
                         name,
                         module_source,
