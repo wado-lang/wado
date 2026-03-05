@@ -1034,11 +1034,10 @@ pub fn "Color^Deserialize::deserialize<JsonDeserializer>"(d: &mut JsonDeserializ
     let __pattern_temp_0: Result<JsonVariantAccess, DeserializeError> = __va_r;
     if __variant_test(__pattern_temp_0, case=0, name=Ok) {
         let va: JsonVariantAccess = __variant_payload(__pattern_temp_0, case=0);
-        let mut __name_r: Result<String, DeserializeError> = Result<String, DeserializeError>::Ok(va.variant);
-        let __pattern_temp_1: Result<String, DeserializeError> = __name_r;
-        if __variant_test(__pattern_temp_1, case=0, name=Ok) {
-            let __name: String = __variant_payload(__pattern_temp_1, case=0);
-            if __name."String^Eq::eq"(&"Red") {
+        let mut __disc_r: Result<i32, DeserializeError> = Result<i32, DeserializeError>::Err(DeserializeError { kind: DeserializeErrorKind::Custom, message: "JSON does not encode discriminants", offset: -1 });
+        if __variant_test(__disc_r, case=0, name=Ok) {
+            let __disc: i32 = __variant_payload(__disc_r, case=0);
+            if (__disc == 0) {
                 __inline_JsonVariantAccess_DeserializeVariant__end_0: {
                     if va.is_object {
                         break __inline_JsonVariantAccess_DeserializeVariant__end_0: va.de.JsonDeserializer::expect_char(125);
@@ -1047,7 +1046,7 @@ pub fn "Color^Deserialize::deserialize<JsonDeserializer>"(d: &mut JsonDeserializ
                 };
                 return Result<Color, DeserializeError>::Ok(Color::Red);
             }
-            if __name."String^Eq::eq"(&"Green") {
+            if (__disc == 1) {
                 __inline_JsonVariantAccess_DeserializeVariant__end_1: {
                     if va.is_object {
                         break __inline_JsonVariantAccess_DeserializeVariant__end_1: va.de.JsonDeserializer::expect_char(125);
@@ -1056,7 +1055,7 @@ pub fn "Color^Deserialize::deserialize<JsonDeserializer>"(d: &mut JsonDeserializ
                 };
                 return Result<Color, DeserializeError>::Ok(Color::Green);
             }
-            if __name."String^Eq::eq"(&"Blue") {
+            if (__disc == 2) {
                 __inline_JsonVariantAccess_DeserializeVariant__end_2: {
                     if va.is_object {
                         break __inline_JsonVariantAccess_DeserializeVariant__end_2: va.de.JsonDeserializer::expect_char(125);
@@ -1065,9 +1064,43 @@ pub fn "Color^Deserialize::deserialize<JsonDeserializer>"(d: &mut JsonDeserializ
                 };
                 return Result<Color, DeserializeError>::Ok(Color::Blue);
             }
-            return Result<Color, DeserializeError>::Err(DeserializeError { kind: DeserializeErrorKind::UnknownVariant, message: "unknown variant", offset: -1 });
+            return Result<Color, DeserializeError>::Err(DeserializeError { kind: DeserializeErrorKind::UnknownVariant, message: "unknown variant discriminant", offset: -1 });
         } else {
-            return Result<Color, DeserializeError>::Err(__variant_payload(__name_r, case=1));
+            let mut __name_r: Result<String, DeserializeError> = Result<String, DeserializeError>::Ok(va.variant);
+            let __pattern_temp_2: Result<String, DeserializeError> = __name_r;
+            if __variant_test(__pattern_temp_2, case=0, name=Ok) {
+                let __name: String = __variant_payload(__pattern_temp_2, case=0);
+                if __name."String^Eq::eq"(&"Red") {
+                    __inline_JsonVariantAccess_DeserializeVariant__end_3: {
+                        if va.is_object {
+                            break __inline_JsonVariantAccess_DeserializeVariant__end_3: va.de.JsonDeserializer::expect_char(125);
+                        }
+                        break __inline_JsonVariantAccess_DeserializeVariant__end_3: Result<(), DeserializeError>::Ok(());
+                    };
+                    return Result<Color, DeserializeError>::Ok(Color::Red);
+                }
+                if __name."String^Eq::eq"(&"Green") {
+                    __inline_JsonVariantAccess_DeserializeVariant__end_4: {
+                        if va.is_object {
+                            break __inline_JsonVariantAccess_DeserializeVariant__end_4: va.de.JsonDeserializer::expect_char(125);
+                        }
+                        break __inline_JsonVariantAccess_DeserializeVariant__end_4: Result<(), DeserializeError>::Ok(());
+                    };
+                    return Result<Color, DeserializeError>::Ok(Color::Green);
+                }
+                if __name."String^Eq::eq"(&"Blue") {
+                    __inline_JsonVariantAccess_DeserializeVariant__end_5: {
+                        if va.is_object {
+                            break __inline_JsonVariantAccess_DeserializeVariant__end_5: va.de.JsonDeserializer::expect_char(125);
+                        }
+                        break __inline_JsonVariantAccess_DeserializeVariant__end_5: Result<(), DeserializeError>::Ok(());
+                    };
+                    return Result<Color, DeserializeError>::Ok(Color::Blue);
+                }
+                return Result<Color, DeserializeError>::Err(DeserializeError { kind: DeserializeErrorKind::UnknownVariant, message: "unknown variant", offset: -1 });
+            } else {
+                return Result<Color, DeserializeError>::Err(__variant_payload(__name_r, case=1));
+            }
         }
     } else {
         return Result<Color, DeserializeError>::Err(__variant_payload(__va_r, case=1));

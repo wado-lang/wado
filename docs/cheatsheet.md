@@ -1371,6 +1371,15 @@ let json = to_string::<User>(&User { name: "Alice", age: 30 });
 let parsed = from_string::<User>(`\{"name":"Alice","age":30\}`);
 // Ok(User { name: "Alice", age: 30 })
 
+// core:json_nsd - Non-self-describing JSON (compact)
+use { to_string, from_string } from "core:json_nsd";
+
+let nsd = to_string::<User>(&User { name: "Alice", age: 30 });
+// Ok("[\"Alice\",30]")  — struct as positional array, no field names
+
+let parsed_nsd = from_string::<User>(`["Alice",30]`);
+// Ok(User { name: "Alice", age: 30 })
+
 // core:base64 - Base64 encoding/decoding
 use { encode, decode } from "core:base64";
 let data: Array<u8> = [72, 101, 108, 108, 111];

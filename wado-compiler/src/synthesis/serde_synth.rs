@@ -1447,10 +1447,17 @@ fn generate_enum_deserialize(
 
     drop(tt);
 
+    let result_i32_err = {
+        let mut tt = module.type_table.borrow_mut();
+        tt.make_result(TypeTable::I32, deser_error_type)
+    };
+
     let mut local_types = vec![mut_ref_d];
     let mut next_local: u32 = 1;
     let va_result_local = alloc_local(&mut next_local, &mut local_types, result_va_err);
     let va_local = alloc_local(&mut next_local, &mut local_types, variant_access_type);
+    let disc_result_local = alloc_local(&mut next_local, &mut local_types, result_i32_err);
+    let disc_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
     let name_result_local = alloc_local(&mut next_local, &mut local_types, result_string_err);
     let name_local = alloc_local(&mut next_local, &mut local_types, string_type);
 
@@ -1486,6 +1493,91 @@ fn generate_enum_deserialize(
     // if let Ok(mut va) = __va_r { ... }
     let mut then_stmts = Vec::new();
 
+    // --- disc-based path (tried first) ---
+    // let __disc_r = va.disc()
+    let disc_call = type_param_method_call(
+        local_ref(va_local, "va", mut_ref_va),
+        "D::VariantAccess",
+        "DeserializeVariant",
+        "disc",
+        serde_module.clone(),
+        vec![],
+        vec![],
+        vec![],
+        result_i32_err,
+        span,
+    );
+    then_stmts.push(let_mut_stmt(
+        "__disc_r",
+        disc_result_local,
+        result_i32_err,
+        disc_call,
+    ));
+
+    // Build disc-based matching: if __disc == 0 { ... } if __disc == 1 { ... } ...
+    let mut disc_then_stmts = Vec::new();
+    for (case_name, case_index) in &cases {
+        let condition = TirExpr::new(
+            TirExprKind::Binary {
+                op: crate::tir::TirBinaryOp::Eq,
+                left: Box::new(local_ref(disc_local, "__disc", TypeTable::I32)),
+                right: Box::new(i32_const(*case_index as i32)),
+            },
+            TypeTable::BOOL,
+            span,
+        );
+
+        let end_call = type_param_method_call(
+            local_ref(va_local, "va", mut_ref_va),
+            "D::VariantAccess",
+            "DeserializeVariant",
+            "end",
+            serde_module.clone(),
+            vec![],
+            vec![],
+            vec![],
+            result_unit_err,
+            span,
+        );
+
+        let enum_construct = TirExpr::new(
+            TirExprKind::EnumConstruct {
+                enum_type,
+                case_index: *case_index,
+                case_name: case_name.clone(),
+            },
+            enum_type,
+            span,
+        );
+
+        let if_body = block(vec![
+            expr_stmt(end_call),
+            return_stmt(Some(variant_ok(enum_construct, result_enum_err, span))),
+        ]);
+        disc_then_stmts.push(if_stmt(condition, if_body, None));
+    }
+
+    // Unknown disc error
+    let disc_unknown_err = deserialize_error_literal(
+        deser_error_type,
+        deser_error_kind_type,
+        "UnknownVariant",
+        2,
+        "unknown variant discriminant",
+        string_type,
+        span,
+    );
+    disc_then_stmts.push(return_stmt(Some(variant_err(
+        disc_unknown_err,
+        result_enum_err,
+        span,
+    ))));
+
+    // if let Ok(__disc) = __disc_r { disc_matching } else { name fallback }
+
+    // --- name-based fallback (existing logic) ---
+    let mut name_fallback_stmts = Vec::new();
+
     // let __name_r = va.variant_name()
     let name_call = type_param_method_call(
         local_ref(va_local, "va", mut_ref_va),
@@ -1499,14 +1591,13 @@ fn generate_enum_deserialize(
         result_string_err,
         span,
     );
-    then_stmts.push(let_mut_stmt(
+    name_fallback_stmts.push(let_mut_stmt(
         "__name_r",
         name_result_local,
         result_string_err,
         name_call,
     ));
 
-    // if let Ok(name) = __name_r { ... match on name ... }
     let mut name_then_stmts = Vec::new();
 
     // For each case: if name == "CaseName" { ... end(); return Ok(EnumConstruct) }
@@ -1542,7 +1633,6 @@ fn generate_enum_deserialize(
             span,
         );
 
-        // va.end()
         let end_call = type_param_method_call(
             local_ref(va_local, "va", mut_ref_va),
             "D::VariantAccess",
@@ -1589,8 +1679,7 @@ fn generate_enum_deserialize(
         span,
     ))));
 
-    // Wire up: if let Ok(__name) = __name_r { name_then_stmts } else { propagate err }
-    then_stmts.push(if_let_ok(
+    name_fallback_stmts.push(if_let_ok(
         local_ref(name_result_local, "__name_r", result_string_err),
         result_string_err,
         string_type,
@@ -1605,6 +1694,18 @@ fn generate_enum_deserialize(
             result_enum_err,
             span,
         ),
+        span,
+    ));
+
+    // Wire up disc path with name fallback in else
+    then_stmts.push(if_let_ok(
+        local_ref(disc_result_local, "__disc_r", result_i32_err),
+        result_i32_err,
+        TypeTable::I32,
+        disc_local,
+        "__disc",
+        block(disc_then_stmts),
+        block(name_fallback_stmts),
         span,
     ));
 
@@ -1978,12 +2079,16 @@ fn generate_variant_deserialize(
         .map(|(_, _, payload)| tt.type_name(*payload))
         .collect();
 
+    let result_i32_err = tt.make_result(TypeTable::I32, deser_error_type);
+
     drop(tt);
 
     let mut local_types = vec![mut_ref_d];
     let mut next_local: u32 = 1;
     let va_result_local = alloc_local(&mut next_local, &mut local_types, result_va_err);
     let va_local = alloc_local(&mut next_local, &mut local_types, variant_access_type);
+    let disc_result_local = alloc_local(&mut next_local, &mut local_types, result_i32_err);
+    let disc_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
     let name_result_local = alloc_local(&mut next_local, &mut local_types, result_string_err);
     let name_local = alloc_local(&mut next_local, &mut local_types, string_type);
 
@@ -2018,7 +2123,168 @@ fn generate_variant_deserialize(
 
     let mut then_stmts = Vec::new();
 
-    // let __name_r = va.variant_name()
+    // --- disc-based path (tried first) ---
+    let disc_call = type_param_method_call(
+        local_ref(va_local, "va", mut_ref_va),
+        "D::VariantAccess",
+        "DeserializeVariant",
+        "disc",
+        serde_module.clone(),
+        vec![],
+        vec![],
+        vec![],
+        result_i32_err,
+        span,
+    );
+    then_stmts.push(let_mut_stmt(
+        "__disc_r",
+        disc_result_local,
+        result_i32_err,
+        disc_call,
+    ));
+
+    let mut disc_then_stmts = Vec::new();
+    for (i, (case_name, case_index, payload_type)) in cases.iter().enumerate() {
+        let is_unit = *payload_type == TypeTable::UNIT;
+
+        let condition = TirExpr::new(
+            TirExprKind::Binary {
+                op: crate::tir::TirBinaryOp::Eq,
+                left: Box::new(local_ref(disc_local, "__disc", TypeTable::I32)),
+                right: Box::new(i32_const(*case_index as i32)),
+            },
+            TypeTable::BOOL,
+            span,
+        );
+
+        if is_unit {
+            let end_call = type_param_method_call(
+                local_ref(va_local, "va", mut_ref_va),
+                "D::VariantAccess",
+                "DeserializeVariant",
+                "end",
+                serde_module.clone(),
+                vec![],
+                vec![],
+                vec![],
+                result_unit_err,
+                span,
+            );
+
+            let construct = TirExpr::new(
+                TirExprKind::VariantConstruct {
+                    variant_type,
+                    case_index: *case_index,
+                    case_name: case_name.clone(),
+                    payload: None,
+                },
+                variant_type,
+                span,
+            );
+
+            let if_body = block(vec![
+                expr_stmt(end_call),
+                return_stmt(Some(variant_ok(construct, result_variant_err, span))),
+            ]);
+            disc_then_stmts.push(if_stmt(condition, if_body, None));
+        } else {
+            let payload_local = alloc_local(&mut next_local, &mut local_types, *payload_type);
+            let p_result_local =
+                alloc_local(&mut next_local, &mut local_types, payload_result_types[i]);
+
+            let payload_call = type_param_method_call(
+                local_ref(va_local, "va", mut_ref_va),
+                "D::VariantAccess",
+                "DeserializeVariant",
+                "payload",
+                serde_module.clone(),
+                vec![payload_type_names[i].clone()],
+                vec![*payload_type],
+                vec![],
+                payload_result_types[i],
+                span,
+            );
+
+            let end_call = type_param_method_call(
+                local_ref(va_local, "va", mut_ref_va),
+                "D::VariantAccess",
+                "DeserializeVariant",
+                "end",
+                serde_module.clone(),
+                vec![],
+                vec![],
+                vec![],
+                result_unit_err,
+                span,
+            );
+
+            let construct = TirExpr::new(
+                TirExprKind::VariantConstruct {
+                    variant_type,
+                    case_index: *case_index,
+                    case_name: case_name.clone(),
+                    payload: Some(Box::new(local_ref(
+                        payload_local,
+                        "__payload",
+                        *payload_type,
+                    ))),
+                },
+                variant_type,
+                span,
+            );
+
+            let ok_block = block(vec![
+                expr_stmt(end_call),
+                return_stmt(Some(variant_ok(construct, result_variant_err, span))),
+            ]);
+
+            let if_body = block(vec![
+                let_mut_stmt(
+                    "__p_r",
+                    p_result_local,
+                    payload_result_types[i],
+                    payload_call,
+                ),
+                if_let_ok(
+                    local_ref(p_result_local, "__p_r", payload_result_types[i]),
+                    payload_result_types[i],
+                    *payload_type,
+                    payload_local,
+                    "__payload",
+                    ok_block,
+                    propagate_err_block(
+                        p_result_local,
+                        "__p_r",
+                        payload_result_types[i],
+                        deser_error_type,
+                        result_variant_err,
+                        span,
+                    ),
+                    span,
+                ),
+            ]);
+            disc_then_stmts.push(if_stmt(condition, if_body, None));
+        }
+    }
+
+    let disc_unknown_err = deserialize_error_literal(
+        deser_error_type,
+        deser_error_kind_type,
+        "UnknownVariant",
+        2,
+        "unknown variant discriminant",
+        string_type,
+        span,
+    );
+    disc_then_stmts.push(return_stmt(Some(variant_err(
+        disc_unknown_err,
+        result_variant_err,
+        span,
+    ))));
+
+    // --- name-based fallback ---
+    let mut name_fallback_stmts = Vec::new();
+
     let name_call = type_param_method_call(
         local_ref(va_local, "va", mut_ref_va),
         "D::VariantAccess",
@@ -2031,7 +2297,7 @@ fn generate_variant_deserialize(
         result_string_err,
         span,
     );
-    then_stmts.push(let_mut_stmt(
+    name_fallback_stmts.push(let_mut_stmt(
         "__name_r",
         name_result_local,
         result_string_err,
@@ -2075,7 +2341,6 @@ fn generate_variant_deserialize(
         );
 
         if is_unit {
-            // va.end(); return Ok(Variant::CaseName)
             let end_call = type_param_method_call(
                 local_ref(va_local, "va", mut_ref_va),
                 "D::VariantAccess",
@@ -2106,7 +2371,6 @@ fn generate_variant_deserialize(
             ]);
             name_then_stmts.push(if_stmt(condition, if_body, None));
         } else {
-            // let __p_r = va.payload::<PayloadType>()
             let payload_local = alloc_local(&mut next_local, &mut local_types, *payload_type);
             let p_result_local =
                 alloc_local(&mut next_local, &mut local_types, payload_result_types[i]);
@@ -2202,8 +2466,7 @@ fn generate_variant_deserialize(
         span,
     ))));
 
-    // Wire up
-    then_stmts.push(if_let_ok(
+    name_fallback_stmts.push(if_let_ok(
         local_ref(name_result_local, "__name_r", result_string_err),
         result_string_err,
         string_type,
@@ -2218,6 +2481,18 @@ fn generate_variant_deserialize(
             result_variant_err,
             span,
         ),
+        span,
+    ));
+
+    // Wire up disc path with name fallback
+    then_stmts.push(if_let_ok(
+        local_ref(disc_result_local, "__disc_r", result_i32_err),
+        result_i32_err,
+        TypeTable::I32,
+        disc_local,
+        "__disc",
+        block(disc_then_stmts),
+        block(name_fallback_stmts),
         span,
     ));
 
