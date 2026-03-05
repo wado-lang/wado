@@ -153,13 +153,13 @@ impl Deserialize for Shape;
 test "serialize payload variant" {
     let s = Shape::Circle(5.0);
     let r = to_string::<Shape>(&s);
-    assert r matches { Ok(v) && v == "[0,5.0]" };
+    assert r matches { Ok(v) && v == "[0,5]" };
 }
 
 test "serialize tuple-payload variant" {
     let s = Shape::Rectangle([10.0, 20.0]);
     let r = to_string::<Shape>(&s);
-    assert r matches { Ok(v) && v == "[1,[10.0,20.0]]" };
+    assert r matches { Ok(v) && v == "[1,[10,20]]" };
 }
 
 test "serialize unit variant in variant type" {

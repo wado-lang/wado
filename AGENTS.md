@@ -1,12 +1,14 @@
 # Wado Project
 
-This is the specification and the toolchain of Wado, a programming language targeting Wasm/WASI.
+This document describes how to develop the Wado compiler toolchain.
 
-## The Spec
+Wado a Rust-like programming language targeting Wasm/WASI.
 
-Read @docs/cheatsheet.md to understand Wado syntax.
+## The Language
 
-If you need detailed specification, read docs/spec.md.
+Read @docs/cheatsheet.md to understand Wado language.
+
+If you need detailed specification, read the `docs/spec.md`.
 
 ## The Compiler
 
@@ -331,80 +333,9 @@ Wado is designed on the following Wasm features:
 
 ## Wado Evolution Proposals (WEP)
 
-Significant language features and architectural decisions are documented as WEPs in `docs/wep-{yyyy-mm-dd}-{feature}.md`.
+Wado has a set of document for significant language features and architecture decisions.
 
-Format: `docs/wep-YYYY-MM-DD-feature-name.md`
-
-WEPs combine language specification and implementation strategy in a single document, covering both user-visible features and compiler architecture decisions.
-
-### List of WEPs
-
-- [Target WASI P3 Only](./docs/wep-2026-01-11-wasi-p3-only.md)
-- [Deterministic Math Library (libm) Integration](./docs/wep-2026-01-10-deterministic-libm.md)
-- [Tagged Template Literals for Compile-Time Execution](./docs/wep-2026-01-10-tagged-template-literals.md)
-- [WebAssembly Module Import Support](./docs/wep-2026-01-10-wasm-import.md)
-- [Operator Precedence and Associativity](./docs/wep-2026-01-11-operator-precedence.md)
-- [Ambient Logging Functions](./docs/wep-2026-01-12-ambient-logging.md)
-- [Data Section (`__DATA__`)](./docs/wep-2026-01-12-data-section.md)
-- [Literal Type Conversion Rules](./docs/wep-2026-01-12-literal-type-conversion.md)
-- [Resource Lifecycle Management (RAII)](./docs/wep-2026-01-12-resource-lifecycle.md)
-- [Value Semantics and Reference Stores](./docs/wep-2026-01-12-value-semantics-and-stores.md)
-- [Struct and Trait System](./docs/wep-2026-01-13-struct-and-trait.md)
-- [Compiler Pipeline Refactoring](./docs/wep-2026-01-14-compiler-pipeline-refactoring.md)
-- [Tuple and Array Literal Syntax](./docs/wep-2026-01-15-tuple-and-array-literals.md)
-- [World Conformance and Export Syntax](./docs/wep-2026-01-16-world-conformance-and-export.md)
-- [Closure Implementation](./docs/wep-2026-01-16-closure-implementation.md)
-- [Function Return Type Syntax](./docs/wep-2026-01-16-function-return-type-syntax.md)
-- [CompilerHost Abstraction for Compiler I/O](./docs/wep-2026-01-16-source-provider-abstraction.md)
-- [Type Stringification](./docs/wep-2026-01-16-type-stringification.md)
-- [Template Format Specifiers](./docs/wep-2026-01-17-template-format-specifiers.md)
-- [JSON Literal Compatibility](./docs/wep-2026-01-18-json-literal-compatibility.md)
-- [JSON Module Import](./docs/wep-2026-01-18-json-module-import.md)
-- [Operator Overloading](./docs/wep-2026-01-18-operator-overloading.md)
-- [Iterator-Based Literal Coercion](./docs/wep-2026-01-18-iterator-based-literal-coercion.md)
-- [Effect System and Randomness in Collections](./docs/wep-2026-01-20-effect-system-randomness.md)
-- [Associated Types in Traits](./docs/wep-2026-01-20-associated-types.md)
-- [Indexing Traits Design](./docs/wep-2026-01-20-indexing-traits.md)
-- [String Template Desugaring](./docs/wep-2026-01-20-string-template-desugaring.md)
-- [Compile-Time Location Literals](./docs/wep-2026-01-23-compile-time-location-literals.md)
-- [Iterator Traits Design](./docs/wep-2026-01-24-iterator-traits.md)
-- [Module Loader Design](./docs/wep-2026-01-24-module-loader.md)
-- [Closure Parameter Monomorphization](./docs/wep-2026-01-25-closure-parameter-monomorphization.md)
-- [128-bit Integer Types (i128/u128)](./docs/wep-2026-01-24-i128-u128-types.md)
-- [Re-export Syntax (`pub use`)](./docs/wep-2026-01-25-pub-use-reexport.md)
-- [Variant Payload Design](./docs/wep-2026-01-25-variant-payload-design.md)
-- [Effect System Design](./docs/wep-2026-01-27-effect-system-design.md)
-- [Global Variables](./docs/wep-2026-01-27-global-variables.md)
-- [WIT and Wado Mapping](./docs/wep-2026-01-29-wit-wado-mapping.md)
-- [Newtype Semantics](./docs/wep-2026-01-29-newtype-semantics.md)
-- [SIMD v128 Types](./docs/wep-2026-01-31-simd-v128.md)
-- [Format Traits](./docs/wep-2026-02-01-format-traits.md)
-- [Wasm Plan Phase](./docs/wep-2026-02-03-wasm-plan-phase.md)
-- [Trait Bounds Enforcement](./docs/wep-2026-02-07-trait-bounds.md)
-- [Variant Wasm GC Representation](./docs/wep-2026-02-08-variant-representation.md)
-- [Variant-Independent Types](./docs/wep-2026-02-09-variant-independent-types.md)
-- [Compile-Time Tuple Enumeration](./docs/wep-2026-02-10-compile-time-tuple-enumeration.md)
-- [Package Manifest (`wado.toml`)](./docs/wep-2026-02-14-package-manifest.md)
-- [Wasm IR (WIR) Layer](./docs/wep-2026-02-14-wir-layer.md)
-- [TIR-Level CM Adapter Synthesis](./docs/wep-2026-02-15-cm-adapter-synthesis.md)
-- [WASI HTTP Integration](./docs/wep-2026-02-21-wasi-http.md)
-- [Inspect (Debug Output)](./docs/wep-2026-02-21-inspect-debug-output.md)
-- [CLI Subcommands for Package Management](./docs/wep-2026-02-22-cli-subcommands.md)
-- [Struct Destructuring](./docs/wep-2026-02-22-struct-destructuring.md)
-- [Tuple Destructuring](./docs/wep-2026-02-22-tuple-destructuring.md)
-- [Base64 Encoding API](./docs/wep-2026-02-27-base64-api.md)
-- [Serialization and Deserialization (Serde)](./docs/wep-2026-02-28-serde.md)
-- [Documentation Generation (`wado doc`)](./docs/wep-2026-02-28-doc-command.md)
-- [Compile-Time File Inclusion (`#include_str`)](./docs/wep-2026-03-02-include-str.md)
-- [Gale — Grammar Adaptive LL Engine](./docs/wep-2026-03-02-gale.md)
-- [Range Object](./docs/wep-2026-03-03-range-object.md)
-
-### Structure
-
-- Title: Short description of the proposal
-- Context: Background and problem statement
-- Decision: What was decided and why
-- Consequences: Impact and trade-offs
+See [docs/WEP.md] for details and existing WEPs.
 
 ## Project Development
 
@@ -417,18 +348,13 @@ Run `make on-task-started` to install mise and all required development tools au
 ### Development Tasks
 
 ```sh
-make test
-make build
+make test        # test Rust crates (included in on-task-done)
+make wado-test   # test Wado modules (included in on-task-done)
 make format      # format Rust files and Markdown files
 make format-wado # format Wado source files
 
-make benchmark-count-prime # use integer arithmetic
-make benchmark-mandelbrot  # use float arithmetic
-make benchmark-sieve       # use arrays
-make benchmark-fts         # float-to-string
-make benchmark-zlib        # complex calculation
-
-make report-wasm-size
+make benchmark-all # count-prime, mandelbrot, sieve, fts, and zlib
+make report-wasm-size # hello_world, pi_approx, and zlib
 ```
 
 ## Compilation Log and Timing
