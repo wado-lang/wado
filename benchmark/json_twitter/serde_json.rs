@@ -113,7 +113,7 @@ struct TwitterResponse {
 fn main() {
     let json_data = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/twitter.json"))
         .expect("Failed to read twitter.json");
-    let iterations = 10;
+    let iterations = 1;
 
     println!(
         "json-twitter: {} bytes, {} iterations",

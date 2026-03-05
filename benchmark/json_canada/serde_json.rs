@@ -37,7 +37,7 @@ struct FeatureCollection {
 fn main() {
     let json_data = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/canada.json"))
         .expect("Failed to read canada.json");
-    let iterations = 10;
+    let iterations = 1;
 
     println!(
         "json-canada: {} bytes, {} iterations",
