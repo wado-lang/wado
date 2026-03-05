@@ -72,7 +72,7 @@ Parses real-world JSON datasets using typed deserialization (struct-based parsin
 - **canada.json** (2.3MB): GeoJSON with deeply nested coordinate arrays (number-heavy)
 - **citm_catalog.json** (1.7MB): Event catalog with mixed types (strings, arrays, nested objects, maps)
 
-Each benchmark reads the JSON file once, then deserializes 10 times into typed structs. Compares Wado (`core:json` + `core:serde`, pure Wado compiled to Wasm) against Rust (`serde_json`, native).
+Each benchmark reads the JSON file once, then deserializes it into typed structs. Compares Wado (`core:json` + `core:serde`, pure Wado compiled to Wasm) against Rust (`serde_json`, native).
 
 ```bash
 make benchmark-json-twitter
@@ -170,32 +170,32 @@ Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significan
 
 All implementations produce: Total bytes: 4,000,000, byte sum: 204,501,007.
 
-### JSON Parsing — Twitter (631KB, 10 iterations)
+### JSON Parsing — Twitter (631KB)
 
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
-| Rust (serde_json, native)  | 6.4       | 1.00x    |
-| **Wado** (core:json, Wasm) | 2,520     | 394x     |
+| Rust (serde_json, native)  | 1.1       | 1.00x    |
+| **Wado** (core:json, Wasm) | 315       | 286x     |
 
-Both implementations parse 1,000 total statuses from Twitter search results.
+Both implementations parse 100 statuses from Twitter search results.
 
-### JSON Parsing — Canada (2.3MB, 10 iterations)
-
-| Runtime                    | Time (ms) | Relative |
-| -------------------------- | --------- | -------- |
-| Rust (serde_json, native)  | 145       | 1.00x    |
-| **Wado** (core:json, Wasm) | 22,461    | 155x     |
-
-Both implementations parse 555,630 total coordinate points from GeoJSON.
-
-### JSON Parsing — CITM Catalog (1.7MB, 10 iterations)
+### JSON Parsing — Canada (2.3MB)
 
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
-| Rust (serde_json, native)  | 23        | 1.00x    |
-| **Wado** (core:json, Wasm) | 5,070     | 220x     |
+| Rust (serde_json, native)  | 13        | 1.00x    |
+| **Wado** (core:json, Wasm) | 2,630     | 202x     |
 
-Both implementations parse 1,840 events and 2,430 performances from CITM catalog data.
+Both implementations parse 55,563 coordinate points from GeoJSON.
+
+### JSON Parsing — CITM Catalog (1.7MB)
+
+| Runtime                    | Time (ms) | Relative |
+| -------------------------- | --------- | -------- |
+| Rust (serde_json, native)  | 3.7       | 1.00x    |
+| **Wado** (core:json, Wasm) | 607       | 164x     |
+
+Both implementations parse 184 events and 243 performances from CITM catalog data.
 
 ## Profiling Wado Programs
 
