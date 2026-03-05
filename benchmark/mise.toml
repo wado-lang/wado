@@ -120,6 +120,54 @@ echo "=== Wado ==="
 cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 fts/fts.wado
 """
 
+[tasks.json-twitter]
+description = "Run json-twitter benchmark (JSON deserialization)"
+run = """
+#!/usr/bin/env bash
+set -e
+
+echo "=== Compiling Rust serde_json benchmark ==="
+cargo build --release --manifest-path json_twitter/Cargo.toml --quiet
+
+echo "=== Rust serde_json ==="
+./json_twitter/target/release/json_twitter_bench
+
+echo "=== Wado ==="
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 json_twitter/json_twitter.wado
+"""
+
+[tasks.json-canada]
+description = "Run json-canada benchmark (JSON deserialization)"
+run = """
+#!/usr/bin/env bash
+set -e
+
+echo "=== Compiling Rust serde_json benchmark ==="
+cargo build --release --manifest-path json_canada/Cargo.toml --quiet
+
+echo "=== Rust serde_json ==="
+./json_canada/target/release/json_canada_bench
+
+echo "=== Wado ==="
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 json_canada/json_canada.wado
+"""
+
+[tasks.json-catalog]
+description = "Run json-catalog benchmark (JSON deserialization)"
+run = """
+#!/usr/bin/env bash
+set -e
+
+echo "=== Compiling Rust serde_json benchmark ==="
+cargo build --release --manifest-path json_catalog/Cargo.toml --quiet
+
+echo "=== Rust serde_json ==="
+./json_catalog/target/release/json_catalog_bench
+
+echo "=== Wado ==="
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 json_catalog/json_catalog.wado
+"""
+
 [tasks.all]
 description = "Run all benchmarks serially"
 run = """
@@ -130,6 +178,9 @@ MISE_JOBS=1 mise run mandelbrot
 MISE_JOBS=1 mise run sieve
 MISE_JOBS=1 mise run zlib
 MISE_JOBS=1 mise run fts
+MISE_JOBS=1 mise run json-twitter
+MISE_JOBS=1 mise run json-canada
+MISE_JOBS=1 mise run json-catalog
 """
 
 [tasks.clean]
@@ -138,5 +189,5 @@ run = """
 rm -f count_prime/*.wasm mandelbrot/*.wasm sieve/*.wasm
 rm -f count_prime/count_prime_c mandelbrot/mandelbrot_c sieve/sieve_c
 rm -f fts/fts_c fts/fts_rs fts/fts_zig fts/fts_zig.o
-rm -rf zlib/target
+rm -rf zlib/target json_twitter/target json_canada/target json_catalog/target
 """

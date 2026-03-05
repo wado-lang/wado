@@ -1603,6 +1603,14 @@ Checked during analysis phase. Non-exhaustive patterns are compile errors.
 - Value semantics for Variant (copy tag + all fields)
 - Template string array concatenation
 
+### Linear Memory and `realloc`
+
+The Component Model requires each core module to export a `realloc` function. The CM runtime calls `realloc` whenever it needs guest-side linear memory — for example, `stream.read` copies bytes from the host into a guest buffer allocated via `realloc`, and string lifting/lowering also goes through it. Because CM operations can allocate significant amounts of memory (e.g., reading a large HTTP response body in a loop), the `realloc` implementation must be robust.
+
+Currently, the compiler emits a trivial bump allocator in `codegen/component.rs` (`build_memory_module`). It never frees memory and has a fixed 64-page (4 MB) backing memory. This is a temporary stopgap.
+
+**HIGH PRIORITY TODO**: Implement a proper `realloc` in `lib/core/internal.wado` that supports freeing and growing. The compiler should then use this Wado-implemented realloc instead of the hand-coded bump allocator in codegen.
+
 ---
 
 ## In Progress

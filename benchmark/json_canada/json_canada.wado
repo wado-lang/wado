@@ -1,0 +1,94 @@
+// JSON benchmark: canada.json
+// Data source: https://github.com/miloyip/nativejson-benchmark
+// License: MIT
+//
+// Parses a GeoJSON FeatureCollection with 480 polygon rings and 55,563 coordinate points.
+
+use { println, Stdout } from "core:cli";
+use { Serialize, Deserialize } from "core:serde";
+use { from_string } from "core:json";
+use { MonotonicClock } from "wasi:clocks";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+
+struct Properties {
+    name: String,
+}
+impl Deserialize for Properties;
+
+struct Geometry {
+    #[serde(rename = "type")]
+    geom_type: String,
+    coordinates: Array<Array<Array<f64>>>,
+}
+impl Deserialize for Geometry;
+
+struct Feature {
+    #[serde(rename = "type")]
+    feat_type: String,
+    properties: Properties,
+    geometry: Geometry,
+}
+impl Deserialize for Feature;
+
+struct FeatureCollection {
+    #[serde(rename = "type")]
+    collection_type: String,
+    features: Array<Feature>,
+}
+impl Deserialize for FeatureCollection;
+
+fn read_file(path: String) -> String with Preopens {
+    let dirs = Preopens::get_directories();
+    let root = dirs[0].0;
+    let open_result = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read);
+    if let Err(_) = open_result {
+        panic(`failed to open {path}`);
+    }
+    let file = match open_result { Ok(f) => f, Err(_) => unreachable() };
+    let [stream, _done] = file.read_via_stream(0 as Filesize);
+    let mut buf = String::with_capacity(3 * 1024 * 1024);
+    loop {
+        let chunk = stream.read(4096);
+        if chunk.len() == 0 {
+            break;
+        }
+        let start = buf.internal_reserve_uninit(chunk.len());
+        for let mut i = 0; i < chunk.len(); i += 1 {
+            buf.set_byte(start + i, chunk[i]);
+        }
+    }
+    stream.close();
+    return buf;
+}
+
+export fn run() with Stdout, MonotonicClock, Preopens {
+    let json_data = read_file("benchmark/json_canada/canada.json");
+    let iterations = 1;
+    println(`json-canada: {json_data.len()} bytes, {iterations} iterations`);
+
+    let start = MonotonicClock::now();
+    let mut total_points = 0;
+    for let mut i = 0; i < iterations; i += 1 {
+        let result = from_string::<FeatureCollection>(json_data);
+        if let Ok(fc) = result {
+            for let feat of fc.features {
+                for let ring of feat.geometry.coordinates {
+                    total_points = total_points + ring.len();
+                }
+            }
+        } else {
+            if let Err(e) = result {
+                println(`Parse error: {e.message}`);
+            }
+            break;
+        }
+    }
+    let end = MonotonicClock::now();
+    let elapsed_ns = (end - start) as u64;
+    let elapsed_ms = elapsed_ns / 1000000;
+    let elapsed_us = elapsed_ns / 1000;
+
+    assert total_points == 55563 * iterations;
+    println(`Parsed {total_points} total coordinate points`);
+    println(`Elapsed: {elapsed_ms}.{elapsed_us % 1000} ms`);
+}

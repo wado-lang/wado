@@ -64,6 +64,22 @@ Converts 500,000 random f64 values (0.0–1.0) to decimal strings with 6 decimal
 make benchmark-fts
 ```
 
+### JSON Parsing (`json_twitter/`, `json_canada/`, `json_catalog/`)
+
+Parses real-world JSON datasets using typed deserialization (struct-based parsing, not DOM). Three datasets from [nativejson-benchmark](https://github.com/miloyip/nativejson-benchmark):
+
+- **twitter.json** (631KB): Twitter search API response with nested objects (statuses, users, entities)
+- **canada.json** (2.3MB): GeoJSON with deeply nested coordinate arrays (number-heavy)
+- **citm_catalog.json** (1.7MB): Event catalog with mixed types (strings, arrays, nested objects, maps)
+
+Each benchmark reads the JSON file once, then deserializes it into typed structs. Compares Wado (`core:json` + `core:serde`, pure Wado compiled to Wasm) against Rust (`serde_json`, native).
+
+```bash
+make benchmark-json-twitter
+make benchmark-json-canada
+make benchmark-json-catalog
+```
+
 ## Prerequisites
 
 To run all benchmarks, ensure you have the following tools installed:
@@ -85,6 +101,9 @@ make benchmark-count-prime
 make benchmark-sieve
 make benchmark-zlib
 make benchmark-fts
+make benchmark-json-twitter
+make benchmark-json-canada
+make benchmark-json-catalog
 ```
 
 ## Recent Results
@@ -93,7 +112,7 @@ make benchmark-fts
 
 | Component  | Version      |
 | ---------- | ------------ |
-| Wado       | 2026-03-04   |
+| Wado       | 2026-03-05   |
 | wasmtime   | 41.0.4       |
 | Node.js    | v24.14.0     |
 | C compiler | gcc 13.3.0   |
@@ -105,9 +124,9 @@ make benchmark-fts
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 130       | 1.00x    |
-| **Wado**    | 137       | 1.05x    |
-| JavaScript  | 147       | 1.13x    |
+| C (gcc -O3) | 120       | 1.00x    |
+| **Wado**    | 138       | 1.15x    |
+| JavaScript  | 145       | 1.21x    |
 
 All implementations produce the same result: 47,407,790 total iterations.
 
@@ -115,9 +134,9 @@ All implementations produce the same result: 47,407,790 total iterations.
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 3,140     | 1.00x    |
-| JavaScript  | 3,314     | 1.06x    |
-| **Wado**    | 3,405     | 1.08x    |
+| C (gcc -O3) | 3,040     | 1.00x    |
+| **Wado**    | 3,279     | 1.08x    |
+| JavaScript  | 3,362     | 1.11x    |
 
 All implementations produce the same result: 664,579 primes.
 
@@ -125,9 +144,9 @@ All implementations produce the same result: 664,579 primes.
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 54        | 1.00x    |
-| JavaScript  | 80        | 1.48x    |
-| **Wado**    | 151       | 2.80x    |
+| C (gcc -O3) | 58        | 1.00x    |
+| JavaScript  | 75        | 1.29x    |
+| **Wado**    | 174       | 3.00x    |
 
 All implementations produce the same result: 664,579 primes.
 
@@ -135,8 +154,8 @@ All implementations produce the same result: 664,579 primes.
 
 | Runtime               | Compress (ms) | Decompress (ms) | Relative |
 | --------------------- | ------------- | --------------- | -------- |
-| zlib-rs (native Rust) | 1.4           | 0.2             | 1.00x    |
-| **Wado** (pure Wado)  | 72            | 760             | 521x     |
+| zlib-rs (native Rust) | 1.7           | 0.2             | 1.00x    |
+| **Wado** (pure Wado)  | 70            | 758             | 449x     |
 
 Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significant overhead is expected compared to native.
 
@@ -144,12 +163,39 @@ Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significan
 
 | Runtime             | Time (ms) | Relative |
 | ------------------- | --------- | -------- |
-| Zig (-OReleaseFast) | 19        | 1.00x    |
-| Rust (rustc -O)     | 35        | 1.84x    |
-| C (gcc -O3)         | 54        | 2.84x    |
-| **Wado**            | 199       | 10.47x   |
+| Zig (-OReleaseFast) | 25        | 1.00x    |
+| Rust (rustc -O)     | 35        | 1.40x    |
+| C (gcc -O3)         | 61        | 2.44x    |
+| **Wado**            | 172       | 6.88x    |
 
 All implementations produce: Total bytes: 4,000,000, byte sum: 204,501,007.
+
+### JSON Parsing — Twitter (631KB)
+
+| Runtime                    | Time (ms) | Relative |
+| -------------------------- | --------- | -------- |
+| Rust (serde_json, native)  | 1.1       | 1.00x    |
+| **Wado** (core:json, Wasm) | 315       | 286x     |
+
+Both implementations parse 100 statuses from Twitter search results.
+
+### JSON Parsing — Canada (2.3MB)
+
+| Runtime                    | Time (ms) | Relative |
+| -------------------------- | --------- | -------- |
+| Rust (serde_json, native)  | 13        | 1.00x    |
+| **Wado** (core:json, Wasm) | 2,630     | 202x     |
+
+Both implementations parse 55,563 coordinate points from GeoJSON.
+
+### JSON Parsing — CITM Catalog (1.7MB)
+
+| Runtime                    | Time (ms) | Relative |
+| -------------------------- | --------- | -------- |
+| Rust (serde_json, native)  | 3.7       | 1.00x    |
+| **Wado** (core:json, Wasm) | 607       | 164x     |
+
+Both implementations parse 184 events and 243 performances from CITM catalog data.
 
 ## Profiling Wado Programs
 
@@ -250,6 +296,8 @@ samply record wado run --profile perfmap benchmark/count_prime/count_prime.wado
 - fts benchmark compares Wado, C (`snprintf`), Rust (`write!`), and Zig (`std.fmt`)
 - Rust benchmarks use `rustc -O` (release optimization)
 - Zig benchmarks use `-OReleaseFast`
+- JSON benchmarks compare Wado's `core:json` (pure Wado, Wasm) against Rust's `serde_json` (native)
+- JSON test data from [nativejson-benchmark](https://github.com/miloyip/nativejson-benchmark)
 
 ## File Structure
 
@@ -258,6 +306,9 @@ benchmark/
 ├── README.md
 ├── count_prime/count_prime.{wado,c,js}
 ├── fts/fts.{wado,c,rs,zig}
+├── json_canada/{json_canada.wado,serde_json.rs,canada.json}
+├── json_catalog/{json_catalog.wado,serde_json.rs,citm_catalog.json}
+├── json_twitter/{json_twitter.wado,serde_json.rs,twitter.json}
 ├── mandelbrot/mandelbrot.{wado,c,js}
 ├── sieve/sieve.{wado,c,js}
 └── zlib/{zlib_bench.wado,zlib_rs.rs}
