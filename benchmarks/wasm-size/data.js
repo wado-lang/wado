@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772660833226,
+  "lastUpdate": 1772672297031,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -335,6 +335,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d596ed10aaed7cced08c4da82ae060493c43c9f1"
         },
         "date": 1772660833095,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1386,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9905,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 14295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4be8755b5b3e07e87932445124a79346294cc440",
+          "message": "Merge pull request #506 from wado-lang/claude/review-serde-json-status-tB7HS\n\nAdd comprehensive JSON serialization/deserialization test suite",
+          "timestamp": "2026-03-05T09:56:04+09:00",
+          "tree_id": "3b6f88516934dea2e1eed5bf43aa23a7e59032a4",
+          "url": "https://github.com/wado-lang/wado/commit/4be8755b5b3e07e87932445124a79346294cc440"
+        },
+        "date": 1772672296902,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
