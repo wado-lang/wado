@@ -69,6 +69,20 @@ jobs:
           benchmark-data-dir-path: benchmarks/wasm-size
           skip-fetch-gh-pages: true
 
+      - name: Deploy combined benchmark pages
+        if: github.event_name == 'push'
+        run: |
+          git worktree add /tmp/gh-pages gh-pages
+          cp .github/pages/runtime-index.html /tmp/gh-pages/benchmarks/runtime/index.html
+          cd /tmp/gh-pages
+          git add benchmarks/runtime/index.html
+          git diff --cached --quiet || {
+            git commit -m "Deploy combined benchmark graphs"
+            git push origin gh-pages
+          }
+          cd -
+          git worktree remove /tmp/gh-pages
+
       # ── PRs: compare against baseline, comment + fail on regression ───────
 
       - name: Compare runtime benchmarks
