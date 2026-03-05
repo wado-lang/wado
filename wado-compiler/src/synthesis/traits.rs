@@ -212,9 +212,6 @@ fn generate_inspect_impls(module: &mut TirModule) {
         .collect();
 
     for (name, type_params, fields, has_hidden, sspan) in &generic_struct_infos {
-        if name == "Array" {
-            continue;
-        }
         let key = MethodName::format_local(name, Some("Inspect"), "inspect");
         if existing.contains(&key) {
             continue;
