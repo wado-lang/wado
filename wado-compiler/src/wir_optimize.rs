@@ -2843,7 +2843,7 @@ fn try_fold_wir_to_bool(instr: &WirInstr) -> Option<bool> {
 }
 
 /// Recursively fold constant integer comparisons to `I32Const`.
-fn fold_constant_comparisons(instrs: &mut Vec<WirInstr>) {
+fn fold_constant_comparisons(instrs: &mut [WirInstr]) {
     for instr in instrs.iter_mut() {
         fold_constant_comparisons_in_instr(instr);
     }
@@ -2882,7 +2882,7 @@ fn fold_constant_comparisons_in_instr(instr: &mut WirInstr) {
         },
         WirInstr::I32GeU(l, r) => match (l.as_ref(), r.as_ref()) {
             (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => {
-                Some(i32::from((*lv as u32) >= (*rv as u32)))
+                Some(i32::from(lv.cast_unsigned() >= rv.cast_unsigned()))
             }
             _ => None,
         },
