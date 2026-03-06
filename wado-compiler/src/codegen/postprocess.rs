@@ -45,7 +45,7 @@ pub fn extract_memory_min_pages(wasm_bytes: &[u8]) -> u64 {
     let parser = Parser::new(0);
     for payload in parser.parse_all(wasm_bytes) {
         if let Ok(Payload::MemorySection(mems)) = payload {
-            for mem in mems.into_iter().flatten() {
+            if let Some(mem) = mems.into_iter().flatten().next() {
                 return mem.initial;
             }
         }
