@@ -5,7 +5,7 @@
 //! and WAT-style mnemonics for arithmetic instructions (i32.add, f64.mul, etc.).
 
 use crate::wir::{
-    WirAbstractHeapType, WirArrayType, WirEnumType, WirExport, WirExportDesc, WirField,
+    WirAbstractHeapType, WirArrayType, WirData, WirEnumType, WirExport, WirExportDesc, WirField,
     WirFlagsType, WirFuncType, WirFunction, WirGlobal, WirImport, WirImportDesc, WirInstr,
     WirModule, WirStructType, WirType, WirTypeDef, WirVariantType,
 };
@@ -14,7 +14,8 @@ use crate::wir::{
 ///
 /// `cwd` is the current working directory used to shorten entry-point paths.
 pub fn unparse_wir(module: &WirModule, cwd: Option<&str>) -> String {
-    let mut unparser = WirUnparser::new(module.entry_point_path.as_deref(), cwd, &module.types);
+    let mut unparser =
+        WirUnparser::new(module.entry_point_path.as_deref(), cwd, &module.types, &module.data);
     unparser.unparse(module);
     unparser.output
 }
@@ -35,6 +36,8 @@ struct WirUnparser<'a> {
     entry_point_path: Option<String>,
     /// Type definitions for struct field name lookup.
     types: &'a [WirTypeDef],
+    /// Data segments for inlining `array.new_data` contents.
+    data: &'a [WirData],
     /// Stack of (kind, label) for block-depth tracking and `br N` resolution.
     label_stack: Vec<(LabelBlockKind, String)>,
     /// Counter for generating unique labels.
@@ -42,14 +45,51 @@ struct WirUnparser<'a> {
 }
 
 impl<'a> WirUnparser<'a> {
-    fn new(entry_point_path: Option<&str>, _cwd: Option<&str>, types: &'a [WirTypeDef]) -> Self {
+    fn new(
+        entry_point_path: Option<&str>,
+        _cwd: Option<&str>,
+        types: &'a [WirTypeDef],
+        data: &'a [WirData],
+    ) -> Self {
         Self {
             output: String::new(),
             indent: 0,
             entry_point_path: entry_point_path.map(String::from),
             types,
+            data,
             label_stack: Vec::new(),
             label_next_id: 0,
+        }
+    }
+
+    /// Try to inline a `array.new_data` as a readable literal.
+    ///
+    /// When offset and len are constant and the slice is valid UTF-8, returns
+    /// a quoted string like `"hello"`. Otherwise returns `None` and the caller
+    /// falls back to the index-based format.
+    fn try_inline_data(
+        &self,
+        data_index: u32,
+        offset: &WirInstr,
+        len: &WirInstr,
+    ) -> Option<String> {
+        let WirInstr::I32Const(off) = offset else {
+            return None;
+        };
+        let WirInstr::I32Const(length) = len else {
+            return None;
+        };
+        let segment = self.data.get(data_index as usize)?;
+        let off = *off as usize;
+        let length = *length as usize;
+        let bytes = segment.bytes.get(off..off + length)?;
+        if let Ok(s) = std::str::from_utf8(bytes) {
+            let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
+            Some(format!("\"{escaped}\""))
+        } else {
+            // Non-UTF-8: show as hex byte sequence
+            let hex: Vec<String> = bytes.iter().map(|b| format!("0x{b:02x}")).collect();
+            Some(hex.join(", "))
         }
     }
 
@@ -849,11 +889,16 @@ impl<'a> WirUnparser<'a> {
                 len,
             } => {
                 let elem = self.array_elem_type_str(type_id);
-                self.write(&format!("array.new_data<{elem}>[{data_index}]("));
-                self.unparse_instr_inline(offset);
-                self.write(", ");
-                self.unparse_instr_inline(len);
-                self.write(")");
+                // Try to inline the data segment contents when offset and len are constants
+                if let Some(inline) = self.try_inline_data(*data_index, offset, len) {
+                    self.write(&format!("array.new_data<{elem}>({inline})"));
+                } else {
+                    self.write(&format!("array.new_data<{elem}>[{data_index}]("));
+                    self.unparse_instr_inline(offset);
+                    self.write(", ");
+                    self.unparse_instr_inline(len);
+                    self.write(")");
+                }
             }
             WirInstr::ArrayNewFixed { type_id, elements } => {
                 let elem = self.array_elem_type_str(type_id);
