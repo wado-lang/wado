@@ -50,6 +50,12 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
     // for data segment promotion and large-literal splitting.
     collapse_array_append_sequences(module);
 
+    // Per-function pass: forward known struct field constants through StructGet,
+    // fold constant comparisons, and eliminate dead branches.
+    // Runs after array append collapse so that recovered StructNew nodes (with
+    // correct `used` field values) enable bounds check elimination.
+    forward_struct_field_constants(module);
+
     // Whole-module pass: rewrite String::append of short constant strings to
     // sequences of String::append_char calls, eliminating GC allocations.
     simplify_short_string_appends(module);
@@ -2775,30 +2781,136 @@ fn optimize_instrs(instrs: &mut Vec<WirInstr>, types: &[WirTypeDef]) {
     for instr in instrs.iter_mut() {
         optimize_nested(instr, types);
     }
+    fold_constant_comparisons(instrs);
     elide_redundant_value_copies(instrs);
     elide_multi_value_structs(instrs, types);
 }
 
-/// Recurse into nested instruction bodies.
+/// Recurse into nested instruction bodies and eliminate dead branches.
 fn optimize_nested(instr: &mut WirInstr, types: &[WirTypeDef]) {
     match instr {
         WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
             optimize_instrs(body, types);
         }
         WirInstr::If {
+            condition,
             then_body,
             else_body,
-            ..
+            result,
         } => {
             optimize_instrs(then_body, types);
             if let Some(eb) = else_body {
                 optimize_instrs(eb, types);
+            }
+            // Dead If elimination: replace with surviving branch when condition is constant
+            if let Some(const_val) = try_fold_wir_to_bool(condition) {
+                if const_val {
+                    let then_instrs = std::mem::take(then_body);
+                    *instr = WirInstr::Block {
+                        label: None,
+                        result: result.clone(),
+                        body: then_instrs,
+                    };
+                } else if let Some(eb) = else_body {
+                    let else_instrs = std::mem::take(eb);
+                    *instr = WirInstr::Block {
+                        label: None,
+                        result: result.clone(),
+                        body: else_instrs,
+                    };
+                } else {
+                    *instr = WirInstr::Block {
+                        label: None,
+                        result: None,
+                        body: vec![WirInstr::Nop],
+                    };
+                }
             }
         }
         WirInstr::Seq(body) => {
             optimize_instrs(body, types);
         }
         _ => {}
+    }
+}
+
+/// Try to evaluate a WIR condition to a boolean constant.
+fn try_fold_wir_to_bool(instr: &WirInstr) -> Option<bool> {
+    match instr {
+        WirInstr::I32Const(v) => Some(*v != 0),
+        _ => None,
+    }
+}
+
+/// Recursively fold constant integer comparisons to `I32Const`.
+fn fold_constant_comparisons(instrs: &mut [WirInstr]) {
+    for instr in instrs.iter_mut() {
+        fold_constant_comparisons_in_instr(instr);
+    }
+}
+
+fn fold_constant_comparisons_in_instr(instr: &mut WirInstr) {
+    // Recurse into children first (bottom-up folding)
+    match instr {
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+            fold_constant_comparisons(body);
+        }
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            fold_constant_comparisons_in_instr(condition);
+            fold_constant_comparisons(then_body);
+            if let Some(eb) = else_body {
+                fold_constant_comparisons(eb);
+            }
+        }
+        _ => {
+            instr.for_each_boxed_child_mut(&mut |child| {
+                fold_constant_comparisons_in_instr(child);
+            });
+        }
+    }
+
+    // Then try to fold this instruction
+    let result = match instr {
+        WirInstr::I32GeS(l, r) => match (l.as_ref(), r.as_ref()) {
+            (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => Some(i32::from(*lv >= *rv)),
+            _ => None,
+        },
+        WirInstr::I32GeU(l, r) => match (l.as_ref(), r.as_ref()) {
+            (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => {
+                Some(i32::from(lv.cast_unsigned() >= rv.cast_unsigned()))
+            }
+            _ => None,
+        },
+        WirInstr::I32LtS(l, r) => match (l.as_ref(), r.as_ref()) {
+            (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => Some(i32::from(*lv < *rv)),
+            _ => None,
+        },
+        WirInstr::I32GtS(l, r) => match (l.as_ref(), r.as_ref()) {
+            (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => Some(i32::from(*lv > *rv)),
+            _ => None,
+        },
+        WirInstr::I32Eq(l, r) => match (l.as_ref(), r.as_ref()) {
+            (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => Some(i32::from(*lv == *rv)),
+            _ => None,
+        },
+        WirInstr::I32Ne(l, r) => match (l.as_ref(), r.as_ref()) {
+            (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => Some(i32::from(*lv != *rv)),
+            _ => None,
+        },
+        WirInstr::I32LeS(l, r) => match (l.as_ref(), r.as_ref()) {
+            (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => Some(i32::from(*lv <= *rv)),
+            _ => None,
+        },
+        _ => None,
+    };
+
+    if let Some(val) = result {
+        *instr = WirInstr::I32Const(val);
     }
 }
 
@@ -4106,4 +4218,374 @@ fn try_rewrite_short_string_append(
     }
 
     Some(replacements)
+}
+
+/// Forward known constant struct fields through `StructGet`, fold constant
+/// integer comparisons, and eliminate dead branches.
+///
+/// After `collapse_array_append_sequences`, Array<T> struct literals have their
+/// `used` field set to the correct constant (e.g., `used: 3` for a 3-element
+/// array literal). This pass forwards that constant to bounds check comparisons:
+///
+/// ```text
+/// arr = StructNew { ..., used: I32Const(3) }
+/// if I32GeS(I32Const(0), StructGet(arr, "used")) { panic }
+///   → if I32GeS(I32Const(0), I32Const(3)) { panic }
+///   → if I32Const(0) { panic }   // 0 >= 3 is false
+///   → Nop                        // dead branch eliminated
+/// ```
+fn forward_struct_field_constants(module: &mut WirModule) {
+    let types = &module.types;
+    for func in &mut module.functions {
+        let Some(body) = &mut func.body else {
+            continue;
+        };
+        // Collect locals whose references escape. Field forwarding is unsafe
+        // for these locals because their fields can be modified through aliases.
+        let aliased = collect_aliased_locals(body);
+        let mut changed = true;
+        while changed {
+            let mut known = FieldKnowledge::new(types, &aliased);
+            changed = forward_fields_in_body(body, &mut known);
+        }
+    }
+}
+
+/// Collect locals whose references escape (address taken, embedded in structs,
+/// or passed to function calls). These are unsafe for field forwarding.
+fn collect_aliased_locals(body: &[WirInstr]) -> IndexSet<String> {
+    let mut aliased = IndexSet::new();
+    for instr in body {
+        collect_aliased_in_instr(instr, &mut aliased);
+    }
+    aliased
+}
+
+fn collect_aliased_in_instr(instr: &WirInstr, aliased: &mut IndexSet<String>) {
+    match instr {
+        // Function calls: all LocalGet args could have their fields modified
+        WirInstr::Call { args, .. } | WirInstr::CallRef { args, .. } => {
+            for arg in args {
+                collect_local_gets_deep(arg, aliased);
+            }
+        }
+        // RefAsNonNull of a LocalGet: address taken
+        WirInstr::RefAsNonNull(inner) => {
+            if let WirInstr::LocalGet { name } = inner.as_ref() {
+                aliased.insert(name.clone());
+            }
+        }
+        // LocalSet from another local: both are aliases of the same GC object.
+        // Modifications through either one affect the other.
+        WirInstr::LocalSet { name, value } => {
+            if let WirInstr::LocalGet { name: source } = value.as_ref() {
+                aliased.insert(name.clone());
+                aliased.insert(source.clone());
+            }
+        }
+        _ => {}
+    }
+    // Recurse into children
+    instr.for_each_child(&mut |child| {
+        collect_aliased_in_instr(child, aliased);
+    });
+}
+
+/// Collect all local names referenced by `LocalGet` in an expression tree.
+fn collect_local_gets_deep(instr: &WirInstr, names: &mut IndexSet<String>) {
+    if let WirInstr::LocalGet { name } = instr {
+        names.insert(name.clone());
+    }
+    instr.for_each_child(&mut |child| {
+        collect_local_gets_deep(child, names);
+    });
+}
+
+/// Known constant field values for locals.
+/// Maps `(local_name, field_name)` → constant `WirInstr`.
+struct FieldKnowledge<'a> {
+    /// Known constant field values: `(local_name, field_name)` → constant value
+    fields: IndexMap<(String, String), WirInstr>,
+    /// Type definitions for resolving field names by index
+    types: &'a [WirTypeDef],
+    /// Locals that are aliased and unsafe for field forwarding
+    aliased: &'a IndexSet<String>,
+}
+
+impl<'a> FieldKnowledge<'a> {
+    fn new(types: &'a [WirTypeDef], aliased: &'a IndexSet<String>) -> Self {
+        Self {
+            fields: IndexMap::new(),
+            types,
+            aliased,
+        }
+    }
+
+    /// Record all constant fields from a `StructNew` assigned to `local_name`.
+    /// Skips aliased locals (their fields may be modified through references).
+    fn record_struct_new(&mut self, local_name: &str, type_id: WirTypeId, fields: &[WirInstr]) {
+        if self.aliased.contains(local_name) {
+            return;
+        }
+        let Some(WirTypeDef::Struct(st)) = self.types.get(type_id.index() as usize) else {
+            return;
+        };
+        for (i, field_def) in st.fields.iter().enumerate() {
+            if let Some(field_instr) = fields.get(i)
+                && is_wir_constant(field_instr)
+            {
+                self.fields.insert(
+                    (local_name.to_string(), field_def.name.clone()),
+                    field_instr.clone(),
+                );
+            }
+        }
+    }
+
+    /// Look up a known constant for `local_name.field_name`.
+    fn get(&self, local_name: &str, field_name: &str) -> Option<&WirInstr> {
+        self.fields
+            .get(&(local_name.to_string(), field_name.to_string()))
+    }
+
+    /// Invalidate all known fields for a local (on reassignment or mutation).
+    fn invalidate_local(&mut self, local_name: &str) {
+        self.fields.retain(|(name, _), _| name != local_name);
+    }
+
+    /// Invalidate a specific field for a local (on `StructSet`).
+    fn invalidate_field(&mut self, local_name: &str, field_name: &str) {
+        self.fields
+            .swap_remove(&(local_name.to_string(), field_name.to_string()));
+    }
+}
+
+/// Check if a WIR instruction is a constant value.
+fn is_wir_constant(instr: &WirInstr) -> bool {
+    matches!(
+        instr,
+        WirInstr::I32Const(_)
+            | WirInstr::I64Const(_)
+            | WirInstr::F32Const(_)
+            | WirInstr::F64Const(_)
+    )
+}
+
+/// Process a body (list of instructions), forwarding known constants.
+/// Returns true if any changes were made.
+fn forward_fields_in_body(body: &mut Vec<WirInstr>, known: &mut FieldKnowledge<'_>) -> bool {
+    let mut changed = false;
+    let mut i = 0;
+    while i < body.len() {
+        changed |= forward_fields_in_instr(&mut body[i], known);
+
+        // After processing, check if this instruction updates knowledge.
+        update_knowledge_from_instr(&body[i], known);
+
+        i += 1;
+    }
+    changed
+}
+
+/// Update field knowledge from an instruction (after processing its children).
+fn update_knowledge_from_instr(instr: &WirInstr, known: &mut FieldKnowledge<'_>) {
+    match instr {
+        // LocalSet with StructNew: record known fields
+        WirInstr::LocalSet { name, value } => {
+            // First invalidate any existing knowledge for this local
+            known.invalidate_local(name);
+            match value.as_ref() {
+                // Direct StructNew: record known fields
+                WirInstr::StructNew { type_id, fields } => {
+                    known.record_struct_new(name, type_id.clone(), fields);
+                }
+                // Block whose result is a LocalGet: copy knowledge from that local
+                WirInstr::Block { body, .. } => {
+                    if let Some(source_name) = extract_block_result_local(body) {
+                        copy_field_knowledge(known, &source_name, name);
+                    }
+                }
+                // LocalGet: copy knowledge from source local
+                WirInstr::LocalGet { name: source } => {
+                    copy_field_knowledge(known, source, name);
+                }
+                // ValueCopy of a LocalGet: copy knowledge
+                WirInstr::ValueCopy { expr, .. } => {
+                    if let WirInstr::LocalGet { name: source } = expr.as_ref() {
+                        copy_field_knowledge(known, source, name);
+                    }
+                }
+                _ => {}
+            }
+        }
+        // StructSet: invalidate the specific field
+        WirInstr::StructSet {
+            field_name, expr, ..
+        } => {
+            if let WirInstr::LocalGet { name } = expr.as_ref() {
+                known.invalidate_field(name, field_name);
+            }
+        }
+        // Function calls: invalidate all locals passed as arguments
+        // (they could be modified via &mut references)
+        WirInstr::Call { args, .. } | WirInstr::CallRef { args, .. } => {
+            for arg in args {
+                match arg {
+                    WirInstr::LocalGet { name } => {
+                        known.invalidate_local(name);
+                    }
+                    WirInstr::RefAsNonNull(inner) => {
+                        if let WirInstr::LocalGet { name } = inner.as_ref() {
+                            known.invalidate_local(name);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Process a single instruction, recursively forwarding constants.
+/// Returns true if any changes were made.
+fn forward_fields_in_instr(instr: &mut WirInstr, known: &mut FieldKnowledge<'_>) -> bool {
+    let mut changed = false;
+
+    match instr {
+        // Recurse into block bodies
+        WirInstr::Block { body, .. } | WirInstr::Seq(body) => {
+            changed |= forward_fields_in_body(body, known);
+        }
+        WirInstr::Loop { body, .. } => {
+            // Conservatively invalidate all knowledge for loops
+            // (locals could be modified on back-edges)
+            let mut loop_known = FieldKnowledge::new(known.types, known.aliased);
+            changed |= forward_fields_in_body(body, &mut loop_known);
+            // Invalidate outer knowledge for locals modified inside the loop
+            invalidate_locals_modified_in_body(body, known);
+        }
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            // Forward in the condition
+            changed |= forward_fields_in_instr(condition, known);
+
+            // Forward into branches with cloned knowledge
+            let mut then_known = FieldKnowledge {
+                fields: known.fields.clone(),
+                types: known.types,
+                aliased: known.aliased,
+            };
+            changed |= forward_fields_in_body(then_body, &mut then_known);
+            if let Some(eb) = else_body {
+                let mut else_known = FieldKnowledge {
+                    fields: known.fields.clone(),
+                    types: known.types,
+                    aliased: known.aliased,
+                };
+                changed |= forward_fields_in_body(eb, &mut else_known);
+            }
+            // Conservatively invalidate locals modified in branches
+            invalidate_locals_modified_in_body(then_body, known);
+            if let Some(eb) = else_body {
+                invalidate_locals_modified_in_body(eb, known);
+            }
+        }
+        _ => {
+            // For other instructions, try to forward StructGet(LocalGet(x), field)
+            changed |= try_forward_struct_gets(instr, known);
+            // Recurse into children
+            instr.for_each_boxed_child_mut(&mut |child| {
+                changed |= forward_fields_in_instr(child, known);
+            });
+        }
+    }
+
+    changed
+}
+
+/// Try to replace `StructGet(LocalGet(x), field)` with a known constant.
+fn try_forward_struct_gets(instr: &mut WirInstr, known: &FieldKnowledge<'_>) -> bool {
+    if let WirInstr::StructGet {
+        field_name, expr, ..
+    } = instr
+        && let WirInstr::LocalGet { name } = expr.as_ref()
+        && let Some(const_val) = known.get(name, field_name)
+    {
+        *instr = const_val.clone();
+        return true;
+    }
+    false
+}
+
+/// Invalidate field knowledge for any locals that are assigned in a body.
+/// Extract the local name from a block's result value.
+/// Matches patterns like: `[..., LocalGet { name }, Br { depth: 0 }]`
+/// or `[..., Seq([LocalGet { name }, Br { depth: 0 }])]`.
+fn extract_block_result_local(body: &[WirInstr]) -> Option<String> {
+    // Check last instruction(s) for LocalGet + Br pattern
+    let len = body.len();
+    if len >= 2
+        && let WirInstr::Br { depth: 0 } = &body[len - 1]
+        && let WirInstr::LocalGet { name } = &body[len - 2]
+    {
+        return Some(name.clone());
+    }
+    // Check for Seq([LocalGet, Br]) as the last instruction
+    if let Some(WirInstr::Seq(seq)) = body.last()
+        && seq.len() >= 2
+    {
+        let slen = seq.len();
+        if let WirInstr::Br { depth: 0 } = &seq[slen - 1]
+            && let WirInstr::LocalGet { name } = &seq[slen - 2]
+        {
+            return Some(name.clone());
+        }
+    }
+    None
+}
+
+/// Copy all known field values from one local to another.
+fn copy_field_knowledge(known: &mut FieldKnowledge<'_>, from: &str, to: &str) {
+    if known.aliased.contains(to) {
+        return;
+    }
+    let entries: Vec<(String, WirInstr)> = known
+        .fields
+        .iter()
+        .filter(|((name, _), _)| name == from)
+        .map(|((_, field), val)| (field.clone(), val.clone()))
+        .collect();
+    for (field, val) in entries {
+        known.fields.insert((to.to_string(), field), val);
+    }
+}
+
+fn invalidate_locals_modified_in_body(body: &[WirInstr], known: &mut FieldKnowledge<'_>) {
+    for instr in body {
+        invalidate_locals_modified_in_instr(instr, known);
+    }
+}
+
+fn invalidate_locals_modified_in_instr(instr: &WirInstr, known: &mut FieldKnowledge<'_>) {
+    match instr {
+        WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } => {
+            known.invalidate_local(name);
+        }
+        WirInstr::StructSet {
+            expr, field_name, ..
+        } => {
+            if let WirInstr::LocalGet { name } = expr.as_ref() {
+                known.invalidate_field(name, field_name);
+            }
+        }
+        _ => {}
+    }
+    instr.for_each_child(&mut |child| {
+        invalidate_locals_modified_in_instr(child, known);
+    });
 }

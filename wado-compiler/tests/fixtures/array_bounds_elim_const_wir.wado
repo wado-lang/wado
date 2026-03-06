@@ -1,0 +1,27 @@
+// Test: WIR-level verification of bounds check elimination
+// Constant-index access on a known-size literal array should have
+// bounds checks eliminated at O2 (when the array is not aliased).
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let arr: Array<i32> = [10, 20, 30];
+    let first = arr[0];
+    let second = arr[1];
+    let third = arr[2];
+    println(`{first}, {second}, {third}`);
+}
+
+__DATA__
+{
+    "stdout": "10, 20, 30\n",
+    "wir_expect:O2": [
+        "array.new_fixed<i32>(10, 20, 30)",
+        "builtin::array_get<i32>(arr.repr, 0)",
+        "builtin::array_get<i32>(arr.repr, 1)",
+        "builtin::array_get<i32>(arr.repr, 2)"
+    ],
+    "wir_not_expect:O2": [
+        "\"index out of bounds\""
+    ]
+}

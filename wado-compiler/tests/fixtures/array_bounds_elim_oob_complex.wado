@@ -1,0 +1,23 @@
+// Test: complex out-of-bounds scenarios that must still trap
+// These test edge cases where the optimizer must preserve bounds checks.
+
+use { println, Stdout } from "core:cli";
+
+fn get_index() -> i32 {
+    return 5;
+}
+
+export fn run() with Stdout {
+    // Array built dynamically via append - size not statically known
+    let mut arr: Array<i32> = [];
+    arr.append(1);
+    arr.append(2);
+    arr.append(3);
+
+    // Dynamic index from function call - must keep bounds check
+    let idx = get_index();
+    let _ = arr[idx];
+}
+
+__DATA__
+{"stderr_contains": ["index out of bounds"], "trapped": true}

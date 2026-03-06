@@ -1,0 +1,19 @@
+// Test: out-of-bounds inside loop with dynamic array
+// Array grows in a loop, then accessed with an out-of-bounds index.
+
+export fn run() {
+    let mut arr: Array<i32> = [];
+    for let mut i = 0; i < 3; i += 1 {
+        arr.append(i * 10);
+    }
+    // arr has 3 elements [0, 10, 20]
+    // In-bounds checks
+    assert arr[0] == 0;
+    assert arr[1] == 10;
+    assert arr[2] == 20;
+    // Out-of-bounds
+    let _ = arr[3];
+}
+
+__DATA__
+{"stderr_contains": ["index out of bounds"], "trapped": true}

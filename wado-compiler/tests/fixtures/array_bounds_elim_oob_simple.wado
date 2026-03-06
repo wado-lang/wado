@@ -1,0 +1,11 @@
+// Test: out-of-bounds access on known-size array must still trap
+// Even though the array size is known, accessing index == size must trap.
+
+export fn run() {
+    let arr: Array<i32> = [10, 20, 30];
+    // index 3 is out of bounds for a 3-element array
+    let _ = arr[3];
+}
+
+__DATA__
+{"stderr_contains": ["index out of bounds"], "trapped": true}
