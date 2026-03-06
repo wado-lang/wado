@@ -1,0 +1,13 @@
+/// Test that memory.grow works when allocating a single 32 MB block.
+/// Initial memory is 1 MB (16 pages), so this requires a large grow.
+use { println } from "core:cli";
+
+export fn run() with Stdout {
+    let thirty_two_mb = 32 * 1024 * 1024;
+    let ptr = builtin::realloc(0, 0, 1, thirty_two_mb);
+    assert ptr >= 0;
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

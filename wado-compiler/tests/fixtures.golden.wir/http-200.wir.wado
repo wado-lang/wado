@@ -287,6 +287,8 @@ type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> ref null 
 
 type "functype/__cm_export__handle" = fn(i32);
 
+type "functype/core:allocator/grow_memory" = fn(i32);
+
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
 type "functype/core:internal/gc_array_to_memory" = fn(ref null array<u8>, i32, i32);
@@ -304,7 +306,7 @@ import fn wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
 import fn wasi:http/Response::new from "wasi/wasi:http/Response::new";
 import memory (1) from "mem/memory";
 
-global mut __heap_offset: i32 = 1024;  // from core:allocator
+global mut heap_offset: i32 = 8;  // from core:allocator
 
 fn handle(request) {
     let __local_1: i32;
@@ -782,11 +784,14 @@ fn handle(request) {
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     };
     let __fw_write_ptr_2: i32;
-    __fw_write_ptr_2 = "mem/realloc"(0, 0, 8, 8);
-    builtin::store_i32(__fw_write_ptr_2, 0);
-    builtin::store_i32[4](__fw_write_ptr_2, 0);
+    __fw_write_ptr_2 = "mem/realloc"(0, 0, 8, 40);
+    builtin::store_i64(__fw_write_ptr_2, 0_i64);
+    builtin::store_i64[8](__fw_write_ptr_2, 0_i64);
+    builtin::store_i64[16](__fw_write_ptr_2, 0_i64);
+    builtin::store_i64[24](__fw_write_ptr_2, 0_i64);
+    builtin::store_i64[32](__fw_write_ptr_2, 0_i64);
     drop("wasi/future-write"(__local_2, __fw_write_ptr_2));
-    drop("mem/realloc"(__fw_write_ptr_2, 8, 8, 0));
+    drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
 }
 
 fn __cm_adapter__Fields_new() {
@@ -805,10 +810,40 @@ fn __cm_export__handle(request) {
     handle(request);
 }
 
+fn "core:allocator/grow_memory"(new_offset) {  // from core:allocator
+    let current_bytes: i32;
+    let deficit: i32;
+    let __local_3: i32;
+    let normal_grow: i32;
+    let grow_bytes: i32;
+    let grow_pages: i32;
+    current_bytes = builtin::memory_size() * 65536;
+    deficit = new_offset - current_bytes;
+    normal_grow = select i32(current_bytes < 16777216, current_bytes, 16777216);
+    grow_bytes = if deficit > normal_grow -> i32 {
+        1 << (32 - builtin::i32_clz(deficit - 1));
+    } else {
+        normal_grow;
+    };
+    grow_pages = (grow_bytes + 65535) / 65536;
+    drop(builtin::memory_grow(grow_pages));
+}
+
 fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from core:allocator
     let aligned: i32;
-    aligned = ((__heap_offset + align) - 1) & (0 - align);
-    __heap_offset = aligned + newsize;
+    let new_offset: i32;
+    if newsize == 0 {
+        if (oldptr + oldsize) == heap_offset {
+            heap_offset = oldptr;
+        };
+        return 0;
+    };
+    aligned = ((heap_offset + align) - 1) & (0 - align);
+    new_offset = aligned + newsize;
+    if builtin::unlikely(new_offset > (builtin::memory_size() * 65536)) {
+        "core:allocator/grow_memory"(new_offset);
+    };
+    heap_offset = new_offset;
     return aligned;
 }
 
@@ -817,13 +852,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l39: loop {
+            l43: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l39;
+                continue l43;
             };
         };
     };

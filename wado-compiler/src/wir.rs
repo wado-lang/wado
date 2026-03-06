@@ -86,8 +86,14 @@ pub struct WasmModuleFunc {
     pub export_name: String,
     /// Parameter names.
     pub param_names: Vec<String>,
+    /// Result types from the original function type.
+    pub results: Vec<WirType>,
     /// The WIR body instructions.
     pub body: Vec<WirInstr>,
+    /// Original function index in the main WIR module (for remapping calls).
+    pub original_func_index: u32,
+    /// Whether this function is exported from the wasm module.
+    pub is_exported: bool,
 }
 
 impl WasmModuleInfo {
@@ -96,10 +102,18 @@ impl WasmModuleInfo {
     pub fn to_wir_module(&self, strip_names: bool, memory: WirMemory) -> WirModule {
         let mut wir = WirModule::empty();
 
+        // Build func index remap: original global index → local module index
+        let func_index_remap: IndexMap<u32, u32> = self
+            .functions
+            .iter()
+            .enumerate()
+            .map(|(local_idx, func)| (func.original_func_index, u32::try_from(local_idx).unwrap()))
+            .collect();
+
         // Memory definition
         wir.memories.push(memory);
 
-        // One func type per function (currently all are (i32, i32, i32, i32) -> i32)
+        // One func type per function
         for (i, func) in self.functions.iter().enumerate() {
             let fq: Rc<str> = Rc::from(format!("__wasm_mod_type_{i}"));
             wir.types.push(WirTypeDef::Func(WirFuncType {
@@ -108,17 +122,21 @@ impl WasmModuleInfo {
                     fq: fq.to_string(),
                 },
                 params: vec![WirType::I32; func.param_names.len()],
-                results: vec![WirType::I32],
+                results: func.results.clone(),
             }));
         }
 
-        // Functions
+        // Functions (with remapped call targets)
         for (i, func) in self.functions.iter().enumerate() {
             let type_id = WirTypeId::new(
                 u32::try_from(i).unwrap(),
                 Rc::from(format!("__wasm_mod_type_{i}")),
             );
             let func_fq: Rc<str> = Rc::from(format!("__wasm_mod_func_{i}"));
+            let mut body = func.body.clone();
+            for instr in &mut body {
+                remap_func_ids_in_instr(instr, &func_index_remap);
+            }
             wir.functions.push(WirFunction {
                 name: WirName {
                     display: func.export_name.clone(),
@@ -126,7 +144,7 @@ impl WasmModuleInfo {
                 },
                 type_id,
                 param_names: func.param_names.clone(),
-                body: Some(func.body.clone()),
+                body: Some(body),
                 meta: WirMeta {
                     module_source: None,
                     span: None,
@@ -138,16 +156,18 @@ impl WasmModuleInfo {
                 export_name: None,
             });
 
-            // Export each function
-            wir.exports.push(WirExport {
-                name: func.export_name.clone(),
-                desc: WirExportDesc::Func {
-                    func_id: WirFuncId::new(
-                        u32::try_from(i).unwrap(),
-                        Rc::from(format!("__wasm_mod_func_{i}")),
-                    ),
-                },
-            });
+            // Only export functions that are marked as exported
+            if func.is_exported {
+                wir.exports.push(WirExport {
+                    name: func.export_name.clone(),
+                    desc: WirExportDesc::Func {
+                        func_id: WirFuncId::new(
+                            u32::try_from(i).unwrap(),
+                            Rc::from(format!("__wasm_mod_func_{i}")),
+                        ),
+                    },
+                });
+            }
         }
 
         // Globals
@@ -169,6 +189,30 @@ impl WasmModuleInfo {
         }
 
         wir
+    }
+}
+
+/// Recursively remap `WirFuncId` indices in a `WirInstr` tree.
+fn remap_func_ids_in_instr(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
+    match instr {
+        WirInstr::Call { func_id, args } => {
+            if let Some(&new_idx) = remap.get(&func_id.index()) {
+                *func_id = WirFuncId::new(new_idx, Rc::from(func_id.fq()));
+            }
+            for arg in args {
+                remap_func_ids_in_instr(arg, remap);
+            }
+        }
+        WirInstr::RefFunc { func_id } => {
+            if let Some(&new_idx) = remap.get(&func_id.index()) {
+                *func_id = WirFuncId::new(new_idx, Rc::from(func_id.fq()));
+            }
+        }
+        _ => {
+            instr.for_each_boxed_child_mut(&mut |child| {
+                remap_func_ids_in_instr(child, remap);
+            });
+        }
     }
 }
 

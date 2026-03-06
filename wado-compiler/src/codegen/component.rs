@@ -49,9 +49,16 @@ pub fn build_component(
         enc.defined_type().result(None, None);
     }
 
+    // Bundled modules (FTS and libm)
+    let component_plan = project
+        .component_plan
+        .as_ref()
+        .expect("component_plan should be set by wasm_plan phase");
+    let bundled_functions = &component_plan.bundled_functions;
+
     // Core memory module
     let mem_info = wasm_modules.get("mem");
-    let mem_module = build_memory_module(project.strip_names, mem_info);
+    let mem_module = build_memory_module(project.strip_names, mem_info, bundled_functions);
     ctx.register_core_module("mem-mod");
     builder.core_module_raw(Some("mem-mod"), &mem_module);
 
@@ -76,13 +83,6 @@ pub fn build_component(
         "realloc",
         ExportKind::Func,
     );
-
-    // Bundled modules (FTS and libm)
-    let component_plan = project
-        .component_plan
-        .as_ref()
-        .expect("component_plan should be set by wasm_plan phase");
-    let bundled_functions = &component_plan.bundled_functions;
 
     embed_bundled_modules(&mut builder, &mut ctx, bundled_functions);
 
@@ -475,11 +475,22 @@ fn wado_type_to_cm_result_type(
 fn build_memory_module(
     strip_names: bool,
     wasm_mod: Option<&crate::wir::WasmModuleInfo>,
+    bundled_functions: &[String],
 ) -> Vec<u8> {
     let wasm_mod = wasm_mod.expect("core:allocator with #![wasm_module(\"mem\")] is required");
 
-    // TODO: make the initial linear memory size configurable via compiler options
-    let memory = crate::wir::WirMemory { min: 64, max: None };
+    // Determine minimum pages: at least 1, but must satisfy bundled module requirements.
+    // libm requires its data section to fit in memory at instantiation time.
+    let mut min_pages: u32 = 1;
+    if !bundled_functions.is_empty() {
+        let libm_pages = postprocess::extract_memory_min_pages(wado_bundled_libm_wasm());
+        min_pages = min_pages.max(u32::try_from(libm_pages).unwrap_or(u32::MAX));
+    }
+
+    let memory = crate::wir::WirMemory {
+        min: min_pages,
+        max: None,
+    };
     let wir = wasm_mod.to_wir_module(strip_names, memory);
     super::emit::emit_core_module(&wir)
 }

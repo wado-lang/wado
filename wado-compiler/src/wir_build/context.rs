@@ -651,10 +651,22 @@ impl<'a> WirContext<'a> {
                     }
                 }
 
+                // Get result types from the function's type definition
+                let results = if let Some(crate::wir::WirTypeDef::Func(ft)) =
+                    self.types.get(func.type_id.index() as usize)
+                {
+                    ft.results.clone()
+                } else {
+                    vec![crate::wir::WirType::I32]
+                };
+
                 mod_functions.push(crate::wir::WasmModuleFunc {
                     export_name,
                     param_names: func.param_names.clone(),
+                    results,
                     body,
+                    original_func_index: self.import_func_count + func_idx,
+                    is_exported: func.export_name.is_some(),
                 });
             }
 

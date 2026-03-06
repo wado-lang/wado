@@ -366,13 +366,13 @@ fn __cm_adapter__Request_get_path_with_query(self: &Request) -> Option<String> {
     let __disc: i32 = core::builtin::i32_load8_u(__outptr);
     let mut __option_result: Option<String> = Option<String>::None;
     if (__disc != 0) {
-        core::builtin::realloc(core::builtin::i32_load((__outptr + 4)), core::builtin::i32_load(((__outptr + 4) + 4)), 1, 0);
         __option_result = Option<String>::Some(__inline_memory_to_gc_string_0: {
             let ptr: i32 = core::builtin::i32_load((__outptr + 4));
             let len: i32 = core::builtin::i32_load(((__outptr + 4) + 4));
             let arr: builtin::array<u8> = core::internal::memory_to_gc_array(ptr, len);
             break __inline_memory_to_gc_string_0: String { repr: arr, used: len };
         });
+        core::builtin::realloc(core::builtin::i32_load((__outptr + 4)), core::builtin::i32_load(((__outptr + 4) + 4)), 1, 0);
     }
     core::builtin::realloc(__outptr, 12, 4, 0);
     return __option_result;

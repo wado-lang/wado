@@ -66,6 +66,8 @@ type "functype/run" = fn();
 
 type "functype/__cm_export__run" = fn();
 
+type "functype/core:allocator/grow_memory" = fn(i32);
+
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
 type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
@@ -119,7 +121,7 @@ import fn wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_vi
 import fn wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 
-global mut __heap_offset: i32 = 1024;  // from core:allocator
+global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
@@ -251,10 +253,40 @@ fn __cm_export__run() {
     "wasi/task-return"(0);
 }
 
+fn "core:allocator/grow_memory"(new_offset) {  // from core:allocator
+    let current_bytes: i32;
+    let deficit: i32;
+    let __local_3: i32;
+    let normal_grow: i32;
+    let grow_bytes: i32;
+    let grow_pages: i32;
+    current_bytes = builtin::memory_size() * 65536;
+    deficit = new_offset - current_bytes;
+    normal_grow = select i32(current_bytes < 16777216, current_bytes, 16777216);
+    grow_bytes = if deficit > normal_grow -> i32 {
+        1 << (32 - builtin::i32_clz(deficit - 1));
+    } else {
+        normal_grow;
+    };
+    grow_pages = (grow_bytes + 65535) / 65536;
+    drop(builtin::memory_grow(grow_pages));
+}
+
 fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from core:allocator
     let aligned: i32;
-    aligned = ((__heap_offset + align) - 1) & (0 - align);
-    __heap_offset = aligned + newsize;
+    let new_offset: i32;
+    if newsize == 0 {
+        if (oldptr + oldsize) == heap_offset {
+            heap_offset = oldptr;
+        };
+        return 0;
+    };
+    aligned = ((heap_offset + align) - 1) & (0 - align);
+    new_offset = aligned + newsize;
+    if builtin::unlikely(new_offset > (builtin::memory_size() * 65536)) {
+        "core:allocator/grow_memory"(new_offset);
+    };
+    heap_offset = new_offset;
     return aligned;
 }
 
@@ -278,14 +310,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     __for_0: block {
         i = 0;
         block {
-            l7: loop {
+            l11: loop {
                 if (i < len) == 0 {
                     break __for_0;
                 };
                 byte = builtin::array_get_u8(msg_bytes, i);
                 builtin::store_u8(ptr + i, byte);
                 i = i + 1;
-                continue l7;
+                continue l11;
             };
         };
     };
@@ -314,13 +346,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l11: loop {
+            l15: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l11;
+                continue l15;
             };
         };
     };
@@ -396,13 +428,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l18: loop {
+            l22: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l18;
+                continue l22;
             };
         };
     };
@@ -421,14 +453,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l22: loop {
+                l26: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l22;
+                    continue l26;
                 };
             };
         };
@@ -572,13 +604,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l36: loop {
+            l40: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l36;
+                continue l40;
             };
         };
     };
