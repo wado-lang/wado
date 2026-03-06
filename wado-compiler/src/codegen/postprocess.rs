@@ -44,10 +44,10 @@ pub fn eliminate_dead_code(wasm_bytes: &[u8], keep_exports: &IndexSet<String>) -
 pub fn extract_memory_min_pages(wasm_bytes: &[u8]) -> u64 {
     let parser = Parser::new(0);
     for payload in parser.parse_all(wasm_bytes) {
-        if let Ok(Payload::MemorySection(mems)) = payload {
-            if let Some(mem) = mems.into_iter().flatten().next() {
-                return mem.initial;
-            }
+        if let Ok(Payload::MemorySection(mems)) = payload
+            && let Some(mem) = mems.into_iter().flatten().next()
+        {
+            return mem.initial;
         }
     }
     1
