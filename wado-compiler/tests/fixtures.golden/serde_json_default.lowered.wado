@@ -378,7 +378,18 @@ export fn __cm_export____test_1_provided_fields_override_defaults() {
 }
 
 export fn __cm_export____test_2_missing_required_field_still_errors() {
-    __test_2_missing_required_field_still_errors();
+    __inline___initialize_modules_1: {
+        if __modules_initialized {
+            break __inline___initialize_modules_1;
+        }
+        __modules_initialized = true;
+    };
+    let r: Result<Config, DeserializeError> = "from_string<Config>"("{\"port\":8080}");
+    if __variant_test(r, case=1, name=Err) {
+        let e: DeserializeError = __variant_payload(r, case=1);
+    } else {
+        core::internal::panic("expected error for missing required field");
+    }
     cm_raw_call task-return(0);
 }
 

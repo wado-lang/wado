@@ -54,12 +54,12 @@ export fn run() with Stdout {
     if !cond {
         core::internal::panic(label);
     }
-    let cond: bool = !x_i128."i128^Eq::eq"(&i128::from_i64(0));
+    let cond: bool = !x_i128."i128^Eq::eq"(&i128 { low: 0, high: 0 });
     let label: String = "i128 != rhs";
     if !cond {
         core::internal::panic(label);
     }
-    let cond: bool = !i128::from_i64(0)."i128^Eq::eq"(&x_i128);
+    let cond: bool = !i128 { low: 0, high: 0 }."i128^Eq::eq"(&x_i128);
     let label: String = "lhs != i128";
     if !cond {
         core::internal::panic(label);
@@ -74,7 +74,7 @@ export fn run() with Stdout {
     if !cond {
         core::internal::panic(label);
     }
-    let cond: bool = (x_i128."i128^Ord::cmp"(&i128::from_i64(0)) == Ordering::Less);
+    let cond: bool = (x_i128."i128^Ord::cmp"(&i128 { low: 0, high: 0 }) == Ordering::Less);
     let label: String = "i128 < rhs";
     if !cond {
         core::internal::panic(label);
@@ -99,7 +99,7 @@ export fn run() with Stdout {
     if !cond {
         core::internal::panic(label);
     }
-    let cond: bool = (i128::from_i64(0)."i128^Ord::cmp"(&x_i128) == Ordering::Greater);
+    let cond: bool = (i128 { low: 0, high: 0 }."i128^Ord::cmp"(&x_i128) == Ordering::Greater);
     let label: String = "lhs > i128";
     if !cond {
         core::internal::panic(label);

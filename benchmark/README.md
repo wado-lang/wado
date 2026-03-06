@@ -112,7 +112,7 @@ make benchmark-json-catalog
 
 | Component  | Version      |
 | ---------- | ------------ |
-| Wado       | 2026-03-05   |
+| Wado       | 2026-03-06   |
 | wasmtime   | 41.0.4       |
 | Node.js    | v24.14.0     |
 | C compiler | gcc 13.3.0   |
@@ -126,7 +126,7 @@ make benchmark-json-catalog
 | ----------- | --------- | -------- |
 | C (gcc -O3) | 120       | 1.00x    |
 | **Wado**    | 138       | 1.15x    |
-| JavaScript  | 145       | 1.21x    |
+| JavaScript  | 142       | 1.18x    |
 
 All implementations produce the same result: 47,407,790 total iterations.
 
@@ -134,9 +134,9 @@ All implementations produce the same result: 47,407,790 total iterations.
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 3,040     | 1.00x    |
-| **Wado**    | 3,279     | 1.08x    |
-| JavaScript  | 3,362     | 1.11x    |
+| C (gcc -O3) | 3,030     | 1.00x    |
+| **Wado**    | 3,288     | 1.09x    |
+| JavaScript  | 3,358     | 1.11x    |
 
 All implementations produce the same result: 664,579 primes.
 
@@ -144,9 +144,9 @@ All implementations produce the same result: 664,579 primes.
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 58        | 1.00x    |
-| JavaScript  | 75        | 1.29x    |
-| **Wado**    | 174       | 3.00x    |
+| C (gcc -O3) | 51        | 1.00x    |
+| JavaScript  | 81        | 1.59x    |
+| **Wado**    | 138       | 2.71x    |
 
 All implementations produce the same result: 664,579 primes.
 
@@ -154,8 +154,8 @@ All implementations produce the same result: 664,579 primes.
 
 | Runtime               | Compress (ms) | Decompress (ms) | Relative |
 | --------------------- | ------------- | --------------- | -------- |
-| zlib-rs (native Rust) | 1.7           | 0.2             | 1.00x    |
-| **Wado** (pure Wado)  | 70            | 758             | 449x     |
+| zlib-rs (native Rust) | 1.6           | 0.2             | 1.00x    |
+| **Wado** (pure Wado)  | 58            | 752             | 450x     |
 
 Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significant overhead is expected compared to native.
 
@@ -165,8 +165,8 @@ Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significan
 | ------------------- | --------- | -------- |
 | Zig (-OReleaseFast) | 25        | 1.00x    |
 | Rust (rustc -O)     | 35        | 1.40x    |
-| C (gcc -O3)         | 61        | 2.44x    |
-| **Wado**            | 172       | 6.88x    |
+| C (gcc -O3)         | 57        | 2.28x    |
+| **Wado**            | 166       | 6.64x    |
 
 All implementations produce: Total bytes: 4,000,000, byte sum: 204,501,007.
 

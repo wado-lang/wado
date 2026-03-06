@@ -35,13 +35,17 @@ export fn run() with Stdout {
             let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(0), used: 0 };
             break __seq_lit: *__b;
         } };
-        __b."StatusMap<Status,i32>^KeyValueLiteralBuilder::insert_literal"("active", 1);
-        __b."StatusMap<Status,i32>^KeyValueLiteralBuilder::insert_literal"("inactive", 2);
+        let key: String = "active";
+        __b.keys."Array<String>::append"(key);
+        __b.values."Array<i32>::append"(1);
+        let key: String = "inactive";
+        __b.keys."Array<String>::append"(key);
+        __b.values."Array<i32>::append"(2);
         break __kv_lit: *__b;
     };
-    let __v0: i32 = __inline_Array_String___len_4: {
+    let __v0: i32 = __inline_Array_String___len_6: {
         let self: &Array<String> = &m.keys;
-        break __inline_Array_String___len_4: self.used;
+        break __inline_Array_String___len_6: self.used;
     };
     let __cond: bool = (__v0 == 2);
     if !__cond {
@@ -52,18 +56,18 @@ export fn run() with Stdout {
             __r.String::append(" at ");
             __r.String::append("wado-compiler/tests/fixtures/from-literal-variant-concrete.wado");
             __r.String::append(":");
-            let mut __f: Formatter = __inline_Formatter__new_6: {
+            let mut __f: Formatter = __inline_Formatter__new_8: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
             let self: Box<i32> = Box<i32> { value: 33 };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
             __r.String::append("\ncondition: m.keys.len() == 2\n");
             __r.String::append("m.keys.len(): ");
-            __f = __inline_Formatter__new_9: {
+            __f = __inline_Formatter__new_11: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
             let self: Box<i32> = Box<i32> { value: __v0 };
             let f: &mut Formatter = &mut __f;
@@ -72,7 +76,13 @@ export fn run() with Stdout {
             break __tmpl: __r;
         });
     }
-    let __v0: i32 = m.values."Array<i32>^IndexValue::index_value"(0);
+    let __v0: i32 = __inline_Array_i32__IndexValue__index_value_14: {
+        let self: &Array<i32> = &m.values;
+        if (0 >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_i32__IndexValue__index_value_14: core::builtin::array_get::<i32>(self.repr, 0);
+    };
     let __cond: bool = (__v0 == 1);
     if !__cond {
         core::internal::panic(__tmpl: {
@@ -82,18 +92,18 @@ export fn run() with Stdout {
             __r.String::append(" at ");
             __r.String::append("wado-compiler/tests/fixtures/from-literal-variant-concrete.wado");
             __r.String::append(":");
-            let mut __f: Formatter = __inline_Formatter__new_13: {
+            let mut __f: Formatter = __inline_Formatter__new_16: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_13: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
             let self: Box<i32> = Box<i32> { value: 34 };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
             __r.String::append("\ncondition: m.values[0] == 1\n");
             __r.String::append("m.values[0]: ");
-            __f = __inline_Formatter__new_16: {
+            __f = __inline_Formatter__new_19: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_19: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
             let self: Box<i32> = Box<i32> { value: __v0 };
             let f: &mut Formatter = &mut __f;
@@ -124,18 +134,6 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
     }
     core::builtin::array_set::<String>(self.repr, used, value);
     self.used = (used + 1);
-}
-
-fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<i32>(self.repr, index);
-}
-
-fn "StatusMap<Status,i32>^KeyValueLiteralBuilder::insert_literal"(self: &mut StatusMap<Status,i32>, key: String, value: i32) {
-    self.keys."Array<String>::append"(key);
-    self.values."Array<i32>::append"(value);
 }
 
 pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {

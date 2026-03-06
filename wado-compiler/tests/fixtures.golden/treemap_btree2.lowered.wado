@@ -253,17 +253,40 @@ fn "BTreeNode<String,i32>::compact"(self: &mut BTreeNode<String,i32>) {
     };
     __for_1: {
         let mut i: i32 = 0;
-        let _licm_keys_17: Array<String> = self.keys;
-        let _licm_deleted_18: Array<bool> = self.deleted;
-        let _licm_values_19: Array<i32> = self.values;
-        let _licm_used_20: i32 = _licm_keys_17.used;
+        let _licm_keys_25: Array<String> = self.keys;
+        let _licm_deleted_26: Array<bool> = self.deleted;
+        let _licm_values_27: Array<i32> = self.values;
+        let _licm_used_28: i32 = _licm_keys_25.used;
+        let _licm_used_29: i32 = _licm_deleted_26.used;
+        let _licm_repr_30: builtin::array<bool> = _licm_deleted_26.repr;
+        let _licm_repr_31: builtin::array<String> = _licm_keys_25.repr;
+        let _licm_used_32: i32 = _licm_values_27.used;
+        let _licm_repr_33: builtin::array<i32> = _licm_values_27.repr;
         loop {
-            if !(i < _licm_used_20) {
+            if !(i < _licm_used_28) {
                 break __for_1;
             }
-            if !_licm_deleted_18."Array<bool>^IndexValue::index_value"(i) {
-                new_keys."Array<String>::append"(_licm_keys_17."Array<String>^IndexValue::index_value"(i));
-                new_values."Array<i32>::append"(_licm_values_19."Array<i32>^IndexValue::index_value"(i));
+            if !__inline_Array_bool__IndexValue__index_value_7: {
+                let index: i32 = i;
+                if (index >= _licm_used_29) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_bool__IndexValue__index_value_7: core::builtin::array_get::<bool>(_licm_repr_30, index);
+            } {
+                new_keys."Array<String>::append"(__inline_Array_String__IndexValue__index_value_8: {
+                    let index: i32 = i;
+                    if (index >= _licm_used_28) {
+                        core::internal::panic("index out of bounds");
+                    }
+                    break __inline_Array_String__IndexValue__index_value_8: core::builtin::array_get::<String>(_licm_repr_31, index);
+                });
+                new_values."Array<i32>::append"(__inline_Array_i32__IndexValue__index_value_9: {
+                    let index: i32 = i;
+                    if (index >= _licm_used_32) {
+                        core::internal::panic("index out of bounds");
+                    }
+                    break __inline_Array_i32__IndexValue__index_value_9: core::builtin::array_get::<i32>(_licm_repr_33, index);
+                });
                 new_deleted."Array<bool>::append"(false);
             }
             i = (i + 1);
@@ -275,24 +298,24 @@ fn "BTreeNode<String,i32>::compact"(self: &mut BTreeNode<String,i32>) {
     if !self.is_leaf {
         __for_2: {
             let mut i: i32 = 0;
-            let _licm_children_21: Array<&mut BTreeNode<String,i32>> = self.children;
-            let _licm_used_22: i32 = _licm_children_21.used;
+            let _licm_children_34: Array<&mut BTreeNode<String,i32>> = self.children;
+            let _licm_used_35: i32 = _licm_children_34.used;
+            let _licm_repr_36: builtin::array<&mut BTreeNode<String,i32>> = _licm_children_34.repr;
             loop {
-                if !(i < _licm_used_22) {
+                if !(i < _licm_used_35) {
                     break __for_2;
                 }
-                _licm_children_21."Array<BTreeNode<String,i32>>^IndexValue::index_value"(i)."BTreeNode<String,i32>::compact"();
+                __inline_Array_BTreeNode_String_i32___IndexValue__index_value_11: {
+                    let index: i32 = i;
+                    if (index >= _licm_used_35) {
+                        core::internal::panic("index out of bounds");
+                    }
+                    break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_11: core::builtin::array_get::<&mut BTreeNode<String,i32>>(_licm_repr_36, index);
+                }."BTreeNode<String,i32>::compact"();
                 i = (i + 1);
             }
         }
     }
-}
-
-fn "Array<BTreeNode<String,i32>>^IndexValue::index_value"(self: &Array<&mut BTreeNode<String,i32>>, index: i32) -> &mut BTreeNode<String,i32> {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<&mut BTreeNode<String,i32>>(self.repr, index);
 }
 
 pub fn "Array<bool>::append"(self: &mut Array<bool>, value: bool) {
@@ -311,13 +334,6 @@ pub fn "Array<bool>::append"(self: &mut Array<bool>, value: bool) {
     self.used = (used + 1);
 }
 
-fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<i32>(self.repr, index);
-}
-
 pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
     let used: i32 = self.used;
     let capacity: i32 = core::builtin::array_len(self.repr);
@@ -332,20 +348,6 @@ pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
     }
     core::builtin::array_set::<i32>(self.repr, used, value);
     self.used = (used + 1);
-}
-
-fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<String>(self.repr, index);
-}
-
-fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<bool>(self.repr, index);
 }
 
 fn "TreeMap<String,i32>::needs_compaction"(self: &TreeMap<String,i32>) -> bool {
@@ -376,30 +378,67 @@ fn "TreeMap<String,i32>::iter"(self: &TreeMap<String,i32>) -> Array<[String, i32
 
 fn "TreeMap<String,i32>::collect_entries"(self: &TreeMap<String,i32>, node: &BTreeNode<String,i32>, result: &mut Array<[String, i32]>) {
     let mut i: i32 = 0;
-    let _licm_keys_7: Array<String> = node.keys;
-    let _licm_is_leaf_8: bool = node.is_leaf;
-    let _licm_children_9: Array<&mut BTreeNode<String,i32>> = node.children;
-    let _licm_deleted_10: Array<bool> = node.deleted;
-    let _licm_values_11: Array<i32> = node.values;
-    let _licm_used_12: i32 = _licm_keys_7.used;
-    let _licm_used_13: i32 = _licm_children_9.used;
+    let _licm_keys_17: Array<String> = node.keys;
+    let _licm_is_leaf_18: bool = node.is_leaf;
+    let _licm_children_19: Array<&mut BTreeNode<String,i32>> = node.children;
+    let _licm_deleted_20: Array<bool> = node.deleted;
+    let _licm_values_21: Array<i32> = node.values;
+    let _licm_used_22: i32 = _licm_keys_17.used;
+    let _licm_used_23: i32 = _licm_children_19.used;
+    let _licm_repr_24: builtin::array<&mut BTreeNode<String,i32>> = _licm_children_19.repr;
+    let _licm_used_25: i32 = _licm_deleted_20.used;
+    let _licm_repr_26: builtin::array<bool> = _licm_deleted_20.repr;
+    let _licm_repr_27: builtin::array<String> = _licm_keys_17.repr;
+    let _licm_used_28: i32 = _licm_values_21.used;
+    let _licm_repr_29: builtin::array<i32> = _licm_values_21.repr;
     loop {
-        if !(i < _licm_used_12) {
+        if !(i < _licm_used_22) {
             break;
         }
-        if (!_licm_is_leaf_8 && (i < _licm_used_13)) {
-            self."TreeMap<String,i32>::collect_entries"(_licm_children_9."Array<BTreeNode<String,i32>>^IndexValue::index_value"(i), result);
+        if (!_licm_is_leaf_18 && (i < _licm_used_23)) {
+            self."TreeMap<String,i32>::collect_entries"(__inline_Array_BTreeNode_String_i32___IndexValue__index_value_2: {
+                let index: i32 = i;
+                if (index >= _licm_used_23) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_2: core::builtin::array_get::<&mut BTreeNode<String,i32>>(_licm_repr_24, index);
+            }, result);
         }
-        if !_licm_deleted_10."Array<bool>^IndexValue::index_value"(i) {
-            result."Array<Tuple<String,i32>>::append"([_licm_keys_7."Array<String>^IndexValue::index_value"(i), _licm_values_11."Array<i32>^IndexValue::index_value"(i)]);
+        if !__inline_Array_bool__IndexValue__index_value_3: {
+            let index: i32 = i;
+            if (index >= _licm_used_25) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_bool__IndexValue__index_value_3: core::builtin::array_get::<bool>(_licm_repr_26, index);
+        } {
+            result."Array<Tuple<String,i32>>::append"([__inline_Array_String__IndexValue__index_value_4: {
+                let index: i32 = i;
+                if (index >= _licm_used_22) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_String__IndexValue__index_value_4: core::builtin::array_get::<String>(_licm_repr_27, index);
+            }, __inline_Array_i32__IndexValue__index_value_5: {
+                let index: i32 = i;
+                if (index >= _licm_used_28) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_i32__IndexValue__index_value_5: core::builtin::array_get::<i32>(_licm_repr_29, index);
+            }]);
         }
         i = (i + 1);
     }
-    if (!node.is_leaf && (__inline_Array_BTreeNode_String_i32____len_2: {
+    if (!node.is_leaf && (__inline_Array_BTreeNode_String_i32____len_6: {
         let self: &Array<&mut BTreeNode<String,i32>> = &node.children;
-        break __inline_Array_BTreeNode_String_i32____len_2: self.used;
+        break __inline_Array_BTreeNode_String_i32____len_6: self.used;
     } > i)) {
-        self."TreeMap<String,i32>::collect_entries"(node.children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(i), result);
+        self."TreeMap<String,i32>::collect_entries"(__inline_Array_BTreeNode_String_i32___IndexValue__index_value_7: {
+            let self: &Array<&mut BTreeNode<String,i32>> = &node.children;
+            let index: i32 = i;
+            if (index >= self.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_7: core::builtin::array_get::<&mut BTreeNode<String,i32>>(self.repr, index);
+        }, result);
     }
 }
 
@@ -430,19 +469,40 @@ fn "TreeMap<String,i32>::delete"(self: &mut TreeMap<String,i32>, key: &String) -
 
 fn "TreeMap<String,i32>::delete_in_node"(self: &mut TreeMap<String,i32>, node: &mut BTreeNode<String,i32>, key: &String) -> bool {
     let mut i: i32 = 0;
-    let _licm_keys_6: Array<String> = node.keys;
-    let _licm_used_7: i32 = _licm_keys_6.used;
+    let _licm_keys_14: Array<String> = node.keys;
+    let _licm_used_15: i32 = _licm_keys_14.used;
+    let _licm_repr_16: builtin::array<String> = _licm_keys_14.repr;
     loop {
-        if !((i < _licm_used_7) && (*key."String^Ord::cmp"(&_licm_keys_6."Array<String>^IndexValue::index_value"(i)) == Ordering::Greater)) {
+        if !((i < _licm_used_15) && (*key."String^Ord::cmp"(&__inline_Array_String__IndexValue__index_value_1: {
+            let index: i32 = i;
+            if (index >= _licm_used_15) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(_licm_repr_16, index);
+        }) == Ordering::Greater)) {
             break;
         }
         i = (i + 1);
     }
-    if ((i < __inline_Array_String___len_1: {
+    if ((i < __inline_Array_String___len_2: {
         let self: &Array<String> = &node.keys;
-        break __inline_Array_String___len_1: self.used;
-    }) && *key."String^Eq::eq"(&node.keys."Array<String>^IndexValue::index_value"(i))) {
-        if !node.deleted."Array<bool>^IndexValue::index_value"(i) {
+        break __inline_Array_String___len_2: self.used;
+    }) && *key."String^Eq::eq"(&__inline_Array_String__IndexValue__index_value_3: {
+        let self: &Array<String> = &node.keys;
+        let index: i32 = i;
+        if (index >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_String__IndexValue__index_value_3: core::builtin::array_get::<String>(self.repr, index);
+    })) {
+        if !__inline_Array_bool__IndexValue__index_value_4: {
+            let self: &Array<bool> = &node.deleted;
+            let index: i32 = i;
+            if (index >= self.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_bool__IndexValue__index_value_4: core::builtin::array_get::<bool>(self.repr, index);
+        } {
             node.deleted."Array<bool>^IndexAssign::index_assign"(i, true);
             self.deleted_count = (self.deleted_count + 1);
             self.size = (self.size - 1);
@@ -453,7 +513,14 @@ fn "TreeMap<String,i32>::delete_in_node"(self: &mut TreeMap<String,i32>, node: &
     if node.is_leaf {
         return false;
     }
-    return self."TreeMap<String,i32>::delete_in_node"(node.children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(i), key);
+    return self."TreeMap<String,i32>::delete_in_node"(__inline_Array_BTreeNode_String_i32___IndexValue__index_value_5: {
+        let self: &Array<&mut BTreeNode<String,i32>> = &node.children;
+        let index: i32 = i;
+        if (index >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_5: core::builtin::array_get::<&mut BTreeNode<String,i32>>(self.repr, index);
+    }, key);
 }
 
 fn "Array<bool>^IndexAssign::index_assign"(self: &mut Array<bool>, index: i32, value: bool) {
@@ -492,27 +559,62 @@ fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: &String) -> Optio
 
 fn "TreeMap<String,i32>::search_in_node"(self: &TreeMap<String,i32>, node: &BTreeNode<String,i32>, key: &String) -> Option<i32> {
     let mut i: i32 = 0;
-    let _licm_keys_6: Array<String> = node.keys;
-    let _licm_used_7: i32 = _licm_keys_6.used;
+    let _licm_keys_16: Array<String> = node.keys;
+    let _licm_used_17: i32 = _licm_keys_16.used;
+    let _licm_repr_18: builtin::array<String> = _licm_keys_16.repr;
     loop {
-        if !((i < _licm_used_7) && (*key."String^Ord::cmp"(&_licm_keys_6."Array<String>^IndexValue::index_value"(i)) == Ordering::Greater)) {
+        if !((i < _licm_used_17) && (*key."String^Ord::cmp"(&__inline_Array_String__IndexValue__index_value_1: {
+            let index: i32 = i;
+            if (index >= _licm_used_17) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(_licm_repr_18, index);
+        }) == Ordering::Greater)) {
             break;
         }
         i = (i + 1);
     }
-    if ((i < __inline_Array_String___len_1: {
+    if ((i < __inline_Array_String___len_2: {
         let self: &Array<String> = &node.keys;
-        break __inline_Array_String___len_1: self.used;
-    }) && *key."String^Eq::eq"(&node.keys."Array<String>^IndexValue::index_value"(i))) {
-        if !node.deleted."Array<bool>^IndexValue::index_value"(i) {
-            return Option<i32>::Some(node.values."Array<i32>^IndexValue::index_value"(i));
+        break __inline_Array_String___len_2: self.used;
+    }) && *key."String^Eq::eq"(&__inline_Array_String__IndexValue__index_value_3: {
+        let self: &Array<String> = &node.keys;
+        let index: i32 = i;
+        if (index >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_String__IndexValue__index_value_3: core::builtin::array_get::<String>(self.repr, index);
+    })) {
+        if !__inline_Array_bool__IndexValue__index_value_4: {
+            let self: &Array<bool> = &node.deleted;
+            let index: i32 = i;
+            if (index >= self.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_bool__IndexValue__index_value_4: core::builtin::array_get::<bool>(self.repr, index);
+        } {
+            return Option<i32>::Some(__inline_Array_i32__IndexValue__index_value_5: {
+                let self: &Array<i32> = &node.values;
+                let index: i32 = i;
+                if (index >= self.used) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_i32__IndexValue__index_value_5: core::builtin::array_get::<i32>(self.repr, index);
+            });
         }
         return null;
     }
     if node.is_leaf {
         return null;
     }
-    return self."TreeMap<String,i32>::search_in_node"(node.children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(i), key);
+    return self."TreeMap<String,i32>::search_in_node"(__inline_Array_BTreeNode_String_i32___IndexValue__index_value_6: {
+        let self: &Array<&mut BTreeNode<String,i32>> = &node.children;
+        let index: i32 = i;
+        if (index >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_6: core::builtin::array_get::<&mut BTreeNode<String,i32>>(self.repr, index);
+    }, key);
 }
 
 fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, value: i32) {
@@ -546,20 +648,41 @@ fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, va
 fn "TreeMap<String,i32>::insert_non_full"(self: &mut TreeMap<String,i32>, node: &mut BTreeNode<String,i32>, key: String, value: i32) {
     if node.is_leaf {
         let mut pos: i32 = 0;
-        let _licm_keys_10: Array<String> = node.keys;
-        let _licm_used_11: i32 = _licm_keys_10.used;
+        let _licm_keys_24: Array<String> = node.keys;
+        let _licm_used_25: i32 = _licm_keys_24.used;
+        let _licm_repr_26: builtin::array<String> = _licm_keys_24.repr;
         loop {
-            if !((pos < _licm_used_11) && (_licm_keys_10."Array<String>^IndexValue::index_value"(pos)."String^Ord::cmp"(&key) == Ordering::Less)) {
+            if !((pos < _licm_used_25) && (__inline_Array_String__IndexValue__index_value_1: {
+                let index: i32 = pos;
+                if (index >= _licm_used_25) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(_licm_repr_26, index);
+            }."String^Ord::cmp"(&key) == Ordering::Less)) {
                 break;
             }
             pos = (pos + 1);
         }
-        if ((pos < __inline_Array_String___len_1: {
+        if ((pos < __inline_Array_String___len_2: {
             let self: &Array<String> = &node.keys;
-            break __inline_Array_String___len_1: self.used;
-        }) && node.keys."Array<String>^IndexValue::index_value"(pos)."String^Eq::eq"(&key)) {
+            break __inline_Array_String___len_2: self.used;
+        }) && __inline_Array_String__IndexValue__index_value_3: {
+            let self: &Array<String> = &node.keys;
+            let index: i32 = pos;
+            if (index >= self.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_String__IndexValue__index_value_3: core::builtin::array_get::<String>(self.repr, index);
+        }."String^Eq::eq"(&key)) {
             node.values."Array<i32>^IndexAssign::index_assign"(pos, value);
-            if node.deleted."Array<bool>^IndexValue::index_value"(pos) {
+            if __inline_Array_bool__IndexValue__index_value_4: {
+                let self: &Array<bool> = &node.deleted;
+                let index: i32 = pos;
+                if (index >= self.used) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_bool__IndexValue__index_value_4: core::builtin::array_get::<bool>(self.repr, index);
+            } {
                 node.deleted."Array<bool>^IndexAssign::index_assign"(pos, false);
                 self.deleted_count = (self.deleted_count - 1);
             }
@@ -572,50 +695,126 @@ fn "TreeMap<String,i32>::insert_non_full"(self: &mut TreeMap<String,i32>, node: 
         self.size = (self.size + 1);
     } else {
         let mut pos: i32 = 0;
-        let _licm_keys_12: Array<String> = node.keys;
-        let _licm_used_13: i32 = _licm_keys_12.used;
+        let _licm_keys_27: Array<String> = node.keys;
+        let _licm_used_28: i32 = _licm_keys_27.used;
+        let _licm_repr_29: builtin::array<String> = _licm_keys_27.repr;
         loop {
-            if !((pos < _licm_used_13) && (key."String^Ord::cmp"(&_licm_keys_12."Array<String>^IndexValue::index_value"(pos)) == Ordering::Greater)) {
+            if !((pos < _licm_used_28) && (key."String^Ord::cmp"(&__inline_Array_String__IndexValue__index_value_6: {
+                let index: i32 = pos;
+                if (index >= _licm_used_28) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_String__IndexValue__index_value_6: core::builtin::array_get::<String>(_licm_repr_29, index);
+            }) == Ordering::Greater)) {
                 break;
             }
             pos = (pos + 1);
         }
-        if node.children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(pos)."BTreeNode<String,i32>::is_full"(((2 * self.t) - 1)) {
+        if __inline_Array_BTreeNode_String_i32___IndexValue__index_value_7: {
+            let self: &Array<&mut BTreeNode<String,i32>> = &node.children;
+            let index: i32 = pos;
+            if (index >= self.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_7: core::builtin::array_get::<&mut BTreeNode<String,i32>>(self.repr, index);
+        }."BTreeNode<String,i32>::is_full"(((2 * self.t) - 1)) {
             self."TreeMap<String,i32>::split_child"(node, pos);
-            if (key."String^Ord::cmp"(&node.keys."Array<String>^IndexValue::index_value"(pos)) == Ordering::Greater) {
+            if (key."String^Ord::cmp"(&__inline_Array_String__IndexValue__index_value_9: {
+                let self: &Array<String> = &node.keys;
+                let index: i32 = pos;
+                if (index >= self.used) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_String__IndexValue__index_value_9: core::builtin::array_get::<String>(self.repr, index);
+            }) == Ordering::Greater) {
                 pos = (pos + 1);
             }
         }
-        self."TreeMap<String,i32>::insert_non_full"(node.children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(pos), key, value);
+        self."TreeMap<String,i32>::insert_non_full"(__inline_Array_BTreeNode_String_i32___IndexValue__index_value_10: {
+            let self: &Array<&mut BTreeNode<String,i32>> = &node.children;
+            let index: i32 = pos;
+            if (index >= self.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_10: core::builtin::array_get::<&mut BTreeNode<String,i32>>(self.repr, index);
+        }, key, value);
     }
 }
 
 fn "TreeMap<String,i32>::sort_node_entries"(self: &TreeMap<String,i32>, node: &mut BTreeNode<String,i32>) {
     __for_5: {
         let mut i: i32 = 0;
-        let _licm_keys_9: Array<String> = node.keys;
-        let _licm_values_10: Array<i32> = node.values;
-        let _licm_deleted_11: Array<bool> = node.deleted;
+        let _licm_keys_25: Array<String> = node.keys;
+        let _licm_values_26: Array<i32> = node.values;
+        let _licm_deleted_27: Array<bool> = node.deleted;
         loop {
-            if !(i < _licm_keys_9.used) {
+            if !(i < _licm_keys_25.used) {
                 break __for_5;
             }
             __for_6: {
                 let mut j: i32 = (i + 1);
                 loop {
-                    if !(j < _licm_keys_9.used) {
+                    if !(j < _licm_keys_25.used) {
                         break __for_6;
                     }
-                    if (_licm_keys_9."Array<String>^IndexValue::index_value"(i)."String^Ord::cmp"(&_licm_keys_9."Array<String>^IndexValue::index_value"(j)) == Ordering::Greater) {
-                        let temp_k: String = _licm_keys_9."Array<String>^IndexValue::index_value"(i);
-                        _licm_keys_9."Array<String>^IndexAssign::index_assign"(i, _licm_keys_9."Array<String>^IndexValue::index_value"(j));
-                        _licm_keys_9."Array<String>^IndexAssign::index_assign"(j, temp_k);
-                        let temp_v: i32 = _licm_values_10."Array<i32>^IndexValue::index_value"(i);
-                        _licm_values_10."Array<i32>^IndexAssign::index_assign"(i, _licm_values_10."Array<i32>^IndexValue::index_value"(j));
-                        _licm_values_10."Array<i32>^IndexAssign::index_assign"(j, temp_v);
-                        let temp_d: bool = _licm_deleted_11."Array<bool>^IndexValue::index_value"(i);
-                        _licm_deleted_11."Array<bool>^IndexAssign::index_assign"(i, _licm_deleted_11."Array<bool>^IndexValue::index_value"(j));
-                        _licm_deleted_11."Array<bool>^IndexAssign::index_assign"(j, temp_d);
+                    if (__inline_Array_String__IndexValue__index_value_2: {
+                        let index: i32 = i;
+                        if (index >= _licm_keys_25.used) {
+                            core::internal::panic("index out of bounds");
+                        }
+                        break __inline_Array_String__IndexValue__index_value_2: core::builtin::array_get::<String>(_licm_keys_25.repr, index);
+                    }."String^Ord::cmp"(&__inline_Array_String__IndexValue__index_value_3: {
+                        let index: i32 = j;
+                        if (index >= _licm_keys_25.used) {
+                            core::internal::panic("index out of bounds");
+                        }
+                        break __inline_Array_String__IndexValue__index_value_3: core::builtin::array_get::<String>(_licm_keys_25.repr, index);
+                    }) == Ordering::Greater) {
+                        let temp_k: String = __inline_Array_String__IndexValue__index_value_4: {
+                            let index: i32 = i;
+                            if (index >= _licm_keys_25.used) {
+                                core::internal::panic("index out of bounds");
+                            }
+                            break __inline_Array_String__IndexValue__index_value_4: core::builtin::array_get::<String>(_licm_keys_25.repr, index);
+                        };
+                        _licm_keys_25."Array<String>^IndexAssign::index_assign"(i, __inline_Array_String__IndexValue__index_value_5: {
+                            let index: i32 = j;
+                            if (index >= _licm_keys_25.used) {
+                                core::internal::panic("index out of bounds");
+                            }
+                            break __inline_Array_String__IndexValue__index_value_5: core::builtin::array_get::<String>(_licm_keys_25.repr, index);
+                        });
+                        _licm_keys_25."Array<String>^IndexAssign::index_assign"(j, temp_k);
+                        let temp_v: i32 = __inline_Array_i32__IndexValue__index_value_6: {
+                            let index: i32 = i;
+                            if (index >= _licm_values_26.used) {
+                                core::internal::panic("index out of bounds");
+                            }
+                            break __inline_Array_i32__IndexValue__index_value_6: core::builtin::array_get::<i32>(_licm_values_26.repr, index);
+                        };
+                        _licm_values_26."Array<i32>^IndexAssign::index_assign"(i, __inline_Array_i32__IndexValue__index_value_7: {
+                            let index: i32 = j;
+                            if (index >= _licm_values_26.used) {
+                                core::internal::panic("index out of bounds");
+                            }
+                            break __inline_Array_i32__IndexValue__index_value_7: core::builtin::array_get::<i32>(_licm_values_26.repr, index);
+                        });
+                        _licm_values_26."Array<i32>^IndexAssign::index_assign"(j, temp_v);
+                        let temp_d: bool = __inline_Array_bool__IndexValue__index_value_8: {
+                            let index: i32 = i;
+                            if (index >= _licm_deleted_27.used) {
+                                core::internal::panic("index out of bounds");
+                            }
+                            break __inline_Array_bool__IndexValue__index_value_8: core::builtin::array_get::<bool>(_licm_deleted_27.repr, index);
+                        };
+                        _licm_deleted_27."Array<bool>^IndexAssign::index_assign"(i, __inline_Array_bool__IndexValue__index_value_9: {
+                            let index: i32 = j;
+                            if (index >= _licm_deleted_27.used) {
+                                core::internal::panic("index out of bounds");
+                            }
+                            break __inline_Array_bool__IndexValue__index_value_9: core::builtin::array_get::<bool>(_licm_deleted_27.repr, index);
+                        });
+                        _licm_deleted_27."Array<bool>^IndexAssign::index_assign"(j, temp_d);
                     }
                     j = (j + 1);
                 }
@@ -640,7 +839,13 @@ fn "Array<i32>^IndexAssign::index_assign"(self: &mut Array<i32>, index: i32, val
 }
 
 fn "TreeMap<String,i32>::split_child"(self: &mut TreeMap<String,i32>, parent: &mut BTreeNode<String,i32>, child_index: i32) {
-    let full_child: &mut BTreeNode<String,i32> = parent.children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(child_index);
+    let full_child: &mut BTreeNode<String,i32> = __inline_Array_BTreeNode_String_i32___IndexValue__index_value_0: {
+        let self: &Array<&mut BTreeNode<String,i32>> = &parent.children;
+        if (child_index >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_0: core::builtin::array_get::<&mut BTreeNode<String,i32>>(self.repr, child_index);
+    };
     let mut new_sibling: BTreeNode<String,i32> = "BTreeNode<String,i32>::new_leaf"();
     if !full_child.is_leaf {
         new_sibling = "BTreeNode<String,i32>::new_internal"();
@@ -648,41 +853,89 @@ fn "TreeMap<String,i32>::split_child"(self: &mut TreeMap<String,i32>, parent: &m
     let mid: i32 = (self.t - 1);
     __for_3: {
         let mut i: i32 = (mid + 1);
-        let _licm_keys_13: Array<String> = full_child.keys;
-        let _licm_keys_14: Array<String> = new_sibling.keys;
-        let _licm_values_15: Array<i32> = new_sibling.values;
-        let _licm_values_16: Array<i32> = full_child.values;
-        let _licm_deleted_17: Array<bool> = new_sibling.deleted;
-        let _licm_deleted_18: Array<bool> = full_child.deleted;
-        let _licm_used_19: i32 = _licm_keys_13.used;
+        let _licm_keys_29: Array<String> = full_child.keys;
+        let _licm_keys_30: Array<String> = new_sibling.keys;
+        let _licm_values_31: Array<i32> = new_sibling.values;
+        let _licm_values_32: Array<i32> = full_child.values;
+        let _licm_deleted_33: Array<bool> = new_sibling.deleted;
+        let _licm_deleted_34: Array<bool> = full_child.deleted;
+        let _licm_used_35: i32 = _licm_keys_29.used;
+        let _licm_repr_36: builtin::array<String> = _licm_keys_29.repr;
+        let _licm_used_37: i32 = _licm_values_32.used;
+        let _licm_repr_38: builtin::array<i32> = _licm_values_32.repr;
+        let _licm_used_39: i32 = _licm_deleted_34.used;
+        let _licm_repr_40: builtin::array<bool> = _licm_deleted_34.repr;
         loop {
-            if !(i < _licm_used_19) {
+            if !(i < _licm_used_35) {
                 break __for_3;
             }
-            _licm_keys_14."Array<String>::append"(_licm_keys_13."Array<String>^IndexValue::index_value"(i));
-            _licm_values_15."Array<i32>::append"(_licm_values_16."Array<i32>^IndexValue::index_value"(i));
-            _licm_deleted_17."Array<bool>::append"(_licm_deleted_18."Array<bool>^IndexValue::index_value"(i));
+            _licm_keys_30."Array<String>::append"(__inline_Array_String__IndexValue__index_value_2: {
+                let index: i32 = i;
+                if (index >= _licm_used_35) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_String__IndexValue__index_value_2: core::builtin::array_get::<String>(_licm_repr_36, index);
+            });
+            _licm_values_31."Array<i32>::append"(__inline_Array_i32__IndexValue__index_value_3: {
+                let index: i32 = i;
+                if (index >= _licm_used_37) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_i32__IndexValue__index_value_3: core::builtin::array_get::<i32>(_licm_repr_38, index);
+            });
+            _licm_deleted_33."Array<bool>::append"(__inline_Array_bool__IndexValue__index_value_4: {
+                let index: i32 = i;
+                if (index >= _licm_used_39) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_bool__IndexValue__index_value_4: core::builtin::array_get::<bool>(_licm_repr_40, index);
+            });
             i = (i + 1);
         }
     }
     if !full_child.is_leaf {
         __for_4: {
             let mut i: i32 = (mid + 1);
-            let _licm_children_20: Array<&mut BTreeNode<String,i32>> = full_child.children;
-            let _licm_children_21: Array<&mut BTreeNode<String,i32>> = new_sibling.children;
-            let _licm_used_22: i32 = _licm_children_20.used;
+            let _licm_children_41: Array<&mut BTreeNode<String,i32>> = full_child.children;
+            let _licm_children_42: Array<&mut BTreeNode<String,i32>> = new_sibling.children;
+            let _licm_used_43: i32 = _licm_children_41.used;
+            let _licm_repr_44: builtin::array<&mut BTreeNode<String,i32>> = _licm_children_41.repr;
             loop {
-                if !(i < _licm_used_22) {
+                if !(i < _licm_used_43) {
                     break __for_4;
                 }
-                _licm_children_21."Array<BTreeNode<String,i32>>::append"(_licm_children_20."Array<BTreeNode<String,i32>>^IndexValue::index_value"(i));
+                _licm_children_42."Array<BTreeNode<String,i32>>::append"(__inline_Array_BTreeNode_String_i32___IndexValue__index_value_6: {
+                    let index: i32 = i;
+                    if (index >= _licm_used_43) {
+                        core::internal::panic("index out of bounds");
+                    }
+                    break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_6: core::builtin::array_get::<&mut BTreeNode<String,i32>>(_licm_repr_44, index);
+                });
                 i = (i + 1);
             }
         }
     }
-    let promoted_key: String = full_child.keys."Array<String>^IndexValue::index_value"(mid);
-    let promoted_value: i32 = full_child.values."Array<i32>^IndexValue::index_value"(mid);
-    let promoted_deleted: bool = full_child.deleted."Array<bool>^IndexValue::index_value"(mid);
+    let promoted_key: String = __inline_Array_String__IndexValue__index_value_7: {
+        let self: &Array<String> = &full_child.keys;
+        if (mid >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_String__IndexValue__index_value_7: core::builtin::array_get::<String>(self.repr, mid);
+    };
+    let promoted_value: i32 = __inline_Array_i32__IndexValue__index_value_8: {
+        let self: &Array<i32> = &full_child.values;
+        if (mid >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_i32__IndexValue__index_value_8: core::builtin::array_get::<i32>(self.repr, mid);
+    };
+    let promoted_deleted: bool = __inline_Array_bool__IndexValue__index_value_9: {
+        let self: &Array<bool> = &full_child.deleted;
+        if (mid >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_bool__IndexValue__index_value_9: core::builtin::array_get::<bool>(self.repr, mid);
+    };
     parent.keys."Array<String>::append"(promoted_key);
     parent.values."Array<i32>::append"(promoted_value);
     parent.deleted."Array<bool>::append"(promoted_deleted);
@@ -726,14 +979,22 @@ fn "BTreeNode<String,i32>::is_full"(self: &BTreeNode<String,i32>, max_keys: i32)
     let mut count: i32 = 0;
     __for_0: {
         let mut i: i32 = 0;
-        let _licm_keys_5: Array<String> = self.keys;
-        let _licm_deleted_6: Array<bool> = self.deleted;
-        let _licm_used_7: i32 = _licm_keys_5.used;
+        let _licm_keys_7: Array<String> = self.keys;
+        let _licm_deleted_8: Array<bool> = self.deleted;
+        let _licm_used_9: i32 = _licm_keys_7.used;
+        let _licm_used_10: i32 = _licm_deleted_8.used;
+        let _licm_repr_11: builtin::array<bool> = _licm_deleted_8.repr;
         loop {
-            if !(i < _licm_used_7) {
+            if !(i < _licm_used_9) {
                 break __for_0;
             }
-            if !_licm_deleted_6."Array<bool>^IndexValue::index_value"(i) {
+            if !__inline_Array_bool__IndexValue__index_value_1: {
+                let index: i32 = i;
+                if (index >= _licm_used_10) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_bool__IndexValue__index_value_1: core::builtin::array_get::<bool>(_licm_repr_11, index);
+            } {
                 count = (count + 1);
             }
             i = (i + 1);

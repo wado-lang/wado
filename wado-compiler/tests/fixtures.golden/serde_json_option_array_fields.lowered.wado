@@ -228,7 +228,13 @@ fn __test_2_roundtrip_with_some() {
                     break __tmpl: __r;
                 });
             }
-            let __v0: i32 = parsed.scores."Array<i32>^IndexValue::index_value"(0);
+            let __v0: i32 = __inline_Array_i32__IndexValue__index_value_21: {
+                let self: &Array<i32> = &parsed.scores;
+                if (0 >= self.used) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_i32__IndexValue__index_value_21: core::builtin::array_get::<i32>(self.repr, 0);
+            };
             let __cond: bool = (__v0 == 100);
             if !__cond {
                 core::internal::panic(__tmpl: {
@@ -238,18 +244,18 @@ fn __test_2_roundtrip_with_some() {
                     __r.String::append(" at ");
                     __r.String::append("wado-compiler/tests/fixtures/serde_json_option_array_fields.wado");
                     __r.String::append(":");
-                    let mut __f: Formatter = __inline_Formatter__new_22: {
+                    let mut __f: Formatter = __inline_Formatter__new_23: {
                         let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                        break __inline_Formatter__new_23: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
                     let self: Box<i32> = Box<i32> { value: 60 };
                     let f: &mut Formatter = &mut __f;
                     self.i32::fmt_decimal(f);
                     __r.String::append("\ncondition: parsed.scores[0] == 100\n");
                     __r.String::append("parsed.scores[0]: ");
-                    __f = __inline_Formatter__new_25: {
+                    __f = __inline_Formatter__new_26: {
                         let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_25: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                        break __inline_Formatter__new_26: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
                     let self: Box<i32> = Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
@@ -384,13 +390,6 @@ export fn __cm_export____test_2_roundtrip_with_some() {
 export fn __cm_export____test_3_roundtrip_with_none() {
     __test_3_roundtrip_with_none();
     cm_raw_call task-return(0);
-}
-
-fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<i32>(self.repr, index);
 }
 
 pub fn "from_string<User>"(input: String) -> Result<User, DeserializeError> {
@@ -632,15 +631,19 @@ pub fn "to_string<User>"(value: &User) -> Result<String, SerializeError> {
 }
 
 pub fn "User^Serialize::serialize<JsonSerializer>"(self: &User, s: &mut JsonSerializer) -> Result<(), SerializeError> {
-    let mut __result: Result<JsonStructSerializer, SerializeError> = s."JsonSerializer^Serializer::begin_struct"(&"User", 3);
+    let mut __result: Result<JsonStructSerializer, SerializeError> = __inline_JsonSerializer_Serializer__begin_struct_0: {
+        let name: &String = &"User";
+        s.buf.String::append("{");
+        break __inline_JsonSerializer_Serializer__begin_struct_0: Result<JsonStructSerializer, SerializeError>::Ok(JsonStructSerializer { buf: s.buf, count: 0 });
+    };
     if __variant_test(__result, case=0, name=Ok) {
         let st: JsonStructSerializer = __variant_payload(__result, case=0);
         st."JsonStructSerializer^SerializeStruct::field<String>"(&"name", &*self.name);
         st."JsonStructSerializer^SerializeStruct::field<Option<String>>"(&"email", Box<Option<String>> { value: *self.email });
         st."JsonStructSerializer^SerializeStruct::field<Array<i32>>"(&"scores", &*self.scores);
-        return __inline_JsonStructSerializer_SerializeStruct__end_0: {
+        return __inline_JsonStructSerializer_SerializeStruct__end_1: {
             st.buf.String::append("}");
-            break __inline_JsonStructSerializer_SerializeStruct__end_0: Result<(), SerializeError>::Ok(());
+            break __inline_JsonStructSerializer_SerializeStruct__end_1: Result<(), SerializeError>::Ok(());
         };
     } else {
         return Result<(), SerializeError>::Err(SerializeError { kind: SerializeErrorKind::Custom, message: "begin_struct failed" });
@@ -661,13 +664,17 @@ fn "JsonStructSerializer^SerializeStruct::field<Array<i32>>"(self: &mut JsonStru
 }
 
 fn "Array<i32>^Serialize::serialize<JsonSerializer>"(self: &Array<i32>, s: &mut JsonSerializer) -> Result<(), SerializeError> {
-    let seq: Result<JsonSeqSerializer, SerializeError> = s."JsonSerializer^Serializer::begin_seq"(self.used);
+    let seq: Result<JsonSeqSerializer, SerializeError> = __inline_JsonSerializer_Serializer__begin_seq_0: {
+        let len: i32 = self.used;
+        s.buf.String::append("[");
+        break __inline_JsonSerializer_Serializer__begin_seq_0: Result<JsonSeqSerializer, SerializeError>::Ok(JsonSeqSerializer { buf: s.buf, count: 0 });
+    };
     let __pattern_temp_0: Result<JsonSeqSerializer, SerializeError> = seq;
     if __variant_test(__pattern_temp_0, case=0, name=Ok) {
         let seq: JsonSeqSerializer = __variant_payload(__pattern_temp_0, case=0);
-        let mut __iter_0: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_1: {
+        let mut __iter_0: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_2: {
             let self: &Array<i32> = &*self;
-            break __inline_Array_i32__IntoIterator__into_iter_1: ArrayIter<i32> { repr: self.repr, used: self.used, index: 0 };
+            break __inline_Array_i32__IntoIterator__into_iter_2: ArrayIter<i32> { repr: self.repr, used: self.used, index: 0 };
         };
         loop {
             let __pattern_temp_1: Option<i32> = __iter_0."ArrayIter<i32>^Iterator::next"();
@@ -682,9 +689,9 @@ fn "Array<i32>^Serialize::serialize<JsonSerializer>"(self: &Array<i32>, s: &mut 
                 break;
             }
         }
-        return __inline_JsonSeqSerializer_SerializeSeq__end_2: {
+        return __inline_JsonSeqSerializer_SerializeSeq__end_3: {
             seq.buf.String::append("]");
-            break __inline_JsonSeqSerializer_SerializeSeq__end_2: Result<(), SerializeError>::Ok(());
+            break __inline_JsonSeqSerializer_SerializeSeq__end_3: Result<(), SerializeError>::Ok(());
         };
     }
     let __pattern_temp_3: Result<JsonSeqSerializer, SerializeError> = seq;

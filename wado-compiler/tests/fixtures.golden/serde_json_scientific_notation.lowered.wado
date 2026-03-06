@@ -1049,12 +1049,36 @@ export fn __cm_export____test_7_i32_from_explicit_positive_exponent() {
 }
 
 export fn __cm_export____test_8_i32_rejects_non_integer_scientific() {
-    __test_8_i32_rejects_non_integer_scientific();
+    __inline___initialize_modules_1: {
+        if __modules_initialized {
+            break __inline___initialize_modules_1;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
+    let r: Result<i32, DeserializeError> = "from_string<i32>"("1.5e0");
+    if __variant_test(r, case=1, name=Err) {
+        __variant_payload(r, case=1);
+    } else {
+        core::internal::panic("expected error for 1.5e0 as i32");
+    }
     cm_raw_call task-return(0);
 }
 
 export fn __cm_export____test_9_i32_rejects_negative_exponent_non_integer() {
-    __test_9_i32_rejects_negative_exponent_non_integer();
+    __inline___initialize_modules_1: {
+        if __modules_initialized {
+            break __inline___initialize_modules_1;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
+    let r: Result<i32, DeserializeError> = "from_string<i32>"("1e-1");
+    if __variant_test(r, case=1, name=Err) {
+        __variant_payload(r, case=1);
+    } else {
+        core::internal::panic("expected error for 1e-1 as i32");
+    }
     cm_raw_call task-return(0);
 }
 
@@ -1094,7 +1118,19 @@ export fn __cm_export____test_16_u64_from_1e10() {
 }
 
 export fn __cm_export____test_17_u64_rejects_negative_scientific() {
-    __test_17_u64_rejects_negative_scientific();
+    __inline___initialize_modules_1: {
+        if __modules_initialized {
+            break __inline___initialize_modules_1;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
+    let r: Result<u64, DeserializeError> = "from_string<u64>"("-1e2");
+    if __variant_test(r, case=1, name=Err) {
+        __variant_payload(r, case=1);
+    } else {
+        core::internal::panic("expected error for -1e2 as u64");
+    }
     cm_raw_call task-return(0);
 }
 

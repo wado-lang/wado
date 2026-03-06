@@ -332,14 +332,18 @@ pub fn "to_string<ApiResponse>"(value: &ApiResponse) -> Result<String, Serialize
 }
 
 pub fn "ApiResponse^Serialize::serialize<JsonSerializer>"(self: &ApiResponse, s: &mut JsonSerializer) -> Result<(), SerializeError> {
-    let mut __result: Result<JsonStructSerializer, SerializeError> = s."JsonSerializer^Serializer::begin_struct"(&"ApiResponse", 2);
+    let mut __result: Result<JsonStructSerializer, SerializeError> = __inline_JsonSerializer_Serializer__begin_struct_0: {
+        let name: &String = &"ApiResponse";
+        s.buf.String::append("{");
+        break __inline_JsonSerializer_Serializer__begin_struct_0: Result<JsonStructSerializer, SerializeError>::Ok(JsonStructSerializer { buf: s.buf, count: 0 });
+    };
     if __variant_test(__result, case=0, name=Ok) {
         let st: JsonStructSerializer = __variant_payload(__result, case=0);
         st."JsonStructSerializer^SerializeStruct::field<i32>"(&"status_code", Box<i32> { value: *self.status_code });
         st."JsonStructSerializer^SerializeStruct::field<String>"(&"data", &*self.response_data);
-        return __inline_JsonStructSerializer_SerializeStruct__end_0: {
+        return __inline_JsonStructSerializer_SerializeStruct__end_1: {
             st.buf.String::append("}");
-            break __inline_JsonStructSerializer_SerializeStruct__end_0: Result<(), SerializeError>::Ok(());
+            break __inline_JsonStructSerializer_SerializeStruct__end_1: Result<(), SerializeError>::Ok(());
         };
     } else {
         return Result<(), SerializeError>::Err(SerializeError { kind: SerializeErrorKind::Custom, message: "begin_struct failed" });

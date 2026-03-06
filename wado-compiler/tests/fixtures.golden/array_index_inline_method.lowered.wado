@@ -112,14 +112,22 @@ fn "Container<String,i32>::is_full"(self: &Container<String,i32>, max_keys: i32)
     let mut count: i32 = 0;
     __for_0: {
         let mut i: i32 = 0;
-        let _licm_keys_5: Array<String> = self.keys;
-        let _licm_deleted_6: Array<bool> = self.deleted;
-        let _licm_used_7: i32 = _licm_keys_5.used;
+        let _licm_keys_7: Array<String> = self.keys;
+        let _licm_deleted_8: Array<bool> = self.deleted;
+        let _licm_used_9: i32 = _licm_keys_7.used;
+        let _licm_used_10: i32 = _licm_deleted_8.used;
+        let _licm_repr_11: builtin::array<bool> = _licm_deleted_8.repr;
         loop {
-            if !(i < _licm_used_7) {
+            if !(i < _licm_used_9) {
                 break __for_0;
             }
-            if !_licm_deleted_6."Array<bool>^IndexValue::index_value"(i) {
+            if !__inline_Array_bool__IndexValue__index_value_1: {
+                let index: i32 = i;
+                if (index >= _licm_used_10) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_bool__IndexValue__index_value_1: core::builtin::array_get::<bool>(_licm_repr_11, index);
+            } {
                 count = (count + 1);
             }
             i = (i + 1);
@@ -128,31 +136,24 @@ fn "Container<String,i32>::is_full"(self: &Container<String,i32>, max_keys: i32)
     return (count >= max_keys);
 }
 
-fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<bool>(self.repr, index);
-}
-
 fn "Container<String,i32>::find_key_index"(self: &Container<String,i32>, key: &String) -> i32 {
     let mut i: i32 = 0;
-    let _licm_keys_4: Array<String> = self.keys;
-    let _licm_used_5: i32 = _licm_keys_4.used;
+    let _licm_keys_6: Array<String> = self.keys;
+    let _licm_used_7: i32 = _licm_keys_6.used;
+    let _licm_repr_8: builtin::array<String> = _licm_keys_6.repr;
     loop {
-        if !((i < _licm_used_5) && (_licm_keys_4."Array<String>^IndexValue::index_value"(i)."String^Ord::cmp"(&*key) == Ordering::Less)) {
+        if !((i < _licm_used_7) && (__inline_Array_String__IndexValue__index_value_1: {
+            let index: i32 = i;
+            if (index >= _licm_used_7) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(_licm_repr_8, index);
+        }."String^Ord::cmp"(&*key) == Ordering::Less)) {
             break;
         }
         i = (i + 1);
     }
     return i;
-}
-
-fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<String>(self.repr, index);
 }
 
 pub fn "Array<bool>::append"(self: &mut Array<bool>, value: bool) {

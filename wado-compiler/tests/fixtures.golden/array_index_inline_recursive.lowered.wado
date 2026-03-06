@@ -109,25 +109,25 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
     self.used = (used + 1);
 }
 
-fn "Array<Node<String>>^IndexValue::index_value"(self: &Array<&mut Node<String>>, index: i32) -> &mut Node<String> {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<&mut Node<String>>(self.repr, index);
-}
-
 fn "Node<String>::traverse"(self: &Node<String>, depth: i32) with Stdout {
     print_depth(depth);
     if !self.is_leaf {
         __for_0: {
             let mut i: i32 = 0;
-            let _licm_children_4: Array<&mut Node<String>> = self.children;
-            let _licm_used_5: i32 = _licm_children_4.used;
+            let _licm_children_6: Array<&mut Node<String>> = self.children;
+            let _licm_used_7: i32 = _licm_children_6.used;
+            let _licm_repr_8: builtin::array<&mut Node<String>> = _licm_children_6.repr;
             loop {
-                if !(i < _licm_used_5) {
+                if !(i < _licm_used_7) {
                     break __for_0;
                 }
-                _licm_children_4."Array<Node<String>>^IndexValue::index_value"(i)."Node<String>::traverse"((depth + 1));
+                __inline_Array_Node_String___IndexValue__index_value_1: {
+                    let index: i32 = i;
+                    if (index >= _licm_used_7) {
+                        core::internal::panic("index out of bounds");
+                    }
+                    break __inline_Array_Node_String___IndexValue__index_value_1: core::builtin::array_get::<&mut Node<String>>(_licm_repr_8, index);
+                }."Node<String>::traverse"((depth + 1));
                 i = (i + 1);
             }
         }

@@ -42,39 +42,74 @@ export fn run() with Stdout {
         self."Array<i32>::append"(100);
         break __seq_lit: *__b;
     };
-    arr."Array<i32>^IndexAssign::index_assign"(2, (other."Array<i32>^IndexValue::index_value"(0) + 50));
-    arr."Array<i32>^IndexAssign::index_assign"(3, ((arr."Array<i32>^IndexValue::index_value"(0) + arr."Array<i32>^IndexValue::index_value"(1)) / 2));
+    arr."Array<i32>^IndexAssign::index_assign"(2, (__inline_Array_i32__IndexValue__index_value_12: {
+        if (0 >= other.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_i32__IndexValue__index_value_12: core::builtin::array_get::<i32>(other.repr, 0);
+    } + 50));
+    arr."Array<i32>^IndexAssign::index_assign"(3, ((__inline_Array_i32__IndexValue__index_value_13: {
+        if (0 >= arr.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_i32__IndexValue__index_value_13: core::builtin::array_get::<i32>(arr.repr, 0);
+    } + __inline_Array_i32__IndexValue__index_value_14: {
+        if (1 >= arr.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_i32__IndexValue__index_value_14: core::builtin::array_get::<i32>(arr.repr, 1);
+    }) / 2));
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(67), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_13: {
-            let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_13: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-        };
-        let self: Box<i32> = Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(0) };
-        let f: &mut Formatter = &mut __f;
-        self.i32::fmt_decimal(f);
-        __r.String::append(" ");
-        __f = __inline_Formatter__new_16: {
+        let mut __f: Formatter = __inline_Formatter__new_16: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        let self: Box<i32> = Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(1) };
+        let self: Box<i32> = Box<i32> { value: __inline_Array_i32__IndexValue__index_value_18: {
+            if (0 >= arr.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_i32__IndexValue__index_value_18: core::builtin::array_get::<i32>(arr.repr, 0);
+        } };
         let f: &mut Formatter = &mut __f;
         self.i32::fmt_decimal(f);
         __r.String::append(" ");
-        __f = __inline_Formatter__new_19: {
+        __f = __inline_Formatter__new_20: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_19: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_20: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        let self: Box<i32> = Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(2) };
+        let self: Box<i32> = Box<i32> { value: __inline_Array_i32__IndexValue__index_value_22: {
+            if (1 >= arr.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_i32__IndexValue__index_value_22: core::builtin::array_get::<i32>(arr.repr, 1);
+        } };
         let f: &mut Formatter = &mut __f;
         self.i32::fmt_decimal(f);
         __r.String::append(" ");
-        __f = __inline_Formatter__new_22: {
+        __f = __inline_Formatter__new_24: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_24: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        let self: Box<i32> = Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(3) };
+        let self: Box<i32> = Box<i32> { value: __inline_Array_i32__IndexValue__index_value_26: {
+            if (2 >= arr.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_i32__IndexValue__index_value_26: core::builtin::array_get::<i32>(arr.repr, 2);
+        } };
+        let f: &mut Formatter = &mut __f;
+        self.i32::fmt_decimal(f);
+        __r.String::append(" ");
+        __f = __inline_Formatter__new_28: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_28: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        let self: Box<i32> = Box<i32> { value: __inline_Array_i32__IndexValue__index_value_30: {
+            if (3 >= arr.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_i32__IndexValue__index_value_30: core::builtin::array_get::<i32>(arr.repr, 3);
+        } };
         let f: &mut Formatter = &mut __f;
         self.i32::fmt_decimal(f);
         break __tmpl: __r;
@@ -84,13 +119,6 @@ export fn run() with Stdout {
 export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
-}
-
-fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<i32>(self.repr, index);
 }
 
 fn "Array<i32>^IndexAssign::index_assign"(self: &mut Array<i32>, index: i32, value: i32) {

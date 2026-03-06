@@ -38,18 +38,28 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        let self: Box<i32> = Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(0).value };
+        let self: Box<i32> = Box<i32> { value: __inline_Array_i32__IndexValue__index_value_9: {
+            if (0 >= arr.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_i32__IndexValue__index_value_9: core::builtin::array_get::<Box<i32>>(arr.repr, 0);
+        }.value };
         let f: &mut Formatter = &mut __f;
         self.i32::fmt_decimal(f);
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_11: {
+        let mut __f: Formatter = __inline_Formatter__new_12: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        let self: Box<i32> = Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(1).value };
+        let self: Box<i32> = Box<i32> { value: __inline_Array_i32__IndexValue__index_value_14: {
+            if (1 >= arr.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_i32__IndexValue__index_value_14: core::builtin::array_get::<Box<i32>>(arr.repr, 1);
+        }.value };
         let f: &mut Formatter = &mut __f;
         self.i32::fmt_decimal(f);
         break __tmpl: __r;
@@ -59,13 +69,6 @@ export fn run() with Stdout {
 export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
-}
-
-fn "Array<i32>^IndexValue::index_value"(self: &Array<Box<i32>>, index: i32) -> Box<i32> {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<Box<i32>>(self.repr, index);
 }
 
 pub fn "Array<i32>::append"(self: &mut Array<Box<i32>>, value: Box<i32>) {

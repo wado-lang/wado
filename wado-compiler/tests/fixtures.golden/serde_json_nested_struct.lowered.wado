@@ -400,14 +400,18 @@ pub fn "to_string<Line>"(value: &Line) -> Result<String, SerializeError> {
 }
 
 pub fn "Line^Serialize::serialize<JsonSerializer>"(self: &Line, s: &mut JsonSerializer) -> Result<(), SerializeError> {
-    let mut __result: Result<JsonStructSerializer, SerializeError> = s."JsonSerializer^Serializer::begin_struct"(&"Line", 2);
+    let mut __result: Result<JsonStructSerializer, SerializeError> = __inline_JsonSerializer_Serializer__begin_struct_0: {
+        let name: &String = &"Line";
+        s.buf.String::append("{");
+        break __inline_JsonSerializer_Serializer__begin_struct_0: Result<JsonStructSerializer, SerializeError>::Ok(JsonStructSerializer { buf: s.buf, count: 0 });
+    };
     if __variant_test(__result, case=0, name=Ok) {
         let st: JsonStructSerializer = __variant_payload(__result, case=0);
         st."JsonStructSerializer^SerializeStruct::field<Point>"(&"startPoint", &*self.start_point);
         st."JsonStructSerializer^SerializeStruct::field<Point>"(&"endPoint", &*self.end_point);
-        return __inline_JsonStructSerializer_SerializeStruct__end_0: {
+        return __inline_JsonStructSerializer_SerializeStruct__end_1: {
             st.buf.String::append("}");
-            break __inline_JsonStructSerializer_SerializeStruct__end_0: Result<(), SerializeError>::Ok(());
+            break __inline_JsonStructSerializer_SerializeStruct__end_1: Result<(), SerializeError>::Ok(());
         };
     } else {
         return Result<(), SerializeError>::Err(SerializeError { kind: SerializeErrorKind::Custom, message: "begin_struct failed" });
@@ -428,14 +432,18 @@ fn "JsonStructSerializer^SerializeStruct::field<Point>"(self: &mut JsonStructSer
 }
 
 pub fn "Point^Serialize::serialize<JsonSerializer>"(self: &Point, s: &mut JsonSerializer) -> Result<(), SerializeError> {
-    let mut __result: Result<JsonStructSerializer, SerializeError> = s."JsonSerializer^Serializer::begin_struct"(&"Point", 2);
+    let mut __result: Result<JsonStructSerializer, SerializeError> = __inline_JsonSerializer_Serializer__begin_struct_0: {
+        let name: &String = &"Point";
+        s.buf.String::append("{");
+        break __inline_JsonSerializer_Serializer__begin_struct_0: Result<JsonStructSerializer, SerializeError>::Ok(JsonStructSerializer { buf: s.buf, count: 0 });
+    };
     if __variant_test(__result, case=0, name=Ok) {
         let st: JsonStructSerializer = __variant_payload(__result, case=0);
         st."JsonStructSerializer^SerializeStruct::field<f64>"(&"x", Box<f64> { value: *self.x });
         st."JsonStructSerializer^SerializeStruct::field<f64>"(&"y", Box<f64> { value: *self.y });
-        return __inline_JsonStructSerializer_SerializeStruct__end_0: {
+        return __inline_JsonStructSerializer_SerializeStruct__end_1: {
             st.buf.String::append("}");
-            break __inline_JsonStructSerializer_SerializeStruct__end_0: Result<(), SerializeError>::Ok(());
+            break __inline_JsonStructSerializer_SerializeStruct__end_1: Result<(), SerializeError>::Ok(());
         };
     } else {
         return Result<(), SerializeError>::Err(SerializeError { kind: SerializeErrorKind::Custom, message: "begin_struct failed" });

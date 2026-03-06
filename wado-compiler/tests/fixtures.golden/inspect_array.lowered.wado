@@ -145,27 +145,27 @@ pub fn "Array<Point>^Inspect::inspect"(self: &Array<Point>, f: &mut Formatter) {
     f.buf.String::append_char('[');
     __for_5: {
         let mut i: i32 = 0;
-        let _licm_used_10: i32 = self.used;
+        let _licm_used_12: i32 = self.used;
+        let _licm_repr_13: builtin::array<Point> = self.repr;
         loop {
-            if !(i < _licm_used_10) {
+            if !(i < _licm_used_12) {
                 break __for_5;
             }
             if (i > 0) {
                 let s: String = ", ";
                 f.buf.String::append(s);
             }
-            self."Array<Point>^IndexValue::index_value"(i)."Point^Inspect::inspect"(f);
+            __inline_Array_Point__IndexValue__index_value_3: {
+                let index: i32 = i;
+                if (index >= _licm_used_12) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_Point__IndexValue__index_value_3: core::builtin::array_get::<Point>(_licm_repr_13, index);
+            }."Point^Inspect::inspect"(f);
             i = (i + 1);
         }
     }
     f.buf.String::append_char(']');
-}
-
-fn "Array<Point>^IndexValue::index_value"(self: &Array<Point>, index: i32) -> Point {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<Point>(self.repr, index);
 }
 
 pub fn "Array<Point>::append"(self: &mut Array<Point>, value: Point) {
@@ -188,28 +188,28 @@ pub fn "Array<i32>^Inspect::inspect"(self: &Array<i32>, f: &mut Formatter) {
     f.buf.String::append_char('[');
     __for_5: {
         let mut i: i32 = 0;
-        let _licm_used_14: i32 = self.used;
+        let _licm_used_16: i32 = self.used;
+        let _licm_repr_17: builtin::array<i32> = self.repr;
         loop {
-            if !(i < _licm_used_14) {
+            if !(i < _licm_used_16) {
                 break __for_5;
             }
             if (i > 0) {
                 let s: String = ", ";
                 f.buf.String::append(s);
             }
-            let self: Box<i32> = Box<i32> { value: self."Array<i32>^IndexValue::index_value"(i) };
+            let self: Box<i32> = Box<i32> { value: __inline_Array_i32__IndexValue__index_value_4: {
+                let index: i32 = i;
+                if (index >= _licm_used_16) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_i32__IndexValue__index_value_4: core::builtin::array_get::<i32>(_licm_repr_17, index);
+            } };
             self.i32::fmt_decimal(f);
             i = (i + 1);
         }
     }
     f.buf.String::append_char(']');
-}
-
-fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<i32>(self.repr, index);
 }
 
 pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {

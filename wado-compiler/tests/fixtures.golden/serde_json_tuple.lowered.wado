@@ -200,14 +200,17 @@ pub fn "to_string<Tuple<f64,f64>>"(value: &[f64, f64]) -> Result<String, Seriali
 }
 
 pub fn "Tuple<f64,f64>^Serialize::serialize<JsonSerializer>"(self: &[f64, f64], s: &mut JsonSerializer) -> Result<(), SerializeError> {
-    let mut __result: Result<JsonSeqSerializer, SerializeError> = s."JsonSerializer^Serializer::begin_seq"(2);
+    let mut __result: Result<JsonSeqSerializer, SerializeError> = __inline_JsonSerializer_Serializer__begin_seq_0: {
+        s.buf.String::append("[");
+        break __inline_JsonSerializer_Serializer__begin_seq_0: Result<JsonSeqSerializer, SerializeError>::Ok(JsonSeqSerializer { buf: s.buf, count: 0 });
+    };
     if __variant_test(__result, case=0, name=Ok) {
         let seq: JsonSeqSerializer = __variant_payload(__result, case=0);
         seq."JsonSeqSerializer^SerializeSeq::element<f64>"(Box<f64> { value: *self.0 });
         seq."JsonSeqSerializer^SerializeSeq::element<f64>"(Box<f64> { value: *self.1 });
-        return __inline_JsonSeqSerializer_SerializeSeq__end_0: {
+        return __inline_JsonSeqSerializer_SerializeSeq__end_1: {
             seq.buf.String::append("]");
-            break __inline_JsonSeqSerializer_SerializeSeq__end_0: Result<(), SerializeError>::Ok(());
+            break __inline_JsonSeqSerializer_SerializeSeq__end_1: Result<(), SerializeError>::Ok(());
         };
     } else {
         return Result<(), SerializeError>::Err(SerializeError { kind: SerializeErrorKind::Custom, message: "begin_seq failed" });
@@ -388,14 +391,17 @@ pub fn "to_string<Tuple<i32,String>>"(value: &[i32, String]) -> Result<String, S
 }
 
 pub fn "Tuple<i32,String>^Serialize::serialize<JsonSerializer>"(self: &[i32, String], s: &mut JsonSerializer) -> Result<(), SerializeError> {
-    let mut __result: Result<JsonSeqSerializer, SerializeError> = s."JsonSerializer^Serializer::begin_seq"(2);
+    let mut __result: Result<JsonSeqSerializer, SerializeError> = __inline_JsonSerializer_Serializer__begin_seq_0: {
+        s.buf.String::append("[");
+        break __inline_JsonSerializer_Serializer__begin_seq_0: Result<JsonSeqSerializer, SerializeError>::Ok(JsonSeqSerializer { buf: s.buf, count: 0 });
+    };
     if __variant_test(__result, case=0, name=Ok) {
         let seq: JsonSeqSerializer = __variant_payload(__result, case=0);
         seq."JsonSeqSerializer^SerializeSeq::element<i32>"(Box<i32> { value: *self.0 });
         seq."JsonSeqSerializer^SerializeSeq::element<String>"(&*self.1);
-        return __inline_JsonSeqSerializer_SerializeSeq__end_0: {
+        return __inline_JsonSeqSerializer_SerializeSeq__end_1: {
             seq.buf.String::append("]");
-            break __inline_JsonSeqSerializer_SerializeSeq__end_0: Result<(), SerializeError>::Ok(());
+            break __inline_JsonSeqSerializer_SerializeSeq__end_1: Result<(), SerializeError>::Ok(());
         };
     } else {
         return Result<(), SerializeError>::Err(SerializeError { kind: SerializeErrorKind::Custom, message: "begin_seq failed" });
@@ -441,15 +447,18 @@ pub fn "to_string<Tuple<i32,String,bool>>"(value: &[i32, String, bool]) -> Resul
 }
 
 pub fn "Tuple<i32,String,bool>^Serialize::serialize<JsonSerializer>"(self: &[i32, String, bool], s: &mut JsonSerializer) -> Result<(), SerializeError> {
-    let mut __result: Result<JsonSeqSerializer, SerializeError> = s."JsonSerializer^Serializer::begin_seq"(3);
+    let mut __result: Result<JsonSeqSerializer, SerializeError> = __inline_JsonSerializer_Serializer__begin_seq_0: {
+        s.buf.String::append("[");
+        break __inline_JsonSerializer_Serializer__begin_seq_0: Result<JsonSeqSerializer, SerializeError>::Ok(JsonSeqSerializer { buf: s.buf, count: 0 });
+    };
     if __variant_test(__result, case=0, name=Ok) {
         let seq: JsonSeqSerializer = __variant_payload(__result, case=0);
         seq."JsonSeqSerializer^SerializeSeq::element<i32>"(Box<i32> { value: *self.0 });
         seq."JsonSeqSerializer^SerializeSeq::element<String>"(&*self.1);
         seq."JsonSeqSerializer^SerializeSeq::element<bool>"(Box<bool> { value: *self.2 });
-        return __inline_JsonSeqSerializer_SerializeSeq__end_0: {
+        return __inline_JsonSeqSerializer_SerializeSeq__end_1: {
             seq.buf.String::append("]");
-            break __inline_JsonSeqSerializer_SerializeSeq__end_0: Result<(), SerializeError>::Ok(());
+            break __inline_JsonSeqSerializer_SerializeSeq__end_1: Result<(), SerializeError>::Ok(());
         };
     } else {
         return Result<(), SerializeError>::Err(SerializeError { kind: SerializeErrorKind::Custom, message: "begin_seq failed" });

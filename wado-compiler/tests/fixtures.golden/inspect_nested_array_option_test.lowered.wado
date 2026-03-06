@@ -55,27 +55,27 @@ pub fn "Array<Option<i32>>^Inspect::inspect"(self: &Array<Option<i32>>, f: &mut 
     f.buf.String::append_char('[');
     __for_5: {
         let mut i: i32 = 0;
-        let _licm_used_10: i32 = self.used;
+        let _licm_used_12: i32 = self.used;
+        let _licm_repr_13: builtin::array<Option<i32>> = self.repr;
         loop {
-            if !(i < _licm_used_10) {
+            if !(i < _licm_used_12) {
                 break __for_5;
             }
             if (i > 0) {
                 let s: String = ", ";
                 f.buf.String::append(s);
             }
-            Box<Option<i32>> { value: self."Array<Option<i32>>^IndexValue::index_value"(i) }."Option<i32>^Inspect::inspect"(f);
+            Box<Option<i32>> { value: __inline_Array_Option_i32___IndexValue__index_value_3: {
+                let index: i32 = i;
+                if (index >= _licm_used_12) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_Option_i32___IndexValue__index_value_3: core::builtin::array_get::<Option<i32>>(_licm_repr_13, index);
+            } }."Option<i32>^Inspect::inspect"(f);
             i = (i + 1);
         }
     }
     f.buf.String::append_char(']');
-}
-
-fn "Array<Option<i32>>^IndexValue::index_value"(self: &Array<Option<i32>>, index: i32) -> Option<i32> {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<Option<i32>>(self.repr, index);
 }
 
 pub fn "Option<i32>^Inspect::inspect"(self: Box<Option<i32>>, f: &mut Formatter) {

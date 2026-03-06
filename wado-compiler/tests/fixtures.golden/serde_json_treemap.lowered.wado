@@ -1308,12 +1308,18 @@ fn "ArrayIter<TreeMapEntry<String,Option<i32>>>^Iterator::next"(self: &mut Array
 fn "TreeMap<String,Option<i32>>::insert"(self: &mut TreeMap<String,Option<i32>>, key: String, value: Option<i32>) {
     let existing_index: i32 = self."TreeMap<String,Option<i32>>::find_index"(key);
     if (existing_index >= 0) {
-        self.entries."Array<TreeMapEntry<String,Option<i32>>>^IndexValue::index_value"(existing_index).value = value;
+        __inline_Array_TreeMapEntry_String_Option_i32____IndexValue__index_value_0: {
+            let self: &Array<TreeMapEntry<String,Option<i32>>> = &self.entries;
+            if (existing_index >= self.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_TreeMapEntry_String_Option_i32____IndexValue__index_value_0: core::builtin::array_get::<TreeMapEntry<String,Option<i32>>>(self.repr, existing_index);
+        }.value = value;
         return;
     }
-    let new_index: i32 = __inline_Array_TreeMapEntry_String_Option_i32_____len_0: {
+    let new_index: i32 = __inline_Array_TreeMapEntry_String_Option_i32_____len_1: {
         let self: &Array<TreeMapEntry<String,Option<i32>>> = &self.entries;
-        break __inline_Array_TreeMapEntry_String_Option_i32_____len_0: self.used;
+        break __inline_Array_TreeMapEntry_String_Option_i32_____len_1: self.used;
     };
     let entry: TreeMapEntry<String,Option<i32>> = TreeMapEntry<String,Option<i32>> { key: key, value: value, deleted: false };
     self.entries."Array<TreeMapEntry<String,Option<i32>>>::append"(entry);
@@ -1395,22 +1401,23 @@ pub fn "Array<TreeMapEntry<String,Option<i32>>>::append"(self: &mut Array<TreeMa
     self.used = (used + 1);
 }
 
-fn "Array<TreeMapEntry<String,Option<i32>>>^IndexValue::index_value"(self: &Array<TreeMapEntry<String,Option<i32>>>, index: i32) -> TreeMapEntry<String,Option<i32>> {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<TreeMapEntry<String,Option<i32>>>(self.repr, index);
-}
-
 fn "TreeMap<String,Option<i32>>::find_index"(self: &TreeMap<String,Option<i32>>, key: String) -> i32 {
     let mut current: Option<&mut TreeMapNode<String>> = self.root;
-    let _licm_entries_6: Array<TreeMapEntry<String,Option<i32>>> = self.entries;
+    let _licm_entries_8: Array<TreeMapEntry<String,Option<i32>>> = self.entries;
+    let _licm_used_9: i32 = _licm_entries_8.used;
+    let _licm_repr_10: builtin::array<TreeMapEntry<String,Option<i32>>> = _licm_entries_8.repr;
     loop {
         let __pattern_temp_0: Option<&mut TreeMapNode<String>> = current;
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
             let n: &mut TreeMapNode<String> = __variant_payload(__pattern_temp_0, case=0);
             if key."String^Eq::eq"(&n.key) {
-                let entry: &TreeMapEntry<String,Option<i32>> = &_licm_entries_6."Array<TreeMapEntry<String,Option<i32>>>^IndexValue::index_value"(n.index);
+                let entry: &TreeMapEntry<String,Option<i32>> = &__inline_Array_TreeMapEntry_String_Option_i32____IndexValue__index_value_0: {
+                    let index: i32 = n.index;
+                    if (index >= _licm_used_9) {
+                        core::internal::panic("index out of bounds");
+                    }
+                    break __inline_Array_TreeMapEntry_String_Option_i32____IndexValue__index_value_0: core::builtin::array_get::<TreeMapEntry<String,Option<i32>>>(_licm_repr_10, index);
+                };
                 if entry.deleted {
                     return -1;
                 }
@@ -1488,13 +1495,17 @@ fn "JsonMapSerializer^SerializeMap::value<Array<i32>>"(self: &mut JsonMapSeriali
 }
 
 fn "Array<i32>^Serialize::serialize<JsonSerializer>"(self: &Array<i32>, s: &mut JsonSerializer) -> Result<(), SerializeError> {
-    let seq: Result<JsonSeqSerializer, SerializeError> = s."JsonSerializer^Serializer::begin_seq"(self.used);
+    let seq: Result<JsonSeqSerializer, SerializeError> = __inline_JsonSerializer_Serializer__begin_seq_0: {
+        let len: i32 = self.used;
+        s.buf.String::append("[");
+        break __inline_JsonSerializer_Serializer__begin_seq_0: Result<JsonSeqSerializer, SerializeError>::Ok(JsonSeqSerializer { buf: s.buf, count: 0 });
+    };
     let __pattern_temp_0: Result<JsonSeqSerializer, SerializeError> = seq;
     if __variant_test(__pattern_temp_0, case=0, name=Ok) {
         let seq: JsonSeqSerializer = __variant_payload(__pattern_temp_0, case=0);
-        let mut __iter_0: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_1: {
+        let mut __iter_0: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_2: {
             let self: &Array<i32> = &*self;
-            break __inline_Array_i32__IntoIterator__into_iter_1: ArrayIter<i32> { repr: self.repr, used: self.used, index: 0 };
+            break __inline_Array_i32__IntoIterator__into_iter_2: ArrayIter<i32> { repr: self.repr, used: self.used, index: 0 };
         };
         loop {
             let __pattern_temp_1: Option<i32> = __iter_0."ArrayIter<i32>^Iterator::next"();
@@ -1509,9 +1520,9 @@ fn "Array<i32>^Serialize::serialize<JsonSerializer>"(self: &Array<i32>, s: &mut 
                 break;
             }
         }
-        return __inline_JsonSeqSerializer_SerializeSeq__end_2: {
+        return __inline_JsonSeqSerializer_SerializeSeq__end_3: {
             seq.buf.String::append("]");
-            break __inline_JsonSeqSerializer_SerializeSeq__end_2: Result<(), SerializeError>::Ok(());
+            break __inline_JsonSeqSerializer_SerializeSeq__end_3: Result<(), SerializeError>::Ok(());
         };
     }
     let __pattern_temp_3: Result<JsonSeqSerializer, SerializeError> = seq;
@@ -1621,12 +1632,18 @@ pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
 fn "TreeMap<String,Array<i32>>::insert"(self: &mut TreeMap<String,Array<i32>>, key: String, value: Array<i32>) {
     let existing_index: i32 = self."TreeMap<String,Array<i32>>::find_index"(key);
     if (existing_index >= 0) {
-        self.entries."Array<TreeMapEntry<String,Array<i32>>>^IndexValue::index_value"(existing_index).value = value;
+        __inline_Array_TreeMapEntry_String_Array_i32____IndexValue__index_value_0: {
+            let self: &Array<TreeMapEntry<String,Array<i32>>> = &self.entries;
+            if (existing_index >= self.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_TreeMapEntry_String_Array_i32____IndexValue__index_value_0: core::builtin::array_get::<TreeMapEntry<String,Array<i32>>>(self.repr, existing_index);
+        }.value = value;
         return;
     }
-    let new_index: i32 = __inline_Array_TreeMapEntry_String_Array_i32_____len_0: {
+    let new_index: i32 = __inline_Array_TreeMapEntry_String_Array_i32_____len_1: {
         let self: &Array<TreeMapEntry<String,Array<i32>>> = &self.entries;
-        break __inline_Array_TreeMapEntry_String_Array_i32_____len_0: self.used;
+        break __inline_Array_TreeMapEntry_String_Array_i32_____len_1: self.used;
     };
     let entry: TreeMapEntry<String,Array<i32>> = TreeMapEntry<String,Array<i32>> { key: key, value: value, deleted: false };
     self.entries."Array<TreeMapEntry<String,Array<i32>>>::append"(entry);
@@ -1708,22 +1725,23 @@ pub fn "Array<TreeMapEntry<String,Array<i32>>>::append"(self: &mut Array<TreeMap
     self.used = (used + 1);
 }
 
-fn "Array<TreeMapEntry<String,Array<i32>>>^IndexValue::index_value"(self: &Array<TreeMapEntry<String,Array<i32>>>, index: i32) -> TreeMapEntry<String,Array<i32>> {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<TreeMapEntry<String,Array<i32>>>(self.repr, index);
-}
-
 fn "TreeMap<String,Array<i32>>::find_index"(self: &TreeMap<String,Array<i32>>, key: String) -> i32 {
     let mut current: Option<&mut TreeMapNode<String>> = self.root;
-    let _licm_entries_6: Array<TreeMapEntry<String,Array<i32>>> = self.entries;
+    let _licm_entries_8: Array<TreeMapEntry<String,Array<i32>>> = self.entries;
+    let _licm_used_9: i32 = _licm_entries_8.used;
+    let _licm_repr_10: builtin::array<TreeMapEntry<String,Array<i32>>> = _licm_entries_8.repr;
     loop {
         let __pattern_temp_0: Option<&mut TreeMapNode<String>> = current;
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
             let n: &mut TreeMapNode<String> = __variant_payload(__pattern_temp_0, case=0);
             if key."String^Eq::eq"(&n.key) {
-                let entry: &TreeMapEntry<String,Array<i32>> = &_licm_entries_6."Array<TreeMapEntry<String,Array<i32>>>^IndexValue::index_value"(n.index);
+                let entry: &TreeMapEntry<String,Array<i32>> = &__inline_Array_TreeMapEntry_String_Array_i32____IndexValue__index_value_0: {
+                    let index: i32 = n.index;
+                    if (index >= _licm_used_9) {
+                        core::internal::panic("index out of bounds");
+                    }
+                    break __inline_Array_TreeMapEntry_String_Array_i32____IndexValue__index_value_0: core::builtin::array_get::<TreeMapEntry<String,Array<i32>>>(_licm_repr_10, index);
+                };
                 if entry.deleted {
                     return -1;
                 }
@@ -1863,12 +1881,18 @@ fn "ArrayIter<TreeMapEntry<String,bool>>^Iterator::next"(self: &mut ArrayIter<Tr
 fn "TreeMap<String,bool>::insert"(self: &mut TreeMap<String,bool>, key: String, value: bool) {
     let existing_index: i32 = self."TreeMap<String,bool>::find_index"(key);
     if (existing_index >= 0) {
-        self.entries."Array<TreeMapEntry<String,bool>>^IndexValue::index_value"(existing_index).value = value;
+        __inline_Array_TreeMapEntry_String_bool___IndexValue__index_value_0: {
+            let self: &Array<TreeMapEntry<String,bool>> = &self.entries;
+            if (existing_index >= self.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_TreeMapEntry_String_bool___IndexValue__index_value_0: core::builtin::array_get::<TreeMapEntry<String,bool>>(self.repr, existing_index);
+        }.value = value;
         return;
     }
-    let new_index: i32 = __inline_Array_TreeMapEntry_String_bool____len_0: {
+    let new_index: i32 = __inline_Array_TreeMapEntry_String_bool____len_1: {
         let self: &Array<TreeMapEntry<String,bool>> = &self.entries;
-        break __inline_Array_TreeMapEntry_String_bool____len_0: self.used;
+        break __inline_Array_TreeMapEntry_String_bool____len_1: self.used;
     };
     let entry: TreeMapEntry<String,bool> = TreeMapEntry<String,bool> { key: key, value: value, deleted: false };
     self.entries."Array<TreeMapEntry<String,bool>>::append"(entry);
@@ -1950,22 +1974,23 @@ pub fn "Array<TreeMapEntry<String,bool>>::append"(self: &mut Array<TreeMapEntry<
     self.used = (used + 1);
 }
 
-fn "Array<TreeMapEntry<String,bool>>^IndexValue::index_value"(self: &Array<TreeMapEntry<String,bool>>, index: i32) -> TreeMapEntry<String,bool> {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<TreeMapEntry<String,bool>>(self.repr, index);
-}
-
 fn "TreeMap<String,bool>::find_index"(self: &TreeMap<String,bool>, key: String) -> i32 {
     let mut current: Option<&mut TreeMapNode<String>> = self.root;
-    let _licm_entries_6: Array<TreeMapEntry<String,bool>> = self.entries;
+    let _licm_entries_8: Array<TreeMapEntry<String,bool>> = self.entries;
+    let _licm_used_9: i32 = _licm_entries_8.used;
+    let _licm_repr_10: builtin::array<TreeMapEntry<String,bool>> = _licm_entries_8.repr;
     loop {
         let __pattern_temp_0: Option<&mut TreeMapNode<String>> = current;
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
             let n: &mut TreeMapNode<String> = __variant_payload(__pattern_temp_0, case=0);
             if key."String^Eq::eq"(&n.key) {
-                let entry: &TreeMapEntry<String,bool> = &_licm_entries_6."Array<TreeMapEntry<String,bool>>^IndexValue::index_value"(n.index);
+                let entry: &TreeMapEntry<String,bool> = &__inline_Array_TreeMapEntry_String_bool___IndexValue__index_value_0: {
+                    let index: i32 = n.index;
+                    if (index >= _licm_used_9) {
+                        core::internal::panic("index out of bounds");
+                    }
+                    break __inline_Array_TreeMapEntry_String_bool___IndexValue__index_value_0: core::builtin::array_get::<TreeMapEntry<String,bool>>(_licm_repr_10, index);
+                };
                 if entry.deleted {
                     return -1;
                 }
@@ -2105,12 +2130,18 @@ fn "ArrayIter<TreeMapEntry<String,String>>^Iterator::next"(self: &mut ArrayIter<
 fn "TreeMap<String,String>::insert"(self: &mut TreeMap<String,String>, key: String, value: String) {
     let existing_index: i32 = self."TreeMap<String,String>::find_index"(key);
     if (existing_index >= 0) {
-        self.entries."Array<TreeMapEntry<String,String>>^IndexValue::index_value"(existing_index).value = value;
+        __inline_Array_TreeMapEntry_String_String___IndexValue__index_value_0: {
+            let self: &Array<TreeMapEntry<String,String>> = &self.entries;
+            if (existing_index >= self.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_TreeMapEntry_String_String___IndexValue__index_value_0: core::builtin::array_get::<TreeMapEntry<String,String>>(self.repr, existing_index);
+        }.value = value;
         return;
     }
-    let new_index: i32 = __inline_Array_TreeMapEntry_String_String____len_0: {
+    let new_index: i32 = __inline_Array_TreeMapEntry_String_String____len_1: {
         let self: &Array<TreeMapEntry<String,String>> = &self.entries;
-        break __inline_Array_TreeMapEntry_String_String____len_0: self.used;
+        break __inline_Array_TreeMapEntry_String_String____len_1: self.used;
     };
     let entry: TreeMapEntry<String,String> = TreeMapEntry<String,String> { key: key, value: value, deleted: false };
     self.entries."Array<TreeMapEntry<String,String>>::append"(entry);
@@ -2192,22 +2223,23 @@ pub fn "Array<TreeMapEntry<String,String>>::append"(self: &mut Array<TreeMapEntr
     self.used = (used + 1);
 }
 
-fn "Array<TreeMapEntry<String,String>>^IndexValue::index_value"(self: &Array<TreeMapEntry<String,String>>, index: i32) -> TreeMapEntry<String,String> {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<TreeMapEntry<String,String>>(self.repr, index);
-}
-
 fn "TreeMap<String,String>::find_index"(self: &TreeMap<String,String>, key: String) -> i32 {
     let mut current: Option<&mut TreeMapNode<String>> = self.root;
-    let _licm_entries_6: Array<TreeMapEntry<String,String>> = self.entries;
+    let _licm_entries_8: Array<TreeMapEntry<String,String>> = self.entries;
+    let _licm_used_9: i32 = _licm_entries_8.used;
+    let _licm_repr_10: builtin::array<TreeMapEntry<String,String>> = _licm_entries_8.repr;
     loop {
         let __pattern_temp_0: Option<&mut TreeMapNode<String>> = current;
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
             let n: &mut TreeMapNode<String> = __variant_payload(__pattern_temp_0, case=0);
             if key."String^Eq::eq"(&n.key) {
-                let entry: &TreeMapEntry<String,String> = &_licm_entries_6."Array<TreeMapEntry<String,String>>^IndexValue::index_value"(n.index);
+                let entry: &TreeMapEntry<String,String> = &__inline_Array_TreeMapEntry_String_String___IndexValue__index_value_0: {
+                    let index: i32 = n.index;
+                    if (index >= _licm_used_9) {
+                        core::internal::panic("index out of bounds");
+                    }
+                    break __inline_Array_TreeMapEntry_String_String___IndexValue__index_value_0: core::builtin::array_get::<TreeMapEntry<String,String>>(_licm_repr_10, index);
+                };
                 if entry.deleted {
                     return -1;
                 }
@@ -2239,25 +2271,32 @@ fn "TreeMap<String,i32>^IndexValue::index_value"(self: &TreeMap<String,i32>, key
             break __tmpl: __r;
         });
     }
-    return self.entries."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(index).value;
-}
-
-fn "Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(self: &Array<TreeMapEntry<String,i32>>, index: i32) -> TreeMapEntry<String,i32> {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<TreeMapEntry<String,i32>>(self.repr, index);
+    return __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_2: {
+        let self: &Array<TreeMapEntry<String,i32>> = &self.entries;
+        if (index >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_2: core::builtin::array_get::<TreeMapEntry<String,i32>>(self.repr, index);
+    }.value;
 }
 
 fn "TreeMap<String,i32>::find_index"(self: &TreeMap<String,i32>, key: String) -> i32 {
     let mut current: Option<&mut TreeMapNode<String>> = self.root;
-    let _licm_entries_6: Array<TreeMapEntry<String,i32>> = self.entries;
+    let _licm_entries_8: Array<TreeMapEntry<String,i32>> = self.entries;
+    let _licm_used_9: i32 = _licm_entries_8.used;
+    let _licm_repr_10: builtin::array<TreeMapEntry<String,i32>> = _licm_entries_8.repr;
     loop {
         let __pattern_temp_0: Option<&mut TreeMapNode<String>> = current;
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
             let n: &mut TreeMapNode<String> = __variant_payload(__pattern_temp_0, case=0);
             if key."String^Eq::eq"(&n.key) {
-                let entry: &TreeMapEntry<String,i32> = &_licm_entries_6."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(n.index);
+                let entry: &TreeMapEntry<String,i32> = &__inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_0: {
+                    let index: i32 = n.index;
+                    if (index >= _licm_used_9) {
+                        core::internal::panic("index out of bounds");
+                    }
+                    break __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_0: core::builtin::array_get::<TreeMapEntry<String,i32>>(_licm_repr_10, index);
+                };
                 if entry.deleted {
                     return -1;
                 }
@@ -2358,12 +2397,18 @@ fn "TreeMap<String,i32>^Deserialize::deserialize<JsonDeserializer>"(d: &mut Json
 fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, value: i32) {
     let existing_index: i32 = self."TreeMap<String,i32>::find_index"(key);
     if (existing_index >= 0) {
-        self.entries."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(existing_index).value = value;
+        __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_0: {
+            let self: &Array<TreeMapEntry<String,i32>> = &self.entries;
+            if (existing_index >= self.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_0: core::builtin::array_get::<TreeMapEntry<String,i32>>(self.repr, existing_index);
+        }.value = value;
         return;
     }
-    let new_index: i32 = __inline_Array_TreeMapEntry_String_i32____len_0: {
+    let new_index: i32 = __inline_Array_TreeMapEntry_String_i32____len_1: {
         let self: &Array<TreeMapEntry<String,i32>> = &self.entries;
-        break __inline_Array_TreeMapEntry_String_i32____len_0: self.used;
+        break __inline_Array_TreeMapEntry_String_i32____len_1: self.used;
     };
     let entry: TreeMapEntry<String,i32> = TreeMapEntry<String,i32> { key: key, value: value, deleted: false };
     self.entries."Array<TreeMapEntry<String,i32>>::append"(entry);

@@ -69,11 +69,6 @@ fn "JsonSerializer^Serializer::serialize_bool"(self: &mut JsonSerializer, v: boo
     return Result<(), SerializeError>::Ok(());
 }
 
-fn "JsonSerializer^Serializer::begin_struct"(self: &mut JsonSerializer, name: &String, fields: i32) -> Result<JsonStructSerializer, SerializeError> {
-    self.buf.String::append("{");
-    return Result<JsonStructSerializer, SerializeError>::Ok(JsonStructSerializer { ser: *self, count: 0 });
-}
-
 export fn run() with Stdout {
     __inline___initialize_modules_0: {
         if __modules_initialized {
@@ -93,15 +88,19 @@ export fn __cm_export__run() {
 }
 
 fn "User^Serialize::serialize<JsonSerializer>"(self: &User, s: &mut JsonSerializer) -> Result<(), SerializeError> {
-    let mut st: Result<JsonStructSerializer, SerializeError> = s."JsonSerializer^Serializer::begin_struct"("User", 3);
+    let mut st: Result<JsonStructSerializer, SerializeError> = __inline_JsonSerializer_Serializer__begin_struct_0: {
+        let name: String = "User";
+        s.buf.String::append("{");
+        break __inline_JsonSerializer_Serializer__begin_struct_0: Result<JsonStructSerializer, SerializeError>::Ok(JsonStructSerializer { ser: *s, count: 0 });
+    };
     if __variant_test(st, case=0, name=Ok) {
         let st: JsonStructSerializer = __variant_payload(st, case=0);
         st."JsonStructSerializer^SerializeStruct::field<String>"("userName", &self.name);
         st."JsonStructSerializer^SerializeStruct::field<i32>"("age", Box<i32> { value: self.age });
         st."JsonStructSerializer^SerializeStruct::field<bool>"("active", Box<bool> { value: self.active });
-        return __inline_JsonStructSerializer_SerializeStruct__end_0: {
+        return __inline_JsonStructSerializer_SerializeStruct__end_1: {
             st.ser.buf.String::append("}");
-            break __inline_JsonStructSerializer_SerializeStruct__end_0: Result<(), SerializeError>::Ok(());
+            break __inline_JsonStructSerializer_SerializeStruct__end_1: Result<(), SerializeError>::Ok(());
         };
     }
     return Result<(), SerializeError>::Err(SerializeError { message: "begin_struct failed" });

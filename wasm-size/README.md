@@ -36,7 +36,7 @@ Compares WebAssembly binary sizes across different languages.
 
 | Language       | Size (bytes) |
 | -------------- | -----------: |
-| wado           |       10,537 |
+| wado           |        9,062 |
 | zig            |       10,608 |
 | assemblyscript |       11,372 |
 | c              |       14,275 |
@@ -50,7 +50,7 @@ Reads gzip data from stdin and decompresses it.
 
 | Language | Size (bytes) | Notes                                  |
 | -------- | -----------: | -------------------------------------- |
-| wado     |       14,295 | stdin + gzip decompress (core:zlib)    |
+| wado     |       18,393 | stdin + gzip decompress (core:zlib)    |
 | zig      |       20,072 | stdin + gzip decompress (std.compress) |
 | c        |       30,215 | stdin + gzip decompress (zlib 1.3.1)   |
 | rust     |       87,534 | stdin + gzip decompress (zlib-rs 0.6)  |

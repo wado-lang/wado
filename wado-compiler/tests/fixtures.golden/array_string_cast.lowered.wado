@@ -34,9 +34,19 @@ export fn run() with Stdout {
     };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(33), used: 0 };
-        __r.String::append(names."Array<String>^IndexValue::index_value"(0));
+        __r.String::append(__inline_Array_String__IndexValue__index_value_7: {
+            if (0 >= names.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_String__IndexValue__index_value_7: core::builtin::array_get::<String>(names.repr, 0);
+        });
         __r.String::append(" ");
-        __r.String::append(names."Array<String>^IndexValue::index_value"(1));
+        __r.String::append(__inline_Array_String__IndexValue__index_value_8: {
+            if (1 >= names.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_String__IndexValue__index_value_8: core::builtin::array_get::<String>(names.repr, 1);
+        });
         break __tmpl: __r;
     });
 }
@@ -60,12 +70,5 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
     }
     core::builtin::array_set::<String>(self.repr, used, value);
     self.used = (used + 1);
-}
-
-fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<String>(self.repr, index);
 }
 
