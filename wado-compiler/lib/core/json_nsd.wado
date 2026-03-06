@@ -546,47 +546,33 @@ impl Deserializer for NsdDeserializer {
         if b == '[' as i32 {
             // Payload variant: [disc, payload]
             self.de.pos += 1;
-            let start = self.de.pos as i64;
-            let raw_r = self.de.read_number_raw();
-            if let Ok(raw) = raw_r {
-                let disc_r = self.de.parse_i32_from(&raw, start);
-                if let Ok(disc) = disc_r {
-                    let comma_r = self.de.expect_char(',' as i32);
-                    if let Err(e) = comma_r {
-                        return Result::<NsdVariantAccess, DeserializeError>::Err(e);
-                    }
-                    return Result::<NsdVariantAccess, DeserializeError>::Ok(NsdVariantAccess {
-                        de: self.de,
-                        disc,
-                        is_unit: false,
-                    });
-                }
-                if let Err(e) = disc_r {
+            let disc_r = self.de.parse_i32_direct();
+            if let Ok(disc) = disc_r {
+                let comma_r = self.de.expect_char(',' as i32);
+                if let Err(e) = comma_r {
                     return Result::<NsdVariantAccess, DeserializeError>::Err(e);
                 }
-            }
-            if let Err(e) = raw_r {
-                return Result::<NsdVariantAccess, DeserializeError>::Err(e);
-            }
-            unreachable();
-        }
-        // Unit variant: bare integer discriminant
-        let start = self.de.pos as i64;
-        let raw_r = self.de.read_number_raw();
-        if let Ok(raw) = raw_r {
-            let disc_r = self.de.parse_i32_from(&raw, start);
-            if let Ok(disc) = disc_r {
                 return Result::<NsdVariantAccess, DeserializeError>::Ok(NsdVariantAccess {
                     de: self.de,
                     disc,
-                    is_unit: true,
+                    is_unit: false,
                 });
             }
             if let Err(e) = disc_r {
                 return Result::<NsdVariantAccess, DeserializeError>::Err(e);
             }
+            unreachable();
         }
-        if let Err(e) = raw_r {
+        // Unit variant: bare integer discriminant
+        let disc_r = self.de.parse_i32_direct();
+        if let Ok(disc) = disc_r {
+            return Result::<NsdVariantAccess, DeserializeError>::Ok(NsdVariantAccess {
+                de: self.de,
+                disc,
+                is_unit: true,
+            });
+        }
+        if let Err(e) = disc_r {
             return Result::<NsdVariantAccess, DeserializeError>::Err(e);
         }
         unreachable();

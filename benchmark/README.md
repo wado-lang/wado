@@ -124,9 +124,9 @@ make benchmark-json-catalog
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 120       | 1.00x    |
-| **Wado**    | 138       | 1.15x    |
-| JavaScript  | 140       | 1.17x    |
+| C (gcc -O3) | 150       | 1.00x    |
+| JavaScript  | 170       | 1.13x    |
+| **Wado**    | 181       | 1.21x    |
 
 All implementations produce the same result: 47,407,790 total iterations.
 
@@ -134,9 +134,9 @@ All implementations produce the same result: 47,407,790 total iterations.
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 3,020     | 1.00x    |
-| **Wado**    | 3,273     | 1.08x    |
-| JavaScript  | 3,328     | 1.10x    |
+| C (gcc -O3) | 3,340     | 1.00x    |
+| **Wado**    | 3,651     | 1.09x    |
+| JavaScript  | 4,275     | 1.28x    |
 
 All implementations produce the same result: 664,579 primes.
 
@@ -144,9 +144,9 @@ All implementations produce the same result: 664,579 primes.
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 53        | 1.00x    |
-| JavaScript  | 72        | 1.36x    |
-| **Wado**    | 133       | 2.51x    |
+| C (gcc -O3) | 44        | 1.00x    |
+| JavaScript  | 71        | 1.61x    |
+| **Wado**    | 146       | 3.32x    |
 
 All implementations produce the same result: 664,579 primes.
 
@@ -154,8 +154,8 @@ All implementations produce the same result: 664,579 primes.
 
 | Runtime               | Compress (ms) | Decompress (ms) | Relative |
 | --------------------- | ------------- | --------------- | -------- |
-| zlib-rs (native Rust) | 1.4           | 0.2             | 1.00x    |
-| **Wado** (pure Wado)  | 50            | 743             | 496x     |
+| zlib-rs (native Rust) | 1.5           | 0.2             | 1.00x    |
+| **Wado** (pure Wado)  | 63            | 885             | 570x     |
 
 Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significant overhead is expected compared to native.
 
@@ -163,10 +163,10 @@ Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significan
 
 | Runtime             | Time (ms) | Relative |
 | ------------------- | --------- | -------- |
-| Zig (-OReleaseFast) | 25        | 1.00x    |
-| Rust (rustc -O)     | 36        | 1.44x    |
-| C (gcc -O3)         | 57        | 2.28x    |
-| **Wado**            | 156       | 6.24x    |
+| Zig (-OReleaseFast) | 29        | 1.00x    |
+| Rust (rustc -O)     | 41        | 1.41x    |
+| C (gcc -O3)         | 64        | 2.21x    |
+| **Wado**            | 170       | 5.86x    |
 
 All implementations produce: Total bytes: 4,000,000, byte sum: 204,501,007.
 
@@ -174,8 +174,8 @@ All implementations produce: Total bytes: 4,000,000, byte sum: 204,501,007.
 
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
-| Rust (serde_json, native)  | 1.1       | 1.00x    |
-| **Wado** (core:json, Wasm) | 315       | 286x     |
+| Rust (serde_json, native)  | 0.98      | 1.00x    |
+| **Wado** (core:json, Wasm) | 282       | 288x     |
 
 Both implementations parse 100 statuses from Twitter search results.
 
@@ -183,8 +183,8 @@ Both implementations parse 100 statuses from Twitter search results.
 
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
-| Rust (serde_json, native)  | 13        | 1.00x    |
-| **Wado** (core:json, Wasm) | 2,630     | 202x     |
+| Rust (serde_json, native)  | 15        | 1.00x    |
+| **Wado** (core:json, Wasm) | 520       | 35x      |
 
 Both implementations parse 55,563 coordinate points from GeoJSON.
 
@@ -192,8 +192,8 @@ Both implementations parse 55,563 coordinate points from GeoJSON.
 
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
-| Rust (serde_json, native)  | 3.7       | 1.00x    |
-| **Wado** (core:json, Wasm) | 607       | 164x     |
+| Rust (serde_json, native)  | 3.2       | 1.00x    |
+| **Wado** (core:json, Wasm) | 431       | 135x     |
 
 Both implementations parse 184 events and 243 performances from CITM catalog data.
 
