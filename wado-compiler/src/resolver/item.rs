@@ -215,6 +215,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     /// Extract inline hint from function attributes.
+    pub(super) fn extract_allocator_strategy(attrs: &[crate::ast::Attribute]) -> Option<String> {
+        attrs
+            .iter()
+            .find(|a| a.name == "allocator")
+            .and_then(|a| a.args.first().cloned())
+    }
+
     pub(super) fn extract_inline_hint(attrs: &[crate::ast::Attribute]) -> crate::tir::InlineHint {
         let Some(attr) = attrs.iter().find(|a| a.name == "inline") else {
             return crate::tir::InlineHint::Auto;
@@ -339,6 +346,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             is_cm_adapter: false,
             inline_hint: Self::extract_inline_hint(&func.attrs),
             comp_features: extract_comp_features(&func.attrs),
+            allocator_strategy: Self::extract_allocator_strategy(&func.attrs),
         })
     }
 
@@ -401,6 +409,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             is_cm_adapter: false,
             inline_hint: crate::tir::InlineHint::Auto,
             comp_features: 0,
+            allocator_strategy: None,
         };
 
         let tir_test = TirTest {
@@ -613,6 +622,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             is_cm_adapter: false,
             inline_hint: Self::extract_inline_hint(&func.attrs),
             comp_features: extract_comp_features(&func.attrs),
+            allocator_strategy: None,
         })
     }
 }

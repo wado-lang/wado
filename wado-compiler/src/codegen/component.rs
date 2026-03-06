@@ -23,7 +23,11 @@ use wasm_encoder::{
 };
 
 /// Build a complete Wasm Component from a pre-built core module and project metadata.
-pub fn build_component(project: &Project, core_module: &[u8]) -> Vec<u8> {
+pub fn build_component(
+    project: &Project,
+    core_module: &[u8],
+    allocator: &Option<crate::wir::AllocatorInfo>,
+) -> Vec<u8> {
     let mut builder = ComponentBuilder::default();
     let mut ctx = ComponentModelContext::new();
 
@@ -46,7 +50,7 @@ pub fn build_component(project: &Project, core_module: &[u8]) -> Vec<u8> {
     }
 
     // Core memory module
-    let mem_module = build_memory_module(project.strip_names);
+    let mem_module = build_memory_module(project.strip_names, allocator);
     ctx.register_core_module("mem-mod");
     builder.core_module_raw(Some("mem-mod"), &mem_module);
 
@@ -467,15 +471,18 @@ fn wado_type_to_cm_result_type(
     }
 }
 
-fn build_memory_module(strip_names: bool) -> Vec<u8> {
+fn build_memory_module(
+    strip_names: bool,
+    allocator: &Option<crate::wir::AllocatorInfo>,
+) -> Vec<u8> {
     use wasm_encoder::{
-        CodeSection, ExportKind, ExportSection, Function, FunctionSection, GlobalSection,
-        GlobalType, Instruction, MemorySection, MemoryType, Module, NameMap, NameSection,
-        TypeSection, ValType,
+        CodeSection, ExportKind, ExportSection, FunctionSection, GlobalSection, GlobalType,
+        MemorySection, MemoryType, Module, NameMap, NameSection, TypeSection, ValType,
     };
 
     let mut module = Module::new();
 
+    // Type section: realloc signature (i32, i32, i32, i32) -> i32
     let mut types = TypeSection::new();
     types.ty().function(
         [ValType::I32, ValType::I32, ValType::I32, ValType::I32],
@@ -483,10 +490,12 @@ fn build_memory_module(strip_names: bool) -> Vec<u8> {
     );
     module.section(&types);
 
+    // Function section: one function (realloc) using type 0
     let mut functions = FunctionSection::new();
     functions.function(0);
     module.section(&functions);
 
+    // Memory section: 64-page linear memory
     let mut memories = MemorySection::new();
     memories.memory(MemoryType {
         minimum: 64,
@@ -497,41 +506,46 @@ fn build_memory_module(strip_names: bool) -> Vec<u8> {
     });
     module.section(&memories);
 
+    // Global section: emit globals from allocator info or default
     let mut globals = GlobalSection::new();
-    globals.global(
-        GlobalType {
-            val_type: ValType::I32,
-            mutable: true,
-            shared: false,
-        },
-        &wasm_encoder::ConstExpr::i32_const(1024),
-    );
+    if let Some(alloc) = allocator {
+        for global in &alloc.globals {
+            let (val_type, const_expr) = wir_global_to_wasm(global);
+            globals.global(
+                GlobalType {
+                    val_type,
+                    mutable: global.mutable,
+                    shared: false,
+                },
+                &const_expr,
+            );
+        }
+    } else {
+        // Fallback: default bump allocator global (heap offset starts at 1024)
+        globals.global(
+            GlobalType {
+                val_type: ValType::I32,
+                mutable: true,
+                shared: false,
+            },
+            &wasm_encoder::ConstExpr::i32_const(1024),
+        );
+    }
     module.section(&globals);
 
+    // Export section: memory + realloc
     let mut exports = ExportSection::new();
     exports.export("memory", ExportKind::Memory, 0);
     exports.export("realloc", ExportKind::Func, 0);
     module.section(&exports);
 
+    // Code section: emit realloc body from WIR or fallback
     let mut code = CodeSection::new();
-    let mut realloc_func = Function::new([(1, ValType::I32)]);
-    realloc_func.instruction(&Instruction::GlobalGet(0));
-    realloc_func.instruction(&Instruction::LocalGet(2));
-    realloc_func.instruction(&Instruction::I32Add);
-    realloc_func.instruction(&Instruction::I32Const(1));
-    realloc_func.instruction(&Instruction::I32Sub);
-    realloc_func.instruction(&Instruction::I32Const(0));
-    realloc_func.instruction(&Instruction::LocalGet(2));
-    realloc_func.instruction(&Instruction::I32Sub);
-    realloc_func.instruction(&Instruction::I32And);
-    realloc_func.instruction(&Instruction::LocalSet(4));
-    realloc_func.instruction(&Instruction::LocalGet(4));
-    realloc_func.instruction(&Instruction::LocalGet(3));
-    realloc_func.instruction(&Instruction::I32Add);
-    realloc_func.instruction(&Instruction::GlobalSet(0));
-    realloc_func.instruction(&Instruction::LocalGet(4));
-    realloc_func.instruction(&Instruction::End);
-    code.function(&realloc_func);
+    if let Some(alloc) = allocator {
+        emit_allocator_function(&mut code, alloc);
+    } else {
+        emit_fallback_bump_allocator(&mut code);
+    }
     module.section(&code);
 
     if !strip_names {
@@ -546,6 +560,238 @@ fn build_memory_module(strip_names: bool) -> Vec<u8> {
     }
 
     module.finish()
+}
+
+/// Convert a WIR global's init value and type to Wasm encoder types.
+fn wir_global_to_wasm(
+    global: &crate::wir::WirGlobal,
+) -> (wasm_encoder::ValType, wasm_encoder::ConstExpr) {
+    use crate::wir::WirInstr;
+    match &global.init {
+        WirInstr::I32Const(v) => (
+            wasm_encoder::ValType::I32,
+            wasm_encoder::ConstExpr::i32_const(*v),
+        ),
+        WirInstr::I64Const(v) => (
+            wasm_encoder::ValType::I64,
+            wasm_encoder::ConstExpr::i64_const(*v),
+        ),
+        _ => panic!(
+            "unsupported allocator global init expression: {:?}",
+            global.init
+        ),
+    }
+}
+
+/// Emit the allocator function body from WIR instructions into the code section.
+fn emit_allocator_function(
+    code: &mut wasm_encoder::CodeSection,
+    alloc: &crate::wir::AllocatorInfo,
+) {
+    use wasm_encoder::{Function, Instruction, ValType};
+
+    // Build parameter name → local index mapping
+    // realloc params: oldptr(0), oldsize(1), align(2), newsize(3)
+    let mut local_map: IndexMap<String, u32> = IndexMap::new();
+    for (i, name) in alloc.param_names.iter().enumerate() {
+        local_map.insert(name.clone(), u32::try_from(i).unwrap());
+    }
+
+    // Scan for DeclareLocal instructions to count additional locals
+    let mut declared_locals: Vec<String> = Vec::new();
+    for instr in &alloc.body {
+        collect_declared_locals(instr, &mut declared_locals);
+    }
+    let next_local = u32::try_from(alloc.param_names.len()).unwrap();
+    for (i, name) in declared_locals.iter().enumerate() {
+        local_map.insert(name.clone(), next_local + u32::try_from(i).unwrap());
+    }
+
+    let additional_locals_count =
+        u32::try_from(declared_locals.len()).expect("too many locals in allocator");
+    let mut func = Function::new([(additional_locals_count, ValType::I32)]);
+
+    // Emit all body instructions
+    for instr in &alloc.body {
+        emit_alloc_instr(&mut func, instr, &local_map, &alloc.global_name_to_index);
+    }
+
+    func.instruction(&Instruction::End);
+    code.function(&func);
+}
+
+/// Collect declared local variable names from WIR instructions.
+fn collect_declared_locals(instr: &crate::wir::WirInstr, out: &mut Vec<String>) {
+    use crate::wir::WirInstr;
+    if let WirInstr::DeclareLocal { name, .. } = instr
+        && !out.contains(name)
+    {
+        out.push(name.clone());
+    }
+    instr.for_each_child(&mut |child| collect_declared_locals(child, out));
+}
+
+/// Emit a single WIR instruction as Wasm for the allocator function.
+fn emit_alloc_instr(
+    f: &mut wasm_encoder::Function,
+    instr: &crate::wir::WirInstr,
+    local_map: &IndexMap<String, u32>,
+    global_map: &IndexMap<String, u32>,
+) {
+    use crate::wir::WirInstr;
+    use wasm_encoder::Instruction;
+
+    match instr {
+        WirInstr::DeclareLocal { .. } => {}
+        WirInstr::I32Const(v) => {
+            f.instruction(&Instruction::I32Const(*v));
+        }
+        WirInstr::I64Const(v) => {
+            f.instruction(&Instruction::I64Const(*v));
+        }
+        WirInstr::I32Add(l, r) => {
+            emit_alloc_instr(f, l, local_map, global_map);
+            emit_alloc_instr(f, r, local_map, global_map);
+            f.instruction(&Instruction::I32Add);
+        }
+        WirInstr::I32Sub(l, r) => {
+            emit_alloc_instr(f, l, local_map, global_map);
+            emit_alloc_instr(f, r, local_map, global_map);
+            f.instruction(&Instruction::I32Sub);
+        }
+        WirInstr::I32And(l, r) => {
+            emit_alloc_instr(f, l, local_map, global_map);
+            emit_alloc_instr(f, r, local_map, global_map);
+            f.instruction(&Instruction::I32And);
+        }
+        WirInstr::I32Mul(l, r) => {
+            emit_alloc_instr(f, l, local_map, global_map);
+            emit_alloc_instr(f, r, local_map, global_map);
+            f.instruction(&Instruction::I32Mul);
+        }
+        WirInstr::I32ShrU(l, r) => {
+            emit_alloc_instr(f, l, local_map, global_map);
+            emit_alloc_instr(f, r, local_map, global_map);
+            f.instruction(&Instruction::I32ShrU);
+        }
+        WirInstr::I32Shl(l, r) => {
+            emit_alloc_instr(f, l, local_map, global_map);
+            emit_alloc_instr(f, r, local_map, global_map);
+            f.instruction(&Instruction::I32Shl);
+        }
+        WirInstr::I32Or(l, r) => {
+            emit_alloc_instr(f, l, local_map, global_map);
+            emit_alloc_instr(f, r, local_map, global_map);
+            f.instruction(&Instruction::I32Or);
+        }
+        WirInstr::I32Xor(l, r) => {
+            emit_alloc_instr(f, l, local_map, global_map);
+            emit_alloc_instr(f, r, local_map, global_map);
+            f.instruction(&Instruction::I32Xor);
+        }
+        WirInstr::I32Eqz(inner) => {
+            emit_alloc_instr(f, inner, local_map, global_map);
+            f.instruction(&Instruction::I32Eqz);
+        }
+        WirInstr::I32Eq(l, r) => {
+            emit_alloc_instr(f, l, local_map, global_map);
+            emit_alloc_instr(f, r, local_map, global_map);
+            f.instruction(&Instruction::I32Eq);
+        }
+        WirInstr::I32Ne(l, r) => {
+            emit_alloc_instr(f, l, local_map, global_map);
+            emit_alloc_instr(f, r, local_map, global_map);
+            f.instruction(&Instruction::I32Ne);
+        }
+        WirInstr::I32LtS(l, r) => {
+            emit_alloc_instr(f, l, local_map, global_map);
+            emit_alloc_instr(f, r, local_map, global_map);
+            f.instruction(&Instruction::I32LtS);
+        }
+        WirInstr::I32GtS(l, r) => {
+            emit_alloc_instr(f, l, local_map, global_map);
+            emit_alloc_instr(f, r, local_map, global_map);
+            f.instruction(&Instruction::I32GtS);
+        }
+        WirInstr::LocalGet { name } => {
+            let idx = local_map.get(name).unwrap_or_else(|| {
+                panic!("allocator: unknown local '{name}'")
+            });
+            f.instruction(&Instruction::LocalGet(*idx));
+        }
+        WirInstr::LocalSet { name, value } => {
+            emit_alloc_instr(f, value, local_map, global_map);
+            let idx = local_map.get(name).unwrap_or_else(|| {
+                panic!("allocator: unknown local '{name}'")
+            });
+            f.instruction(&Instruction::LocalSet(*idx));
+        }
+        WirInstr::LocalTee { name, value } => {
+            emit_alloc_instr(f, value, local_map, global_map);
+            let idx = local_map.get(name).unwrap_or_else(|| {
+                panic!("allocator: unknown local '{name}'")
+            });
+            f.instruction(&Instruction::LocalTee(*idx));
+        }
+        WirInstr::GlobalGet { name } => {
+            let idx = global_map.get(&name.fq).unwrap_or_else(|| {
+                panic!("allocator: unknown global '{}'", name.fq)
+            });
+            f.instruction(&Instruction::GlobalGet(*idx));
+        }
+        WirInstr::GlobalSet { name, value } => {
+            emit_alloc_instr(f, value, local_map, global_map);
+            let idx = global_map.get(&name.fq).unwrap_or_else(|| {
+                panic!("allocator: unknown global '{}'", name.fq)
+            });
+            f.instruction(&Instruction::GlobalSet(*idx));
+        }
+        WirInstr::Return { value } => {
+            if let Some(v) = value {
+                emit_alloc_instr(f, v, local_map, global_map);
+            }
+            f.instruction(&Instruction::Return);
+        }
+        WirInstr::MemoryGrow(delta) => {
+            emit_alloc_instr(f, delta, local_map, global_map);
+            f.instruction(&Instruction::MemoryGrow(0));
+        }
+        WirInstr::MemorySize => {
+            f.instruction(&Instruction::MemorySize(0));
+        }
+        WirInstr::Nop => {}
+        WirInstr::Drop(inner) => {
+            emit_alloc_instr(f, inner, local_map, global_map);
+            f.instruction(&Instruction::Drop);
+        }
+        _ => panic!(
+            "unsupported WIR instruction in allocator function: {:?}",
+            std::mem::discriminant(instr)
+        ),
+    }
+}
+
+/// Fallback bump allocator when no #[allocator] function is provided.
+fn emit_fallback_bump_allocator(code: &mut wasm_encoder::CodeSection) {
+    use wasm_encoder::{Function, Instruction, ValType};
+    let mut func = Function::new([(1, ValType::I32)]);
+    func.instruction(&Instruction::GlobalGet(0));
+    func.instruction(&Instruction::LocalGet(2));
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::I32Const(1));
+    func.instruction(&Instruction::I32Sub);
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::LocalGet(2));
+    func.instruction(&Instruction::I32Sub);
+    func.instruction(&Instruction::I32And);
+    func.instruction(&Instruction::LocalSet(4));
+    func.instruction(&Instruction::LocalGet(4));
+    func.instruction(&Instruction::LocalGet(3));
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::GlobalSet(0));
+    func.instruction(&Instruction::LocalGet(4));
+    func.instruction(&Instruction::End);
+    code.function(&func);
 }
 
 fn embed_bundled_modules(

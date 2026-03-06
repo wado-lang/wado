@@ -2684,6 +2684,13 @@ impl FunctionTranslator<'_, '_> {
                 Some(WirInstr::F32ReinterpretI32(Box::new(o)))
             }
 
+            // === Memory ===
+            "builtin::memory_grow" => {
+                let o = self.translate_expr(&args[0]);
+                Some(WirInstr::MemoryGrow(Box::new(o)))
+            }
+            "builtin::memory_size" => Some(WirInstr::MemorySize),
+
             // === Control ===
             "builtin::unreachable" => Some(WirInstr::Unreachable),
             "builtin::likely" | "builtin::unlikely" => {

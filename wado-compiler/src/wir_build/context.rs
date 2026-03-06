@@ -88,6 +88,12 @@ pub struct WirContext<'a> {
     /// Available WASI function names (computed during component generation).
     pub available_wasi_funcs: IndexSet<String>,
 
+    // === Allocator tracking ===
+    /// FQ name of the allocator function (detected via `#[allocator]` attribute).
+    pub allocator_func_fq: Option<String>,
+    /// Allocator strategy name (e.g., "bump").
+    pub allocator_strategy: Option<String>,
+
     // === Function body translation helpers ===
     /// Pending function bodies: (function index in self.functions, `TirFunction` ref, `TypeTable` ref)
     pub pending_bodies: Vec<PendingFunctionBody>,
@@ -144,6 +150,8 @@ impl<'a> WirContext<'a> {
             closure_wrapper_funcs: IndexMap::new(),
             canonical_closure_counter: 0,
             string_literals,
+            allocator_func_fq: None,
+            allocator_strategy: None,
             available_wasi_funcs: IndexSet::new(),
             pending_bodies: Vec::new(),
         }
@@ -589,12 +597,81 @@ impl<'a> WirContext<'a> {
 
     /// Consume this context and produce the final `WirModule`.
     pub fn into_wir_module(self) -> WirModule {
+        let mut functions = self.functions;
+        let mut globals = self.globals;
+        let global_map = &self.global_map;
+
+        // Extract allocator function and its globals from the main module.
+        // The allocator is compiled into the memory module (separate Wasm module)
+        // to satisfy Component Model ordering constraints.
+        let allocator = if let (Some(alloc_fq), Some(strategy)) =
+            (&self.allocator_func_fq, &self.allocator_strategy)
+        {
+            // Find and remove the allocator function
+            let alloc_pos = functions.iter().position(|f| f.name.fq == *alloc_fq);
+            if let Some(pos) = alloc_pos {
+                let alloc_func = functions.remove(pos);
+                let body = alloc_func.body.unwrap_or_default();
+                let param_names = alloc_func.param_names;
+
+                // Collect global names referenced by the allocator body
+                let mut referenced_globals = IndexMap::new();
+                collect_referenced_globals(&body, &mut referenced_globals);
+
+                // Extract referenced globals from the main module
+                let mut alloc_globals = Vec::new();
+                let mut alloc_global_name_to_index = IndexMap::new();
+                for (global_fq, _) in &referenced_globals {
+                    if let Some(&global_idx) = global_map.get(global_fq.as_str()) {
+                        let idx = global_idx as usize;
+                        if idx < globals.len() {
+                            alloc_global_name_to_index.insert(
+                                global_fq.clone(),
+                                u32::try_from(alloc_globals.len()).unwrap(),
+                            );
+                            alloc_globals.push(globals[idx].clone());
+                        }
+                    }
+                }
+
+                // Remove extracted globals from main module (in reverse order to preserve indices)
+                let mut indices_to_remove: Vec<usize> = referenced_globals
+                    .values()
+                    .filter_map(|_| None::<usize>)
+                    .collect();
+                for (global_fq, _) in &referenced_globals {
+                    if let Some(&global_idx) = global_map.get(global_fq.as_str()) {
+                        indices_to_remove.push(global_idx as usize);
+                    }
+                }
+                indices_to_remove.sort_unstable();
+                indices_to_remove.dedup();
+                for &idx in indices_to_remove.iter().rev() {
+                    if idx < globals.len() {
+                        globals.remove(idx);
+                    }
+                }
+
+                Some(crate::wir::AllocatorInfo {
+                    strategy: strategy.clone(),
+                    body,
+                    param_names,
+                    globals: alloc_globals,
+                    global_name_to_index: alloc_global_name_to_index,
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         WirModule {
             types: self.types,
             rec_groups: self.rec_groups,
             imports: self.imports,
-            functions: self.functions,
-            globals: self.globals,
+            functions,
+            globals,
             exports: self.exports,
             elements: Vec::new(), // TODO: element section
             data: self.data,
@@ -603,6 +680,25 @@ impl<'a> WirContext<'a> {
             component: WirComponent::default(),
             variant_case_info: self.variant_case_info,
             entry_point_path: Some(self.project.entry_module_source.to_string()),
+            allocator,
         }
     }
+}
+
+/// Collect fully-qualified global names referenced by WIR instructions.
+fn collect_referenced_globals(instrs: &[crate::wir::WirInstr], out: &mut IndexMap<String, ()>) {
+    for instr in instrs {
+        collect_referenced_globals_instr(instr, out);
+    }
+}
+
+fn collect_referenced_globals_instr(instr: &crate::wir::WirInstr, out: &mut IndexMap<String, ()>) {
+    use crate::wir::WirInstr;
+    match instr {
+        WirInstr::GlobalGet { name } | WirInstr::GlobalSet { name, .. } => {
+            out.insert(name.fq.clone(), ());
+        }
+        _ => {}
+    }
+    instr.for_each_child(&mut |child| collect_referenced_globals_instr(child, out));
 }

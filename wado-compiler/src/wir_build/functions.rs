@@ -438,6 +438,12 @@ fn register_single_function(
         comp_features: tir_func.comp_features,
     };
 
+    // Track allocator functions for extraction into the memory module
+    if let Some(strategy) = &tir_func.allocator_strategy {
+        ctx.allocator_func_fq = Some(fq.clone());
+        ctx.allocator_strategy = Some(strategy.clone());
+    }
+
     let _func_id = ctx.register_function(wir_func);
     let wir_func_index = ctx.functions.len() - 1;
 

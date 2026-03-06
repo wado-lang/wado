@@ -10,6 +10,20 @@
 // Do NOT define Box<T> here — the monomorphizer would create user-type instances
 // in core:internal, conflicting with entry module types.
 
+/// Bump allocator heap pointer. Starts at byte 1024 (leaving space for stack).
+global mut __heap_offset: i32 = 1024;
+
+/// Allocates or reallocates memory in linear memory.
+/// This bump allocator simply advances a pointer with alignment.
+/// The #[allocator("bump")] attribute marks this as the active allocator
+/// implementation. The compiler compiles it into the memory module.
+#[allocator("bump")]
+pub export fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
+    let aligned = builtin::i32_and(__heap_offset + align - 1, 0 - align);
+    __heap_offset = aligned + newsize;
+    return aligned;
+}
+
 /// Copies bytes from linear memory to a new GC array.
 pub fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
     let arr = builtin::array_new::<u8>(len);

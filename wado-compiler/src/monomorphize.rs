@@ -2352,6 +2352,7 @@ impl Monomorphizer {
             is_cm_adapter: false,
             inline_hint: generic.inline_hint,
             comp_features: generic.comp_features,
+            allocator_strategy: generic.allocator_strategy.clone(),
         })
     }
 

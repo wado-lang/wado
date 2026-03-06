@@ -1910,6 +1910,10 @@ pub struct TirFunction {
 
     /// Compiler feature bitflags from `#[comp_feature("...")]` attributes.
     pub comp_features: u32,
+
+    /// Allocator strategy from `#[allocator("bump")]` attribute.
+    /// When set, this function provides the `realloc` implementation for the memory module.
+    pub allocator_strategy: Option<String>,
 }
 
 /// Inline hint for a function, extracted from `#[inline(...)]` attributes.

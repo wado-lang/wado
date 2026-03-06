@@ -154,8 +154,17 @@ fn i32_store16(addr: i32, value: u16);
 
 /// Allocates or reallocates memory in linear memory.
 /// Standard WASI realloc signature.
+/// The implementation is provided by #[allocator] function in core:internal.
 #[canonical("mem", "realloc")]
 fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
+
+/// Grows linear memory by delta pages, returns previous page count or -1 on failure.
+/// Maps to Wasm memory.grow instruction.
+fn memory_grow(delta: i32) -> i32;
+
+/// Returns the current linear memory size in pages.
+/// Maps to Wasm memory.size instruction.
+fn memory_size() -> i32;
 /// Sine of x (in radians)
 #[canonical("bundled", "libm_sin")]
 fn f64_sin(x: f64) -> f64;

@@ -54,6 +54,26 @@ pub struct WirModule {
     pub variant_case_info: IndexMap<u32, (u32, u32)>,
     /// Entry-point module path string (for display shortening in unparse).
     pub entry_point_path: Option<String>,
+    /// Allocator function and associated globals, extracted from main module.
+    /// Compiled into the memory module instead of the main core module.
+    pub allocator: Option<AllocatorInfo>,
+}
+
+/// Allocator function extracted from the main WIR module.
+/// This is compiled into the memory module (separate from the main core module)
+/// to satisfy Component Model ordering constraints.
+#[derive(Debug)]
+pub struct AllocatorInfo {
+    /// Allocator strategy name (e.g., "bump").
+    pub strategy: String,
+    /// The allocator function's WIR body instructions.
+    pub body: Vec<WirInstr>,
+    /// Parameter names (types are always [i32, i32, i32, i32] -> i32).
+    pub param_names: Vec<String>,
+    /// Associated globals (e.g., the bump pointer).
+    pub globals: Vec<WirGlobal>,
+    /// Mapping from WIR global FQ names to memory-module global indices.
+    pub global_name_to_index: IndexMap<String, u32>,
 }
 
 impl WirModule {
@@ -73,6 +93,7 @@ impl WirModule {
             component: WirComponent::default(),
             variant_case_info: IndexMap::new(),
             entry_point_path: None,
+            allocator: None,
         }
     }
 }
@@ -1766,7 +1787,7 @@ pub enum WirImportDesc {
 }
 
 /// A global variable.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WirGlobal {
     /// Global name.
     pub name: WirName,
