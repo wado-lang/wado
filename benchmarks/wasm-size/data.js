@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772817917876,
+  "lastUpdate": 1772829886098,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -881,6 +881,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1fa82d821605815a1fa9b4725741b2b30b7cfb71"
         },
         "date": 1772817917733,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1572,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9242,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18579,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "831af199b514950436d53a0745d97fc5f0a3a2f5",
+          "message": "Merge pull request #520 from wado-lang/claude/implement-include-macros-LELGQ\n\nAdd compile-time file inclusion with #include_str and #include_bytes",
+          "timestamp": "2026-03-07T05:42:22+09:00",
+          "tree_id": "ca9758ed1bc2ee49df404a5c66b091b2bec0b7b1",
+          "url": "https://github.com/wado-lang/wado/commit/831af199b514950436d53a0745d97fc5f0a3a2f5"
+        },
+        "date": 1772829885954,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
