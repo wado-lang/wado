@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772816686748,
+  "lastUpdate": 1772817917876,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -857,6 +857,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 18395,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1fa82d821605815a1fa9b4725741b2b30b7cfb71",
+          "message": "Merge pull request #518 from wado-lang/claude/improve-bump-allocator-dxRzr\n\nImplement dynamic memory growth and improve allocator",
+          "timestamp": "2026-03-07T02:22:49+09:00",
+          "tree_id": "92c65db75fbb67042b9ab4e3cfaf8d907d025c4d",
+          "url": "https://github.com/wado-lang/wado/commit/1fa82d821605815a1fa9b4725741b2b30b7cfb71"
+        },
+        "date": 1772817917733,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1572,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9242,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18579,
             "unit": "bytes"
           }
         ]
