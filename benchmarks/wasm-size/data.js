@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772829886098,
+  "lastUpdate": 1772831359809,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -920,6 +920,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/831af199b514950436d53a0745d97fc5f0a3a2f5"
         },
         "date": 1772829885954,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1572,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9242,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18579,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fbbfc3d870e5eb61eefbabc8668b6b2208f59d77",
+          "message": "Merge pull request #521 from wado-lang/claude/optimize-array-bounds-check-629QY\n\nImplement bounds check elimination via struct field constant forwarding",
+          "timestamp": "2026-03-07T06:06:57+09:00",
+          "tree_id": "d871c0156072620823033412d04bb85b9ea0cb0f",
+          "url": "https://github.com/wado-lang/wado/commit/fbbfc3d870e5eb61eefbabc8668b6b2208f59d77"
+        },
+        "date": 1772831359670,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
