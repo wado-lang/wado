@@ -2781,30 +2781,136 @@ fn optimize_instrs(instrs: &mut Vec<WirInstr>, types: &[WirTypeDef]) {
     for instr in instrs.iter_mut() {
         optimize_nested(instr, types);
     }
+    fold_constant_comparisons(instrs);
     elide_redundant_value_copies(instrs);
     elide_multi_value_structs(instrs, types);
 }
 
-/// Recurse into nested instruction bodies.
+/// Recurse into nested instruction bodies and eliminate dead branches.
 fn optimize_nested(instr: &mut WirInstr, types: &[WirTypeDef]) {
     match instr {
         WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
             optimize_instrs(body, types);
         }
         WirInstr::If {
+            condition,
             then_body,
             else_body,
-            ..
+            result,
         } => {
             optimize_instrs(then_body, types);
             if let Some(eb) = else_body {
                 optimize_instrs(eb, types);
+            }
+            // Dead If elimination: replace with surviving branch when condition is constant
+            if let Some(const_val) = try_fold_wir_to_bool(condition) {
+                if const_val {
+                    let then_instrs = std::mem::take(then_body);
+                    *instr = WirInstr::Block {
+                        label: None,
+                        result: result.clone(),
+                        body: then_instrs,
+                    };
+                } else if let Some(eb) = else_body {
+                    let else_instrs = std::mem::take(eb);
+                    *instr = WirInstr::Block {
+                        label: None,
+                        result: result.clone(),
+                        body: else_instrs,
+                    };
+                } else {
+                    *instr = WirInstr::Block {
+                        label: None,
+                        result: None,
+                        body: vec![WirInstr::Nop],
+                    };
+                }
             }
         }
         WirInstr::Seq(body) => {
             optimize_instrs(body, types);
         }
         _ => {}
+    }
+}
+
+/// Try to evaluate a WIR condition to a boolean constant.
+fn try_fold_wir_to_bool(instr: &WirInstr) -> Option<bool> {
+    match instr {
+        WirInstr::I32Const(v) => Some(*v != 0),
+        _ => None,
+    }
+}
+
+/// Recursively fold constant integer comparisons to `I32Const`.
+fn fold_constant_comparisons(instrs: &mut Vec<WirInstr>) {
+    for instr in instrs.iter_mut() {
+        fold_constant_comparisons_in_instr(instr);
+    }
+}
+
+fn fold_constant_comparisons_in_instr(instr: &mut WirInstr) {
+    // Recurse into children first (bottom-up folding)
+    match instr {
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+            fold_constant_comparisons(body);
+        }
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            fold_constant_comparisons_in_instr(condition);
+            fold_constant_comparisons(then_body);
+            if let Some(eb) = else_body {
+                fold_constant_comparisons(eb);
+            }
+        }
+        _ => {
+            instr.for_each_boxed_child_mut(&mut |child| {
+                fold_constant_comparisons_in_instr(child);
+            });
+        }
+    }
+
+    // Then try to fold this instruction
+    let result = match instr {
+        WirInstr::I32GeS(l, r) => match (l.as_ref(), r.as_ref()) {
+            (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => Some(i32::from(*lv >= *rv)),
+            _ => None,
+        },
+        WirInstr::I32GeU(l, r) => match (l.as_ref(), r.as_ref()) {
+            (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => {
+                Some(i32::from((*lv as u32) >= (*rv as u32)))
+            }
+            _ => None,
+        },
+        WirInstr::I32LtS(l, r) => match (l.as_ref(), r.as_ref()) {
+            (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => Some(i32::from(*lv < *rv)),
+            _ => None,
+        },
+        WirInstr::I32GtS(l, r) => match (l.as_ref(), r.as_ref()) {
+            (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => Some(i32::from(*lv > *rv)),
+            _ => None,
+        },
+        WirInstr::I32Eq(l, r) => match (l.as_ref(), r.as_ref()) {
+            (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => Some(i32::from(*lv == *rv)),
+            _ => None,
+        },
+        WirInstr::I32Ne(l, r) => match (l.as_ref(), r.as_ref()) {
+            (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => Some(i32::from(*lv != *rv)),
+            _ => None,
+        },
+        WirInstr::I32LeS(l, r) => match (l.as_ref(), r.as_ref()) {
+            (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) => Some(i32::from(*lv <= *rv)),
+            _ => None,
+        },
+        _ => None,
+    };
+
+    if let Some(val) = result {
+        *instr = WirInstr::I32Const(val);
     }
 }
 
@@ -4363,46 +4469,10 @@ fn forward_fields_in_instr(instr: &mut WirInstr, known: &mut FieldKnowledge<'_>)
             condition,
             then_body,
             else_body,
-            result,
+            ..
         } => {
             // Forward in the condition
             changed |= forward_fields_in_instr(condition, known);
-
-            // Try to fold constant conditions
-            if let Some(const_val) = try_fold_wir_to_bool(condition) {
-                if const_val {
-                    // Condition is always true: replace with then_body.
-                    // Always wrap in a Block because `If` is a block-level
-                    // construct for Br depth indexing. Removing it without
-                    // a replacement block would shift Br targets.
-                    let then_instrs = std::mem::take(then_body);
-                    *instr = WirInstr::Block {
-                        label: None,
-                        result: result.clone(),
-                        body: then_instrs,
-                    };
-                    changed = true;
-                } else if let Some(eb) = else_body {
-                    // Condition is always false: replace with else_body
-                    let else_instrs = std::mem::take(eb);
-                    *instr = WirInstr::Block {
-                        label: None,
-                        result: result.clone(),
-                        body: else_instrs,
-                    };
-                    changed = true;
-                } else {
-                    // Condition is always false, no else: replace with
-                    // an empty block (preserves Br depth).
-                    *instr = WirInstr::Block {
-                        label: None,
-                        result: None,
-                        body: vec![WirInstr::Nop],
-                    };
-                    changed = true;
-                }
-                return changed;
-            }
 
             // Forward into branches with cloned knowledge
             let mut then_known = FieldKnowledge {
@@ -4428,8 +4498,6 @@ fn forward_fields_in_instr(instr: &mut WirInstr, known: &mut FieldKnowledge<'_>)
         _ => {
             // For other instructions, try to forward StructGet(LocalGet(x), field)
             changed |= try_forward_struct_gets(instr, known);
-            // Then try to fold constant comparisons
-            changed |= try_fold_constant_comparison(instr);
             // Recurse into children
             instr.for_each_boxed_child_mut(&mut |child| {
                 changed |= forward_fields_in_instr(child, known);
@@ -4452,77 +4520,6 @@ fn try_forward_struct_gets(instr: &mut WirInstr, known: &FieldKnowledge<'_>) -> 
         return true;
     }
     false
-}
-
-/// Try to fold constant integer comparisons to a boolean constant.
-fn try_fold_constant_comparison(instr: &mut WirInstr) -> bool {
-    let result = match instr {
-        WirInstr::I32GeS(l, r) => {
-            if let (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) = (l.as_ref(), r.as_ref()) {
-                Some(i32::from(*lv >= *rv))
-            } else {
-                None
-            }
-        }
-        WirInstr::I32GeU(l, r) => {
-            if let (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) = (l.as_ref(), r.as_ref()) {
-                Some(i32::from((*lv as u32) >= (*rv as u32)))
-            } else {
-                None
-            }
-        }
-        WirInstr::I32LtS(l, r) => {
-            if let (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) = (l.as_ref(), r.as_ref()) {
-                Some(i32::from(*lv < *rv))
-            } else {
-                None
-            }
-        }
-        WirInstr::I32GtS(l, r) => {
-            if let (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) = (l.as_ref(), r.as_ref()) {
-                Some(i32::from(*lv > *rv))
-            } else {
-                None
-            }
-        }
-        WirInstr::I32Eq(l, r) => {
-            if let (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) = (l.as_ref(), r.as_ref()) {
-                Some(i32::from(*lv == *rv))
-            } else {
-                None
-            }
-        }
-        WirInstr::I32Ne(l, r) => {
-            if let (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) = (l.as_ref(), r.as_ref()) {
-                Some(i32::from(*lv != *rv))
-            } else {
-                None
-            }
-        }
-        WirInstr::I32LeS(l, r) => {
-            if let (WirInstr::I32Const(lv), WirInstr::I32Const(rv)) = (l.as_ref(), r.as_ref()) {
-                Some(i32::from(*lv <= *rv))
-            } else {
-                None
-            }
-        }
-        _ => None,
-    };
-
-    if let Some(val) = result {
-        *instr = WirInstr::I32Const(val);
-        true
-    } else {
-        false
-    }
-}
-
-/// Try to evaluate a WIR condition to a boolean constant.
-fn try_fold_wir_to_bool(instr: &WirInstr) -> Option<bool> {
-    match instr {
-        WirInstr::I32Const(v) => Some(*v != 0),
-        _ => None,
-    }
 }
 
 /// Invalidate field knowledge for any locals that are assigned in a body.
