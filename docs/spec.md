@@ -3969,6 +3969,166 @@ pub enum ErrorCode {  // Maps to WIT: enum error-code
 }
 ```
 
+## Compiler Attributes
+
+Wado uses `#[...]` attributes (item-level) and `#![...]` inner attributes (module-level) to control compiler behavior.
+
+### User-Facing Attributes
+
+These attributes are part of the language surface and can be used in any Wado source file.
+
+#### `#[inline]` / `#[inline(always)]` / `#[inline(never)]`
+
+Inlining hints for the optimizer. Applies to functions.
+
+```wado
+#[inline]              // hint: prefer inlining
+fn small_helper() -> i32 { return 42; }
+
+#[inline(always)]      // always inline (ignores threshold)
+fn critical_path() -> i32 { return 1; }
+
+#[inline(never)]       // never inline
+fn error_handler() { panic("error"); }
+```
+
+#### `#[hidden]`
+
+Hides a struct field from debug/inspect output (the `:?` format specifier).
+
+```wado
+struct Foo {
+    pub name: String,
+    #[hidden]
+    secret: String, // excluded from `{foo:?}` output
+}
+```
+
+#### `#[expect_trap]` / `#[TODO]`
+
+Test block attributes. `#[expect_trap]` marks a test that is expected to trap. `#[TODO]` marks a test for an unimplemented feature (must fail; the test itself fails if the body passes, to remind you to remove the annotation).
+
+```wado
+#[expect_trap]
+test "panics on invalid input" {
+    panic("bad input");
+}
+
+#[TODO]
+test "not yet implemented" {
+    panic("TODO: implement this");
+}
+```
+
+#### `#[serde("rename", "...")]` / `#[serde("rename_all", "...")]` / `#[serde("default")]`
+
+Controls serialization/deserialization behavior for struct fields and variant cases. See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
+
+### Standard Library Attributes
+
+These attributes are used in the standard library (`lib/`) to wire Wado code to Wasm and the Component Model. They are not intended for user code.
+
+#### `#![no_prelude]`
+
+Module-level inner attribute. Prevents the automatic import of `core:prelude`. Used by low-level modules that define the prelude itself or that operate below the prelude layer.
+
+```wado
+#![no_prelude]
+// This module does not import core:prelude
+```
+
+#### `#![wasm_module("name")]`
+
+Module-level inner attribute. All items in this module are compiled into a **separate Wasm core module** with the given name, rather than into the main GC core module.
+
+This is the mechanism by which the compiler produces the multi-module component structure required by the Component Model. Items marked with `#![wasm_module]` are extracted from the main compilation pipeline and emitted as a standalone core module with its own linear memory.
+
+```wado
+#![wasm_module("mem")]
+#![no_prelude]
+
+global mut __heap_offset: i32 = 1024;
+
+#[export_name("realloc")]
+export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
+    // ...
+}
+```
+
+Currently, the only `wasm_module` in the standard library is `"mem"`, defined in `core:allocator`. See [The "mem" Core Module](#the-mem-core-module) for details.
+
+#### `#[export_name("name")]`
+
+Overrides the Wasm export name of a function within its core module. Without this attribute, the export name is derived from the function's module-qualified path.
+
+```wado
+#[export_name("realloc")]
+export fn bump_realloc(...) -> i32 { ... }
+// Exported as "realloc" instead of "bump_realloc"
+```
+
+#### `#[canonical("namespace", "name")]`
+
+Declares that a builtin function is imported as a Component Model canonical built-in. Used in `core:builtin` to map intrinsic declarations to CM imports. Functions without this attribute compile directly to Wasm instructions.
+
+| Namespace   | Description                                      |
+| ----------- | ------------------------------------------------ |
+| `"wasi"`    | CM canonical builtins (streams, futures, tasks)  |
+| `"mem"`     | Memory operations from the "mem" core module     |
+| `"bundled"` | Functions from bundled Wasm modules (e.g., libm) |
+
+```wado
+#[canonical("wasi", "stream-new")]
+fn stream_new() -> i64;
+
+#[canonical("mem", "realloc")]
+fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
+```
+
+#### `#[comp_feature("name")]`
+
+Marks a function as providing a compiler feature. The compiler uses these flags to enable optimizations and synthesis passes (e.g., `array_append`, `string_append`, `option`, `result`, `default`). Used in `core:prelude` method implementations.
+
+#### `#[wasi("interface@version")]` / `#[wasi_params(...)]`
+
+Links Wado definitions (effects, resources, enums) to WASI interfaces. See [Attribute Syntax for WASI Linking](#attribute-syntax-for-wasi-linking).
+
+### The "mem" Core Module
+
+The Component Model requires each component to provide a linear memory and a `realloc` function. The CM runtime calls `realloc` whenever it needs guest-side linear memory — for example, `stream.read` copies bytes from the host into a guest buffer, and string lifting/lowering also goes through it.
+
+Wado's main core module uses Wasm GC (managed heap) and does not have linear memory. The "mem" core module is a separate core module that provides:
+
+1. **Linear memory** — a Wasm linear memory for CM data transfer
+2. **`realloc`** — the CM-required allocator function
+
+The "mem" module is defined in `core:allocator` using `#![wasm_module("mem")]`. The compiler:
+
+1. Extracts all functions and globals from `#![wasm_module("mem")]` sources during WIR construction
+2. Emits them as a standalone core module with its own linear memory
+3. Instantiates the "mem" module as part of the component
+4. Aliases the `realloc` export for use in `canon lift`/`canon lower` options
+5. Shares the "mem" instance with the main core module via imports, so that `builtin::realloc` (declared with `#[canonical("mem", "realloc")]`) resolves to the same function
+
+The component structure looks like:
+
+```
+(component
+  (core module "mem"          ;; from #![wasm_module("mem")]
+    (memory (export "mem") 1)
+    (func (export "realloc") ...)
+    (global (export "__heap_offset") (mut i32) (i32.const 1024)))
+  (core instance "mem" (instantiate "mem"))
+  (core module "main"         ;; GC core module
+    (import "mem" "realloc" (func ...))
+    (import "mem" "mem" (memory 1))
+    ...)
+  (core instance "main" (instantiate "main"
+    (with "mem" (instance "mem"))))
+  (canon lower ... (realloc (func "mem" "realloc")) (memory (memory "mem" "mem")))
+)
+```
+
 ## Appendix
 
 ### Naming Conventions

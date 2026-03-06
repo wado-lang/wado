@@ -1607,9 +1607,13 @@ Checked during analysis phase. Non-exhaustive patterns are compile errors.
 
 The Component Model requires each core module to export a `realloc` function. The CM runtime calls `realloc` whenever it needs guest-side linear memory — for example, `stream.read` copies bytes from the host into a guest buffer allocated via `realloc`, and string lifting/lowering also goes through it. Because CM operations can allocate significant amounts of memory (e.g., reading a large HTTP response body in a loop), the `realloc` implementation must be robust.
 
-Currently, the compiler emits a trivial bump allocator in `codegen/component.rs` (`build_memory_module`). It never frees memory and has a fixed 64-page (4 MB) backing memory. This is a temporary stopgap.
+The allocator is implemented in Wado itself in `lib/core/allocator.wado`, using the `#![wasm_module("mem")]` attribute to compile it into a separate core module. The module exports a `realloc` function (via `#[export_name("realloc")]`) and a mutable global for the heap pointer.
 
-**HIGH PRIORITY TODO**: Implement a proper `realloc` in `lib/core/internal.wado` that supports freeing and growing. The compiler should then use this Wado-implemented realloc instead of the hand-coded bump allocator in codegen.
+The compiler extracts `#![wasm_module("mem")]` items during WIR construction and emits them as a standalone core module. This "mem" module is instantiated as part of the component, and its `realloc` and linear memory exports are shared with the main GC core module. See the [spec section on the "mem" core module](./spec.md#the-mem-core-module) for the full component structure.
+
+The main core module accesses `realloc` and linear memory through imports, declared via `#[canonical("mem", "realloc")]` in `core:builtin`. Internal functions like `memory_to_gc_array` and `gc_array_to_memory` in `core:internal` use these builtins to copy data between GC arrays and linear memory.
+
+**TODO**: The current bump allocator never frees memory and has a fixed 64-page (4 MB) backing memory. Implement a proper allocator that supports freeing and growing. In the future, the compiler will support switching allocators via a compile option like `--allocator <name>`. Each allocator module will declare its identity with an `#[allocator]` attribute, and the compiler will select the appropriate one at build time.
 
 ---
 

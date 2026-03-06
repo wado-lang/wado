@@ -207,6 +207,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                 generic_origin: None,
                 effects: Vec::new(),
                 comp_features: 0,
+                export_name: None,
             };
 
             let func_id = ctx.register_function(func);
@@ -2683,6 +2684,13 @@ impl FunctionTranslator<'_, '_> {
                 let o = self.translate_expr(&args[0]);
                 Some(WirInstr::F32ReinterpretI32(Box::new(o)))
             }
+
+            // === Memory ===
+            "builtin::memory_grow" => {
+                let o = self.translate_expr(&args[0]);
+                Some(WirInstr::MemoryGrow(Box::new(o)))
+            }
+            "builtin::memory_size" => Some(WirInstr::MemorySize),
 
             // === Control ===
             "builtin::unreachable" => Some(WirInstr::Unreachable),

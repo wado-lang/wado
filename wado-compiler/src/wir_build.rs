@@ -29,6 +29,15 @@ pub fn plan_project(mut project: Project) -> Project {
 pub fn build_wir_module(project: &Project) -> WirModule {
     let mut ctx = context::WirContext::new(project);
 
+    // Collect wasm_module attributes from TIR modules
+    for (module_source, tir_mod) in &project.tir_modules {
+        if let Some(wasm_mod_name) = &tir_mod.wasm_module {
+            let prefix = module_source.to_string();
+            ctx.wasm_module_sources
+                .insert(prefix, wasm_mod_name.clone());
+        }
+    }
+
     // Step 1: Register all types
     types::register_types(&mut ctx);
 

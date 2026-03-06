@@ -88,6 +88,11 @@ pub struct WirContext<'a> {
     /// Available WASI function names (computed during component generation).
     pub available_wasi_funcs: IndexSet<String>,
 
+    // === Wasm module tracking ===
+    /// Map from `ModuleSource` prefix (e.g., "core/allocator") to wasm module name (e.g., "mem").
+    /// Functions/globals from these modules are extracted into separate wasm core modules.
+    pub wasm_module_sources: IndexMap<String, String>,
+
     // === Function body translation helpers ===
     /// Pending function bodies: (function index in self.functions, `TirFunction` ref, `TypeTable` ref)
     pub pending_bodies: Vec<PendingFunctionBody>,
@@ -144,6 +149,7 @@ impl<'a> WirContext<'a> {
             closure_wrapper_funcs: IndexMap::new(),
             canonical_closure_counter: 0,
             string_literals,
+            wasm_module_sources: IndexMap::new(),
             available_wasi_funcs: IndexSet::new(),
             pending_bodies: Vec::new(),
         }
@@ -589,20 +595,116 @@ impl<'a> WirContext<'a> {
 
     /// Consume this context and produce the final `WirModule`.
     pub fn into_wir_module(self) -> WirModule {
+        let functions = self.functions;
+        let globals = self.globals;
+        let global_map = &self.global_map;
+
+        // Extract functions and globals from #![wasm_module("...")] sources
+        // into separate WasmModuleInfo structures.
+        let mut wasm_modules: IndexMap<String, crate::wir::WasmModuleInfo> = IndexMap::new();
+        let mut dead_type_indices: IndexSet<u32> = IndexSet::new();
+        let mut dead_func_indices: IndexSet<u32> = IndexSet::new();
+        let mut dead_global_indices: IndexSet<u32> = IndexSet::new();
+
+        for (source_prefix, wasm_mod_name) in &self.wasm_module_sources {
+            let mut mod_functions = Vec::new();
+            let mut mod_globals = Vec::new();
+            let mut mod_global_name_to_index = IndexMap::new();
+
+            // Find functions belonging to this wasm module (keep in list, mark as dead)
+            for (i, func) in functions.iter().enumerate() {
+                if !func.name.fq.starts_with(source_prefix) {
+                    continue;
+                }
+                let func_idx = u32::try_from(i).unwrap();
+                dead_func_indices.insert(func_idx);
+                dead_type_indices.insert(func.type_id.index());
+
+                let export_name = func.export_name.clone().unwrap_or_else(|| {
+                    func.name
+                        .fq
+                        .strip_prefix(source_prefix)
+                        .and_then(|s| s.strip_prefix('/'))
+                        .unwrap_or(&func.name.fq)
+                        .to_string()
+                });
+                let body = func.body.clone().unwrap_or_default();
+
+                // Collect referenced globals
+                let mut referenced_globals = IndexMap::new();
+                collect_referenced_globals(&body, &mut referenced_globals);
+
+                for (global_fq, ()) in &referenced_globals {
+                    if mod_global_name_to_index.contains_key(global_fq) {
+                        continue;
+                    }
+                    if let Some(&global_idx) = global_map.get(global_fq.as_str()) {
+                        let idx = global_idx as usize;
+                        if idx < globals.len() {
+                            dead_global_indices.insert(u32::try_from(idx).unwrap());
+                            mod_global_name_to_index.insert(
+                                global_fq.clone(),
+                                u32::try_from(mod_globals.len()).unwrap(),
+                            );
+                            mod_globals.push(globals[idx].clone());
+                        }
+                    }
+                }
+
+                mod_functions.push(crate::wir::WasmModuleFunc {
+                    export_name,
+                    param_names: func.param_names.clone(),
+                    body,
+                });
+            }
+
+            wasm_modules.insert(
+                wasm_mod_name.clone(),
+                crate::wir::WasmModuleInfo {
+                    functions: mod_functions,
+                    globals: mod_globals,
+                    global_name_to_index: mod_global_name_to_index,
+                },
+            );
+        }
+
         WirModule {
             types: self.types,
             rec_groups: self.rec_groups,
             imports: self.imports,
-            functions: self.functions,
-            globals: self.globals,
+            functions,
+            globals,
             exports: self.exports,
             elements: Vec::new(), // TODO: element section
+            memories: Vec::new(),
             data: self.data,
             branch_hints: Vec::new(),
             names: self.names,
             component: WirComponent::default(),
             variant_case_info: self.variant_case_info,
             entry_point_path: Some(self.project.entry_module_source.to_string()),
+            wasm_modules,
+            dead_type_indices,
+            dead_func_indices,
+            dead_global_indices,
         }
     }
+}
+
+/// Collect fully-qualified global names referenced by WIR instructions.
+fn collect_referenced_globals(instrs: &[crate::wir::WirInstr], out: &mut IndexMap<String, ()>) {
+    for instr in instrs {
+        collect_referenced_globals_instr(instr, out);
+    }
+}
+
+fn collect_referenced_globals_instr(instr: &crate::wir::WirInstr, out: &mut IndexMap<String, ()>) {
+    use crate::wir::WirInstr;
+    match instr {
+        WirInstr::GlobalGet { name } | WirInstr::GlobalSet { name, .. } => {
+            out.insert(name.fq.clone(), ());
+        }
+        _ => {}
+    }
+    instr.for_each_child(&mut |child| collect_referenced_globals_instr(child, out));
 }

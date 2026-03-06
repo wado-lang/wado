@@ -17,7 +17,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 
 use crate::name::ModuleSource;
 use crate::token::Span;
@@ -41,6 +41,8 @@ pub struct WirModule {
     pub exports: Vec<WirExport>,
     /// Element section (for funcref tables).
     pub elements: Vec<WirElement>,
+    /// Defined memories (for standalone modules like the memory module).
+    pub memories: Vec<WirMemory>,
     /// Data section (string literals, etc.).
     pub data: Vec<WirData>,
     /// Branch hints (from likely/unlikely).
@@ -54,6 +56,120 @@ pub struct WirModule {
     pub variant_case_info: IndexMap<u32, (u32, u32)>,
     /// Entry-point module path string (for display shortening in unparse).
     pub entry_point_path: Option<String>,
+    /// Separate Wasm core modules extracted from `#![wasm_module("name")]` sources.
+    /// Key: wasm module name (e.g., "mem").
+    pub wasm_modules: IndexMap<String, WasmModuleInfo>,
+    /// Type indices that were extracted into `wasm_modules` and should be skipped by the emitter.
+    pub dead_type_indices: IndexSet<u32>,
+    /// Function indices (into `functions`) extracted into `wasm_modules`; skipped by emitter.
+    pub dead_func_indices: IndexSet<u32>,
+    /// Global indices (into `globals`) extracted into `wasm_modules`; skipped by emitter.
+    pub dead_global_indices: IndexSet<u32>,
+}
+
+/// Functions and globals extracted from a `#![wasm_module("name")]` source module.
+/// Compiled into a separate Wasm core module in the component.
+#[derive(Debug)]
+pub struct WasmModuleInfo {
+    /// Extracted functions with their export names and bodies.
+    pub functions: Vec<WasmModuleFunc>,
+    /// Extracted globals.
+    pub globals: Vec<WirGlobal>,
+    /// Mapping from WIR global FQ names to module-local global indices.
+    pub global_name_to_index: IndexMap<String, u32>,
+}
+
+/// A function in a `#![wasm_module]` separate core module.
+#[derive(Debug)]
+pub struct WasmModuleFunc {
+    /// The wasm export name for this function (e.g., "realloc").
+    pub export_name: String,
+    /// Parameter names.
+    pub param_names: Vec<String>,
+    /// The WIR body instructions.
+    pub body: Vec<WirInstr>,
+}
+
+impl WasmModuleInfo {
+    /// Convert this extracted module info into a standalone `WirModule`
+    /// that can be emitted via `emit_core_module`.
+    pub fn to_wir_module(&self, strip_names: bool, memory: WirMemory) -> WirModule {
+        let mut wir = WirModule::empty();
+
+        // Memory definition
+        wir.memories.push(memory);
+
+        // One func type per function (currently all are (i32, i32, i32, i32) -> i32)
+        for (i, func) in self.functions.iter().enumerate() {
+            let fq: Rc<str> = Rc::from(format!("__wasm_mod_type_{i}"));
+            wir.types.push(WirTypeDef::Func(WirFuncType {
+                name: WirName {
+                    display: func.export_name.clone(),
+                    fq: fq.to_string(),
+                },
+                params: vec![WirType::I32; func.param_names.len()],
+                results: vec![WirType::I32],
+            }));
+        }
+
+        // Functions
+        for (i, func) in self.functions.iter().enumerate() {
+            let type_id = WirTypeId::new(
+                u32::try_from(i).unwrap(),
+                Rc::from(format!("__wasm_mod_type_{i}")),
+            );
+            let func_fq: Rc<str> = Rc::from(format!("__wasm_mod_func_{i}"));
+            wir.functions.push(WirFunction {
+                name: WirName {
+                    display: func.export_name.clone(),
+                    fq: func_fq.to_string(),
+                },
+                type_id,
+                param_names: func.param_names.clone(),
+                body: Some(func.body.clone()),
+                meta: WirMeta {
+                    module_source: None,
+                    span: None,
+                    attributes: Vec::new(),
+                },
+                generic_origin: None,
+                effects: Vec::new(),
+                comp_features: 0,
+                export_name: None,
+            });
+
+            // Export each function
+            wir.exports.push(WirExport {
+                name: func.export_name.clone(),
+                desc: WirExportDesc::Func {
+                    func_id: WirFuncId::new(
+                        u32::try_from(i).unwrap(),
+                        Rc::from(format!("__wasm_mod_func_{i}")),
+                    ),
+                },
+            });
+        }
+
+        // Globals
+        wir.globals = self.globals.clone();
+
+        // Export memory
+        wir.exports.push(WirExport {
+            name: "memory".to_string(),
+            desc: WirExportDesc::Memory,
+        });
+
+        // Names
+        if !strip_names {
+            for (i, func) in self.functions.iter().enumerate() {
+                wir.names
+                    .function_names
+                    .push((u32::try_from(i).unwrap(), func.export_name.clone()));
+            }
+        }
+
+        wir
+    }
 }
 
 impl WirModule {
@@ -67,12 +183,17 @@ impl WirModule {
             globals: Vec::new(),
             exports: Vec::new(),
             elements: Vec::new(),
+            memories: Vec::new(),
             data: Vec::new(),
             branch_hints: Vec::new(),
             names: WirNames::default(),
             component: WirComponent::default(),
             variant_case_info: IndexMap::new(),
             entry_point_path: None,
+            wasm_modules: IndexMap::new(),
+            dead_type_indices: IndexSet::new(),
+            dead_func_indices: IndexSet::new(),
+            dead_global_indices: IndexSet::new(),
         }
     }
 }
@@ -547,6 +668,8 @@ pub struct WirFunction {
     /// Compiler feature bitflags (e.g., `COMP_FEATURE_ARRAY_APPEND`).
     /// Set via `#[comp_feature("array_append")]` attribute in Wado source.
     pub comp_features: u32,
+    /// Custom wasm export name from `#[export_name("...")]` attribute.
+    pub export_name: Option<String>,
 }
 
 /// WIR instructions are tree-structured where operands are child nodes,
@@ -1765,8 +1888,17 @@ pub enum WirImportDesc {
     },
 }
 
+/// A defined linear memory.
+#[derive(Debug, Clone)]
+pub struct WirMemory {
+    /// Minimum size in pages.
+    pub min: u32,
+    /// Maximum size in pages (optional).
+    pub max: Option<u32>,
+}
+
 /// A global variable.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WirGlobal {
     /// Global name.
     pub name: WirName,

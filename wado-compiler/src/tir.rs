@@ -1910,6 +1910,9 @@ pub struct TirFunction {
 
     /// Compiler feature bitflags from `#[comp_feature("...")]` attributes.
     pub comp_features: u32,
+
+    /// Custom wasm export name from `#[export_name("...")]` attribute.
+    pub export_name: Option<String>,
 }
 
 /// Inline hint for a function, extracted from `#[inline(...)]` attributes.
@@ -2232,6 +2235,8 @@ pub struct TirModule {
     /// Global variable declarations
     pub globals: Vec<TirGlobal>,
     pub data_section: Option<String>,
+    /// `#![wasm_module("name")]` — items in this module compile to a separate Wasm core module.
+    pub wasm_module: Option<String>,
     pub string_literals: Vec<String>,
     /// Map of function name to string literals it contains (for DCE)
     pub function_strings: IndexMap<String, Vec<String>>,
@@ -2269,6 +2274,7 @@ impl TirModule {
             tests: Vec::new(),
             globals: Vec::new(),
             data_section: None,
+            wasm_module: None,
             string_literals: Vec::new(),
             function_strings: IndexMap::new(),
             function_method_info: IndexMap::new(),
@@ -2300,6 +2306,7 @@ impl TirModule {
             tests: Vec::new(),
             globals: Vec::new(),
             data_section: None,
+            wasm_module: None,
             string_literals: Vec::new(),
             function_strings: IndexMap::new(),
             function_method_info: IndexMap::new(),

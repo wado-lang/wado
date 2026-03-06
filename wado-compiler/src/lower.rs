@@ -2373,6 +2373,7 @@ fn lower_global_initializers(module: &mut TirModule) {
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
+        export_name: None,
     };
 
     module.functions.push(Rc::new(RefCell::new(init_func)));
@@ -2869,6 +2870,7 @@ fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, TirModule>) 
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
+        export_name: None,
     };
 
     entry_module
@@ -4632,6 +4634,7 @@ impl ClosureLowerer {
                 is_cm_adapter: false,
                 inline_hint: InlineHint::Auto,
                 comp_features: 0,
+                export_name: None,
             };
 
             let call_method_rc = Rc::new(RefCell::new(call_method));
@@ -6240,6 +6243,7 @@ impl ClosureLowerer {
             is_cm_adapter: false,
             inline_hint: callee.inline_hint,
             comp_features: callee.comp_features,
+            export_name: callee.export_name.clone(),
         };
 
         self.generated_functions

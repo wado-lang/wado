@@ -23,7 +23,11 @@ use wasm_encoder::{
 };
 
 /// Build a complete Wasm Component from a pre-built core module and project metadata.
-pub fn build_component(project: &Project, core_module: &[u8]) -> Vec<u8> {
+pub fn build_component(
+    project: &Project,
+    core_module: &[u8],
+    wasm_modules: &IndexMap<String, crate::wir::WasmModuleInfo>,
+) -> Vec<u8> {
     let mut builder = ComponentBuilder::default();
     let mut ctx = ComponentModelContext::new();
 
@@ -46,7 +50,8 @@ pub fn build_component(project: &Project, core_module: &[u8]) -> Vec<u8> {
     }
 
     // Core memory module
-    let mem_module = build_memory_module(project.strip_names);
+    let mem_info = wasm_modules.get("mem");
+    let mem_module = build_memory_module(project.strip_names, mem_info);
     ctx.register_core_module("mem-mod");
     builder.core_module_raw(Some("mem-mod"), &mem_module);
 
@@ -467,85 +472,16 @@ fn wado_type_to_cm_result_type(
     }
 }
 
-fn build_memory_module(strip_names: bool) -> Vec<u8> {
-    use wasm_encoder::{
-        CodeSection, ExportKind, ExportSection, Function, FunctionSection, GlobalSection,
-        GlobalType, Instruction, MemorySection, MemoryType, Module, NameMap, NameSection,
-        TypeSection, ValType,
-    };
+fn build_memory_module(
+    strip_names: bool,
+    wasm_mod: Option<&crate::wir::WasmModuleInfo>,
+) -> Vec<u8> {
+    let wasm_mod = wasm_mod.expect("core:allocator with #![wasm_module(\"mem\")] is required");
 
-    let mut module = Module::new();
-
-    let mut types = TypeSection::new();
-    types.ty().function(
-        [ValType::I32, ValType::I32, ValType::I32, ValType::I32],
-        [ValType::I32],
-    );
-    module.section(&types);
-
-    let mut functions = FunctionSection::new();
-    functions.function(0);
-    module.section(&functions);
-
-    let mut memories = MemorySection::new();
-    memories.memory(MemoryType {
-        minimum: 64,
-        maximum: None,
-        memory64: false,
-        shared: false,
-        page_size_log2: None,
-    });
-    module.section(&memories);
-
-    let mut globals = GlobalSection::new();
-    globals.global(
-        GlobalType {
-            val_type: ValType::I32,
-            mutable: true,
-            shared: false,
-        },
-        &wasm_encoder::ConstExpr::i32_const(1024),
-    );
-    module.section(&globals);
-
-    let mut exports = ExportSection::new();
-    exports.export("memory", ExportKind::Memory, 0);
-    exports.export("realloc", ExportKind::Func, 0);
-    module.section(&exports);
-
-    let mut code = CodeSection::new();
-    let mut realloc_func = Function::new([(1, ValType::I32)]);
-    realloc_func.instruction(&Instruction::GlobalGet(0));
-    realloc_func.instruction(&Instruction::LocalGet(2));
-    realloc_func.instruction(&Instruction::I32Add);
-    realloc_func.instruction(&Instruction::I32Const(1));
-    realloc_func.instruction(&Instruction::I32Sub);
-    realloc_func.instruction(&Instruction::I32Const(0));
-    realloc_func.instruction(&Instruction::LocalGet(2));
-    realloc_func.instruction(&Instruction::I32Sub);
-    realloc_func.instruction(&Instruction::I32And);
-    realloc_func.instruction(&Instruction::LocalSet(4));
-    realloc_func.instruction(&Instruction::LocalGet(4));
-    realloc_func.instruction(&Instruction::LocalGet(3));
-    realloc_func.instruction(&Instruction::I32Add);
-    realloc_func.instruction(&Instruction::GlobalSet(0));
-    realloc_func.instruction(&Instruction::LocalGet(4));
-    realloc_func.instruction(&Instruction::End);
-    code.function(&realloc_func);
-    module.section(&code);
-
-    if !strip_names {
-        let mut names = NameSection::new();
-        let mut func_names = NameMap::new();
-        func_names.append(0, "realloc");
-        names.functions(&func_names);
-        let mut type_names = NameMap::new();
-        type_names.append(0, "realloc");
-        names.types(&type_names);
-        module.section(&names);
-    }
-
-    module.finish()
+    // TODO: make the initial linear memory size configurable via compiler options
+    let memory = crate::wir::WirMemory { min: 64, max: None };
+    let wir = wasm_mod.to_wir_module(strip_names, memory);
+    super::emit::emit_core_module(&wir)
 }
 
 fn embed_bundled_modules(
