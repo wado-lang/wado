@@ -21,6 +21,7 @@ mod licm;
 mod ref_elim;
 mod rewrite;
 mod sroa;
+mod store_load_forward;
 mod tmpl_hoist;
 
 use const_fold::fold_constants;
@@ -35,6 +36,7 @@ use inline::inline_functions;
 use licm::apply_licm;
 use ref_elim::eliminate_unnecessary_refs;
 use sroa::scalar_replace_aggregates;
+use store_load_forward::forward_stores_to_loads;
 use tmpl_hoist::hoist_template_buffers;
 
 use crate::project::Project;
@@ -185,6 +187,7 @@ fn run_optimization_passes(project: &mut Project, config: &OptConfig) {
         changed |= eliminate_unnecessary_refs(project);
         changed |= scalar_replace_aggregates(project);
         changed |= propagate_copies(project);
+        changed |= forward_stores_to_loads(project);
         changed |= propagate_constants(project);
         changed |= fold_constants(project);
         changed |= promote_constant_globals(project);
