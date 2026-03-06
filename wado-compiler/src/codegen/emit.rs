@@ -164,14 +164,13 @@ impl<'a> WirEmitter<'a> {
         }
 
         // 11. Name section (optional)
-        if !self.strip_names {
-            if self.wir.names.module_name.is_some()
+        if !self.strip_names
+            && (self.wir.names.module_name.is_some()
                 || !self.wir.names.function_names.is_empty()
-                || !self.wir.functions.is_empty()
-            {
-                let names = self.emit_name_section();
-                module.section(&names);
-            }
+                || !self.wir.functions.is_empty())
+        {
+            let names = self.emit_name_section();
+            module.section(&names);
         }
 
         module.finish()
