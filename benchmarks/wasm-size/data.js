@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772794453738,
+  "lastUpdate": 1772800093827,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -764,6 +764,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0669d7896b235e32b7da81f76c14b953bfc5c13d"
         },
         "date": 1772794453598,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1388,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9058,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18395,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5ebfe361eaaa80688a51f10d878853653082f262",
+          "message": "Merge pull request #517 from wado-lang/claude/optimize-json-parsing-tuIN4\n\nOptimize JSON number parsing with direct single-pass parsing",
+          "timestamp": "2026-03-06T21:26:00+09:00",
+          "tree_id": "a0a5d0e2eeaaacd249d9132265b0c725071dbf11",
+          "url": "https://github.com/wado-lang/wado/commit/5ebfe361eaaa80688a51f10d878853653082f262"
+        },
+        "date": 1772800093688,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
