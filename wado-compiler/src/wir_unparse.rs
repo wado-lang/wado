@@ -64,11 +64,12 @@ impl<'a> WirUnparser<'a> {
 
     /// Try to inline a `array.new_data` as a readable literal.
     ///
-    /// When offset and len are constant and the slice is valid UTF-8, returns
-    /// a quoted string like `"hello"`. Otherwise returns `None` and the caller
-    /// falls back to the index-based format.
+    /// When offset and len are constant and the slice is valid, returns
+    /// formatted values. For u8 arrays with valid UTF-8, returns a quoted string
+    /// like `"hello"`. For other element types, returns comma-separated values.
     fn try_inline_data(
         &self,
+        type_id: &crate::wir::WirTypeId,
         data_index: u32,
         offset: &WirInstr,
         len: &WirInstr,
@@ -82,15 +83,86 @@ impl<'a> WirUnparser<'a> {
         let segment = self.data.get(data_index as usize)?;
         let off = *off as usize;
         let length = *length as usize;
-        let bytes = segment.bytes.get(off..off + length)?;
-        if let Ok(s) = std::str::from_utf8(bytes) {
-            let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
-            Some(format!("\"{escaped}\""))
-        } else {
-            // Non-UTF-8: show as hex byte sequence
+
+        // Look up the element type from the array type definition
+        let elem_type = {
+            let idx = type_id.index() as usize;
+            if let Some(WirTypeDef::Array(a)) = self.types.get(idx) {
+                Some(a.element_type.clone())
+            } else {
+                None
+            }
+        };
+
+        let byte_width = match elem_type.as_ref() {
+            Some(WirType::U8 | WirType::I8 | WirType::Bool) => 1,
+            Some(WirType::I16 | WirType::U16) => 2,
+            Some(WirType::I32 | WirType::U32 | WirType::Char) => 4,
+            Some(WirType::Enum { .. } | WirType::Flags { .. }) => 4,
+            Some(WirType::I64 | WirType::U64) => 8,
+            Some(WirType::F32) => 4,
+            Some(WirType::F64) => 8,
+            _ => 1, // fallback: treat as bytes
+        };
+
+        let byte_len = length * byte_width;
+        let bytes = segment.bytes.get(off..off + byte_len)?;
+
+        // For u8/i8: try UTF-8 string display
+        if byte_width == 1 {
+            if let Ok(s) = std::str::from_utf8(bytes) {
+                let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
+                return Some(format!("\"{escaped}\""));
+            }
             let hex: Vec<String> = bytes.iter().map(|b| format!("0x{b:02x}")).collect();
-            Some(hex.join(", "))
+            return Some(hex.join(", "));
         }
+
+        // For multi-byte types: decode and display as values
+        let mut values = Vec::with_capacity(length);
+        for i in 0..length {
+            let start = i * byte_width;
+            let chunk = &bytes[start..start + byte_width];
+            let val = match elem_type.as_ref() {
+                Some(WirType::I16) => {
+                    format!("{}", i16::from_le_bytes(chunk.try_into().ok()?))
+                }
+                Some(WirType::U16) => {
+                    format!("{}", u16::from_le_bytes(chunk.try_into().ok()?))
+                }
+                Some(WirType::I32 | WirType::Enum { .. } | WirType::Flags { .. }) => {
+                    format!("{}", i32::from_le_bytes(chunk.try_into().ok()?))
+                }
+                Some(WirType::U32) => {
+                    format!("{}", u32::from_le_bytes(chunk.try_into().ok()?))
+                }
+                Some(WirType::Char) => {
+                    let code = u32::from_le_bytes(chunk.try_into().ok()?);
+                    if let Some(c) = char::from_u32(code) {
+                        format!("'{c}'")
+                    } else {
+                        format!("0x{code:08x}")
+                    }
+                }
+                Some(WirType::I64) => {
+                    format!("{}_i64", i64::from_le_bytes(chunk.try_into().ok()?))
+                }
+                Some(WirType::U64) => {
+                    format!("{}_u64", u64::from_le_bytes(chunk.try_into().ok()?))
+                }
+                Some(WirType::F32) => {
+                    let v = f32::from_le_bytes(chunk.try_into().ok()?);
+                    format!("{v}_f32")
+                }
+                Some(WirType::F64) => {
+                    let v = f64::from_le_bytes(chunk.try_into().ok()?);
+                    format!("{v}")
+                }
+                _ => return None,
+            };
+            values.push(val);
+        }
+        Some(values.join(", "))
     }
 
     /// Get the element type of a GC array type as a display string.
@@ -890,7 +962,7 @@ impl<'a> WirUnparser<'a> {
             } => {
                 let elem = self.array_elem_type_str(type_id);
                 // Try to inline the data segment contents when offset and len are constants
-                if let Some(inline) = self.try_inline_data(*data_index, offset, len) {
+                if let Some(inline) = self.try_inline_data(type_id, *data_index, offset, len) {
                     self.write(&format!("array.new_data<{elem}>({inline})"));
                 } else {
                     self.write(&format!("array.new_data<{elem}>[{data_index}]("));

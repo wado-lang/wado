@@ -3705,11 +3705,12 @@ fn try_extract_array_new_default(
         return None;
     }
 
-    // First field: RefAsNonNull(ArrayNewDefault { type_id, len: I32Const(N) })
-    let WirInstr::RefAsNonNull(inner) = &fields[0] else {
-        return None;
+    // First field: ArrayNewDefault or RefAsNonNull(ArrayNewDefault)
+    let array_new_default = match &fields[0] {
+        WirInstr::RefAsNonNull(inner) => inner.as_ref(),
+        other => other,
     };
-    let WirInstr::ArrayNewDefault { type_id, len } = inner.as_ref() else {
+    let WirInstr::ArrayNewDefault { type_id, len } = array_new_default else {
         return None;
     };
     let WirInstr::I32Const(capacity) = len.as_ref() else {
@@ -3962,12 +3963,16 @@ fn rewrite_init_to_fixed(instr: &mut WirInstr, init_info: &ArrayInitInfo, values
         _ => return,
     };
 
-    // Replace fields[0]: RefAsNonNull(ArrayNewDefault) → RefAsNonNull(ArrayNewFixed)
-    if let Some(WirInstr::RefAsNonNull(inner)) = array_fields.first_mut() {
-        **inner = WirInstr::ArrayNewFixed {
+    // Replace fields[0]: ArrayNewDefault → ArrayNewFixed (with or without RefAsNonNull)
+    if let Some(first) = array_fields.first_mut() {
+        let new_fixed = WirInstr::ArrayNewFixed {
             type_id: init_info.raw_array_type_id.clone(),
             elements: values,
         };
+        match first {
+            WirInstr::RefAsNonNull(inner) => **inner = new_fixed,
+            _ => *first = new_fixed,
+        }
     }
 
     // Replace fields[used_field_index]: I32Const(0) → I32Const(N)
@@ -3983,33 +3988,32 @@ impl ArrayAccessPath {
 }
 
 /// Find the inner Array<T> fields within a wrapper struct's fields.
-/// Looks for RefAsNonNull(StructNew { fields }) pattern.
+/// Looks for `StructNew { fields }` (with or without `RefAsNonNull` wrapper).
 fn find_inner_array_fields(outer_fields: &mut [WirInstr]) -> Option<&mut Vec<WirInstr>> {
     for field in outer_fields.iter_mut() {
-        match field {
-            WirInstr::RefAsNonNull(inner) => {
-                if let WirInstr::StructNew { fields, .. } = inner.as_mut() {
-                    // Check if this has the ArrayNewDefault pattern
-                    if fields.len() == 2
-                        && matches!(&fields[0], WirInstr::RefAsNonNull(i) if matches!(i.as_ref(), WirInstr::ArrayNewDefault { .. }))
-                        && matches!(&fields[1], WirInstr::I32Const(0))
-                    {
-                        return Some(fields);
-                    }
-                }
+        let struct_new = match field {
+            WirInstr::RefAsNonNull(inner) => inner.as_mut(),
+            other => other,
+        };
+        if let WirInstr::StructNew { fields, .. } = struct_new {
+            if fields.len() == 2
+                && is_array_new_default(&fields[0])
+                && matches!(&fields[1], WirInstr::I32Const(0))
+            {
+                return Some(fields);
             }
-            WirInstr::StructNew { fields, .. } => {
-                if fields.len() == 2
-                    && matches!(&fields[0], WirInstr::RefAsNonNull(i) if matches!(i.as_ref(), WirInstr::ArrayNewDefault { .. }))
-                    && matches!(&fields[1], WirInstr::I32Const(0))
-                {
-                    return Some(fields);
-                }
-            }
-            _ => {}
         }
     }
     None
+}
+
+/// Check if an instruction is `ArrayNewDefault` (with or without `RefAsNonNull` wrapper).
+fn is_array_new_default(instr: &WirInstr) -> bool {
+    match instr {
+        WirInstr::ArrayNewDefault { .. } => true,
+        WirInstr::RefAsNonNull(inner) => matches!(inner.as_ref(), WirInstr::ArrayNewDefault { .. }),
+        _ => false,
+    }
 }
 
 /// Rewrite `String::append(buf, "short_constant")` calls into sequences of
