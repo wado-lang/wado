@@ -677,6 +677,7 @@ impl<'a> WirContext<'a> {
             globals,
             exports: self.exports,
             elements: Vec::new(), // TODO: element section
+            memories: Vec::new(),
             data: self.data,
             branch_hints: Vec::new(),
             names: self.names,

@@ -41,6 +41,8 @@ pub struct WirModule {
     pub exports: Vec<WirExport>,
     /// Element section (for funcref tables).
     pub elements: Vec<WirElement>,
+    /// Defined memories (for standalone modules like the memory module).
+    pub memories: Vec<WirMemory>,
     /// Data section (string literals, etc.).
     pub data: Vec<WirData>,
     /// Branch hints (from likely/unlikely).
@@ -88,6 +90,88 @@ pub struct WasmModuleFunc {
     pub body: Vec<WirInstr>,
 }
 
+impl WasmModuleInfo {
+    /// Convert this extracted module info into a standalone `WirModule`
+    /// that can be emitted via `emit_core_module`.
+    pub fn to_wir_module(&self, strip_names: bool, memory: WirMemory) -> WirModule {
+        let mut wir = WirModule::empty();
+
+        // Memory definition
+        wir.memories.push(memory);
+
+        // One func type per function (currently all are (i32, i32, i32, i32) -> i32)
+        for (i, func) in self.functions.iter().enumerate() {
+            let fq: Rc<str> = Rc::from(format!("__wasm_mod_type_{i}"));
+            wir.types.push(WirTypeDef::Func(WirFuncType {
+                name: WirName {
+                    display: func.export_name.clone(),
+                    fq: fq.to_string(),
+                },
+                params: vec![WirType::I32; func.param_names.len()],
+                results: vec![WirType::I32],
+            }));
+        }
+
+        // Functions
+        for (i, func) in self.functions.iter().enumerate() {
+            let type_id = WirTypeId::new(
+                u32::try_from(i).unwrap(),
+                Rc::from(format!("__wasm_mod_type_{i}")),
+            );
+            let func_fq: Rc<str> = Rc::from(format!("__wasm_mod_func_{i}"));
+            wir.functions.push(WirFunction {
+                name: WirName {
+                    display: func.export_name.clone(),
+                    fq: func_fq.to_string(),
+                },
+                type_id,
+                param_names: func.param_names.clone(),
+                body: Some(func.body.clone()),
+                meta: WirMeta {
+                    module_source: None,
+                    span: None,
+                    attributes: Vec::new(),
+                },
+                generic_origin: None,
+                effects: Vec::new(),
+                comp_features: 0,
+                export_name: None,
+            });
+
+            // Export each function
+            wir.exports.push(WirExport {
+                name: func.export_name.clone(),
+                desc: WirExportDesc::Func {
+                    func_id: WirFuncId::new(
+                        u32::try_from(i).unwrap(),
+                        Rc::from(format!("__wasm_mod_func_{i}")),
+                    ),
+                },
+            });
+        }
+
+        // Globals
+        wir.globals = self.globals.clone();
+
+        // Export memory
+        wir.exports.push(WirExport {
+            name: "memory".to_string(),
+            desc: WirExportDesc::Memory,
+        });
+
+        // Names
+        if !strip_names {
+            for (i, func) in self.functions.iter().enumerate() {
+                wir.names
+                    .function_names
+                    .push((u32::try_from(i).unwrap(), func.export_name.clone()));
+            }
+        }
+
+        wir
+    }
+}
+
 impl WirModule {
     /// Create an empty `WirModule` with no types, functions, or other content.
     pub fn empty() -> Self {
@@ -99,6 +183,7 @@ impl WirModule {
             globals: Vec::new(),
             exports: Vec::new(),
             elements: Vec::new(),
+            memories: Vec::new(),
             data: Vec::new(),
             branch_hints: Vec::new(),
             names: WirNames::default(),
@@ -1801,6 +1886,15 @@ pub enum WirImportDesc {
         min: u32,
         max: Option<u32>,
     },
+}
+
+/// A defined linear memory.
+#[derive(Debug, Clone)]
+pub struct WirMemory {
+    /// Minimum size in pages.
+    pub min: u32,
+    /// Maximum size in pages (optional).
+    pub max: Option<u32>,
 }
 
 /// A global variable.

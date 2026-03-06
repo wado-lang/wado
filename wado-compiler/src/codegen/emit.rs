@@ -15,7 +15,8 @@ use wasm_encoder::{
     AbstractHeapType, BlockType, BranchHint, BranchHints, CodeSection, CompositeInnerType,
     CompositeType, ConstExpr, DataCountSection, DataSection, ElementSection, Elements, ExportKind,
     ExportSection, FieldType, Function, FunctionSection, GlobalSection, GlobalType, HeapType,
-    ImportSection, Instruction, MemArg, Module, NameMap, NameSection, RefType, StorageType,
+    ImportSection, Instruction, MemArg, MemorySection, MemoryType, Module, NameMap, NameSection,
+    RefType, StorageType,
     StructType, SubType, TypeSection, ValType,
 };
 
@@ -99,8 +100,11 @@ impl<'a> WirEmitter<'a> {
         let funcs = self.emit_function_section();
         module.section(&funcs);
 
-        // 4. Memory section (if needed and not imported)
-        // Memory is imported from component level, not defined here
+        // 4. Memory section (for standalone modules like the memory module)
+        if !self.wir.memories.is_empty() {
+            let memories = self.emit_memory_section();
+            module.section(&memories);
+        }
 
         // 5. Global section
         self.build_global_name_map();
@@ -577,6 +581,20 @@ impl<'a> WirEmitter<'a> {
         }
 
         funcs
+    }
+
+    fn emit_memory_section(&self) -> MemorySection {
+        let mut memories = MemorySection::new();
+        for mem in &self.wir.memories {
+            memories.memory(MemoryType {
+                minimum: u64::from(mem.min),
+                maximum: mem.max.map(u64::from),
+                memory64: false,
+                shared: false,
+                page_size_log2: None,
+            });
+        }
+        memories
     }
 
     fn build_func_index_map(&mut self) {
