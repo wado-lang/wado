@@ -266,7 +266,7 @@ fn run() with Stdout {
     };
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_7 = String { repr: ref.as_non_null(builtin::array_new<u8>(31)), used: 0 };
-        String::append(__local_7, String { repr: ref.as_non_null(array.new_data<u8>[14](0, 15)), used: 15 });
+        String::append(__local_7, String { repr: ref.as_non_null(array.new_data<u8>("sum of meters: ")), used: 15 });
         __local_8 = __inline_Formatter__new_2: block -> ref null Formatter {
             __local_16 = __local_7;
             break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_16) };
@@ -275,7 +275,7 @@ fn run() with Stdout {
         __local_18 = __local_8;
         nop;
         f64::inspect_into(1500, __local_18);
-        __local_24 = String { repr: ref.as_non_null(array.new_data<u8>[18](0, 10)), used: 10 };
+        __local_24 = String { repr: ref.as_non_null(array.new_data<u8>(" as Meters")), used: 10 };
         String::append(__local_18.buf, __local_24);
         break __tmpl: __local_7;
     });
@@ -299,7 +299,7 @@ fn run() with Stdout {
     from_raw = 100;
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_11 = String { repr: ref.as_non_null(builtin::array_new<u8>(26)), used: 0 };
-        String::append(__local_11, String { repr: ref.as_non_null(array.new_data<u8>[16](0, 10)), used: 10 });
+        String::append(__local_11, String { repr: ref.as_non_null(array.new_data<u8>("from_raw: ")), used: 10 });
         __local_12 = __inline_Formatter__new_11: block -> ref null Formatter {
             __local_30 = __local_11;
             break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_30) };
@@ -308,14 +308,14 @@ fn run() with Stdout {
         __local_32 = __local_12;
         nop;
         f64::inspect_into(from_raw, __local_32);
-        __local_38 = String { repr: ref.as_non_null(array.new_data<u8>[18](0, 10)), used: 10 };
+        __local_38 = String { repr: ref.as_non_null(array.new_data<u8>(" as Meters")), used: 10 };
         String::append(__local_32.buf, __local_38);
         break __tmpl: __local_11;
     });
     km_from_m = 1000 / 1000;
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_13 = String { repr: ref.as_non_null(builtin::array_new<u8>(27)), used: 0 };
-        String::append(__local_13, String { repr: ref.as_non_null(array.new_data<u8>[17](0, 11)), used: 11 });
+        String::append(__local_13, String { repr: ref.as_non_null(array.new_data<u8>("km_from_m: ")), used: 11 });
         __local_14 = __inline_Formatter__new_17: block -> ref null Formatter {
             __local_40 = __local_13;
             break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_40) };
@@ -324,7 +324,7 @@ fn run() with Stdout {
         __local_42 = __local_14;
         nop;
         f64::inspect_into(km_from_m, __local_42);
-        __local_48 = String { repr: ref.as_non_null(array.new_data<u8>[19](0, 14)), used: 14 };
+        __local_48 = String { repr: ref.as_non_null(array.new_data<u8>(" as Kilometers")), used: 14 };
         String::append(__local_42.buf, __local_48);
         break __tmpl: __local_13;
     });
@@ -932,7 +932,7 @@ fn fixed_width_for_prec(f, precision) {
     if d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
         __local_28 = POW10;
         if n >= __local_28.used {
-            "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[5](0, 19)), used: 19 });
+            "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>("index out of bounds")), used: 19 });
             unreachable;
         };
         break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_28.repr, n);
@@ -1282,9 +1282,9 @@ fn write_exp(buf, d, p, nd, upper) {
         write_digits_at(buf, start_8, d, 1);
     };
     String::append(buf, if upper -> ref null String {
-        String { repr: ref.as_non_null(array.new_data<u8>[1](0, 1)), used: 1 };
+        String { repr: ref.as_non_null(array.new_data<u8>("E")), used: 1 };
     } else {
-        String { repr: ref.as_non_null(array.new_data<u8>[2](0, 1)), used: 1 };
+        String { repr: ref.as_non_null(array.new_data<u8>("e")), used: 1 };
     });
     if exp < 0 {
         String::append_char(buf, 45);
@@ -1553,13 +1553,13 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
         String::append_char(f.buf, 78);
     } else if kind == 2 {
         String::append(f.buf, if is_neg -> ref null String {
-            String { repr: ref.as_non_null(array.new_data<u8>[7](0, 4)), used: 4 };
+            String { repr: ref.as_non_null(array.new_data<u8>("-inf")), used: 4 };
         } else {
-            String { repr: ref.as_non_null(array.new_data<u8>[8](0, 3)), used: 3 };
+            String { repr: ref.as_non_null(array.new_data<u8>("inf")), used: 3 };
         });
     } else {
         String::append(f.buf, if is_neg -> ref null String {
-            String { repr: ref.as_non_null(array.new_data<u8>[3](0, 1)), used: 1 };
+            String { repr: ref.as_non_null(array.new_data<u8>("-")), used: 1 };
         } else {
             String { repr: ref.as_non_null(builtin::array_new<u8>(0)), used: 0 };
         });
@@ -1632,7 +1632,7 @@ fn f64::fmt_into(self, f) {
     is_neg = __sroa___pattern_temp_0_1;
     kind = __sroa___pattern_temp_0_2;
     if is_special {
-        fmt_float_special(f, is_neg, kind, String { repr: ref.as_non_null(array.new_data<u8>[11](0, 1)), used: 1 });
+        fmt_float_special(f, is_neg, kind, String { repr: ref.as_non_null(array.new_data<u8>("0")), used: 1 });
         return;
     };
     abs_f = if is_neg -> f64 {
@@ -1653,7 +1653,7 @@ fn f64::fmt_into(self, f) {
         break __inline_digits_0: __local_14 + (d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
             __local_20 = POW10;
             if __local_14 >= __local_20.used {
-                "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[5](0, 19)), used: 19 });
+                "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>("index out of bounds")), used: 19 });
                 unreachable;
             };
             break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_20.repr, __local_14);
@@ -1703,7 +1703,7 @@ fn f64::inspect_into(self, f) {
     is_neg = __sroa___pattern_temp_0_1;
     kind = __sroa___pattern_temp_0_2;
     if is_special {
-        fmt_float_special(f, is_neg, kind, String { repr: ref.as_non_null(array.new_data<u8>[12](0, 3)), used: 3 });
+        fmt_float_special(f, is_neg, kind, String { repr: ref.as_non_null(array.new_data<u8>("0.0")), used: 3 });
         return;
     };
     abs_f = if is_neg -> f64 {
@@ -1724,7 +1724,7 @@ fn f64::inspect_into(self, f) {
         break __inline_digits_0: __local_15 + (d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
             __local_21 = POW10;
             if __local_15 >= __local_21.used {
-                "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[5](0, 19)), used: 19 });
+                "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>("index out of bounds")), used: 19 });
                 unreachable;
             };
             break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_21.repr, __local_15);
@@ -1800,7 +1800,7 @@ fn f64::fmt_fixed(self, precision, f) {
                 0;
             };
         } {
-            fmt_float_special(f, is_neg, kind, String { repr: ref.as_non_null(array.new_data<u8>[11](0, 1)), used: 1 });
+            fmt_float_special(f, is_neg, kind, String { repr: ref.as_non_null(array.new_data<u8>("0")), used: 1 });
             return;
         };
         mark_7 = __inline_String__len_1: block -> i32 {
@@ -1834,7 +1834,7 @@ fn f64::fmt_fixed(self, precision, f) {
         break __inline_digits_2: __local_18 + (d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
             __local_24 = POW10;
             if __local_18 >= __local_24.used {
-                "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[5](0, 19)), used: 19 });
+                "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>("index out of bounds")), used: 19 });
                 unreachable;
             };
             break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_24.repr, __local_18);

@@ -128,7 +128,7 @@ fn run() with Stdout {
     };
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_2 = String { repr: ref.as_non_null(builtin::array_new<u8>(30)), used: 0 };
-        String::append(__local_2, String { repr: ref.as_non_null(array.new_data<u8>[1](0, 14)), used: 14 });
+        String::append(__local_2, String { repr: ref.as_non_null(array.new_data<u8>("nested value: ")), used: 14 });
         __local_3 = __inline_Formatter__new_3: block -> ref null Formatter {
             __local_6 = __local_2;
             break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_6) };
@@ -433,9 +433,9 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     let __local_15: ref null String;
     sign = String { repr: ref.as_non_null(builtin::array_new<u8>(0)), used: 0 };
     if is_negative {
-        sign = String { repr: ref.as_non_null(array.new_data<u8>[2](0, 1)), used: 1 };
+        sign = String { repr: ref.as_non_null(array.new_data<u8>("-")), used: 1 };
     } else if self.sign_plus {
-        sign = String { repr: ref.as_non_null(array.new_data<u8>[3](0, 1)), used: 1 };
+        sign = String { repr: ref.as_non_null(array.new_data<u8>("+")), used: 1 };
     };
     sign_len = sign.used;
     prefix_len = prefix.used;
