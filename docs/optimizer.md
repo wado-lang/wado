@@ -50,11 +50,11 @@ The optimizer runs after lowering and before Wasm emission:
    4. Copy Propagation
    5. Store-to-Load Forwarding
    6. Constant Propagation
-   6. Constant Folding
-   7. Constant Global Promotion
-   8. Constant Branch Pruning
-   9. Loop-Invariant Code Motion (LICM)
-   10. Template String Buffer Hoisting
+   7. Constant Folding
+   8. Constant Global Promotion
+   9. Constant Branch Pruning
+   10. Loop-Invariant Code Motion (LICM)
+   11. Template String Buffer Hoisting
 3. Final DCE: clean up code made dead by optimizations (e.g., functions inlined away) (all levels)
 4. Post-optimization rewrites (labeled block simplification, select lowering, move insertion; all levels)
 5. WIR-level optimizations (multi-value SROA, constant array data promotion, large array splitting; see [WIR Optimizations](#wir-optimizations))
