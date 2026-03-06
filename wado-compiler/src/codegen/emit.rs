@@ -1358,7 +1358,7 @@ impl<'a> WirEmitter<'a> {
                 f.instruction(&Instruction::Unreachable);
             }
             WirInstr::Nop => {
-                // Don't emit nop
+                f.instruction(&Instruction::Nop);
             }
             WirInstr::Drop(o) => {
                 self.emit_instr(f, o);
