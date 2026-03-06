@@ -989,10 +989,10 @@ fn extract_world_from_data_section(source: &str) -> Option<String> {
     if let Some(world) = json.get("world").and_then(|v| v.as_str()) {
         return Some(world.to_string());
     }
-    // New format: world name is a top-level key (contains ':' or is "test")
+    // New format: world name is a top-level key (wasi:* prefix or "test")
     if let Some(obj) = json.as_object() {
         for key in obj.keys() {
-            if key.contains(':') || key == "test" {
+            if key.starts_with("wasi:") || key == "test" {
                 return Some(key.clone());
             }
         }

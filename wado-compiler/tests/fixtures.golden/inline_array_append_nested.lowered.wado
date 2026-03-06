@@ -8,6 +8,7 @@
 // wasi::stream-new
 // wasi::stream-write
 // wasi::subtask-drop
+// wasi::task-return
 // wasi::waitable-join
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
@@ -40,13 +41,20 @@ fn Container::process(self: &mut Container) {
     };
     __for_1: {
         let mut i: i32 = 0;
-        let _licm_items_10: Array<i32> = self.items;
-        let _licm_used_11: i32 = _licm_items_10.used;
+        let _licm_items_14: Array<i32> = self.items;
+        let _licm_used_15: i32 = _licm_items_14.used;
+        let _licm_repr_16: builtin::array<i32> = _licm_items_14.repr;
         loop {
-            if !(i < _licm_used_11) {
+            if !(i < _licm_used_15) {
                 break __for_1;
             }
-            let val: i32 = _licm_items_10."Array<i32>^IndexValue::index_value"(i);
+            let val: i32 = __inline_Array_i32__IndexValue__index_value_3: {
+                let index: i32 = i;
+                if (index >= _licm_used_15) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_i32__IndexValue__index_value_3: core::builtin::array_get::<i32>(_licm_repr_16, index);
+            };
             if ((val % 2) == 0) {
                 temp."Array<i32>::append"(val);
             }
@@ -55,13 +63,20 @@ fn Container::process(self: &mut Container) {
     }
     __for_2: {
         let mut j: i32 = 0;
-        let _licm_used_12: i32 = temp.used;
-        let _licm_items_13: Array<i32> = self.items;
+        let _licm_used_17: i32 = temp.used;
+        let _licm_items_18: Array<i32> = self.items;
+        let _licm_repr_19: builtin::array<i32> = temp.repr;
         loop {
-            if !(j < _licm_used_12) {
+            if !(j < _licm_used_17) {
                 break __for_2;
             }
-            _licm_items_13."Array<i32>::append"((temp."Array<i32>^IndexValue::index_value"(j) + 100));
+            _licm_items_18."Array<i32>::append"((__inline_Array_i32__IndexValue__index_value_5: {
+                let index: i32 = j;
+                if (index >= _licm_used_17) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_i32__IndexValue__index_value_5: core::builtin::array_get::<i32>(_licm_repr_19, index);
+            } + 100));
             j = (j + 1);
         }
     }
@@ -97,11 +112,9 @@ export fn run() with Stdout {
     });
 }
 
-fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<i32>(self.repr, index);
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {

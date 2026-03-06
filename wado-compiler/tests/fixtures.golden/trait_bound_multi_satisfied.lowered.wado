@@ -33,15 +33,6 @@ fn "Button^Drawable::draw"(self: &Button) -> String {
     };
 }
 
-fn "Button^Clickable::on_click"(self: &Button) -> String {
-    return __tmpl: {
-        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(24), used: 0 };
-        __r.String::append("clicked ");
-        __r.String::append(self.label);
-        break __tmpl: __r;
-    };
-}
-
 export fn run() with Stdout {
     __inline___initialize_modules_0: {
         if __modules_initialized {
@@ -51,7 +42,12 @@ export fn run() with Stdout {
     };
     let __sroa_w_item: Button = Button { label: "OK" };
     core::cli::println(__sroa_w_item."Button^Drawable::draw"());
-    core::cli::println(__sroa_w_item."Button^Clickable::on_click"());
+    core::cli::println(__tmpl: {
+        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(24), used: 0 };
+        __r.String::append("clicked ");
+        __r.String::append(__sroa_w_item.label);
+        break __tmpl: __r;
+    });
 }
 
 export fn __cm_export__run() {

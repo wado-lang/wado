@@ -32,17 +32,19 @@ export fn run() with Stdout {
         self."Array<i32>::append"(7);
         break __seq_lit: *__b;
     };
-    let first: Box<i32> = __inline_get_first_7: {
-        let arr: &Array<i32> = &nums;
-        break __inline_get_first_7: Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(0) };
+    let __sroa_first_value: i32 = __inline_Array_i32__IndexValue__index_value_8: {
+        if (0 >= nums.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_i32__IndexValue__index_value_8: core::builtin::array_get::<i32>(nums.repr, 0);
     };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_9: {
+        let mut __f: Formatter = __inline_Formatter__new_10: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        let self: Box<i32> = Box<i32> { value: first.value };
+        let self: Box<i32> = Box<i32> { value: __sroa_first_value };
         let f: &mut Formatter = &mut __f;
         self.i32::fmt_decimal(f);
         break __tmpl: __r;
@@ -68,12 +70,5 @@ pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
     }
     core::builtin::array_set::<i32>(self.repr, used, value);
     self.used = (used + 1);
-}
-
-fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<i32>(self.repr, index);
 }
 

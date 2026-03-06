@@ -125,13 +125,20 @@ export fn __cm_export__run() {
 fn "MiniDict<String,String>::has"(self: &MiniDict<String,String>, key: String) -> bool {
     __for_2: {
         let mut i: i32 = 0;
-        let _licm_entries_4: Array<[String, String]> = self.entries;
-        let _licm_used_5: i32 = _licm_entries_4.used;
+        let _licm_entries_6: Array<[String, String]> = self.entries;
+        let _licm_used_7: i32 = _licm_entries_6.used;
+        let _licm_repr_8: builtin::array<[String, String]> = _licm_entries_6.repr;
         loop {
-            if !(i < _licm_used_5) {
+            if !(i < _licm_used_7) {
                 break __for_2;
             }
-            if _licm_entries_4."Array<Tuple<String,String>>^IndexValue::index_value"(i).0."String^Eq::eq"(&key) {
+            if __inline_Array_Tuple_String_String___IndexValue__index_value_1: {
+                let index: i32 = i;
+                if (index >= _licm_used_7) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_Tuple_String_String___IndexValue__index_value_1: core::builtin::array_get::<[String, String]>(_licm_repr_8, index);
+            }.0."String^Eq::eq"(&key) {
                 return true;
             }
             i = (i + 1);
@@ -140,24 +147,30 @@ fn "MiniDict<String,String>::has"(self: &MiniDict<String,String>, key: String) -
     return false;
 }
 
-fn "Array<Tuple<String,String>>^IndexValue::index_value"(self: &Array<[String, String]>, index: i32) -> [String, String] {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<[String, String]>(self.repr, index);
-}
-
 fn "MiniDict<String,String>::get"(self: &MiniDict<String,String>, key: String) -> Option<String> {
     __for_1: {
         let mut i: i32 = 0;
-        let _licm_entries_4: Array<[String, String]> = self.entries;
-        let _licm_used_5: i32 = _licm_entries_4.used;
+        let _licm_entries_8: Array<[String, String]> = self.entries;
+        let _licm_used_9: i32 = _licm_entries_8.used;
+        let _licm_repr_10: builtin::array<[String, String]> = _licm_entries_8.repr;
         loop {
-            if !(i < _licm_used_5) {
+            if !(i < _licm_used_9) {
                 break __for_1;
             }
-            if _licm_entries_4."Array<Tuple<String,String>>^IndexValue::index_value"(i).0."String^Eq::eq"(&key) {
-                return Option<String>::Some(_licm_entries_4."Array<Tuple<String,String>>^IndexValue::index_value"(i).1);
+            if __inline_Array_Tuple_String_String___IndexValue__index_value_1: {
+                let index: i32 = i;
+                if (index >= _licm_used_9) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_Tuple_String_String___IndexValue__index_value_1: core::builtin::array_get::<[String, String]>(_licm_repr_10, index);
+            }.0."String^Eq::eq"(&key) {
+                return Option<String>::Some(__inline_Array_Tuple_String_String___IndexValue__index_value_2: {
+                    let index: i32 = i;
+                    if (index >= _licm_used_9) {
+                        core::internal::panic("index out of bounds");
+                    }
+                    break __inline_Array_Tuple_String_String___IndexValue__index_value_2: core::builtin::array_get::<[String, String]>(_licm_repr_10, index);
+                }.1);
             }
             i = (i + 1);
         }
@@ -168,13 +181,19 @@ fn "MiniDict<String,String>::get"(self: &MiniDict<String,String>, key: String) -
 fn "MiniDict<String,String>::set"(self: &mut MiniDict<String,String>, key: String, value: String) {
     __for_0: {
         let mut i: i32 = 0;
-        let _licm_entries_5: Array<[String, String]> = self.entries;
+        let _licm_entries_7: Array<[String, String]> = self.entries;
         loop {
-            if !(i < _licm_entries_5.used) {
+            if !(i < _licm_entries_7.used) {
                 break __for_0;
             }
-            if _licm_entries_5."Array<Tuple<String,String>>^IndexValue::index_value"(i).0."String^Eq::eq"(&key) {
-                _licm_entries_5."Array<Tuple<String,String>>^IndexAssign::index_assign"(i, [key, value]);
+            if __inline_Array_Tuple_String_String___IndexValue__index_value_1: {
+                let index: i32 = i;
+                if (index >= _licm_entries_7.used) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_Tuple_String_String___IndexValue__index_value_1: core::builtin::array_get::<[String, String]>(_licm_entries_7.repr, index);
+            }.0."String^Eq::eq"(&key) {
+                _licm_entries_7."Array<Tuple<String,String>>^IndexAssign::index_assign"(i, [key, value]);
                 return;
             }
             i = (i + 1);

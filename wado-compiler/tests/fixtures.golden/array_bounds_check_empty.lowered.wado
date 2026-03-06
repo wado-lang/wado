@@ -26,7 +26,12 @@ export fn run() {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(0), used: 0 };
         break __seq_lit: *__b;
     };
-    arr."Array<i32>^IndexValue::index_value"(0);
+    __inline_Array_i32__IndexValue__index_value_4: {
+        if (0 >= arr.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_i32__IndexValue__index_value_4: core::builtin::array_get::<i32>(arr.repr, 0);
+    };
 }
 
 export fn __cm_export__run() {
@@ -40,14 +45,12 @@ export fn __cm_export__run() {
         let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(0), used: 0 };
         break __seq_lit: *__b;
     };
-    arr."Array<i32>^IndexValue::index_value"(0);
+    __inline_Array_i32__IndexValue__index_value_5: {
+        if (0 >= arr.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_i32__IndexValue__index_value_5: core::builtin::array_get::<i32>(arr.repr, 0);
+    };
     cm_raw_call task-return(0);
-}
-
-fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<i32>(self.repr, index);
 }
 

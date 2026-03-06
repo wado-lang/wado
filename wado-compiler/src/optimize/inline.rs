@@ -193,7 +193,7 @@ fn is_inline_eligible(
     };
 
     // Small enough (based on expression count)
-    count_block_exprs(body) < effective_threshold
+    count_block_exprs(body) <= effective_threshold
 }
 
 /// Detect recursive functions using call graph analysis

@@ -22,11 +22,11 @@ export fn run() with Stdout {
         }
         __modules_initialized = true;
     };
-    let x: i128 = i128::from_i64(42);
-    let r1: String = if x."i128^Eq::eq"(&i128::from_i64(0)) {
+    let x: i128 = i128 { low: 42, high: 0 };
+    let r1: String = if x."i128^Eq::eq"(&i128 { low: 0, high: 0 }) {
         "zero";
     } else {
-        if x."i128^Eq::eq"(&i128::from_i64(42)) {
+        if x."i128^Eq::eq"(&i128 { low: 42, high: 0 }) {
             "answer";
         } else {
             "other";

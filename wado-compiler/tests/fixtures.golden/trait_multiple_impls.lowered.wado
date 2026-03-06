@@ -23,24 +23,6 @@ struct Dog {
     name: String,
 }
 
-fn "Cat^Describe::describe"(self: &Cat) -> String {
-    return __tmpl: {
-        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(28), used: 0 };
-        __r.String::append("A cat named ");
-        __r.String::append(self.name);
-        break __tmpl: __r;
-    };
-}
-
-fn "Dog^Describe::describe"(self: &Dog) -> String {
-    return __tmpl: {
-        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(28), used: 0 };
-        __r.String::append("A dog named ");
-        __r.String::append(self.name);
-        break __tmpl: __r;
-    };
-}
-
 export fn run() with Stdout {
     __inline___initialize_modules_0: {
         if __modules_initialized {
@@ -48,10 +30,20 @@ export fn run() with Stdout {
         }
         __modules_initialized = true;
     };
-    let cat: Cat = Cat { name: "Whiskers" };
-    let dog: Dog = Dog { name: "Buddy" };
-    core::cli::println(cat."Cat^Describe::describe"());
-    core::cli::println(dog."Dog^Describe::describe"());
+    let __sroa_cat_name: String = "Whiskers";
+    let __sroa_dog_name: String = "Buddy";
+    core::cli::println(__tmpl: {
+        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(28), used: 0 };
+        __r.String::append("A cat named ");
+        __r.String::append(__sroa_cat_name);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(28), used: 0 };
+        __r.String::append("A dog named ");
+        __r.String::append(__sroa_dog_name);
+        break __tmpl: __r;
+    });
 }
 
 export fn __cm_export__run() {

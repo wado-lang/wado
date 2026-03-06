@@ -48,12 +48,13 @@ The optimizer runs after lowering and before Wasm emission:
    2. Reference Elimination
    3. SROA (Scalar Replacement of Aggregates)
    4. Copy Propagation
-   5. Constant Propagation
-   6. Constant Folding
-   7. Constant Global Promotion
-   8. Constant Branch Pruning
-   9. Loop-Invariant Code Motion (LICM)
-   10. Template String Buffer Hoisting
+   5. Store-to-Load Forwarding
+   6. Constant Propagation
+   7. Constant Folding
+   8. Constant Global Promotion
+   9. Constant Branch Pruning
+   10. Loop-Invariant Code Motion (LICM)
+   11. Template String Buffer Hoisting
 3. Final DCE: clean up code made dead by optimizations (e.g., functions inlined away) (all levels)
 4. Post-optimization rewrites (labeled block simplification, select lowering, move insertion; all levels)
 5. WIR-level optimizations (multi-value SROA, constant array data promotion, large array splitting; see [WIR Optimizations](#wir-optimizations))
@@ -99,6 +100,12 @@ This is the single most impactful optimization for WasmGC-targeting compilers, a
 **Module:** `optimize/copy_prop.rs`
 
 Eliminates trivial copy bindings (`let x = y`, `let x = 42`, `let x = true`) by propagating the source value to all uses, then removing the dead binding. Checks safety conditions: target not reassigned, not address-taken, not captured by closures, and for value types the source must be dead after the binding.
+
+### Store-to-Load Forwarding
+
+**Module:** `optimize/store_load_forward.rs`
+
+When a literal value is stored to a local variable and then loaded with no intervening modification, forwards the stored value directly, eliminating the load. Particularly effective after SROA decomposes struct fields into scalar locals: the forwarding propagates known literal values through control flow boundaries (such as assert branches) that would otherwise block optimization. Uses selective invalidation at control flow boundaries — only locals actually modified within branches are invalidated, allowing knowledge of unmodified locals to survive. A pre-analysis phase identifies unsafe locals (address-taken or closure-captured) that are excluded from forwarding.
 
 ### Constant Propagation
 
@@ -290,10 +297,6 @@ When a function takes a reference parameter (`&T`) but only accesses specific fi
 ### Dead Argument Elimination
 
 Remove function parameters that are unused at all call sites (LLVM: `-deadargelim`). Common after monomorphization where generic parameters or feature-specific arguments become dead. Reduces call overhead and enables further interprocedural optimizations.
-
-### Store-to-Load Forwarding
-
-When a `struct.set` is followed by a `struct.get` on the same object and field with no intervening aliasing writes, forward the stored value directly without the load (part of LLVM's GVN). Common pattern after function inlining exposes field write + field read sequences.
 
 ### Jump Threading
 

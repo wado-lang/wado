@@ -23,7 +23,16 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let s: String = Box<f64> { value: 3.14 }.f64::to_string();
+    let s: String = __inline_f64__to_string_1: {
+        let self: Box<f64> = Box<f64> { value: 3.14 };
+        let mut buf: String = String { repr: "core::prelude/string.wado::array_new<u8>"(24), used: 0 };
+        let mut f: Formatter = __inline_Formatter__new_3: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        self.f64::fmt_into(&mut f);
+        break __inline_f64__to_string_1: buf;
+    };
     core::cli::println(s);
 }
 

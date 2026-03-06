@@ -35,13 +35,19 @@ export fn run() with Stdout {
             let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(0), used: 0 };
             break __seq_lit: *__b;
         } };
-        __b."PairList<String>^KeyValueLiteralBuilder::insert_literal"("name", "Alice");
-        __b."PairList<String>^KeyValueLiteralBuilder::insert_literal"("city", "Tokyo");
+        let key: String = "name";
+        let value: String = "Alice";
+        __b.keys."Array<String>::append"(key);
+        __b.values."Array<String>::append"(value);
+        let key: String = "city";
+        let value: String = "Tokyo";
+        __b.keys."Array<String>::append"(key);
+        __b.values."Array<String>::append"(value);
         break __kv_lit: *__b;
     };
-    let __v0: i32 = __inline_Array_String___len_5: {
+    let __v0: i32 = __inline_Array_String___len_7: {
         let self: &Array<String> = &m.keys;
-        break __inline_Array_String___len_5: self.used;
+        break __inline_Array_String___len_7: self.used;
     };
     let __cond: bool = (__v0 == 2);
     if !__cond {
@@ -52,18 +58,18 @@ export fn run() with Stdout {
             __r.String::append(" at ");
             __r.String::append("wado-compiler/tests/fixtures/from-literal-cast.wado");
             __r.String::append(":");
-            let mut __f: Formatter = __inline_Formatter__new_7: {
+            let mut __f: Formatter = __inline_Formatter__new_9: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
             let self: Box<i32> = Box<i32> { value: 41 };
             let f: &mut Formatter = &mut __f;
             self.i32::fmt_decimal(f);
             __r.String::append("\ncondition: m.len() == 2\n");
             __r.String::append("m.len(): ");
-            __f = __inline_Formatter__new_10: {
+            __f = __inline_Formatter__new_12: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
             let self: Box<i32> = Box<i32> { value: __v0 };
             let f: &mut Formatter = &mut __f;
@@ -72,7 +78,13 @@ export fn run() with Stdout {
             break __tmpl: __r;
         });
     }
-    let __v0: String = m.keys."Array<String>^IndexValue::index_value"(0);
+    let __v0: String = __inline_Array_String__IndexValue__index_value_15: {
+        let self: &Array<String> = &m.keys;
+        if (0 >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_String__IndexValue__index_value_15: core::builtin::array_get::<String>(self.repr, 0);
+    };
     let __cond: bool = __v0."String^Eq::eq"(&"name");
     if !__cond {
         core::internal::panic(__tmpl: {
@@ -82,9 +94,9 @@ export fn run() with Stdout {
             __r.String::append(" at ");
             __r.String::append("wado-compiler/tests/fixtures/from-literal-cast.wado");
             __r.String::append(":");
-            let mut __f: Formatter = __inline_Formatter__new_14: {
+            let mut __f: Formatter = __inline_Formatter__new_17: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
             let self: Box<i32> = Box<i32> { value: 42 };
             let f: &mut Formatter = &mut __f;
@@ -96,7 +108,13 @@ export fn run() with Stdout {
             break __tmpl: __r;
         });
     }
-    let __v0: String = m.keys."Array<String>^IndexValue::index_value"(1);
+    let __v0: String = __inline_Array_String__IndexValue__index_value_20: {
+        let self: &Array<String> = &m.keys;
+        if (1 >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_String__IndexValue__index_value_20: core::builtin::array_get::<String>(self.repr, 1);
+    };
     let __cond: bool = __v0."String^Eq::eq"(&"city");
     if !__cond {
         core::internal::panic(__tmpl: {
@@ -106,9 +124,9 @@ export fn run() with Stdout {
             __r.String::append(" at ");
             __r.String::append("wado-compiler/tests/fixtures/from-literal-cast.wado");
             __r.String::append(":");
-            let mut __f: Formatter = __inline_Formatter__new_18: {
+            let mut __f: Formatter = __inline_Formatter__new_22: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_18: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
             let self: Box<i32> = Box<i32> { value: 43 };
             let f: &mut Formatter = &mut __f;
@@ -120,7 +138,13 @@ export fn run() with Stdout {
             break __tmpl: __r;
         });
     }
-    let __v0: String = m.values."Array<String>^IndexValue::index_value"(0);
+    let __v0: String = __inline_Array_String__IndexValue__index_value_25: {
+        let self: &Array<String> = &m.values;
+        if (0 >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_String__IndexValue__index_value_25: core::builtin::array_get::<String>(self.repr, 0);
+    };
     let __cond: bool = __v0."String^Eq::eq"(&"Alice");
     if !__cond {
         core::internal::panic(__tmpl: {
@@ -130,9 +154,9 @@ export fn run() with Stdout {
             __r.String::append(" at ");
             __r.String::append("wado-compiler/tests/fixtures/from-literal-cast.wado");
             __r.String::append(":");
-            let mut __f: Formatter = __inline_Formatter__new_22: {
+            let mut __f: Formatter = __inline_Formatter__new_27: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_27: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
             let self: Box<i32> = Box<i32> { value: 44 };
             let f: &mut Formatter = &mut __f;
@@ -144,7 +168,13 @@ export fn run() with Stdout {
             break __tmpl: __r;
         });
     }
-    let __v0: String = m.values."Array<String>^IndexValue::index_value"(1);
+    let __v0: String = __inline_Array_String__IndexValue__index_value_30: {
+        let self: &Array<String> = &m.values;
+        if (1 >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_String__IndexValue__index_value_30: core::builtin::array_get::<String>(self.repr, 1);
+    };
     let __cond: bool = __v0."String^Eq::eq"(&"Tokyo");
     if !__cond {
         core::internal::panic(__tmpl: {
@@ -154,9 +184,9 @@ export fn run() with Stdout {
             __r.String::append(" at ");
             __r.String::append("wado-compiler/tests/fixtures/from-literal-cast.wado");
             __r.String::append(":");
-            let mut __f: Formatter = __inline_Formatter__new_26: {
+            let mut __f: Formatter = __inline_Formatter__new_32: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_26: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_32: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
             let self: Box<i32> = Box<i32> { value: 45 };
             let f: &mut Formatter = &mut __f;
@@ -190,17 +220,5 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
     }
     core::builtin::array_set::<String>(self.repr, used, value);
     self.used = (used + 1);
-}
-
-fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<String>(self.repr, index);
-}
-
-fn "PairList<String>^KeyValueLiteralBuilder::insert_literal"(self: &mut PairList<String>, key: String, value: String) {
-    self.keys."Array<String>::append"(key);
-    self.values."Array<String>::append"(value);
 }
 

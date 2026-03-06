@@ -58,14 +58,24 @@ export fn run() with Stdout {
         self."Array<Array<i32>>::append"(value);
         break __seq_lit: *__b;
     };
-    let first_row: Array<i32> = matrix."Array<Array<i32>>^IndexValue::index_value"(0);
+    let first_row: Array<i32> = __inline_Array_Array_i32___IndexValue__index_value_14: {
+        if (0 >= matrix.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_Array_i32___IndexValue__index_value_14: core::builtin::array_get::<Array<i32>>(matrix.repr, 0);
+    };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_15: {
+        let mut __f: Formatter = __inline_Formatter__new_16: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_15: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        let self: Box<i32> = Box<i32> { value: first_row."Array<i32>^IndexValue::index_value"(0) };
+        let self: Box<i32> = Box<i32> { value: __inline_Array_i32__IndexValue__index_value_18: {
+            if (0 >= first_row.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_i32__IndexValue__index_value_18: core::builtin::array_get::<i32>(first_row.repr, 0);
+        } };
         let f: &mut Formatter = &mut __f;
         self.i32::fmt_decimal(f);
         break __tmpl: __r;
@@ -83,9 +93,9 @@ export fn run() with Stdout {
                     let val: i32 = __variant_payload(__pattern_temp_1, case=0);
                     buf = String::concat(buf, __tmpl: {
                         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(17), used: 0 };
-                        let mut __f: Formatter = __inline_Formatter__new_21: {
+                        let mut __f: Formatter = __inline_Formatter__new_23: {
                             let buf: &mut String = &mut __r;
-                            break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                            break __inline_Formatter__new_23: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                         };
                         let self: Box<i32> = Box<i32> { value: val };
                         let f: &mut Formatter = &mut __f;
@@ -127,20 +137,6 @@ fn "ArrayIter<Array<i32>>^Iterator::next"(self: &mut ArrayIter<Array<i32>>) -> O
     let item: Array<i32> = core::builtin::array_get::<Array<i32>>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option<Array<i32>>::Some(item);
-}
-
-fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<i32>(self.repr, index);
-}
-
-fn "Array<Array<i32>>^IndexValue::index_value"(self: &Array<Array<i32>>, index: i32) -> Array<i32> {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<Array<i32>>(self.repr, index);
 }
 
 pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {

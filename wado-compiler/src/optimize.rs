@@ -21,6 +21,7 @@ mod licm;
 mod ref_elim;
 mod rewrite;
 mod sroa;
+mod store_load_forward;
 mod tmpl_hoist;
 
 use const_fold::fold_constants;
@@ -35,6 +36,7 @@ use inline::inline_functions;
 use licm::apply_licm;
 use ref_elim::eliminate_unnecessary_refs;
 use sroa::scalar_replace_aggregates;
+use store_load_forward::forward_stores_to_loads;
 use tmpl_hoist::hoist_template_buffers;
 
 use crate::project::Project;
@@ -61,23 +63,23 @@ struct OptConfig {
 /// | Level | DCE | Iterations | Inline Threshold |
 /// |-------|-----|------------|------------------|
 /// | O0    | Yes | 0          | N/A              |
-/// | O1    | Yes | 2          | 10               |
+/// | O1    | Yes | 2          | 5                |
 /// | O2    | Yes | 10         | 10               |
-/// | O3    | Yes | 100        | 20               |
+/// | O3    | Yes | 100        | 19               |
 /// | Os    | Yes | 10         | 10               |
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OptLevel {
     /// No optimization passes. DCE only.
     O0,
     /// Development optimizations. All passes with fast iteration count.
-    /// Iterations: 2, Inline threshold: 10.
+    /// Iterations: 2, Inline threshold: 5.
     O1,
     /// Production optimizations. All passes including DCE.
     /// Iterations: 10, Inline threshold: 10.
     #[default]
     O2,
     /// Aggressive production optimizations. All passes including DCE.
-    /// Iterations: 100, Inline threshold: 20.
+    /// Iterations: 100, Inline threshold: 19 (20 degrades fts benchmark performance).
     O3,
     /// Size optimizations. Same as O2 plus name section stripping.
     /// Intended for frontend/browser deployment.
@@ -119,7 +121,7 @@ pub fn optimize(
         OptLevel::O1 => {
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(2),
-                inline_threshold: inline_threshold.unwrap_or(10),
+                inline_threshold: inline_threshold.unwrap_or(5),
             };
             // Early DCE: remove unreachable functions/types before optimization
             // to reduce the working set for subsequent passes
@@ -141,9 +143,10 @@ pub fn optimize(
             }
         }
         OptLevel::O3 => {
+            // Threshold 19: threshold 20 degrades fts benchmark performance
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(100),
-                inline_threshold: inline_threshold.unwrap_or(20),
+                inline_threshold: inline_threshold.unwrap_or(19),
             };
             run_dce(&mut project);
             run_optimization_passes(&mut project, &config);
@@ -185,6 +188,7 @@ fn run_optimization_passes(project: &mut Project, config: &OptConfig) {
         changed |= eliminate_unnecessary_refs(project);
         changed |= scalar_replace_aggregates(project);
         changed |= propagate_copies(project);
+        changed |= forward_stores_to_loads(project);
         changed |= propagate_constants(project);
         changed |= fold_constants(project);
         changed |= promote_constant_globals(project);

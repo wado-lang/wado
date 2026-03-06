@@ -138,26 +138,31 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    core::cli::println(__inline_to_json_i32__0: {
+    core::cli::println(__inline_to_json_i32__1: {
         let mut ser: JsonSerializer = JsonSerializer { w: JsonWriter { buf: "" } };
         __inline_i32_Serialize__serialize_JsonSerializer__0: {
             let s: &mut JsonSerializer = &mut ser;
             break __inline_i32_Serialize__serialize_JsonSerializer__0: s."JsonSerializer^Serializer::serialize_i32"(42);
         };
-        break __inline_to_json_i32__0: ser.w.buf;
+        break __inline_to_json_i32__1: ser.w.buf;
     });
     let s: String = "hello";
-    core::cli::println(__inline_to_json_String__1: {
+    core::cli::println(__inline_to_json_String__2: {
         let value: &String = &s;
         let mut ser: JsonSerializer = JsonSerializer { w: JsonWriter { buf: "" } };
-        __inline_String_Serialize__serialize_JsonSerializer__0: {
+        __inline_String_Serialize__serialize_JsonSerializer__1: {
             let s: &mut JsonSerializer = &mut ser;
-            break __inline_String_Serialize__serialize_JsonSerializer__0: s."JsonSerializer^Serializer::serialize_string"(value);
+            break __inline_String_Serialize__serialize_JsonSerializer__1: s."JsonSerializer^Serializer::serialize_string"(value);
         };
-        break __inline_to_json_String__1: ser.w.buf;
+        break __inline_to_json_String__2: ser.w.buf;
     });
     let point: Point = Point { x: 1.5, y: 2.5 };
-    core::cli::println("to_json<Point>"(&point));
+    core::cli::println(__inline_to_json_Point__3: {
+        let value: &Point = &point;
+        let mut ser: JsonSerializer = JsonSerializer { w: JsonWriter { buf: "" } };
+        value."Point^Serialize::serialize<JsonSerializer>"(&mut ser);
+        break __inline_to_json_Point__3: ser.w.buf;
+    });
     let user: User = User { name: "Alice", age: 30, active: true, location: Option<Point>::Some(Point { x: 10.0, y: 20.0 }), tags: __seq_lit: {
         let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(2), used: 0 };
         let self: &mut Array<String> = &mut __b;
@@ -168,12 +173,22 @@ export fn run() with Stdout {
         self."Array<String>::append"(value);
         break __seq_lit: *__b;
     } };
-    core::cli::println("to_json<User>"(&user));
+    core::cli::println(__inline_to_json_User__8: {
+        let value: &User = &user;
+        let mut ser: JsonSerializer = JsonSerializer { w: JsonWriter { buf: "" } };
+        value."User^Serialize::serialize<JsonSerializer>"(&mut ser);
+        break __inline_to_json_User__8: ser.w.buf;
+    });
     let user2: User = User { name: "Bob", age: 25, active: false, location: null, tags: __seq_lit: {
         let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(0), used: 0 };
         break __seq_lit: *__b;
     } };
-    core::cli::println("to_json<User>"(&user2));
+    core::cli::println(__inline_to_json_User__11: {
+        let value: &User = &user2;
+        let mut ser: JsonSerializer = JsonSerializer { w: JsonWriter { buf: "" } };
+        value."User^Serialize::serialize<JsonSerializer>"(&mut ser);
+        break __inline_to_json_User__11: ser.w.buf;
+    });
 }
 
 export fn __cm_export__run() {
@@ -195,12 +210,6 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
     }
     core::builtin::array_set::<String>(self.repr, used, value);
     self.used = (used + 1);
-}
-
-fn "to_json<User>"(value: &User) -> String {
-    let mut ser: JsonSerializer = JsonSerializer { w: JsonWriter { buf: "" } };
-    value."User^Serialize::serialize<JsonSerializer>"(&mut ser);
-    return ser.w.buf;
 }
 
 fn "User^Serialize::serialize<JsonSerializer>"(self: &User, s: &mut JsonSerializer) -> Result<(), SerializeError> {
@@ -446,11 +455,5 @@ fn "JsonStructSerializer^SerializeStruct::field<String>"(self: &mut JsonStructSe
     self.w = ser.w;
     self.count = (self.count + 1);
     return Result<(), SerializeError>::Ok(());
-}
-
-fn "to_json<Point>"(value: &Point) -> String {
-    let mut ser: JsonSerializer = JsonSerializer { w: JsonWriter { buf: "" } };
-    value."Point^Serialize::serialize<JsonSerializer>"(&mut ser);
-    return ser.w.buf;
 }
 

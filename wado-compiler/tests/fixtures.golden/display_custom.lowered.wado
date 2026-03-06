@@ -22,11 +22,31 @@ struct Point {
 
 pub fn "Point^Display::fmt"(self: &Point, f: &mut Formatter) {
     f.buf.String::append_char('(');
-    let s: String = Box<i32> { value: self.x }.i32::to_string();
+    let s: String = __inline_i32__to_string_2: {
+        let self: Box<i32> = Box<i32> { value: self.x };
+        let mut buf: String = String { repr: "core::prelude/string.wado::array_new<u8>"(12), used: 0 };
+        let mut f: Formatter = __inline_Formatter__new_4: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        let f: &mut Formatter = &mut f;
+        self.i32::fmt_decimal(f);
+        break __inline_i32__to_string_2: buf;
+    };
     f.buf.String::append(s);
     let s: String = ", ";
     f.buf.String::append(s);
-    let s: String = Box<i32> { value: self.y }.i32::to_string();
+    let s: String = __inline_i32__to_string_8: {
+        let self: Box<i32> = Box<i32> { value: self.y };
+        let mut buf: String = String { repr: "core::prelude/string.wado::array_new<u8>"(12), used: 0 };
+        let mut f: Formatter = __inline_Formatter__new_10: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        let f: &mut Formatter = &mut f;
+        self.i32::fmt_decimal(f);
+        break __inline_i32__to_string_8: buf;
+    };
     f.buf.String::append(s);
     f.buf.String::append_char(')');
 }

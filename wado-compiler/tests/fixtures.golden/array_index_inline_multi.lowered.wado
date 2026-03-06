@@ -49,11 +49,41 @@ export fn run() with Stdout {
         self."Array<bool>::append"(true);
         break __seq_lit: *__b;
     } };
-    let item0: String = c.items."Array<String>^IndexValue::index_value"(0);
-    let item1: String = c.items."Array<String>^IndexValue::index_value"(1);
-    let item2: String = c.items."Array<String>^IndexValue::index_value"(2);
-    let flag0: bool = c.markers."Array<bool>^IndexValue::index_value"(0);
-    let flag1: bool = c.markers."Array<bool>^IndexValue::index_value"(1);
+    let item0: String = __inline_Array_String__IndexValue__index_value_13: {
+        let self: &Array<String> = &c.items;
+        if (0 >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_String__IndexValue__index_value_13: core::builtin::array_get::<String>(self.repr, 0);
+    };
+    let item1: String = __inline_Array_String__IndexValue__index_value_15: {
+        let self: &Array<String> = &c.items;
+        if (1 >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_String__IndexValue__index_value_15: core::builtin::array_get::<String>(self.repr, 1);
+    };
+    let item2: String = __inline_Array_String__IndexValue__index_value_17: {
+        let self: &Array<String> = &c.items;
+        if (2 >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_String__IndexValue__index_value_17: core::builtin::array_get::<String>(self.repr, 2);
+    };
+    let flag0: bool = __inline_Array_bool__IndexValue__index_value_19: {
+        let self: &Array<bool> = &c.markers;
+        if (0 >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_bool__IndexValue__index_value_19: core::builtin::array_get::<bool>(self.repr, 0);
+    };
+    let flag1: bool = __inline_Array_bool__IndexValue__index_value_21: {
+        let self: &Array<bool> = &c.markers;
+        if (1 >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_bool__IndexValue__index_value_21: core::builtin::array_get::<bool>(self.repr, 1);
+    };
     let count: i32 = c."Container<String>::count_flagged"();
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(59), used: 0 };
@@ -68,9 +98,9 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(41), used: 0 };
         __r.String::append("flags: ");
-        let mut __f: Formatter = __inline_Formatter__new_19: {
+        let mut __f: Formatter = __inline_Formatter__new_24: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_19: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_24: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         let self: Box<bool> = Box<bool> { value: flag0 };
         let f: &mut Formatter = &mut __f;
@@ -80,9 +110,9 @@ export fn run() with Stdout {
             "false";
         });
         __r.String::append(", ");
-        __f = __inline_Formatter__new_22: {
+        __f = __inline_Formatter__new_27: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_27: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         let self: Box<bool> = Box<bool> { value: flag1 };
         let f: &mut Formatter = &mut __f;
@@ -96,9 +126,9 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(23), used: 0 };
         __r.String::append("count: ");
-        let mut __f: Formatter = __inline_Formatter__new_26: {
+        let mut __f: Formatter = __inline_Formatter__new_31: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_26: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_31: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         let self: Box<i32> = Box<i32> { value: count };
         let f: &mut Formatter = &mut __f;
@@ -132,33 +162,26 @@ fn "Container<String>::count_flagged"(self: &Container<String>) -> i32 {
     let mut count: i32 = 0;
     __for_0: {
         let mut i: i32 = 0;
-        let _licm_markers_4: Array<bool> = self.markers;
-        let _licm_used_5: i32 = _licm_markers_4.used;
+        let _licm_markers_6: Array<bool> = self.markers;
+        let _licm_used_7: i32 = _licm_markers_6.used;
+        let _licm_repr_8: builtin::array<bool> = _licm_markers_6.repr;
         loop {
-            if !(i < _licm_used_5) {
+            if !(i < _licm_used_7) {
                 break __for_0;
             }
-            if _licm_markers_4."Array<bool>^IndexValue::index_value"(i) {
+            if __inline_Array_bool__IndexValue__index_value_1: {
+                let index: i32 = i;
+                if (index >= _licm_used_7) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_bool__IndexValue__index_value_1: core::builtin::array_get::<bool>(_licm_repr_8, index);
+            } {
                 count = (count + 1);
             }
             i = (i + 1);
         }
     }
     return count;
-}
-
-fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<bool>(self.repr, index);
-}
-
-fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<String>(self.repr, index);
 }
 
 pub fn "Array<bool>::append"(self: &mut Array<bool>, value: bool) {
