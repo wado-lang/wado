@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772800093827,
+  "lastUpdate": 1772816686748,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -803,6 +803,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5ebfe361eaaa80688a51f10d878853653082f262"
         },
         "date": 1772800093688,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1388,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9058,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18395,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d665a50ea01d8186ca13eb3e55703e6f061fd01c",
+          "message": "Merge pull request #519 from wado-lang/claude/benchmark-json-performance-K4Den\n\nOptimize JSON struct deserialization with byte-range field lookup",
+          "timestamp": "2026-03-07T02:02:22+09:00",
+          "tree_id": "af88f82407d65f2764ae2d148b1d7dd0415c9f18",
+          "url": "https://github.com/wado-lang/wado/commit/d665a50ea01d8186ca13eb3e55703e6f061fd01c"
+        },
+        "date": 1772816686605,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
