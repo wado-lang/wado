@@ -523,7 +523,7 @@ impl Deserializer for NsdDeserializer {
         });
     }
 
-    fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn(&String) -> Option<i32>) -> Result<NsdStructAccess, DeserializeError> {
+    fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn(&String, i32, i32) -> Option<i32>) -> Result<NsdStructAccess, DeserializeError> {
         // NSD: struct encoded as array
         let r = self.de.expect_char('[' as i32);
         if let Err(e) = r {
