@@ -755,6 +755,10 @@ pub enum Literal {
     LocationFunction,
     /// Compile-time data section literal: `#data`
     DataSection,
+    /// Compile-time file include as string: `#include_str("path")`
+    IncludeStr(String),
+    /// Compile-time file include as bytes: `#include_bytes("path")`
+    IncludeBytes(String),
 }
 
 #[derive(Debug, Clone)]

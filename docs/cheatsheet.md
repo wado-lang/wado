@@ -1603,7 +1603,7 @@ let result = arr.iter()
 
 See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
 
-## Compile-Time Location Literals
+## Compile-Time Literals
 
 ```wado
 // Get current source file
@@ -1618,11 +1618,19 @@ let func = #function;       // "run" or "Point::distance"
 // Get the __DATA__ section content (compile error if absent)
 let data = #data;           // String
 
+// Include external file as string (compile error if not valid UTF-8)
+let src = #include_str("./runtime.wado");  // String
+
+// Include external file as bytes
+let icon = #include_bytes("./icon.png");   // Array<u8>
+
 // Example: debug logging
 fn log_debug(message: String) with Stdout {
     println(`[{#file}:{#line}] {message}`);
 }
 ```
+
+Paths in `#include_str` and `#include_bytes` are resolved relative to the source file. See [WEP: Compile-Time File Inclusion](./wep-2026-03-02-include-str.md).
 
 ## Attributes
 

@@ -264,10 +264,14 @@ impl std::error::Error for SourceError {}
 /// }
 /// ```
 pub trait CompilerHost: Send + Sync {
-    /// Load source code for a user module
+    /// Load a file as raw bytes.
+    ///
+    /// This is the single I/O primitive for the compiler. Both source files
+    /// (`.wado`) and binary assets (`#include_bytes`) are loaded through this
+    /// method. The compiler interprets the bytes as UTF-8 where appropriate.
     ///
     /// # Arguments
-    /// * `path` - Module path, which can be:
+    /// * `path` - File path, which can be:
     ///   - Local path (e.g., "./lib.wado", "../utils.wado")
     ///   - Remote URL (e.g., "<https://example.com/lib.wado>", "<http://example.com/lib.wado>")
     ///
@@ -275,8 +279,8 @@ pub trait CompilerHost: Send + Sync {
     /// They are handled directly by the compiler via embedded sources.
     ///
     /// # Returns
-    /// The complete source code including `__DATA__` section if present
-    fn load_source(&self, path: &str) -> impl Future<Output = Result<String, SourceError>> + Send;
+    /// The raw bytes of the file
+    fn load_source(&self, path: &str) -> impl Future<Output = Result<Vec<u8>, SourceError>> + Send;
 
     /// Emit a diagnostic (error, warning, etc.)
     ///
@@ -291,8 +295,8 @@ pub trait CompilerHost: Send + Sync {
 /// This host stores sources in an `IndexMap` and collects diagnostics in a Vec.
 #[derive(Debug, Default)]
 pub struct InMemoryCompilerHost {
-    /// Source files by path
-    sources: indexmap::IndexMap<String, String>,
+    /// Source files by path (stored as raw bytes)
+    sources: indexmap::IndexMap<String, Vec<u8>>,
     /// Collected diagnostics
     diagnostics: std::sync::Mutex<Vec<Diagnostic>>,
 }
@@ -303,9 +307,14 @@ impl InMemoryCompilerHost {
         Self::default()
     }
 
-    /// Add a source file
+    /// Add a source file (text)
     pub fn add_source(&mut self, path: impl Into<String>, source: impl Into<String>) {
-        self.sources.insert(path.into(), source.into());
+        self.sources.insert(path.into(), source.into().into_bytes());
+    }
+
+    /// Add a binary file
+    pub fn add_bytes(&mut self, path: impl Into<String>, bytes: Vec<u8>) {
+        self.sources.insert(path.into(), bytes);
     }
 
     /// Get all collected diagnostics
@@ -329,7 +338,7 @@ impl InMemoryCompilerHost {
 }
 
 impl CompilerHost for InMemoryCompilerHost {
-    async fn load_source(&self, path: &str) -> Result<String, SourceError> {
+    async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
         self.sources
             .get(path)
             .cloned()
@@ -352,10 +361,10 @@ mod tests {
         let mut host = InMemoryCompilerHost::new();
         host.add_source("./test.wado", "fn run() {}");
 
-        // Test load_source
+        // Test load_source returns bytes
         let result = host.load_source("./test.wado").await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), "fn run() {}");
+        assert_eq!(result.unwrap(), b"fn run() {}");
 
         // Test not found
         let result = host.load_source("./missing.wado").await;

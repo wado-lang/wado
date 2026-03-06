@@ -129,6 +129,9 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Pre-built list of blanket trait impl blocks: `impl<T: Trait> OtherTrait for T`.
     /// Checked as fallback when concrete type lookup in `trait_impl_index` fails.
     blanket_trait_impl_index: Arc<BlanketTraitImplIndex>,
+    /// Pre-loaded file contents for `#include_str` / `#include_bytes`.
+    /// Key: `[module_source_display, raw_path]`, value: raw bytes.
+    included_files: &'a IndexMap<[String; 2], Vec<u8>>,
 }
 
 impl<'a, H: CompilerHost> Resolver<'a, H> {
@@ -137,6 +140,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         loaded_modules: &'a IndexMap<ModuleSource, Module>,
         builtin_registry: &'a BuiltinRegistry,
         logger: &'a Logger<'a, H>,
+        included_files: &'a IndexMap<[String; 2], Vec<u8>>,
     ) -> Self {
         let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
@@ -179,6 +183,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             trait_impl_index,
             trait_decl_index,
             blanket_trait_impl_index,
+            included_files,
         }
     }
 
@@ -564,7 +569,14 @@ pub fn resolve_module<H: CompilerHost>(
 ) -> Result<TirModule, Bail> {
     let type_table = std::cell::RefCell::new(crate::tir::TypeTable::new());
     let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
-    let mut resolver = Resolver::new(symbols, loaded_modules, &builtin_registry, logger);
+    let empty_included = IndexMap::new();
+    let mut resolver = Resolver::new(
+        symbols,
+        loaded_modules,
+        &builtin_registry,
+        logger,
+        &empty_included,
+    );
     resolver.resolve_module(module, module_source)
 }
 
@@ -579,9 +591,15 @@ pub fn resolve_to_project<H: CompilerHost>(
     implicit_modules: IndexSet<ModuleSource>,
     module_name: String,
     logger: &Logger<H>,
+    included_files: &IndexMap<[String; 2], Vec<u8>>,
 ) -> Result<Project, Bail> {
-    let tir_modules =
-        Resolver::resolve_all_modules(&symbols, modules, entry_module_source.clone(), logger)?;
+    let tir_modules = Resolver::resolve_all_modules(
+        &symbols,
+        modules,
+        entry_module_source.clone(),
+        logger,
+        included_files,
+    )?;
 
     let (wasi_registry, world_registry) = crate::component_model::WasiRegistry::build_from_stdlib();
 

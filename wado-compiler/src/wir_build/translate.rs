@@ -1127,6 +1127,10 @@ impl FunctionTranslator<'_, '_> {
                 // String literals are constructed from data segments
                 self.translate_string_literal(s)
             }
+            TirExprKind::BytesLiteral(b) => {
+                // Bytes literals are constructed as Array<u8> from data segments
+                self.translate_bytes_literal(b)
+            }
             TirExprKind::Null => {
                 // For Option types, construct a None variant struct (SubtypeHierarchy)
                 // For other types, use null ref as before
@@ -1754,6 +1758,59 @@ impl FunctionTranslator<'_, '_> {
                 vec![
                     WirInstr::ArrayNewData {
                         type_id: array_type_id,
+                        data_index,
+                        offset: Box::new(WirInstr::I32Const(0)),
+                        len: Box::new(WirInstr::I32Const(len_i32)),
+                    },
+                    WirInstr::I32Const(len_i32),
+                ],
+            )
+        }
+    }
+
+    /// Translate a bytes literal to WIR instructions.
+    ///
+    /// Creates an `Array<u8>` struct from a passive data segment:
+    ///   `array.new_data` $`u8_array`, $`data_idx` (offset=0, len=bytes)
+    ///   struct.new $`Array<u8>` (repr=array, used=len)
+    fn translate_bytes_literal(&self, b: &[u8]) -> WirInstr {
+        let byte_len = b.len();
+
+        // Look up u8 GC array type
+        let u8_array_type = self.ctx.array_type_by_name.get("u8").cloned();
+
+        // Look up Array<u8> wrapper struct type
+        let mangled =
+            crate::name::mangle_generic_name("Array", std::slice::from_ref(&"u8".to_string()));
+        let array_struct_name =
+            crate::name::StructName::new(crate::name::ModuleSource::prelude(), mangled);
+        let array_struct_type = self.ctx.struct_type_map.get(&array_struct_name).cloned();
+
+        let (Some(gc_array_type_id), Some(struct_type_id)) = (u8_array_type, array_struct_type)
+        else {
+            return WirInstr::Unreachable;
+        };
+
+        if byte_len == 0 {
+            self.struct_new(
+                struct_type_id,
+                vec![
+                    WirInstr::ArrayNewDefault {
+                        type_id: gc_array_type_id,
+                        len: Box::new(WirInstr::I32Const(0)),
+                    },
+                    WirInstr::I32Const(0),
+                ],
+            )
+        } else {
+            let data_index = self.ctx.bytes_literal_map.get(b).copied().unwrap_or(0);
+            let len_i32 = i32::try_from(byte_len).unwrap_or(0);
+
+            self.struct_new(
+                struct_type_id,
+                vec![
+                    WirInstr::ArrayNewData {
+                        type_id: gc_array_type_id,
                         data_index,
                         offset: Box::new(WirInstr::I32Const(0)),
                         len: Box::new(WirInstr::I32Const(len_i32)),

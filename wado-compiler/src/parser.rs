@@ -2560,10 +2560,39 @@ impl Parser {
                             "line" => Literal::LocationLine,
                             "function" => Literal::LocationFunction,
                             "data" => Literal::DataSection,
+                            "include_str" | "include_bytes" => {
+                                let is_str = name == "include_str";
+                                self.expect(&TokenKind::LParen)?;
+                                let path = match self.peek_kind() {
+                                    TokenKind::StringLit(s) => {
+                                        let s = s.clone();
+                                        self.advance();
+                                        s
+                                    }
+                                    _ => {
+                                        return Err(ParseError {
+                                            message: format!(
+                                                "expected string literal path argument for `#{name}`"
+                                            ),
+                                            span: self.peek().span,
+                                        });
+                                    }
+                                };
+                                let close_span = self.expect(&TokenKind::RParen)?.span;
+                                let lit = if is_str {
+                                    Literal::IncludeStr(path)
+                                } else {
+                                    Literal::IncludeBytes(path)
+                                };
+                                return Ok(Expr::Literal(LiteralExpr {
+                                    value: lit,
+                                    span: start_span.merge(&close_span),
+                                }));
+                            }
                             _ => {
                                 return Err(ParseError {
                                     message: format!(
-                                        "unknown compile-time literal `#{name}`, expected `#file`, `#line`, `#function`, or `#data`"
+                                        "unknown compile-time literal `#{name}`, expected `#file`, `#line`, `#function`, `#data`, `#include_str`, or `#include_bytes`"
                                     ),
                                     span: start_span.merge(&end_span),
                                 });

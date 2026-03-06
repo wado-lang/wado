@@ -1567,12 +1567,14 @@ for desugaring rules, the immutable-output (separate builder) pattern, and concr
 
 Compile-time location literals provide source location information at compile time. They use the `#` prefix to clearly signal compile-time evaluation.
 
-| Literal     | Type     | Value                                              |
-| ----------- | -------- | -------------------------------------------------- |
-| `#file`     | `String` | Current source file path                           |
-| `#line`     | `i32`    | Current line number (1-indexed)                    |
-| `#function` | `String` | Fully specialized function name                    |
-| `#data`     | `String` | `__DATA__` section content (compile error if none) |
+| Literal                  | Type        | Value                                              |
+| ------------------------ | ----------- | -------------------------------------------------- |
+| `#file`                  | `String`    | Current source file path                           |
+| `#line`                  | `i32`       | Current line number (1-indexed)                    |
+| `#function`              | `String`    | Fully specialized function name                    |
+| `#data`                  | `String`    | `__DATA__` section content (compile error if none) |
+| `#include_str("path")`   | `String`    | External file content as string                    |
+| `#include_bytes("path")` | `Array<u8>` | External file content as bytes                     |
 
 ```wado
 fn example() {
@@ -1593,6 +1595,17 @@ export fn run() with Stdout {
 
 __DATA__
 {"key": "value"}
+```
+
+**`#include_str` and `#include_bytes`:**
+
+`#include_str("path")` reads an external file at compile time and returns its content as a `String`. The file must be valid UTF-8; otherwise, a compile error is raised. `#include_bytes("path")` returns the raw bytes as `Array<u8>` without UTF-8 validation.
+
+The path argument must be a string literal. Paths are resolved relative to the source file containing the expression. See [WEP: Compile-Time File Inclusion](./wep-2026-03-02-include-str.md).
+
+```wado
+let template = #include_str("./templates/header.html");
+let icon: Array<u8> = #include_bytes("./assets/logo.png");
 ```
 
 **`#function` Format:**

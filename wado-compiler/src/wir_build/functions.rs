@@ -30,8 +30,9 @@ pub fn collect_functions(ctx: &mut WirContext<'_>) {
     // Step 5: Collect and register methods from all modules
     register_methods(ctx);
 
-    // Step 6: Register data segments for string literals
+    // Step 6: Register data segments for string and bytes literals
     register_string_data(ctx);
+    register_bytes_data(ctx);
 
     // Step 7: Register exports
     register_exports(ctx);
@@ -455,6 +456,14 @@ fn register_string_data(ctx: &mut WirContext<'_>) {
     let literals: Vec<String> = ctx.string_literals.clone();
     for s in &literals {
         ctx.register_string_literal(s);
+    }
+}
+
+/// Register data segments for bytes literals.
+fn register_bytes_data(ctx: &mut WirContext<'_>) {
+    let literals: Vec<Vec<u8>> = ctx.bytes_literals.clone();
+    for b in &literals {
+        ctx.register_bytes_literal(b);
     }
 }
 

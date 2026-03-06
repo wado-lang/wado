@@ -65,10 +65,12 @@ pub struct WirContext<'a> {
     pub global_map: IndexMap<String, u32>,
     /// Exports.
     pub exports: Vec<WirExport>,
-    /// Data segments (string literals).
+    /// Data segments (string and bytes literals).
     pub data: Vec<WirData>,
     /// String literal dedup: string → data segment index.
     pub string_literal_map: IndexMap<String, u32>,
+    /// Bytes literal dedup: bytes → data segment index.
+    pub bytes_literal_map: IndexMap<Vec<u8>, u32>,
     /// Name section entries.
     pub names: WirNames,
 
@@ -85,6 +87,8 @@ pub struct WirContext<'a> {
     // === Scratch state ===
     /// Collected string literals (from all TIR modules).
     pub string_literals: Vec<String>,
+    /// Collected bytes literals (from all TIR modules).
+    pub bytes_literals: Vec<Vec<u8>>,
     /// Available WASI function names (computed during component generation).
     pub available_wasi_funcs: IndexSet<String>,
 
@@ -122,6 +126,17 @@ impl<'a> WirContext<'a> {
             }
         }
 
+        // Collect bytes literals from all TIR modules (deduped)
+        let mut seen_bytes: IndexSet<&[u8]> = IndexSet::new();
+        let mut bytes_literals = Vec::new();
+        for tir_module in project.tir_modules.values() {
+            for b in &tir_module.bytes_literals {
+                if seen_bytes.insert(b.as_slice()) {
+                    bytes_literals.push(b.clone());
+                }
+            }
+        }
+
         Self {
             project,
             types: Vec::new(),
@@ -144,11 +159,13 @@ impl<'a> WirContext<'a> {
             exports: Vec::new(),
             data: Vec::new(),
             string_literal_map: IndexMap::new(),
+            bytes_literal_map: IndexMap::new(),
             names: WirNames::default(),
             canonical_closure_types: IndexMap::new(),
             closure_wrapper_funcs: IndexMap::new(),
             canonical_closure_counter: 0,
             string_literals,
+            bytes_literals,
             wasm_module_sources: IndexMap::new(),
             available_wasi_funcs: IndexSet::new(),
             pending_bodies: Vec::new(),
@@ -257,6 +274,20 @@ impl<'a> WirContext<'a> {
             offset: None, // passive segment
         });
         self.string_literal_map.insert(s.to_string(), idx);
+        idx
+    }
+
+    /// Register a bytes literal and return its data segment index.
+    pub fn register_bytes_literal(&mut self, b: &[u8]) -> u32 {
+        if let Some(&idx) = self.bytes_literal_map.get(b) {
+            return idx;
+        }
+        let idx = u32::try_from(self.data.len()).expect("too many data segments");
+        self.data.push(WirData {
+            bytes: b.to_vec(),
+            offset: None, // passive segment
+        });
+        self.bytes_literal_map.insert(b.to_vec(), idx);
         idx
     }
 

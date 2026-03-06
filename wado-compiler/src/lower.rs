@@ -69,11 +69,12 @@ fn lower_post_boxing(module: &mut TirModule) {
     let mut closure_lowerer = ClosureLowerer::new(&module.module_source);
     closure_lowerer.lower_module(module);
 
-    // Phase 3b: Collect string literals and their function mappings
+    // Phase 3b: Collect string literals (and bytes literals) and their function mappings
     let mut collector = StringCollector::new();
     collector.collect_module(module);
-    let (strings, function_strings, function_method_info) = collector.into_results();
+    let (strings, bytes, function_strings, function_method_info) = collector.into_results();
     module.string_literals = strings;
+    module.bytes_literals = bytes;
     module.function_strings = function_strings;
     module.function_method_info = function_method_info;
 }
@@ -625,6 +626,7 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
@@ -2154,6 +2156,7 @@ impl<'a> PatternLowerer<'a> {
             | TirExprKind::BoolLiteral(_)
             | TirExprKind::CharLiteral(_)
             | TirExprKind::StringLiteral(_)
+            | TirExprKind::BytesLiteral(_)
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
@@ -2463,6 +2466,7 @@ fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<String>) {
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
@@ -3658,6 +3662,7 @@ impl BoxLowerer {
             | TirExprKind::BoolLiteral(_)
             | TirExprKind::CharLiteral(_)
             | TirExprKind::StringLiteral(_)
+            | TirExprKind::BytesLiteral(_)
             | TirExprKind::Null
             | TirExprKind::Local { .. }
             | TirExprKind::Global { .. }
@@ -4248,6 +4253,7 @@ impl ClosureLowerer {
             | TirExprKind::BoolLiteral(_)
             | TirExprKind::CharLiteral(_)
             | TirExprKind::StringLiteral(_)
+            | TirExprKind::BytesLiteral(_)
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
@@ -4462,6 +4468,7 @@ impl ClosureLowerer {
             | TirExprKind::BoolLiteral(_)
             | TirExprKind::CharLiteral(_)
             | TirExprKind::StringLiteral(_)
+            | TirExprKind::BytesLiteral(_)
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Global { .. }
@@ -5174,6 +5181,7 @@ impl ClosureLowerer {
             | TirExprKind::BoolLiteral(_)
             | TirExprKind::CharLiteral(_)
             | TirExprKind::StringLiteral(_)
+            | TirExprKind::BytesLiteral(_)
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Global { .. }
@@ -5665,6 +5673,7 @@ impl ClosureLowerer {
             | TirExprKind::BoolLiteral(_)
             | TirExprKind::CharLiteral(_)
             | TirExprKind::StringLiteral(_)
+            | TirExprKind::BytesLiteral(_)
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
@@ -5938,6 +5947,7 @@ impl ClosureLowerer {
             | TirExprKind::BoolLiteral(_)
             | TirExprKind::CharLiteral(_)
             | TirExprKind::StringLiteral(_)
+            | TirExprKind::BytesLiteral(_)
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
@@ -6799,6 +6809,11 @@ impl ClosureLowerer {
                 expr.type_id,
                 expr.span,
             ),
+            TirExprKind::BytesLiteral(b) => TirExpr::new(
+                TirExprKind::BytesLiteral(b.clone()),
+                expr.type_id,
+                expr.span,
+            ),
             TirExprKind::Null => TirExpr::new(TirExprKind::Null, expr.type_id, expr.span),
             TirExprKind::Unit => TirExpr::new(TirExprKind::Unit, expr.type_id, expr.span),
             TirExprKind::Global {
@@ -7208,6 +7223,7 @@ impl ClosureLowerer {
             | TirExprKind::BoolLiteral(_)
             | TirExprKind::CharLiteral(_)
             | TirExprKind::StringLiteral(_)
+            | TirExprKind::BytesLiteral(_)
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
@@ -7559,6 +7575,7 @@ impl ClosureLowerer {
             | TirExprKind::BoolLiteral(_)
             | TirExprKind::CharLiteral(_)
             | TirExprKind::StringLiteral(_)
+            | TirExprKind::BytesLiteral(_)
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
@@ -7578,6 +7595,7 @@ impl ClosureLowerer {
 /// tracking which function each string comes from for DCE
 struct StringCollector {
     strings: IndexSet<String>,
+    bytes: IndexSet<Vec<u8>>,
     /// Map of function name → strings in that function (for DCE filtering)
     function_strings: IndexMap<String, IndexSet<String>>,
     /// Map of function name → method info (for DCE to avoid parsing)
@@ -7590,6 +7608,7 @@ impl StringCollector {
     fn new() -> Self {
         Self {
             strings: IndexSet::new(),
+            bytes: IndexSet::new(),
             function_strings: IndexMap::new(),
             function_method_info: IndexMap::new(),
             current_function: None,
@@ -7600,16 +7619,18 @@ impl StringCollector {
         self,
     ) -> (
         Vec<String>,
+        Vec<Vec<u8>>,
         IndexMap<String, Vec<String>>,
         IndexMap<String, Option<LocalMethodName>>,
     ) {
         let strings = self.strings.into_iter().collect();
+        let bytes = self.bytes.into_iter().collect();
         let function_strings = self
             .function_strings
             .into_iter()
             .map(|(k, v)| (k, v.into_iter().collect()))
             .collect();
-        (strings, function_strings, self.function_method_info)
+        (strings, bytes, function_strings, self.function_method_info)
     }
 
     fn add_string(&mut self, s: String) {
@@ -7710,6 +7731,9 @@ impl StringCollector {
         match &expr.kind {
             TirExprKind::StringLiteral(s) => {
                 self.add_string(s.clone());
+            }
+            TirExprKind::BytesLiteral(b) => {
+                self.bytes.insert(b.clone());
             }
             TirExprKind::Binary { left, right, .. } => {
                 self.collect_expr(left);

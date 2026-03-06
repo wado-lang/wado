@@ -142,9 +142,9 @@ impl FilesystemCompilerHost {
 }
 
 impl CompilerHost for FilesystemCompilerHost {
-    async fn load_source(&self, path: &str) -> Result<String, SourceError> {
+    async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
         let full_path = self.base_path.join(path);
-        std::fs::read_to_string(&full_path).map_err(|e| SourceError::IoError {
+        std::fs::read(&full_path).map_err(|e| SourceError::IoError {
             path: full_path.display().to_string(),
             message: e.to_string(),
         })

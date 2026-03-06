@@ -337,6 +337,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             | TirExprKind::BoolLiteral(_)
             | TirExprKind::CharLiteral(_)
             | TirExprKind::StringLiteral(_)
+            | TirExprKind::BytesLiteral(_)
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
