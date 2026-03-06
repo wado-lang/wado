@@ -16,6 +16,8 @@
 //!   sequences with `MultiValueLocalBind` to skip intermediate struct allocation.
 //! - **Constant array data promotion**: replaces `ArrayNewFixed` of constant primitive
 //!   values with `ArrayNewData` backed by a passive data segment.
+//! - **Cleanup**: removes redundant `RefAsNonNull`, `Nop`, and dead code after
+//!   `Unreachable`, normalizing WIR so that codegen can emit it as-is.
 
 use indexmap::{IndexMap, IndexSet};
 
@@ -73,6 +75,10 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
             optimize_instrs(body, types);
         }
     }
+
+    // Final cleanup pass: normalize the WIR so that codegen can emit it as-is.
+    // Removes nops, redundant ref.as_non_null, and dead code after unreachable.
+    cleanup_wir(module);
 }
 
 /// Multi-value return SROA (Scalar Replacement of Aggregates).
@@ -4591,4 +4597,59 @@ fn invalidate_locals_modified_in_instr(instr: &WirInstr, known: &mut FieldKnowle
     instr.for_each_child(&mut |child| {
         invalidate_locals_modified_in_instr(child, known);
     });
+}
+
+/// Final cleanup pass: normalize WIR so that codegen can emit it as-is.
+///
+/// - Removes `RefAsNonNull(inner)` where `inner` already produces a non-null ref.
+/// - Removes `Nop` instructions from instruction sequences.
+/// - Removes dead code after `Unreachable` in instruction sequences.
+fn cleanup_wir(module: &mut WirModule) {
+    for func in &mut module.functions {
+        if let Some(body) = &mut func.body {
+            cleanup_instrs(body);
+        }
+    }
+}
+
+fn cleanup_instrs(instrs: &mut Vec<WirInstr>) {
+    for instr in instrs.iter_mut() {
+        cleanup_instr(instr);
+    }
+    // Remove nops.
+    instrs.retain(|i| !matches!(i, WirInstr::Nop));
+    // Truncate after first unreachable (dead code elimination).
+    if let Some(pos) = instrs.iter().position(|i| matches!(i, WirInstr::Unreachable)) {
+        instrs.truncate(pos + 1);
+    }
+}
+
+fn cleanup_instr(instr: &mut WirInstr) {
+    // Recurse into nested bodies first (bottom-up).
+    match instr {
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+            cleanup_instrs(body);
+        }
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            cleanup_instr(condition);
+            cleanup_instrs(then_body);
+            if let Some(eb) = else_body {
+                cleanup_instrs(eb);
+            }
+        }
+        _ => {
+            instr.for_each_boxed_child_mut(&mut |child| cleanup_instr(child));
+        }
+    }
+    // Elide redundant RefAsNonNull wrapping a non-null-producing instruction.
+    if let WirInstr::RefAsNonNull(inner) = instr {
+        if inner.is_nonnull_result() {
+            *instr = std::mem::replace(inner.as_mut(), WirInstr::Nop);
+        }
+    }
 }
