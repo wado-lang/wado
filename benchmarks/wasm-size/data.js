@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772787599140,
+  "lastUpdate": 1772794453738,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -740,6 +740,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 14297,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0669d7896b235e32b7da81f76c14b953bfc5c13d",
+          "message": "Merge pull request #516 from wado-lang/claude/test-inlining-threshold-sQTxC\n\nAdd store-to-load forwarding optimization pass",
+          "timestamp": "2026-03-06T19:51:54+09:00",
+          "tree_id": "8b1d69333323057c47990958343d36e5a3d4a61f",
+          "url": "https://github.com/wado-lang/wado/commit/0669d7896b235e32b7da81f76c14b953bfc5c13d"
+        },
+        "date": 1772794453598,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1388,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9058,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18395,
             "unit": "bytes"
           }
         ]
