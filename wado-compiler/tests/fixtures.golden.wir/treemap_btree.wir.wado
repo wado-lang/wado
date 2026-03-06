@@ -152,8 +152,6 @@ type "functype/run" = fn();
 
 type "functype/__cm_export__run" = fn();
 
-type "functype/core:allocator/grow_memory" = fn(i32);
-
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
 type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
@@ -194,17 +192,9 @@ type "functype/TreeMap<String,i32>::compact" = fn(ref null TreeMap<String,i32>);
 
 type "functype/BTreeNode<String,i32>::compact" = fn(ref null BTreeNode<String,i32>);
 
-type "functype/Array<BTreeNode<String,i32>>^IndexValue::index_value" = fn(ref null Array<BTreeNode<String,i32>>, i32) -> ref null BTreeNode<String,i32>;
-
 type "functype/Array<bool>::append" = fn(ref null Array<bool>, bool);
 
-type "functype/Array<i32>^IndexValue::index_value" = fn(ref null Array<i32>, i32) -> i32;
-
 type "functype/Array<i32>::append" = fn(ref null Array<i32>, i32);
-
-type "functype/Array<String>^IndexValue::index_value" = fn(ref null Array<String>, i32) -> ref null String;
-
-type "functype/Array<bool>^IndexValue::index_value" = fn(ref null Array<bool>, i32) -> bool;
 
 type "functype/TreeMap<String,i32>::needs_compaction" = fn(ref null TreeMap<String,i32>) -> bool;
 
@@ -267,7 +257,7 @@ import fn wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_vi
 import fn wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 
-global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __heap_offset: i32 = 1024;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
@@ -585,40 +575,10 @@ fn __cm_export__run() {
     "wasi/task-return"(0);
 }
 
-fn "core:allocator/grow_memory"(new_offset) {  // from core:allocator
-    let current_bytes: i32;
-    let deficit: i32;
-    let __local_3: i32;
-    let normal_grow: i32;
-    let grow_bytes: i32;
-    let grow_pages: i32;
-    current_bytes = builtin::memory_size() * 65536;
-    deficit = new_offset - current_bytes;
-    normal_grow = select i32(current_bytes < 16777216, current_bytes, 16777216);
-    grow_bytes = if deficit > normal_grow -> i32 {
-        1 << (32 - builtin::i32_clz(deficit - 1));
-    } else {
-        normal_grow;
-    };
-    grow_pages = (grow_bytes + 65535) / 65536;
-    drop(builtin::memory_grow(grow_pages));
-}
-
 fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from core:allocator
     let aligned: i32;
-    let new_offset: i32;
-    if newsize == 0 {
-        if (oldptr + oldsize) == heap_offset {
-            heap_offset = oldptr;
-        };
-        return 0;
-    };
-    aligned = ((heap_offset + align) - 1) & (0 - align);
-    new_offset = aligned + newsize;
-    if builtin::unlikely(new_offset > (builtin::memory_size() * 65536)) {
-        "core:allocator/grow_memory"(new_offset);
-    };
-    heap_offset = new_offset;
+    aligned = ((__heap_offset + align) - 1) & (0 - align);
+    __heap_offset = aligned + newsize;
     return aligned;
 }
 
@@ -642,14 +602,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     __for_0: block {
         i = 0;
         block {
-            l18: loop {
+            l14: loop {
                 if (i < len) == 0 {
                     break __for_0;
                 };
                 byte = builtin::array_get_u8(msg_bytes, i);
                 builtin::store_u8(ptr + i, byte);
                 i = i + 1;
-                continue l18;
+                continue l14;
             };
         };
     };
@@ -678,13 +638,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l22: loop {
+            l18: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l22;
+                continue l18;
             };
         };
     };
@@ -760,13 +720,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l29: loop {
+            l25: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l29;
+                continue l25;
             };
         };
     };
@@ -785,14 +745,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l33: loop {
+                l29: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l33;
+                    continue l29;
                 };
             };
         };
@@ -892,7 +852,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l42: loop {
+            l38: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -900,7 +860,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l42;
+                continue l38;
             };
         };
     };
@@ -930,7 +890,7 @@ fn String^Ord::cmp(self, other) {
     __for_2: block {
         i = 0;
         block {
-            l46: loop {
+            l42: loop {
                 if (i < min_len) == 0 {
                     break __for_2;
                 };
@@ -943,7 +903,7 @@ fn String^Ord::cmp(self, other) {
                     return 2;
                 };
                 i = i + 1;
-                continue l46;
+                continue l42;
             };
         };
     };
@@ -1032,16 +992,30 @@ fn BTreeNode<String,i32>::compact(self) {
     let __local_13: i32;
     let __local_14: ref null Array<bool>;
     let __local_15: ref null Array<String>;
-    let __local_16: ref null Array<BTreeNode<String,i32>>;
-    let _licm_keys_17: ref null Array<String>;
-    let _licm_deleted_18: ref null Array<bool>;
-    let _licm_values_19: ref null Array<i32>;
-    let _licm_used_20: i32;
-    let _licm_children_21: ref null Array<BTreeNode<String,i32>>;
-    let _licm_used_22: i32;
-    let __local_23: i32;
+    let __local_16: ref null Array<bool>;
+    let __local_17: i32;
+    let __local_18: ref null Array<String>;
+    let __local_19: i32;
+    let __local_20: ref null Array<i32>;
+    let __local_21: i32;
+    let __local_22: ref null Array<BTreeNode<String,i32>>;
+    let __local_23: ref null Array<BTreeNode<String,i32>>;
     let __local_24: i32;
-    let __local_25: i32;
+    let _licm_keys_25: ref null Array<String>;
+    let _licm_deleted_26: ref null Array<bool>;
+    let _licm_values_27: ref null Array<i32>;
+    let _licm_used_28: i32;
+    let _licm_used_29: i32;
+    let _licm_repr_30: ref null array<bool>;
+    let _licm_repr_31: ref null array<String>;
+    let _licm_used_32: i32;
+    let _licm_repr_33: ref null array<i32>;
+    let _licm_children_34: ref null Array<BTreeNode<String,i32>>;
+    let _licm_used_35: i32;
+    let _licm_repr_36: ref null array<BTreeNode<String,i32>>;
+    let __local_37: i32;
+    let __local_38: i32;
+    let __local_39: i32;
     new_keys = __seq_lit: block -> ref null Array<String> {
         __local_1 = Array<String> { repr: ref.as_non_null(builtin::array_new<ref null String>(0)), used: 0 };
         break __seq_lit: __local_1;
@@ -1056,22 +1030,48 @@ fn BTreeNode<String,i32>::compact(self) {
     };
     __for_1: block {
         i_7 = 0;
-        _licm_keys_17 = self.keys;
-        _licm_deleted_18 = self.deleted;
-        _licm_values_19 = self.values;
-        _licm_used_20 = _licm_keys_17.used;
+        _licm_keys_25 = self.keys;
+        _licm_deleted_26 = self.deleted;
+        _licm_values_27 = self.values;
+        _licm_used_28 = _licm_keys_25.used;
+        _licm_used_29 = _licm_deleted_26.used;
+        _licm_repr_30 = _licm_deleted_26.repr;
+        _licm_repr_31 = _licm_keys_25.repr;
+        _licm_used_32 = _licm_values_27.used;
+        _licm_repr_33 = _licm_values_27.repr;
         block {
-            l59: loop {
-                if (i_7 < _licm_used_20) == 0 {
+            l55: loop {
+                if (i_7 < _licm_used_28) == 0 {
                     break __for_1;
                 };
-                if Array<bool>^IndexValue::index_value(_licm_deleted_18, i_7) == 0 {
-                    Array<String>::append(new_keys, Array<String>^IndexValue::index_value(_licm_keys_17, i_7));
-                    Array<i32>::append(new_values, Array<i32>^IndexValue::index_value(_licm_values_19, i_7));
+                if __inline_Array_bool__IndexValue__index_value_7: block -> bool {
+                    __local_17 = i_7;
+                    if __local_17 >= _licm_used_29 {
+                        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                        unreachable;
+                    };
+                    break __inline_Array_bool__IndexValue__index_value_7: builtin::array_get<bool>(_licm_repr_30, __local_17);
+                } == 0 {
+                    Array<String>::append(new_keys, __inline_Array_String__IndexValue__index_value_8: block -> ref null String {
+                        __local_19 = i_7;
+                        if __local_19 >= _licm_used_28 {
+                            "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                            unreachable;
+                        };
+                        break __inline_Array_String__IndexValue__index_value_8: builtin::array_get<ref null String>(_licm_repr_31, __local_19);
+                    });
+                    Array<i32>::append(new_values, __inline_Array_i32__IndexValue__index_value_9: block -> i32 {
+                        __local_21 = i_7;
+                        if __local_21 >= _licm_used_32 {
+                            "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                            unreachable;
+                        };
+                        break __inline_Array_i32__IndexValue__index_value_9: builtin::array_get<i32>(_licm_repr_33, __local_21);
+                    });
                     Array<bool>::append(new_deleted, 0);
                 };
                 i_7 = i_7 + 1;
-                continue l59;
+                continue l55;
             };
         };
     };
@@ -1081,28 +1081,28 @@ fn BTreeNode<String,i32>::compact(self) {
     if self.is_leaf == 0 {
         __for_2: block {
             i_8 = 0;
-            _licm_children_21 = self.children;
-            _licm_used_22 = _licm_children_21.used;
+            _licm_children_34 = self.children;
+            _licm_used_35 = _licm_children_34.used;
+            _licm_repr_36 = _licm_children_34.repr;
             block {
-                l64: loop {
-                    if (i_8 < _licm_used_22) == 0 {
+                l63: loop {
+                    if (i_8 < _licm_used_35) == 0 {
                         break __for_2;
                     };
-                    BTreeNode<String,i32>::compact(Array<BTreeNode<String,i32>>^IndexValue::index_value(_licm_children_21, i_8));
+                    BTreeNode<String,i32>::compact(__inline_Array_BTreeNode_String_i32___IndexValue__index_value_11: block -> ref null BTreeNode<String,i32> {
+                        __local_24 = i_8;
+                        if __local_24 >= _licm_used_35 {
+                            "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                            unreachable;
+                        };
+                        break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_11: builtin::array_get<ref null BTreeNode<String,i32>>(_licm_repr_36, __local_24);
+                    });
                     i_8 = i_8 + 1;
-                    continue l64;
+                    continue l63;
                 };
             };
         };
     };
-}
-
-fn Array<BTreeNode<String,i32>>^IndexValue::index_value(self, index) {
-    if index >= self.used {
-        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
-        unreachable;
-    };
-    return builtin::array_get<ref null BTreeNode<String,i32>>(self.repr, index);
 }
 
 fn Array<bool>::append(self, value) {
@@ -1127,14 +1127,6 @@ fn Array<bool>::append(self, value) {
     self.used = used + 1;
 }
 
-fn Array<i32>^IndexValue::index_value(self, index) {
-    if index >= self.used {
-        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
-        unreachable;
-    };
-    return builtin::array_get<i32>(self.repr, index);
-}
-
 fn Array<i32>::append(self, value) {
     let used: i32;
     let capacity: i32;
@@ -1155,22 +1147,6 @@ fn Array<i32>::append(self, value) {
     };
     builtin::array_set<i32>(self.repr, used, value);
     self.used = used + 1;
-}
-
-fn Array<String>^IndexValue::index_value(self, index) {
-    if index >= self.used {
-        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
-        unreachable;
-    };
-    return builtin::array_get<ref null String>(self.repr, index);
-}
-
-fn Array<bool>^IndexValue::index_value(self, index) {
-    if index >= self.used {
-        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
-        unreachable;
-    };
-    return builtin::array_get<bool>(self.repr, index);
 }
 
 fn TreeMap<String,i32>::needs_compaction(self) {
@@ -1216,49 +1192,107 @@ fn TreeMap<String,i32>::collect_entries(self, node, result) {
     let __local_4: ref null Array<String>;
     let __local_5: ref null Array<BTreeNode<String,i32>>;
     let __local_6: ref null Array<BTreeNode<String,i32>>;
-    let _licm_keys_7: ref null Array<String>;
-    let _licm_is_leaf_8: bool;
-    let _licm_children_9: ref null Array<BTreeNode<String,i32>>;
-    let _licm_deleted_10: ref null Array<bool>;
-    let _licm_values_11: ref null Array<i32>;
-    let _licm_used_12: i32;
-    let _licm_used_13: i32;
+    let __local_7: i32;
+    let __local_8: ref null Array<bool>;
+    let __local_9: i32;
+    let __local_10: ref null Array<String>;
+    let __local_11: i32;
+    let __local_12: ref null Array<i32>;
+    let __local_13: i32;
+    let __local_14: ref null Array<BTreeNode<String,i32>>;
+    let __local_15: ref null Array<BTreeNode<String,i32>>;
+    let __local_16: i32;
+    let _licm_keys_17: ref null Array<String>;
+    let _licm_is_leaf_18: bool;
+    let _licm_children_19: ref null Array<BTreeNode<String,i32>>;
+    let _licm_deleted_20: ref null Array<bool>;
+    let _licm_values_21: ref null Array<i32>;
+    let _licm_used_22: i32;
+    let _licm_used_23: i32;
+    let _licm_repr_24: ref null array<BTreeNode<String,i32>>;
+    let _licm_used_25: i32;
+    let _licm_repr_26: ref null array<bool>;
+    let _licm_repr_27: ref null array<String>;
+    let _licm_used_28: i32;
+    let _licm_repr_29: ref null array<i32>;
     i = 0;
-    _licm_keys_7 = node.keys;
-    _licm_is_leaf_8 = node.is_leaf;
-    _licm_children_9 = node.children;
-    _licm_deleted_10 = node.deleted;
-    _licm_values_11 = node.values;
-    _licm_used_12 = _licm_keys_7.used;
-    _licm_used_13 = _licm_children_9.used;
-    b75: block {
-        l76: loop {
-            if (i < _licm_used_12) == 0 {
-                break b75;
+    _licm_keys_17 = node.keys;
+    _licm_is_leaf_18 = node.is_leaf;
+    _licm_children_19 = node.children;
+    _licm_deleted_20 = node.deleted;
+    _licm_values_21 = node.values;
+    _licm_used_22 = _licm_keys_17.used;
+    _licm_used_23 = _licm_children_19.used;
+    _licm_repr_24 = _licm_children_19.repr;
+    _licm_used_25 = _licm_deleted_20.used;
+    _licm_repr_26 = _licm_deleted_20.repr;
+    _licm_repr_27 = _licm_keys_17.repr;
+    _licm_used_28 = _licm_values_21.used;
+    _licm_repr_29 = _licm_values_21.repr;
+    b71: block {
+        l72: loop {
+            if (i < _licm_used_22) == 0 {
+                break b71;
             };
-            if if _licm_is_leaf_8 == 0 -> i32 {
-                i < _licm_used_13;
+            if if _licm_is_leaf_18 == 0 -> i32 {
+                i < _licm_used_23;
             } else {
                 0;
             } {
-                TreeMap<String,i32>::collect_entries(self, Array<BTreeNode<String,i32>>^IndexValue::index_value(_licm_children_9, i), result);
+                TreeMap<String,i32>::collect_entries(self, __inline_Array_BTreeNode_String_i32___IndexValue__index_value_2: block -> ref null BTreeNode<String,i32> {
+                    __local_7 = i;
+                    if __local_7 >= _licm_used_23 {
+                        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                        unreachable;
+                    };
+                    break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_2: builtin::array_get<ref null BTreeNode<String,i32>>(_licm_repr_24, __local_7);
+                }, result);
             };
-            if Array<bool>^IndexValue::index_value(_licm_deleted_10, i) == 0 {
-                Array<Tuple<String,i32>>::append(result, "tuple/[String, i32]" { 0: ref.as_non_null(Array<String>^IndexValue::index_value(_licm_keys_7, i)), 1: Array<i32>^IndexValue::index_value(_licm_values_11, i) });
+            if __inline_Array_bool__IndexValue__index_value_3: block -> bool {
+                __local_9 = i;
+                if __local_9 >= _licm_used_25 {
+                    "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                    unreachable;
+                };
+                break __inline_Array_bool__IndexValue__index_value_3: builtin::array_get<bool>(_licm_repr_26, __local_9);
+            } == 0 {
+                Array<Tuple<String,i32>>::append(result, "tuple/[String, i32]" { 0: ref.as_non_null(__inline_Array_String__IndexValue__index_value_4: block -> ref null String {
+                    __local_11 = i;
+                    if __local_11 >= _licm_used_22 {
+                        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                        unreachable;
+                    };
+                    break __inline_Array_String__IndexValue__index_value_4: builtin::array_get<ref null String>(_licm_repr_27, __local_11);
+                }), 1: __inline_Array_i32__IndexValue__index_value_5: block -> i32 {
+                    __local_13 = i;
+                    if __local_13 >= _licm_used_28 {
+                        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                        unreachable;
+                    };
+                    break __inline_Array_i32__IndexValue__index_value_5: builtin::array_get<i32>(_licm_repr_29, __local_13);
+                } });
             };
             i = i + 1;
-            continue l76;
+            continue l72;
         };
     };
     if if node.is_leaf == 0 -> i32 {
-        __inline_Array_BTreeNode_String_i32____len_2: block -> i32 {
-            __local_6 = node.children;
-            break __inline_Array_BTreeNode_String_i32____len_2: __local_6.used;
+        __inline_Array_BTreeNode_String_i32____len_6: block -> i32 {
+            __local_14 = node.children;
+            break __inline_Array_BTreeNode_String_i32____len_6: __local_14.used;
         } > i;
     } else {
         0;
     } {
-        TreeMap<String,i32>::collect_entries(self, Array<BTreeNode<String,i32>>^IndexValue::index_value(node.children, i), result);
+        TreeMap<String,i32>::collect_entries(self, __inline_Array_BTreeNode_String_i32___IndexValue__index_value_7: block -> ref null BTreeNode<String,i32> {
+            __local_15 = node.children;
+            __local_16 = i;
+            if __local_16 >= __local_15.used {
+                "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                unreachable;
+            };
+            break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_7: builtin::array_get<ref null BTreeNode<String,i32>>(__local_15.repr, __local_16);
+        }, result);
     };
 }
 
@@ -1299,33 +1333,66 @@ fn TreeMap<String,i32>::delete_in_node(self, node, key) {
     let i: i32;
     let __local_4: ref null Array<String>;
     let __local_5: ref null Array<String>;
-    let _licm_keys_6: ref null Array<String>;
-    let _licm_used_7: i32;
+    let __local_6: i32;
+    let __local_7: ref null Array<String>;
+    let __local_8: ref null Array<String>;
+    let __local_9: i32;
+    let __local_10: ref null Array<bool>;
+    let __local_11: i32;
+    let __local_12: ref null Array<BTreeNode<String,i32>>;
+    let __local_13: i32;
+    let _licm_keys_14: ref null Array<String>;
+    let _licm_used_15: i32;
+    let _licm_repr_16: ref null array<String>;
     i = 0;
-    _licm_keys_6 = node.keys;
-    _licm_used_7 = _licm_keys_6.used;
-    b85: block {
-        l86: loop {
-            if if i < _licm_used_7 -> i32 {
-                String^Ord::cmp(key, Array<String>^IndexValue::index_value(_licm_keys_6, i)) == 2;
+    _licm_keys_14 = node.keys;
+    _licm_used_15 = _licm_keys_14.used;
+    _licm_repr_16 = _licm_keys_14.repr;
+    b86: block {
+        l87: loop {
+            if if i < _licm_used_15 -> i32 {
+                String^Ord::cmp(key, __inline_Array_String__IndexValue__index_value_1: block -> ref null String {
+                    __local_6 = i;
+                    if __local_6 >= _licm_used_15 {
+                        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                        unreachable;
+                    };
+                    break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref null String>(_licm_repr_16, __local_6);
+                }) == 2;
             } else {
                 0;
             } == 0 {
-                break b85;
+                break b86;
             };
             i = i + 1;
-            continue l86;
+            continue l87;
         };
     };
-    if if i < __inline_Array_String___len_1: block -> i32 {
-        __local_5 = node.keys;
-        break __inline_Array_String___len_1: __local_5.used;
+    if if i < __inline_Array_String___len_2: block -> i32 {
+        __local_7 = node.keys;
+        break __inline_Array_String___len_2: __local_7.used;
     } -> i32 {
-        String^Eq::eq(key, Array<String>^IndexValue::index_value(node.keys, i));
+        String^Eq::eq(key, __inline_Array_String__IndexValue__index_value_3: block -> ref null String {
+            __local_8 = node.keys;
+            __local_9 = i;
+            if __local_9 >= __local_8.used {
+                "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                unreachable;
+            };
+            break __inline_Array_String__IndexValue__index_value_3: builtin::array_get<ref null String>(__local_8.repr, __local_9);
+        });
     } else {
         0;
     } {
-        if Array<bool>^IndexValue::index_value(node.deleted, i) == 0 {
+        if __inline_Array_bool__IndexValue__index_value_4: block -> bool {
+            __local_10 = node.deleted;
+            __local_11 = i;
+            if __local_11 >= __local_10.used {
+                "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                unreachable;
+            };
+            break __inline_Array_bool__IndexValue__index_value_4: builtin::array_get<bool>(__local_10.repr, __local_11);
+        } == 0 {
             Array<bool>^IndexAssign::index_assign(node.deleted, i, 1);
             self.deleted_count = self.deleted_count + 1;
             self.size = self.size - 1;
@@ -1336,7 +1403,15 @@ fn TreeMap<String,i32>::delete_in_node(self, node, key) {
     if node.is_leaf {
         return 0;
     };
-    return TreeMap<String,i32>::delete_in_node(self, Array<BTreeNode<String,i32>>^IndexValue::index_value(node.children, i), key);
+    return TreeMap<String,i32>::delete_in_node(self, __inline_Array_BTreeNode_String_i32___IndexValue__index_value_5: block -> ref null BTreeNode<String,i32> {
+        __local_12 = node.children;
+        __local_13 = i;
+        if __local_13 >= __local_12.used {
+            "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+            unreachable;
+        };
+        break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_5: builtin::array_get<ref null BTreeNode<String,i32>>(__local_12.repr, __local_13);
+    }, key);
 }
 
 fn Array<bool>^IndexAssign::index_assign(self, index, value) {
@@ -1362,41 +1437,92 @@ fn TreeMap<String,i32>::search_in_node(self, node, key) {
     let i: i32;
     let __local_4: ref null Array<String>;
     let __local_5: ref null Array<String>;
-    let _licm_keys_6: ref null Array<String>;
-    let _licm_used_7: i32;
+    let __local_6: i32;
+    let __local_7: ref null Array<String>;
+    let __local_8: ref null Array<String>;
+    let __local_9: i32;
+    let __local_10: ref null Array<bool>;
+    let __local_11: i32;
+    let __local_12: ref null Array<i32>;
+    let __local_13: i32;
+    let __local_14: ref null Array<BTreeNode<String,i32>>;
+    let __local_15: i32;
+    let _licm_keys_16: ref null Array<String>;
+    let _licm_used_17: i32;
+    let _licm_repr_18: ref null array<String>;
     i = 0;
-    _licm_keys_6 = node.keys;
-    _licm_used_7 = _licm_keys_6.used;
-    b95: block {
-        l96: loop {
-            if if i < _licm_used_7 -> i32 {
-                String^Ord::cmp(key, Array<String>^IndexValue::index_value(_licm_keys_6, i)) == 2;
+    _licm_keys_16 = node.keys;
+    _licm_used_17 = _licm_keys_16.used;
+    _licm_repr_18 = _licm_keys_16.repr;
+    b100: block {
+        l101: loop {
+            if if i < _licm_used_17 -> i32 {
+                String^Ord::cmp(key, __inline_Array_String__IndexValue__index_value_1: block -> ref null String {
+                    __local_6 = i;
+                    if __local_6 >= _licm_used_17 {
+                        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                        unreachable;
+                    };
+                    break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref null String>(_licm_repr_18, __local_6);
+                }) == 2;
             } else {
                 0;
             } == 0 {
-                break b95;
+                break b100;
             };
             i = i + 1;
-            continue l96;
+            continue l101;
         };
     };
-    if if i < __inline_Array_String___len_1: block -> i32 {
-        __local_5 = node.keys;
-        break __inline_Array_String___len_1: __local_5.used;
+    if if i < __inline_Array_String___len_2: block -> i32 {
+        __local_7 = node.keys;
+        break __inline_Array_String___len_2: __local_7.used;
     } -> i32 {
-        String^Eq::eq(key, Array<String>^IndexValue::index_value(node.keys, i));
+        String^Eq::eq(key, __inline_Array_String__IndexValue__index_value_3: block -> ref null String {
+            __local_8 = node.keys;
+            __local_9 = i;
+            if __local_9 >= __local_8.used {
+                "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                unreachable;
+            };
+            break __inline_Array_String__IndexValue__index_value_3: builtin::array_get<ref null String>(__local_8.repr, __local_9);
+        });
     } else {
         0;
     } {
-        if Array<bool>^IndexValue::index_value(node.deleted, i) == 0 {
-            return Option<i32>::Some { discriminant: 0, payload_0: Array<i32>^IndexValue::index_value(node.values, i) };
+        if __inline_Array_bool__IndexValue__index_value_4: block -> bool {
+            __local_10 = node.deleted;
+            __local_11 = i;
+            if __local_11 >= __local_10.used {
+                "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                unreachable;
+            };
+            break __inline_Array_bool__IndexValue__index_value_4: builtin::array_get<bool>(__local_10.repr, __local_11);
+        } == 0 {
+            return Option<i32>::Some { discriminant: 0, payload_0: __inline_Array_i32__IndexValue__index_value_5: block -> i32 {
+                __local_12 = node.values;
+                __local_13 = i;
+                if __local_13 >= __local_12.used {
+                    "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                    unreachable;
+                };
+                break __inline_Array_i32__IndexValue__index_value_5: builtin::array_get<i32>(__local_12.repr, __local_13);
+            } };
         };
         return Option<i32> { 1 };
     };
     if node.is_leaf {
         return Option<i32> { 1 };
     };
-    return TreeMap<String,i32>::search_in_node(self, Array<BTreeNode<String,i32>>^IndexValue::index_value(node.children, i), key);
+    return TreeMap<String,i32>::search_in_node(self, __inline_Array_BTreeNode_String_i32___IndexValue__index_value_6: block -> ref null BTreeNode<String,i32> {
+        __local_14 = node.children;
+        __local_15 = i;
+        if __local_15 >= __local_14.used {
+            "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+            unreachable;
+        };
+        break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_6: builtin::array_get<ref null BTreeNode<String,i32>>(__local_14.repr, __local_15);
+    }, key);
 }
 
 fn TreeMap<String,i32>::insert(self, key, value) {
@@ -1440,39 +1566,79 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
     let pos_5: i32;
     let __local_6: ref null Array<String>;
     let __local_7: ref null Array<String>;
-    let __local_8: ref null Array<String>;
-    let __local_9: ref null TreeMap<String,i32>;
-    let _licm_keys_10: ref null Array<String>;
-    let _licm_used_11: i32;
-    let _licm_keys_12: ref null Array<String>;
-    let _licm_used_13: i32;
+    let __local_8: i32;
+    let __local_9: ref null Array<String>;
+    let __local_10: ref null Array<String>;
+    let __local_11: i32;
+    let __local_12: ref null Array<bool>;
+    let __local_13: i32;
+    let __local_14: ref null Array<String>;
+    let __local_15: ref null Array<String>;
+    let __local_16: i32;
+    let __local_17: ref null Array<BTreeNode<String,i32>>;
+    let __local_18: i32;
+    let __local_19: ref null TreeMap<String,i32>;
+    let __local_20: ref null Array<String>;
+    let __local_21: i32;
+    let __local_22: ref null Array<BTreeNode<String,i32>>;
+    let __local_23: i32;
+    let _licm_keys_24: ref null Array<String>;
+    let _licm_used_25: i32;
+    let _licm_repr_26: ref null array<String>;
+    let _licm_keys_27: ref null Array<String>;
+    let _licm_used_28: i32;
+    let _licm_repr_29: ref null array<String>;
     if node.is_leaf {
         pos_4 = 0;
-        _licm_keys_10 = node.keys;
-        _licm_used_11 = _licm_keys_10.used;
-        b108: block {
-            l109: loop {
-                if if pos_4 < _licm_used_11 -> i32 {
-                    String^Ord::cmp(Array<String>^IndexValue::index_value(_licm_keys_10, pos_4), key) == 0;
+        _licm_keys_24 = node.keys;
+        _licm_used_25 = _licm_keys_24.used;
+        _licm_repr_26 = _licm_keys_24.repr;
+        b118: block {
+            l119: loop {
+                if if pos_4 < _licm_used_25 -> i32 {
+                    String^Ord::cmp(__inline_Array_String__IndexValue__index_value_1: block -> ref null String {
+                        __local_8 = pos_4;
+                        if __local_8 >= _licm_used_25 {
+                            "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                            unreachable;
+                        };
+                        break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref null String>(_licm_repr_26, __local_8);
+                    }, key) == 0;
                 } else {
                     0;
                 } == 0 {
-                    break b108;
+                    break b118;
                 };
                 pos_4 = pos_4 + 1;
-                continue l109;
+                continue l119;
             };
         };
-        if if pos_4 < __inline_Array_String___len_1: block -> i32 {
-            __local_7 = node.keys;
-            break __inline_Array_String___len_1: __local_7.used;
+        if if pos_4 < __inline_Array_String___len_2: block -> i32 {
+            __local_9 = node.keys;
+            break __inline_Array_String___len_2: __local_9.used;
         } -> i32 {
-            String^Eq::eq(Array<String>^IndexValue::index_value(node.keys, pos_4), key);
+            String^Eq::eq(__inline_Array_String__IndexValue__index_value_3: block -> ref null String {
+                __local_10 = node.keys;
+                __local_11 = pos_4;
+                if __local_11 >= __local_10.used {
+                    "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                    unreachable;
+                };
+                break __inline_Array_String__IndexValue__index_value_3: builtin::array_get<ref null String>(__local_10.repr, __local_11);
+            }, key);
         } else {
             0;
         } {
             Array<i32>^IndexAssign::index_assign(node.values, pos_4, value);
-            if Array<bool>^IndexValue::index_value(node.deleted, pos_4) {
+            if __inline_Array_bool__IndexValue__index_value_4: block -> bool {
+                __local_12 = node.deleted;
+                __local_13 = pos_4;
+                if __local_13 >= __local_12.used {
+                    "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                    unreachable;
+                };
+                break __inline_Array_bool__IndexValue__index_value_4: builtin::array_get<bool>(__local_12.repr, __local_13);
+            } {
                 Array<bool>^IndexAssign::index_assign(node.deleted, pos_4, 0);
                 self.deleted_count = self.deleted_count - 1;
             };
@@ -1485,28 +1651,60 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
         self.size = self.size + 1;
     } else {
         pos_5 = 0;
-        _licm_keys_12 = node.keys;
-        _licm_used_13 = _licm_keys_12.used;
-        b115: block {
-            l116: loop {
-                if if pos_5 < _licm_used_13 -> i32 {
-                    String^Ord::cmp(key, Array<String>^IndexValue::index_value(_licm_keys_12, pos_5)) == 2;
+        _licm_keys_27 = node.keys;
+        _licm_used_28 = _licm_keys_27.used;
+        _licm_repr_29 = _licm_keys_27.repr;
+        b128: block {
+            l129: loop {
+                if if pos_5 < _licm_used_28 -> i32 {
+                    String^Ord::cmp(key, __inline_Array_String__IndexValue__index_value_6: block -> ref null String {
+                        __local_16 = pos_5;
+                        if __local_16 >= _licm_used_28 {
+                            "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                            unreachable;
+                        };
+                        break __inline_Array_String__IndexValue__index_value_6: builtin::array_get<ref null String>(_licm_repr_29, __local_16);
+                    }) == 2;
                 } else {
                     0;
                 } == 0 {
-                    break b115;
+                    break b128;
                 };
                 pos_5 = pos_5 + 1;
-                continue l116;
+                continue l129;
             };
         };
-        if BTreeNode<String,i32>::is_full(Array<BTreeNode<String,i32>>^IndexValue::index_value(node.children, pos_5), (2 * self.t) - 1) {
+        if BTreeNode<String,i32>::is_full(__inline_Array_BTreeNode_String_i32___IndexValue__index_value_7: block -> ref null BTreeNode<String,i32> {
+            __local_17 = node.children;
+            __local_18 = pos_5;
+            if __local_18 >= __local_17.used {
+                "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                unreachable;
+            };
+            break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_7: builtin::array_get<ref null BTreeNode<String,i32>>(__local_17.repr, __local_18);
+        }, (2 * self.t) - 1) {
             TreeMap<String,i32>::split_child(self, node, pos_5);
-            if String^Ord::cmp(key, Array<String>^IndexValue::index_value(node.keys, pos_5)) == 2 {
+            if String^Ord::cmp(key, __inline_Array_String__IndexValue__index_value_9: block -> ref null String {
+                __local_20 = node.keys;
+                __local_21 = pos_5;
+                if __local_21 >= __local_20.used {
+                    "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                    unreachable;
+                };
+                break __inline_Array_String__IndexValue__index_value_9: builtin::array_get<ref null String>(__local_20.repr, __local_21);
+            }) == 2 {
                 pos_5 = pos_5 + 1;
             };
         };
-        TreeMap<String,i32>::insert_non_full(self, Array<BTreeNode<String,i32>>^IndexValue::index_value(node.children, pos_5), key, value);
+        TreeMap<String,i32>::insert_non_full(self, __inline_Array_BTreeNode_String_i32___IndexValue__index_value_10: block -> ref null BTreeNode<String,i32> {
+            __local_22 = node.children;
+            __local_23 = pos_5;
+            if __local_23 >= __local_22.used {
+                "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                unreachable;
+            };
+            break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_10: builtin::array_get<ref null BTreeNode<String,i32>>(__local_22.repr, __local_23);
+        }, key, value);
     };
 }
 
@@ -1518,44 +1716,116 @@ fn TreeMap<String,i32>::sort_node_entries(self, node) {
     let temp_d: bool;
     let __local_7: ref null Array<String>;
     let __local_8: ref null Array<String>;
-    let _licm_keys_9: ref null Array<String>;
-    let _licm_values_10: ref null Array<i32>;
-    let _licm_deleted_11: ref null Array<bool>;
+    let __local_9: ref null Array<String>;
+    let __local_10: i32;
+    let __local_11: ref null Array<String>;
+    let __local_12: i32;
+    let __local_13: ref null Array<String>;
+    let __local_14: i32;
+    let __local_15: ref null Array<String>;
+    let __local_16: i32;
+    let __local_17: ref null Array<i32>;
+    let __local_18: i32;
+    let __local_19: ref null Array<i32>;
+    let __local_20: i32;
+    let __local_21: ref null Array<bool>;
+    let __local_22: i32;
+    let __local_23: ref null Array<bool>;
+    let __local_24: i32;
+    let _licm_keys_25: ref null Array<String>;
+    let _licm_values_26: ref null Array<i32>;
+    let _licm_deleted_27: ref null Array<bool>;
     __for_5: block {
         i = 0;
-        _licm_keys_9 = node.keys;
-        _licm_values_10 = node.values;
-        _licm_deleted_11 = node.deleted;
+        _licm_keys_25 = node.keys;
+        _licm_values_26 = node.values;
+        _licm_deleted_27 = node.deleted;
         block {
-            l122: loop {
-                if (i < _licm_keys_9.used) == 0 {
+            l139: loop {
+                if (i < _licm_keys_25.used) == 0 {
                     break __for_5;
                 };
                 __for_6: block {
                     j = i + 1;
                     block {
-                        l125: loop {
-                            if (j < _licm_keys_9.used) == 0 {
+                        l142: loop {
+                            if (j < _licm_keys_25.used) == 0 {
                                 break __for_6;
                             };
-                            if String^Ord::cmp(Array<String>^IndexValue::index_value(_licm_keys_9, i), Array<String>^IndexValue::index_value(_licm_keys_9, j)) == 2 {
-                                temp_k = Array<String>^IndexValue::index_value(_licm_keys_9, i);
-                                Array<String>^IndexAssign::index_assign(_licm_keys_9, i, Array<String>^IndexValue::index_value(_licm_keys_9, j));
-                                Array<String>^IndexAssign::index_assign(_licm_keys_9, j, temp_k);
-                                temp_v = Array<i32>^IndexValue::index_value(_licm_values_10, i);
-                                Array<i32>^IndexAssign::index_assign(_licm_values_10, i, Array<i32>^IndexValue::index_value(_licm_values_10, j));
-                                Array<i32>^IndexAssign::index_assign(_licm_values_10, j, temp_v);
-                                temp_d = Array<bool>^IndexValue::index_value(_licm_deleted_11, i);
-                                Array<bool>^IndexAssign::index_assign(_licm_deleted_11, i, Array<bool>^IndexValue::index_value(_licm_deleted_11, j));
-                                Array<bool>^IndexAssign::index_assign(_licm_deleted_11, j, temp_d);
+                            if String^Ord::cmp(__inline_Array_String__IndexValue__index_value_2: block -> ref null String {
+                                __local_10 = i;
+                                if __local_10 >= _licm_keys_25.used {
+                                    "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                                    unreachable;
+                                };
+                                break __inline_Array_String__IndexValue__index_value_2: builtin::array_get<ref null String>(_licm_keys_25.repr, __local_10);
+                            }, __inline_Array_String__IndexValue__index_value_3: block -> ref null String {
+                                __local_12 = j;
+                                if __local_12 >= _licm_keys_25.used {
+                                    "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                                    unreachable;
+                                };
+                                break __inline_Array_String__IndexValue__index_value_3: builtin::array_get<ref null String>(_licm_keys_25.repr, __local_12);
+                            }) == 2 {
+                                temp_k = __inline_Array_String__IndexValue__index_value_4: block -> ref null String {
+                                    __local_14 = i;
+                                    if __local_14 >= _licm_keys_25.used {
+                                        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                                        unreachable;
+                                    };
+                                    break __inline_Array_String__IndexValue__index_value_4: builtin::array_get<ref null String>(_licm_keys_25.repr, __local_14);
+                                };
+                                Array<String>^IndexAssign::index_assign(_licm_keys_25, i, __inline_Array_String__IndexValue__index_value_5: block -> ref null String {
+                                    __local_16 = j;
+                                    if __local_16 >= _licm_keys_25.used {
+                                        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                                        unreachable;
+                                    };
+                                    break __inline_Array_String__IndexValue__index_value_5: builtin::array_get<ref null String>(_licm_keys_25.repr, __local_16);
+                                });
+                                Array<String>^IndexAssign::index_assign(_licm_keys_25, j, temp_k);
+                                temp_v = __inline_Array_i32__IndexValue__index_value_6: block -> i32 {
+                                    __local_18 = i;
+                                    if __local_18 >= _licm_values_26.used {
+                                        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                                        unreachable;
+                                    };
+                                    break __inline_Array_i32__IndexValue__index_value_6: builtin::array_get<i32>(_licm_values_26.repr, __local_18);
+                                };
+                                Array<i32>^IndexAssign::index_assign(_licm_values_26, i, __inline_Array_i32__IndexValue__index_value_7: block -> i32 {
+                                    __local_20 = j;
+                                    if __local_20 >= _licm_values_26.used {
+                                        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                                        unreachable;
+                                    };
+                                    break __inline_Array_i32__IndexValue__index_value_7: builtin::array_get<i32>(_licm_values_26.repr, __local_20);
+                                });
+                                Array<i32>^IndexAssign::index_assign(_licm_values_26, j, temp_v);
+                                temp_d = __inline_Array_bool__IndexValue__index_value_8: block -> bool {
+                                    __local_22 = i;
+                                    if __local_22 >= _licm_deleted_27.used {
+                                        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                                        unreachable;
+                                    };
+                                    break __inline_Array_bool__IndexValue__index_value_8: builtin::array_get<bool>(_licm_deleted_27.repr, __local_22);
+                                };
+                                Array<bool>^IndexAssign::index_assign(_licm_deleted_27, i, __inline_Array_bool__IndexValue__index_value_9: block -> bool {
+                                    __local_24 = j;
+                                    if __local_24 >= _licm_deleted_27.used {
+                                        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                                        unreachable;
+                                    };
+                                    break __inline_Array_bool__IndexValue__index_value_9: builtin::array_get<bool>(_licm_deleted_27.repr, __local_24);
+                                });
+                                Array<bool>^IndexAssign::index_assign(_licm_deleted_27, j, temp_d);
                             };
                             j = j + 1;
-                            continue l125;
+                            continue l142;
                         };
                     };
                 };
                 i = i + 1;
-                continue l122;
+                continue l139;
             };
         };
     };
@@ -1586,19 +1856,48 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
     let promoted_key: ref null String;
     let promoted_value: i32;
     let promoted_deleted: bool;
-    let __local_11: ref null Array<String>;
-    let __local_12: ref null Array<BTreeNode<String,i32>>;
-    let _licm_keys_13: ref null Array<String>;
-    let _licm_keys_14: ref null Array<String>;
-    let _licm_values_15: ref null Array<i32>;
-    let _licm_values_16: ref null Array<i32>;
-    let _licm_deleted_17: ref null Array<bool>;
-    let _licm_deleted_18: ref null Array<bool>;
-    let _licm_used_19: i32;
-    let _licm_children_20: ref null Array<BTreeNode<String,i32>>;
-    let _licm_children_21: ref null Array<BTreeNode<String,i32>>;
-    let _licm_used_22: i32;
-    full_child = Array<BTreeNode<String,i32>>^IndexValue::index_value(parent.children, child_index);
+    let __local_11: ref null Array<BTreeNode<String,i32>>;
+    let __local_12: i32;
+    let __local_13: ref null Array<String>;
+    let __local_14: ref null Array<String>;
+    let __local_15: i32;
+    let __local_16: ref null Array<i32>;
+    let __local_17: i32;
+    let __local_18: ref null Array<bool>;
+    let __local_19: i32;
+    let __local_20: ref null Array<BTreeNode<String,i32>>;
+    let __local_21: ref null Array<BTreeNode<String,i32>>;
+    let __local_22: i32;
+    let __local_23: ref null Array<String>;
+    let __local_24: i32;
+    let __local_25: ref null Array<i32>;
+    let __local_26: i32;
+    let __local_27: ref null Array<bool>;
+    let __local_28: i32;
+    let _licm_keys_29: ref null Array<String>;
+    let _licm_keys_30: ref null Array<String>;
+    let _licm_values_31: ref null Array<i32>;
+    let _licm_values_32: ref null Array<i32>;
+    let _licm_deleted_33: ref null Array<bool>;
+    let _licm_deleted_34: ref null Array<bool>;
+    let _licm_used_35: i32;
+    let _licm_repr_36: ref null array<String>;
+    let _licm_used_37: i32;
+    let _licm_repr_38: ref null array<i32>;
+    let _licm_used_39: i32;
+    let _licm_repr_40: ref null array<bool>;
+    let _licm_children_41: ref null Array<BTreeNode<String,i32>>;
+    let _licm_children_42: ref null Array<BTreeNode<String,i32>>;
+    let _licm_used_43: i32;
+    let _licm_repr_44: ref null array<BTreeNode<String,i32>>;
+    full_child = __inline_Array_BTreeNode_String_i32___IndexValue__index_value_0: block -> ref null BTreeNode<String,i32> {
+        __local_11 = parent.children;
+        if child_index >= __local_11.used {
+            "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+            unreachable;
+        };
+        break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_0: builtin::array_get<ref null BTreeNode<String,i32>>(__local_11.repr, child_index);
+    };
     new_sibling = BTreeNode<String,i32>::new_leaf();
     if full_child.is_leaf == 0 {
         new_sibling = BTreeNode<String,i32>::new_internal();
@@ -1606,47 +1905,102 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
     mid = self.t - 1;
     __for_3: block {
         i_6 = mid + 1;
-        _licm_keys_13 = full_child.keys;
-        _licm_keys_14 = new_sibling.keys;
-        _licm_values_15 = new_sibling.values;
-        _licm_values_16 = full_child.values;
-        _licm_deleted_17 = new_sibling.deleted;
-        _licm_deleted_18 = full_child.deleted;
-        _licm_used_19 = _licm_keys_13.used;
+        _licm_keys_29 = full_child.keys;
+        _licm_keys_30 = new_sibling.keys;
+        _licm_values_31 = new_sibling.values;
+        _licm_values_32 = full_child.values;
+        _licm_deleted_33 = new_sibling.deleted;
+        _licm_deleted_34 = full_child.deleted;
+        _licm_used_35 = _licm_keys_29.used;
+        _licm_repr_36 = _licm_keys_29.repr;
+        _licm_used_37 = _licm_values_32.used;
+        _licm_repr_38 = _licm_values_32.repr;
+        _licm_used_39 = _licm_deleted_34.used;
+        _licm_repr_40 = _licm_deleted_34.repr;
         block {
-            l132: loop {
-                if (i_6 < _licm_used_19) == 0 {
+            l158: loop {
+                if (i_6 < _licm_used_35) == 0 {
                     break __for_3;
                 };
-                Array<String>::append(_licm_keys_14, Array<String>^IndexValue::index_value(_licm_keys_13, i_6));
-                Array<i32>::append(_licm_values_15, Array<i32>^IndexValue::index_value(_licm_values_16, i_6));
-                Array<bool>::append(_licm_deleted_17, Array<bool>^IndexValue::index_value(_licm_deleted_18, i_6));
+                Array<String>::append(_licm_keys_30, __inline_Array_String__IndexValue__index_value_2: block -> ref null String {
+                    __local_15 = i_6;
+                    if __local_15 >= _licm_used_35 {
+                        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                        unreachable;
+                    };
+                    break __inline_Array_String__IndexValue__index_value_2: builtin::array_get<ref null String>(_licm_repr_36, __local_15);
+                });
+                Array<i32>::append(_licm_values_31, __inline_Array_i32__IndexValue__index_value_3: block -> i32 {
+                    __local_17 = i_6;
+                    if __local_17 >= _licm_used_37 {
+                        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                        unreachable;
+                    };
+                    break __inline_Array_i32__IndexValue__index_value_3: builtin::array_get<i32>(_licm_repr_38, __local_17);
+                });
+                Array<bool>::append(_licm_deleted_33, __inline_Array_bool__IndexValue__index_value_4: block -> bool {
+                    __local_19 = i_6;
+                    if __local_19 >= _licm_used_39 {
+                        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                        unreachable;
+                    };
+                    break __inline_Array_bool__IndexValue__index_value_4: builtin::array_get<bool>(_licm_repr_40, __local_19);
+                });
                 i_6 = i_6 + 1;
-                continue l132;
+                continue l158;
             };
         };
     };
     if full_child.is_leaf == 0 {
         __for_4: block {
             i_7 = mid + 1;
-            _licm_children_20 = full_child.children;
-            _licm_children_21 = new_sibling.children;
-            _licm_used_22 = _licm_children_20.used;
+            _licm_children_41 = full_child.children;
+            _licm_children_42 = new_sibling.children;
+            _licm_used_43 = _licm_children_41.used;
+            _licm_repr_44 = _licm_children_41.repr;
             block {
-                l136: loop {
-                    if (i_7 < _licm_used_22) == 0 {
+                l165: loop {
+                    if (i_7 < _licm_used_43) == 0 {
                         break __for_4;
                     };
-                    Array<BTreeNode<String,i32>>::append(_licm_children_21, Array<BTreeNode<String,i32>>^IndexValue::index_value(_licm_children_20, i_7));
+                    Array<BTreeNode<String,i32>>::append(_licm_children_42, __inline_Array_BTreeNode_String_i32___IndexValue__index_value_6: block -> ref null BTreeNode<String,i32> {
+                        __local_22 = i_7;
+                        if __local_22 >= _licm_used_43 {
+                            "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                            unreachable;
+                        };
+                        break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_6: builtin::array_get<ref null BTreeNode<String,i32>>(_licm_repr_44, __local_22);
+                    });
                     i_7 = i_7 + 1;
-                    continue l136;
+                    continue l165;
                 };
             };
         };
     };
-    promoted_key = Array<String>^IndexValue::index_value(full_child.keys, mid);
-    promoted_value = Array<i32>^IndexValue::index_value(full_child.values, mid);
-    promoted_deleted = Array<bool>^IndexValue::index_value(full_child.deleted, mid);
+    promoted_key = __inline_Array_String__IndexValue__index_value_7: block -> ref null String {
+        __local_23 = full_child.keys;
+        if mid >= __local_23.used {
+            "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+            unreachable;
+        };
+        break __inline_Array_String__IndexValue__index_value_7: builtin::array_get<ref null String>(__local_23.repr, mid);
+    };
+    promoted_value = __inline_Array_i32__IndexValue__index_value_8: block -> i32 {
+        __local_25 = full_child.values;
+        if mid >= __local_25.used {
+            "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+            unreachable;
+        };
+        break __inline_Array_i32__IndexValue__index_value_8: builtin::array_get<i32>(__local_25.repr, mid);
+    };
+    promoted_deleted = __inline_Array_bool__IndexValue__index_value_9: block -> bool {
+        __local_27 = full_child.deleted;
+        if mid >= __local_27.used {
+            "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+            unreachable;
+        };
+        break __inline_Array_bool__IndexValue__index_value_9: builtin::array_get<bool>(__local_27.repr, mid);
+    };
     Array<String>::append(parent.keys, promoted_key);
     Array<i32>::append(parent.values, promoted_value);
     Array<bool>::append(parent.deleted, promoted_deleted);
@@ -1712,25 +2066,38 @@ fn BTreeNode<String,i32>::is_full(self, max_keys) {
     let count: i32;
     let i: i32;
     let __local_4: ref null Array<String>;
-    let _licm_keys_5: ref null Array<String>;
-    let _licm_deleted_6: ref null Array<bool>;
-    let _licm_used_7: i32;
+    let __local_5: ref null Array<bool>;
+    let __local_6: i32;
+    let _licm_keys_7: ref null Array<String>;
+    let _licm_deleted_8: ref null Array<bool>;
+    let _licm_used_9: i32;
+    let _licm_used_10: i32;
+    let _licm_repr_11: ref null array<bool>;
     count = 0;
     __for_0: block {
         i = 0;
-        _licm_keys_5 = self.keys;
-        _licm_deleted_6 = self.deleted;
-        _licm_used_7 = _licm_keys_5.used;
+        _licm_keys_7 = self.keys;
+        _licm_deleted_8 = self.deleted;
+        _licm_used_9 = _licm_keys_7.used;
+        _licm_used_10 = _licm_deleted_8.used;
+        _licm_repr_11 = _licm_deleted_8.repr;
         block {
-            l140: loop {
-                if (i < _licm_used_7) == 0 {
+            l173: loop {
+                if (i < _licm_used_9) == 0 {
                     break __for_0;
                 };
-                if Array<bool>^IndexValue::index_value(_licm_deleted_6, i) == 0 {
+                if __inline_Array_bool__IndexValue__index_value_1: block -> bool {
+                    __local_6 = i;
+                    if __local_6 >= _licm_used_10 {
+                        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[19](0, 19)), used: 19 });
+                        unreachable;
+                    };
+                    break __inline_Array_bool__IndexValue__index_value_1: builtin::array_get<bool>(_licm_repr_11, __local_6);
+                } == 0 {
                     count = count + 1;
                 };
                 i = i + 1;
-                continue l140;
+                continue l173;
             };
         };
     };
@@ -1776,13 +2143,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l144: loop {
+            l178: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l144;
+                continue l178;
             };
         };
     };

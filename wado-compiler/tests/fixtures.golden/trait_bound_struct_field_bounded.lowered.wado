@@ -59,29 +59,41 @@ export fn __cm_export__run() {
 }
 
 fn "Holder<i32>::min"(self: &Holder<i32>) -> i32 {
-    let mut m: i32 = self.items."Array<i32>^IndexValue::index_value"(0);
+    let mut m: i32 = __inline_Array_i32__IndexValue__index_value_0: {
+        let self: &Array<i32> = &self.items;
+        if (0 >= self.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_i32__IndexValue__index_value_0: core::builtin::array_get::<i32>(self.repr, 0);
+    };
     __for_0: {
         let mut i: i32 = 1;
-        let _licm_items_4: Array<i32> = self.items;
-        let _licm_used_5: i32 = _licm_items_4.used;
+        let _licm_items_10: Array<i32> = self.items;
+        let _licm_used_11: i32 = _licm_items_10.used;
+        let _licm_repr_12: builtin::array<i32> = _licm_items_10.repr;
         loop {
-            if !(i < _licm_used_5) {
+            if !(i < _licm_used_11) {
                 break __for_0;
             }
-            if (_licm_items_4."Array<i32>^IndexValue::index_value"(i) < m) {
-                m = _licm_items_4."Array<i32>^IndexValue::index_value"(i);
+            if (__inline_Array_i32__IndexValue__index_value_2: {
+                let index: i32 = i;
+                if (index >= _licm_used_11) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_i32__IndexValue__index_value_2: core::builtin::array_get::<i32>(_licm_repr_12, index);
+            } < m) {
+                m = __inline_Array_i32__IndexValue__index_value_3: {
+                    let index: i32 = i;
+                    if (index >= _licm_used_11) {
+                        core::internal::panic("index out of bounds");
+                    }
+                    break __inline_Array_i32__IndexValue__index_value_3: core::builtin::array_get::<i32>(_licm_repr_12, index);
+                };
             }
             i = (i + 1);
         }
     }
     return m;
-}
-
-fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<i32>(self.repr, index);
 }
 
 pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {

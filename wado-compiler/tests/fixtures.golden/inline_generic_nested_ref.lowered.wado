@@ -40,9 +40,10 @@ export fn run() with Stdout {
     };
     __for_0: {
         let mut i: i32 = 0;
-        let _licm_used_21: i32 = items.used;
+        let _licm_used_23: i32 = items.used;
+        let _licm_repr_24: builtin::array<&mut Item> = items.repr;
         loop {
-            if !(i < _licm_used_21) {
+            if !(i < _licm_used_23) {
                 break __for_0;
             }
             core::cli::println(__tmpl: {
@@ -51,7 +52,13 @@ export fn run() with Stdout {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                let self: Box<i32> = Box<i32> { value: items."Array<Item>^IndexValue::index_value"(i).value };
+                let self: Box<i32> = Box<i32> { value: __inline_Array_Item__IndexValue__index_value_10: {
+                    let index: i32 = i;
+                    if (index >= _licm_used_23) {
+                        core::internal::panic("index out of bounds");
+                    }
+                    break __inline_Array_Item__IndexValue__index_value_10: core::builtin::array_get::<&mut Item>(_licm_repr_24, index);
+                }.value };
                 let f: &mut Formatter = &mut __f;
                 self.i32::fmt_decimal(f);
                 break __tmpl: __r;
@@ -64,13 +71,6 @@ export fn run() with Stdout {
 export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
-}
-
-fn "Array<Item>^IndexValue::index_value"(self: &Array<&mut Item>, index: i32) -> &mut Item {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<&mut Item>(self.repr, index);
 }
 
 pub fn "Array<Item>::append"(self: &mut Array<&mut Item>, value: &mut Item) {

@@ -221,27 +221,27 @@ pub fn "Array<Point>^Inspect::inspect"(self: &Array<Point>, f: &mut Formatter) {
     f.buf.String::append_char('[');
     __for_5: {
         let mut i: i32 = 0;
-        let _licm_used_10: i32 = self.used;
+        let _licm_used_12: i32 = self.used;
+        let _licm_repr_13: builtin::array<Point> = self.repr;
         loop {
-            if !(i < _licm_used_10) {
+            if !(i < _licm_used_12) {
                 break __for_5;
             }
             if (i > 0) {
                 let s: String = ", ";
                 f.buf.String::append(s);
             }
-            self."Array<Point>^IndexValue::index_value"(i)."Point^Inspect::inspect"(f);
+            __inline_Array_Point__IndexValue__index_value_3: {
+                let index: i32 = i;
+                if (index >= _licm_used_12) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_Point__IndexValue__index_value_3: core::builtin::array_get::<Point>(_licm_repr_13, index);
+            }."Point^Inspect::inspect"(f);
             i = (i + 1);
         }
     }
     f.buf.String::append_char(']');
-}
-
-fn "Array<Point>^IndexValue::index_value"(self: &Array<Point>, index: i32) -> Point {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<Point>(self.repr, index);
 }
 
 pub fn "Array<Point>::append"(self: &mut Array<Point>, value: Point) {

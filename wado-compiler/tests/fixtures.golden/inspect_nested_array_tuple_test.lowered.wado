@@ -64,27 +64,27 @@ pub fn "Array<Tuple<i32,String>>^Inspect::inspect"(self: &Array<[i32, String]>, 
     f.buf.String::append_char('[');
     __for_5: {
         let mut i: i32 = 0;
-        let _licm_used_10: i32 = self.used;
+        let _licm_used_12: i32 = self.used;
+        let _licm_repr_13: builtin::array<[i32, String]> = self.repr;
         loop {
-            if !(i < _licm_used_10) {
+            if !(i < _licm_used_12) {
                 break __for_5;
             }
             if (i > 0) {
                 let s: String = ", ";
                 f.buf.String::append(s);
             }
-            self."Array<Tuple<i32,String>>^IndexValue::index_value"(i)."Tuple<i32,String>^Inspect::inspect"(f);
+            __inline_Array_Tuple_i32_String___IndexValue__index_value_3: {
+                let index: i32 = i;
+                if (index >= _licm_used_12) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_Tuple_i32_String___IndexValue__index_value_3: core::builtin::array_get::<[i32, String]>(_licm_repr_13, index);
+            }."Tuple<i32,String>^Inspect::inspect"(f);
             i = (i + 1);
         }
     }
     f.buf.String::append_char(']');
-}
-
-fn "Array<Tuple<i32,String>>^IndexValue::index_value"(self: &Array<[i32, String]>, index: i32) -> [i32, String] {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<[i32, String]>(self.repr, index);
 }
 
 pub fn "Array<Tuple<i32,String>>::append"(self: &mut Array<[i32, String]>, value: [i32, String]) {

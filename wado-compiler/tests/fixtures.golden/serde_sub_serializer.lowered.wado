@@ -59,16 +59,6 @@ fn "TextSerializer^Serializer::serialize_string"(self: &mut TextSerializer, v: &
     return Result<(), SerializeError>::Ok(());
 }
 
-fn "TextSerializer^Serializer::begin_seq"(self: &mut TextSerializer, len: i32) -> Result<TextSeqSerializer, SerializeError> {
-    self.buf.String::append("[");
-    return Result<TextSeqSerializer, SerializeError>::Ok(TextSeqSerializer { parent: *self, count: 0 });
-}
-
-fn "TextSerializer^Serializer::begin_struct"(self: &mut TextSerializer, name: &String, fields: i32) -> Result<TextStructSerializer, SerializeError> {
-    self.buf.String::append("{");
-    return Result<TextStructSerializer, SerializeError>::Ok(TextStructSerializer { parent: *self, count: 0 });
-}
-
 export fn run() with Stdout {
     __inline___initialize_modules_0: {
         if __modules_initialized {
@@ -77,7 +67,11 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let mut ser: TextSerializer = TextSerializer { buf: "" };
-    let mut seq: Result<TextSeqSerializer, SerializeError> = ser."TextSerializer^Serializer::begin_seq"(3);
+    let mut seq: Result<TextSeqSerializer, SerializeError> = __inline_TextSerializer_Serializer__begin_seq_2: {
+        let self: &mut TextSerializer = &mut ser;
+        self.buf.String::append("[");
+        break __inline_TextSerializer_Serializer__begin_seq_2: Result<TextSeqSerializer, SerializeError>::Ok(TextSeqSerializer { parent: *self, count: 0 });
+    };
     if __variant_test(seq, case=0, name=Ok) {
         let s: TextSeqSerializer = __variant_payload(seq, case=0);
         let a: Box<i32> = Box<i32> { value: 1 };
@@ -86,9 +80,9 @@ export fn run() with Stdout {
         s."TextSeqSerializer^SerializeSeq::element<i32>"(b);
         let c: Box<i32> = Box<i32> { value: 3 };
         s."TextSeqSerializer^SerializeSeq::element<i32>"(c);
-        __inline_TextSeqSerializer_SerializeSeq__end_2: {
+        __inline_TextSeqSerializer_SerializeSeq__end_3: {
             s.parent.buf.String::append("]");
-            break __inline_TextSeqSerializer_SerializeSeq__end_2: Result<(), SerializeError>::Ok(());
+            break __inline_TextSeqSerializer_SerializeSeq__end_3: Result<(), SerializeError>::Ok(());
         };
     }
     core::cli::println(__tmpl: {
@@ -98,16 +92,21 @@ export fn run() with Stdout {
         break __tmpl: __r;
     });
     ser.buf = "";
-    let mut st: Result<TextStructSerializer, SerializeError> = ser."TextSerializer^Serializer::begin_struct"("User", 2);
+    let mut st: Result<TextStructSerializer, SerializeError> = __inline_TextSerializer_Serializer__begin_struct_5: {
+        let self: &mut TextSerializer = &mut ser;
+        let name: String = "User";
+        self.buf.String::append("{");
+        break __inline_TextSerializer_Serializer__begin_struct_5: Result<TextStructSerializer, SerializeError>::Ok(TextStructSerializer { parent: *self, count: 0 });
+    };
     if __variant_test(st, case=0, name=Ok) {
         let s: TextStructSerializer = __variant_payload(st, case=0);
         let name: String = "Alice";
         s."TextStructSerializer^SerializeStruct::field<String>"("name", &name);
         let age: Box<i32> = Box<i32> { value: 30 };
         s."TextStructSerializer^SerializeStruct::field<i32>"("age", age);
-        __inline_TextStructSerializer_SerializeStruct__end_4: {
+        __inline_TextStructSerializer_SerializeStruct__end_6: {
             s.parent.buf.String::append("}");
-            break __inline_TextStructSerializer_SerializeStruct__end_4: Result<(), SerializeError>::Ok(());
+            break __inline_TextStructSerializer_SerializeStruct__end_6: Result<(), SerializeError>::Ok(());
         };
     }
     core::cli::println(__tmpl: {

@@ -32,19 +32,17 @@ export fn run() {
         self."Array<i32>::append"(30);
         break __seq_lit: *__b;
     };
-    arr."Array<i32>^IndexValue::index_value"(-1);
+    __inline_Array_i32__IndexValue__index_value_7: {
+        if (-1 >= arr.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_i32__IndexValue__index_value_7: core::builtin::array_get::<i32>(arr.repr, -1);
+    };
 }
 
 export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
-}
-
-fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<i32>(self.repr, index);
 }
 
 pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {

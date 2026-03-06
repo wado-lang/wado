@@ -27,8 +27,18 @@ export fn run() with Stdout, Stderr, Preopens {
         core::cli::eprintln("open_at: no preopened directories available");
         return;
     }
-    let dir: Descriptor = dirs."Array<Tuple<Descriptor,String>>^IndexValue::index_value"(0).0;
-    let preopen_path: String = dirs."Array<Tuple<Descriptor,String>>^IndexValue::index_value"(0).1;
+    let dir: Descriptor = __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_3: {
+        if (0 >= dirs.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_3: core::builtin::array_get::<[Descriptor, String]>(dirs.repr, 0);
+    }.0;
+    let preopen_path: String = __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_4: {
+        if (0 >= dirs.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_4: core::builtin::array_get::<[Descriptor, String]>(dirs.repr, 0);
+    }.1;
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(43), used: 0 };
         __r.String::append("open_at: preopened dir = \"");
@@ -124,12 +134,5 @@ pub fn "Array<Tuple<Descriptor,String>>::append"(self: &mut Array<[Descriptor, S
     }
     core::builtin::array_set::<[Descriptor, String]>(self.repr, used, value);
     self.used = (used + 1);
-}
-
-fn "Array<Tuple<Descriptor,String>>^IndexValue::index_value"(self: &Array<[Descriptor, String]>, index: i32) -> [Descriptor, String] {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<[Descriptor, String]>(self.repr, index);
 }
 

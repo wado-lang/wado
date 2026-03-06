@@ -83,54 +83,54 @@ pub fn "Array<Array<String>>^Inspect::inspect"(self: &Array<Array<String>>, f: &
     f.buf.String::append_char('[');
     __for_5: {
         let mut i: i32 = 0;
-        let _licm_used_10: i32 = self.used;
+        let _licm_used_12: i32 = self.used;
+        let _licm_repr_13: builtin::array<Array<String>> = self.repr;
         loop {
-            if !(i < _licm_used_10) {
+            if !(i < _licm_used_12) {
                 break __for_5;
             }
             if (i > 0) {
                 let s: String = ", ";
                 f.buf.String::append(s);
             }
-            self."Array<Array<String>>^IndexValue::index_value"(i)."Array<String>^Inspect::inspect"(f);
+            __inline_Array_Array_String___IndexValue__index_value_3: {
+                let index: i32 = i;
+                if (index >= _licm_used_12) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_Array_String___IndexValue__index_value_3: core::builtin::array_get::<Array<String>>(_licm_repr_13, index);
+            }."Array<String>^Inspect::inspect"(f);
             i = (i + 1);
         }
     }
     f.buf.String::append_char(']');
-}
-
-fn "Array<Array<String>>^IndexValue::index_value"(self: &Array<Array<String>>, index: i32) -> Array<String> {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<Array<String>>(self.repr, index);
 }
 
 pub fn "Array<String>^Inspect::inspect"(self: &Array<String>, f: &mut Formatter) {
     f.buf.String::append_char('[');
     __for_5: {
         let mut i: i32 = 0;
-        let _licm_used_10: i32 = self.used;
+        let _licm_used_12: i32 = self.used;
+        let _licm_repr_13: builtin::array<String> = self.repr;
         loop {
-            if !(i < _licm_used_10) {
+            if !(i < _licm_used_12) {
                 break __for_5;
             }
             if (i > 0) {
                 let s: String = ", ";
                 f.buf.String::append(s);
             }
-            self."Array<String>^IndexValue::index_value"(i)."String^Inspect::inspect"(f);
+            __inline_Array_String__IndexValue__index_value_3: {
+                let index: i32 = i;
+                if (index >= _licm_used_12) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_String__IndexValue__index_value_3: core::builtin::array_get::<String>(_licm_repr_13, index);
+            }."String^Inspect::inspect"(f);
             i = (i + 1);
         }
     }
     f.buf.String::append_char(']');
-}
-
-fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<String>(self.repr, index);
 }
 
 pub fn "Array<Array<String>>::append"(self: &mut Array<Array<String>>, value: Array<String>) {

@@ -2295,21 +2295,24 @@ fn sroa_single_field_parameters(module: &mut WirModule) {
         }
     }
 
-    // Build per-function set of param names that are already scalar (SROA'd).
-    let mut func_scalar_params: indexmap::IndexMap<u32, IndexSet<String>> =
+    // Build per-function map of param names → struct type that was unwrapped.
+    // This tells us what struct type each scalar param was derived from (so we
+    // know whether a bare `LocalGet(param)` at a call site needs a StructGet).
+    let mut func_scalar_param_struct: indexmap::IndexMap<u32, indexmap::IndexMap<String, u32>> =
         indexmap::IndexMap::new();
     for &(func_id_index, param_idx) in &candidates {
         let func_array_idx = (func_id_index - import_func_count) as usize;
         let param_name = module.functions[func_array_idx].param_names[param_idx].clone();
-        func_scalar_params
+        let (struct_type_idx, _, _) = &candidate_info[&(func_id_index, param_idx)];
+        func_scalar_param_struct
             .entry(func_id_index)
             .or_default()
-            .insert(param_name);
+            .insert(param_name, *struct_type_idx);
     }
 
     for (i, func) in module.functions.iter_mut().enumerate() {
         let func_id_index = import_func_count + u32::try_from(i).unwrap();
-        let scalar_params = func_scalar_params
+        let scalar_param_structs = func_scalar_param_struct
             .get(&func_id_index)
             .cloned()
             .unwrap_or_default();
@@ -2320,7 +2323,7 @@ fn sroa_single_field_parameters(module: &mut WirModule) {
                     instr,
                     &sroa_params,
                     &param_struct_info,
-                    &scalar_params,
+                    &scalar_param_structs,
                 );
             }
         }
@@ -2506,13 +2509,14 @@ fn rewrite_single_field_param_reads(instr: &mut WirInstr, param_name: &str, expe
 /// Rewrite arguments at SROA'd Call positions to pass the scalar value instead of a struct ref.
 ///
 /// - `StructNew(S, [val])` → `val` (unwrap allocation, eliminate heap alloc)
-/// - `LocalGet(x)` where x is already scalar (SROA'd param) → leave as-is
+/// - `LocalGet(x)` where x is already scalar (SROA'd param) and the callee unwraps the
+///   *same* struct type → leave as-is (types match)
 /// - Other expressions → `StructGet(expr, field_name)` (extract scalar from existing ref)
 fn rewrite_single_field_args_at_call_sites(
     instr: &mut WirInstr,
     sroa_params: &indexmap::IndexMap<u32, IndexSet<usize>>,
     param_struct_info: &indexmap::IndexMap<(u32, usize), (WirTypeId, String)>,
-    scalar_params: &IndexSet<String>,
+    scalar_param_structs: &indexmap::IndexMap<String, u32>,
 ) {
     // Recurse first (bottom-up)
     instr.for_each_boxed_child_mut(&mut |child| {
@@ -2520,7 +2524,7 @@ fn rewrite_single_field_args_at_call_sites(
             child,
             sroa_params,
             param_struct_info,
-            scalar_params,
+            scalar_param_structs,
         );
     });
 
@@ -2543,9 +2547,29 @@ fn rewrite_single_field_args_at_call_sites(
             let inner = std::mem::replace(&mut fields[0], WirInstr::Nop);
             *arg = inner;
         } else if let WirInstr::LocalGet { name } = arg
-            && scalar_params.contains(name.as_str())
+            && let Some(&caller_struct_type) = scalar_param_structs.get(name.as_str())
         {
-            // Already scalar (this function's own SROA'd param) — no change needed.
+            // This arg is a scalar param (SROA'd in the caller). Check if the callee
+            // unwraps the same struct type. If so, types already match. If the callee
+            // unwraps a *different* struct (e.g. the caller's scalar is `ref JsonWriter`
+            // but the callee unwraps `JsonWriter` → `ref String`), we need StructGet.
+            let Some((callee_struct_type_id, field_name)) =
+                param_struct_info.get(&(func_id_idx, pi))
+            else {
+                continue;
+            };
+            if caller_struct_type == callee_struct_type_id.index() {
+                // Same struct type — types match, no rewrite needed.
+            } else {
+                // Different struct type — the caller's scalar type IS the callee's
+                // wrapper struct. Extract the inner field.
+                let old_arg = std::mem::replace(arg, WirInstr::Nop);
+                *arg = WirInstr::StructGet {
+                    type_id: callee_struct_type_id.clone(),
+                    field_name: field_name.clone(),
+                    expr: Box::new(old_arg),
+                };
+            }
         } else {
             // The argument is an existing struct reference (e.g., from a local variable).
             // Extract the scalar value via StructGet(field_name).

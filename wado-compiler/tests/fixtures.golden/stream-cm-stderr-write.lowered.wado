@@ -49,11 +49,19 @@ export fn run() with Stderr {
     let ptr: i32 = core::builtin::realloc(0, 0, 1, 8);
     __for_0: {
         let mut i: i32 = 0;
+        let _licm_used_29: i32 = data.used;
+        let _licm_repr_30: builtin::array<u8> = data.repr;
         loop {
             if !(i < 8) {
                 break __for_0;
             }
-            core::builtin::i32_store8((ptr + i), data."Array<u8>^IndexValue::index_value"(i) as i32);
+            core::builtin::i32_store8((ptr + i), __inline_Array_u8__IndexValue__index_value_12: {
+                let index: i32 = i;
+                if (index >= _licm_used_29) {
+                    core::internal::panic("index out of bounds");
+                }
+                break __inline_Array_u8__IndexValue__index_value_12: core::builtin::array_get::<u8>(_licm_repr_30, index);
+            } as i32);
             i = (i + 1);
         }
     }
@@ -65,13 +73,6 @@ export fn run() with Stderr {
 export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
-}
-
-fn "Array<u8>^IndexValue::index_value"(self: &Array<u8>, index: i32) -> u8 {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<u8>(self.repr, index);
 }
 
 pub fn "Array<u8>::append"(self: &mut Array<u8>, value: u8) {

@@ -36,13 +36,13 @@ export fn run() with Stdout {
     if !cond {
         core::internal::panic(label);
     }
-    let a3: i128 = x_i128."i128^Add::add"(&i128::from_i64(100));
+    let a3: i128 = x_i128."i128^Add::add"(&i128 { low: 100, high: 0 });
     let cond: bool = a3."i128^Eq::eq"(&i128 { low: 18446744073709551216, high: -1 });
     let label: String = "+ i128 rhs";
     if !cond {
         core::internal::panic(label);
     }
-    let a4: i128 = i128::from_i64(100)."i128^Add::add"(&x_i128);
+    let a4: i128 = i128 { low: 100, high: 0 }."i128^Add::add"(&x_i128);
     let cond: bool = a4."i128^Eq::eq"(&i128 { low: 18446744073709551216, high: -1 });
     let label: String = "+ lhs i128";
     if !cond {
@@ -60,14 +60,14 @@ export fn run() with Stdout {
     if !cond {
         core::internal::panic(label);
     }
-    let b3: i128 = x_i128."i128^Sub::sub"(&i128::from_i64(100));
+    let b3: i128 = x_i128."i128^Sub::sub"(&i128 { low: 100, high: 0 });
     let cond: bool = b3."i128^Eq::eq"(&i128 { low: 18446744073709551016, high: -1 });
     let label: String = "- i128 rhs";
     if !cond {
         core::internal::panic(label);
     }
-    let b4: i128 = i128::from_i64(100)."i128^Sub::sub"(&x_i128);
-    let cond: bool = b4."i128^Eq::eq"(&i128::from_i64(600));
+    let b4: i128 = i128 { low: 100, high: 0 }."i128^Sub::sub"(&x_i128);
+    let cond: bool = b4."i128^Eq::eq"(&i128 { low: 600, high: 0 });
     let label: String = "- lhs i128";
     if !cond {
         core::internal::panic(label);
@@ -84,13 +84,13 @@ export fn run() with Stdout {
     if !cond {
         core::internal::panic(label);
     }
-    let c3: i128 = x_i128."i128^Mul::mul"(&i128::from_i64(2));
+    let c3: i128 = x_i128."i128^Mul::mul"(&i128 { low: 2, high: 0 });
     let cond: bool = c3."i128^Eq::eq"(&i128 { low: 18446744073709550616, high: -1 });
     let label: String = "* i128 rhs";
     if !cond {
         core::internal::panic(label);
     }
-    let c4: i128 = i128::from_i64(2)."i128^Mul::mul"(&x_i128);
+    let c4: i128 = i128 { low: 2, high: 0 }."i128^Mul::mul"(&x_i128);
     let cond: bool = c4."i128^Eq::eq"(&i128 { low: 18446744073709550616, high: -1 });
     let label: String = "* lhs i128";
     if !cond {

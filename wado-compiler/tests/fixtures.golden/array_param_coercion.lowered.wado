@@ -16,7 +16,22 @@
 global mut __modules_initialized: bool = false;
 
 fn sum_array(arr: Array<i32>) -> i32 {
-    return ((arr."Array<i32>^IndexValue::index_value"(0) + arr."Array<i32>^IndexValue::index_value"(1)) + arr."Array<i32>^IndexValue::index_value"(2));
+    return ((__inline_Array_i32__IndexValue__index_value_0: {
+        if (0 >= arr.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_i32__IndexValue__index_value_0: core::builtin::array_get::<i32>(arr.repr, 0);
+    } + __inline_Array_i32__IndexValue__index_value_1: {
+        if (1 >= arr.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(arr.repr, 1);
+    }) + __inline_Array_i32__IndexValue__index_value_2: {
+        if (2 >= arr.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_i32__IndexValue__index_value_2: core::builtin::array_get::<i32>(arr.repr, 2);
+    });
 }
 
 export fn run() with Stdout {
@@ -68,12 +83,5 @@ pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
     }
     core::builtin::array_set::<i32>(self.repr, used, value);
     self.used = (used + 1);
-}
-
-fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<i32>(self.repr, index);
 }
 

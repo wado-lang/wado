@@ -1,0 +1,48 @@
+use { println } from "core:cli";
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+fn modify(p: &mut Pair) {
+    p.a = p.a + 1;
+}
+
+export fn run() with Stdout {
+    // Pattern 1: struct literal + field access (SROA handles this, baseline)
+    let p1 = Pair { a: 10, b: 20 };
+    assert p1.a == 10;
+    assert p1.b == 20;
+
+    // Pattern 2: field store then field load (core S2LF pattern)
+    let mut p2 = Pair { a: 0, b: 0 };
+    p2.a = 42;
+    p2.b = 99;
+    assert p2.a == 42;
+    assert p2.b == 99;
+
+    // Pattern 3: field store, then mutation of OTHER field, then load
+    let mut p3 = Pair { a: 0, b: 0 };
+    p3.a = 100;
+    p3.b = 200;
+    // modifying b should not invalidate knowledge of a
+    p3.b = 300;
+    assert p3.a == 100;
+    assert p3.b == 300;
+
+    println(`{p1.a}, {p2.a}, {p3.a}`);
+}
+
+__DATA__
+{
+    "stdout": "10, 42, 100\n",
+    "wir_expect:O2": [
+        "i32::fmt_decimal(10,",
+        "i32::fmt_decimal(42,",
+        "i32::fmt_decimal(100,"
+    ],
+    "wir_not_expect:O2": [
+        "panic("
+    ]
+}

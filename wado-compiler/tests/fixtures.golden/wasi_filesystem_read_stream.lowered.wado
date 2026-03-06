@@ -27,7 +27,12 @@ export fn run() with Stdout, Stderr, Preopens {
         core::cli::eprintln("read_stream: no preopened directories available");
         return;
     }
-    let dir: Descriptor = dirs."Array<Tuple<Descriptor,String>>^IndexValue::index_value"(0).0;
+    let dir: Descriptor = __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_3: {
+        if (0 >= dirs.used) {
+            core::internal::panic("index out of bounds");
+        }
+        break __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_3: core::builtin::array_get::<[Descriptor, String]>(dirs.repr, 0);
+    }.0;
     let open_result: Result<Descriptor, ErrorCode> = __cm_adapter__Descriptor_open_at(&dir, 0, "hello.txt", 0, 1);
     if __variant_test(open_result, case=0, name=Ok) {
         let file: Descriptor = __variant_payload(open_result, case=0);
@@ -132,12 +137,5 @@ pub fn "Array<Tuple<Descriptor,String>>::append"(self: &mut Array<[Descriptor, S
     }
     core::builtin::array_set::<[Descriptor, String]>(self.repr, used, value);
     self.used = (used + 1);
-}
-
-fn "Array<Tuple<Descriptor,String>>^IndexValue::index_value"(self: &Array<[Descriptor, String]>, index: i32) -> [Descriptor, String] {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<[Descriptor, String]>(self.repr, index);
 }
 

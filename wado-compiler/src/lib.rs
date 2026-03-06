@@ -300,6 +300,17 @@ pub async fn compile_with_options<H: CompilerHost>(
     }
     project.skip_validation = options.skip_validation;
 
+    // Validate target world (test world is handled specially, not in registry)
+    if !project.is_test_world() && project.world_registry.get(&project.target_world).is_none() {
+        let _ = logger.error(compiler_host::Diagnostic {
+            severity: compiler_host::Severity::Error,
+            code: compiler_host::Code::UnsupportedFeature,
+            message: format!("unknown target world: `{}`", project.target_world),
+            span: None,
+        });
+        return Err(Bail);
+    }
+
     // === Phase 8: Synthesis (Project -> Project) ===
     let project = {
         let _span = logger.span("synthesis");
@@ -513,6 +524,17 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         let mut project = project;
         if let Some(world) = target_world {
             project.target_world = world.to_string();
+        }
+
+        // Validate target world
+        if project.world_registry.get(&project.target_world).is_none() {
+            let _ = logger.error(compiler_host::Diagnostic {
+                severity: compiler_host::Severity::Error,
+                code: compiler_host::Code::UnsupportedFeature,
+                message: format!("unknown target world: `{}`", project.target_world),
+                span: None,
+            });
+            return Err(Bail);
         }
 
         // Synthesis (must run before monomorphize)

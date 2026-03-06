@@ -44,15 +44,25 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        let self: Box<i32> = Box<i32> { value: points."Array<Point>^IndexValue::index_value"(0).x };
+        let self: Box<i32> = Box<i32> { value: __inline_Array_Point__IndexValue__index_value_9: {
+            if (0 >= points.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_Point__IndexValue__index_value_9: core::builtin::array_get::<Point>(points.repr, 0);
+        }.x };
         let f: &mut Formatter = &mut __f;
         self.i32::fmt_decimal(f);
         __r.String::append(", ");
-        __f = __inline_Formatter__new_10: {
+        __f = __inline_Formatter__new_11: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        let self: Box<i32> = Box<i32> { value: points."Array<Point>^IndexValue::index_value"(0).y };
+        let self: Box<i32> = Box<i32> { value: __inline_Array_Point__IndexValue__index_value_13: {
+            if (0 >= points.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_Point__IndexValue__index_value_13: core::builtin::array_get::<Point>(points.repr, 0);
+        }.y };
         let f: &mut Formatter = &mut __f;
         self.i32::fmt_decimal(f);
         __r.String::append(")");
@@ -61,19 +71,29 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(47), used: 0 };
         __r.String::append("points[1]: (");
-        let mut __f: Formatter = __inline_Formatter__new_14: {
+        let mut __f: Formatter = __inline_Formatter__new_16: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        let self: Box<i32> = Box<i32> { value: points."Array<Point>^IndexValue::index_value"(1).x };
+        let self: Box<i32> = Box<i32> { value: __inline_Array_Point__IndexValue__index_value_18: {
+            if (1 >= points.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_Point__IndexValue__index_value_18: core::builtin::array_get::<Point>(points.repr, 1);
+        }.x };
         let f: &mut Formatter = &mut __f;
         self.i32::fmt_decimal(f);
         __r.String::append(", ");
-        __f = __inline_Formatter__new_17: {
+        __f = __inline_Formatter__new_20: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_20: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        let self: Box<i32> = Box<i32> { value: points."Array<Point>^IndexValue::index_value"(1).y };
+        let self: Box<i32> = Box<i32> { value: __inline_Array_Point__IndexValue__index_value_22: {
+            if (1 >= points.used) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_Point__IndexValue__index_value_22: core::builtin::array_get::<Point>(points.repr, 1);
+        }.y };
         let f: &mut Formatter = &mut __f;
         self.i32::fmt_decimal(f);
         __r.String::append(")");
@@ -84,13 +104,6 @@ export fn run() with Stdout {
 export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
-}
-
-fn "Array<Point>^IndexValue::index_value"(self: &Array<Point>, index: i32) -> Point {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<Point>(self.repr, index);
 }
 
 pub fn "Array<Point>::append"(self: &mut Array<Point>, value: Point) {

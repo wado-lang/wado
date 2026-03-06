@@ -8,6 +8,7 @@
 // wasi::stream-new
 // wasi::stream-write
 // wasi::subtask-drop
+// wasi::task-return
 // wasi::waitable-join
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
@@ -1365,6 +1366,11 @@ export fn run() with Stdout {
     check_f32(0.5, "0.5");
     check_f64(0.123456, "0.123456");
     core::cli::println("ok");
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 fn __Closure_0::__call(self: &__Closure_0, x: i32) -> String {

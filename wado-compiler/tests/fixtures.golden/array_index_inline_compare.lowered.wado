@@ -17,9 +17,16 @@ global mut __modules_initialized: bool = false;
 
 fn find_key_index(keys: &Array<String>, key: &String) -> i32 {
     let mut i: i32 = 0;
-    let _licm_used_4: i32 = keys.used;
+    let _licm_used_6: i32 = keys.used;
+    let _licm_repr_7: builtin::array<String> = keys.repr;
     loop {
-        if !((i < _licm_used_4) && (keys."Array<String>^IndexValue::index_value"(i)."String^Ord::cmp"(&*key) == Ordering::Less)) {
+        if !((i < _licm_used_6) && (__inline_Array_String__IndexValue__index_value_1: {
+            let index: i32 = i;
+            if (index >= _licm_used_6) {
+                core::internal::panic("index out of bounds");
+            }
+            break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(_licm_repr_7, index);
+        }."String^Ord::cmp"(&*key) == Ordering::Less)) {
             break;
         }
         i = (i + 1);
@@ -84,12 +91,5 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
     }
     core::builtin::array_set::<String>(self.repr, used, value);
     self.used = (used + 1);
-}
-
-fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
-    if (index >= self.used) {
-        core::internal::panic("index out of bounds");
-    }
-    return core::builtin::array_get::<String>(self.repr, index);
 }
 
