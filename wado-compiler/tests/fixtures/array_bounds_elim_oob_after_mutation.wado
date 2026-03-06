@@ -1,0 +1,21 @@
+// Test: out-of-bounds after mutation through reference
+// The array is passed to a function that modifies it, so the optimizer
+// must not assume it still has the original size.
+
+fn clear_array(arr: &mut Array<i32>) {
+    // Simulating an operation that could change array state
+    // The optimizer must not forward the original .used value after this call
+    arr[0] = 999;
+}
+
+export fn run() {
+    let mut arr: Array<i32> = [10, 20, 30];
+    clear_array(&mut arr);
+    // This is still in-bounds, should work
+    assert arr[0] == 999;
+    // But index 3 is out of bounds
+    let _ = arr[3];
+}
+
+__DATA__
+{"stderr_contains": ["index out of bounds"], "trapped": true}

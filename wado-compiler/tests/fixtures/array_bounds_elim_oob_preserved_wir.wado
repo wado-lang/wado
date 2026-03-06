@@ -1,0 +1,21 @@
+// Test: WIR-level verification that bounds checks are preserved for OOB access
+// When constant index >= known array size, the bounds check must remain
+// (and should fold to always-trap).
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let arr: Array<i32> = [10, 20, 30];
+    // index 3 is out of bounds for 3-element array
+    let _ = arr[3];
+    println("should not reach here");
+}
+
+__DATA__
+{
+    "stderr_contains": ["index out of bounds"],
+    "trapped": true,
+    "wir_expect:O2": [
+        "core:internal/panic"
+    ]
+}
