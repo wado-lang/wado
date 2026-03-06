@@ -1134,6 +1134,32 @@ impl JsonDeserializer {
         return Result::<f64, DeserializeError>::Ok(v);
     }
 
+    /// Advances past a JSON string without allocating.
+    pub fn skip_string(&mut self) -> Result<(), DeserializeError> {
+        // Assumes pos is at the opening '"'
+        self.pos += 1;
+        while self.pos < self.input.len() {
+            let b = self.input.get_byte(self.pos) as i32;
+            if b == '"' as i32 {
+                self.pos += 1;
+                return Result::<(), DeserializeError>::Ok(());
+            }
+            if b == '\\' as i32 {
+                self.pos += 1;
+                if self.pos >= self.input.len() {
+                    return Result::<(), DeserializeError>::Err(DeserializeError::eof(self.pos as i64));
+                }
+                let esc = self.input.get_byte(self.pos) as i32;
+                if esc == 'u' as i32 {
+                    // \uXXXX — skip 4 hex digits
+                    self.pos += 4;
+                }
+            }
+            self.pos += 1;
+        }
+        return Result::<(), DeserializeError>::Err(DeserializeError::eof(self.pos as i64));
+    }
+
     /// Skips the next JSON value without allocating.
     pub fn skip_value(&mut self) -> Result<(), DeserializeError> {
         self.skip_whitespace();
@@ -1142,11 +1168,7 @@ impl JsonDeserializer {
         }
         let b = self.input.get_byte(self.pos) as i32;
         if b == '"' as i32 {
-            let r = self.read_json_string();
-            if let Err(e) = r {
-                return Result::<(), DeserializeError>::Err(e);
-            }
-            return Result::<(), DeserializeError>::Ok(());
+            return self.skip_string();
         }
         if b == 't' as i32 {
             return self.expect_literal(&"true");
@@ -1196,7 +1218,11 @@ impl JsonDeserializer {
                 return Result::<(), DeserializeError>::Ok(());
             }
             loop {
-                let kr = self.read_json_string();
+                self.skip_whitespace();
+                if self.pos >= self.input.len() || self.input.get_byte(self.pos) as i32 != '"' as i32 {
+                    return Result::<(), DeserializeError>::Err(DeserializeError::malformed("expected string key", self.pos as i64));
+                }
+                let kr = self.skip_string();
                 if let Err(e) = kr {
                     return Result::<(), DeserializeError>::Err(e);
                 }
@@ -1252,7 +1278,7 @@ struct JsonMapAccess {
 
 struct JsonStructAccess {
     de: JsonDeserializer,
-    lookup: fn(&String) -> Option<i32>,
+    lookup: fn(&String, i32, i32) -> Option<i32>,
     first: bool,
 }
 
@@ -1348,13 +1374,57 @@ impl DeserializeStruct for JsonStructAccess {
             }
         }
         self.first = false;
+
+        // Fast path: scan JSON string key without allocating.
+        // For unescaped keys (the common case), we pass the byte range
+        // directly to the lookup function, avoiding String allocation entirely.
+        self.de.skip_whitespace();
+        if self.de.pos >= self.de.input.len() || self.de.input.get_byte(self.de.pos) as i32 != '"' as i32 {
+            return Result::<Option<i32>, DeserializeError>::Err(DeserializeError::unexpected_type(
+                "expected string key",
+                self.de.pos as i64,
+            ));
+        }
+        self.de.pos += 1;
+        let key_start = self.de.pos;
+        let mut has_escape = false;
+        while self.de.pos < self.de.input.len() {
+            let b = self.de.input.get_byte(self.de.pos) as i32;
+            if b == '"' as i32 {
+                break;
+            }
+            if b == '\\' as i32 {
+                has_escape = true;
+                break;
+            }
+            self.de.pos += 1;
+        }
+
+        if !has_escape {
+            // Fast path: key has no escapes, compare directly from input buffer
+            let key_end = self.de.pos;
+            self.de.pos += 1; // skip closing '"'
+            let r = self.de.expect_char(':' as i32);
+            if let Err(e) = r {
+                return Result::<Option<i32>, DeserializeError>::Err(e);
+            }
+            let idx = (self.lookup)(&self.de.input, key_start, key_end);
+            if let Some(i) = idx {
+                return Result::<Option<i32>, DeserializeError>::Ok(Option::<i32>::Some(i));
+            }
+            return Result::<Option<i32>, DeserializeError>::Ok(Option::<i32>::Some(-1));
+        }
+
+        // Slow path: key has escape sequences, must parse fully.
+        // Reset position to before the key and use read_json_string.
+        self.de.pos = key_start - 1;
         let key_r = self.de.read_json_string();
         if let Ok(key) = key_r {
             let r = self.de.expect_char(':' as i32);
             if let Err(e) = r {
                 return Result::<Option<i32>, DeserializeError>::Err(e);
             }
-            let idx = (self.lookup)(&key);
+            let idx = (self.lookup)(&key, 0, key.len());
             if let Some(i) = idx {
                 return Result::<Option<i32>, DeserializeError>::Ok(Option::<i32>::Some(i));
             }
@@ -1659,7 +1729,7 @@ impl Deserializer for JsonDeserializer {
         });
     }
 
-    fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn(&String) -> Option<i32>) -> Result<JsonStructAccess, DeserializeError> {
+    fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn(&String, i32, i32) -> Option<i32>) -> Result<JsonStructAccess, DeserializeError> {
         let r = self.expect_char('{' as i32);
         if let Err(e) = r {
             return Result::<JsonStructAccess, DeserializeError>::Err(e);
