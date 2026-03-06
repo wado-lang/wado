@@ -1,8 +1,13 @@
 // Test that function names appear in stack trace on trap
 
-export fn run() {
+#[inline(never)]
+fn helper() {
     panic("stack trace test");
 }
 
+export fn run() {
+    helper();
+}
+
 __DATA__
-{"trapped": true, "stderr_contains": ["!panic", "!__cm_export__run"]}
+{"trapped": true, "stderr_contains": ["!panic", "!helper", "!__cm_export__run"]}
