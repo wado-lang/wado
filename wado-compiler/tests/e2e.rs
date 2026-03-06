@@ -156,6 +156,10 @@ struct TestSpec {
     #[serde(default)]
     preopened_dirs: Vec<[String; 2]>,
 
+    /// Skip this test under `-Os` (e.g. tests that rely on debug names).
+    #[serde(default)]
+    skip_os: bool,
+
     /// Stdin data to pipe into the program.
     /// If set, the program's stdin will receive this UTF-8 string.
     #[serde(default)]
@@ -570,6 +574,12 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
 
     // Parse the test spec from JSON
     let spec: TestSpec = common::parse_data_section(data_section, &test_id);
+
+    // Skip if the spec says skip_os and we're running -Os
+    if spec.skip_os && opt_level == OptLevel::Os {
+        eprintln!("[{test_id}] skipped (skip_os)");
+        return;
+    }
 
     // Handle TODO tests - they must fail
     if spec.todo {
