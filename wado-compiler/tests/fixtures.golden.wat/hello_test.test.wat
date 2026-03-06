@@ -14,12 +14,12 @@
   (type $stream-u8 (;2;) (stream u8))
   (type $result-unit (;3;) (result))
   (core module $mem-mod (;0;)
-    (type $realloc (;0;) (func (param i32 i32 i32 i32) (result i32)))
+    (type (;0;) (func (param i32 i32 i32 i32) (result i32)))
     (memory (;0;) 64)
     (global (;0;) (mut i32) (i32.const 1024))
-    (export "memory" (memory 0))
     (export "realloc" (func $realloc))
-    (func $realloc (;0;) (type $realloc) (param i32 i32 i32 i32) (result i32)
+    (export "memory" (memory 0))
+    (func $realloc (;0;) (type 0) (param i32 i32 i32 i32) (result i32)
       (local i32)
       (local.set 4
         (i32.and
@@ -35,7 +35,9 @@
         (i32.add
           (local.get 4)
           (local.get 3)))
-      (local.get 4)
+      (return
+        (local.get 4))
+      (unreachable)
     )
   )
   (core instance $mem (;0;) (instantiate $mem-mod))

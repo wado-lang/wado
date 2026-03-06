@@ -64,6 +64,8 @@ type "functype/run" = fn();
 
 type "functype/__cm_export__run" = fn();
 
+type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
+
 type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
 
 type "functype/core:cli/println" = fn(ref null String);
@@ -102,6 +104,7 @@ import fn waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 
+global mut __heap_offset: i32 = 1024;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn print_point(p) with Stdout {
@@ -155,6 +158,13 @@ fn run() with Stdout {
 fn __cm_export__run() {
     run();
     "wasi/task-return"(0);
+}
+
+fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from core:allocator
+    let aligned: i32;
+    aligned = ((__heap_offset + align) - 1) & (0 - align);
+    __heap_offset = aligned + newsize;
+    return aligned;
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli

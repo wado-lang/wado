@@ -4071,11 +4071,11 @@ export fn bump_realloc(...) -> i32 { ... }
 
 Declares that a builtin function is imported as a Component Model canonical built-in. Used in `core:builtin` to map intrinsic declarations to CM imports. Functions without this attribute compile directly to Wasm instructions.
 
-| Namespace   | Description                                       |
-| ----------- | ------------------------------------------------- |
-| `"wasi"`    | CM canonical builtins (streams, futures, tasks)   |
-| `"mem"`     | Memory operations from the "mem" core module      |
-| `"bundled"` | Functions from bundled Wasm modules (e.g., libm)  |
+| Namespace   | Description                                      |
+| ----------- | ------------------------------------------------ |
+| `"wasi"`    | CM canonical builtins (streams, futures, tasks)  |
+| `"mem"`     | Memory operations from the "mem" core module     |
+| `"bundled"` | Functions from bundled Wasm modules (e.g., libm) |
 
 ```wado
 #[canonical("wasi", "stream-new")]

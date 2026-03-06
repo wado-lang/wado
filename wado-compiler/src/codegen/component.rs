@@ -479,10 +479,7 @@ fn build_memory_module(
     let wasm_mod = wasm_mod.expect("core:allocator with #![wasm_module(\"mem\")] is required");
 
     // TODO: make the initial linear memory size configurable via compiler options
-    let memory = crate::wir::WirMemory {
-        min: 64,
-        max: None,
-    };
+    let memory = crate::wir::WirMemory { min: 64, max: None };
     let wir = wasm_mod.to_wir_module(strip_names, memory);
     super::emit::emit_core_module(&wir)
 }

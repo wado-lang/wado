@@ -59,11 +59,11 @@ pub struct WirModule {
     /// Separate Wasm core modules extracted from `#![wasm_module("name")]` sources.
     /// Key: wasm module name (e.g., "mem").
     pub wasm_modules: IndexMap<String, WasmModuleInfo>,
-    /// Type indices that were extracted into wasm_modules and should be skipped by the emitter.
+    /// Type indices that were extracted into `wasm_modules` and should be skipped by the emitter.
     pub dead_type_indices: IndexSet<u32>,
-    /// Function indices (into `functions`) extracted into wasm_modules; skipped by emitter.
+    /// Function indices (into `functions`) extracted into `wasm_modules`; skipped by emitter.
     pub dead_func_indices: IndexSet<u32>,
-    /// Global indices (into `globals`) extracted into wasm_modules; skipped by emitter.
+    /// Global indices (into `globals`) extracted into `wasm_modules`; skipped by emitter.
     pub dead_global_indices: IndexSet<u32>,
 }
 

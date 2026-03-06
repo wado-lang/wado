@@ -681,7 +681,7 @@ fn generate_struct_serialize(
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
-            export_name: None,
+        export_name: None,
     })
 }
 
@@ -1186,7 +1186,7 @@ fn generate_struct_deserialize(
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
-            export_name: None,
+        export_name: None,
     };
 
     Some((lookup_func, deser_func))
@@ -1269,7 +1269,7 @@ fn generate_lookup_function(
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
-            export_name: None,
+        export_name: None,
     }
 }
 
@@ -1408,7 +1408,7 @@ fn generate_enum_serialize(
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
-            export_name: None,
+        export_name: None,
     })
 }
 
@@ -1770,7 +1770,7 @@ fn generate_enum_deserialize(
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
-            export_name: None,
+        export_name: None,
     })
 }
 
@@ -2036,7 +2036,7 @@ fn generate_variant_serialize(
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
-            export_name: None,
+        export_name: None,
     })
 }
 
@@ -2558,7 +2558,7 @@ fn generate_variant_deserialize(
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
-            export_name: None,
+        export_name: None,
     })
 }
 
@@ -2775,7 +2775,7 @@ fn generate_tuple_serialize(
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
-            export_name: None,
+        export_name: None,
     })
 }
 
@@ -3046,7 +3046,7 @@ fn generate_tuple_deserialize(
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
-            export_name: None,
+        export_name: None,
     })
 }
 

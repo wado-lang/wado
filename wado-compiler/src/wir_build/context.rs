@@ -634,15 +634,14 @@ impl<'a> WirContext<'a> {
                 let mut referenced_globals = IndexMap::new();
                 collect_referenced_globals(&body, &mut referenced_globals);
 
-                for (global_fq, _) in &referenced_globals {
+                for (global_fq, ()) in &referenced_globals {
                     if mod_global_name_to_index.contains_key(global_fq) {
                         continue;
                     }
                     if let Some(&global_idx) = global_map.get(global_fq.as_str()) {
                         let idx = global_idx as usize;
                         if idx < globals.len() {
-                            dead_global_indices
-                                .insert(u32::try_from(idx).unwrap());
+                            dead_global_indices.insert(u32::try_from(idx).unwrap());
                             mod_global_name_to_index.insert(
                                 global_fq.clone(),
                                 u32::try_from(mod_globals.len()).unwrap(),

@@ -287,6 +287,8 @@ type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> ref null 
 
 type "functype/__cm_export__handle" = fn(i32);
 
+type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
+
 type "functype/core:internal/gc_array_to_memory" = fn(ref null array<u8>, i32, i32);
 
 type "functype/core:internal/cm_lower_string" = fn(ref null String) -> i64;
@@ -301,6 +303,8 @@ import fn task-return from "wasi/task-return";
 import fn wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
 import fn wasi:http/Response::new from "wasi/wasi:http/Response::new";
 import memory (1) from "mem/memory";
+
+global mut __heap_offset: i32 = 1024;  // from core:allocator
 
 fn handle(request) {
     let __local_1: i32;
@@ -799,6 +803,13 @@ fn __cm_adapter__Response_new(headers, contents_flat0, contents_flat1, trailers)
 
 fn __cm_export__handle(request) {
     handle(request);
+}
+
+fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from core:allocator
+    let aligned: i32;
+    aligned = ((__heap_offset + align) - 1) & (0 - align);
+    __heap_offset = aligned + newsize;
+    return aligned;
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
