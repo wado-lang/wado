@@ -70,6 +70,7 @@ fn __cm_adapter__Preopens_get_directories() -> Array<[Descriptor, String]> {
 
 fn __cm_adapter__Descriptor_open_at(self: &Descriptor, path_flags: PathFlags, path: String, open_flags: OpenFlags, flags: DescriptorFlags) -> Result<Descriptor, ErrorCode> {
     let __path_packed: i64 = core::internal::cm_lower_string(path);
+    let __async_outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
     let __params_buf: i32 = core::builtin::realloc(0, 0, 4, 24);
     core::builtin::i32_store(__params_buf, self);
     core::builtin::i32_store((__params_buf + 4), path_flags);
@@ -77,15 +78,16 @@ fn __cm_adapter__Descriptor_open_at(self: &Descriptor, path_flags: PathFlags, pa
     core::builtin::i32_store((__params_buf + 12), (__path_packed >> 32) as i32);
     core::builtin::i32_store((__params_buf + 16), open_flags);
     core::builtin::i32_store((__params_buf + 20), flags);
-    let __subtask: i32 = cm_raw_call wasi:filesystem/Descriptor::open_at(__params_buf, 2048);
+    let __subtask: i32 = cm_raw_call wasi:filesystem/Descriptor::open_at(__params_buf, __async_outptr);
     core::internal::wait_for_subtask(__subtask);
-    let __disc: i32 = core::builtin::i32_load(2048);
+    let __disc: i32 = core::builtin::i32_load(__async_outptr);
     let mut __result_val: Result<Descriptor, ErrorCode> = null;
     if (__disc == 0) {
-        __result_val = Result<Descriptor, ErrorCode>::Ok(core::builtin::i32_load(2052));
+        __result_val = Result<Descriptor, ErrorCode>::Ok(core::builtin::i32_load((__async_outptr + 4)));
     } else {
-        __result_val = Result<Descriptor, ErrorCode>::Err(core::builtin::i32_load(2052));
+        __result_val = Result<Descriptor, ErrorCode>::Err(core::builtin::i32_load((__async_outptr + 4)));
     }
+    core::builtin::realloc(__async_outptr, 8, 4, 0);
     return __result_val;
 }
 
@@ -97,15 +99,17 @@ fn __cm_adapter__Descriptor_read_via_stream(self: &Descriptor, offset: Filesize)
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode> {
-    let __subtask: i32 = cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+    let __async_outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    let __subtask: i32 = cm_raw_call wasi:cli/Stdout::write_via_stream(data, __async_outptr);
     core::internal::wait_for_subtask(__subtask);
-    let __disc: i32 = core::builtin::i32_load(2048);
+    let __disc: i32 = core::builtin::i32_load(__async_outptr);
     let mut __result_val: Result<(), ErrorCode> = null;
     if (__disc == 0) {
         __result_val = Result<(), ErrorCode>::Ok;
     } else {
-        __result_val = Result<(), ErrorCode>::Err(core::builtin::i32_load(2052));
+        __result_val = Result<(), ErrorCode>::Err(core::builtin::i32_load((__async_outptr + 4)));
     }
+    core::builtin::realloc(__async_outptr, 8, 4, 0);
     return __result_val;
 }
 

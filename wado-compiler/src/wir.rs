@@ -107,12 +107,7 @@ impl WasmModuleInfo {
             .functions
             .iter()
             .enumerate()
-            .map(|(local_idx, func)| {
-                (
-                    func.original_func_index,
-                    u32::try_from(local_idx).unwrap(),
-                )
-            })
+            .map(|(local_idx, func)| (func.original_func_index, u32::try_from(local_idx).unwrap()))
             .collect();
 
         // Memory definition

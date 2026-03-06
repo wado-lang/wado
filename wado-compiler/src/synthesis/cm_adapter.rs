@@ -1531,25 +1531,24 @@ fn synthesize_adapter(
 
         // Allocate the async results buffer via realloc.
         // Compute size/alignment from the return type's CM layout.
-        let (async_result_size, async_result_align) =
-            if let Some(return_type) = &func_info.return_type {
-                if let crate::ast::Type::Named(named) = return_type
-                    && let Some(sa) = crate::component_model::wasi_variant_cm_size_align(
-                        &named.name,
-                        wasi_registry,
-                    )
-                {
-                    sa
-                } else {
-                    (
-                        crate::cm_abi::cm_size(return_type) as u32,
-                        crate::cm_abi::cm_align(return_type) as u32,
-                    )
-                }
+        let (async_result_size, async_result_align) = if let Some(return_type) =
+            &func_info.return_type
+        {
+            if let crate::ast::Type::Named(named) = return_type
+                && let Some(sa) =
+                    crate::component_model::wasi_variant_cm_size_align(&named.name, wasi_registry)
+            {
+                sa
             } else {
-                // No return type: allocate a minimal buffer (4 bytes).
-                (4, 4)
-            };
+                (
+                    crate::cm_abi::cm_size(return_type),
+                    crate::cm_abi::cm_align(return_type),
+                )
+            }
+        } else {
+            // No return type: allocate a minimal buffer (4 bytes).
+            (4, 4)
+        };
         let async_outptr_local = next_local;
         body_stmts.push(let_stmt(
             "__async_outptr",
@@ -1568,8 +1567,7 @@ fn synthesize_adapter(
         ));
         local_types.push(TypeTable::I32);
         next_local += 1;
-        async_outptr_info =
-            Some((async_outptr_local, async_result_size, async_result_align));
+        async_outptr_info = Some((async_outptr_local, async_result_size, async_result_align));
 
         if flat_args.len() > MAX_FLAT_ASYNC_PARAMS {
             // Indirect calling: write all flat_args to a memory buffer and pass params_ptr.
@@ -1649,8 +1647,11 @@ fn synthesize_adapter(
             ];
         } else {
             // Direct calling: params fit within MAX_FLAT_ASYNC_PARAMS.
-            flat_args
-                .push(local_ref(async_outptr_local, "__async_outptr", TypeTable::I32));
+            flat_args.push(local_ref(
+                async_outptr_local,
+                "__async_outptr",
+                TypeTable::I32,
+            ));
         }
     } else if let Some((size, align)) = outptr_alloc {
         // Allocate outptr via realloc
@@ -1705,8 +1706,8 @@ fn synthesize_adapter(
             TypeTable::UNIT,
         )));
 
-        let (outptr_local, outptr_size, outptr_align) = async_outptr_info
-            .expect("async_outptr_info should be set for async functions");
+        let (outptr_local, outptr_size, outptr_align) =
+            async_outptr_info.expect("async_outptr_info should be set for async functions");
         if let Some(return_type) = &func_info.return_type {
             // Async with result: lift from the dynamically allocated results buffer.
             let resolved = wasi_registry.resolve_type(return_type);
