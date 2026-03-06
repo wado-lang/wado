@@ -478,8 +478,8 @@ fn build_memory_module(
 ) -> Vec<u8> {
     let wasm_mod = wasm_mod.expect("core:allocator with #![wasm_module(\"mem\")] is required");
 
-    // Initial linear memory: 16 pages = 1 MB. The allocator grows as needed.
-    let memory = crate::wir::WirMemory { min: 16, max: None };
+    // Initial linear memory: 64 pages = 4 MB. The allocator grows as needed.
+    let memory = crate::wir::WirMemory { min: 64, max: None };
     let wir = wasm_mod.to_wir_module(strip_names, memory);
     super::emit::emit_core_module(&wir)
 }

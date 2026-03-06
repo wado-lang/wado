@@ -27,7 +27,7 @@
   (core module $mem-mod (;0;)
     (type (;0;) (func (param i32)))
     (type (;1;) (func (param i32 i32 i32 i32) (result i32)))
-    (memory (;0;) 16)
+    (memory (;0;) 64)
     (global (;0;) (mut i32) (i32.const 8))
     (export "realloc" (func $realloc))
     (export "memory" (memory 0))
