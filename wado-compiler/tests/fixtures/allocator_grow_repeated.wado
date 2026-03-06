@@ -1,0 +1,16 @@
+/// Test that memory.grow works when repeatedly allocating 1 MB chunks.
+/// Initial memory is 1 MB (16 pages), so 32 allocations of 1 MB each
+/// requires growing well beyond the initial size.
+use { println } from "core:cli";
+
+export fn run() with Stdout {
+    let one_mb = 1024 * 1024;
+    for let mut i = 0; i < 32; i += 1 {
+        let ptr = builtin::realloc(0, 0, 1, one_mb);
+        assert ptr >= 0;
+    }
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

@@ -2914,14 +2914,19 @@ impl FunctionTranslator<'_, '_> {
         self.local_counter += 1;
         let ptr_name = format!("__fw_write_ptr_{}", self.local_counter);
 
-        // DeclareLocal ptr: i32
+        // The buffer must be large enough for the full CM layout of
+        // result<option<own<trailers>>, error-code>. ErrorCode is a large variant
+        // whose biggest cases contain option<string> (12 bytes) or dns-error-payload
+        // (option<string> + option<u16> = 16 bytes). We allocate 40 bytes to cover
+        // the worst case and zero-initialize the entire buffer, since Ok(None) is
+        // represented as all-zeros.
+        const BUF_SIZE: i32 = 40;
+        const BUF_ALIGN: i32 = 8;
+
         let declare_ptr = WirInstr::DeclareLocal {
             name: ptr_name.clone(),
             ty: WirType::I32,
         };
-        // ptr = realloc(0, 0, 8, 8) — allocate 8 bytes with 8-byte alignment.
-        // The result<option<own<trailers>>, error-code> type requires 8-byte alignment
-        // because error-code contains option<u64> fields.
         let alloc_ptr = WirInstr::LocalSet {
             name: ptr_name.clone(),
             value: Box::new(WirInstr::Call {
@@ -2929,31 +2934,27 @@ impl FunctionTranslator<'_, '_> {
                 args: vec![
                     WirInstr::I32Const(0),
                     WirInstr::I32Const(0),
-                    WirInstr::I32Const(8),
-                    WirInstr::I32Const(8),
+                    WirInstr::I32Const(BUF_ALIGN),
+                    WirInstr::I32Const(BUF_SIZE),
                 ],
             }),
         };
-        // Store 0 at ptr+0 (Ok discriminant)
-        let store_ok = WirInstr::I32Store {
-            offset: 0,
-            align: 2,
-            addr: Box::new(WirInstr::LocalGet {
-                name: ptr_name.clone(),
-            }),
-            value: Box::new(WirInstr::I32Const(0)),
-        };
-        // Store 0 at ptr+4 (None discriminant)
-        let store_none = WirInstr::I32Store {
-            offset: 4,
-            align: 2,
-            addr: Box::new(WirInstr::LocalGet {
-                name: ptr_name.clone(),
-            }),
-            value: Box::new(WirInstr::I32Const(0)),
-        };
+
+        // Zero-initialize the entire buffer using i64 stores (8 bytes each).
+        let mut seq = vec![declare_ptr, alloc_ptr];
+        for i in 0..(BUF_SIZE / 8) {
+            seq.push(WirInstr::I64Store {
+                offset: u64::from((i * 8) as u32),
+                align: 3,
+                addr: Box::new(WirInstr::LocalGet {
+                    name: ptr_name.clone(),
+                }),
+                value: Box::new(WirInstr::I64Const(0)),
+            });
+        }
+
         // Drop result of future_write(handle, ptr)
-        let do_write = WirInstr::Drop(Box::new(WirInstr::Call {
+        seq.push(WirInstr::Drop(Box::new(WirInstr::Call {
             func_id: future_write_id,
             args: vec![
                 handle,
@@ -2961,26 +2962,19 @@ impl FunctionTranslator<'_, '_> {
                     name: ptr_name.clone(),
                 },
             ],
-        }));
-        // Drop result of realloc(ptr, 8, 8, 0) — free the buffer
-        let free_mem = WirInstr::Drop(Box::new(WirInstr::Call {
+        })));
+        // Free the buffer after future_write.
+        seq.push(WirInstr::Drop(Box::new(WirInstr::Call {
             func_id: realloc_id,
             args: vec![
                 WirInstr::LocalGet { name: ptr_name },
-                WirInstr::I32Const(8),
-                WirInstr::I32Const(8),
+                WirInstr::I32Const(BUF_SIZE),
+                WirInstr::I32Const(BUF_ALIGN),
                 WirInstr::I32Const(0),
             ],
-        }));
+        })));
 
-        WirInstr::Seq(vec![
-            declare_ptr,
-            alloc_ptr,
-            store_ok,
-            store_none,
-            do_write,
-            free_mem,
-        ])
+        WirInstr::Seq(seq)
     }
 
     // =========================================================================

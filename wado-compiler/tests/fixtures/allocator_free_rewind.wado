@@ -1,0 +1,36 @@
+/// Test that freeing the most recent allocation rewinds the bump pointer,
+/// so the next allocation returns the same address.
+use { println } from "core:cli";
+
+export fn run() with Stdout {
+    // First allocation to establish a base
+    let base = builtin::realloc(0, 0, 4, 64);
+
+    // Allocate a block
+    let ptr1 = builtin::realloc(0, 0, 4, 128);
+    assert ptr1 > base;
+
+    // Free it (newsize=0, and it was the most recent allocation)
+    builtin::realloc(ptr1, 128, 4, 0);
+
+    // Allocate again with the same size — should get the same address
+    let ptr2 = builtin::realloc(0, 0, 4, 128);
+    assert ptr2 == ptr1, `expected rewind: ptr1={ptr1}, ptr2={ptr2}`;
+
+    // Free ptr2 before the loop
+    builtin::realloc(ptr2, 128, 4, 0);
+
+    // Allocate and free in a loop to verify repeated rewind
+    for let mut i = 0; i < 1000; i += 1 {
+        let p = builtin::realloc(0, 0, 4, 256);
+        // After freeing ptr2, heap is rewound to same base end,
+        // so each allocation should start at the same address
+        assert p == ptr2, `loop iteration {i}: expected same address`;
+        builtin::realloc(p, 256, 4, 0);
+    }
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

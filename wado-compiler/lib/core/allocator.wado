@@ -4,15 +4,47 @@
 /// This module defines the linear memory allocator for the Component Model.
 /// All items here are compiled into a separate Wasm core module named "mem".
 
-/// Bump allocator heap pointer. Starts at byte 1024 (leaving space for stack).
-// TODO: make the initial linear memory size configurable via compiler options
-global mut __heap_offset: i32 = 1024;
+/// Bump allocator heap pointer. Starts at 8 to avoid returning address 0 (null sentinel).
+global mut heap_offset: i32 = 8;
 
 /// Bump allocator — advances a pointer with alignment.
+/// When newsize is 0 and the allocation was the most recent one, rewinds the heap pointer.
+/// Grows linear memory on demand using a doubling strategy up to 16 MB, then 16 MB steps.
 /// Exported as "realloc" from the "mem" Wasm module for Component Model compatibility.
 #[export_name("realloc")]
 export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
-    let aligned = builtin::i32_and(__heap_offset + align - 1, 0 - align);
-    __heap_offset = aligned + newsize;
+    // Free: rewind if this was the most recent allocation
+    if newsize == 0 {
+        if oldptr + oldsize == heap_offset {
+            heap_offset = oldptr;
+        }
+        return 0;
+    }
+
+    let aligned = builtin::i32_and(heap_offset + align - 1, 0 - align);
+    let new_offset = aligned + newsize;
+
+    // Grow memory if needed
+    let current_bytes = builtin::memory_size() * 65536;
+    if new_offset > current_bytes {
+        let deficit = new_offset - current_bytes;
+        // Normal growth: double current size, capped at 16 MB
+        let sixteen_mb = 16 * 1024 * 1024;
+        let normal_grow = if current_bytes < sixteen_mb {
+            current_bytes
+        } else {
+            sixteen_mb
+        };
+        // If deficit exceeds normal growth, round up to next power of two
+        let grow_bytes = if deficit > normal_grow {
+            1 << (32 - builtin::i32_clz(deficit - 1))
+        } else {
+            normal_grow
+        };
+        let grow_pages = (grow_bytes + 65535) / 65536;
+        builtin::memory_grow(grow_pages);
+    }
+
+    heap_offset = new_offset;
     return aligned;
 }
