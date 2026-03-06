@@ -175,7 +175,7 @@ All implementations produce: Total bytes: 4,000,000, byte sum: 204,501,007.
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
 | Rust (serde_json, native)  | 0.98      | 1.00x    |
-| **Wado** (core:json, Wasm) | 282       | 288x     |
+| **Wado** (core:json, Wasm) | 106       | 108x     |
 
 Both implementations parse 100 statuses from Twitter search results.
 
@@ -184,7 +184,7 @@ Both implementations parse 100 statuses from Twitter search results.
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
 | Rust (serde_json, native)  | 15        | 1.00x    |
-| **Wado** (core:json, Wasm) | 520       | 35x      |
+| **Wado** (core:json, Wasm) | 426       | 28x      |
 
 Both implementations parse 55,563 coordinate points from GeoJSON.
 
@@ -193,7 +193,7 @@ Both implementations parse 55,563 coordinate points from GeoJSON.
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
 | Rust (serde_json, native)  | 3.2       | 1.00x    |
-| **Wado** (core:json, Wasm) | 431       | 135x     |
+| **Wado** (core:json, Wasm) | 112       | 35x      |
 
 Both implementations parse 184 events and 243 performances from CITM catalog data.
 

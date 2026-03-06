@@ -134,14 +134,15 @@ export fn run() {
     }
 }
 
-fn _config_field_lookup(key: &String) -> Option<i32> {
-    if key."String^Eq::eq"(&"host") {
+fn _config_field_lookup(__input: &String, __start: i32, __end: i32) -> Option<i32> {
+    let mut __len: i32 = (__end - __start);
+    if (((((__len == 4) && (__input.String::get_byte((__start + 0)) as i32 == 104)) && (__input.String::get_byte((__start + 1)) as i32 == 111)) && (__input.String::get_byte((__start + 2)) as i32 == 115)) && (__input.String::get_byte((__start + 3)) as i32 == 116)) {
         return Option<i32>::Some(0);
     }
-    if key."String^Eq::eq"(&"port") {
+    if (((((__len == 4) && (__input.String::get_byte((__start + 0)) as i32 == 112)) && (__input.String::get_byte((__start + 1)) as i32 == 111)) && (__input.String::get_byte((__start + 2)) as i32 == 114)) && (__input.String::get_byte((__start + 3)) as i32 == 116)) {
         return Option<i32>::Some(1);
     }
-    if key."String^Eq::eq"(&"debug") {
+    if ((((((__len == 5) && (__input.String::get_byte((__start + 0)) as i32 == 100)) && (__input.String::get_byte((__start + 1)) as i32 == 101)) && (__input.String::get_byte((__start + 2)) as i32 == 98)) && (__input.String::get_byte((__start + 3)) as i32 == 117)) && (__input.String::get_byte((__start + 4)) as i32 == 103)) {
         return Option<i32>::Some(2);
     }
     return Option<i32>::None;
@@ -333,7 +334,7 @@ fn "JsonStructSerializer^SerializeStruct::field<String>"(self: &mut JsonStructSe
     return r;
 }
 
-fn __Closure_0::__call(self: &__Closure_0, key: &String) -> Option<i32> {
-    return _config_field_lookup(key);
+fn __Closure_0::__call(self: &__Closure_0, __input: &String, __start: i32, __end: i32) -> Option<i32> {
+    return _config_field_lookup(__input, __start, __end);
 }
 
