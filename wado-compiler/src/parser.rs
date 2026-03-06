@@ -32,6 +32,8 @@ pub struct Parser {
     shebang: Option<String>,
     /// Content of the __DATA__ section, passed from the lexer.
     data_section: Option<String>,
+    /// Paths referenced by `#include_str` / `#include_bytes`, collected as they are parsed.
+    include_paths: indexmap::IndexSet<String>,
 }
 
 #[derive(Debug)]
@@ -76,6 +78,7 @@ impl Parser {
             restrict_struct_literals: false,
             shebang: None,
             data_section: None,
+            include_paths: indexmap::IndexSet::new(),
         }
     }
 
@@ -92,6 +95,7 @@ impl Parser {
             restrict_struct_literals: false,
             shebang,
             data_section,
+            include_paths: indexmap::IndexSet::new(),
         }
     }
 
@@ -150,6 +154,7 @@ impl Parser {
             inner_attributes,
             self.shebang.take(),
             self.data_section.take(),
+            std::mem::take(&mut self.include_paths),
         ))
     }
 
@@ -2579,6 +2584,7 @@ impl Parser {
                                     }
                                 };
                                 let close_span = self.expect(&TokenKind::RParen)?.span;
+                                self.include_paths.insert(path.clone());
                                 let lit = if is_str {
                                     Literal::IncludeStr(path)
                                 } else {

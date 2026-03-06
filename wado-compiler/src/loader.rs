@@ -9,7 +9,7 @@ use indexmap::IndexSet;
 
 use indexmap::IndexMap;
 
-use crate::ast::{Expr, Item, Literal, Module};
+use crate::ast::{Item, Module};
 use crate::bind;
 use crate::compiler_host::{CompilerHost, SourceError};
 use crate::desugar::desugar_module;
@@ -615,11 +615,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // Collect (module_source, raw_path) pairs
         let mut pairs: IndexSet<[String; 2]> = IndexSet::new();
         for (module_source, module) in &self.loaded {
-            let mut raw_paths = IndexSet::new();
-            collect_include_paths(module, &mut raw_paths);
             let ms_str = module_source.to_string();
-            for raw_path in raw_paths {
-                pairs.insert([ms_str.clone(), raw_path]);
+            for raw_path in module.include_paths() {
+                pairs.insert([ms_str.clone(), raw_path.clone()]);
             }
         }
         let mut included = IndexMap::new();
@@ -651,166 +649,5 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             return format!("{dir}/{stripped}");
         }
         raw_path.to_string()
-    }
-}
-
-/// Collect all include paths (`#include_str`/`#include_bytes`) from a module's AST.
-fn collect_include_paths(module: &Module, paths: &mut IndexSet<String>) {
-    for item in &module.items {
-        collect_include_paths_item(item, paths);
-    }
-}
-
-fn collect_include_paths_item(item: &Item, paths: &mut IndexSet<String>) {
-    match item {
-        Item::Function(f) => {
-            if let Some(body) = &f.body {
-                collect_include_paths_block(body, paths);
-            }
-        }
-        Item::Global(g) => collect_include_paths_expr(&g.initializer, paths),
-        Item::Test(t) => collect_include_paths_block(&t.body, paths),
-        Item::Impl(imp) => {
-            for method in &imp.methods {
-                if let Some(body) = &method.body {
-                    collect_include_paths_block(body, paths);
-                }
-            }
-        }
-        _ => {}
-    }
-}
-
-fn collect_include_paths_block(block: &crate::ast::Block, paths: &mut IndexSet<String>) {
-    for stmt in &block.stmts {
-        collect_include_paths_stmt(stmt, paths);
-    }
-}
-
-fn collect_include_paths_stmt(stmt: &crate::ast::Stmt, paths: &mut IndexSet<String>) {
-    use crate::ast::Stmt;
-    match stmt {
-        Stmt::Expr(s) => collect_include_paths_expr(&s.expr, paths),
-        Stmt::Return(s) => {
-            if let Some(expr) = &s.value {
-                collect_include_paths_expr(expr, paths);
-            }
-        }
-        Stmt::TaskReturn(s) => collect_include_paths_expr(&s.value, paths),
-        Stmt::Let(s) => collect_include_paths_expr(&s.value, paths),
-        Stmt::For(s) => {
-            if let Some(init) = &s.init {
-                collect_include_paths_stmt(init, paths);
-            }
-            if let Some(cond) = &s.condition {
-                collect_include_paths_condition(cond, paths);
-            }
-            if let Some(update) = &s.update {
-                collect_include_paths_expr(update, paths);
-            }
-            collect_include_paths_block(&s.body, paths);
-        }
-        Stmt::ForOf(s) => {
-            collect_include_paths_expr(&s.iterable, paths);
-            collect_include_paths_block(&s.body, paths);
-        }
-        Stmt::While(s) => {
-            collect_include_paths_condition(&s.condition, paths);
-            collect_include_paths_block(&s.body, paths);
-        }
-        Stmt::Loop(s) => collect_include_paths_block(&s.body, paths),
-        Stmt::If(s) => {
-            collect_include_paths_condition(&s.condition, paths);
-            collect_include_paths_block(&s.then_block, paths);
-            if let Some(else_block) = &s.else_block {
-                collect_include_paths_block(else_block, paths);
-            }
-        }
-        Stmt::Assert(s) => {
-            collect_include_paths_expr(&s.condition, paths);
-            if let Some(msg) = &s.message {
-                collect_include_paths_expr(msg, paths);
-            }
-        }
-        Stmt::LabeledBlock(s) => collect_include_paths_block(&s.block, paths),
-        Stmt::Break(_) | Stmt::Continue(_) => {}
-    }
-}
-
-fn collect_include_paths_condition(cond: &crate::ast::Condition, paths: &mut IndexSet<String>) {
-    match cond {
-        crate::ast::Condition::Expr(e) => collect_include_paths_expr(e, paths),
-        crate::ast::Condition::Pattern { expr, .. } => collect_include_paths_expr(expr, paths),
-    }
-}
-
-fn collect_include_paths_expr(expr: &Expr, paths: &mut IndexSet<String>) {
-    match expr {
-        Expr::Literal(lit) => match &lit.value {
-            Literal::IncludeStr(path) | Literal::IncludeBytes(path) => {
-                paths.insert(path.clone());
-            }
-            _ => {}
-        },
-        Expr::Binary(b) => {
-            collect_include_paths_expr(&b.left, paths);
-            collect_include_paths_expr(&b.right, paths);
-        }
-        Expr::Unary(u) => collect_include_paths_expr(&u.expr, paths),
-        Expr::Call(c) => {
-            collect_include_paths_expr(&c.callee, paths);
-            for arg in &c.args {
-                collect_include_paths_expr(arg, paths);
-            }
-        }
-        Expr::MethodCall(m) => {
-            collect_include_paths_expr(&m.receiver, paths);
-            for arg in &m.args {
-                collect_include_paths_expr(arg, paths);
-            }
-        }
-        Expr::Block(b) => collect_include_paths_block(b, paths),
-        Expr::If(i) => {
-            collect_include_paths_condition(&i.condition, paths);
-            collect_include_paths_block(&i.then_block, paths);
-            if let Some(else_block) = &i.else_block {
-                collect_include_paths_block(else_block, paths);
-            }
-        }
-        Expr::Assign(a) => {
-            collect_include_paths_expr(&a.target, paths);
-            collect_include_paths_expr(&a.value, paths);
-        }
-        Expr::Index(i) => {
-            collect_include_paths_expr(&i.expr, paths);
-            collect_include_paths_expr(&i.index, paths);
-        }
-        Expr::FieldAccess(f) => collect_include_paths_expr(&f.expr, paths),
-        Expr::Cast(c) => collect_include_paths_expr(&c.expr, paths),
-        Expr::Match(m) => {
-            collect_include_paths_expr(&m.expr, paths);
-            for arm in &m.arms {
-                collect_include_paths_expr(&arm.body, paths);
-            }
-        }
-        Expr::TupleLiteral(t) => {
-            for elem in &t.elements {
-                collect_include_paths_expr(elem, paths);
-            }
-        }
-        Expr::StructLiteral(s) => {
-            for field in &s.fields {
-                collect_include_paths_expr(&field.value, paths);
-            }
-        }
-        Expr::TemplateString(t) => {
-            for part in &t.parts {
-                if let crate::ast::TemplatePart::Interpolation { expr, .. } = part {
-                    collect_include_paths_expr(expr, paths);
-                }
-            }
-        }
-        Expr::Closure(c) => collect_include_paths_expr(&c.body, paths),
-        _ => {}
     }
 }
