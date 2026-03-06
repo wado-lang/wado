@@ -302,6 +302,7 @@ fn propagate_constants_in_expr(
         | TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::Null

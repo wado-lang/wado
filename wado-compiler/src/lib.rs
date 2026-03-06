@@ -284,6 +284,7 @@ pub async fn compile_with_options<H: CompilerHost>(
             load_result.implicit_modules.clone(),
             module_name,
             &logger,
+            &load_result.included_files,
         )?
     };
 
@@ -485,6 +486,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             &load_result.modules,
             load_result.entry_module_source.clone(),
             &logger,
+            &load_result.included_files,
         )
         .ok()
     };

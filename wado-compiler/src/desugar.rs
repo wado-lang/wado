@@ -46,6 +46,7 @@ pub fn desugar_module(module: &Module) -> Module {
         module.inner_attributes().to_vec(),
         module.shebang().map(String::from),
         module.data_section().map(String::from),
+        module.include_paths().clone(),
     )
 }
 

@@ -185,6 +185,9 @@ pub struct LoadResult {
     pub entry_ast: Module,
     /// Modules that were implicitly loaded (not from user imports)
     pub implicit_modules: IndexSet<ModuleSource>,
+    /// Included file contents from `#include_str` and `#include_bytes`.
+    /// Key is `(module_source_display, raw_path)`, value is raw bytes.
+    pub included_files: IndexMap<[String; 2], Vec<u8>>,
 }
 
 use crate::compiler_host::LogLevel;
@@ -381,11 +384,15 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // Load implicit modules (for compiler-generated code)
         self.load_implicit_modules()?;
 
+        // Collect and load files referenced by #include_str / #include_bytes
+        let included_files = self.load_included_files().await?;
+
         Ok(LoadResult {
             modules: self.loaded,
             entry_module_source,
             entry_ast: entry_ast_original,
             implicit_modules: self.implicit_modules,
+            included_files,
         })
     }
 
@@ -522,10 +529,18 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     ) -> Result<String, LoadError> {
         match module_source {
             ModuleSource::Local { path } => {
-                self.host.load_source(path).await.map_err(LoadError::from)
+                let bytes = self.host.load_source(path).await.map_err(LoadError::from)?;
+                String::from_utf8(bytes).map_err(|_| LoadError::IoError {
+                    path: path.clone(),
+                    message: "file is not valid UTF-8".to_string(),
+                })
             }
             ModuleSource::Remote { url } => {
-                self.host.load_source(url).await.map_err(LoadError::from)
+                let bytes = self.host.load_source(url).await.map_err(LoadError::from)?;
+                String::from_utf8(bytes).map_err(|_| LoadError::IoError {
+                    path: url.clone(),
+                    message: "file is not valid UTF-8".to_string(),
+                })
             }
             ModuleSource::Core { name } => {
                 let import_path = format!("core:{name}");
@@ -593,5 +608,46 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 message: format!("{error_count} bind error(s)"),
             }
         })
+    }
+
+    /// Scan all loaded modules for `#include_str`/`#include_bytes` and load referenced files.
+    async fn load_included_files(&self) -> Result<IndexMap<[String; 2], Vec<u8>>, LoadError> {
+        // Collect (module_source, raw_path) pairs
+        let mut pairs: IndexSet<[String; 2]> = IndexSet::new();
+        for (module_source, module) in &self.loaded {
+            let ms_str = module_source.to_string();
+            for raw_path in module.include_paths() {
+                pairs.insert([ms_str.clone(), raw_path.clone()]);
+            }
+        }
+        let mut included = IndexMap::new();
+        for pair in pairs {
+            let [ref ms_str, ref raw_path] = pair;
+            // Resolve path relative to the module source's directory
+            let resolved = self.resolve_include_path(ms_str, raw_path);
+            let bytes = self
+                .host
+                .load_source(&resolved)
+                .await
+                .map_err(LoadError::from)?;
+            included.insert(pair, bytes);
+        }
+        Ok(included)
+    }
+
+    /// Resolve an include path relative to the module that contains it.
+    ///
+    /// Unlike `resolve_module_path` (which normalizes to `./`-prefixed relative paths),
+    /// this preserves absolute path prefixes so that `CompilerHost::load_source` receives
+    /// the correct path.
+    fn resolve_include_path(&self, module_source_str: &str, raw_path: &str) -> String {
+        if (raw_path.starts_with("./") || raw_path.starts_with("../"))
+            && let Some(dir_end) = module_source_str.rfind('/')
+        {
+            let dir = &module_source_str[..dir_end];
+            let stripped = raw_path.strip_prefix("./").unwrap_or(raw_path);
+            return format!("{dir}/{stripped}");
+        }
+        raw_path.to_string()
     }
 }

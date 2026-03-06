@@ -1564,6 +1564,16 @@ impl<'a> Unparser<'a> {
             Literal::LocationLine => self.output.push_str("#line"),
             Literal::LocationFunction => self.output.push_str("#function"),
             Literal::DataSection => self.output.push_str("#data"),
+            Literal::IncludeStr(path) => {
+                self.output.push_str("#include_str(\"");
+                self.output.push_str(path);
+                self.output.push_str("\")");
+            }
+            Literal::IncludeBytes(path) => {
+                self.output.push_str("#include_bytes(\"");
+                self.output.push_str(path);
+                self.output.push_str("\")");
+            }
         }
     }
 
@@ -3101,6 +3111,16 @@ fn unparse_literal_into(lit: &Literal, output: &mut String) {
         Literal::LocationLine => output.push_str("#line"),
         Literal::LocationFunction => output.push_str("#function"),
         Literal::DataSection => output.push_str("#data"),
+        Literal::IncludeStr(path) => {
+            output.push_str("#include_str(\"");
+            output.push_str(path);
+            output.push_str("\")");
+        }
+        Literal::IncludeBytes(path) => {
+            output.push_str("#include_bytes(\"");
+            output.push_str(path);
+            output.push_str("\")");
+        }
     }
 }
 
@@ -3655,6 +3675,10 @@ impl<'a> TirUnparser<'a> {
                 self.output.push('"');
                 self.output.push_str(&escape_string(s));
                 self.output.push('"');
+            }
+            TirExprKind::BytesLiteral(bytes) => {
+                self.output
+                    .push_str(&format!("#include_bytes(/* {} bytes */)", bytes.len()));
             }
             TirExprKind::Null => {
                 self.output.push_str("null");

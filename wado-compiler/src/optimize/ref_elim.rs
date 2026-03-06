@@ -236,6 +236,7 @@ fn analyze_uses_in_expr(expr: &TirExpr, refs: &mut IndexMap<u32, RefInfo>) {
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Global { .. }
@@ -432,6 +433,7 @@ fn transform_expr(expr: &mut TirExpr, eliminable: &IndexMap<u32, RefInfo>) {
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }

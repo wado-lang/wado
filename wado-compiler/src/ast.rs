@@ -1,6 +1,7 @@
 // AST definitions for Wado
 
 use crate::token::Span;
+use indexmap::IndexSet;
 
 #[derive(Debug, Clone)]
 pub struct Module {
@@ -12,6 +13,8 @@ pub struct Module {
     /// Content of the __DATA__ section, if present in the source file.
     /// This is available after parsing for tooling (test harnesses, IDEs).
     data_section: Option<String>,
+    /// Paths referenced by `#include_str` and `#include_bytes` literals, collected during parsing.
+    include_paths: IndexSet<String>,
 }
 
 /// Inner attribute like `#![no_prelude]` or `#![wasm_module("mem")]`
@@ -30,6 +33,7 @@ impl Module {
             inner_attributes: Vec::new(),
             shebang: None,
             data_section: None,
+            include_paths: IndexSet::new(),
         }
     }
 
@@ -39,12 +43,14 @@ impl Module {
         inner_attributes: Vec<InnerAttribute>,
         shebang: Option<String>,
         data_section: Option<String>,
+        include_paths: IndexSet<String>,
     ) -> Self {
         Self {
             items,
             inner_attributes,
             shebang,
             data_section,
+            include_paths,
         }
     }
 
@@ -75,6 +81,10 @@ impl Module {
     /// Returns the content of the __DATA__ section, if present.
     pub fn data_section(&self) -> Option<&str> {
         self.data_section.as_deref()
+    }
+
+    pub fn include_paths(&self) -> &IndexSet<String> {
+        &self.include_paths
     }
 }
 
@@ -755,6 +765,10 @@ pub enum Literal {
     LocationFunction,
     /// Compile-time data section literal: `#data`
     DataSection,
+    /// Compile-time file include as string: `#include_str("path")`
+    IncludeStr(String),
+    /// Compile-time file include as bytes: `#include_bytes("path")`
+    IncludeBytes(String),
 }
 
 #[derive(Debug, Clone)]

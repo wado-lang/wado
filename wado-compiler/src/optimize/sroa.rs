@@ -573,6 +573,7 @@ fn check_escape_in_expr(expr: &TirExpr, candidates: &IndexSet<u32>, escaped: &mu
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Global { .. }
@@ -967,6 +968,7 @@ fn check_soft_escape_in_expr(
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Global { .. }
@@ -1700,6 +1702,7 @@ fn rewrite_expr(
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Global { .. }

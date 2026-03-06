@@ -5081,6 +5081,7 @@ fn collect_effect_calls_in_expr(
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::Local { .. }
         | TirExprKind::Null
         | TirExprKind::Unit

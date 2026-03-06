@@ -1361,6 +1361,8 @@ pub enum TirExprKind {
     BoolLiteral(bool),
     CharLiteral(char),
     StringLiteral(String),
+    /// Byte array literal from `#include_bytes`. Lowered to `Array<u8>` via data segment.
+    BytesLiteral(Vec<u8>),
     Null,
     Unit,
 
@@ -2238,6 +2240,8 @@ pub struct TirModule {
     /// `#![wasm_module("name")]` — items in this module compile to a separate Wasm core module.
     pub wasm_module: Option<String>,
     pub string_literals: Vec<String>,
+    /// Byte array literals from `#include_bytes` (for data segments)
+    pub bytes_literals: Vec<Vec<u8>>,
     /// Map of function name to string literals it contains (for DCE)
     pub function_strings: IndexMap<String, Vec<String>>,
     /// Map of function name to its method info (for DCE), populated alongside `function_strings`
@@ -2276,6 +2280,7 @@ impl TirModule {
             data_section: None,
             wasm_module: None,
             string_literals: Vec::new(),
+            bytes_literals: Vec::new(),
             function_strings: IndexMap::new(),
             function_method_info: IndexMap::new(),
             generic_structs: IndexMap::new(),
@@ -2308,6 +2313,7 @@ impl TirModule {
             data_section: None,
             wasm_module: None,
             string_literals: Vec::new(),
+            bytes_literals: Vec::new(),
             function_strings: IndexMap::new(),
             function_method_info: IndexMap::new(),
             generic_structs: IndexMap::new(),

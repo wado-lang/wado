@@ -1114,6 +1114,7 @@ fn analyze_expr(
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
@@ -1702,6 +1703,7 @@ fn collect_types_from_expr(
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
@@ -2170,6 +2172,7 @@ fn collect_global_reads_expr(expr: &TirExpr, used: &mut IndexSet<(String, String
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
@@ -2573,6 +2576,7 @@ fn prune_branches_in_expr(expr: &mut TirExpr) -> bool {
         | TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::Null

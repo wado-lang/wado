@@ -31,6 +31,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         modules: &'a IndexMap<ModuleSource, Module>,
         _entry_module_source: ModuleSource,
         logger: &'a Logger<'a, H>,
+        included_files: &'a IndexMap<[String; 2], Vec<u8>>,
     ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
         let mut result = IndexMap::new();
 
@@ -559,6 +560,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 trait_impl_index: Arc::clone(&trait_impl_index),
                 trait_decl_index: Arc::clone(&trait_decl_index),
                 blanket_trait_impl_index: Arc::clone(&blanket_trait_impl_index),
+                included_files,
             };
 
             // Set file context so diagnostics emitted during resolution

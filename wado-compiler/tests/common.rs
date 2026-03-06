@@ -41,10 +41,10 @@ impl CompilerHost for FilesystemHost {
     fn load_source(
         &self,
         path: &str,
-    ) -> impl std::future::Future<Output = Result<String, SourceError>> + Send {
+    ) -> impl std::future::Future<Output = Result<Vec<u8>, SourceError>> + Send {
         let full_path = self.base_path.join(path);
         async move {
-            std::fs::read_to_string(&full_path).map_err(|e| SourceError::IoError {
+            std::fs::read(&full_path).map_err(|e| SourceError::IoError {
                 path: full_path.to_string_lossy().to_string(),
                 message: e.to_string(),
             })
@@ -83,7 +83,7 @@ impl CompilerHost for InMemoryHost {
     fn load_source(
         &self,
         path: &str,
-    ) -> impl std::future::Future<Output = Result<String, SourceError>> + Send {
+    ) -> impl std::future::Future<Output = Result<Vec<u8>, SourceError>> + Send {
         let path = path.to_string();
         async move { Err(SourceError::NotFound { path }) }
     }

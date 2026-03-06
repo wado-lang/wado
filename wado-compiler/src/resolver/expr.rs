@@ -241,6 +241,40 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     (TirExprKind::StringLiteral(String::new()), string_type)
                 }
             }
+            Literal::IncludeStr(raw_path) => {
+                let key = [self.current_module_source.to_string(), raw_path.clone()];
+                let string_type = self.get_string_struct_type();
+                if let Some(bytes) = self.included_files.get(&key) {
+                    if let Ok(s) = std::str::from_utf8(bytes) {
+                        (TirExprKind::StringLiteral(s.to_owned()), string_type)
+                    } else {
+                        let _ = self.logger.error(TypeError::InvalidLiteral {
+                            message: format!("file is not valid UTF-8: \"{raw_path}\""),
+                            span: lit.span,
+                        });
+                        (TirExprKind::StringLiteral(String::new()), string_type)
+                    }
+                } else {
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                        message: format!("file not found: \"{raw_path}\""),
+                        span: lit.span,
+                    });
+                    (TirExprKind::StringLiteral(String::new()), string_type)
+                }
+            }
+            Literal::IncludeBytes(raw_path) => {
+                let key = [self.current_module_source.to_string(), raw_path.clone()];
+                let array_u8_type = self.type_table.borrow_mut().make_array(TypeTable::U8);
+                if let Some(bytes) = self.included_files.get(&key) {
+                    (TirExprKind::BytesLiteral(bytes.clone()), array_u8_type)
+                } else {
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                        message: format!("file not found: \"{raw_path}\""),
+                        span: lit.span,
+                    });
+                    (TirExprKind::BytesLiteral(Vec::new()), array_u8_type)
+                }
+            }
         };
         TirExpr::new(kind, type_id, lit.span)
     }

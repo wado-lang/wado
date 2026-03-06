@@ -471,6 +471,7 @@ fn collect_unsafe_in_expr(expr: &TirExpr, unsafe_locals: &mut IndexSet<u32>) {
         | TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::Null
@@ -791,6 +792,7 @@ fn forward_in_expr(
         | TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::Null

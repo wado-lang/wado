@@ -560,6 +560,7 @@ fn collect_modified_vars_in_expr(
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
@@ -588,6 +589,7 @@ fn is_loop_invariant(expr: &TirExpr, modified_vars: &IndexSet<u32>) -> bool {
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Global { .. } => true,
@@ -844,6 +846,7 @@ fn collect_licm_ref_bindings_in_expr(
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
@@ -1431,6 +1434,7 @@ fn find_hoist_candidates_in_expr(
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
@@ -1674,6 +1678,7 @@ fn replace_hoisted_in_expr(
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
         | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
