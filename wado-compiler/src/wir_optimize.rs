@@ -3995,13 +3995,12 @@ fn find_inner_array_fields(outer_fields: &mut [WirInstr]) -> Option<&mut Vec<Wir
             WirInstr::RefAsNonNull(inner) => inner.as_mut(),
             other => other,
         };
-        if let WirInstr::StructNew { fields, .. } = struct_new {
-            if fields.len() == 2
-                && is_array_new_default(&fields[0])
-                && matches!(&fields[1], WirInstr::I32Const(0))
-            {
-                return Some(fields);
-            }
+        if let WirInstr::StructNew { fields, .. } = struct_new
+            && fields.len() == 2
+            && is_array_new_default(&fields[0])
+            && matches!(&fields[1], WirInstr::I32Const(0))
+        {
+            return Some(fields);
         }
     }
     None

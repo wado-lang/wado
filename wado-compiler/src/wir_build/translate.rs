@@ -322,9 +322,7 @@ impl FunctionTranslator<'_, '_> {
         expr: WirInstr,
         value: WirInstr,
     ) -> WirInstr {
-        let value = if self.is_field_nonnull_ref(&type_id, &field_name)
-            && !value.is_nonnull_result()
-        {
+        let value = if self.is_field_nonnull_ref(&type_id, &field_name) {
             WirInstr::RefAsNonNull(Box::new(value))
         } else {
             value
@@ -348,9 +346,7 @@ impl FunctionTranslator<'_, '_> {
                 .into_iter()
                 .enumerate()
                 .map(|(i, instr)| {
-                    if st.fields.get(i).is_some_and(|f| f.ty.is_nonnull_ref())
-                        && !instr.is_nonnull_result()
-                    {
+                    if st.fields.get(i).is_some_and(|f| f.ty.is_nonnull_ref()) {
                         WirInstr::RefAsNonNull(Box::new(instr))
                     } else {
                         instr

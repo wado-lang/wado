@@ -182,10 +182,9 @@
           (i32.const 1)))
       (call 13
         (struct.new 2
-          (ref.as_non_null
-            (array.new_data 1 0
-              (i32.const 0)
-              (i32.const 13)))
+          (array.new_data 1 0
+            (i32.const 0)
+            (i32.const 13))
           (i32.const 13)))
     )
     (func (;11;) (type 16)

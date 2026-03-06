@@ -1273,7 +1273,15 @@ impl<'a> WirEmitter<'a> {
                 f.instruction(&Instruction::RefNull(ht));
             }
             WirInstr::RefIsNull(o) => self.emit_unary(f, o, Instruction::RefIsNull),
-            WirInstr::RefAsNonNull(o) => self.emit_unary(f, o, Instruction::RefAsNonNull),
+            WirInstr::RefAsNonNull(o) => {
+                // Skip ref.as_non_null when inner instruction is guaranteed non-null
+                // (e.g. struct.new, array.new_data, array.new_fixed produce (ref $t)).
+                if o.is_nonnull_result() {
+                    self.emit_instr(f, o);
+                } else {
+                    self.emit_unary(f, o, Instruction::RefAsNonNull);
+                }
+            }
             WirInstr::RefEq(l, r) => self.emit_binary(f, l, r, Instruction::RefEq),
 
             // Control Flow

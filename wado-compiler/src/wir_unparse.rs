@@ -14,8 +14,12 @@ use crate::wir::{
 ///
 /// `cwd` is the current working directory used to shorten entry-point paths.
 pub fn unparse_wir(module: &WirModule, cwd: Option<&str>) -> String {
-    let mut unparser =
-        WirUnparser::new(module.entry_point_path.as_deref(), cwd, &module.types, &module.data);
+    let mut unparser = WirUnparser::new(
+        module.entry_point_path.as_deref(),
+        cwd,
+        &module.types,
+        &module.data,
+    );
     unparser.unparse(module);
     unparser.output
 }
