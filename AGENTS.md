@@ -53,6 +53,7 @@ The target world is indicated by the top-level key in the JSON object:
 | `trapped`             | `bool`               | Whether the program should trap                             |
 | `compile_error`       | `string`             | Expected compile error (substring match)                    |
 | `TODO`                | `bool`               | Mark as TODO test - must fail until feature is implemented  |
+| `skip_os`             | `bool`               | Skip this test under `-Os` (e.g. tests relying on names)    |
 | `preopened_dirs`      | `[string, string][]` | Preopened directories `[host_path, guest_path]`             |
 | `wir_expect:Ox`       | `string[]`           | Patterns that must appear in WIR at `-Ox` (substring match) |
 | `wir_not_expect:Ox`   | `string[]`           | Patterns that must NOT appear in WIR at `-Ox`               |

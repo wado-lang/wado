@@ -170,8 +170,8 @@
     (import "wasi" "wasi:cli/Stdout::write_via_stream" (func (;9;) (type 14)))
     (import "mem" "memory" (memory (;0;) 1))
     (global (;0;) (mut i32) (i32.const 0))
-    (export "run" (func 11))
-    (func (;10;) (type 15)
+    (export "run" (func $__cm_export__run))
+    (func $run (;10;) (type 15)
       (local (ref null 4))
       (block ;; label = @1
         (if ;; label = @2
@@ -180,7 +180,7 @@
             (br 1 (;@1;))))
         (global.set 0
           (i32.const 1)))
-      (call 13
+      (call $println
         (struct.new 2
           (ref.as_non_null
             (array.new_data 1 0
@@ -188,12 +188,12 @@
               (i32.const 13)))
           (i32.const 13)))
     )
-    (func (;11;) (type 16)
-      (call 10)
+    (func $__cm_export__run (;11;) (type 16)
+      (call $run)
       (call 5
         (i32.const 0))
     )
-    (func (;12;) (type 17) (param i32 (ref null 2) i32)
+    (func $write_to_stream (;12;) (type 17) (param i32 (ref null 2) i32)
       (local i32 (ref null 1) i32 i32 i32 i32 (ref null 2) (ref null 2))
       (local.set 3
         (struct.get 2 1
@@ -258,7 +258,7 @@
       (call 1
         (local.get 0))
     )
-    (func (;13;) (type 18) (param (ref null 2))
+    (func $println (;13;) (type 18) (param (ref null 2))
       (local i64 i32 i32 i32)
       (local.set 1
         (call 2))
@@ -274,14 +274,14 @@
         (call 9
           (local.get 2)
           (i32.const 2048)))
-      (call 12
+      (call $write_to_stream
         (local.get 3)
         (local.get 0)
         (i32.const 1))
-      (call 14
+      (call $wait_for_subtask
         (local.get 4))
     )
-    (func (;14;) (type 19) (param i32)
+    (func $wait_for_subtask (;14;) (type 19) (param i32)
       (local i32 i32 i32)
       (local.set 1
         (i32.shr_s

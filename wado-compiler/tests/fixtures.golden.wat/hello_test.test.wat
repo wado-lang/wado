@@ -135,9 +135,9 @@
     (import "wasi" "task-return" (func (;1;) (type 7)))
     (import "mem" "memory" (memory (;0;) 1))
     (global (;0;) (mut i32) (i32.const 0))
-    (export "__test_0_greeting" (func 4))
-    (export "__test_1" (func 5))
-    (func (;2;) (type 8)
+    (export "__test_0_greeting" (func $__cm_export____test_0_greeting))
+    (export "__test_1" (func $__cm_export____test_1))
+    (func $__test_0_greeting (;2;) (type 8)
       (local i32 i32 (ref null 2) (ref null 3) (ref null 5) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3) (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3))
       (block ;; label = @1
         (if ;; label = @2
@@ -147,7 +147,7 @@
         (global.set 0
           (i32.const 1)))
     )
-    (func (;3;) (type 9)
+    (func $__test_1 (;3;) (type 9)
       (local i32 (ref null 2) (ref null 3) (ref null 5) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3))
       (block ;; label = @1
         (if ;; label = @2
@@ -157,7 +157,7 @@
         (global.set 0
           (i32.const 1)))
     )
-    (func (;4;) (type 10)
+    (func $__cm_export____test_0_greeting (;4;) (type 10)
       (local i32 i32 (ref null 2) (ref null 3) (ref null 5) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3) (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3))
       (block ;; label = @1
         (if ;; label = @2
@@ -169,7 +169,7 @@
       (call 1
         (i32.const 0))
     )
-    (func (;5;) (type 11)
+    (func $__cm_export____test_1 (;5;) (type 11)
       (local i32 (ref null 2) (ref null 3) (ref null 5) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 0) (ref null 3))
       (block ;; label = @1
         (if ;; label = @2

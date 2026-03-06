@@ -16,7 +16,7 @@ mod postprocess;
 /// Emit a Wasm component binary from a planned project and its WIR module.
 pub fn emit_wasm(project: &Project, wir_module: &WirModule) -> Vec<u8> {
     // Step 1: Emit core module bytes from WirModule
-    let core_module = emit::emit_core_module(wir_module);
+    let core_module = emit::emit_core_module(wir_module, project.strip_names);
 
     // Step 2: Validate core module (catch errors before component wrapping)
     if !project.skip_validation {

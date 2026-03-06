@@ -492,7 +492,7 @@ fn build_memory_module(
         max: None,
     };
     let wir = wasm_mod.to_wir_module(strip_names, memory);
-    super::emit::emit_core_module(&wir)
+    super::emit::emit_core_module(&wir, strip_names)
 }
 
 fn embed_bundled_modules(

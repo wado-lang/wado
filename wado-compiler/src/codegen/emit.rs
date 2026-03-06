@@ -20,8 +20,8 @@ use wasm_encoder::{
 };
 
 /// Emit a core Wasm module from a `WirModule`.
-pub fn emit_core_module(wir: &WirModule) -> Vec<u8> {
-    let mut emitter = WirEmitter::new(wir);
+pub fn emit_core_module(wir: &WirModule, strip_names: bool) -> Vec<u8> {
+    let mut emitter = WirEmitter::new(wir, strip_names);
     emitter.emit()
 }
 
@@ -57,10 +57,12 @@ struct WirEmitter<'a> {
     current_branch_hints: Vec<(u32, bool)>,
     /// All collected branch hints: (`func_index`, vec of (`instr_offset`, likely)).
     all_branch_hints: Vec<(u32, Vec<(u32, bool)>)>,
+    /// When true, strip debug name sections for smaller binary size (-Os).
+    strip_names: bool,
 }
 
 impl<'a> WirEmitter<'a> {
-    fn new(wir: &'a WirModule) -> Self {
+    fn new(wir: &'a WirModule, strip_names: bool) -> Self {
         Self {
             wir,
             type_index_map: IndexMap::new(),
@@ -75,6 +77,7 @@ impl<'a> WirEmitter<'a> {
             variant_pre_assigned: IndexMap::new(),
             current_branch_hints: Vec::new(),
             all_branch_hints: Vec::new(),
+            strip_names,
         }
     }
 
@@ -161,7 +164,11 @@ impl<'a> WirEmitter<'a> {
         }
 
         // 11. Name section (optional)
-        if self.wir.names.module_name.is_some() || !self.wir.names.function_names.is_empty() {
+        if !self.strip_names
+            && (self.wir.names.module_name.is_some()
+                || !self.wir.names.function_names.is_empty()
+                || !self.wir.functions.is_empty())
+        {
             let names = self.emit_name_section();
             module.section(&names);
         }
@@ -1742,9 +1749,20 @@ impl<'a> WirEmitter<'a> {
         }
 
         if !self.wir.names.function_names.is_empty() {
+            // Pre-populated names (e.g., memory module)
             let mut name_map = NameMap::new();
             for &(idx, ref name) in &self.wir.names.function_names {
                 name_map.append(idx, name);
+            }
+            names.functions(&name_map);
+        } else if !self.wir.functions.is_empty() {
+            // Generate names from WIR functions using remapped Wasm indices
+            let mut name_map = NameMap::new();
+            for (i, func) in self.wir.functions.iter().enumerate() {
+                let wir_func_idx = self.func_index_offset + u32::try_from(i).unwrap();
+                if let Some(&wasm_idx) = self.func_index_map.get(&wir_func_idx) {
+                    name_map.append(wasm_idx, &func.name.display);
+                }
             }
             names.functions(&name_map);
         }
