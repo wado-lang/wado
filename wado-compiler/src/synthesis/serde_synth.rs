@@ -11,9 +11,9 @@ use indexmap::IndexSet;
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_local_trait_method};
 use crate::project::Project;
 use crate::tir::{
-    FunctionRef, InlineHint, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField,
-    TirTypeParam, TypeId, TypeTable,
+    FunctionRef, InlineHint, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
+    TirFunction, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
+    TirStructField, TirTypeParam, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -705,7 +705,11 @@ fn generate_struct_deserialize(
         .find_enum_type_by_name("DeserializeErrorKind")
         .unwrap_or(TypeTable::I32);
     let result_struct_err = tt.make_result(struct_type, deser_error_type);
-    let lookup_fn_type = tt.make_function(vec![ref_string_type], option_i32, vec![]);
+    let lookup_fn_type = tt.make_function(
+        vec![ref_string_type, TypeTable::I32, TypeTable::I32],
+        option_i32,
+        vec![],
+    );
     let d_type_param = tt.make_type_param("D".to_string(), 0);
     let mut_ref_d = tt.make_mut_ref(d_type_param);
     let struct_access_type = tt.make_assoc_type_projection(
@@ -769,7 +773,11 @@ fn generate_struct_deserialize(
 
     let lookup_closure = TirExpr::new(
         TirExprKind::Closure {
-            params: vec![("key".to_string(), ref_string_type)],
+            params: vec![
+                ("__input".to_string(), ref_string_type),
+                ("__start".to_string(), TypeTable::I32),
+                ("__end".to_string(), TypeTable::I32),
+            ],
             body: Box::new(TirExpr::new(
                 TirExprKind::Call {
                     func: FunctionRef::External {
@@ -779,7 +787,11 @@ fn generate_struct_deserialize(
                         method_info: None,
                     },
                     type_args: vec![],
-                    args: vec![local_ref(0, "key", ref_string_type)],
+                    args: vec![
+                        local_ref(0, "__input", ref_string_type),
+                        local_ref(1, "__start", TypeTable::I32),
+                        local_ref(2, "__end", TypeTable::I32),
+                    ],
                 },
                 option_i32,
                 span,
@@ -1192,47 +1204,126 @@ fn generate_struct_deserialize(
     Some((lookup_func, deser_func))
 }
 
+/// Build a `string.get_byte(index_expr) as i32` expression with a computed index.
+fn key_get_byte_as_i32_expr(string_ref: TirExpr, index_expr: TirExpr, span: Span) -> TirExpr {
+    let get_byte_method =
+        LocalMethodName::new("String".to_string(), None, "get_byte".to_string());
+    let get_byte_call = TirExpr::new(
+        TirExprKind::MethodCall {
+            receiver: Box::new(string_ref),
+            func: FunctionRef::External {
+                module_source: ModuleSource::prelude(),
+                name: get_byte_method.to_mangled_name(),
+                monomorph_info: None,
+                method_info: Some(get_byte_method),
+            },
+            type_args: vec![],
+            args: vec![index_expr],
+        },
+        TypeTable::U8,
+        span,
+    );
+    TirExpr::new(
+        TirExprKind::Cast {
+            expr: Box::new(get_byte_call),
+            target_type: TypeTable::I32,
+        },
+        TypeTable::I32,
+        span,
+    )
+}
+
+/// Build `left && right` expression.
+fn and_expr(left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Binary {
+            left: Box::new(left),
+            op: TirBinaryOp::And,
+            right: Box::new(right),
+        },
+        TypeTable::BOOL,
+        span,
+    )
+}
+
+/// Build `left == right` expression for i32 operands.
+fn i32_eq(left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Binary {
+            left: Box::new(left),
+            op: TirBinaryOp::Eq,
+            right: Box::new(right),
+        },
+        TypeTable::BOOL,
+        span,
+    )
+}
+
 fn generate_lookup_function(
     type_name: &str,
     fields: &[(String, String, TypeId, u32)],
-    string_type: TypeId,
+    _string_type: TypeId,
     ref_string_type: TypeId,
     option_i32: TypeId,
     span: Span,
 ) -> TirFunction {
     let fn_name = format!("_{}_field_lookup", type_name.to_lowercase());
-    let local_types = vec![ref_string_type];
-    let next_local: u32 = 1;
+    // Parameters: input: &String (0), start: i32 (1), end: i32 (2)
+    let mut local_types = vec![ref_string_type, TypeTable::I32, TypeTable::I32];
+    let mut next_local: u32 = 3;
 
     let mut stmts = Vec::new();
+
+    // Allocate a local for `let __len = end - start`
+    let len_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
+    let len_expr = TirExpr::new(
+        TirExprKind::Binary {
+            left: Box::new(local_ref(2, "__end", TypeTable::I32)),
+            op: TirBinaryOp::Sub,
+            right: Box::new(local_ref(1, "__start", TypeTable::I32)),
+        },
+        TypeTable::I32,
+        span,
+    );
+    stmts.push(let_mut_stmt("__len", len_local, TypeTable::I32, len_expr));
+
+    // For each field, generate:
+    //   if __len == N && input.get_byte(start + 0) as i32 == B0 && ... { return Some(i); }
     for (i, (_, camel_name, _, _)) in fields.iter().enumerate() {
-        // Call String^Eq::eq(&key, &"camelName") — both operands are &String
-        let key_ref = local_ref(0, "key", ref_string_type);
-        let lit_ref = ref_expr(
-            string_lit(camel_name, string_type, span),
-            ref_string_type,
+        let name_bytes = camel_name.as_bytes();
+        let name_len = name_bytes.len() as i32;
+
+        // Start with: __len == name_len
+        let mut condition = i32_eq(
+            local_ref(len_local, "__len", TypeTable::I32),
+            i32_const(name_len),
             span,
         );
-        let eq_method = LocalMethodName::new(
-            "String".to_string(),
-            Some("Eq".to_string()),
-            "eq".to_string(),
-        );
-        let condition = TirExpr::new(
-            TirExprKind::MethodCall {
-                receiver: Box::new(key_ref),
-                func: FunctionRef::External {
-                    module_source: ModuleSource::prelude(),
-                    name: eq_method.to_mangled_name(),
-                    monomorph_info: None,
-                    method_info: Some(eq_method),
+
+        // Chain: && input.get_byte(start + j) as i32 == byte_j
+        for (j, &byte_val) in name_bytes.iter().enumerate() {
+            // start + j
+            let index_expr = TirExpr::new(
+                TirExprKind::Binary {
+                    left: Box::new(local_ref(1, "__start", TypeTable::I32)),
+                    op: TirBinaryOp::Add,
+                    right: Box::new(i32_const(j as i32)),
                 },
-                type_args: vec![],
-                args: vec![lit_ref],
-            },
-            TypeTable::BOOL,
-            span,
-        );
+                TypeTable::I32,
+                span,
+            );
+            let byte_check = i32_eq(
+                key_get_byte_as_i32_expr(
+                    local_ref(0, "__input", ref_string_type),
+                    index_expr,
+                    span,
+                ),
+                i32_const(i32::from(byte_val)),
+                span,
+            );
+            condition = and_expr(condition, byte_check, span);
+        }
+
         stmts.push(if_stmt(
             condition,
             block(vec![return_stmt(Some(option_some(
@@ -1253,12 +1344,26 @@ fn generate_lookup_function(
         impl_type_params: Vec::new(),
         monomorph_info: None,
         method_info: None,
-        params: vec![TirParam {
-            name: "key".to_string(),
-            type_id: ref_string_type,
-            local_index: 0,
-            span,
-        }],
+        params: vec![
+            TirParam {
+                name: "__input".to_string(),
+                type_id: ref_string_type,
+                local_index: 0,
+                span,
+            },
+            TirParam {
+                name: "__start".to_string(),
+                type_id: TypeTable::I32,
+                local_index: 1,
+                span,
+            },
+            TirParam {
+                name: "__end".to_string(),
+                type_id: TypeTable::I32,
+                local_index: 2,
+                span,
+            },
+        ],
         return_type: option_i32,
         effects: Vec::new(),
         body: Some(block(stmts)),
