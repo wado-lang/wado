@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772753592831,
+  "lastUpdate": 1772787599140,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -701,6 +701,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 14295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3c03a79a5975b32dae7513f48c864572e13f4594",
+          "message": "Merge pull request #515 from wado-lang/claude/migrate-realloc-wado-iCt51\n\nImplement separate Wasm modules via #![wasm_module] attribute",
+          "timestamp": "2026-03-06T17:57:34+09:00",
+          "tree_id": "3f1f98c19745c953025787c9ec0ac29c8c49d9ca",
+          "url": "https://github.com/wado-lang/wado/commit/3c03a79a5975b32dae7513f48c864572e13f4594"
+        },
+        "date": 1772787598993,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1388,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8931,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 14297,
             "unit": "bytes"
           }
         ]
