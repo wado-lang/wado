@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772831359809,
+  "lastUpdate": 1772837508796,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -959,6 +959,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fbbfc3d870e5eb61eefbabc8668b6b2208f59d77"
         },
         "date": 1772831359670,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1572,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9242,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18579,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1b431264f59e9710275cc093a6a73a224b04d084",
+          "message": "Merge pull request #522 from wado-lang/claude/restore-stack-trace-names-Hv4El\n\nAdd function name generation and strip_names support to codegen",
+          "timestamp": "2026-03-07T07:49:32+09:00",
+          "tree_id": "2de53d3d0aa3490ee5a1fbc063fb88058d465767",
+          "url": "https://github.com/wado-lang/wado/commit/1b431264f59e9710275cc093a6a73a224b04d084"
+        },
+        "date": 1772837508649,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
