@@ -26,7 +26,7 @@ use wasm_encoder::{
 pub fn build_component(
     project: &Project,
     core_module: &[u8],
-    allocator: &Option<crate::wir::AllocatorInfo>,
+    wasm_modules: &IndexMap<String, crate::wir::WasmModuleInfo>,
 ) -> Vec<u8> {
     let mut builder = ComponentBuilder::default();
     let mut ctx = ComponentModelContext::new();
@@ -50,7 +50,8 @@ pub fn build_component(
     }
 
     // Core memory module
-    let mem_module = build_memory_module(project.strip_names, allocator);
+    let mem_info = wasm_modules.get("mem");
+    let mem_module = build_memory_module(project.strip_names, mem_info);
     ctx.register_core_module("mem-mod");
     builder.core_module_raw(Some("mem-mod"), &mem_module);
 
@@ -473,29 +474,37 @@ fn wado_type_to_cm_result_type(
 
 fn build_memory_module(
     strip_names: bool,
-    allocator: &Option<crate::wir::AllocatorInfo>,
+    wasm_mod: Option<&crate::wir::WasmModuleInfo>,
 ) -> Vec<u8> {
     use wasm_encoder::{
         CodeSection, ExportKind, ExportSection, FunctionSection, GlobalSection, GlobalType,
         MemorySection, MemoryType, Module, NameMap, NameSection, TypeSection, ValType,
     };
 
+    let wasm_mod = wasm_mod.expect("core:allocator with #![wasm_module(\"mem\")] is required");
+
     let mut module = Module::new();
 
-    // Type section: realloc signature (i32, i32, i32, i32) -> i32
+    // Type section: one type per function (realloc signature)
     let mut types = TypeSection::new();
-    types.ty().function(
-        [ValType::I32, ValType::I32, ValType::I32, ValType::I32],
-        [ValType::I32],
-    );
+    for _func in &wasm_mod.functions {
+        // Currently all mem module functions have signature (i32, i32, i32, i32) -> i32
+        types.ty().function(
+            [ValType::I32, ValType::I32, ValType::I32, ValType::I32],
+            [ValType::I32],
+        );
+    }
     module.section(&types);
 
-    // Function section: one function (realloc) using type 0
+    // Function section
     let mut functions = FunctionSection::new();
-    functions.function(0);
+    for (i, _func) in wasm_mod.functions.iter().enumerate() {
+        functions.function(u32::try_from(i).unwrap());
+    }
     module.section(&functions);
 
     // Memory section: 64-page linear memory
+    // TODO: make the initial linear memory size configurable via compiler options
     let mut memories = MemorySection::new();
     memories.memory(MemoryType {
         minimum: 64,
@@ -506,56 +515,43 @@ fn build_memory_module(
     });
     module.section(&memories);
 
-    // Global section: emit globals from allocator info or default
+    // Global section
     let mut globals = GlobalSection::new();
-    if let Some(alloc) = allocator {
-        for global in &alloc.globals {
-            let (val_type, const_expr) = wir_global_to_wasm(global);
-            globals.global(
-                GlobalType {
-                    val_type,
-                    mutable: global.mutable,
-                    shared: false,
-                },
-                &const_expr,
-            );
-        }
-    } else {
-        // Fallback: default bump allocator global (heap offset starts at 1024)
+    for global in &wasm_mod.globals {
+        let (val_type, const_expr) = wir_global_to_wasm(global);
         globals.global(
             GlobalType {
-                val_type: ValType::I32,
-                mutable: true,
+                val_type,
+                mutable: global.mutable,
                 shared: false,
             },
-            &wasm_encoder::ConstExpr::i32_const(1024),
+            &const_expr,
         );
     }
     module.section(&globals);
 
-    // Export section: memory + realloc
+    // Export section: memory + all functions
     let mut exports = ExportSection::new();
     exports.export("memory", ExportKind::Memory, 0);
-    exports.export("realloc", ExportKind::Func, 0);
+    for (i, func) in wasm_mod.functions.iter().enumerate() {
+        exports.export(&func.export_name, ExportKind::Func, u32::try_from(i).unwrap());
+    }
     module.section(&exports);
 
-    // Code section: emit realloc body from WIR or fallback
+    // Code section
     let mut code = CodeSection::new();
-    if let Some(alloc) = allocator {
-        emit_allocator_function(&mut code, alloc);
-    } else {
-        emit_fallback_bump_allocator(&mut code);
+    for func in &wasm_mod.functions {
+        emit_wasm_module_function(&mut code, func, &wasm_mod.global_name_to_index);
     }
     module.section(&code);
 
     if !strip_names {
         let mut names = NameSection::new();
         let mut func_names = NameMap::new();
-        func_names.append(0, "realloc");
+        for (i, func) in wasm_mod.functions.iter().enumerate() {
+            func_names.append(u32::try_from(i).unwrap(), &func.export_name);
+        }
         names.functions(&func_names);
-        let mut type_names = NameMap::new();
-        type_names.append(0, "realloc");
-        names.types(&type_names);
         module.section(&names);
     }
 
@@ -583,37 +579,37 @@ fn wir_global_to_wasm(
     }
 }
 
-/// Emit the allocator function body from WIR instructions into the code section.
-fn emit_allocator_function(
+/// Emit a wasm_module function body from WIR instructions into the code section.
+fn emit_wasm_module_function(
     code: &mut wasm_encoder::CodeSection,
-    alloc: &crate::wir::AllocatorInfo,
+    func_info: &crate::wir::WasmModuleFunc,
+    global_map: &IndexMap<String, u32>,
 ) {
     use wasm_encoder::{Function, Instruction, ValType};
 
     // Build parameter name → local index mapping
-    // realloc params: oldptr(0), oldsize(1), align(2), newsize(3)
     let mut local_map: IndexMap<String, u32> = IndexMap::new();
-    for (i, name) in alloc.param_names.iter().enumerate() {
+    for (i, name) in func_info.param_names.iter().enumerate() {
         local_map.insert(name.clone(), u32::try_from(i).unwrap());
     }
 
     // Scan for DeclareLocal instructions to count additional locals
     let mut declared_locals: Vec<String> = Vec::new();
-    for instr in &alloc.body {
+    for instr in &func_info.body {
         collect_declared_locals(instr, &mut declared_locals);
     }
-    let next_local = u32::try_from(alloc.param_names.len()).unwrap();
+    let next_local = u32::try_from(func_info.param_names.len()).unwrap();
     for (i, name) in declared_locals.iter().enumerate() {
         local_map.insert(name.clone(), next_local + u32::try_from(i).unwrap());
     }
 
     let additional_locals_count =
-        u32::try_from(declared_locals.len()).expect("too many locals in allocator");
+        u32::try_from(declared_locals.len()).expect("too many locals in wasm_module function");
     let mut func = Function::new([(additional_locals_count, ValType::I32)]);
 
     // Emit all body instructions
-    for instr in &alloc.body {
-        emit_alloc_instr(&mut func, instr, &local_map, &alloc.global_name_to_index);
+    for instr in &func_info.body {
+        emit_alloc_instr(&mut func, instr, &local_map, global_map);
     }
 
     func.instruction(&Instruction::End);
@@ -769,29 +765,6 @@ fn emit_alloc_instr(
             std::mem::discriminant(instr)
         ),
     }
-}
-
-/// Fallback bump allocator when no #[allocator] function is provided.
-fn emit_fallback_bump_allocator(code: &mut wasm_encoder::CodeSection) {
-    use wasm_encoder::{Function, Instruction, ValType};
-    let mut func = Function::new([(1, ValType::I32)]);
-    func.instruction(&Instruction::GlobalGet(0));
-    func.instruction(&Instruction::LocalGet(2));
-    func.instruction(&Instruction::I32Add);
-    func.instruction(&Instruction::I32Const(1));
-    func.instruction(&Instruction::I32Sub);
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::LocalGet(2));
-    func.instruction(&Instruction::I32Sub);
-    func.instruction(&Instruction::I32And);
-    func.instruction(&Instruction::LocalSet(4));
-    func.instruction(&Instruction::LocalGet(4));
-    func.instruction(&Instruction::LocalGet(3));
-    func.instruction(&Instruction::I32Add);
-    func.instruction(&Instruction::GlobalSet(0));
-    func.instruction(&Instruction::LocalGet(4));
-    func.instruction(&Instruction::End);
-    code.function(&func);
 }
 
 fn embed_bundled_modules(

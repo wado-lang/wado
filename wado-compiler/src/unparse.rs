@@ -82,6 +82,18 @@ impl<'a> Unparser<'a> {
         for attr in module.inner_attributes() {
             self.output.push_str("#![");
             self.output.push_str(&attr.name);
+            if !attr.args.is_empty() {
+                self.output.push('(');
+                for (i, arg) in attr.args.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.output.push('"');
+                    self.output.push_str(arg);
+                    self.output.push('"');
+                }
+                self.output.push(')');
+            }
             self.output.push_str("]\n");
         }
 

@@ -543,6 +543,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             tir_module = tir_module.with_data_section(Some(data.to_string()));
         }
 
+        // Preserve wasm_module attribute
+        tir_module.wasm_module = module.wasm_module().map(String::from);
+
         self.logger.ok_or_bail(tir_module)
     }
 

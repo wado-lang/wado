@@ -17,7 +17,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 
 use crate::name::ModuleSource;
 use crate::token::Span;
@@ -54,26 +54,38 @@ pub struct WirModule {
     pub variant_case_info: IndexMap<u32, (u32, u32)>,
     /// Entry-point module path string (for display shortening in unparse).
     pub entry_point_path: Option<String>,
-    /// Allocator function and associated globals, extracted from main module.
-    /// Compiled into the memory module instead of the main core module.
-    pub allocator: Option<AllocatorInfo>,
+    /// Separate Wasm core modules extracted from `#![wasm_module("name")]` sources.
+    /// Key: wasm module name (e.g., "mem").
+    pub wasm_modules: IndexMap<String, WasmModuleInfo>,
+    /// Type indices that were extracted into wasm_modules and should be skipped by the emitter.
+    pub dead_type_indices: IndexSet<u32>,
+    /// Function indices (into `functions`) extracted into wasm_modules; skipped by emitter.
+    pub dead_func_indices: IndexSet<u32>,
+    /// Global indices (into `globals`) extracted into wasm_modules; skipped by emitter.
+    pub dead_global_indices: IndexSet<u32>,
 }
 
-/// Allocator function extracted from the main WIR module.
-/// This is compiled into the memory module (separate from the main core module)
-/// to satisfy Component Model ordering constraints.
+/// Functions and globals extracted from a `#![wasm_module("name")]` source module.
+/// Compiled into a separate Wasm core module in the component.
 #[derive(Debug)]
-pub struct AllocatorInfo {
-    /// Allocator strategy name (e.g., "bump").
-    pub strategy: String,
-    /// The allocator function's WIR body instructions.
-    pub body: Vec<WirInstr>,
-    /// Parameter names (types are always [i32, i32, i32, i32] -> i32).
-    pub param_names: Vec<String>,
-    /// Associated globals (e.g., the bump pointer).
+pub struct WasmModuleInfo {
+    /// Extracted functions with their export names and bodies.
+    pub functions: Vec<WasmModuleFunc>,
+    /// Extracted globals.
     pub globals: Vec<WirGlobal>,
-    /// Mapping from WIR global FQ names to memory-module global indices.
+    /// Mapping from WIR global FQ names to module-local global indices.
     pub global_name_to_index: IndexMap<String, u32>,
+}
+
+/// A function in a `#![wasm_module]` separate core module.
+#[derive(Debug)]
+pub struct WasmModuleFunc {
+    /// The wasm export name for this function (e.g., "realloc").
+    pub export_name: String,
+    /// Parameter names.
+    pub param_names: Vec<String>,
+    /// The WIR body instructions.
+    pub body: Vec<WirInstr>,
 }
 
 impl WirModule {
@@ -93,7 +105,10 @@ impl WirModule {
             component: WirComponent::default(),
             variant_case_info: IndexMap::new(),
             entry_point_path: None,
-            allocator: None,
+            wasm_modules: IndexMap::new(),
+            dead_type_indices: IndexSet::new(),
+            dead_func_indices: IndexSet::new(),
+            dead_global_indices: IndexSet::new(),
         }
     }
 }
@@ -568,6 +583,8 @@ pub struct WirFunction {
     /// Compiler feature bitflags (e.g., `COMP_FEATURE_ARRAY_APPEND`).
     /// Set via `#[comp_feature("array_append")]` attribute in Wado source.
     pub comp_features: u32,
+    /// Custom wasm export name from `#[export_name("...")]` attribute.
+    pub export_name: Option<String>,
 }
 
 /// WIR instructions are tree-structured where operands are child nodes,

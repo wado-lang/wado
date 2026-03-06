@@ -207,6 +207,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                 generic_origin: None,
                 effects: Vec::new(),
                 comp_features: 0,
+                export_name: None,
             };
 
             let func_id = ctx.register_function(func);

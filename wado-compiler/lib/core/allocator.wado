@@ -1,0 +1,18 @@
+#![wasm_module("mem")]
+#![no_prelude]
+
+/// This module defines the linear memory allocator for the Component Model.
+/// All items here are compiled into a separate Wasm core module named "mem".
+
+/// Bump allocator heap pointer. Starts at byte 1024 (leaving space for stack).
+// TODO: make the initial linear memory size configurable via compiler options
+global mut __heap_offset: i32 = 1024;
+
+/// Bump allocator — advances a pointer with alignment.
+/// Exported as "realloc" from the "mem" Wasm module for Component Model compatibility.
+#[export_name("realloc")]
+export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
+    let aligned = builtin::i32_and(__heap_offset + align - 1, 0 - align);
+    __heap_offset = aligned + newsize;
+    return aligned;
+}

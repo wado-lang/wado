@@ -431,7 +431,7 @@ impl Parser {
         Ok(attrs)
     }
 
-    /// Parse a single inner attribute: `#![name]`
+    /// Parse a single inner attribute: `#![name]` or `#![name("arg")]`
     fn parse_inner_attribute(&mut self) -> ParseResult<InnerAttribute> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Hash)?;
@@ -440,10 +440,38 @@ impl Parser {
 
         let name = self.consume_ident()?;
 
+        let args = if self.check(&TokenKind::LParen) {
+            self.advance();
+            let mut args = Vec::new();
+            loop {
+                match self.peek_kind().clone() {
+                    TokenKind::StringLit(raw) => {
+                        self.advance();
+                        args.push(raw);
+                    }
+                    TokenKind::Ident(value) => {
+                        self.advance();
+                        args.push(value);
+                    }
+                    _ => break,
+                }
+                if self.check(&TokenKind::Comma) {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+            self.expect(&TokenKind::RParen)?;
+            args
+        } else {
+            Vec::new()
+        };
+
         self.expect(&TokenKind::RBracket)?;
 
         Ok(InnerAttribute {
             name,
+            args,
             span: start_span,
         })
     }

@@ -23,6 +23,7 @@
 pub const CORE_PRELUDE: &str = include_str!("../lib/core/prelude.wado");
 pub const CORE_CLI: &str = include_str!("../lib/core/cli.wado");
 pub const CORE_INTERNAL: &str = include_str!("../lib/core/internal.wado");
+pub const CORE_ALLOCATOR: &str = include_str!("../lib/core/allocator.wado");
 pub const CORE_PRELUDE_STRING: &str = include_str!("../lib/core/prelude/string.wado");
 pub const CORE_BUILTIN: &str = include_str!("../lib/core/builtin.wado");
 pub const CORE_PRELUDE_TRAITS: &str = include_str!("../lib/core/prelude/traits.wado");
@@ -67,6 +68,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:collections" => Some(CORE_COLLECTIONS),
         "core:cli" => Some(CORE_CLI),
         "core:internal" => Some(CORE_INTERNAL),
+        "core:allocator" => Some(CORE_ALLOCATOR),
         "core:builtin" => Some(CORE_BUILTIN),
         "core:zlib" => Some(CORE_ZLIB),
         "core:base64" => Some(CORE_BASE64),

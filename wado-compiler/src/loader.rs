@@ -202,6 +202,7 @@ fn cached_core_stdlib() -> &'static IndexMap<ModuleSource, Module> {
     static CACHE: OnceLock<IndexMap<ModuleSource, Module>> = OnceLock::new();
     CACHE.get_or_init(|| {
         let core_modules: &[(&str, &str)] = &[
+            ("allocator", stdlib::CORE_ALLOCATOR),
             ("builtin", stdlib::CORE_BUILTIN),
             ("cli", stdlib::CORE_CLI),
             ("collections", stdlib::CORE_COLLECTIONS),
@@ -413,6 +414,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             ModuleSource::string(),
             ModuleSource::prelude(),
             ModuleSource::internal(),
+            ModuleSource::allocator(),
         ];
 
         for module_source in implicit_module_sources {

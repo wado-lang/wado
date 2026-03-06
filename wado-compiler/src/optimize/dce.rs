@@ -94,6 +94,24 @@ pub fn analyze_project(project: &mut Project) {
         }
     }
 
+    // Mark exported functions from #![wasm_module] sources as reachable.
+    // These are compiled into separate wasm modules and must not be eliminated.
+    for (module_source, tir_mod) in &project.tir_modules {
+        if tir_mod.wasm_module.is_some() {
+            for func_rc in &tir_mod.functions {
+                let func = func_rc.borrow();
+                if func.is_export {
+                    let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                        module_source,
+                        &func.name,
+                    ));
+                    let wasm_mod_reachable = compute_reachable(&call_graph, &func_id);
+                    reachable.extend(wasm_mod_reachable);
+                }
+            }
+        }
+    }
+
     // Collect used WASI functions from reachable functions
     let mut used_wasi_functions: IndexSet<String> = IndexSet::new();
     for func_id in &reachable {

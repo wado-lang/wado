@@ -14,10 +14,11 @@ pub struct Module {
     data_section: Option<String>,
 }
 
-/// Inner attribute like `#![no_prelude]`
+/// Inner attribute like `#![no_prelude]` or `#![wasm_module("mem")]`
 #[derive(Debug, Clone)]
 pub struct InnerAttribute {
     pub name: String,
+    pub args: Vec<String>,
     pub span: Span,
 }
 
@@ -55,6 +56,15 @@ impl Module {
     /// Returns true if the module has the `#![no_prelude]` attribute.
     pub fn has_no_prelude(&self) -> bool {
         self.inner_attributes.iter().any(|a| a.name == "no_prelude")
+    }
+
+    /// Returns the `wasm_module` name if `#![wasm_module("name")]` is present.
+    pub fn wasm_module(&self) -> Option<&str> {
+        self.inner_attributes
+            .iter()
+            .find(|a| a.name == "wasm_module")
+            .and_then(|a| a.args.first())
+            .map(String::as_str)
     }
 
     /// Returns the shebang line, if present.

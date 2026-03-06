@@ -197,6 +197,12 @@ impl ModuleSource {
         Self::core("internal")
     }
 
+    /// `core:allocator` — linear memory allocator (compiled into "mem" Wasm module).
+    #[must_use]
+    pub fn allocator() -> Self {
+        Self::core("allocator")
+    }
+
     /// `core:builtin` — builtin wasm instruction mappings.
     #[must_use]
     pub fn builtin() -> Self {
