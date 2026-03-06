@@ -1613,7 +1613,7 @@ The compiler extracts `#![wasm_module("mem")]` items during WIR construction and
 
 The main core module accesses `realloc` and linear memory through imports, declared via `#[canonical("mem", "realloc")]` in `core:builtin`. Internal functions like `memory_to_gc_array` and `gc_array_to_memory` in `core:internal` use these builtins to copy data between GC arrays and linear memory.
 
-**TODO**: The current bump allocator never frees memory and has a fixed 64-page (4 MB) backing memory. Implement a proper allocator that supports freeing and growing.
+**TODO**: The current bump allocator never frees memory and has a fixed 64-page (4 MB) backing memory. Implement a proper allocator that supports freeing and growing. In the future, the compiler will support switching allocators via a compile option like `--allocator <name>`. Each allocator module will declare its identity with an `#[allocator]` attribute, and the compiler will select the appropriate one at build time.
 
 ---
 
