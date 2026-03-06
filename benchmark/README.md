@@ -126,7 +126,7 @@ make benchmark-json-catalog
 | ----------- | --------- | -------- |
 | C (gcc -O3) | 120       | 1.00x    |
 | **Wado**    | 138       | 1.15x    |
-| JavaScript  | 142       | 1.18x    |
+| JavaScript  | 140       | 1.17x    |
 
 All implementations produce the same result: 47,407,790 total iterations.
 
@@ -134,9 +134,9 @@ All implementations produce the same result: 47,407,790 total iterations.
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 3,030     | 1.00x    |
-| **Wado**    | 3,288     | 1.09x    |
-| JavaScript  | 3,358     | 1.11x    |
+| C (gcc -O3) | 3,020     | 1.00x    |
+| **Wado**    | 3,273     | 1.08x    |
+| JavaScript  | 3,328     | 1.10x    |
 
 All implementations produce the same result: 664,579 primes.
 
@@ -144,9 +144,9 @@ All implementations produce the same result: 664,579 primes.
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 51        | 1.00x    |
-| JavaScript  | 81        | 1.59x    |
-| **Wado**    | 138       | 2.71x    |
+| C (gcc -O3) | 53        | 1.00x    |
+| JavaScript  | 72        | 1.36x    |
+| **Wado**    | 133       | 2.51x    |
 
 All implementations produce the same result: 664,579 primes.
 
@@ -154,8 +154,8 @@ All implementations produce the same result: 664,579 primes.
 
 | Runtime               | Compress (ms) | Decompress (ms) | Relative |
 | --------------------- | ------------- | --------------- | -------- |
-| zlib-rs (native Rust) | 1.6           | 0.2             | 1.00x    |
-| **Wado** (pure Wado)  | 58            | 752             | 450x     |
+| zlib-rs (native Rust) | 1.4           | 0.2             | 1.00x    |
+| **Wado** (pure Wado)  | 50            | 743             | 496x     |
 
 Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significant overhead is expected compared to native.
 
@@ -164,9 +164,9 @@ Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significan
 | Runtime             | Time (ms) | Relative |
 | ------------------- | --------- | -------- |
 | Zig (-OReleaseFast) | 25        | 1.00x    |
-| Rust (rustc -O)     | 35        | 1.40x    |
+| Rust (rustc -O)     | 36        | 1.44x    |
 | C (gcc -O3)         | 57        | 2.28x    |
-| **Wado**            | 166       | 6.64x    |
+| **Wado**            | 156       | 6.24x    |
 
 All implementations produce: Total bytes: 4,000,000, byte sum: 204,501,007.
 
