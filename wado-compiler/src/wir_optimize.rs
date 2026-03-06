@@ -4619,7 +4619,10 @@ fn cleanup_instrs(instrs: &mut Vec<WirInstr>) {
     // Remove nops.
     instrs.retain(|i| !matches!(i, WirInstr::Nop));
     // Truncate after first unreachable (dead code elimination).
-    if let Some(pos) = instrs.iter().position(|i| matches!(i, WirInstr::Unreachable)) {
+    if let Some(pos) = instrs
+        .iter()
+        .position(|i| matches!(i, WirInstr::Unreachable))
+    {
         instrs.truncate(pos + 1);
     }
 }
@@ -4647,9 +4650,9 @@ fn cleanup_instr(instr: &mut WirInstr) {
         }
     }
     // Elide redundant RefAsNonNull wrapping a non-null-producing instruction.
-    if let WirInstr::RefAsNonNull(inner) = instr {
-        if inner.is_nonnull_result() {
-            *instr = std::mem::replace(inner.as_mut(), WirInstr::Nop);
-        }
+    if let WirInstr::RefAsNonNull(inner) = instr
+        && inner.is_nonnull_result()
+    {
+        *instr = std::mem::replace(inner.as_mut(), WirInstr::Nop);
     }
 }
