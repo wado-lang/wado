@@ -27,6 +27,8 @@ use {
     DeserializeErrorKind,
 } from "core:serde";
 
+use { parse as fpfmt_parse } from "core:prelude/fpfmt.wado";
+
 pub fn hex_digit(v: i32) -> char {
     if v < 10 {
         return ('0' as i32 + v) as u8 as char;
@@ -722,6 +724,416 @@ impl JsonDeserializer {
         return Result::<u64, DeserializeError>::Ok(result);
     }
 
+    /// Advances past a JSON number in `self.input` without allocating a String.
+    pub fn skip_number(&mut self) {
+        if self.pos < self.input.len() && self.input.get_byte(self.pos) as i32 == '-' as i32 {
+            self.pos += 1;
+        }
+        while self.pos < self.input.len() {
+            let b = self.input.get_byte(self.pos) as i32;
+            if b >= '0' as i32 && b <= '9' as i32 {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        if self.pos < self.input.len() && self.input.get_byte(self.pos) as i32 == '.' as i32 {
+            self.pos += 1;
+            while self.pos < self.input.len() {
+                let b = self.input.get_byte(self.pos) as i32;
+                if b >= '0' as i32 && b <= '9' as i32 {
+                    self.pos += 1;
+                } else {
+                    break;
+                }
+            }
+        }
+        if self.pos < self.input.len() {
+            let b = self.input.get_byte(self.pos) as i32;
+            if b == 'e' as i32 || b == 'E' as i32 {
+                self.pos += 1;
+                if self.pos < self.input.len() {
+                    let sign = self.input.get_byte(self.pos) as i32;
+                    if sign == '+' as i32 || sign == '-' as i32 {
+                        self.pos += 1;
+                    }
+                }
+                while self.pos < self.input.len() {
+                    let b2 = self.input.get_byte(self.pos) as i32;
+                    if b2 >= '0' as i32 && b2 <= '9' as i32 {
+                        self.pos += 1;
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Single-pass i32 parsing directly from self.input. No intermediate String allocation
+    /// for the common case of pure integer literals.
+    pub fn parse_i32_direct(&mut self) -> Result<i32, DeserializeError> {
+        self.skip_whitespace();
+        let start = self.pos as i64;
+        if self.pos >= self.input.len() {
+            return Result::<i32, DeserializeError>::Err(DeserializeError::eof(start));
+        }
+        let mut neg = false;
+        if self.input.get_byte(self.pos) as i32 == '-' as i32 {
+            neg = true;
+            self.pos += 1;
+        }
+        if self.pos >= self.input.len() {
+            return Result::<i32, DeserializeError>::Err(DeserializeError::eof(self.pos as i64));
+        }
+        let first = self.input.get_byte(self.pos) as i32;
+        if first < '0' as i32 || first > '9' as i32 {
+            return Result::<i32, DeserializeError>::Err(DeserializeError::unexpected_type("expected number", self.pos as i64));
+        }
+        let mut result = first - '0' as i32;
+        self.pos += 1;
+        while self.pos < self.input.len() {
+            let b = self.input.get_byte(self.pos) as i32;
+            if b >= '0' as i32 && b <= '9' as i32 {
+                result = result * 10 + (b - '0' as i32);
+                self.pos += 1;
+            } else if b == '.' as i32 || b == 'e' as i32 || b == 'E' as i32 {
+                // Has decimal or exponent — fall back to float-based parsing.
+                // Accumulate remaining digits into u64 d, track frac and exponent.
+                let mut d = result as u64;
+                let mut frac = 0;
+                if b == '.' as i32 {
+                    self.pos += 1;
+                    while self.pos < self.input.len() {
+                        let b2 = self.input.get_byte(self.pos) as i32;
+                        if b2 >= '0' as i32 && b2 <= '9' as i32 {
+                            d = d * 10 + (b2 - '0' as i32) as u64;
+                            frac += 1;
+                            self.pos += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                let mut exp = 0;
+                if self.pos < self.input.len() {
+                    let eb = self.input.get_byte(self.pos) as i32;
+                    if eb == 'e' as i32 || eb == 'E' as i32 {
+                        self.pos += 1;
+                        let mut exp_neg = false;
+                        if self.pos < self.input.len() {
+                            let sb = self.input.get_byte(self.pos) as i32;
+                            if sb == '-' as i32 {
+                                exp_neg = true;
+                                self.pos += 1;
+                            } else if sb == '+' as i32 {
+                                self.pos += 1;
+                            }
+                        }
+                        while self.pos < self.input.len() {
+                            let b3 = self.input.get_byte(self.pos) as i32;
+                            if b3 >= '0' as i32 && b3 <= '9' as i32 {
+                                exp = exp * 10 + (b3 - '0' as i32);
+                                self.pos += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                        if exp_neg {
+                            exp = -exp;
+                        }
+                    }
+                }
+                let v = fpfmt_parse(d, exp - frac);
+                let v_signed = if neg { -v } else { v };
+                if v_signed != f64::floor(v_signed) {
+                    return Result::<i32, DeserializeError>::Err(DeserializeError::unexpected_type("expected integer, got float", start));
+                }
+                if v_signed < -2147483648.0 || v_signed > 2147483647.0 {
+                    return Result::<i32, DeserializeError>::Err(DeserializeError::overflow("value out of range for i32", start));
+                }
+                return Result::<i32, DeserializeError>::Ok(v_signed as i32);
+            } else {
+                break;
+            }
+        }
+        if neg {
+            result = -result;
+        }
+        return Result::<i32, DeserializeError>::Ok(result);
+    }
+
+    /// Single-pass i64 parsing directly from self.input.
+    pub fn parse_i64_direct(&mut self) -> Result<i64, DeserializeError> {
+        self.skip_whitespace();
+        let start = self.pos as i64;
+        if self.pos >= self.input.len() {
+            return Result::<i64, DeserializeError>::Err(DeserializeError::eof(start));
+        }
+        let mut neg = false;
+        if self.input.get_byte(self.pos) as i32 == '-' as i32 {
+            neg = true;
+            self.pos += 1;
+        }
+        if self.pos >= self.input.len() {
+            return Result::<i64, DeserializeError>::Err(DeserializeError::eof(self.pos as i64));
+        }
+        let first = self.input.get_byte(self.pos) as i32;
+        if first < '0' as i32 || first > '9' as i32 {
+            return Result::<i64, DeserializeError>::Err(DeserializeError::unexpected_type("expected number", self.pos as i64));
+        }
+        let mut result: i64 = (first - '0' as i32) as i64;
+        self.pos += 1;
+        while self.pos < self.input.len() {
+            let b = self.input.get_byte(self.pos) as i32;
+            if b >= '0' as i32 && b <= '9' as i32 {
+                result = result * 10 as i64 + (b - '0' as i32) as i64;
+                self.pos += 1;
+            } else if b == '.' as i32 || b == 'e' as i32 || b == 'E' as i32 {
+                let mut d = result as u64;
+                let mut frac = 0;
+                if b == '.' as i32 {
+                    self.pos += 1;
+                    while self.pos < self.input.len() {
+                        let b2 = self.input.get_byte(self.pos) as i32;
+                        if b2 >= '0' as i32 && b2 <= '9' as i32 {
+                            d = d * 10 + (b2 - '0' as i32) as u64;
+                            frac += 1;
+                            self.pos += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                let mut exp = 0;
+                if self.pos < self.input.len() {
+                    let eb = self.input.get_byte(self.pos) as i32;
+                    if eb == 'e' as i32 || eb == 'E' as i32 {
+                        self.pos += 1;
+                        let mut exp_neg = false;
+                        if self.pos < self.input.len() {
+                            let sb = self.input.get_byte(self.pos) as i32;
+                            if sb == '-' as i32 {
+                                exp_neg = true;
+                                self.pos += 1;
+                            } else if sb == '+' as i32 {
+                                self.pos += 1;
+                            }
+                        }
+                        while self.pos < self.input.len() {
+                            let b3 = self.input.get_byte(self.pos) as i32;
+                            if b3 >= '0' as i32 && b3 <= '9' as i32 {
+                                exp = exp * 10 + (b3 - '0' as i32);
+                                self.pos += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                        if exp_neg {
+                            exp = -exp;
+                        }
+                    }
+                }
+                let v = fpfmt_parse(d, exp - frac);
+                let v_signed = if neg { -v } else { v };
+                if v_signed != f64::floor(v_signed) {
+                    return Result::<i64, DeserializeError>::Err(DeserializeError::unexpected_type("expected integer, got float", start));
+                }
+                return Result::<i64, DeserializeError>::Ok(v_signed as i64);
+            } else {
+                break;
+            }
+        }
+        if neg {
+            result = -result;
+        }
+        return Result::<i64, DeserializeError>::Ok(result);
+    }
+
+    /// Single-pass u64 parsing directly from self.input.
+    pub fn parse_u64_direct(&mut self) -> Result<u64, DeserializeError> {
+        self.skip_whitespace();
+        let start = self.pos as i64;
+        if self.pos >= self.input.len() {
+            return Result::<u64, DeserializeError>::Err(DeserializeError::eof(start));
+        }
+        if self.input.get_byte(self.pos) as i32 == '-' as i32 {
+            return Result::<u64, DeserializeError>::Err(DeserializeError::overflow("negative value for u64", start));
+        }
+        let first = self.input.get_byte(self.pos) as i32;
+        if first < '0' as i32 || first > '9' as i32 {
+            return Result::<u64, DeserializeError>::Err(DeserializeError::unexpected_type("expected number", self.pos as i64));
+        }
+        let mut result: u64 = (first - '0' as i32) as u64;
+        self.pos += 1;
+        while self.pos < self.input.len() {
+            let b = self.input.get_byte(self.pos) as i32;
+            if b >= '0' as i32 && b <= '9' as i32 {
+                result = result * 10 + (b - '0' as i32) as u64;
+                self.pos += 1;
+            } else if b == '.' as i32 || b == 'e' as i32 || b == 'E' as i32 {
+                let mut d = result;
+                let mut frac = 0;
+                if b == '.' as i32 {
+                    self.pos += 1;
+                    while self.pos < self.input.len() {
+                        let b2 = self.input.get_byte(self.pos) as i32;
+                        if b2 >= '0' as i32 && b2 <= '9' as i32 {
+                            d = d * 10 + (b2 - '0' as i32) as u64;
+                            frac += 1;
+                            self.pos += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                let mut exp = 0;
+                if self.pos < self.input.len() {
+                    let eb = self.input.get_byte(self.pos) as i32;
+                    if eb == 'e' as i32 || eb == 'E' as i32 {
+                        self.pos += 1;
+                        let mut exp_neg = false;
+                        if self.pos < self.input.len() {
+                            let sb = self.input.get_byte(self.pos) as i32;
+                            if sb == '-' as i32 {
+                                exp_neg = true;
+                                self.pos += 1;
+                            } else if sb == '+' as i32 {
+                                self.pos += 1;
+                            }
+                        }
+                        while self.pos < self.input.len() {
+                            let b3 = self.input.get_byte(self.pos) as i32;
+                            if b3 >= '0' as i32 && b3 <= '9' as i32 {
+                                exp = exp * 10 + (b3 - '0' as i32);
+                                self.pos += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                        if exp_neg {
+                            exp = -exp;
+                        }
+                    }
+                }
+                let v = fpfmt_parse(d, exp - frac);
+                if v < 0.0 {
+                    return Result::<u64, DeserializeError>::Err(DeserializeError::overflow("negative value for u64", start));
+                }
+                if v != f64::floor(v) {
+                    return Result::<u64, DeserializeError>::Err(DeserializeError::unexpected_type("expected integer, got float", start));
+                }
+                return Result::<u64, DeserializeError>::Ok(v as u64);
+            } else {
+                break;
+            }
+        }
+        return Result::<u64, DeserializeError>::Ok(result);
+    }
+
+    /// Single-pass f64 parsing directly from self.input using fpfmt.
+    /// No intermediate String allocation.
+    pub fn parse_f64_direct(&mut self) -> Result<f64, DeserializeError> {
+        self.skip_whitespace();
+        let start = self.pos as i64;
+        if self.pos >= self.input.len() {
+            return Result::<f64, DeserializeError>::Err(DeserializeError::eof(start));
+        }
+        let mut neg = false;
+        if self.input.get_byte(self.pos) as i32 == '-' as i32 {
+            neg = true;
+            self.pos += 1;
+        }
+        if self.pos >= self.input.len() {
+            return Result::<f64, DeserializeError>::Err(DeserializeError::eof(self.pos as i64));
+        }
+        let first = self.input.get_byte(self.pos) as i32;
+        if first < '0' as i32 || first > '9' as i32 {
+            return Result::<f64, DeserializeError>::Err(DeserializeError::unexpected_type("expected number", self.pos as i64));
+        }
+        let mut d: u64 = (first - '0' as i32) as u64;
+        let mut total_digits = 1;
+        self.pos += 1;
+        while self.pos < self.input.len() {
+            let b = self.input.get_byte(self.pos) as i32;
+            if b >= '0' as i32 && b <= '9' as i32 {
+                if total_digits < 19 {
+                    d = d * 10 + (b - '0' as i32) as u64;
+                }
+                total_digits += 1;
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        let mut frac = 0;
+        if self.pos < self.input.len() && self.input.get_byte(self.pos) as i32 == '.' as i32 {
+            self.pos += 1;
+            while self.pos < self.input.len() {
+                let b = self.input.get_byte(self.pos) as i32;
+                if b >= '0' as i32 && b <= '9' as i32 {
+                    if total_digits < 19 {
+                        d = d * 10 + (b - '0' as i32) as u64;
+                        frac += 1;
+                    }
+                    total_digits += 1;
+                    self.pos += 1;
+                } else {
+                    break;
+                }
+            }
+        }
+        let mut exp = 0;
+        if self.pos < self.input.len() {
+            let eb = self.input.get_byte(self.pos) as i32;
+            if eb == 'e' as i32 || eb == 'E' as i32 {
+                self.pos += 1;
+                let mut exp_neg = false;
+                if self.pos < self.input.len() {
+                    let sb = self.input.get_byte(self.pos) as i32;
+                    if sb == '-' as i32 {
+                        exp_neg = true;
+                        self.pos += 1;
+                    } else if sb == '+' as i32 {
+                        self.pos += 1;
+                    }
+                }
+                while self.pos < self.input.len() {
+                    let b3 = self.input.get_byte(self.pos) as i32;
+                    if b3 >= '0' as i32 && b3 <= '9' as i32 {
+                        exp = exp * 10 + (b3 - '0' as i32);
+                        self.pos += 1;
+                    } else {
+                        break;
+                    }
+                }
+                if exp_neg {
+                    exp = -exp;
+                }
+            }
+        }
+        if d == 0 {
+            let v = if neg { -0.0 } else { 0.0 };
+            return Result::<f64, DeserializeError>::Ok(v);
+        }
+        // Adjust for digits beyond 19 that were not accumulated
+        let extra_int_digits = if total_digits - frac > 19 { total_digits - frac - 19 } else { 0 };
+        let eff_p = exp - frac + extra_int_digits;
+        if eff_p > 350 {
+            let v = if neg { f64::NEG_INFINITY } else { f64::INFINITY };
+            return Result::<f64, DeserializeError>::Ok(v);
+        }
+        if eff_p < -351 {
+            let v = if neg { -0.0 } else { 0.0 };
+            return Result::<f64, DeserializeError>::Ok(v);
+        }
+        let v = fpfmt_parse(d, eff_p);
+        if neg {
+            return Result::<f64, DeserializeError>::Ok(-v);
+        }
+        return Result::<f64, DeserializeError>::Ok(v);
+    }
+
     /// Skips the next JSON value without allocating.
     pub fn skip_value(&mut self) -> Result<(), DeserializeError> {
         self.skip_whitespace();
@@ -816,10 +1228,7 @@ impl JsonDeserializer {
             }
         }
         if b == '-' as i32 || (b >= '0' as i32 && b <= '9' as i32) {
-            let r = self.read_number_raw();
-            if let Err(e) = r {
-                return Result::<(), DeserializeError>::Err(e);
-            }
+            self.skip_number();
             return Result::<(), DeserializeError>::Ok(());
         }
         return Result::<(), DeserializeError>::Err(DeserializeError::malformed(
@@ -1006,15 +1415,7 @@ impl Deserializer for JsonDeserializer {
     type VariantAccess = JsonVariantAccess;
 
     fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
-        let start = self.pos as i64;
-        let r = self.read_number_raw();
-        if let Ok(raw) = r {
-            return self.parse_i32_from(&raw, start);
-        }
-        if let Err(e) = r {
-            return Result::<i32, DeserializeError>::Err(e);
-        }
-        unreachable();
+        return self.parse_i32_direct();
     }
 
     fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
@@ -1031,32 +1432,19 @@ impl Deserializer for JsonDeserializer {
             }
             unreachable();
         }
-        let r = self.read_number_raw();
-        if let Ok(raw) = r {
-            return self.parse_i64_from(&raw, start);
-        }
-        if let Err(e) = r {
-            return Result::<i64, DeserializeError>::Err(e);
-        }
-        unreachable();
+        return self.parse_i64_direct();
     }
 
     fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
         let start = self.pos as i64;
-        let r = self.read_number_raw();
-        if let Ok(raw) = r {
-            let ir = self.parse_i64_from(&raw, start);
-            if let Ok(v) = ir {
-                if v < 0 as i64 || v > 4294967295 as i64 {
-                    return Result::<u32, DeserializeError>::Err(DeserializeError::overflow("value out of range for u32", start));
-                }
-                return Result::<u32, DeserializeError>::Ok(v as u32);
+        let ir = self.parse_i64_direct();
+        if let Ok(v) = ir {
+            if v < 0 as i64 || v > 4294967295 as i64 {
+                return Result::<u32, DeserializeError>::Err(DeserializeError::overflow("value out of range for u32", start));
             }
-            if let Err(e) = ir {
-                return Result::<u32, DeserializeError>::Err(e);
-            }
+            return Result::<u32, DeserializeError>::Ok(v as u32);
         }
-        if let Err(e) = r {
+        if let Err(e) = ir {
             return Result::<u32, DeserializeError>::Err(e);
         }
         unreachable();
@@ -1076,110 +1464,109 @@ impl Deserializer for JsonDeserializer {
             }
             unreachable();
         }
-        let r = self.read_number_raw();
-        if let Ok(raw) = r {
-            return self.parse_u64_from(&raw, start);
-        }
-        if let Err(e) = r {
-            return Result::<u64, DeserializeError>::Err(e);
-        }
-        unreachable();
+        return self.parse_u64_direct();
     }
 
     fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
         self.skip_whitespace();
         let start = self.pos as i64;
-        let raw: String = if self.pos < self.input.len() && self.input.get_byte(self.pos) as i32 == '"' as i32 {
+        // String-encoded path for large values
+        if self.pos < self.input.len() && self.input.get_byte(self.pos) as i32 == '"' as i32 {
             let sr = self.read_json_string();
-            if let Ok(s) = sr {
-                s
-            } else if let Err(e) = sr {
-                return Result::<i128, DeserializeError>::Err(e);
-            } else {
-                unreachable();
+            if let Ok(raw) = sr {
+                let mut neg = false;
+                let mut idx = 0;
+                let len = raw.len();
+                if len > 0 && raw.get_byte(0) as i32 == '-' as i32 {
+                    neg = true;
+                    idx = 1;
+                }
+                let mut result: i128 = 0;
+                while idx < len {
+                    let b = raw.get_byte(idx) as i32;
+                    if b < '0' as i32 || b > '9' as i32 {
+                        return Result::<i128, DeserializeError>::Err(DeserializeError::invalid_value("invalid digit in i128", start));
+                    }
+                    result = result * 10 + (b - '0' as i32) as i128;
+                    idx += 1;
+                }
+                if neg { result = -result; }
+                return Result::<i128, DeserializeError>::Ok(result);
             }
-        } else {
-            let nr = self.read_number_raw();
-            if let Ok(s) = nr {
-                s
-            } else if let Err(e) = nr {
+            if let Err(e) = sr {
                 return Result::<i128, DeserializeError>::Err(e);
-            } else {
-                unreachable();
             }
-        };
+            unreachable();
+        }
+        // Direct parsing from input
         let mut neg = false;
-        let mut idx = 0;
-        let len = raw.len();
-        if len > 0 && raw.get_byte(0) as i32 == '-' as i32 {
+        if self.pos < self.input.len() && self.input.get_byte(self.pos) as i32 == '-' as i32 {
             neg = true;
-            idx = 1;
+            self.pos += 1;
         }
         let mut result: i128 = 0;
-        while idx < len {
-            let b = raw.get_byte(idx) as i32;
-            if b < '0' as i32 || b > '9' as i32 {
-                return Result::<i128, DeserializeError>::Err(DeserializeError::invalid_value("invalid digit in i128", start));
+        while self.pos < self.input.len() {
+            let b = self.input.get_byte(self.pos) as i32;
+            if b >= '0' as i32 && b <= '9' as i32 {
+                result = result * 10 + (b - '0' as i32) as i128;
+                self.pos += 1;
+            } else {
+                break;
             }
-            let digit = (b - '0' as i32) as i128;
-            result = result * 10 + digit;
-            idx += 1;
         }
-        if neg {
-            result = -result;
-        }
+        if neg { result = -result; }
         return Result::<i128, DeserializeError>::Ok(result);
     }
 
     fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
         self.skip_whitespace();
         let start = self.pos as i64;
-        let raw: String = if self.pos < self.input.len() && self.input.get_byte(self.pos) as i32 == '"' as i32 {
+        // String-encoded path
+        if self.pos < self.input.len() && self.input.get_byte(self.pos) as i32 == '"' as i32 {
             let sr = self.read_json_string();
-            if let Ok(s) = sr {
-                s
-            } else if let Err(e) = sr {
-                return Result::<u128, DeserializeError>::Err(e);
-            } else {
-                unreachable();
+            if let Ok(raw) = sr {
+                let len = raw.len();
+                if len > 0 && raw.get_byte(0) as i32 == '-' as i32 {
+                    return Result::<u128, DeserializeError>::Err(DeserializeError::overflow("negative value for u128", start));
+                }
+                let mut result: u128 = 0;
+                let mut idx = 0;
+                while idx < len {
+                    let b = raw.get_byte(idx) as i32;
+                    if b < '0' as i32 || b > '9' as i32 {
+                        return Result::<u128, DeserializeError>::Err(DeserializeError::invalid_value("invalid digit in u128", start));
+                    }
+                    result = result * 10 + (b - '0' as i32) as u128;
+                    idx += 1;
+                }
+                return Result::<u128, DeserializeError>::Ok(result);
             }
-        } else {
-            let nr = self.read_number_raw();
-            if let Ok(s) = nr {
-                s
-            } else if let Err(e) = nr {
+            if let Err(e) = sr {
                 return Result::<u128, DeserializeError>::Err(e);
-            } else {
-                unreachable();
             }
-        };
-        let len = raw.len();
-        if len > 0 && raw.get_byte(0) as i32 == '-' as i32 {
+            unreachable();
+        }
+        // Direct parsing from input
+        if self.pos < self.input.len() && self.input.get_byte(self.pos) as i32 == '-' as i32 {
             return Result::<u128, DeserializeError>::Err(DeserializeError::overflow("negative value for u128", start));
         }
         let mut result: u128 = 0;
-        let mut idx = 0;
-        while idx < len {
-            let b = raw.get_byte(idx) as i32;
-            if b < '0' as i32 || b > '9' as i32 {
-                return Result::<u128, DeserializeError>::Err(DeserializeError::invalid_value("invalid digit in u128", start));
+        while self.pos < self.input.len() {
+            let b = self.input.get_byte(self.pos) as i32;
+            if b >= '0' as i32 && b <= '9' as i32 {
+                result = result * 10 + (b - '0' as i32) as u128;
+                self.pos += 1;
+            } else {
+                break;
             }
-            let digit = (b - '0' as i32) as u128;
-            result = result * 10 + digit;
-            idx += 1;
         }
         return Result::<u128, DeserializeError>::Ok(result);
     }
 
     fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
-        let start = self.pos as i64;
-        let r = self.read_number_raw();
-        if let Ok(raw) = r {
-            let parsed = f64::parse(raw);
-            if let Some(v) = parsed {
-                return Result::<f32, DeserializeError>::Ok(v as f32);
-            }
-            return Result::<f32, DeserializeError>::Err(DeserializeError::invalid_value("invalid float", start));
+        let r = self.parse_f64_direct();
+        if let Ok(v) = r {
+            return Result::<f32, DeserializeError>::Ok(v as f32);
         }
         if let Err(e) = r {
             return Result::<f32, DeserializeError>::Err(e);
@@ -1188,19 +1575,7 @@ impl Deserializer for JsonDeserializer {
     }
 
     fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
-        let start = self.pos as i64;
-        let r = self.read_number_raw();
-        if let Ok(raw) = r {
-            let parsed = f64::parse(raw);
-            if let Some(v) = parsed {
-                return Result::<f64, DeserializeError>::Ok(v);
-            }
-            return Result::<f64, DeserializeError>::Err(DeserializeError::invalid_value("invalid float", start));
-        }
-        if let Err(e) = r {
-            return Result::<f64, DeserializeError>::Err(e);
-        }
-        unreachable();
+        return self.parse_f64_direct();
     }
 
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
