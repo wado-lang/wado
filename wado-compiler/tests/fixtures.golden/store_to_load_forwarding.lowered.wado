@@ -8,6 +8,7 @@
 // wasi::stream-new
 // wasi::stream-write
 // wasi::subtask-drop
+// wasi::task-return
 // wasi::waitable-join
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
@@ -62,5 +63,10 @@ export fn run() with Stdout {
         self.i32::fmt_decimal(f);
         break __tmpl: __r;
     });
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

@@ -8,6 +8,7 @@
 // wasi::stream-new
 // wasi::stream-write
 // wasi::subtask-drop
+// wasi::task-return
 // wasi::waitable-join
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
@@ -204,6 +205,11 @@ export fn run() with Stdout {
         });
     }
     core::cli::println("ok");
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 fn "TreeMap<String,i32>^IndexValue::index_value"(self: &TreeMap<String,i32>, key: String) -> i32 {
