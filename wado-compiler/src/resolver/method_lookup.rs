@@ -272,7 +272,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if let Some(&return_type) = self.function_return_types.get(&mangled_name) {
             // For locally registered methods, find self_kind and param_types from the AST
             // Also checks that bounded impl block constraints are satisfied
-            if let Some((self_kind, param_types)) = self.find_local_method_info(
+            if let Some((self_kind, param_types, param_is_mut)) = self.find_local_method_info(
                 &struct_name,
                 method_name,
                 receiver_type_args.as_deref(),
@@ -281,6 +281,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     return_type,
                     self_kind,
                     param_types,
+                    param_is_mut,
                     inherited_from_base: None,
                     canonical_name: None,
                 });
@@ -382,6 +383,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         .map(|p| p.self_kind)
                                         .unwrap_or(ast::SelfKind::None);
                                     let param_types = self.extract_param_types(&method.params);
+                                    let param_is_mut: Vec<bool> = method
+                                        .params
+                                        .iter()
+                                        .filter(|p| p.name != "self")
+                                        .map(|p| p.is_mut)
+                                        .collect();
 
                                     std::mem::swap(
                                         &mut self.struct_fields,
@@ -406,6 +413,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         return_type,
                                         self_kind,
                                         param_types,
+                                        param_is_mut,
                                         inherited_from_base: None,
                                         canonical_name: None,
                                     });
@@ -481,6 +489,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         .map(|p| p.self_kind)
                                         .unwrap_or(ast::SelfKind::None);
                                     let param_types = self.extract_param_types(&method.params);
+                                    let param_is_mut: Vec<bool> = method
+                                        .params
+                                        .iter()
+                                        .filter(|p| p.name != "self")
+                                        .map(|p| p.is_mut)
+                                        .collect();
 
                                     self.current_type_params = old_type_params;
 
@@ -488,6 +502,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         return_type,
                                         self_kind,
                                         param_types,
+                                        param_is_mut,
                                         inherited_from_base: None,
                                         canonical_name: None,
                                     });
@@ -593,6 +608,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .map(|t| self.resolve_type(t))
                 .unwrap_or(TypeTable::UNIT);
             let param_types = self.extract_param_types(&method.params);
+            let param_is_mut: Vec<bool> = method
+                .params
+                .iter()
+                .filter(|p| p.name != "self")
+                .map(|p| p.is_mut)
+                .collect();
 
             self.current_type_params = old_type_params;
 
@@ -607,6 +628,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 return_type,
                 self_kind: ast::SelfKind::Ref,
                 param_types,
+                param_is_mut,
                 inherited_from_base: None,
                 canonical_name,
             });
@@ -620,9 +642,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         struct_name: &str,
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
-    ) -> Option<(ast::SelfKind, Vec<TypeId>)> {
+    ) -> Option<(ast::SelfKind, Vec<TypeId>, Vec<bool>)> {
         // First collect method info without resolving types
-        let mut found_method: Option<(ast::SelfKind, Vec<ast::Type>)> = None;
+        let mut found_method: Option<(ast::SelfKind, Vec<ast::Type>, Vec<bool>)> = None;
 
         for item in &self.current_module_items {
             if let Item::Impl(impl_block) = item {
@@ -641,14 +663,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 .first()
                                 .map(|p| p.self_kind)
                                 .unwrap_or(ast::SelfKind::None);
-                            // Extract non-self parameter types
-                            let param_types: Vec<ast::Type> = method
-                                .params
-                                .iter()
-                                .filter(|p| p.name != "self")
-                                .map(|p| p.ty.clone())
-                                .collect();
-                            found_method = Some((self_kind, param_types));
+                            // Extract non-self parameter types and mut flags
+                            let non_self: Vec<&ast::Param> =
+                                method.params.iter().filter(|p| p.name != "self").collect();
+                            let param_types: Vec<ast::Type> =
+                                non_self.iter().map(|p| p.ty.clone()).collect();
+                            let param_is_mut: Vec<bool> =
+                                non_self.iter().map(|p| p.is_mut).collect();
+                            found_method = Some((self_kind, param_types, param_is_mut));
                             break;
                         }
                     }
@@ -660,12 +682,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Now resolve the types (needs mutable borrow)
-        found_method.map(|(self_kind, param_types_ast)| {
+        found_method.map(|(self_kind, param_types_ast, param_is_mut)| {
             let param_types: Vec<TypeId> = param_types_ast
                 .iter()
                 .map(|ty| self.resolve_type(ty))
                 .collect();
-            (self_kind, param_types)
+            (self_kind, param_types, param_is_mut)
         })
     }
 
@@ -1226,12 +1248,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .map(|p| p.self_kind)
                             .unwrap_or(ast::SelfKind::None);
                         let param_types = self.extract_param_types(&method.params);
+                        let param_is_mut: Vec<bool> = method
+                            .params
+                            .iter()
+                            .filter(|p| p.name != "self")
+                            .map(|p| p.is_mut)
+                            .collect();
                         found_traits.push(TraitMethodMatch {
                             trait_name,
                             method_info: MethodInfo {
                                 return_type,
                                 self_kind,
                                 param_types,
+                                param_is_mut,
                                 inherited_from_base: None,
                                 canonical_name: None,
                             },
@@ -1260,12 +1289,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     .map(|p| p.self_kind)
                                     .unwrap_or(ast::SelfKind::None);
                                 let param_types = self.extract_param_types(&default_method.params);
+                                let param_is_mut: Vec<bool> = default_method
+                                    .params
+                                    .iter()
+                                    .filter(|p| p.name != "self")
+                                    .map(|p| p.is_mut)
+                                    .collect();
                                 found_traits.push(TraitMethodMatch {
                                     trait_name: trait_name_str.clone(),
                                     method_info: MethodInfo {
                                         return_type,
                                         self_kind,
                                         param_types,
+                                        param_is_mut,
                                         inherited_from_base: None,
                                         canonical_name: None,
                                     },
@@ -2056,6 +2092,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .map(|p| p.self_kind)
                     .unwrap_or(ast::SelfKind::None);
                 let param_types = self.extract_param_types(&method.params);
+                let param_is_mut: Vec<bool> = method
+                    .params
+                    .iter()
+                    .filter(|p| p.name != "self")
+                    .map(|p| p.is_mut)
+                    .collect();
 
                 self.current_associated_type_bindings = old_bindings;
                 self.current_self_type = old_self_type;
@@ -2066,6 +2108,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         return_type,
                         self_kind,
                         param_types,
+                        param_is_mut,
                         inherited_from_base: None,
                         canonical_name: None,
                     },
@@ -2780,6 +2823,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return_type,
             self_kind,
             param_types,
+            param_is_mut: method_param_is_mut,
             inherited_from_base: _,
             canonical_name: _,
         } = method_info?;
@@ -2821,7 +2865,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 },
                 type_args: vec![],
                 args: vec![index_resolved],
-                param_is_mut: vec![],
+                param_is_mut: vec![false],
             },
             mut_ref_output_type,
             index_expr.span,
@@ -2875,7 +2919,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 },
                 type_args,
                 args,
-                param_is_mut: vec![],
+                param_is_mut: method_param_is_mut,
             },
             return_type,
             method_call.span,

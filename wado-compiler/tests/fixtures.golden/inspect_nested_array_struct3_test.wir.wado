@@ -181,13 +181,13 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     data = __seq_lit: block -> ref null Array<Array<i32>> {
-        __local_0 = Array<Array<i32>> { repr: array.new_fixed<ref null Array<i32>>(value_copy Array<i32>(__seq_lit: block -> ref null Array<i32> {
+        __local_0 = Array<Array<i32>> { repr: array.new_fixed<ref null Array<i32>>(__seq_lit: block -> ref null Array<i32> {
             __local_1 = Array<i32> { repr: array.new_fixed<i32>(1, 2), used: 2 };
             break __seq_lit: __local_1;
-        }), value_copy Array<i32>(__seq_lit: block -> ref null Array<i32> {
+        }, __seq_lit: block -> ref null Array<i32> {
             __local_2 = Array<i32> { repr: array.new_fixed<i32>(3, 4), used: 2 };
             break __seq_lit: __local_2;
-        })), used: 2 };
+        }), used: 2 };
         break __seq_lit: __local_0;
     };
     m = Matrix { data: ref.as_non_null(data), rows: 2 };
@@ -536,17 +536,17 @@ fn Matrix^Inspect::inspect(self, f) {
     let __local_14: ref null Formatter;
     let s_15: ref null String;
     s_3 = String { repr: array.new_data<u8>("Matrix { "), used: 9 };
-    String::append(f.buf, value_copy String(s_3));
+    String::append(f.buf, s_3);
     s_5 = String { repr: array.new_data<u8>("data: "), used: 6 };
-    String::append(f.buf, value_copy String(s_5));
+    String::append(f.buf, s_5);
     Array<Array<i32>>^Inspect::inspect(self.data, f);
     s_7 = String { repr: array.new_data<u8>(", "), used: 2 };
-    String::append(f.buf, value_copy String(s_7));
+    String::append(f.buf, s_7);
     s_9 = String { repr: array.new_data<u8>("rows: "), used: 6 };
-    String::append(f.buf, value_copy String(s_9));
+    String::append(f.buf, s_9);
     i32::fmt_decimal(self.rows, f);
     s_15 = String { repr: array.new_data<u8>(" }"), used: 2 };
-    String::append(f.buf, value_copy String(s_15));
+    String::append(f.buf, s_15);
 }
 
 fn Array<Array<i32>>^Inspect::inspect(self, f) {
@@ -574,7 +574,7 @@ fn Array<Array<i32>>^Inspect::inspect(self, f) {
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
-                    String::append(f.buf, value_copy String(s));
+                    String::append(f.buf, s);
                 };
                 Array<i32>^Inspect::inspect(__inline_Array_Array_i32___IndexValue__index_value_3: block -> ref null Array<i32> {
                     __local_9 = i;
@@ -617,7 +617,7 @@ fn Array<i32>^Inspect::inspect(self, f) {
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
-                    String::append(f.buf, value_copy String(s));
+                    String::append(f.buf, s);
                 };
                 i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_4: block -> i32 {
                     __local_11 = i;

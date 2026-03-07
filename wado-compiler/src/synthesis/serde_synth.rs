@@ -187,6 +187,7 @@ fn type_param_method_call(
         i
     };
     let fn_name = info.to_mangled_name();
+    let n = args.len();
     TirExpr::new(
         TirExprKind::MethodCall {
             receiver: Box::new(receiver),
@@ -198,7 +199,7 @@ fn type_param_method_call(
             },
             type_args,
             args,
-            param_is_mut: vec![],
+            param_is_mut: vec![false; n],
         },
         return_type,
         span,
@@ -475,7 +476,7 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
                 method_info: Some(method_info),
             },
             args: vec![],
-            param_is_mut: vec![],
+            param_is_mut: vec![], // no args
         },
         type_id,
         span,
@@ -796,7 +797,7 @@ fn generate_struct_deserialize(
                         local_ref(1, "__start", TypeTable::I32),
                         local_ref(2, "__end", TypeTable::I32),
                     ],
-                    param_is_mut: vec![],
+                    param_is_mut: vec![false, false, false],
                 },
                 option_i32,
                 span,
@@ -1224,7 +1225,7 @@ fn key_get_byte_as_i32_expr(string_ref: TirExpr, index_expr: TirExpr, span: Span
             },
             type_args: vec![],
             args: vec![index_expr],
-            param_is_mut: vec![],
+            param_is_mut: vec![false],
         },
         TypeTable::U8,
         span,
@@ -1748,7 +1749,7 @@ fn generate_enum_deserialize(
                 },
                 type_args: vec![],
                 args: vec![lit_ref],
-                param_is_mut: vec![],
+                param_is_mut: vec![false],
             },
             TypeTable::BOOL,
             span,
@@ -2461,7 +2462,7 @@ fn generate_variant_deserialize(
                 },
                 type_args: vec![],
                 args: vec![lit_ref],
-                param_is_mut: vec![],
+                param_is_mut: vec![false],
             },
             TypeTable::BOOL,
             span,

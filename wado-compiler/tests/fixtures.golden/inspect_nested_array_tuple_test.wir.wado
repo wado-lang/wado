@@ -175,7 +175,7 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     arr = __seq_lit: block -> ref null Array<Tuple<i32,String>> {
-        __local_0 = Array<Tuple<i32,String>> { repr: array.new_fixed<ref null "tuple/[i32, String]">(value_copy "tuple/[i32, String]"("tuple/[i32, String]" { 0: 1, 1: String { repr: array.new_data<u8>("one"), used: 3 } }), value_copy "tuple/[i32, String]"("tuple/[i32, String]" { 0: 2, 1: String { repr: array.new_data<u8>("two"), used: 3 } })), used: 2 };
+        __local_0 = Array<Tuple<i32,String>> { repr: array.new_fixed<ref null "tuple/[i32, String]">("tuple/[i32, String]" { 0: 1, 1: String { repr: array.new_data<u8>("one"), used: 3 } }, "tuple/[i32, String]" { 0: 2, 1: String { repr: array.new_data<u8>("two"), used: 3 } }), used: 2 };
         break __seq_lit: __local_0;
     };
     "core:cli/println"(__tmpl: block -> ref null String {
@@ -575,13 +575,13 @@ fn Tuple<i32,String>^Inspect::inspect(self, f) {
     let __local_10: ref null Formatter;
     let s_11: ref null String;
     s_3 = String { repr: array.new_data<u8>("["), used: 1 };
-    String::append(f.buf, value_copy String(s_3));
+    String::append(f.buf, s_3);
     i32::fmt_decimal(self.0, f);
     s_9 = String { repr: array.new_data<u8>(", "), used: 2 };
-    String::append(f.buf, value_copy String(s_9));
+    String::append(f.buf, s_9);
     String^Inspect::inspect(self.1, f);
     s_11 = String { repr: array.new_data<u8>("]"), used: 1 };
-    String::append(f.buf, value_copy String(s_11));
+    String::append(f.buf, s_11);
 }
 
 fn Array<Tuple<i32,String>>^Inspect::inspect(self, f) {
@@ -609,7 +609,7 @@ fn Array<Tuple<i32,String>>^Inspect::inspect(self, f) {
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
-                    String::append(f.buf, value_copy String(s));
+                    String::append(f.buf, s);
                 };
                 Tuple<i32,String>^Inspect::inspect(__inline_Array_Tuple_i32_String___IndexValue__index_value_3: block -> ref null "tuple/[i32, String]" {
                     __local_9 = i;

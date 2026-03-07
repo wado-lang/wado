@@ -164,6 +164,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             mut return_type,
             self_kind,
             param_types,
+            param_is_mut: _,
             inherited_from_base,
             canonical_name,
         } = if let Some(info) = method_info {
@@ -183,6 +184,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 return_type: TypeTable::UNKNOWN,
                 self_kind: ast::SelfKind::Ref,
                 param_types: vec![],
+                param_is_mut: vec![],
                 inherited_from_base: None,
                 canonical_name: None,
             }
@@ -1493,6 +1495,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             })
         };
 
+        let param_is_mut = self.lookup_static_method_param_is_mut(&actual_struct_name, method_name);
+
         TirExpr::new(
             TirExprKind::StaticCall {
                 func: FunctionRef::External {
@@ -1506,7 +1510,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     )),
                 },
                 args: args.to_vec(),
-                param_is_mut: vec![],
+                param_is_mut,
             },
             return_type,
             span,

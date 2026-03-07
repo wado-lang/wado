@@ -92,11 +92,11 @@ fn format_str(s, opts) {
     let pad: ref null String;
     pad = String { repr: array.new_data<u8>("  "), used: 2 };
     return let __match_scrut_0: ref null Align; __match_scrut_0 = opts.align; if __match_scrut_0.discriminant == 0 -> ref null String {
-        String::concat(value_copy String(s), value_copy String(pad));
+        String::concat(s, pad);
     } else if __match_scrut_0.discriminant == 1 -> ref null String {
-        String::concat(value_copy String(pad), value_copy String(s));
+        String::concat(pad, s);
     } else if __match_scrut_0.discriminant == 2 -> ref null String {
-        String::concat(String::concat(value_copy String(pad), value_copy String(s)), value_copy String(pad));
+        String::concat(String::concat(pad, s), pad);
     } else {
         unreachable;
     };
@@ -119,7 +119,7 @@ fn run() with Stdout {
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_2 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append(__local_2, String { repr: array.new_data<u8>("["), used: 1 });
-        String::append(__local_2, value_copy String(s));
+        String::append(__local_2, s);
         String::append(__local_2, String { repr: array.new_data<u8>("]"), used: 1 });
         break __tmpl: __local_2;
     });

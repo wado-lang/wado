@@ -1992,11 +1992,11 @@ condition: `{f32_val:?}` == \"2.5\"
             break __inline_Formatter__new_142: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_527) };
         };
         __local_529 = __local_167;
-        Formatter::pad(__local_529, value_copy String(if 1 -> ref null String {
+        Formatter::pad(__local_529, if 1 -> ref null String {
             String { repr: array.new_data<u8>("true"), used: 4 };
         } else {
             String { repr: array.new_data<u8>("false"), used: 5 };
-        }));
+        });
         break __tmpl: __local_166;
     }, String { repr: array.new_data<u8>("true"), used: 4 });
     if __cond_32 == 0 {
@@ -2032,11 +2032,11 @@ condition: `{true:?}` == \"true\"
             break __inline_Formatter__new_150: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_539) };
         };
         __local_541 = __local_171;
-        Formatter::pad(__local_541, value_copy String(if 0 -> ref null String {
+        Formatter::pad(__local_541, if 0 -> ref null String {
             String { repr: array.new_data<u8>("true"), used: 4 };
         } else {
             String { repr: array.new_data<u8>("false"), used: 5 };
-        }));
+        });
         break __tmpl: __local_170;
     }, String { repr: array.new_data<u8>("false"), used: 5 });
     if __cond_33 == 0 {
@@ -3286,11 +3286,11 @@ condition: `{i128_pos:<10?}` == \"42        \"
         __local_310 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_311 = Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: 10, precision: -1, buf: ref.as_non_null(__local_310) };
         __local_854 = __local_311;
-        Formatter::pad(__local_854, value_copy String(if 1 -> ref null String {
+        Formatter::pad(__local_854, if 1 -> ref null String {
             String { repr: array.new_data<u8>("true"), used: 4 };
         } else {
             String { repr: array.new_data<u8>("false"), used: 5 };
-        }));
+        });
         break __tmpl: __local_310;
     }, String { repr: array.new_data<u8>("      true"), used: 10 });
     if __cond_92 == 0 {
@@ -3323,11 +3323,11 @@ condition: `{true:10?}` == \"      true\"
         __local_314 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_315 = Formatter { fill: 32, align: 0, sign_plus: 0, alternate: 0, zero_pad: 0, width: 10, precision: -1, buf: ref.as_non_null(__local_314) };
         __local_865 = __local_315;
-        Formatter::pad(__local_865, value_copy String(if 0 -> ref null String {
+        Formatter::pad(__local_865, if 0 -> ref null String {
             String { repr: array.new_data<u8>("true"), used: 4 };
         } else {
             String { repr: array.new_data<u8>("false"), used: 5 };
-        }));
+        });
         break __tmpl: __local_314;
     }, String { repr: array.new_data<u8>("false     "), used: 10 });
     if __cond_93 == 0 {
@@ -5874,16 +5874,16 @@ fn Result<String,i32>^Inspect::inspect(self, f) {
     let __local_13: ref null String;
     if ref.test Result<String,i32>::Ok(self) {
         __local_3 = String { repr: array.new_data<u8>("Result::Ok("), used: 11 };
-        String::append(f.buf, value_copy String(__local_3));
+        String::append(f.buf, __local_3);
         String^Inspect::inspect(ref.cast Result<String,i32>::Ok(self).payload_0, f);
         __local_5 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, value_copy String(__local_5));
+        String::append(f.buf, __local_5);
     } else if ref.test Result<String,i32>::Err(self) {
         __local_7 = String { repr: array.new_data<u8>("Result::Err("), used: 12 };
-        String::append(f.buf, value_copy String(__local_7));
+        String::append(f.buf, __local_7);
         i32::fmt_decimal(ref.cast Result<String,i32>::Err(self).payload_0, f);
         __local_13 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, value_copy String(__local_13));
+        String::append(f.buf, __local_13);
     };
 }
 
@@ -5902,16 +5902,16 @@ fn Result<i32,String>^Inspect::inspect(self, f) {
     let __local_13: ref null String;
     if ref.test Result<i32,String>::Ok(self) {
         __local_3 = String { repr: array.new_data<u8>("Result::Ok("), used: 11 };
-        String::append(f.buf, value_copy String(__local_3));
+        String::append(f.buf, __local_3);
         i32::fmt_decimal(ref.cast Result<i32,String>::Ok(self).payload_0, f);
         __local_9 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, value_copy String(__local_9));
+        String::append(f.buf, __local_9);
     } else if ref.test Result<i32,String>::Err(self) {
         __local_11 = String { repr: array.new_data<u8>("Result::Err("), used: 12 };
-        String::append(f.buf, value_copy String(__local_11));
+        String::append(f.buf, __local_11);
         String^Inspect::inspect(ref.cast Result<i32,String>::Err(self).payload_0, f);
         __local_13 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, value_copy String(__local_13));
+        String::append(f.buf, __local_13);
     };
 }
 
@@ -5924,13 +5924,13 @@ fn Option<Option<i32>>^Inspect::inspect(self, f) {
     let __local_7: ref null String;
     if ref.test Option<Option<i32>>::Some(self) {
         __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
-        String::append(f.buf, value_copy String(__local_3));
+        String::append(f.buf, __local_3);
         Option<i32>^Inspect::inspect(ref.as_non_null(ref.cast Option<Option<i32>>::Some(self).payload_0), f);
         __local_5 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, value_copy String(__local_5));
+        String::append(f.buf, __local_5);
     } else if self.discriminant == 1 {
         __local_7 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
-        String::append(f.buf, value_copy String(__local_7));
+        String::append(f.buf, __local_7);
     };
 }
 
@@ -5943,13 +5943,13 @@ fn Option<String>^Inspect::inspect(self, f) {
     let __local_7: ref null String;
     if ref.test Option<String>::Some(self) {
         __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
-        String::append(f.buf, value_copy String(__local_3));
+        String::append(f.buf, __local_3);
         String^Inspect::inspect(ref.cast Option<String>::Some(self).payload_0, f);
         __local_5 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, value_copy String(__local_5));
+        String::append(f.buf, __local_5);
     } else if self.discriminant == 1 {
         __local_7 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
-        String::append(f.buf, value_copy String(__local_7));
+        String::append(f.buf, __local_7);
     };
 }
 
@@ -5966,13 +5966,13 @@ fn Option<i32>^Inspect::inspect(self, f) {
     let __local_11: ref null String;
     if ref.test Option<i32>::Some(self) {
         __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
-        String::append(f.buf, value_copy String(__local_3));
+        String::append(f.buf, __local_3);
         i32::fmt_decimal(ref.cast Option<i32>::Some(self).payload_0, f);
         __local_9 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, value_copy String(__local_9));
+        String::append(f.buf, __local_9);
     } else if self.discriminant == 1 {
         __local_11 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
-        String::append(f.buf, value_copy String(__local_11));
+        String::append(f.buf, __local_11);
     };
 }
 

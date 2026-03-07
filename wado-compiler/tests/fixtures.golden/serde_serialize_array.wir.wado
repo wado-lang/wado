@@ -265,19 +265,19 @@ fn run() with Stdout {
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_7 = String { repr: builtin::array_new<u8>(28), used: 0 };
         String::append(__local_7, String { repr: array.new_data<u8>("Array<i32>: "), used: 12 });
-        String::append(__local_7, value_copy String(ser.buf));
+        String::append(__local_7, ser.buf);
         break __tmpl: __local_7;
     });
     ser.buf = String { repr: builtin::array_new<u8>(0), used: 0 };
     strs = __seq_lit: block -> ref null Array<String> {
-        __local_3 = Array<String> { repr: array.new_fixed<ref null String>(value_copy String(String { repr: array.new_data<u8>("hello"), used: 5 }), value_copy String(String { repr: array.new_data<u8>("world"), used: 5 })), used: 2 };
+        __local_3 = Array<String> { repr: array.new_fixed<ref null String>(String { repr: array.new_data<u8>("hello"), used: 5 }, String { repr: array.new_data<u8>("world"), used: 5 }), used: 2 };
         break __seq_lit: __local_3;
     };
     drop(Array<String>^Serialize::serialize<JsonSerializer>(strs, ser));
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_8 = String { repr: builtin::array_new<u8>(31), used: 0 };
         String::append(__local_8, String { repr: array.new_data<u8>("Array<String>: "), used: 15 });
-        String::append(__local_8, value_copy String(ser.buf));
+        String::append(__local_8, ser.buf);
         break __tmpl: __local_8;
     });
     ser.buf = String { repr: builtin::array_new<u8>(0), used: 0 };
@@ -295,7 +295,7 @@ fn run() with Stdout {
         String::append_char(__local_9, 121);
         String::append_char(__local_9, 58);
         String::append_char(__local_9, 32);
-        String::append(__local_9, value_copy String(ser.buf));
+        String::append(__local_9, ser.buf);
         break __tmpl: __local_9;
     });
 }
@@ -587,7 +587,7 @@ fn JsonSerializer^Serializer::serialize_string(self, v) {
     String::append(self, __tmpl: block -> ref null String {
         __local_2 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append_char(__local_2, 34);
-        String::append(__local_2, value_copy String(v));
+        String::append(__local_2, v);
         String::append_char(__local_2, 34);
         break __tmpl: __local_2;
     });

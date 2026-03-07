@@ -1159,7 +1159,7 @@ impl ClosureLowerer {
                 func,
                 type_args,
                 args,
-                ..
+                param_is_mut,
             } => {
                 let new_args = args
                     .iter()
@@ -1178,13 +1178,17 @@ impl ClosureLowerer {
                         func: func.clone(),
                         type_args: type_args.clone(),
                         args: new_args,
-                        param_is_mut: vec![],
+                        param_is_mut: param_is_mut.clone(),
                     },
                     expr.type_id,
                     expr.span,
                 )
             }
-            TirExprKind::StaticCall { func, args, .. } => {
+            TirExprKind::StaticCall {
+                func,
+                args,
+                param_is_mut,
+            } => {
                 let new_args = args
                     .iter()
                     .map(|a| {
@@ -1201,7 +1205,7 @@ impl ClosureLowerer {
                     TirExprKind::StaticCall {
                         func: func.clone(),
                         args: new_args,
-                        param_is_mut: vec![],
+                        param_is_mut: param_is_mut.clone(),
                     },
                     expr.type_id,
                     expr.span,
@@ -1212,7 +1216,7 @@ impl ClosureLowerer {
                 func,
                 type_args,
                 args,
-                ..
+                param_is_mut,
             } => {
                 let new_receiver = self.transform_closure_body(
                     receiver,
@@ -1239,7 +1243,7 @@ impl ClosureLowerer {
                         func: func.clone(),
                         type_args: type_args.clone(),
                         args: new_args,
-                        param_is_mut: vec![],
+                        param_is_mut: param_is_mut.clone(),
                     },
                     expr.type_id,
                     expr.span,
@@ -2606,6 +2610,14 @@ impl ClosureLowerer {
                         );
 
                         // Use the call_method_name for External ref since codegen expects it
+                        let param_is_mut = functor
+                            .call_method
+                            .borrow()
+                            .params
+                            .iter()
+                            .skip(1) // skip self/env param
+                            .map(|p| p.is_mut)
+                            .collect();
                         return TirExpr::new(
                             TirExprKind::MethodCall {
                                 receiver: Box::new(new_callee),
@@ -2617,7 +2629,7 @@ impl ClosureLowerer {
                                 },
                                 args: new_args,
                                 type_args: Vec::new(),
-                                param_is_mut: vec![],
+                                param_is_mut,
                             },
                             expr.type_id,
                             expr.span,
@@ -2676,7 +2688,7 @@ impl ClosureLowerer {
                 func,
                 args,
                 type_args,
-                ..
+                param_is_mut,
             } => TirExpr::new(
                 TirExprKind::Call {
                     func: func.clone(),
@@ -2694,7 +2706,7 @@ impl ClosureLowerer {
                         })
                         .collect(),
                     type_args: type_args.clone(),
-                    param_is_mut: vec![],
+                    param_is_mut: param_is_mut.clone(),
                 },
                 expr.type_id,
                 expr.span,
@@ -2704,7 +2716,7 @@ impl ClosureLowerer {
                 func,
                 args,
                 type_args,
-                ..
+                param_is_mut,
             } => TirExpr::new(
                 TirExprKind::MethodCall {
                     receiver: Box::new(self.specialize_expr(
@@ -2727,12 +2739,16 @@ impl ClosureLowerer {
                         })
                         .collect(),
                     type_args: type_args.clone(),
-                    param_is_mut: vec![],
+                    param_is_mut: param_is_mut.clone(),
                 },
                 expr.type_id,
                 expr.span,
             ),
-            TirExprKind::StaticCall { func, args, .. } => TirExpr::new(
+            TirExprKind::StaticCall {
+                func,
+                args,
+                param_is_mut,
+            } => TirExpr::new(
                 TirExprKind::StaticCall {
                     func: func.clone(),
                     args: args
@@ -2748,7 +2764,7 @@ impl ClosureLowerer {
                             )
                         })
                         .collect(),
-                    param_is_mut: vec![],
+                    param_is_mut: param_is_mut.clone(),
                 },
                 expr.type_id,
                 expr.span,
@@ -3263,6 +3279,15 @@ impl ClosureLowerer {
 
                     // Replace with MethodCall using FunctionRef::Resolved
                     let args_owned = std::mem::take(args);
+                    // Derive param_is_mut from the __call method's non-self params.
+                    let param_is_mut = functor
+                        .call_method
+                        .borrow()
+                        .params
+                        .iter()
+                        .skip(1) // skip self/env param
+                        .map(|p| p.is_mut)
+                        .collect();
                     expr.kind = TirExprKind::MethodCall {
                         receiver: Box::new(callee_owned),
                         func: FunctionRef::Resolved {
@@ -3271,7 +3296,7 @@ impl ClosureLowerer {
                         },
                         type_args: Vec::new(),
                         args: args_owned,
-                        param_is_mut: vec![],
+                        param_is_mut,
                     };
                     expr.type_id = return_type;
                 }

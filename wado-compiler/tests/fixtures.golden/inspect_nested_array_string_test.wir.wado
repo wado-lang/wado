@@ -179,13 +179,13 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     arr = __seq_lit: block -> ref null Array<Array<String>> {
-        __local_0 = Array<Array<String>> { repr: array.new_fixed<ref null Array<String>>(value_copy Array<String>(__seq_lit: block -> ref null Array<String> {
-            __local_1 = Array<String> { repr: array.new_fixed<ref null String>(value_copy String(String { repr: array.new_data<u8>("a"), used: 1 }), value_copy String(String { repr: array.new_data<u8>("b"), used: 1 })), used: 2 };
+        __local_0 = Array<Array<String>> { repr: array.new_fixed<ref null Array<String>>(__seq_lit: block -> ref null Array<String> {
+            __local_1 = Array<String> { repr: array.new_fixed<ref null String>(String { repr: array.new_data<u8>("a"), used: 1 }, String { repr: array.new_data<u8>("b"), used: 1 }), used: 2 };
             break __seq_lit: __local_1;
-        }), value_copy Array<String>(__seq_lit: block -> ref null Array<String> {
-            __local_2 = Array<String> { repr: array.new_fixed<ref null String>(value_copy String(String { repr: array.new_data<u8>("c"), used: 1 })), used: 1 };
+        }, __seq_lit: block -> ref null Array<String> {
+            __local_2 = Array<String> { repr: array.new_fixed<ref null String>(String { repr: array.new_data<u8>("c"), used: 1 }), used: 1 };
             break __seq_lit: __local_2;
-        })), used: 2 };
+        }), used: 2 };
         break __seq_lit: __local_0;
     };
     "core:cli/println"(__tmpl: block -> ref null String {
@@ -537,7 +537,7 @@ fn Array<Array<String>>^Inspect::inspect(self, f) {
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
-                    String::append(f.buf, value_copy String(s));
+                    String::append(f.buf, s);
                 };
                 Array<String>^Inspect::inspect(__inline_Array_Array_String___IndexValue__index_value_3: block -> ref null Array<String> {
                     __local_9 = i;
@@ -576,7 +576,7 @@ fn Array<String>^Inspect::inspect(self, f) {
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
-                    String::append(f.buf, value_copy String(s));
+                    String::append(f.buf, s);
                 };
                 String^Inspect::inspect(__inline_Array_String__IndexValue__index_value_3: block -> ref null String {
                     __local_9 = i;

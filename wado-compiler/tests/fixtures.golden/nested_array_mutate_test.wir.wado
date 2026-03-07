@@ -193,13 +193,13 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     matrix = __seq_lit: block -> ref null Array<Array<i32>> {
-        __local_0 = Array<Array<i32>> { repr: array.new_fixed<ref null Array<i32>>(value_copy Array<i32>(__seq_lit: block -> ref null Array<i32> {
+        __local_0 = Array<Array<i32>> { repr: array.new_fixed<ref null Array<i32>>(__seq_lit: block -> ref null Array<i32> {
             __local_1 = Array<i32> { repr: array.new_fixed<i32>(1, 2), used: 2 };
             break __seq_lit: __local_1;
-        }), value_copy Array<i32>(__seq_lit: block -> ref null Array<i32> {
+        }, __seq_lit: block -> ref null Array<i32> {
             __local_2 = Array<i32> { repr: array.new_fixed<i32>(3, 4), used: 2 };
             break __seq_lit: __local_2;
-        })), used: 2 };
+        }), used: 2 };
         break __seq_lit: __local_0;
     };
     row = __inline_Array_Array_i32___IndexValue__index_value_14: block -> ref null Array<i32> {
@@ -223,7 +223,7 @@ fn run() with Stdout {
         __local_5 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_5;
     };
-    Array<Array<i32>>^IndexAssign::index_assign(matrix, 0, value_copy Array<i32>(new_row));
+    Array<Array<i32>>^IndexAssign::index_assign(matrix, 0, new_row);
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_9 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_10 = __inline_Formatter__new_23: block -> ref null Formatter {
@@ -579,7 +579,7 @@ fn Array<Array<i32>>^Inspect::inspect(self, f) {
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
-                    String::append(f.buf, value_copy String(s));
+                    String::append(f.buf, s);
                 };
                 Array<i32>^Inspect::inspect(__inline_Array_Array_i32___IndexValue__index_value_3: block -> ref null Array<i32> {
                     __local_9 = i;
@@ -630,7 +630,7 @@ fn Array<i32>^Inspect::inspect(self, f) {
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
-                    String::append(f.buf, value_copy String(s));
+                    String::append(f.buf, s);
                 };
                 i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_4: block -> i32 {
                     __local_11 = i;

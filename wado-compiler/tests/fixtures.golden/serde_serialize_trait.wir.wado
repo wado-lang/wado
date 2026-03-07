@@ -160,7 +160,7 @@ fn run() with Stdout {
         String::append_char(__local_3, 50);
         String::append_char(__local_3, 58);
         String::append_char(__local_3, 32);
-        String::append(__local_3, value_copy String(ser.buf));
+        String::append(__local_3, ser.buf);
         break __tmpl: __local_3;
     });
     ser.buf = String { repr: builtin::array_new<u8>(0), used: 0 };
@@ -180,7 +180,7 @@ fn run() with Stdout {
         String::append_char(__local_4, 103);
         String::append_char(__local_4, 58);
         String::append_char(__local_4, 32);
-        String::append(__local_4, value_copy String(ser.buf));
+        String::append(__local_4, ser.buf);
         break __tmpl: __local_4;
     });
 }
@@ -472,7 +472,7 @@ fn TextSerializer^Serializer::serialize_string(self, v) {
     String::append(self, __tmpl: block -> ref null String {
         __local_2 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append_char(__local_2, 34);
-        String::append(__local_2, value_copy String(v));
+        String::append(__local_2, v);
         String::append_char(__local_2, 34);
         break __tmpl: __local_2;
     });

@@ -1946,7 +1946,7 @@ fn remap_expr(
             func,
             type_args,
             args,
-            ..
+            param_is_mut,
         } => {
             // Convert local calls to use the source module path
             let remapped_func = remap_function_ref(func, source_module);
@@ -1959,7 +1959,7 @@ fn remap_expr(
                         remap_expr(a, param_to_local, local_offset, param_count, source_module)
                     })
                     .collect(),
-                param_is_mut: vec![],
+                param_is_mut: param_is_mut.clone(),
             }
         }
         TirExprKind::MethodCall {
@@ -1967,7 +1967,7 @@ fn remap_expr(
             func,
             type_args,
             args,
-            ..
+            param_is_mut,
         } => {
             // Convert local method calls to use the source module path
             let remapped_func = remap_function_ref(func, source_module);
@@ -1987,10 +1987,14 @@ fn remap_expr(
                         remap_expr(a, param_to_local, local_offset, param_count, source_module)
                     })
                     .collect(),
-                param_is_mut: vec![],
+                param_is_mut: param_is_mut.clone(),
             }
         }
-        TirExprKind::StaticCall { func, args, .. } => {
+        TirExprKind::StaticCall {
+            func,
+            args,
+            param_is_mut,
+        } => {
             // Convert local static calls to use the source module path
             let remapped_func = remap_function_ref(func, source_module);
             TirExprKind::StaticCall {
@@ -2001,7 +2005,7 @@ fn remap_expr(
                         remap_expr(a, param_to_local, local_offset, param_count, source_module)
                     })
                     .collect(),
-                param_is_mut: vec![],
+                param_is_mut: param_is_mut.clone(),
             }
         }
         TirExprKind::CmRawCall { local_name, args } => TirExprKind::CmRawCall {

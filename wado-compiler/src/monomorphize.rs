@@ -3886,7 +3886,7 @@ impl Monomorphizer {
                 },
                 type_args: vec![],
                 args: vec![arg_ref],
-                param_is_mut: vec![],
+                param_is_mut: vec![false],
             };
 
             if needs_negation {
@@ -3950,7 +3950,7 @@ impl Monomorphizer {
                     },
                     type_args: vec![],
                     args: vec![arg_ref],
-                    param_is_mut: vec![],
+                    param_is_mut: vec![false],
                 },
                 ordering_type_id,
                 span,

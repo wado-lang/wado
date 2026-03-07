@@ -166,7 +166,7 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     arr = __seq_lit: block -> ref null Array<Option<i32>> {
-        __local_0 = Array<Option<i32>> { repr: array.new_fixed<ref null Option<i32>>(value_copy Option<i32>(Option<i32>::Some { discriminant: 0, payload_0: 1 }), value_copy Option<i32>(Option<i32> { 1 }), value_copy Option<i32>(Option<i32>::Some { discriminant: 0, payload_0: 3 })), used: 3 };
+        __local_0 = Array<Option<i32>> { repr: array.new_fixed<ref null Option<i32>>(Option<i32>::Some { discriminant: 0, payload_0: 1 }, Option<i32> { 1 }, Option<i32>::Some { discriminant: 0, payload_0: 3 }), used: 3 };
         break __seq_lit: __local_0;
     };
     "core:cli/println"(__tmpl: block -> ref null String {
@@ -523,7 +523,7 @@ fn Array<Option<i32>>^Inspect::inspect(self, f) {
                 };
                 if i > 0 {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
-                    String::append(f.buf, value_copy String(s));
+                    String::append(f.buf, s);
                 };
                 Option<i32>^Inspect::inspect(ref.as_non_null(__inline_Array_Option_i32___IndexValue__index_value_3: block -> ref null Option<i32> {
                     __local_9 = i;
@@ -550,13 +550,13 @@ fn Option<i32>^Inspect::inspect(self, f) {
     let __local_11: ref null String;
     if ref.test Option<i32>::Some(self) {
         __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
-        String::append(f.buf, value_copy String(__local_3));
+        String::append(f.buf, __local_3);
         i32::fmt_decimal(ref.cast Option<i32>::Some(self).payload_0, f);
         __local_9 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, value_copy String(__local_9));
+        String::append(f.buf, __local_9);
     } else if self.discriminant == 1 {
         __local_11 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
-        String::append(f.buf, value_copy String(__local_11));
+        String::append(f.buf, __local_11);
     };
 }
 

@@ -2859,7 +2859,9 @@ fn synthesize_result_export_adapter(
 
     let mut next_local = param_count;
 
-    // Call user function
+    // Call user function — derive param_is_mut from the actual function params.
+    let call_user_param_is_mut: Vec<bool> =
+        user_func.borrow().params.iter().map(|p| p.is_mut).collect();
     let call_user = TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef::Resolved {
@@ -2868,7 +2870,7 @@ fn synthesize_result_export_adapter(
             },
             type_args: vec![],
             args: call_args,
-            param_is_mut: vec![],
+            param_is_mut: call_user_param_is_mut,
         },
         user_return_type,
         synth_span(),
@@ -3389,7 +3391,9 @@ fn synthesize_general_export_adapter(
 
     let mut next_local = param_count;
 
-    // Call user function
+    // Call user function — derive param_is_mut from the actual function params.
+    let call_user_param_is_mut: Vec<bool> =
+        user_func.borrow().params.iter().map(|p| p.is_mut).collect();
     let call_user = TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef::Resolved {
@@ -3398,7 +3402,7 @@ fn synthesize_general_export_adapter(
             },
             type_args: vec![],
             args: call_args,
-            param_is_mut: vec![],
+            param_is_mut: call_user_param_is_mut,
         },
         user_return_type,
         synth_span(),
@@ -3595,6 +3599,8 @@ fn synthesize_async_export_adapter(
     };
 
     // Call user function (it returns unit; task-return is called internally)
+    let call_user_param_is_mut: Vec<bool> =
+        user_func.borrow().params.iter().map(|p| p.is_mut).collect();
     let call_user = TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef::Resolved {
@@ -3603,7 +3609,7 @@ fn synthesize_async_export_adapter(
             },
             type_args: vec![],
             args: call_args,
-            param_is_mut: vec![],
+            param_is_mut: call_user_param_is_mut,
         },
         TypeTable::UNIT,
         synth_span(),
@@ -4696,6 +4702,7 @@ fn rewrite_calls_in_expr(
             // Prepend receiver to args
             let mut all_args = vec![taken_receiver];
             all_args.extend(taken_args);
+            let all_args_len = all_args.len();
 
             expr.kind = TirExprKind::Call {
                 func: FunctionRef::Resolved {
@@ -4704,7 +4711,7 @@ fn rewrite_calls_in_expr(
                 },
                 args: all_args,
                 type_args: vec![],
-                param_is_mut: vec![],
+                param_is_mut: vec![false; all_args_len],
             };
 
             // Recurse into args of the new Call
@@ -4781,6 +4788,7 @@ fn rewrite_calls_in_expr(
             };
 
             // Replace StaticCall with Call targeting the adapter
+            let flat_args_len = flat_call_args.len();
             expr.kind = TirExprKind::Call {
                 func: FunctionRef::Resolved {
                     func: adapter_rc.clone(),
@@ -4788,7 +4796,7 @@ fn rewrite_calls_in_expr(
                 },
                 args: flat_call_args,
                 type_args: vec![],
-                param_is_mut: vec![],
+                param_is_mut: vec![false; flat_args_len],
             };
 
             // Recurse into args of the new Call

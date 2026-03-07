@@ -379,6 +379,8 @@ pub(super) struct MethodInfo {
     pub(super) self_kind: ast::SelfKind,
     /// Parameter types (excluding self)
     pub(super) param_types: Vec<TypeId>,
+    /// Whether each parameter (excluding self) is declared `mut`
+    pub(super) param_is_mut: Vec<bool>,
     /// If this method was inherited from a newtype's base type, the base type ID
     /// Used for method signature substitution
     pub(super) inherited_from_base: Option<TypeId>,

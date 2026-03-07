@@ -232,7 +232,7 @@ fn run() with Stdout {
         String::append_char(__local_10, 113);
         String::append_char(__local_10, 58);
         String::append_char(__local_10, 32);
-        String::append(__local_10, value_copy String(ser.buf));
+        String::append(__local_10, ser.buf);
         break __tmpl: __local_10;
     });
     ser.buf = String { repr: builtin::array_new<u8>(0), used: 0 };
@@ -262,7 +262,7 @@ fn run() with Stdout {
         String::append_char(__local_11, 116);
         String::append_char(__local_11, 58);
         String::append_char(__local_11, 32);
-        String::append(__local_11, value_copy String(ser.buf));
+        String::append(__local_11, ser.buf);
         break __tmpl: __local_11;
     });
 }
@@ -554,7 +554,7 @@ fn TextSerializer^Serializer::serialize_string(self, v) {
     String::append(self, __tmpl: block -> ref null String {
         __local_2 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append_char(__local_2, 34);
-        String::append(__local_2, value_copy String(v));
+        String::append(__local_2, v);
         String::append_char(__local_2, 34);
         break __tmpl: __local_2;
     });
@@ -572,7 +572,7 @@ fn TextStructSerializer^SerializeStruct::field<i32>(self, name, value) {
     String::append(self.parent.buf, __tmpl: block -> ref null String {
         __local_3 = String { repr: builtin::array_new<u8>(19), used: 0 };
         String::append_char(__local_3, 34);
-        String::append(__local_3, value_copy String(name));
+        String::append(__local_3, name);
         String::append_char(__local_3, 34);
         String::append_char(__local_3, 58);
         break __tmpl: __local_3;
@@ -596,7 +596,7 @@ fn TextStructSerializer^SerializeStruct::field<String>(self, name, value) {
     String::append(self.parent.buf, __tmpl: block -> ref null String {
         __local_3 = String { repr: builtin::array_new<u8>(19), used: 0 };
         String::append_char(__local_3, 34);
-        String::append(__local_3, value_copy String(name));
+        String::append(__local_3, name);
         String::append_char(__local_3, 34);
         String::append_char(__local_3, 58);
         break __tmpl: __local_3;
