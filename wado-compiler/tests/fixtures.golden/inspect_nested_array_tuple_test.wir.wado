@@ -613,10 +613,6 @@ fn Array<Tuple<i32,String>>^Inspect::inspect(self, f) {
                 };
                 Tuple<i32,String>^Inspect::inspect(__inline_Array_Tuple_i32_String___IndexValue__index_value_3: block -> ref null "tuple/[i32, String]" {
                     __local_9 = i;
-                    if __local_9 >= _licm_used_12 {
-                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    };
                     break __inline_Array_Tuple_i32_String___IndexValue__index_value_3: builtin::array_get<ref null "tuple/[i32, String]">(_licm_repr_13, __local_9);
                 }, f);
                 i = i + 1;
@@ -656,13 +652,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l44: loop {
+            l43: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l44;
+                continue l43;
             };
         };
     };
@@ -792,8 +788,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b63: block {
-        l64: loop {
+    b62: block {
+        l63: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_4);
@@ -818,9 +814,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b63;
+                break b62;
             };
-            continue l64;
+            continue l63;
         };
     };
     String::append_char(f.buf, 34);

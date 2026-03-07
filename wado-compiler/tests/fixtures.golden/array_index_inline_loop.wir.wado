@@ -214,10 +214,6 @@ fn run() with Stdout {
                 };
                 sum = sum + __inline_Array_i32__IndexValue__index_value_10: block -> i32 {
                     __local_26 = i_3;
-                    if __local_26 >= _licm_used_63 {
-                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    };
                     break __inline_Array_i32__IndexValue__index_value_10: builtin::array_get<i32>(_licm_repr_64, __local_26);
                 };
                 i_3 = i_3 + 1;
@@ -247,13 +243,13 @@ fn run() with Stdout {
     __for_1: block {
         i_6 = 0;
         block {
-            l6: loop {
+            l5: loop {
                 if (i_6 < 3) == 0 {
                     break __for_1;
                 };
                 Array<i32>^IndexAssign::index_assign(arr2, i_6, i_6 * 10);
                 i_6 = i_6 + 1;
-                continue l6;
+                continue l5;
             };
         };
     };
@@ -365,14 +361,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     __for_0: block {
         i = 0;
         block {
-            l17: loop {
+            l16: loop {
                 if (i < len) == 0 {
                     break __for_0;
                 };
                 byte = builtin::array_get_u8(msg_bytes, i);
                 builtin::store_u8(ptr + i, byte);
                 i = i + 1;
-                continue l17;
+                continue l16;
             };
         };
     };
@@ -401,13 +397,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l21: loop {
+            l20: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l21;
+                continue l20;
             };
         };
     };
@@ -482,13 +478,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l28: loop {
+            l27: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l28;
+                continue l27;
             };
         };
     };
@@ -507,14 +503,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l32: loop {
+                l31: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l32;
+                    continue l31;
                 };
             };
         };
@@ -658,13 +654,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l46: loop {
+            l45: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l46;
+                continue l45;
             };
         };
     };
