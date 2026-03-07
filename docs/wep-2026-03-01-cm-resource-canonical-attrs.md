@@ -534,25 +534,43 @@ __DATA__
 
 ## Migration Path
 
-- [x] 1. Add `canonical_name` field to `MethodInfo`
-- [x] 2. Populate it from resource method `#[canonical]` attributes during resolution
-- [ ] 3. Add `ensure_canonical` to `WirBuildContext` for lazy canonical import registration
-- [x] 4. Add `try_translate_canonical_method` to WIR translation, dispatch by canonical name
-- [x] 5. Move each existing `emit_*` function to register its own canonical dependencies
-- [x] 6. Route existing `try_translate_stream_method` etc. through the new unified dispatch
-- [ ] 7. Remove CM-specific logic from DCE
-- [ ] 8. Update `wasm_plan.rs` to collect canonicals from WIR context
-- [ ] 9. Remove `method_call.rs` special cases for `Stream::new()` / `Future::new()`
-- [x] 10. Add `#[canonical]` attributes to resource methods in `types.wado`
-- [ ] 11. Add `WaitableSet`, `Subtask`, `ErrorContext` resource declarations
-- [ ] 12. Add `Future::read` declaration
-- [ ] 13. Update `WaitableSet::wait`/`poll` to use Wado-level return types
-- [ ] 14. Remove 13 CM functions from `builtin.wado`
-- [x] 15. Delete `stream.wado`
-- [ ] 16. Update prelude exports (WaitableSet/Subtask/ErrorContext)
-- [ ] 17. Add e2e tests for WaitableSet/Subtask
-- [ ] 18. Implement `emit_future_read`, `emit_waitable_set_wait`, `emit_waitable_set_poll`,
-    `emit_error_context_*` synthesis functions (or stub as compile errors)
+-
+  1. [x] Add `canonical_name` field to `MethodInfo`
+-
+  2. [x] Populate it from resource method `#[canonical]` attributes during resolution
+-
+  3. [ ] Add `ensure_canonical` to `WirBuildContext` for lazy canonical import registration
+-
+  4. [x] Add `try_translate_canonical_method` to WIR translation, dispatch by canonical name
+-
+  5. [x] Move each existing `emit_*` function to register its own canonical dependencies
+-
+  6. [x] Route existing `try_translate_stream_method` etc. through the new unified dispatch
+-
+  7. [ ] Remove CM-specific logic from DCE
+-
+  8. [ ] Update `wasm_plan.rs` to collect canonicals from WIR context
+-
+  9. [ ] Remove `method_call.rs` special cases for `Stream::new()` / `Future::new()`
+-
+  10. [x] Add `#[canonical]` attributes to resource methods in `types.wado`
+-
+  11. [ ] Add `WaitableSet`, `Subtask`, `ErrorContext` resource declarations
+-
+  12. [ ] Add `Future::read` declaration
+-
+  13. [ ] Update `WaitableSet::wait`/`poll` to use Wado-level return types
+-
+  14. [ ] Remove 13 CM functions from `builtin.wado`
+-
+  15. [x] Delete `stream.wado`
+-
+  16. [ ] Update prelude exports (WaitableSet/Subtask/ErrorContext)
+-
+  17. [ ] Add e2e tests for WaitableSet/Subtask
+-
+  18. [ ] Implement `emit_future_read`, `emit_waitable_set_wait`, `emit_waitable_set_poll`,
+          `emit_error_context_*` synthesis functions (or stub as compile errors)
 
 ## Consequences
 
