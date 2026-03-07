@@ -1,0 +1,19 @@
+// Test: Assert inspect output for enum values
+// Enums should show as "TypeName::CaseName" in inspect format
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+export fn run() with Stdout, Stderr {
+    let c = Color::Red;
+    assert c == Color::Blue;
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["condition: c == Color::Blue", "c: Color::Red"]
+}
