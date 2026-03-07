@@ -8,6 +8,12 @@ struct Box<i32> {  // from core:internal  // Box<T> with T=i32
 
 array array<u8> (mut u8);
 
+struct StrCharIter {
+    mut repr: ref array<u8>,
+    mut used: i32,
+    mut byte_index: i32,
+}
+
 struct String {
     mut repr: ref array<u8>,
     mut used: i32,
@@ -25,6 +31,16 @@ struct Formatter {
 }
 
 array array<String> (mut ref null String);
+
+variant Option<char> {
+    Some(char),
+    None,
+}
+
+struct Option<char>::Some {
+    discriminant: i32,
+    payload_0: char,
+}
 
 struct Array<String> {  // Array<T> with T=String
     mut repr: ref array<String>,
@@ -103,6 +119,8 @@ type "functype/String::append" = fn(ref null String, ref null String);
 
 type "functype/String^Eq::eq" = fn(ref null String, ref null String) -> bool;
 
+type "functype/StrCharIter^Iterator::next" = fn(ref null StrCharIter) -> ref null Option<char>;
+
 type "functype/String::append_char" = fn(ref null String, char);
 
 type "functype/Array<String>::append" = fn(ref null Array<String>, ref null String);
@@ -110,6 +128,10 @@ type "functype/Array<String>::append" = fn(ref null Array<String>, ref null Stri
 type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref null String, i32) -> i32;
+
+type "functype/String^Inspect::inspect" = fn(ref null String, ref null Formatter);
+
+type "functype/StrCharIter^Iterator::next" = fn(ref null StrCharIter) -> [i32, char];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref null Formatter);
 
@@ -182,38 +204,42 @@ fn run() with Stdout {
     let __local_49: ref null Formatter;
     let __local_50: ref null "core:internal/Box<i32>";
     let __local_51: ref null Formatter;
-    let __local_52: ref null Array<String>;
-    let __local_53: i32;
+    let __local_52: ref null String;
+    let __local_53: ref null Array<String>;
     let __local_54: i32;
-    let __local_55: ref null String;
-    let __local_56: ref null "core:internal/Box<i32>";
-    let __local_57: ref null Formatter;
-    let __local_58: ref null "core:internal/Box<i32>";
-    let __local_59: ref null Formatter;
-    let __local_60: ref null Array<String>;
-    let __local_61: i32;
-    let __local_62: i32;
-    let __local_63: ref null String;
-    let __local_64: ref null "core:internal/Box<i32>";
-    let __local_65: ref null Formatter;
+    let __local_55: i32;
+    let __local_56: ref null String;
+    let __local_57: ref null "core:internal/Box<i32>";
+    let __local_58: ref null Formatter;
+    let __local_59: ref null "core:internal/Box<i32>";
+    let __local_60: ref null Formatter;
+    let __local_61: ref null String;
+    let __local_62: ref null Array<String>;
+    let __local_63: i32;
+    let __local_64: i32;
+    let __local_65: ref null String;
     let __local_66: ref null "core:internal/Box<i32>";
     let __local_67: ref null Formatter;
-    let __local_68: ref null Array<String>;
-    let __local_69: i32;
-    let __local_70: i32;
-    let __local_71: ref null String;
-    let __local_72: ref null "core:internal/Box<i32>";
-    let __local_73: ref null Formatter;
-    let __local_74: ref null "core:internal/Box<i32>";
-    let __local_75: ref null Formatter;
-    let __local_76: ref null Array<String>;
-    let __local_77: ref null Array<String>;
-    let __local_78: i32;
-    let __local_79: ref null Array<String>;
-    let __local_80: i32;
+    let __local_68: ref null "core:internal/Box<i32>";
+    let __local_69: ref null Formatter;
+    let __local_70: ref null String;
+    let __local_71: ref null Array<String>;
+    let __local_72: i32;
+    let __local_73: i32;
+    let __local_74: ref null String;
+    let __local_75: ref null "core:internal/Box<i32>";
+    let __local_76: ref null Formatter;
+    let __local_77: ref null "core:internal/Box<i32>";
+    let __local_78: ref null Formatter;
+    let __local_79: ref null String;
+    let __local_80: ref null Array<String>;
     let __local_81: ref null Array<String>;
     let __local_82: i32;
-    let __local_83: i32;
+    let __local_83: ref null Array<String>;
+    let __local_84: i32;
+    let __local_85: ref null Array<String>;
+    let __local_86: i32;
+    let __local_87: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -222,11 +248,11 @@ fn run() with Stdout {
     };
     m = __kv_lit: block -> ref null PairList<String> {
         __local_0 = PairList<String> { keys: ref.as_non_null(__seq_lit: block -> ref null Array<String> {
-            __local_76 = Array<String> { repr: builtin::array_new<ref null String>(0), used: 0 };
-            break __seq_lit: __local_76;
+            __local_80 = Array<String> { repr: builtin::array_new<ref null String>(0), used: 0 };
+            break __seq_lit: __local_80;
         }), values: ref.as_non_null(__seq_lit: block -> ref null Array<String> {
-            __local_77 = Array<String> { repr: builtin::array_new<ref null String>(0), used: 0 };
-            break __seq_lit: __local_77;
+            __local_81 = Array<String> { repr: builtin::array_new<ref null String>(0), used: 0 };
+            break __seq_lit: __local_81;
         }) };
         __local_25 = String { repr: array.new_data<u8>("name"), used: 4 };
         __local_26 = String { repr: array.new_data<u8>("Alice"), used: 5 };
@@ -309,19 +335,23 @@ condition: m.len() == 2
 condition: m.keys[0] == \"name\"
 "), used: 32 });
             String::append(__local_14, String { repr: array.new_data<u8>("m.keys[0]: "), used: 11 });
-            String::append(__local_14, __v0_4);
+            __local_15 = __inline_Formatter__new_20: block -> ref null Formatter {
+                __local_52 = __local_14;
+                break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_52) };
+            };
+            String^Inspect::inspect(__v0_4, __local_15);
             String::append_char(__local_14, 10);
             break __tmpl: __local_14;
         });
         unreachable;
     };
-    __v0_6 = __inline_Array_String__IndexValue__index_value_20: block -> ref null String {
-        __local_52 = m.keys;
-        if 1 >= __local_52.used {
+    __v0_6 = __inline_Array_String__IndexValue__index_value_21: block -> ref null String {
+        __local_53 = m.keys;
+        if 1 >= __local_53.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_String__IndexValue__index_value_20: builtin::array_get<ref null String>(__local_52.repr, 1);
+        break __inline_Array_String__IndexValue__index_value_21: builtin::array_get<ref null String>(__local_53.repr, 1);
     };
     __cond_7 = String^Eq::eq(__v0_6, String { repr: array.new_data<u8>("city"), used: 4 });
     if __cond_7 == 0 {
@@ -337,29 +367,33 @@ condition: m.keys[0] == \"name\"
             String::append_char(__local_16, 32);
             String::append(__local_16, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/from-literal-cast.wado"), used: 51 });
             String::append_char(__local_16, 58);
-            __local_17 = __inline_Formatter__new_22: block -> ref null Formatter {
-                __local_55 = __local_16;
-                break __inline_Formatter__new_22: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_55) };
+            __local_17 = __inline_Formatter__new_23: block -> ref null Formatter {
+                __local_56 = __local_16;
+                break __inline_Formatter__new_23: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_56) };
             };
-            __local_57 = __local_17;
-            i32::fmt_decimal(43, __local_57);
+            __local_58 = __local_17;
+            i32::fmt_decimal(43, __local_58);
             String::append(__local_16, String { repr: array.new_data<u8>("
 condition: m.keys[1] == \"city\"
 "), used: 32 });
             String::append(__local_16, String { repr: array.new_data<u8>("m.keys[1]: "), used: 11 });
-            String::append(__local_16, __v0_6);
+            __local_17 = __inline_Formatter__new_26: block -> ref null Formatter {
+                __local_61 = __local_16;
+                break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_61) };
+            };
+            String^Inspect::inspect(__v0_6, __local_17);
             String::append_char(__local_16, 10);
             break __tmpl: __local_16;
         });
         unreachable;
     };
-    __v0_8 = __inline_Array_String__IndexValue__index_value_25: block -> ref null String {
-        __local_60 = m.values;
-        if 0 >= __local_60.used {
+    __v0_8 = __inline_Array_String__IndexValue__index_value_27: block -> ref null String {
+        __local_62 = m.values;
+        if 0 >= __local_62.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_String__IndexValue__index_value_25: builtin::array_get<ref null String>(__local_60.repr, 0);
+        break __inline_Array_String__IndexValue__index_value_27: builtin::array_get<ref null String>(__local_62.repr, 0);
     };
     __cond_9 = String^Eq::eq(__v0_8, String { repr: array.new_data<u8>("Alice"), used: 5 });
     if __cond_9 == 0 {
@@ -375,29 +409,33 @@ condition: m.keys[1] == \"city\"
             String::append_char(__local_18, 32);
             String::append(__local_18, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/from-literal-cast.wado"), used: 51 });
             String::append_char(__local_18, 58);
-            __local_19 = __inline_Formatter__new_27: block -> ref null Formatter {
-                __local_63 = __local_18;
-                break __inline_Formatter__new_27: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_63) };
+            __local_19 = __inline_Formatter__new_29: block -> ref null Formatter {
+                __local_65 = __local_18;
+                break __inline_Formatter__new_29: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_65) };
             };
-            __local_65 = __local_19;
-            i32::fmt_decimal(44, __local_65);
+            __local_67 = __local_19;
+            i32::fmt_decimal(44, __local_67);
             String::append(__local_18, String { repr: array.new_data<u8>("
 condition: m.values[0] == \"Alice\"
 "), used: 35 });
             String::append(__local_18, String { repr: array.new_data<u8>("m.values[0]: "), used: 13 });
-            String::append(__local_18, __v0_8);
+            __local_19 = __inline_Formatter__new_32: block -> ref null Formatter {
+                __local_70 = __local_18;
+                break __inline_Formatter__new_32: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_70) };
+            };
+            String^Inspect::inspect(__v0_8, __local_19);
             String::append_char(__local_18, 10);
             break __tmpl: __local_18;
         });
         unreachable;
     };
-    __v0_10 = __inline_Array_String__IndexValue__index_value_30: block -> ref null String {
-        __local_68 = m.values;
-        if 1 >= __local_68.used {
+    __v0_10 = __inline_Array_String__IndexValue__index_value_33: block -> ref null String {
+        __local_71 = m.values;
+        if 1 >= __local_71.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_String__IndexValue__index_value_30: builtin::array_get<ref null String>(__local_68.repr, 1);
+        break __inline_Array_String__IndexValue__index_value_33: builtin::array_get<ref null String>(__local_71.repr, 1);
     };
     __cond_11 = String^Eq::eq(__v0_10, String { repr: array.new_data<u8>("Tokyo"), used: 5 });
     if __cond_11 == 0 {
@@ -413,17 +451,21 @@ condition: m.values[0] == \"Alice\"
             String::append_char(__local_20, 32);
             String::append(__local_20, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/from-literal-cast.wado"), used: 51 });
             String::append_char(__local_20, 58);
-            __local_21 = __inline_Formatter__new_32: block -> ref null Formatter {
-                __local_71 = __local_20;
-                break __inline_Formatter__new_32: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_71) };
+            __local_21 = __inline_Formatter__new_35: block -> ref null Formatter {
+                __local_74 = __local_20;
+                break __inline_Formatter__new_35: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_74) };
             };
-            __local_73 = __local_21;
-            i32::fmt_decimal(45, __local_73);
+            __local_76 = __local_21;
+            i32::fmt_decimal(45, __local_76);
             String::append(__local_20, String { repr: array.new_data<u8>("
 condition: m.values[1] == \"Tokyo\"
 "), used: 35 });
             String::append(__local_20, String { repr: array.new_data<u8>("m.values[1]: "), used: 13 });
-            String::append(__local_20, __v0_10);
+            __local_21 = __inline_Formatter__new_38: block -> ref null Formatter {
+                __local_79 = __local_20;
+                break __inline_Formatter__new_38: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_79) };
+            };
+            String^Inspect::inspect(__v0_10, __local_21);
             String::append_char(__local_20, 10);
             break __tmpl: __local_20;
         });
@@ -758,6 +800,62 @@ fn String^Eq::eq(self, other) {
     return 1;
 }
 
+fn StrCharIter^Iterator::next(self) {
+    let b0: u8;
+    let b1_2: u8;
+    let code_3: u8;
+    let b1_4: u8;
+    let b2_5: u8;
+    let code_6: u8;
+    let b1_7: u8;
+    let b2_8: u8;
+    let b3: u8;
+    let code_10: u8;
+    let __local_11: u32;
+    let __local_12: u32;
+    let __local_13: u32;
+    let __local_14: u32;
+    if self.byte_index >= self.used {
+        return 1; 0;
+    };
+    b0 = builtin::array_get_u8(self.repr, self.byte_index);
+    self.byte_index = self.byte_index + 1;
+    if b0 <u 128 {
+        return 0; __inline_char__from_u32_unchecked_0: block -> char {
+            __local_11 = b0;
+            break __inline_char__from_u32_unchecked_0: __local_11;
+        };
+    };
+    if b0 <u 224 {
+        b1_2 = builtin::array_get_u8(self.repr, self.byte_index);
+        self.byte_index = self.byte_index + 1;
+        code_3 = ((b0 & 31) << 6) | (b1_2 & 63);
+        return 0; __inline_char__from_u32_unchecked_1: block -> char {
+            __local_12 = code_3;
+            break __inline_char__from_u32_unchecked_1: __local_12;
+        };
+    };
+    if b0 <u 240 {
+        b1_4 = builtin::array_get_u8(self.repr, self.byte_index);
+        b2_5 = builtin::array_get_u8(self.repr, self.byte_index + 1);
+        self.byte_index = self.byte_index + 2;
+        code_6 = (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63);
+        return 0; __inline_char__from_u32_unchecked_2: block -> char {
+            __local_13 = code_6;
+            break __inline_char__from_u32_unchecked_2: __local_13;
+        };
+    };
+    b1_7 = builtin::array_get_u8(self.repr, self.byte_index);
+    b2_8 = builtin::array_get_u8(self.repr, self.byte_index + 1);
+    b3 = builtin::array_get_u8(self.repr, self.byte_index + 2);
+    self.byte_index = self.byte_index + 3;
+    code_10 = ((((b0 & 7) << 18) | ((b1_7 & 63) << 12)) | ((b2_8 & 63) << 6)) | (b3 & 63);
+    return 0; __inline_char__from_u32_unchecked_3: block -> char {
+        __local_14 = code_10;
+        break __inline_char__from_u32_unchecked_3: __local_14;
+    };
+}
+
 fn String::append_char(self, c) {
     let code: u32;
     code = c;
@@ -814,13 +912,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l49: loop {
+            l53: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l49;
+                continue l53;
             };
         };
     };
@@ -906,6 +1004,82 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
+}
+
+fn String^Inspect::inspect(self, f) {
+    let __iter_4: ref null StrCharIter;
+    let c: char;
+    let __pattern_temp_0: ref null Option<char>;
+    let __local_5: ref null Formatter;
+    let __local_6: char;
+    let __local_7: ref null StrCharIter;
+    let __local_8: ref null String;
+    let __local_9: ref null Formatter;
+    let __local_10: char;
+    let __local_11: ref null Formatter;
+    let __local_12: char;
+    let __local_13: ref null Formatter;
+    let __local_14: char;
+    let __local_15: ref null Formatter;
+    let __local_16: char;
+    let __local_17: ref null Formatter;
+    let __local_18: char;
+    let __local_19: ref null Formatter;
+    let __local_20: char;
+    let __local_21: ref null Formatter;
+    let __local_22: char;
+    let __local_23: ref null Formatter;
+    let __local_24: char;
+    let __local_25: ref null Formatter;
+    let __local_26: char;
+    let __local_27: ref null Formatter;
+    let __local_28: char;
+    let __local_29: ref null Formatter;
+    let __local_30: char;
+    let __local_31: ref null Formatter;
+    let __local_32: char;
+    let _licm_buf_33: ref null String;
+    String::append_char(f.buf, 34);
+    __iter_4 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref null StrCharIter {
+        __local_7 = __inline_String__chars_2: block -> ref null StrCharIter {
+            __local_8 = self;
+            break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
+        };
+        break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
+    };
+    _licm_buf_33 = f.buf;
+    b72: block {
+        l73: loop {
+            let __sroa___pattern_temp_0_discriminant: i32;
+            let __sroa___pattern_temp_0_payload_0: char;
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_4);
+            if __sroa___pattern_temp_0_discriminant == 0 {
+                c = __sroa___pattern_temp_0_payload_0;
+                if c == 34 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 34);
+                } else if c == 92 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 92);
+                } else if c == 10 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 110);
+                } else if c == 13 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 114);
+                } else if c == 9 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 116);
+                } else {
+                    String::append_char(_licm_buf_33, c);
+                };
+            } else {
+                break b72;
+            };
+            continue l73;
+        };
+    };
+    String::append_char(f.buf, 34);
 }
 
 export fn __cm_export__run as "run"

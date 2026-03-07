@@ -67,6 +67,12 @@ struct UnpackResult {
 
 array array<u8> (mut u8);
 
+struct StrCharIter {
+    mut repr: ref array<u8>,
+    mut used: i32,
+    mut byte_index: i32,
+}
+
 struct String {
     mut repr: ref array<u8>,
     mut used: i32,
@@ -100,6 +106,16 @@ struct [bool, bool, SpecialKind] {
 }
 
 array array<u64> (mut u64);
+
+variant Option<char> {
+    Some(char),
+    None,
+}
+
+struct Option<char>::Some {
+    discriminant: i32,
+    payload_0: char,
+}
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
@@ -224,6 +240,8 @@ type "functype/String::append" = fn(ref null String, ref null String);
 
 type "functype/String^Eq::eq" = fn(ref null String, ref null String) -> bool;
 
+type "functype/StrCharIter^Iterator::next" = fn(ref null StrCharIter) -> ref null Option<char>;
+
 type "functype/String::append_char" = fn(ref null String, char);
 
 type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
@@ -233,6 +251,8 @@ type "functype/Formatter::pad" = fn(ref null Formatter, ref null String);
 type "functype/Formatter::apply_padding" = fn(ref null Formatter, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref null String, i32) -> i32;
+
+type "functype/String^Inspect::inspect" = fn(ref null String, ref null Formatter);
 
 type "functype/unpack64" = fn(f64) -> [u64, i32];
 
@@ -251,6 +271,8 @@ type "functype/short32" = fn(f32) -> [u64, i32];
 type "functype/trim_zeros" = fn(u64, i32) -> [u64, i32];
 
 type "functype/check_special" = fn(f64) -> [bool, bool, i32];
+
+type "functype/StrCharIter^Iterator::next" = fn(ref null StrCharIter) -> [i32, char];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref null Formatter);
 
@@ -379,242 +401,261 @@ fn run() with Stdout {
     let __local_92: ref null Formatter;
     let __local_93: ref null "core:internal/Box<i32>";
     let __local_94: ref null Formatter;
-    let __local_95: ref null "core:internal/Box<i8>";
-    let __local_96: ref null String;
-    let __local_97: ref null Formatter;
-    let __local_98: i32;
-    let __local_99: ref null String;
-    let __local_100: ref null "core:internal/Box<i8>";
-    let __local_101: ref null Formatter;
-    let __local_102: i32;
-    let __local_103: ref null String;
-    let __local_104: ref null "core:internal/Box<i32>";
-    let __local_105: ref null Formatter;
-    let __local_106: ref null "core:internal/Box<i32>";
-    let __local_107: ref null Formatter;
-    let __local_108: ref null "core:internal/Box<u8>";
+    let __local_95: ref null String;
+    let __local_96: ref null "core:internal/Box<i8>";
+    let __local_97: ref null String;
+    let __local_98: ref null Formatter;
+    let __local_99: i32;
+    let __local_100: ref null String;
+    let __local_101: ref null "core:internal/Box<i8>";
+    let __local_102: ref null Formatter;
+    let __local_103: i32;
+    let __local_104: ref null String;
+    let __local_105: ref null "core:internal/Box<i32>";
+    let __local_106: ref null Formatter;
+    let __local_107: ref null "core:internal/Box<i32>";
+    let __local_108: ref null Formatter;
     let __local_109: ref null String;
-    let __local_110: ref null Formatter;
-    let __local_111: i32;
-    let __local_112: ref null String;
-    let __local_113: ref null "core:internal/Box<u8>";
-    let __local_114: ref null Formatter;
-    let __local_115: i32;
-    let __local_116: ref null String;
-    let __local_117: ref null "core:internal/Box<i32>";
-    let __local_118: ref null Formatter;
+    let __local_110: ref null "core:internal/Box<u8>";
+    let __local_111: ref null String;
+    let __local_112: ref null Formatter;
+    let __local_113: i32;
+    let __local_114: ref null String;
+    let __local_115: ref null "core:internal/Box<u8>";
+    let __local_116: ref null Formatter;
+    let __local_117: i32;
+    let __local_118: ref null String;
     let __local_119: ref null "core:internal/Box<i32>";
     let __local_120: ref null Formatter;
-    let __local_121: ref null "core:internal/Box<u8>";
-    let __local_122: ref null String;
-    let __local_123: ref null Formatter;
-    let __local_124: i32;
+    let __local_121: ref null "core:internal/Box<i32>";
+    let __local_122: ref null Formatter;
+    let __local_123: ref null String;
+    let __local_124: ref null "core:internal/Box<u8>";
     let __local_125: ref null String;
-    let __local_126: ref null "core:internal/Box<u8>";
-    let __local_127: ref null Formatter;
-    let __local_128: i32;
-    let __local_129: ref null String;
-    let __local_130: ref null "core:internal/Box<i32>";
-    let __local_131: ref null Formatter;
-    let __local_132: ref null "core:internal/Box<i32>";
-    let __local_133: ref null Formatter;
-    let __local_134: ref null "core:internal/Box<i16>";
-    let __local_135: ref null String;
+    let __local_126: ref null Formatter;
+    let __local_127: i32;
+    let __local_128: ref null String;
+    let __local_129: ref null "core:internal/Box<u8>";
+    let __local_130: ref null Formatter;
+    let __local_131: i32;
+    let __local_132: ref null String;
+    let __local_133: ref null "core:internal/Box<i32>";
+    let __local_134: ref null Formatter;
+    let __local_135: ref null "core:internal/Box<i32>";
     let __local_136: ref null Formatter;
-    let __local_137: i32;
-    let __local_138: ref null String;
-    let __local_139: ref null "core:internal/Box<i16>";
+    let __local_137: ref null String;
+    let __local_138: ref null "core:internal/Box<i16>";
+    let __local_139: ref null String;
     let __local_140: ref null Formatter;
     let __local_141: i32;
     let __local_142: ref null String;
-    let __local_143: ref null "core:internal/Box<i32>";
+    let __local_143: ref null "core:internal/Box<i16>";
     let __local_144: ref null Formatter;
-    let __local_145: ref null "core:internal/Box<i32>";
-    let __local_146: ref null Formatter;
-    let __local_147: ref null "core:internal/Box<i16>";
-    let __local_148: ref null String;
-    let __local_149: ref null Formatter;
-    let __local_150: i32;
+    let __local_145: i32;
+    let __local_146: ref null String;
+    let __local_147: ref null "core:internal/Box<i32>";
+    let __local_148: ref null Formatter;
+    let __local_149: ref null "core:internal/Box<i32>";
+    let __local_150: ref null Formatter;
     let __local_151: ref null String;
     let __local_152: ref null "core:internal/Box<i16>";
-    let __local_153: ref null Formatter;
-    let __local_154: i32;
-    let __local_155: ref null String;
-    let __local_156: ref null "core:internal/Box<i32>";
-    let __local_157: ref null Formatter;
-    let __local_158: ref null "core:internal/Box<i32>";
-    let __local_159: ref null Formatter;
-    let __local_160: ref null "core:internal/Box<u16>";
-    let __local_161: ref null String;
+    let __local_153: ref null String;
+    let __local_154: ref null Formatter;
+    let __local_155: i32;
+    let __local_156: ref null String;
+    let __local_157: ref null "core:internal/Box<i16>";
+    let __local_158: ref null Formatter;
+    let __local_159: i32;
+    let __local_160: ref null String;
+    let __local_161: ref null "core:internal/Box<i32>";
     let __local_162: ref null Formatter;
-    let __local_163: i32;
-    let __local_164: ref null String;
-    let __local_165: ref null "core:internal/Box<u16>";
-    let __local_166: ref null Formatter;
-    let __local_167: i32;
-    let __local_168: ref null String;
-    let __local_169: ref null "core:internal/Box<i32>";
-    let __local_170: ref null Formatter;
-    let __local_171: ref null "core:internal/Box<i32>";
+    let __local_163: ref null "core:internal/Box<i32>";
+    let __local_164: ref null Formatter;
+    let __local_165: ref null String;
+    let __local_166: ref null "core:internal/Box<u16>";
+    let __local_167: ref null String;
+    let __local_168: ref null Formatter;
+    let __local_169: i32;
+    let __local_170: ref null String;
+    let __local_171: ref null "core:internal/Box<u16>";
     let __local_172: ref null Formatter;
-    let __local_173: ref null "core:internal/Box<i32>";
+    let __local_173: i32;
     let __local_174: ref null String;
-    let __local_175: ref null Formatter;
-    let __local_176: i32;
-    let __local_177: ref null String;
-    let __local_178: ref null "core:internal/Box<i32>";
-    let __local_179: ref null Formatter;
-    let __local_180: i32;
+    let __local_175: ref null "core:internal/Box<i32>";
+    let __local_176: ref null Formatter;
+    let __local_177: ref null "core:internal/Box<i32>";
+    let __local_178: ref null Formatter;
+    let __local_179: ref null String;
+    let __local_180: ref null "core:internal/Box<i32>";
     let __local_181: ref null String;
-    let __local_182: ref null "core:internal/Box<i32>";
-    let __local_183: ref null Formatter;
-    let __local_184: ref null "core:internal/Box<i32>";
-    let __local_185: ref null Formatter;
-    let __local_186: ref null "core:internal/Box<i32>";
-    let __local_187: ref null String;
-    let __local_188: ref null Formatter;
-    let __local_189: i32;
-    let __local_190: ref null String;
+    let __local_182: ref null Formatter;
+    let __local_183: i32;
+    let __local_184: ref null String;
+    let __local_185: ref null "core:internal/Box<i32>";
+    let __local_186: ref null Formatter;
+    let __local_187: i32;
+    let __local_188: ref null String;
+    let __local_189: ref null "core:internal/Box<i32>";
+    let __local_190: ref null Formatter;
     let __local_191: ref null "core:internal/Box<i32>";
     let __local_192: ref null Formatter;
-    let __local_193: i32;
-    let __local_194: ref null String;
-    let __local_195: ref null "core:internal/Box<i32>";
+    let __local_193: ref null String;
+    let __local_194: ref null "core:internal/Box<i32>";
+    let __local_195: ref null String;
     let __local_196: ref null Formatter;
-    let __local_197: ref null "core:internal/Box<i32>";
-    let __local_198: ref null Formatter;
+    let __local_197: i32;
+    let __local_198: ref null String;
     let __local_199: ref null "core:internal/Box<i32>";
-    let __local_200: ref null String;
-    let __local_201: ref null Formatter;
-    let __local_202: i32;
-    let __local_203: ref null String;
-    let __local_204: ref null "core:internal/Box<i32>";
-    let __local_205: ref null Formatter;
-    let __local_206: i32;
+    let __local_200: ref null Formatter;
+    let __local_201: i32;
+    let __local_202: ref null String;
+    let __local_203: ref null "core:internal/Box<i32>";
+    let __local_204: ref null Formatter;
+    let __local_205: ref null "core:internal/Box<i32>";
+    let __local_206: ref null Formatter;
     let __local_207: ref null String;
     let __local_208: ref null "core:internal/Box<i32>";
-    let __local_209: ref null Formatter;
-    let __local_210: ref null "core:internal/Box<i32>";
-    let __local_211: ref null Formatter;
-    let __local_212: ref null "core:internal/Box<u32>";
-    let __local_213: ref null String;
+    let __local_209: ref null String;
+    let __local_210: ref null Formatter;
+    let __local_211: i32;
+    let __local_212: ref null String;
+    let __local_213: ref null "core:internal/Box<i32>";
     let __local_214: ref null Formatter;
     let __local_215: i32;
     let __local_216: ref null String;
-    let __local_217: ref null "core:internal/Box<u32>";
+    let __local_217: ref null "core:internal/Box<i32>";
     let __local_218: ref null Formatter;
-    let __local_219: i32;
-    let __local_220: ref null String;
-    let __local_221: ref null "core:internal/Box<i32>";
-    let __local_222: ref null Formatter;
-    let __local_223: ref null "core:internal/Box<i32>";
+    let __local_219: ref null "core:internal/Box<i32>";
+    let __local_220: ref null Formatter;
+    let __local_221: ref null String;
+    let __local_222: ref null "core:internal/Box<u32>";
+    let __local_223: ref null String;
     let __local_224: ref null Formatter;
-    let __local_225: ref null "core:internal/Box<i64>";
+    let __local_225: i32;
     let __local_226: ref null String;
-    let __local_227: ref null Formatter;
-    let __local_228: i32;
-    let __local_229: ref null String;
-    let __local_230: ref null "core:internal/Box<i64>";
-    let __local_231: ref null Formatter;
-    let __local_232: i32;
-    let __local_233: ref null String;
-    let __local_234: ref null "core:internal/Box<i32>";
-    let __local_235: ref null Formatter;
-    let __local_236: ref null "core:internal/Box<i32>";
-    let __local_237: ref null Formatter;
-    let __local_238: ref null "core:internal/Box<i64>";
-    let __local_239: ref null String;
-    let __local_240: ref null Formatter;
-    let __local_241: i32;
-    let __local_242: ref null String;
-    let __local_243: ref null "core:internal/Box<i64>";
-    let __local_244: ref null Formatter;
-    let __local_245: i32;
-    let __local_246: ref null String;
+    let __local_227: ref null "core:internal/Box<u32>";
+    let __local_228: ref null Formatter;
+    let __local_229: i32;
+    let __local_230: ref null String;
+    let __local_231: ref null "core:internal/Box<i32>";
+    let __local_232: ref null Formatter;
+    let __local_233: ref null "core:internal/Box<i32>";
+    let __local_234: ref null Formatter;
+    let __local_235: ref null String;
+    let __local_236: ref null "core:internal/Box<i64>";
+    let __local_237: ref null String;
+    let __local_238: ref null Formatter;
+    let __local_239: i32;
+    let __local_240: ref null String;
+    let __local_241: ref null "core:internal/Box<i64>";
+    let __local_242: ref null Formatter;
+    let __local_243: i32;
+    let __local_244: ref null String;
+    let __local_245: ref null "core:internal/Box<i32>";
+    let __local_246: ref null Formatter;
     let __local_247: ref null "core:internal/Box<i32>";
     let __local_248: ref null Formatter;
-    let __local_249: ref null "core:internal/Box<i32>";
-    let __local_250: ref null Formatter;
-    let __local_251: ref null "core:internal/Box<u64>";
-    let __local_252: ref null String;
-    let __local_253: ref null Formatter;
-    let __local_254: i32;
-    let __local_255: ref null String;
-    let __local_256: ref null "core:internal/Box<u64>";
-    let __local_257: ref null Formatter;
-    let __local_258: i32;
-    let __local_259: ref null String;
-    let __local_260: ref null "core:internal/Box<i32>";
-    let __local_261: ref null Formatter;
-    let __local_262: ref null "core:internal/Box<i32>";
-    let __local_263: ref null Formatter;
-    let __local_264: ref null "core:internal/Box<f32>";
+    let __local_249: ref null String;
+    let __local_250: ref null "core:internal/Box<i64>";
+    let __local_251: ref null String;
+    let __local_252: ref null Formatter;
+    let __local_253: i32;
+    let __local_254: ref null String;
+    let __local_255: ref null "core:internal/Box<i64>";
+    let __local_256: ref null Formatter;
+    let __local_257: i32;
+    let __local_258: ref null String;
+    let __local_259: ref null "core:internal/Box<i32>";
+    let __local_260: ref null Formatter;
+    let __local_261: ref null "core:internal/Box<i32>";
+    let __local_262: ref null Formatter;
+    let __local_263: ref null String;
+    let __local_264: ref null "core:internal/Box<u64>";
     let __local_265: ref null String;
     let __local_266: ref null Formatter;
     let __local_267: i32;
     let __local_268: ref null String;
-    let __local_269: i32;
-    let __local_270: ref null String;
-    let __local_271: ref null "core:internal/Box<i32>";
-    let __local_272: ref null Formatter;
+    let __local_269: ref null "core:internal/Box<u64>";
+    let __local_270: ref null Formatter;
+    let __local_271: i32;
+    let __local_272: ref null String;
     let __local_273: ref null "core:internal/Box<i32>";
     let __local_274: ref null Formatter;
-    let __local_275: ref null "core:internal/Box<f64>";
-    let __local_276: ref null String;
-    let __local_277: ref null Formatter;
-    let __local_278: i32;
+    let __local_275: ref null "core:internal/Box<i32>";
+    let __local_276: ref null Formatter;
+    let __local_277: ref null String;
+    let __local_278: ref null "core:internal/Box<f32>";
     let __local_279: ref null String;
-    let __local_280: i32;
-    let __local_281: ref null String;
-    let __local_282: ref null "core:internal/Box<i32>";
-    let __local_283: ref null Formatter;
-    let __local_284: ref null "core:internal/Box<i32>";
-    let __local_285: ref null Formatter;
-    let __local_286: ref null "core:internal/Box<bool>";
-    let __local_287: ref null String;
+    let __local_280: ref null Formatter;
+    let __local_281: i32;
+    let __local_282: ref null String;
+    let __local_283: i32;
+    let __local_284: ref null String;
+    let __local_285: ref null "core:internal/Box<i32>";
+    let __local_286: ref null Formatter;
+    let __local_287: ref null "core:internal/Box<i32>";
     let __local_288: ref null Formatter;
-    let __local_289: i32;
-    let __local_290: ref null String;
-    let __local_291: ref null "core:internal/Box<bool>";
+    let __local_289: ref null String;
+    let __local_290: ref null "core:internal/Box<f64>";
+    let __local_291: ref null String;
     let __local_292: ref null Formatter;
     let __local_293: i32;
     let __local_294: ref null String;
-    let __local_295: ref null "core:internal/Box<i32>";
-    let __local_296: ref null Formatter;
+    let __local_295: i32;
+    let __local_296: ref null String;
     let __local_297: ref null "core:internal/Box<i32>";
     let __local_298: ref null Formatter;
-    let __local_299: ref null "core:internal/Box<bool>";
-    let __local_300: ref null String;
-    let __local_301: ref null Formatter;
-    let __local_302: i32;
+    let __local_299: ref null "core:internal/Box<i32>";
+    let __local_300: ref null Formatter;
+    let __local_301: ref null String;
+    let __local_302: ref null "core:internal/Box<bool>";
     let __local_303: ref null String;
-    let __local_304: ref null "core:internal/Box<bool>";
-    let __local_305: ref null Formatter;
-    let __local_306: i32;
-    let __local_307: ref null String;
-    let __local_308: ref null "core:internal/Box<i32>";
-    let __local_309: ref null Formatter;
-    let __local_310: ref null "core:internal/Box<i32>";
-    let __local_311: ref null Formatter;
-    let __local_312: ref null "core:internal/Box<char>";
-    let __local_313: ref null String;
-    let __local_314: i32;
-    let __local_315: i32;
-    let __local_316: ref null String;
-    let __local_317: ref null "core:internal/Box<i32>";
+    let __local_304: ref null Formatter;
+    let __local_305: i32;
+    let __local_306: ref null String;
+    let __local_307: ref null "core:internal/Box<bool>";
+    let __local_308: ref null Formatter;
+    let __local_309: i32;
+    let __local_310: ref null String;
+    let __local_311: ref null "core:internal/Box<i32>";
+    let __local_312: ref null Formatter;
+    let __local_313: ref null "core:internal/Box<i32>";
+    let __local_314: ref null Formatter;
+    let __local_315: ref null String;
+    let __local_316: ref null "core:internal/Box<bool>";
+    let __local_317: ref null String;
     let __local_318: ref null Formatter;
-    let __local_319: ref null "core:internal/Box<i32>";
-    let __local_320: ref null Formatter;
-    let __local_321: char;
-    let __local_322: i8;
-    let __local_323: i8;
-    let __local_324: u8;
-    let __local_325: u8;
-    let __local_326: i16;
-    let __local_327: i16;
-    let __local_328: u16;
-    let __local_329: bool;
-    let __local_330: bool;
+    let __local_319: i32;
+    let __local_320: ref null String;
+    let __local_321: ref null "core:internal/Box<bool>";
+    let __local_322: ref null Formatter;
+    let __local_323: i32;
+    let __local_324: ref null String;
+    let __local_325: ref null "core:internal/Box<i32>";
+    let __local_326: ref null Formatter;
+    let __local_327: ref null "core:internal/Box<i32>";
+    let __local_328: ref null Formatter;
+    let __local_329: ref null String;
+    let __local_330: ref null "core:internal/Box<char>";
+    let __local_331: ref null String;
+    let __local_332: i32;
+    let __local_333: i32;
+    let __local_334: ref null String;
+    let __local_335: ref null "core:internal/Box<i32>";
+    let __local_336: ref null Formatter;
+    let __local_337: ref null "core:internal/Box<i32>";
+    let __local_338: ref null Formatter;
+    let __local_339: ref null String;
+    let __local_340: char;
+    let __local_341: i8;
+    let __local_342: i8;
+    let __local_343: u8;
+    let __local_344: u8;
+    let __local_345: i16;
+    let __local_346: i16;
+    let __local_347: u16;
+    let __local_348: bool;
+    let __local_349: bool;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -656,21 +697,25 @@ fn run() with Stdout {
 condition: 127 as i8.to_string() == \"127\"
 "), used: 43 });
             String::append(__local_44, String { repr: array.new_data<u8>("127 as i8.to_string(): "), used: 23 });
-            String::append(__local_44, __v0_0);
+            __local_45 = __inline_Formatter__new_9: block -> ref null Formatter {
+                __local_95 = __local_44;
+                break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_95) };
+            };
+            String^Inspect::inspect(__v0_0, __local_45);
             String::append_char(__local_44, 10);
             break __tmpl: __local_44;
         });
         unreachable;
     };
-    __v0_2 = __inline_i8__to_string_9: block -> ref null String {
-        __local_96 = String { repr: builtin::array_new<u8>(5), used: 0 };
-        __local_97 = __inline_Formatter__new_11: block -> ref null Formatter {
-            __local_99 = __local_96;
-            break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_99) };
+    __v0_2 = __inline_i8__to_string_10: block -> ref null String {
+        __local_97 = String { repr: builtin::array_new<u8>(5), used: 0 };
+        __local_98 = __inline_Formatter__new_12: block -> ref null Formatter {
+            __local_100 = __local_97;
+            break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_100) };
         };
-        __local_101 = __local_97;
-        i32::fmt_decimal(-128, __local_101);
-        break __inline_i8__to_string_9: __local_96;
+        __local_102 = __local_98;
+        i32::fmt_decimal(-128, __local_102);
+        break __inline_i8__to_string_10: __local_97;
     };
     __cond_3 = String^Eq::eq(__v0_2, String { repr: array.new_data<u8>("-128"), used: 4 });
     if __cond_3 == 0 {
@@ -686,31 +731,35 @@ condition: 127 as i8.to_string() == \"127\"
             String::append_char(__local_46, 32);
             String::append(__local_46, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_all_primitives.wado"), used: 56 });
             String::append_char(__local_46, 58);
-            __local_47 = __inline_Formatter__new_14: block -> ref null Formatter {
-                __local_103 = __local_46;
-                break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_103) };
+            __local_47 = __inline_Formatter__new_15: block -> ref null Formatter {
+                __local_104 = __local_46;
+                break __inline_Formatter__new_15: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_104) };
             };
-            __local_105 = __local_47;
-            i32::fmt_decimal(7, __local_105);
+            __local_106 = __local_47;
+            i32::fmt_decimal(7, __local_106);
             String::append(__local_46, String { repr: array.new_data<u8>("
 condition: -128 as i8.to_string() == \"-128\"
 "), used: 45 });
             String::append(__local_46, String { repr: array.new_data<u8>("-128 as i8.to_string(): "), used: 24 });
-            String::append(__local_46, __v0_2);
+            __local_47 = __inline_Formatter__new_18: block -> ref null Formatter {
+                __local_109 = __local_46;
+                break __inline_Formatter__new_18: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_109) };
+            };
+            String^Inspect::inspect(__v0_2, __local_47);
             String::append_char(__local_46, 10);
             break __tmpl: __local_46;
         });
         unreachable;
     };
-    __v0_4 = __inline_u8__to_string_17: block -> ref null String {
-        __local_109 = String { repr: builtin::array_new<u8>(4), used: 0 };
-        __local_110 = __inline_Formatter__new_19: block -> ref null Formatter {
-            __local_112 = __local_109;
-            break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_112) };
+    __v0_4 = __inline_u8__to_string_19: block -> ref null String {
+        __local_111 = String { repr: builtin::array_new<u8>(4), used: 0 };
+        __local_112 = __inline_Formatter__new_21: block -> ref null Formatter {
+            __local_114 = __local_111;
+            break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_114) };
         };
-        __local_114 = __local_110;
-        i32::fmt_decimal(255, __local_114);
-        break __inline_u8__to_string_17: __local_109;
+        __local_116 = __local_112;
+        i32::fmt_decimal(255, __local_116);
+        break __inline_u8__to_string_19: __local_111;
     };
     __cond_5 = String^Eq::eq(__v0_4, String { repr: array.new_data<u8>("255"), used: 3 });
     if __cond_5 == 0 {
@@ -726,31 +775,35 @@ condition: -128 as i8.to_string() == \"-128\"
             String::append_char(__local_48, 32);
             String::append(__local_48, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_all_primitives.wado"), used: 56 });
             String::append_char(__local_48, 58);
-            __local_49 = __inline_Formatter__new_22: block -> ref null Formatter {
-                __local_116 = __local_48;
-                break __inline_Formatter__new_22: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_116) };
+            __local_49 = __inline_Formatter__new_24: block -> ref null Formatter {
+                __local_118 = __local_48;
+                break __inline_Formatter__new_24: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_118) };
             };
-            __local_118 = __local_49;
-            i32::fmt_decimal(10, __local_118);
+            __local_120 = __local_49;
+            i32::fmt_decimal(10, __local_120);
             String::append(__local_48, String { repr: array.new_data<u8>("
 condition: 255 as u8.to_string() == \"255\"
 "), used: 43 });
             String::append(__local_48, String { repr: array.new_data<u8>("255 as u8.to_string(): "), used: 23 });
-            String::append(__local_48, __v0_4);
+            __local_49 = __inline_Formatter__new_27: block -> ref null Formatter {
+                __local_123 = __local_48;
+                break __inline_Formatter__new_27: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_123) };
+            };
+            String^Inspect::inspect(__v0_4, __local_49);
             String::append_char(__local_48, 10);
             break __tmpl: __local_48;
         });
         unreachable;
     };
-    __v0_6 = __inline_u8__to_string_25: block -> ref null String {
-        __local_122 = String { repr: builtin::array_new<u8>(4), used: 0 };
-        __local_123 = __inline_Formatter__new_27: block -> ref null Formatter {
-            __local_125 = __local_122;
-            break __inline_Formatter__new_27: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_125) };
+    __v0_6 = __inline_u8__to_string_28: block -> ref null String {
+        __local_125 = String { repr: builtin::array_new<u8>(4), used: 0 };
+        __local_126 = __inline_Formatter__new_30: block -> ref null Formatter {
+            __local_128 = __local_125;
+            break __inline_Formatter__new_30: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_128) };
         };
-        __local_127 = __local_123;
-        i32::fmt_decimal(0, __local_127);
-        break __inline_u8__to_string_25: __local_122;
+        __local_130 = __local_126;
+        i32::fmt_decimal(0, __local_130);
+        break __inline_u8__to_string_28: __local_125;
     };
     __cond_7 = String^Eq::eq(__v0_6, String { repr: array.new_data<u8>("0"), used: 1 });
     if __cond_7 == 0 {
@@ -766,31 +819,35 @@ condition: 255 as u8.to_string() == \"255\"
             String::append_char(__local_50, 32);
             String::append(__local_50, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_all_primitives.wado"), used: 56 });
             String::append_char(__local_50, 58);
-            __local_51 = __inline_Formatter__new_30: block -> ref null Formatter {
-                __local_129 = __local_50;
-                break __inline_Formatter__new_30: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_129) };
+            __local_51 = __inline_Formatter__new_33: block -> ref null Formatter {
+                __local_132 = __local_50;
+                break __inline_Formatter__new_33: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_132) };
             };
-            __local_131 = __local_51;
-            i32::fmt_decimal(11, __local_131);
+            __local_134 = __local_51;
+            i32::fmt_decimal(11, __local_134);
             String::append(__local_50, String { repr: array.new_data<u8>("
 condition: 0 as u8.to_string() == \"0\"
 "), used: 39 });
             String::append(__local_50, String { repr: array.new_data<u8>("0 as u8.to_string(): "), used: 21 });
-            String::append(__local_50, __v0_6);
+            __local_51 = __inline_Formatter__new_36: block -> ref null Formatter {
+                __local_137 = __local_50;
+                break __inline_Formatter__new_36: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_137) };
+            };
+            String^Inspect::inspect(__v0_6, __local_51);
             String::append_char(__local_50, 10);
             break __tmpl: __local_50;
         });
         unreachable;
     };
-    __v0_8 = __inline_i16__to_string_33: block -> ref null String {
-        __local_135 = String { repr: builtin::array_new<u8>(7), used: 0 };
-        __local_136 = __inline_Formatter__new_35: block -> ref null Formatter {
-            __local_138 = __local_135;
-            break __inline_Formatter__new_35: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_138) };
+    __v0_8 = __inline_i16__to_string_37: block -> ref null String {
+        __local_139 = String { repr: builtin::array_new<u8>(7), used: 0 };
+        __local_140 = __inline_Formatter__new_39: block -> ref null Formatter {
+            __local_142 = __local_139;
+            break __inline_Formatter__new_39: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_142) };
         };
-        __local_140 = __local_136;
-        i32::fmt_decimal(32767, __local_140);
-        break __inline_i16__to_string_33: __local_135;
+        __local_144 = __local_140;
+        i32::fmt_decimal(32767, __local_144);
+        break __inline_i16__to_string_37: __local_139;
     };
     __cond_9 = String^Eq::eq(__v0_8, String { repr: array.new_data<u8>("32767"), used: 5 });
     if __cond_9 == 0 {
@@ -806,31 +863,35 @@ condition: 0 as u8.to_string() == \"0\"
             String::append_char(__local_52, 32);
             String::append(__local_52, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_all_primitives.wado"), used: 56 });
             String::append_char(__local_52, 58);
-            __local_53 = __inline_Formatter__new_38: block -> ref null Formatter {
-                __local_142 = __local_52;
-                break __inline_Formatter__new_38: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_142) };
+            __local_53 = __inline_Formatter__new_42: block -> ref null Formatter {
+                __local_146 = __local_52;
+                break __inline_Formatter__new_42: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_146) };
             };
-            __local_144 = __local_53;
-            i32::fmt_decimal(14, __local_144);
+            __local_148 = __local_53;
+            i32::fmt_decimal(14, __local_148);
             String::append(__local_52, String { repr: array.new_data<u8>("
 condition: 32767 as i16.to_string() == \"32767\"
 "), used: 48 });
             String::append(__local_52, String { repr: array.new_data<u8>("32767 as i16.to_string(): "), used: 26 });
-            String::append(__local_52, __v0_8);
+            __local_53 = __inline_Formatter__new_45: block -> ref null Formatter {
+                __local_151 = __local_52;
+                break __inline_Formatter__new_45: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_151) };
+            };
+            String^Inspect::inspect(__v0_8, __local_53);
             String::append_char(__local_52, 10);
             break __tmpl: __local_52;
         });
         unreachable;
     };
-    __v0_10 = __inline_i16__to_string_41: block -> ref null String {
-        __local_148 = String { repr: builtin::array_new<u8>(7), used: 0 };
-        __local_149 = __inline_Formatter__new_43: block -> ref null Formatter {
-            __local_151 = __local_148;
-            break __inline_Formatter__new_43: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_151) };
+    __v0_10 = __inline_i16__to_string_46: block -> ref null String {
+        __local_153 = String { repr: builtin::array_new<u8>(7), used: 0 };
+        __local_154 = __inline_Formatter__new_48: block -> ref null Formatter {
+            __local_156 = __local_153;
+            break __inline_Formatter__new_48: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_156) };
         };
-        __local_153 = __local_149;
-        i32::fmt_decimal(-32768, __local_153);
-        break __inline_i16__to_string_41: __local_148;
+        __local_158 = __local_154;
+        i32::fmt_decimal(-32768, __local_158);
+        break __inline_i16__to_string_46: __local_153;
     };
     __cond_11 = String^Eq::eq(__v0_10, String { repr: array.new_data<u8>("-32768"), used: 6 });
     if __cond_11 == 0 {
@@ -846,31 +907,35 @@ condition: 32767 as i16.to_string() == \"32767\"
             String::append_char(__local_54, 32);
             String::append(__local_54, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_all_primitives.wado"), used: 56 });
             String::append_char(__local_54, 58);
-            __local_55 = __inline_Formatter__new_46: block -> ref null Formatter {
-                __local_155 = __local_54;
-                break __inline_Formatter__new_46: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_155) };
+            __local_55 = __inline_Formatter__new_51: block -> ref null Formatter {
+                __local_160 = __local_54;
+                break __inline_Formatter__new_51: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_160) };
             };
-            __local_157 = __local_55;
-            i32::fmt_decimal(15, __local_157);
+            __local_162 = __local_55;
+            i32::fmt_decimal(15, __local_162);
             String::append(__local_54, String { repr: array.new_data<u8>("
 condition: -32768 as i16.to_string() == \"-32768\"
 "), used: 50 });
             String::append(__local_54, String { repr: array.new_data<u8>("-32768 as i16.to_string(): "), used: 27 });
-            String::append(__local_54, __v0_10);
+            __local_55 = __inline_Formatter__new_54: block -> ref null Formatter {
+                __local_165 = __local_54;
+                break __inline_Formatter__new_54: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_165) };
+            };
+            String^Inspect::inspect(__v0_10, __local_55);
             String::append_char(__local_54, 10);
             break __tmpl: __local_54;
         });
         unreachable;
     };
-    __v0_12 = __inline_u16__to_string_49: block -> ref null String {
-        __local_161 = String { repr: builtin::array_new<u8>(6), used: 0 };
-        __local_162 = __inline_Formatter__new_51: block -> ref null Formatter {
-            __local_164 = __local_161;
-            break __inline_Formatter__new_51: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_164) };
+    __v0_12 = __inline_u16__to_string_55: block -> ref null String {
+        __local_167 = String { repr: builtin::array_new<u8>(6), used: 0 };
+        __local_168 = __inline_Formatter__new_57: block -> ref null Formatter {
+            __local_170 = __local_167;
+            break __inline_Formatter__new_57: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_170) };
         };
-        __local_166 = __local_162;
-        i32::fmt_decimal(65535, __local_166);
-        break __inline_u16__to_string_49: __local_161;
+        __local_172 = __local_168;
+        i32::fmt_decimal(65535, __local_172);
+        break __inline_u16__to_string_55: __local_167;
     };
     __cond_13 = String^Eq::eq(__v0_12, String { repr: array.new_data<u8>("65535"), used: 5 });
     if __cond_13 == 0 {
@@ -886,31 +951,35 @@ condition: -32768 as i16.to_string() == \"-32768\"
             String::append_char(__local_56, 32);
             String::append(__local_56, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_all_primitives.wado"), used: 56 });
             String::append_char(__local_56, 58);
-            __local_57 = __inline_Formatter__new_54: block -> ref null Formatter {
-                __local_168 = __local_56;
-                break __inline_Formatter__new_54: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_168) };
+            __local_57 = __inline_Formatter__new_60: block -> ref null Formatter {
+                __local_174 = __local_56;
+                break __inline_Formatter__new_60: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_174) };
             };
-            __local_170 = __local_57;
-            i32::fmt_decimal(18, __local_170);
+            __local_176 = __local_57;
+            i32::fmt_decimal(18, __local_176);
             String::append(__local_56, String { repr: array.new_data<u8>("
 condition: 65535 as u16.to_string() == \"65535\"
 "), used: 48 });
             String::append(__local_56, String { repr: array.new_data<u8>("65535 as u16.to_string(): "), used: 26 });
-            String::append(__local_56, __v0_12);
+            __local_57 = __inline_Formatter__new_63: block -> ref null Formatter {
+                __local_179 = __local_56;
+                break __inline_Formatter__new_63: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_179) };
+            };
+            String^Inspect::inspect(__v0_12, __local_57);
             String::append_char(__local_56, 10);
             break __tmpl: __local_56;
         });
         unreachable;
     };
-    __v0_14 = __inline_i32__to_string_57: block -> ref null String {
-        __local_174 = String { repr: builtin::array_new<u8>(12), used: 0 };
-        __local_175 = __inline_Formatter__new_59: block -> ref null Formatter {
-            __local_177 = __local_174;
-            break __inline_Formatter__new_59: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_177) };
+    __v0_14 = __inline_i32__to_string_64: block -> ref null String {
+        __local_181 = String { repr: builtin::array_new<u8>(12), used: 0 };
+        __local_182 = __inline_Formatter__new_66: block -> ref null Formatter {
+            __local_184 = __local_181;
+            break __inline_Formatter__new_66: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_184) };
         };
-        __local_179 = __local_175;
-        i32::fmt_decimal(2147483647, __local_179);
-        break __inline_i32__to_string_57: __local_174;
+        __local_186 = __local_182;
+        i32::fmt_decimal(2147483647, __local_186);
+        break __inline_i32__to_string_64: __local_181;
     };
     __cond_15 = String^Eq::eq(__v0_14, String { repr: array.new_data<u8>("2147483647"), used: 10 });
     if __cond_15 == 0 {
@@ -926,31 +995,35 @@ condition: 65535 as u16.to_string() == \"65535\"
             String::append_char(__local_58, 32);
             String::append(__local_58, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_all_primitives.wado"), used: 56 });
             String::append_char(__local_58, 58);
-            __local_59 = __inline_Formatter__new_62: block -> ref null Formatter {
-                __local_181 = __local_58;
-                break __inline_Formatter__new_62: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_181) };
+            __local_59 = __inline_Formatter__new_69: block -> ref null Formatter {
+                __local_188 = __local_58;
+                break __inline_Formatter__new_69: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_188) };
             };
-            __local_183 = __local_59;
-            i32::fmt_decimal(21, __local_183);
+            __local_190 = __local_59;
+            i32::fmt_decimal(21, __local_190);
             String::append(__local_58, String { repr: array.new_data<u8>("
 condition: 2147483647.to_string() == \"2147483647\"
 "), used: 51 });
             String::append(__local_58, String { repr: array.new_data<u8>("2147483647.to_string(): "), used: 24 });
-            String::append(__local_58, __v0_14);
+            __local_59 = __inline_Formatter__new_72: block -> ref null Formatter {
+                __local_193 = __local_58;
+                break __inline_Formatter__new_72: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_193) };
+            };
+            String^Inspect::inspect(__v0_14, __local_59);
             String::append_char(__local_58, 10);
             break __tmpl: __local_58;
         });
         unreachable;
     };
-    __v0_16 = __inline_i32__to_string_65: block -> ref null String {
-        __local_187 = String { repr: builtin::array_new<u8>(12), used: 0 };
-        __local_188 = __inline_Formatter__new_67: block -> ref null Formatter {
-            __local_190 = __local_187;
-            break __inline_Formatter__new_67: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_190) };
+    __v0_16 = __inline_i32__to_string_73: block -> ref null String {
+        __local_195 = String { repr: builtin::array_new<u8>(12), used: 0 };
+        __local_196 = __inline_Formatter__new_75: block -> ref null Formatter {
+            __local_198 = __local_195;
+            break __inline_Formatter__new_75: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_198) };
         };
-        __local_192 = __local_188;
-        i32::fmt_decimal(-2147483648, __local_192);
-        break __inline_i32__to_string_65: __local_187;
+        __local_200 = __local_196;
+        i32::fmt_decimal(-2147483648, __local_200);
+        break __inline_i32__to_string_73: __local_195;
     };
     __cond_17 = String^Eq::eq(__v0_16, String { repr: array.new_data<u8>("-2147483648"), used: 11 });
     if __cond_17 == 0 {
@@ -966,31 +1039,35 @@ condition: 2147483647.to_string() == \"2147483647\"
             String::append_char(__local_60, 32);
             String::append(__local_60, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_all_primitives.wado"), used: 56 });
             String::append_char(__local_60, 58);
-            __local_61 = __inline_Formatter__new_70: block -> ref null Formatter {
-                __local_194 = __local_60;
-                break __inline_Formatter__new_70: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_194) };
+            __local_61 = __inline_Formatter__new_78: block -> ref null Formatter {
+                __local_202 = __local_60;
+                break __inline_Formatter__new_78: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_202) };
             };
-            __local_196 = __local_61;
-            i32::fmt_decimal(22, __local_196);
+            __local_204 = __local_61;
+            i32::fmt_decimal(22, __local_204);
             String::append(__local_60, String { repr: array.new_data<u8>("
 condition: -2147483648.to_string() == \"-2147483648\"
 "), used: 53 });
             String::append(__local_60, String { repr: array.new_data<u8>("-2147483648.to_string(): "), used: 25 });
-            String::append(__local_60, __v0_16);
+            __local_61 = __inline_Formatter__new_81: block -> ref null Formatter {
+                __local_207 = __local_60;
+                break __inline_Formatter__new_81: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_207) };
+            };
+            String^Inspect::inspect(__v0_16, __local_61);
             String::append_char(__local_60, 10);
             break __tmpl: __local_60;
         });
         unreachable;
     };
-    __v0_18 = __inline_i32__to_string_73: block -> ref null String {
-        __local_200 = String { repr: builtin::array_new<u8>(12), used: 0 };
-        __local_201 = __inline_Formatter__new_75: block -> ref null Formatter {
-            __local_203 = __local_200;
-            break __inline_Formatter__new_75: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_203) };
+    __v0_18 = __inline_i32__to_string_82: block -> ref null String {
+        __local_209 = String { repr: builtin::array_new<u8>(12), used: 0 };
+        __local_210 = __inline_Formatter__new_84: block -> ref null Formatter {
+            __local_212 = __local_209;
+            break __inline_Formatter__new_84: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_212) };
         };
-        __local_205 = __local_201;
-        i32::fmt_decimal(0, __local_205);
-        break __inline_i32__to_string_73: __local_200;
+        __local_214 = __local_210;
+        i32::fmt_decimal(0, __local_214);
+        break __inline_i32__to_string_82: __local_209;
     };
     __cond_19 = String^Eq::eq(__v0_18, String { repr: array.new_data<u8>("0"), used: 1 });
     if __cond_19 == 0 {
@@ -1006,31 +1083,35 @@ condition: -2147483648.to_string() == \"-2147483648\"
             String::append_char(__local_62, 32);
             String::append(__local_62, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_all_primitives.wado"), used: 56 });
             String::append_char(__local_62, 58);
-            __local_63 = __inline_Formatter__new_78: block -> ref null Formatter {
-                __local_207 = __local_62;
-                break __inline_Formatter__new_78: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_207) };
+            __local_63 = __inline_Formatter__new_87: block -> ref null Formatter {
+                __local_216 = __local_62;
+                break __inline_Formatter__new_87: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_216) };
             };
-            __local_209 = __local_63;
-            i32::fmt_decimal(23, __local_209);
+            __local_218 = __local_63;
+            i32::fmt_decimal(23, __local_218);
             String::append(__local_62, String { repr: array.new_data<u8>("
 condition: 0.to_string() == \"0\"
 "), used: 33 });
             String::append(__local_62, String { repr: array.new_data<u8>("0.to_string(): "), used: 15 });
-            String::append(__local_62, __v0_18);
+            __local_63 = __inline_Formatter__new_90: block -> ref null Formatter {
+                __local_221 = __local_62;
+                break __inline_Formatter__new_90: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_221) };
+            };
+            String^Inspect::inspect(__v0_18, __local_63);
             String::append_char(__local_62, 10);
             break __tmpl: __local_62;
         });
         unreachable;
     };
-    __v0_21 = __inline_u32__to_string_81: block -> ref null String {
-        __local_213 = String { repr: builtin::array_new<u8>(11), used: 0 };
-        __local_214 = __inline_Formatter__new_83: block -> ref null Formatter {
-            __local_216 = __local_213;
-            break __inline_Formatter__new_83: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_216) };
+    __v0_21 = __inline_u32__to_string_91: block -> ref null String {
+        __local_223 = String { repr: builtin::array_new<u8>(11), used: 0 };
+        __local_224 = __inline_Formatter__new_93: block -> ref null Formatter {
+            __local_226 = __local_223;
+            break __inline_Formatter__new_93: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_226) };
         };
-        __local_218 = __local_214;
-        u32::fmt_decimal(-1, __local_218);
-        break __inline_u32__to_string_81: __local_213;
+        __local_228 = __local_224;
+        u32::fmt_decimal(-1, __local_228);
+        break __inline_u32__to_string_91: __local_223;
     };
     __cond_22 = String^Eq::eq(__v0_21, String { repr: array.new_data<u8>("4294967295"), used: 10 });
     if __cond_22 == 0 {
@@ -1046,31 +1127,35 @@ condition: 0.to_string() == \"0\"
             String::append_char(__local_64, 32);
             String::append(__local_64, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_all_primitives.wado"), used: 56 });
             String::append_char(__local_64, 58);
-            __local_65 = __inline_Formatter__new_86: block -> ref null Formatter {
-                __local_220 = __local_64;
-                break __inline_Formatter__new_86: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_220) };
+            __local_65 = __inline_Formatter__new_96: block -> ref null Formatter {
+                __local_230 = __local_64;
+                break __inline_Formatter__new_96: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_230) };
             };
-            __local_222 = __local_65;
-            i32::fmt_decimal(27, __local_222);
+            __local_232 = __local_65;
+            i32::fmt_decimal(27, __local_232);
             String::append(__local_64, String { repr: array.new_data<u8>("
 condition: j.to_string() == \"4294967295\"
 "), used: 42 });
             String::append(__local_64, String { repr: array.new_data<u8>("j.to_string(): "), used: 15 });
-            String::append(__local_64, __v0_21);
+            __local_65 = __inline_Formatter__new_99: block -> ref null Formatter {
+                __local_235 = __local_64;
+                break __inline_Formatter__new_99: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_235) };
+            };
+            String^Inspect::inspect(__v0_21, __local_65);
             String::append_char(__local_64, 10);
             break __tmpl: __local_64;
         });
         unreachable;
     };
-    __v0_24 = __inline_i64__to_string_89: block -> ref null String {
-        __local_226 = String { repr: builtin::array_new<u8>(21), used: 0 };
-        __local_227 = __inline_Formatter__new_91: block -> ref null Formatter {
-            __local_229 = __local_226;
-            break __inline_Formatter__new_91: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_229) };
+    __v0_24 = __inline_i64__to_string_100: block -> ref null String {
+        __local_237 = String { repr: builtin::array_new<u8>(21), used: 0 };
+        __local_238 = __inline_Formatter__new_102: block -> ref null Formatter {
+            __local_240 = __local_237;
+            break __inline_Formatter__new_102: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_240) };
         };
-        __local_231 = __local_227;
-        i64::fmt_decimal(9223372036854775807_i64, __local_231);
-        break __inline_i64__to_string_89: __local_226;
+        __local_242 = __local_238;
+        i64::fmt_decimal(9223372036854775807_i64, __local_242);
+        break __inline_i64__to_string_100: __local_237;
     };
     __cond_25 = String^Eq::eq(__v0_24, String { repr: array.new_data<u8>("9223372036854775807"), used: 19 });
     if __cond_25 == 0 {
@@ -1086,31 +1171,35 @@ condition: j.to_string() == \"4294967295\"
             String::append_char(__local_66, 32);
             String::append(__local_66, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_all_primitives.wado"), used: 56 });
             String::append_char(__local_66, 58);
-            __local_67 = __inline_Formatter__new_94: block -> ref null Formatter {
-                __local_233 = __local_66;
-                break __inline_Formatter__new_94: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_233) };
+            __local_67 = __inline_Formatter__new_105: block -> ref null Formatter {
+                __local_244 = __local_66;
+                break __inline_Formatter__new_105: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_244) };
             };
-            __local_235 = __local_67;
-            i32::fmt_decimal(31, __local_235);
+            __local_246 = __local_67;
+            i32::fmt_decimal(31, __local_246);
             String::append(__local_66, String { repr: array.new_data<u8>("
 condition: k.to_string() == \"9223372036854775807\"
 "), used: 51 });
             String::append(__local_66, String { repr: array.new_data<u8>("k.to_string(): "), used: 15 });
-            String::append(__local_66, __v0_24);
+            __local_67 = __inline_Formatter__new_108: block -> ref null Formatter {
+                __local_249 = __local_66;
+                break __inline_Formatter__new_108: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_249) };
+            };
+            String^Inspect::inspect(__v0_24, __local_67);
             String::append_char(__local_66, 10);
             break __tmpl: __local_66;
         });
         unreachable;
     };
-    __v0_27 = __inline_i64__to_string_97: block -> ref null String {
-        __local_239 = String { repr: builtin::array_new<u8>(21), used: 0 };
-        __local_240 = __inline_Formatter__new_99: block -> ref null Formatter {
-            __local_242 = __local_239;
-            break __inline_Formatter__new_99: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_242) };
+    __v0_27 = __inline_i64__to_string_109: block -> ref null String {
+        __local_251 = String { repr: builtin::array_new<u8>(21), used: 0 };
+        __local_252 = __inline_Formatter__new_111: block -> ref null Formatter {
+            __local_254 = __local_251;
+            break __inline_Formatter__new_111: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_254) };
         };
-        __local_244 = __local_240;
-        i64::fmt_decimal(-9223372036854775808_i64, __local_244);
-        break __inline_i64__to_string_97: __local_239;
+        __local_256 = __local_252;
+        i64::fmt_decimal(-9223372036854775808_i64, __local_256);
+        break __inline_i64__to_string_109: __local_251;
     };
     __cond_28 = String^Eq::eq(__v0_27, String { repr: array.new_data<u8>("-9223372036854775808"), used: 20 });
     if __cond_28 == 0 {
@@ -1126,31 +1215,35 @@ condition: k.to_string() == \"9223372036854775807\"
             String::append_char(__local_68, 32);
             String::append(__local_68, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_all_primitives.wado"), used: 56 });
             String::append_char(__local_68, 58);
-            __local_69 = __inline_Formatter__new_102: block -> ref null Formatter {
-                __local_246 = __local_68;
-                break __inline_Formatter__new_102: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_246) };
+            __local_69 = __inline_Formatter__new_114: block -> ref null Formatter {
+                __local_258 = __local_68;
+                break __inline_Formatter__new_114: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_258) };
             };
-            __local_248 = __local_69;
-            i32::fmt_decimal(33, __local_248);
+            __local_260 = __local_69;
+            i32::fmt_decimal(33, __local_260);
             String::append(__local_68, String { repr: array.new_data<u8>("
 condition: l.to_string() == \"-9223372036854775808\"
 "), used: 52 });
             String::append(__local_68, String { repr: array.new_data<u8>("l.to_string(): "), used: 15 });
-            String::append(__local_68, __v0_27);
+            __local_69 = __inline_Formatter__new_117: block -> ref null Formatter {
+                __local_263 = __local_68;
+                break __inline_Formatter__new_117: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_263) };
+            };
+            String^Inspect::inspect(__v0_27, __local_69);
             String::append_char(__local_68, 10);
             break __tmpl: __local_68;
         });
         unreachable;
     };
-    __v0_30 = __inline_u64__to_string_105: block -> ref null String {
-        __local_252 = String { repr: builtin::array_new<u8>(21), used: 0 };
-        __local_253 = __inline_Formatter__new_107: block -> ref null Formatter {
-            __local_255 = __local_252;
-            break __inline_Formatter__new_107: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_255) };
+    __v0_30 = __inline_u64__to_string_118: block -> ref null String {
+        __local_265 = String { repr: builtin::array_new<u8>(21), used: 0 };
+        __local_266 = __inline_Formatter__new_120: block -> ref null Formatter {
+            __local_268 = __local_265;
+            break __inline_Formatter__new_120: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_268) };
         };
-        __local_257 = __local_253;
-        u64::fmt_decimal(-1_i64, __local_257);
-        break __inline_u64__to_string_105: __local_252;
+        __local_270 = __local_266;
+        u64::fmt_decimal(-1_i64, __local_270);
+        break __inline_u64__to_string_118: __local_265;
     };
     __cond_31 = String^Eq::eq(__v0_30, String { repr: array.new_data<u8>("18446744073709551615"), used: 20 });
     if __cond_31 == 0 {
@@ -1166,30 +1259,34 @@ condition: l.to_string() == \"-9223372036854775808\"
             String::append_char(__local_70, 32);
             String::append(__local_70, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_all_primitives.wado"), used: 56 });
             String::append_char(__local_70, 58);
-            __local_71 = __inline_Formatter__new_110: block -> ref null Formatter {
-                __local_259 = __local_70;
-                break __inline_Formatter__new_110: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_259) };
+            __local_71 = __inline_Formatter__new_123: block -> ref null Formatter {
+                __local_272 = __local_70;
+                break __inline_Formatter__new_123: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_272) };
             };
-            __local_261 = __local_71;
-            i32::fmt_decimal(37, __local_261);
+            __local_274 = __local_71;
+            i32::fmt_decimal(37, __local_274);
             String::append(__local_70, String { repr: array.new_data<u8>("
 condition: m.to_string() == \"18446744073709551615\"
 "), used: 52 });
             String::append(__local_70, String { repr: array.new_data<u8>("m.to_string(): "), used: 15 });
-            String::append(__local_70, __v0_30);
+            __local_71 = __inline_Formatter__new_126: block -> ref null Formatter {
+                __local_277 = __local_70;
+                break __inline_Formatter__new_126: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_277) };
+            };
+            String^Inspect::inspect(__v0_30, __local_71);
             String::append_char(__local_70, 10);
             break __tmpl: __local_70;
         });
         unreachable;
     };
-    __v0_33 = __inline_f32__to_string_113: block -> ref null String {
-        __local_265 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_266 = __inline_Formatter__new_115: block -> ref null Formatter {
-            __local_268 = __local_265;
-            break __inline_Formatter__new_115: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_268) };
+    __v0_33 = __inline_f32__to_string_127: block -> ref null String {
+        __local_279 = String { repr: builtin::array_new<u8>(16), used: 0 };
+        __local_280 = __inline_Formatter__new_129: block -> ref null Formatter {
+            __local_282 = __local_279;
+            break __inline_Formatter__new_129: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_282) };
         };
-        f32::fmt_into(3.14_f32, __local_266);
-        break __inline_f32__to_string_113: __local_265;
+        f32::fmt_into(3.14_f32, __local_280);
+        break __inline_f32__to_string_127: __local_279;
     };
     __cond_34 = String^Eq::eq(__v0_33, String { repr: array.new_data<u8>("3.14"), used: 4 });
     if __cond_34 == 0 {
@@ -1205,30 +1302,34 @@ condition: m.to_string() == \"18446744073709551615\"
             String::append_char(__local_72, 32);
             String::append(__local_72, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_all_primitives.wado"), used: 56 });
             String::append_char(__local_72, 58);
-            __local_73 = __inline_Formatter__new_117: block -> ref null Formatter {
-                __local_270 = __local_72;
-                break __inline_Formatter__new_117: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_270) };
+            __local_73 = __inline_Formatter__new_131: block -> ref null Formatter {
+                __local_284 = __local_72;
+                break __inline_Formatter__new_131: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_284) };
             };
-            __local_272 = __local_73;
-            i32::fmt_decimal(41, __local_272);
+            __local_286 = __local_73;
+            i32::fmt_decimal(41, __local_286);
             String::append(__local_72, String { repr: array.new_data<u8>("
 condition: n.to_string() == \"3.14\"
 "), used: 36 });
             String::append(__local_72, String { repr: array.new_data<u8>("n.to_string(): "), used: 15 });
-            String::append(__local_72, __v0_33);
+            __local_73 = __inline_Formatter__new_134: block -> ref null Formatter {
+                __local_289 = __local_72;
+                break __inline_Formatter__new_134: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_289) };
+            };
+            String^Inspect::inspect(__v0_33, __local_73);
             String::append_char(__local_72, 10);
             break __tmpl: __local_72;
         });
         unreachable;
     };
-    __v0_36 = __inline_f64__to_string_120: block -> ref null String {
-        __local_276 = String { repr: builtin::array_new<u8>(24), used: 0 };
-        __local_277 = __inline_Formatter__new_122: block -> ref null Formatter {
-            __local_279 = __local_276;
-            break __inline_Formatter__new_122: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_279) };
+    __v0_36 = __inline_f64__to_string_135: block -> ref null String {
+        __local_291 = String { repr: builtin::array_new<u8>(24), used: 0 };
+        __local_292 = __inline_Formatter__new_137: block -> ref null Formatter {
+            __local_294 = __local_291;
+            break __inline_Formatter__new_137: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_294) };
         };
-        f64::fmt_into(3.141592653589793, __local_277);
-        break __inline_f64__to_string_120: __local_276;
+        f64::fmt_into(3.141592653589793, __local_292);
+        break __inline_f64__to_string_135: __local_291;
     };
     __cond_37 = String^Eq::eq(__v0_36, String { repr: array.new_data<u8>("3.141592653589793"), used: 17 });
     if __cond_37 == 0 {
@@ -1244,31 +1345,35 @@ condition: n.to_string() == \"3.14\"
             String::append_char(__local_74, 32);
             String::append(__local_74, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_all_primitives.wado"), used: 56 });
             String::append_char(__local_74, 58);
-            __local_75 = __inline_Formatter__new_124: block -> ref null Formatter {
-                __local_281 = __local_74;
-                break __inline_Formatter__new_124: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_281) };
+            __local_75 = __inline_Formatter__new_139: block -> ref null Formatter {
+                __local_296 = __local_74;
+                break __inline_Formatter__new_139: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_296) };
             };
-            __local_283 = __local_75;
-            i32::fmt_decimal(45, __local_283);
+            __local_298 = __local_75;
+            i32::fmt_decimal(45, __local_298);
             String::append(__local_74, String { repr: array.new_data<u8>("
 condition: o.to_string() == \"3.141592653589793\"
 "), used: 49 });
             String::append(__local_74, String { repr: array.new_data<u8>("o.to_string(): "), used: 15 });
-            String::append(__local_74, __v0_36);
+            __local_75 = __inline_Formatter__new_142: block -> ref null Formatter {
+                __local_301 = __local_74;
+                break __inline_Formatter__new_142: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_301) };
+            };
+            String^Inspect::inspect(__v0_36, __local_75);
             String::append_char(__local_74, 10);
             break __tmpl: __local_74;
         });
         unreachable;
     };
-    __v0_38 = __inline_bool__to_string_127: block -> ref null String {
-        __local_287 = String { repr: builtin::array_new<u8>(5), used: 0 };
-        __local_288 = __inline_Formatter__new_129: block -> ref null Formatter {
-            __local_290 = __local_287;
-            break __inline_Formatter__new_129: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_290) };
+    __v0_38 = __inline_bool__to_string_143: block -> ref null String {
+        __local_303 = String { repr: builtin::array_new<u8>(5), used: 0 };
+        __local_304 = __inline_Formatter__new_145: block -> ref null Formatter {
+            __local_306 = __local_303;
+            break __inline_Formatter__new_145: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_306) };
         };
-        __local_292 = __local_288;
-        Formatter::pad(__local_292, String { repr: array.new_data<u8>("true"), used: 4 });
-        break __inline_bool__to_string_127: __local_287;
+        __local_308 = __local_304;
+        Formatter::pad(__local_308, String { repr: array.new_data<u8>("true"), used: 4 });
+        break __inline_bool__to_string_143: __local_303;
     };
     __cond_39 = String^Eq::eq(__v0_38, String { repr: array.new_data<u8>("true"), used: 4 });
     if __cond_39 == 0 {
@@ -1284,31 +1389,35 @@ condition: o.to_string() == \"3.141592653589793\"
             String::append_char(__local_76, 32);
             String::append(__local_76, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_all_primitives.wado"), used: 56 });
             String::append_char(__local_76, 58);
-            __local_77 = __inline_Formatter__new_132: block -> ref null Formatter {
-                __local_294 = __local_76;
-                break __inline_Formatter__new_132: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_294) };
+            __local_77 = __inline_Formatter__new_148: block -> ref null Formatter {
+                __local_310 = __local_76;
+                break __inline_Formatter__new_148: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_310) };
             };
-            __local_296 = __local_77;
-            i32::fmt_decimal(48, __local_296);
+            __local_312 = __local_77;
+            i32::fmt_decimal(48, __local_312);
             String::append(__local_76, String { repr: array.new_data<u8>("
 condition: true.to_string() == \"true\"
 "), used: 39 });
             String::append(__local_76, String { repr: array.new_data<u8>("true.to_string(): "), used: 18 });
-            String::append(__local_76, __v0_38);
+            __local_77 = __inline_Formatter__new_151: block -> ref null Formatter {
+                __local_315 = __local_76;
+                break __inline_Formatter__new_151: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_315) };
+            };
+            String^Inspect::inspect(__v0_38, __local_77);
             String::append_char(__local_76, 10);
             break __tmpl: __local_76;
         });
         unreachable;
     };
-    __v0_40 = __inline_bool__to_string_135: block -> ref null String {
-        __local_300 = String { repr: builtin::array_new<u8>(5), used: 0 };
-        __local_301 = __inline_Formatter__new_137: block -> ref null Formatter {
-            __local_303 = __local_300;
-            break __inline_Formatter__new_137: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_303) };
+    __v0_40 = __inline_bool__to_string_152: block -> ref null String {
+        __local_317 = String { repr: builtin::array_new<u8>(5), used: 0 };
+        __local_318 = __inline_Formatter__new_154: block -> ref null Formatter {
+            __local_320 = __local_317;
+            break __inline_Formatter__new_154: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_320) };
         };
-        __local_305 = __local_301;
-        Formatter::pad(__local_305, String { repr: array.new_data<u8>("false"), used: 5 });
-        break __inline_bool__to_string_135: __local_300;
+        __local_322 = __local_318;
+        Formatter::pad(__local_322, String { repr: array.new_data<u8>("false"), used: 5 });
+        break __inline_bool__to_string_152: __local_317;
     };
     __cond_41 = String^Eq::eq(__v0_40, String { repr: array.new_data<u8>("false"), used: 5 });
     if __cond_41 == 0 {
@@ -1324,26 +1433,30 @@ condition: true.to_string() == \"true\"
             String::append_char(__local_78, 32);
             String::append(__local_78, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_all_primitives.wado"), used: 56 });
             String::append_char(__local_78, 58);
-            __local_79 = __inline_Formatter__new_140: block -> ref null Formatter {
-                __local_307 = __local_78;
-                break __inline_Formatter__new_140: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_307) };
+            __local_79 = __inline_Formatter__new_157: block -> ref null Formatter {
+                __local_324 = __local_78;
+                break __inline_Formatter__new_157: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_324) };
             };
-            __local_309 = __local_79;
-            i32::fmt_decimal(49, __local_309);
+            __local_326 = __local_79;
+            i32::fmt_decimal(49, __local_326);
             String::append(__local_78, String { repr: array.new_data<u8>("
 condition: false.to_string() == \"false\"
 "), used: 41 });
             String::append(__local_78, String { repr: array.new_data<u8>("false.to_string(): "), used: 19 });
-            String::append(__local_78, __v0_40);
+            __local_79 = __inline_Formatter__new_160: block -> ref null Formatter {
+                __local_329 = __local_78;
+                break __inline_Formatter__new_160: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_329) };
+            };
+            String^Inspect::inspect(__v0_40, __local_79);
             String::append_char(__local_78, 10);
             break __tmpl: __local_78;
         });
         unreachable;
     };
-    __v0_42 = __inline_char__to_string_143: block -> ref null String {
-        __local_313 = String { repr: builtin::array_new<u8>(4), used: 0 };
-        String::append_char(__local_313, 90);
-        break __inline_char__to_string_143: __local_313;
+    __v0_42 = __inline_char__to_string_161: block -> ref null String {
+        __local_331 = String { repr: builtin::array_new<u8>(4), used: 0 };
+        String::append_char(__local_331, 90);
+        break __inline_char__to_string_161: __local_331;
     };
     __cond_43 = String^Eq::eq(__v0_42, String { repr: array.new_data<u8>("Z"), used: 1 });
     if __cond_43 == 0 {
@@ -1359,17 +1472,21 @@ condition: false.to_string() == \"false\"
             String::append_char(__local_80, 32);
             String::append(__local_80, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_all_primitives.wado"), used: 56 });
             String::append_char(__local_80, 58);
-            __local_81 = __inline_Formatter__new_146: block -> ref null Formatter {
-                __local_316 = __local_80;
-                break __inline_Formatter__new_146: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_316) };
+            __local_81 = __inline_Formatter__new_164: block -> ref null Formatter {
+                __local_334 = __local_80;
+                break __inline_Formatter__new_164: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_334) };
             };
-            __local_318 = __local_81;
-            i32::fmt_decimal(52, __local_318);
+            __local_336 = __local_81;
+            i32::fmt_decimal(52, __local_336);
             String::append(__local_80, String { repr: array.new_data<u8>("
 condition: 'Z'.to_string() == \"Z\"
 "), used: 35 });
             String::append(__local_80, String { repr: array.new_data<u8>("'Z'.to_string(): "), used: 17 });
-            String::append(__local_80, __v0_42);
+            __local_81 = __inline_Formatter__new_167: block -> ref null Formatter {
+                __local_339 = __local_80;
+                break __inline_Formatter__new_167: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_339) };
+            };
+            String^Inspect::inspect(__v0_42, __local_81);
             String::append_char(__local_80, 10);
             break __tmpl: __local_80;
         });
@@ -3231,6 +3348,62 @@ fn String^Eq::eq(self, other) {
     return 1;
 }
 
+fn StrCharIter^Iterator::next(self) {
+    let b0: u8;
+    let b1_2: u8;
+    let code_3: u8;
+    let b1_4: u8;
+    let b2_5: u8;
+    let code_6: u8;
+    let b1_7: u8;
+    let b2_8: u8;
+    let b3: u8;
+    let code_10: u8;
+    let __local_11: u32;
+    let __local_12: u32;
+    let __local_13: u32;
+    let __local_14: u32;
+    if self.byte_index >= self.used {
+        return 1; 0;
+    };
+    b0 = builtin::array_get_u8(self.repr, self.byte_index);
+    self.byte_index = self.byte_index + 1;
+    if b0 <u 128 {
+        return 0; __inline_char__from_u32_unchecked_0: block -> char {
+            __local_11 = b0;
+            break __inline_char__from_u32_unchecked_0: __local_11;
+        };
+    };
+    if b0 <u 224 {
+        b1_2 = builtin::array_get_u8(self.repr, self.byte_index);
+        self.byte_index = self.byte_index + 1;
+        code_3 = ((b0 & 31) << 6) | (b1_2 & 63);
+        return 0; __inline_char__from_u32_unchecked_1: block -> char {
+            __local_12 = code_3;
+            break __inline_char__from_u32_unchecked_1: __local_12;
+        };
+    };
+    if b0 <u 240 {
+        b1_4 = builtin::array_get_u8(self.repr, self.byte_index);
+        b2_5 = builtin::array_get_u8(self.repr, self.byte_index + 1);
+        self.byte_index = self.byte_index + 2;
+        code_6 = (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63);
+        return 0; __inline_char__from_u32_unchecked_2: block -> char {
+            __local_13 = code_6;
+            break __inline_char__from_u32_unchecked_2: __local_13;
+        };
+    };
+    b1_7 = builtin::array_get_u8(self.repr, self.byte_index);
+    b2_8 = builtin::array_get_u8(self.repr, self.byte_index + 1);
+    b3 = builtin::array_get_u8(self.repr, self.byte_index + 2);
+    self.byte_index = self.byte_index + 3;
+    code_10 = ((((b0 & 7) << 18) | ((b1_7 & 63) << 12)) | ((b2_8 & 63) << 6)) | (b3 & 63);
+    return 0; __inline_char__from_u32_unchecked_3: block -> char {
+        __local_14 = code_10;
+        break __inline_char__from_u32_unchecked_3: __local_14;
+    };
+}
+
 fn String::append_char(self, c) {
     let code: u32;
     code = c;
@@ -3265,13 +3438,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l205: loop {
+            l209: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l205;
+                continue l209;
             };
         };
     };
@@ -3369,10 +3542,10 @@ fn Formatter::apply_padding(self, start_pos) {
         i_8 = content_len - 1;
         _licm_buf_29 = self.buf;
         _licm_repr_33 = _licm_buf_29.repr;
-        b215: block {
-            l216: loop {
+        b219: block {
+            l220: loop {
                 if (i_8 >= 0) == 0 {
-                    break b215;
+                    break b219;
                 };
                 index_14 = (start_pos + left_pad) + i_8;
                 value_15 = __inline_String__get_byte_2: block -> u8 {
@@ -3381,7 +3554,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 };
                 builtin::array_set_u8(_licm_repr_33, index_14, value_15);
                 i_8 = i_8 - 1;
-                continue l216;
+                continue l220;
             };
         };
         __for_1: block {
@@ -3389,14 +3562,14 @@ fn Formatter::apply_padding(self, start_pos) {
             _licm_buf_30 = self.buf;
             _licm_repr_34 = _licm_buf_30.repr;
             block {
-                l219: loop {
+                l223: loop {
                     if (j_9 < left_pad) == 0 {
                         break __for_1;
                     };
                     index_19 = start_pos + j_9;
                     builtin::array_set_u8(_licm_repr_34, index_19, fill_byte);
                     j_9 = j_9 + 1;
-                    continue l219;
+                    continue l223;
                 };
             };
         };
@@ -3406,10 +3579,10 @@ fn Formatter::apply_padding(self, start_pos) {
         i_10 = content_len - 1;
         _licm_buf_31 = self.buf;
         _licm_repr_35 = _licm_buf_31.repr;
-        b221: block {
-            l222: loop {
+        b225: block {
+            l226: loop {
                 if (i_10 >= 0) == 0 {
-                    break b221;
+                    break b225;
                 };
                 index_22 = (start_pos + padding) + i_10;
                 value_23 = __inline_String__get_byte_5: block -> u8 {
@@ -3418,7 +3591,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 };
                 builtin::array_set_u8(_licm_repr_35, index_22, value_23);
                 i_10 = i_10 - 1;
-                continue l222;
+                continue l226;
             };
         };
         __for_2: block {
@@ -3426,14 +3599,14 @@ fn Formatter::apply_padding(self, start_pos) {
             _licm_buf_32 = self.buf;
             _licm_repr_36 = _licm_buf_32.repr;
             block {
-                l225: loop {
+                l229: loop {
                     if (j_11 < padding) == 0 {
                         break __for_2;
                     };
                     index_27 = start_pos + j_11;
                     builtin::array_set_u8(_licm_repr_36, index_27, fill_byte);
                     j_11 = j_11 + 1;
-                    continue l225;
+                    continue l229;
                 };
             };
         };
@@ -3520,6 +3693,82 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
+}
+
+fn String^Inspect::inspect(self, f) {
+    let __iter_4: ref null StrCharIter;
+    let c: char;
+    let __pattern_temp_0: ref null Option<char>;
+    let __local_5: ref null Formatter;
+    let __local_6: char;
+    let __local_7: ref null StrCharIter;
+    let __local_8: ref null String;
+    let __local_9: ref null Formatter;
+    let __local_10: char;
+    let __local_11: ref null Formatter;
+    let __local_12: char;
+    let __local_13: ref null Formatter;
+    let __local_14: char;
+    let __local_15: ref null Formatter;
+    let __local_16: char;
+    let __local_17: ref null Formatter;
+    let __local_18: char;
+    let __local_19: ref null Formatter;
+    let __local_20: char;
+    let __local_21: ref null Formatter;
+    let __local_22: char;
+    let __local_23: ref null Formatter;
+    let __local_24: char;
+    let __local_25: ref null Formatter;
+    let __local_26: char;
+    let __local_27: ref null Formatter;
+    let __local_28: char;
+    let __local_29: ref null Formatter;
+    let __local_30: char;
+    let __local_31: ref null Formatter;
+    let __local_32: char;
+    let _licm_buf_33: ref null String;
+    String::append_char(f.buf, 34);
+    __iter_4 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref null StrCharIter {
+        __local_7 = __inline_String__chars_2: block -> ref null StrCharIter {
+            __local_8 = self;
+            break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
+        };
+        break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
+    };
+    _licm_buf_33 = f.buf;
+    b248: block {
+        l249: loop {
+            let __sroa___pattern_temp_0_discriminant: i32;
+            let __sroa___pattern_temp_0_payload_0: char;
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_4);
+            if __sroa___pattern_temp_0_discriminant == 0 {
+                c = __sroa___pattern_temp_0_payload_0;
+                if c == 34 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 34);
+                } else if c == 92 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 92);
+                } else if c == 10 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 110);
+                } else if c == 13 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 114);
+                } else if c == 9 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 116);
+                } else {
+                    String::append_char(_licm_buf_33, c);
+                };
+            } else {
+                break b248;
+            };
+            continue l249;
+        };
+    };
+    String::append_char(f.buf, 34);
 }
 
 export fn __cm_export__run as "run"

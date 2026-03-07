@@ -8,6 +8,12 @@ struct Box<i32> {  // from core:internal  // Box<T> with T=i32
 
 array array<u8> (mut u8);
 
+struct StrCharIter {
+    mut repr: ref array<u8>,
+    mut used: i32,
+    mut byte_index: i32,
+}
+
 struct String {
     mut repr: ref array<u8>,
     mut used: i32,
@@ -226,6 +232,16 @@ struct Option<FieldSizePayload>::Some {
     payload_0: ref null "wasi:http/FieldSizePayload",
 }
 
+variant Option<char> {
+    Some(char),
+    None,
+}
+
+struct Option<char>::Some {
+    discriminant: i32,
+    payload_0: char,
+}
+
 variant Result<Response,ErrorCode> {
     Ok(i32),
     Err(ref null "wasi:http/ErrorCode"),
@@ -352,13 +368,19 @@ type "functype/String::append" = fn(ref null String, ref null String);
 
 type "functype/String^Eq::eq" = fn(ref null String, ref null String) -> bool;
 
+type "functype/StrCharIter^Iterator::next" = fn(ref null StrCharIter) -> ref null Option<char>;
+
 type "functype/String::append_char" = fn(ref null String, char);
 
 type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref null String, i32) -> i32;
 
+type "functype/String^Inspect::inspect" = fn(ref null String, ref null Formatter);
+
 type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
+
+type "functype/StrCharIter^Iterator::next" = fn(ref null StrCharIter) -> [i32, char];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref null Formatter);
 
@@ -553,6 +575,7 @@ fn handle(request) {
     let __local_168: ref null Formatter;
     let __local_169: ref null "core:internal/Box<i32>";
     let __local_170: ref null Formatter;
+    let __local_171: ref null String;
     path = __cm_adapter__Request_get_path_with_query(request);
     if ref.test Option<String>::Some(path) {
         p = value_copy String(ref.cast Option<String>::Some(path).payload_0);
@@ -586,7 +609,11 @@ condition: p == \"/hello\"
                 String::append_char(__local_10, 112);
                 String::append_char(__local_10, 58);
                 String::append_char(__local_10, 32);
-                String::append(__local_10, __v0);
+                __local_11 = __inline_Formatter__new_4: block -> ref null Formatter {
+                    __local_171 = __local_10;
+                    break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_171) };
+                };
+                String^Inspect::inspect(__v0, __local_11);
                 String::append_char(__local_10, 10);
                 break __tmpl: __local_10;
             });
@@ -1269,6 +1296,62 @@ fn String^Eq::eq(self, other) {
     return 1;
 }
 
+fn StrCharIter^Iterator::next(self) {
+    let b0: u8;
+    let b1_2: u8;
+    let code_3: u8;
+    let b1_4: u8;
+    let b2_5: u8;
+    let code_6: u8;
+    let b1_7: u8;
+    let b2_8: u8;
+    let b3: u8;
+    let code_10: u8;
+    let __local_11: u32;
+    let __local_12: u32;
+    let __local_13: u32;
+    let __local_14: u32;
+    if self.byte_index >= self.used {
+        return 1; 0;
+    };
+    b0 = builtin::array_get_u8(self.repr, self.byte_index);
+    self.byte_index = self.byte_index + 1;
+    if b0 <u 128 {
+        return 0; __inline_char__from_u32_unchecked_0: block -> char {
+            __local_11 = b0;
+            break __inline_char__from_u32_unchecked_0: __local_11;
+        };
+    };
+    if b0 <u 224 {
+        b1_2 = builtin::array_get_u8(self.repr, self.byte_index);
+        self.byte_index = self.byte_index + 1;
+        code_3 = ((b0 & 31) << 6) | (b1_2 & 63);
+        return 0; __inline_char__from_u32_unchecked_1: block -> char {
+            __local_12 = code_3;
+            break __inline_char__from_u32_unchecked_1: __local_12;
+        };
+    };
+    if b0 <u 240 {
+        b1_4 = builtin::array_get_u8(self.repr, self.byte_index);
+        b2_5 = builtin::array_get_u8(self.repr, self.byte_index + 1);
+        self.byte_index = self.byte_index + 2;
+        code_6 = (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63);
+        return 0; __inline_char__from_u32_unchecked_2: block -> char {
+            __local_13 = code_6;
+            break __inline_char__from_u32_unchecked_2: __local_13;
+        };
+    };
+    b1_7 = builtin::array_get_u8(self.repr, self.byte_index);
+    b2_8 = builtin::array_get_u8(self.repr, self.byte_index + 1);
+    b3 = builtin::array_get_u8(self.repr, self.byte_index + 2);
+    self.byte_index = self.byte_index + 3;
+    code_10 = ((((b0 & 7) << 18) | ((b1_7 & 63) << 12)) | ((b2_8 & 63) << 6)) | (b3 & 63);
+    return 0; __inline_char__from_u32_unchecked_3: block -> char {
+        __local_14 = code_10;
+        break __inline_char__from_u32_unchecked_3: __local_14;
+    };
+}
+
 fn String::append_char(self, c) {
     let code: u32;
     code = c;
@@ -1303,13 +1386,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l77: loop {
+            l81: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l77;
+                continue l81;
             };
         };
     };
@@ -1395,6 +1478,82 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
+}
+
+fn String^Inspect::inspect(self, f) {
+    let __iter_4: ref null StrCharIter;
+    let c: char;
+    let __pattern_temp_0: ref null Option<char>;
+    let __local_5: ref null Formatter;
+    let __local_6: char;
+    let __local_7: ref null StrCharIter;
+    let __local_8: ref null String;
+    let __local_9: ref null Formatter;
+    let __local_10: char;
+    let __local_11: ref null Formatter;
+    let __local_12: char;
+    let __local_13: ref null Formatter;
+    let __local_14: char;
+    let __local_15: ref null Formatter;
+    let __local_16: char;
+    let __local_17: ref null Formatter;
+    let __local_18: char;
+    let __local_19: ref null Formatter;
+    let __local_20: char;
+    let __local_21: ref null Formatter;
+    let __local_22: char;
+    let __local_23: ref null Formatter;
+    let __local_24: char;
+    let __local_25: ref null Formatter;
+    let __local_26: char;
+    let __local_27: ref null Formatter;
+    let __local_28: char;
+    let __local_29: ref null Formatter;
+    let __local_30: char;
+    let __local_31: ref null Formatter;
+    let __local_32: char;
+    let _licm_buf_33: ref null String;
+    String::append_char(f.buf, 34);
+    __iter_4 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref null StrCharIter {
+        __local_7 = __inline_String__chars_2: block -> ref null StrCharIter {
+            __local_8 = self;
+            break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
+        };
+        break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
+    };
+    _licm_buf_33 = f.buf;
+    b100: block {
+        l101: loop {
+            let __sroa___pattern_temp_0_discriminant: i32;
+            let __sroa___pattern_temp_0_payload_0: char;
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_4);
+            if __sroa___pattern_temp_0_discriminant == 0 {
+                c = __sroa___pattern_temp_0_payload_0;
+                if c == 34 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 34);
+                } else if c == 92 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 92);
+                } else if c == 10 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 110);
+                } else if c == 13 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 114);
+                } else if c == 9 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 116);
+                } else {
+                    String::append_char(_licm_buf_33, c);
+                };
+            } else {
+                break b100;
+            };
+            continue l101;
+        };
+    };
+    String::append_char(f.buf, 34);
 }
 
 export fn __cm_export__handle as "handle"

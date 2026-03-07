@@ -1,0 +1,18 @@
+// Test: Assert inspect output for struct values
+// Structs should show as "TypeName { field: value, ... }" in inspect format
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+export fn run() with Stdout, Stderr {
+    let p = Point { x: 3, y: 4 };
+    assert p.x > 10;
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["condition: p.x > 10", "p.x: 3"]
+}

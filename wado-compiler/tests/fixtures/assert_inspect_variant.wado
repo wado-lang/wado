@@ -1,0 +1,14 @@
+// Test: Assert inspect output for variant values
+// Option is a variant; Some(42) shows as "Option::Some(42)" in inspect format
+
+export fn run() with Stdout, Stderr {
+    let v: Option<i32> = Option::Some(42);
+    let expected: Option<i32> = Option::Some(99);
+    assert v == expected;
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["condition: v == expected", "v: Option::Some(42)", "expected: Option::Some(99)"]
+}
