@@ -763,7 +763,7 @@ test "not yet implemented" {
 }
 ```
 
-Test blocks compile to a `wasi:test` world. Files with test blocks are discovered and executed by `wado test`:
+Test blocks compile to the `test` world. Files with test blocks are discovered and executed by `wado test`:
 
 ```sh
 wado test                       # discover and run *_test.wado files
