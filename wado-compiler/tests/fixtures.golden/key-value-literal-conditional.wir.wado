@@ -457,7 +457,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
+    "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 
@@ -526,12 +526,12 @@ fn "core:internal/log_stderr"(message) {  // from core:internal
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stderr::write_via_stream"(rx, 2048);
-    "core:internal/write_string_to_stream"(tx, value_copy String(message), 1);
+    "core:internal/write_string_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 
 fn "core:internal/panic"(message) {  // from core:internal
-    "core:internal/log_stderr"(value_copy String(message));
+    "core:internal/log_stderr"(message);
     unreachable;
 }
 
@@ -834,7 +834,7 @@ fn TreeMap<String,i32>^IndexValue::index_value(self, key) {
     let __local_6: ref null String;
     let __local_7: ref null Array<TreeMapEntry<String,i32>>;
     let __local_8: i32;
-    index = TreeMap<String,i32>::find_index(self, value_copy String(key));
+    index = TreeMap<String,i32>::find_index(self, key);
     if index < 0 {
         "core:internal/panic"(__tmpl: block -> ref null String {
             __local_3 = String { repr: builtin::array_new<u8>(31), used: 0 };
@@ -912,7 +912,7 @@ fn TreeMap<String,i32>::insert(self, key, value) {
     let __local_6: ref null Array<TreeMapEntry<String,i32>>;
     let __local_7: i32;
     let __local_8: ref null Array<TreeMapEntry<String,i32>>;
-    existing_index = TreeMap<String,i32>::find_index(self, value_copy String(key));
+    existing_index = TreeMap<String,i32>::find_index(self, key);
     if existing_index >= 0 {
         __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_0: block -> ref null "core:collections/TreeMapEntry<String,i32>" {
             __local_6 = self.entries;
@@ -929,8 +929,8 @@ fn TreeMap<String,i32>::insert(self, key, value) {
         break __inline_Array_TreeMapEntry_String_i32____len_1: __local_8.used;
     };
     entry = "core:collections/TreeMapEntry<String,i32>" { key: ref.as_non_null(key), value: value, deleted: 0 };
-    Array<TreeMapEntry<String,i32>>::append(self.entries, value_copy "core:collections/TreeMapEntry<String,i32>"(entry));
-    self.root = ref.as_non_null(TreeMap<String,i32>::insert_node(self, value_copy Option<TreeMapNode<String>>(self.root), value_copy String(key), new_index));
+    Array<TreeMapEntry<String,i32>>::append(self.entries, entry);
+    self.root = ref.as_non_null(TreeMap<String,i32>::insert_node(self, self.root, key, new_index));
     self.size = self.size + 1;
 }
 
@@ -946,12 +946,12 @@ fn TreeMap<String,i32>::insert_node(self, node, key, index) {
             return Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: n };
         };
         if String^Ord::cmp(key, n.key) == 0 {
-            n.left = ref.as_non_null(TreeMap<String,i32>::insert_node(self, value_copy Option<TreeMapNode<String>>(n.left), value_copy String(key), index));
+            n.left = ref.as_non_null(TreeMap<String,i32>::insert_node(self, n.left, key, index));
         } else {
-            n.right = ref.as_non_null(TreeMap<String,i32>::insert_node(self, value_copy Option<TreeMapNode<String>>(n.right), value_copy String(key), index));
+            n.right = ref.as_non_null(TreeMap<String,i32>::insert_node(self, n.right, key, index));
         };
         after_skew = TreeMap<String,i32>::skew(self, Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: n });
-        return TreeMap<String,i32>::split(self, value_copy Option<TreeMapNode<String>>(after_skew));
+        return TreeMap<String,i32>::split(self, after_skew);
     };
     new_node = "core:collections/TreeMapNode<String>" { key: ref.as_non_null(key), index: index, level: 1, left: Option<TreeMapNode<String>> { 1 }, right: Option<TreeMapNode<String>> { 1 } };
     return Option<TreeMapNode<String>>::Some { discriminant: 0, payload_0: new_node };
@@ -1075,20 +1075,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, value_copy String(sign));
+            String::append(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, value_copy String(prefix));
+            String::append(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, value_copy String(sign));
+            String::append(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, value_copy String(prefix));
+            String::append(self.buf, prefix);
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -1096,10 +1096,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     align = self.align;
     if align == 0 {
         if sign_len > 0 {
-            String::append(self.buf, value_copy String(sign));
+            String::append(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, value_copy String(prefix));
+            String::append(self.buf, prefix);
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -1109,10 +1109,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, value_copy String(sign));
+            String::append(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, value_copy String(prefix));
+            String::append(self.buf, prefix);
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -1120,10 +1120,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, value_copy String(sign));
+            String::append(self.buf, sign);
         };
         if prefix_len > 0 {
-            String::append(self.buf, value_copy String(prefix));
+            String::append(self.buf, prefix);
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };

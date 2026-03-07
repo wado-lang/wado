@@ -223,12 +223,12 @@ fn "core:internal/log_stderr"(message) {  // from core:internal
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stderr::write_via_stream"(rx, 2048);
-    "core:internal/write_string_to_stream"(tx, value_copy String(message), 1);
+    "core:internal/write_string_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 
 fn "core:internal/panic"(message) {  // from core:internal
-    "core:internal/log_stderr"(value_copy String(message));
+    "core:internal/log_stderr"(message);
     unreachable;
 }
 

@@ -136,7 +136,7 @@ fn run() with Stdout {
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_0);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 pair = __sroa___pattern_temp_0_payload_0;
-                "core:cli/println"(value_copy String(pair.0));
+                "core:cli/println"(pair.0);
             } else {
                 break b1;
             };
@@ -235,7 +235,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
+    "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 

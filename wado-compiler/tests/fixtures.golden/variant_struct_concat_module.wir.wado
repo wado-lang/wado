@@ -115,7 +115,7 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     opts = Opts { align: Align { 1 }, width: 0 };
-    s = format_str(String { repr: array.new_data<u8>("hi"), used: 2 }, value_copy Opts(opts));
+    s = format_str(String { repr: array.new_data<u8>("hi"), used: 2 }, opts);
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_2 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append(__local_2, String { repr: array.new_data<u8>("["), used: 1 });
@@ -214,7 +214,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
+    "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 

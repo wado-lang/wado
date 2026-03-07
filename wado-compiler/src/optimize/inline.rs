@@ -1326,7 +1326,7 @@ fn try_inline_static_call_expr(
     _type_table: &TypeTable,
     inline_counter: &mut u32,
 ) -> Option<(TirExpr, (ModuleSource, String))> {
-    let TirExprKind::StaticCall { func, args , .. } = &expr.kind else {
+    let TirExprKind::StaticCall { func, args, .. } = &expr.kind else {
         return None;
     };
 

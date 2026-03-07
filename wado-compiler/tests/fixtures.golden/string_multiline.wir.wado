@@ -84,14 +84,14 @@ fn run() with Stdout {
 Violets are blue,
 Wado is great,
 And so are you!"), used: 63 };
-    "core:cli/println"(value_copy String(poem));
+    "core:cli/println"(poem);
     mixed = String { repr: array.new_data<u8>("Line with tab:	here
 Next line"), used: 29 };
-    "core:cli/println"(value_copy String(mixed));
+    "core:cli/println"(mixed);
     with_empty = String { repr: array.new_data<u8>("First
 
 Third"), used: 12 };
-    "core:cli/println"(value_copy String(with_empty));
+    "core:cli/println"(with_empty);
     "core:cli/println"(String { repr: array.new_data<u8>("done"), used: 4 });
 }
 
@@ -184,7 +184,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
+    "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 

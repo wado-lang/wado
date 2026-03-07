@@ -94,7 +94,7 @@ fn run() with Stdout {
     } else {
         String { repr: array.new_data<u8>("other"), used: 5 };
     });
-    "core:cli/println"(value_copy String(r1));
+    "core:cli/println"(r1);
     r2 = value_copy String(let __match_scrut_1: i32; __match_scrut_1 = -100; if __match_scrut_1 == -100 -> ref null String {
         String { repr: array.new_data<u8>("minus hundred"), used: 13 };
     } else if __match_scrut_1 == -1 -> ref null String {
@@ -102,7 +102,7 @@ fn run() with Stdout {
     } else {
         String { repr: array.new_data<u8>("other"), used: 5 };
     });
-    "core:cli/println"(value_copy String(r2));
+    "core:cli/println"(r2);
     r3 = value_copy String(let __match_scrut_2: i64; __match_scrut_2 = -1000000000000_i64; if __match_scrut_2 == 0_i64 -> ref null String {
         String { repr: array.new_data<u8>("zero"), used: 4 };
     } else if __match_scrut_2 == -1000000000000_i64 -> ref null String {
@@ -110,7 +110,7 @@ fn run() with Stdout {
     } else {
         String { repr: array.new_data<u8>("other"), used: 5 };
     });
-    "core:cli/println"(value_copy String(r3));
+    "core:cli/println"(r3);
     r4 = value_copy String(let __match_scrut_3: i32; __match_scrut_3 = 42; if __match_scrut_3 == -42 -> ref null String {
         String { repr: array.new_data<u8>("minus answer"), used: 12 };
     } else if __match_scrut_3 == 0 -> ref null String {
@@ -120,7 +120,7 @@ fn run() with Stdout {
     } else {
         String { repr: array.new_data<u8>("other"), used: 5 };
     });
-    "core:cli/println"(value_copy String(r4));
+    "core:cli/println"(r4);
     r5 = value_copy String(let __match_scrut_4: i32; __match_scrut_4 = -5; if __match_scrut_4 == -5 -> ref null String {
         String { repr: array.new_data<u8>("minus five"), used: 10 };
     } else if __match_scrut_4 == 5 -> ref null String {
@@ -128,7 +128,7 @@ fn run() with Stdout {
     } else {
         String { repr: array.new_data<u8>("other"), used: 5 };
     });
-    "core:cli/println"(value_copy String(r5));
+    "core:cli/println"(r5);
 }
 
 fn __cm_export__run() {
@@ -220,7 +220,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
+    "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 

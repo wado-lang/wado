@@ -373,7 +373,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
+    "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 
@@ -442,12 +442,12 @@ fn "core:internal/log_stderr"(message) {  // from core:internal
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stderr::write_via_stream"(rx, 2048);
-    "core:internal/write_string_to_stream"(tx, value_copy String(message), 1);
+    "core:internal/write_string_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 
 fn "core:internal/panic"(message) {  // from core:internal
-    "core:internal/log_stderr"(value_copy String(message));
+    "core:internal/log_stderr"(message);
     unreachable;
 }
 
@@ -1383,18 +1383,18 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
     if kind == 3 {
         String::append(f.buf, String { repr: array.new_data<u8>("NaN"), used: 3 });
     } else if kind == 2 {
-        String::append(f.buf, value_copy String(if is_neg -> ref null String {
+        String::append(f.buf, if is_neg -> ref null String {
             String { repr: array.new_data<u8>("-inf"), used: 4 };
         } else {
             String { repr: array.new_data<u8>("inf"), used: 3 };
-        }));
+        });
     } else {
-        String::append(f.buf, value_copy String(if is_neg -> ref null String {
+        String::append(f.buf, if is_neg -> ref null String {
             String { repr: array.new_data<u8>("-"), used: 1 };
         } else {
             String { repr: builtin::array_new<u8>(0), used: 0 };
-        }));
-        String::append(f.buf, value_copy String(zero_repr));
+        });
+        String::append(f.buf, zero_repr);
     };
     Formatter::apply_padding(f, mark);
 }

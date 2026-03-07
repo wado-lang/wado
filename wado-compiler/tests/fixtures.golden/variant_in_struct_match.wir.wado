@@ -90,13 +90,13 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     __sroa_opts_align = "./variant_in_struct_match_module.wado/Align" { 1 };
-    "core:cli/println"(value_copy String(let __match_scrut_0: ref null "./variant_in_struct_match_module.wado/Align"; __match_scrut_0 = __sroa_opts_align; if __match_scrut_0.discriminant == 0 -> ref null String {
+    "core:cli/println"(let __match_scrut_0: ref null "./variant_in_struct_match_module.wado/Align"; __match_scrut_0 = __sroa_opts_align; if __match_scrut_0.discriminant == 0 -> ref null String {
         String { repr: array.new_data<u8>("left"), used: 4 };
     } else if __match_scrut_0.discriminant == 1 -> ref null String {
         String { repr: array.new_data<u8>("right"), used: 5 };
     } else {
         unreachable;
-    }));
+    });
 }
 
 fn __cm_export__run() {
@@ -188,7 +188,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
+    "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 

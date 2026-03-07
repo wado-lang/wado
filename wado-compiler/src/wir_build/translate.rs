@@ -578,7 +578,12 @@ impl FunctionTranslator<'_, '_> {
     /// When a parameter is not `mut`, the callee cannot reassign it, write to its
     /// fields, or call `&mut self` methods on it — so the caller's value is safe
     /// without a defensive copy.
-    fn maybe_value_copy_if_mut(&self, value: &TirExpr, translated: WirInstr, is_mut: bool) -> WirInstr {
+    fn maybe_value_copy_if_mut(
+        &self,
+        value: &TirExpr,
+        translated: WirInstr,
+        is_mut: bool,
+    ) -> WirInstr {
         if is_mut {
             self.maybe_value_copy(value, translated)
         } else {
@@ -1273,7 +1278,12 @@ impl FunctionTranslator<'_, '_> {
             },
 
             // === Function Calls ===
-            TirExprKind::Call { func, args, param_is_mut, .. } => {
+            TirExprKind::Call {
+                func,
+                args,
+                param_is_mut,
+                ..
+            } => {
                 // Check for instruction-builtins first
                 let builtin = func
                     .builtin_name()
@@ -1355,7 +1365,12 @@ impl FunctionTranslator<'_, '_> {
                     WirInstr::Unreachable
                 }
             }
-            TirExprKind::StaticCall { func, args, param_is_mut, .. } => {
+            TirExprKind::StaticCall {
+                func,
+                args,
+                param_is_mut,
+                ..
+            } => {
                 let translated_args: Vec<WirInstr> = args
                     .iter()
                     .enumerate()
