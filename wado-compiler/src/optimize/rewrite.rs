@@ -283,6 +283,7 @@ fn try_lower_to_select(
             func: func_ref,
             type_args: vec![result_type],
             args: vec![condition.clone(), true_val.clone(), false_val.clone()],
+            param_is_mut: vec![false, false, false],
         },
         result_type,
         span,

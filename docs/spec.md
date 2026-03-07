@@ -908,6 +908,54 @@ impl Point {
 
 In languages with ownership semantics (e.g., Rust), `self` by value transfers ownership to the method, preventing subsequent use of the receiver. Wado has no ownership system — there is no concept of "consuming" a value — so `self` by value serves no purpose. The parser rejects it with a clear error message guiding the user to `&self` or `&mut self`.
 
+**`mut` Parameters**
+
+A parameter can be declared `mut` to allow the function body to reassign it:
+
+```wado
+fn increment(mut n: i32) -> i32 {
+    n += 1;   // mutates the local copy
+    return n;
+}
+
+fn normalize(mut s: String) -> String {
+    s = s.to_uppercase();  // rebinds local binding
+    return s;
+}
+```
+
+The `mut` keyword grants write access to the local parameter binding inside the function. Due to Wado's value semantics for primitives (i32, f64, bool, char, etc.), reassigning a `mut` primitive parameter never affects the caller's variable — primitives are passed as Wasm stack values. For GC-managed reference types (struct, String, Array), reassigning the parameter binding (`p = new_value`) does not affect the caller's variable, but in-place mutations via method calls or field writes (`p.x = ...`) operate on the shared GC object and are visible to the caller.
+
+```wado
+fn countdown(mut n: i32) with Stdout {
+    while n > 0 {
+        println(`{n}`);
+        n -= 1;         // only modifies the local copy
+    }
+}
+
+let x = 3;
+countdown(x);
+// x is still 3 — primitive parameters are value types
+```
+
+Closures also support `mut` parameters:
+
+```wado
+let add_one = |mut n: i32| {
+    n += 1;
+    return n;
+};
+```
+
+Without `mut`, any assignment to a parameter is a compile error:
+
+```wado
+fn bad(n: i32) {
+    n = 10;  // Error: cannot assign to immutable variable 'n'
+}
+```
+
 ### String Type
 
 `String` is a built-in type representing UTF-8 encoded text with value semantics and GC management.

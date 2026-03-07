@@ -1,0 +1,26 @@
+use { println, Stdout } from "core:cli";
+
+fn increment(mut n: i32) -> i32 {
+    n += 1;
+    return n;
+}
+
+fn double_in_place(mut n: i32) {
+    n = n * 2;
+    // caller's value is unaffected
+}
+
+export fn run() with Stdout {
+    let x = 5;
+    let result = increment(x);
+    assert result == 6;
+    assert x == 5;
+
+    double_in_place(x);
+    assert x == 5; // still unchanged
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

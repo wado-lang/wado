@@ -86,7 +86,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     p.ty.as_ref()
                         .map(|t| self.resolve_type(t))
                         .unwrap_or(TypeTable::UNKNOWN);
-                closure_ctx.add_local(p.name.clone(), type_id, false);
+                closure_ctx.add_local(p.name.clone(), type_id, p.is_mut);
                 (p.name.clone(), type_id)
             })
             .collect();
@@ -165,7 +165,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     p.ty.as_ref()
                         .map(|t| self.resolve_type(t))
                         .unwrap_or(TypeTable::UNKNOWN);
-                closure_ctx.add_local(p.name.clone(), type_id, false);
+                closure_ctx.add_local(p.name.clone(), type_id, p.is_mut);
                 (p.name.clone(), type_id)
             })
             .collect();

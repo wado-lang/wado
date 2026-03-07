@@ -462,12 +462,14 @@ fn generate_enum_inspect_fn(
             name: "self".to_string(),
             type_id: ref_enum_type,
             local_index: 0,
+            is_mut: false,
             span,
         },
         TirParam {
             name: "f".to_string(),
             type_id: fmt_type,
             local_index: 1,
+            is_mut: false,
             span,
         },
     ];
@@ -582,12 +584,14 @@ fn generate_struct_inspect_fn(
             name: "self".to_string(),
             type_id: ref_struct_type,
             local_index: 0,
+            is_mut: false,
             span,
         },
         TirParam {
             name: "f".to_string(),
             type_id: fmt_type,
             local_index: 1,
+            is_mut: false,
             span,
         },
     ];
@@ -728,12 +732,14 @@ fn generate_generic_struct_inspect_fn(
             name: "self".to_string(),
             type_id: ref_struct_type,
             local_index: 0,
+            is_mut: false,
             span,
         },
         TirParam {
             name: "f".to_string(),
             type_id: fmt_type,
             local_index: 1,
+            is_mut: false,
             span,
         },
     ];
@@ -895,12 +901,14 @@ fn generate_variant_inspect_fn(
             name: "self".to_string(),
             type_id: ref_variant_type,
             local_index: 0,
+            is_mut: false,
             span,
         },
         TirParam {
             name: "f".to_string(),
             type_id: fmt_type,
             local_index: 1,
+            is_mut: false,
             span,
         },
     ];
@@ -1040,12 +1048,14 @@ fn generate_generic_variant_inspect_fn(
             name: "self".to_string(),
             type_id: ref_variant_type,
             local_index: 0,
+            is_mut: false,
             span,
         },
         TirParam {
             name: "f".to_string(),
             type_id: fmt_type,
             local_index: 1,
+            is_mut: false,
             span,
         },
     ];
@@ -1612,12 +1622,14 @@ fn inspect_params(ref_type: TypeId, fmt_type: TypeId, span: Span) -> Vec<TirPara
             name: "self".to_string(),
             type_id: ref_type,
             local_index: 0,
+            is_mut: false,
             span,
         },
         TirParam {
             name: "f".to_string(),
             type_id: fmt_type,
             local_index: 1,
+            is_mut: false,
             span,
         },
     ]
@@ -1952,12 +1964,14 @@ fn generate_display_fallback(
             name: "self".to_string(),
             type_id: ref_type,
             local_index: 0,
+            is_mut: false,
             span,
         },
         TirParam {
             name: "f".to_string(),
             type_id: fmt_type,
             local_index: 1,
+            is_mut: false,
             span,
         },
     ];
@@ -2222,12 +2236,14 @@ fn generate_enum_eq_fn(
             name: "self".to_string(),
             type_id: ref_enum_type,
             local_index: 0,
+            is_mut: false,
             span,
         },
         TirParam {
             name: "other".to_string(),
             type_id: ref_enum_type,
             local_index: 1,
+            is_mut: false,
             span,
         },
     ];
@@ -2320,12 +2336,14 @@ fn generate_enum_ord_fn(
             name: "self".to_string(),
             type_id: ref_enum_type,
             local_index: 0,
+            is_mut: false,
             span,
         },
         TirParam {
             name: "other".to_string(),
             type_id: ref_enum_type,
             local_index: 1,
+            is_mut: false,
             span,
         },
     ];

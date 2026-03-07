@@ -876,6 +876,7 @@ impl Parser {
                     } else {
                         SelfKind::Ref
                     },
+                    is_mut: false,
                     span: start_span,
                 });
             }
@@ -898,6 +899,13 @@ impl Parser {
             });
         }
 
+        let is_mut = if self.check(&TokenKind::Mut) {
+            self.advance();
+            true
+        } else {
+            false
+        };
+
         let name = self.consume_ident()?;
         self.expect(&TokenKind::Colon)?;
         let ty = self.parse_type()?;
@@ -906,6 +914,7 @@ impl Parser {
             name,
             ty,
             self_kind: SelfKind::None,
+            is_mut,
             span: start_span,
         })
     }
@@ -2883,6 +2892,12 @@ impl Parser {
     }
 
     fn parse_closure_param(&mut self) -> ParseResult<ClosureParam> {
+        let is_mut = if self.check(&TokenKind::Mut) {
+            self.advance();
+            true
+        } else {
+            false
+        };
         let name = self.consume_ident()?;
         let ty = if self.check(&TokenKind::Colon) {
             self.advance();
@@ -2890,7 +2905,7 @@ impl Parser {
         } else {
             None
         };
-        Ok(ClosureParam { name, ty })
+        Ok(ClosureParam { name, ty, is_mut })
     }
 
     fn parse_type(&mut self) -> ParseResult<Type> {

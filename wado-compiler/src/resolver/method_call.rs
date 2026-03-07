@@ -160,6 +160,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             mut return_type,
             self_kind,
             param_types,
+            param_is_mut: _,
             inherited_from_base,
             canonical_name,
         } = if let Some(info) = method_info {
@@ -179,6 +180,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 return_type: TypeTable::UNKNOWN,
                 self_kind: ast::SelfKind::Ref,
                 param_types: vec![],
+                param_is_mut: vec![],
                 inherited_from_base: None,
                 canonical_name: None,
             }
@@ -362,6 +364,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             self.type_table.borrow().get(base_type_id),
             ResolvedType::TypeParam { .. } | ResolvedType::AssocTypeProjection { .. }
         );
+        let param_is_mut = self.lookup_method_param_is_mut(&base_struct_name, &method_call.method);
         let mut method_info = LocalMethodName::new(
             base_struct_name, // Use base struct name without type params
             trait_name,
@@ -388,6 +391,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 },
                 type_args: method_type_args, // Use inferred type args
                 args,
+                param_is_mut,
             },
             return_type,
             method_call.span,
@@ -841,6 +845,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 )
             };
 
+        let param_is_mut = struct_name_for_lookup
+            .as_deref()
+            .map(|name| self.lookup_static_method_param_is_mut(name, &static_call.method))
+            .unwrap_or_default();
+
         // Build method_info with base struct name and trait name (if applicable)
         let mut method_info = LocalMethodName::new(
             struct_name.clone(),
@@ -866,6 +875,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     method_info: Some(method_info),
                 },
                 args,
+                param_is_mut,
             },
             return_type,
             static_call.span,
@@ -1183,6 +1193,76 @@ impl<H: CompilerHost> Resolver<'_, H> {
         Vec::new()
     }
 
+    /// Look up whether each non-self parameter of an instance method is `mut`.
+    /// Returns empty vec (conservative) for unknown methods.
+    fn lookup_method_param_is_mut(&self, struct_name: &str, method_name: &str) -> Vec<bool> {
+        let find_in_items = |items: &[Item]| -> Option<Vec<bool>> {
+            items.iter().find_map(|item| {
+                if let Item::Impl(impl_block) = item {
+                    let impl_struct_name = Self::get_type_name_static(&impl_block.ty);
+                    if impl_struct_name == struct_name {
+                        for method in &impl_block.methods {
+                            if method.name == method_name {
+                                let is_muts: Vec<bool> = method
+                                    .params
+                                    .iter()
+                                    .filter(|p| p.self_kind == ast::SelfKind::None)
+                                    .map(|p| p.is_mut)
+                                    .collect();
+                                return Some(is_muts);
+                            }
+                        }
+                    }
+                }
+                None
+            })
+        };
+
+        if let Some(result) = find_in_items(&self.current_module_items) {
+            return result;
+        }
+        for module in self.loaded_modules.values() {
+            if let Some(result) = find_in_items(&module.items) {
+                return result;
+            }
+        }
+        Vec::new()
+    }
+
+    /// Look up whether each parameter of a static method is `mut`.
+    /// Returns empty vec (conservative) for unknown methods.
+    fn lookup_static_method_param_is_mut(&self, struct_name: &str, method_name: &str) -> Vec<bool> {
+        let find_in_items = |items: &[Item]| -> Option<Vec<bool>> {
+            items.iter().find_map(|item| {
+                if let Item::Impl(impl_block) = item {
+                    let impl_struct_name = Self::get_type_name_static(&impl_block.ty);
+                    if impl_struct_name == struct_name {
+                        for method in &impl_block.methods {
+                            let has_self = method
+                                .params
+                                .iter()
+                                .any(|p| p.self_kind != ast::SelfKind::None);
+                            if method.name == method_name && !has_self {
+                                return Some(method.params.iter().map(|p| p.is_mut).collect());
+                            }
+                        }
+                    }
+                }
+                None
+            })
+        };
+
+        if let Some(result) = find_in_items(&self.current_module_items) {
+            return result;
+        }
+        for module in self.loaded_modules.values() {
+            if let Some(result) = find_in_items(&module.items) {
+                return result;
+            }
+        }
+        Vec::new()
+    }
+
     /// Find the trait name for a static method on a struct, if the method belongs to a trait impl.
     /// Returns `None` for inherent static methods, `Some(trait_name)` for trait static methods.
     pub(super) fn find_static_method_trait(
@@ -1380,6 +1460,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             })
         };
 
+        let param_is_mut = self.lookup_static_method_param_is_mut(&actual_struct_name, method_name);
+
         TirExpr::new(
             TirExprKind::StaticCall {
                 func: FunctionRef::External {
@@ -1393,6 +1475,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     )),
                 },
                 args: args.to_vec(),
+                param_is_mut,
             },
             return_type,
             span,

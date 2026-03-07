@@ -176,6 +176,7 @@ fn match_to_switch(
                         },
                         args: vec![],
                         type_args: vec![],
+                        param_is_mut: vec![],
                     },
                     TypeTable::NEVER,
                     span,

@@ -1469,6 +1469,8 @@ pub enum TirExprKind {
         /// Explicit type arguments for generic functions: `identity::<i32>(x)`
         type_args: Vec<TypeId>,
         args: Vec<TirExpr>,
+        /// Whether each parameter is `mut` in the callee. Empty means unknown (conservative).
+        param_is_mut: Vec<bool>,
     },
     /// Raw Component Model call to a lowered WASI import.
     ///
@@ -1488,6 +1490,8 @@ pub enum TirExprKind {
         /// Explicit type arguments for generic methods: `obj.method::<i32>()`
         type_args: Vec<TypeId>,
         args: Vec<TirExpr>,
+        /// Whether each non-receiver parameter is `mut` in the callee. Empty means unknown.
+        param_is_mut: Vec<bool>,
     },
     /// Static method call: `Array::<i32>::with_capacity(100)` or `Point::origin()`
     StaticCall {
@@ -1495,6 +1499,8 @@ pub enum TirExprKind {
         func: FunctionRef,
         /// Arguments to the static method
         args: Vec<TirExpr>,
+        /// Whether each parameter is `mut` in the callee. Empty means unknown (conservative).
+        param_is_mut: Vec<bool>,
     },
 
     FieldAccess {
@@ -2011,6 +2017,7 @@ pub struct TirParam {
     pub name: String,
     pub type_id: TypeId,
     pub local_index: u32,
+    pub is_mut: bool,
     pub span: Span,
 }
 

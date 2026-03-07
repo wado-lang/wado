@@ -689,6 +689,7 @@ impl ClosureLowerer {
                 name: "self".to_string(),
                 type_id: self_ref_type,
                 local_index: 0,
+                is_mut: false,
                 span: collected.span,
             });
 
@@ -697,6 +698,7 @@ impl ClosureLowerer {
                     name: name.clone(),
                     type_id: *type_id,
                     local_index: (i + 1) as u32,
+                    is_mut: false,
                     span: collected.span,
                 });
             }
@@ -1157,6 +1159,7 @@ impl ClosureLowerer {
                 func,
                 type_args,
                 args,
+                param_is_mut,
             } => {
                 let new_args = args
                     .iter()
@@ -1175,12 +1178,17 @@ impl ClosureLowerer {
                         func: func.clone(),
                         type_args: type_args.clone(),
                         args: new_args,
+                        param_is_mut: param_is_mut.clone(),
                     },
                     expr.type_id,
                     expr.span,
                 )
             }
-            TirExprKind::StaticCall { func, args } => {
+            TirExprKind::StaticCall {
+                func,
+                args,
+                param_is_mut,
+            } => {
                 let new_args = args
                     .iter()
                     .map(|a| {
@@ -1197,6 +1205,7 @@ impl ClosureLowerer {
                     TirExprKind::StaticCall {
                         func: func.clone(),
                         args: new_args,
+                        param_is_mut: param_is_mut.clone(),
                     },
                     expr.type_id,
                     expr.span,
@@ -1207,6 +1216,7 @@ impl ClosureLowerer {
                 func,
                 type_args,
                 args,
+                param_is_mut,
             } => {
                 let new_receiver = self.transform_closure_body(
                     receiver,
@@ -1233,6 +1243,7 @@ impl ClosureLowerer {
                         func: func.clone(),
                         type_args: type_args.clone(),
                         args: new_args,
+                        param_is_mut: param_is_mut.clone(),
                     },
                     expr.type_id,
                     expr.span,
@@ -1925,6 +1936,7 @@ impl ClosureLowerer {
                 func,
                 args,
                 type_args: _,
+                ..
             } => {
                 // Check if this is a call to a known function with closure args
                 if let Some(callee_rc) = func_by_name.get(&func.name()) {
@@ -1948,6 +1960,7 @@ impl ClosureLowerer {
                 func,
                 args,
                 type_args: _,
+                ..
             } => {
                 // Check if this is a method call with closure args
                 if let Some(callee_rc) = func_by_name.get(&func.name()) {
@@ -1971,7 +1984,7 @@ impl ClosureLowerer {
                     self.collect_fn_param_specs_expr(arg, func_by_name, type_table, requests);
                 }
             }
-            TirExprKind::StaticCall { func, args } => {
+            TirExprKind::StaticCall { func, args, .. } => {
                 if let Some(callee_rc) = func_by_name.get(&func.name()) {
                     let callee = callee_rc.borrow();
                     if let Some(key) = self.create_fn_param_spec_key(
@@ -2597,6 +2610,14 @@ impl ClosureLowerer {
                         );
 
                         // Use the call_method_name for External ref since codegen expects it
+                        let param_is_mut = functor
+                            .call_method
+                            .borrow()
+                            .params
+                            .iter()
+                            .skip(1) // skip self/env param
+                            .map(|p| p.is_mut)
+                            .collect();
                         return TirExpr::new(
                             TirExprKind::MethodCall {
                                 receiver: Box::new(new_callee),
@@ -2608,6 +2629,7 @@ impl ClosureLowerer {
                                 },
                                 args: new_args,
                                 type_args: Vec::new(),
+                                param_is_mut,
                             },
                             expr.type_id,
                             expr.span,
@@ -2666,6 +2688,7 @@ impl ClosureLowerer {
                 func,
                 args,
                 type_args,
+                param_is_mut,
             } => TirExpr::new(
                 TirExprKind::Call {
                     func: func.clone(),
@@ -2683,6 +2706,7 @@ impl ClosureLowerer {
                         })
                         .collect(),
                     type_args: type_args.clone(),
+                    param_is_mut: param_is_mut.clone(),
                 },
                 expr.type_id,
                 expr.span,
@@ -2692,6 +2716,7 @@ impl ClosureLowerer {
                 func,
                 args,
                 type_args,
+                param_is_mut,
             } => TirExpr::new(
                 TirExprKind::MethodCall {
                     receiver: Box::new(self.specialize_expr(
@@ -2714,11 +2739,16 @@ impl ClosureLowerer {
                         })
                         .collect(),
                     type_args: type_args.clone(),
+                    param_is_mut: param_is_mut.clone(),
                 },
                 expr.type_id,
                 expr.span,
             ),
-            TirExprKind::StaticCall { func, args } => TirExpr::new(
+            TirExprKind::StaticCall {
+                func,
+                args,
+                param_is_mut,
+            } => TirExpr::new(
                 TirExprKind::StaticCall {
                     func: func.clone(),
                     args: args
@@ -2734,6 +2764,7 @@ impl ClosureLowerer {
                             )
                         })
                         .collect(),
+                    param_is_mut: param_is_mut.clone(),
                 },
                 expr.type_id,
                 expr.span,
@@ -3248,6 +3279,15 @@ impl ClosureLowerer {
 
                     // Replace with MethodCall using FunctionRef::Resolved
                     let args_owned = std::mem::take(args);
+                    // Derive param_is_mut from the __call method's non-self params.
+                    let param_is_mut = functor
+                        .call_method
+                        .borrow()
+                        .params
+                        .iter()
+                        .skip(1) // skip self/env param
+                        .map(|p| p.is_mut)
+                        .collect();
                     expr.kind = TirExprKind::MethodCall {
                         receiver: Box::new(callee_owned),
                         func: FunctionRef::Resolved {
@@ -3256,6 +3296,7 @@ impl ClosureLowerer {
                         },
                         type_args: Vec::new(),
                         args: args_owned,
+                        param_is_mut,
                     };
                     expr.type_id = return_type;
                 }
@@ -3273,7 +3314,7 @@ impl ClosureLowerer {
             | TirExprKind::FieldAccess { expr: inner, .. } => {
                 self.transform_expr(inner, type_table);
             }
-            TirExprKind::Call { func, args, .. } | TirExprKind::StaticCall { func, args } => {
+            TirExprKind::Call { func, args, .. } | TirExprKind::StaticCall { func, args, .. } => {
                 for arg in &mut *args {
                     self.transform_expr(arg, type_table);
                 }
@@ -3290,6 +3331,7 @@ impl ClosureLowerer {
                 func,
                 args,
                 type_args: _,
+                ..
             } => {
                 self.transform_expr(receiver, type_table);
                 for arg in &mut *args {

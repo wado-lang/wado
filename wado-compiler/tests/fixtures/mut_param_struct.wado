@@ -1,0 +1,55 @@
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+// Rebinding a mut struct param does not affect the caller's binding.
+fn zero_out(mut p: Point) -> Point {
+    p = Point { x: 0, y: 0 };
+    return p;
+}
+
+// In-place field mutation on a mut struct param does not affect the caller.
+fn translate(mut p: Point, dx: i32, dy: i32) -> Point {
+    p.x += dx;
+    p.y += dy;
+    return p;
+}
+
+// In-place field mutation on a non-mut struct param does not affect the caller.
+fn shift(p: Point) -> Point {
+    let mut q = p;
+    q.x += 1;
+    return q;
+}
+
+export fn run() with Stdout {
+    // Binding rebind does not affect caller.
+    let p = Point { x: 5, y: 10 };
+    let q = zero_out(p);
+    assert q.x == 0;
+    assert q.y == 0;
+    assert p.x == 5;
+    assert p.y == 10;
+
+    // Field mutation in callee does not affect caller (value semantics).
+    let a = Point { x: 1, y: 2 };
+    let b = translate(a, 10, 20);
+    assert b.x == 11;
+    assert b.y == 22;
+    assert a.x == 1; // caller's struct is unchanged
+    assert a.y == 2;
+
+    // Field mutation via local copy in non-mut param does not affect caller.
+    let c = Point { x: 3, y: 4 };
+    let d = shift(c);
+    assert d.x == 4;
+    assert c.x == 3; // caller's struct is unchanged
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

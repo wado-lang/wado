@@ -883,7 +883,7 @@ fn analyze_expr(
                 analyze_expr(arg, current_module, type_table, analysis);
             }
         }
-        TirExprKind::StaticCall { func, args } => {
+        TirExprKind::StaticCall { func, args, .. } => {
             let func_name = func.name();
             // Static method call - func_name already contains "StructName::method_name"
             // The function is registered as a free function with mangled name

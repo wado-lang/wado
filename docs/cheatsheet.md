@@ -380,6 +380,27 @@ export fn run() { ... }
 
 A function must have `return` if it returns a value.
 
+## Mut Parameters
+
+```wado
+// mut allows reassigning the parameter inside the function
+fn increment(mut n: i32) -> i32 {
+    n += 1;
+    return n;
+}
+
+// Caller's variable is unchanged for primitives (value type)
+let x = 5;
+let y = increment(x);
+// x == 5, y == 6
+
+// Closures also support mut parameters
+let double = |mut n: i32| { n *= 2; return n; };
+
+// Without mut, assignment is a compile error
+// fn bad(n: i32) { n = 0; }  // Error: cannot assign to immutable variable 'n'
+```
+
 ## Visibility
 
 Wado has three levels of visibility:

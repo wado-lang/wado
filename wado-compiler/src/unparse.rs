@@ -335,6 +335,9 @@ impl<'a> Unparser<'a> {
             }
         }
         // Regular parameter
+        if param.is_mut {
+            self.output.push_str("mut ");
+        }
         self.output.push_str(&param.name);
         self.output.push_str(": ");
         self.unparse_type(&param.ty);
@@ -2136,6 +2139,9 @@ impl<'a> Unparser<'a> {
             if i > 0 {
                 self.output.push_str(", ");
             }
+            if param.is_mut {
+                self.output.push_str("mut ");
+            }
             self.output.push_str(&param.name);
             if let Some(ty) = &param.ty {
                 self.output.push_str(": ");
@@ -2747,6 +2753,9 @@ fn unparse_closure_into(c: &ClosureExpr, output: &mut String) {
     for (i, param) in c.params.iter().enumerate() {
         if i > 0 {
             output.push_str(", ");
+        }
+        if param.is_mut {
+            output.push_str("mut ");
         }
         output.push_str(&param.name);
         if let Some(ty) = &param.ty {
@@ -3778,6 +3787,7 @@ impl<'a> TirUnparser<'a> {
                 func,
                 type_args,
                 args,
+                ..
             } => {
                 let func_name = func.name();
                 let full_name = if func.module_source().is_entry_point() {
@@ -3824,6 +3834,7 @@ impl<'a> TirUnparser<'a> {
                 func,
                 type_args,
                 args,
+                ..
             } => {
                 // Show as method call with resolved method name: receiver."Type::method"(args)
                 // This shows which method was resolved during type checking
@@ -3866,7 +3877,7 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push(')');
             }
-            TirExprKind::StaticCall { func, args } => {
+            TirExprKind::StaticCall { func, args, .. } => {
                 // Output the mangled function name (e.g., "Point::origin" or "Array<i32>::with_capacity")
                 self.output.push_str(&Self::quote_if_needed(&func.name()));
                 self.output.push('(');
