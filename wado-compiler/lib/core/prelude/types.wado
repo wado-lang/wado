@@ -237,25 +237,11 @@ pub resource Task {
 /// Obtained when a thread suspends itself (e.g. via `Thread::suspend`).
 pub resource SuspendedThread;
 
-/// Component Model thread operations (Shared-Everything Threads proposal).
+/// Component Model stackful-async thread operations.
 ///
-/// These canonicals operate on threads within a component instance.
-/// Thread functions must be bare (no captures), matching the shared function type.
+/// These canonicals support cooperative threading within an async component:
+/// yielding, suspending, and switching between threads.
 pub resource Thread {
-    /// Spawn a new thread by calling the shared function at `func_type_index`.
-    /// The function type index must be a compile-time constant.
-    #[canonical("thread-spawn-ref")]
-    fn spawn_ref(func_type_index: u32);
-
-    /// Spawn a new thread via indirect call through a shared function table.
-    /// Both `func_type_index` and `table_index` must be compile-time constants.
-    #[canonical("thread-spawn-indirect")]
-    fn spawn_indirect(func_type_index: u32, table_index: u32);
-
-    /// Returns the number of hardware threads that can be expected to execute concurrently.
-    #[canonical("thread-available-parallelism")]
-    fn available_parallelism() -> u32;
-
     /// Yield control to allow other threads to make progress.
     /// If `cancellable` is true, may return early if the current task is being cancelled.
     #[canonical("thread-yield")]
