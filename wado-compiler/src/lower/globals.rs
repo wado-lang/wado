@@ -736,4 +736,3 @@ pub(super) fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, T
         }
     }
 }
-

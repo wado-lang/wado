@@ -34,7 +34,6 @@ fn analyze_match_for_switch(
     scrutinee_type: &ResolvedType,
     arms: &[TirMatchArm],
 ) -> Option<SwitchAnalysis> {
-
     // Only applicable to integer types and enums (enums are i32 discriminants)
     match scrutinee_type {
         ResolvedType::Primitive(
