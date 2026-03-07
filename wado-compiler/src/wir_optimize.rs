@@ -2628,7 +2628,7 @@ fn elide_dead_single_field_struct_locals(module: &mut WirModule) {
 }
 
 /// One pass: collect candidates, validate, rewrite. Returns `true` if anything changed.
-fn elide_struct_locals_one_pass(body: &mut Vec<WirInstr>) -> bool {
+fn elide_struct_locals_one_pass(body: &mut [WirInstr]) -> bool {
     // Step 1: collect LocalSet(name, StructNew { [inner] }) at any depth.
     let mut all_defs: IndexMap<String, WirInstr> = IndexMap::new();
     for instr in body.iter() {
@@ -4388,7 +4388,7 @@ fn is_wir_constant(instr: &WirInstr) -> bool {
 
 /// Process a body (list of instructions), forwarding known constants.
 /// Returns true if any changes were made.
-fn forward_fields_in_body(body: &mut Vec<WirInstr>, known: &mut FieldKnowledge<'_>) -> bool {
+fn forward_fields_in_body(body: &mut [WirInstr], known: &mut FieldKnowledge<'_>) -> bool {
     let mut changed = false;
     let mut i = 0;
     while i < body.len() {

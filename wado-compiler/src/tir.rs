@@ -1166,6 +1166,9 @@ impl TirExpr {
 
 /// Reference to a function, either resolved to TIR or external
 #[derive(Debug, Clone)]
+// The External variant is intentionally large because boxing it would add pervasive
+// heap allocation overhead at 97+ call sites throughout the compiler.
+#[allow(clippy::large_enum_variant)]
 pub enum FunctionRef {
     /// Reference to a resolved TIR function
     Resolved {
