@@ -557,10 +557,6 @@ fn Container::process(self) {
                 };
                 val = __inline_Array_i32__IndexValue__index_value_3: block -> i32 {
                     __local_10 = i;
-                    if __local_10 >= _licm_used_15 {
-                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    };
                     break __inline_Array_i32__IndexValue__index_value_3: builtin::array_get<i32>(_licm_repr_16, __local_10);
                 };
                 if (val % 2) == 0 {
@@ -577,20 +573,16 @@ fn Container::process(self) {
         _licm_items_18 = self;
         _licm_repr_19 = temp.repr;
         block {
-            l42: loop {
+            l41: loop {
                 if (j < _licm_used_17) == 0 {
                     break __for_2;
                 };
                 Array<i32>::append(_licm_items_18, __inline_Array_i32__IndexValue__index_value_5: block -> i32 {
                     __local_13 = j;
-                    if __local_13 >= _licm_used_17 {
-                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    };
                     break __inline_Array_i32__IndexValue__index_value_5: builtin::array_get<i32>(_licm_repr_19, __local_13);
                 } + 100);
                 j = j + 1;
-                continue l42;
+                continue l41;
             };
         };
     };
@@ -625,13 +617,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l47: loop {
+            l45: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l47;
+                continue l45;
             };
         };
     };

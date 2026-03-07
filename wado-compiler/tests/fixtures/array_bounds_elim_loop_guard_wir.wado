@@ -1,0 +1,26 @@
+// Test: WIR-level verification of loop-guarded bounds check elimination
+// When a loop guard `i < arr.len()` dominates `arr[i]`, the bounds check
+// `if (i >= arr.used)` is redundant and should be eliminated at O2.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let arr: Array<i32> = [10, 20, 30];
+    let mut sum = 0;
+    for let mut i = 0; i < arr.len(); i += 1 {
+        sum += arr[i];
+    }
+    println(`{sum}`);
+}
+
+__DATA__
+{
+    "stdout": "60\n",
+    "wir_expect:O2": [
+        "array.new_fixed<i32>(10, 20, 30)",
+        "builtin::array_get<i32>("
+    ],
+    "wir_not_expect:O2": [
+        "index out of bounds"
+    ]
+}

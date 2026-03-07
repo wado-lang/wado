@@ -1,0 +1,22 @@
+// Test: bounds check elimination for loop-guarded array access
+// When a loop condition `i < arr.len()` guards `arr[i]`, the bounds check is redundant.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let mut sum = 0;
+    for let mut i = 0; i < arr.len(); i += 1 {
+        sum += arr[i];
+    }
+    assert sum == 150;
+    println(`{sum}`);
+}
+
+__DATA__
+{
+    "stdout": "150\n",
+    "wir_not_expect:O2": [
+        "index out of bounds"
+    ]
+}

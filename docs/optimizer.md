@@ -227,12 +227,13 @@ Remove redundant array bounds checks when the compiler can prove indices are wit
 
 - **Constant-index × known-size arrays:** When an array is created from a literal (e.g., `[10, 20, 30]`), `collapse_array_append_sequences` produces `StructNew { ..., used: N }`. The `forward_struct_field_constants` pass tracks `used` through `StructGet`, folds the comparison `index >= used` to a constant, and eliminates the dead branch (either the bounds check or the array access). This requires the array local to not be aliased (not passed to function calls or assigned to other locals).
 
+**Implemented (WIR level — `eliminate_loop_guarded_bounds_checks`):**
+
+- **Loop-guarded index:** When a loop condition `i < arr.len()` dominates the bounds check `i >= arr.used` inside the loop body, the check is provably redundant. The pass detects the negated loop guard pattern `if (i < bound) == 0 { break }` at the start of a loop, records that `i < bound` holds within the iteration, tracks copies of the induction variable (e.g., `__local = i` from inlining), and eliminates any `if (copy >= bound) { panic; unreachable }` bounds check referencing the same bound variable. Also handles redundant consecutive accesses (`arr[i]` followed by `arr[i]`) inside guarded loops, since all accesses with the guarded index are eliminated.
+
 **Not yet implemented:**
 
-- **Loop-guarded index:** When a loop condition `i < arr.len()` dominates the bounds check `i >= arr.used`, the check is redundant. This requires value range propagation or dominator-based reasoning.
-- **Redundant consecutive checks:** When `arr[i]` is followed by `arr[i]` again, the second check is redundant.
-
-Can provide 10-30% speedup for array-intensive code when fully implemented.
+- **Redundant consecutive checks (outside loops):** When `arr[i]` is followed by `arr[i]` again outside of a loop, the second check is redundant.
 
 ### Common Subexpression Elimination (CSE)
 
