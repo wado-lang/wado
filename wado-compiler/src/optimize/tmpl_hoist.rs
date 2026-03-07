@@ -690,7 +690,7 @@ fn extract_tmpl_candidate(block: &TirBlock) -> Option<TmplCandidate> {
         } if name == "__r" => {
             // Try pre-lowered form: String::with_capacity(N)
             if let TirExprKind::StaticCall { func, .. } = &value.kind
-                && func.name() == "String::with_capacity"
+                && func.name.clone() == "String::with_capacity"
             {
                 return Some(TmplCandidate {
                     buf_local_index: *local_index,
@@ -754,7 +754,7 @@ fn extract_tmpl_candidate(block: &TirBlock) -> Option<TmplCandidate> {
 fn extract_array_new_capacity(expr: &TirExpr) -> Option<TirExpr> {
     match &expr.kind {
         TirExprKind::StaticCall { func, args, .. } | TirExprKind::Call { func, args, .. } => {
-            let name = func.name();
+            let name = func.name.clone();
             if name.contains("array_new") {
                 args.first().cloned()
             } else {

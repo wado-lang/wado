@@ -3789,8 +3789,8 @@ impl<'a> TirUnparser<'a> {
                 args,
                 ..
             } => {
-                let func_name = func.name();
-                let full_name = if func.module_source().is_entry_point() {
+                let func_name = func.name.clone();
+                let full_name = if func.module_source.clone().is_entry_point() {
                     func_name
                 } else {
                     let module_path = func.module_path();
@@ -3838,7 +3838,7 @@ impl<'a> TirUnparser<'a> {
             } => {
                 // Show as method call with resolved method name: receiver."Type::method"(args)
                 // This shows which method was resolved during type checking
-                let full_name = func.name();
+                let full_name = func.name.clone();
 
                 // Unparse receiver - skip the reference operator if present
                 // (the resolver adds &/&mut for self methods, but we want to show just the value)
@@ -3879,7 +3879,8 @@ impl<'a> TirUnparser<'a> {
             }
             TirExprKind::StaticCall { func, args, .. } => {
                 // Output the mangled function name (e.g., "Point::origin" or "Array<i32>::with_capacity")
-                self.output.push_str(&Self::quote_if_needed(&func.name()));
+                self.output
+                    .push_str(&Self::quote_if_needed(&func.name.clone()));
                 self.output.push('(');
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {

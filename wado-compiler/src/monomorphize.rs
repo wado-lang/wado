@@ -1044,7 +1044,7 @@ impl Monomorphizer {
                     let key = InstantiationKey {
                         name: name.clone(),
                         type_args: type_args.clone(),
-                        method_info: None, // Struct instantiation
+                        method_info: None, // Struct instantiation,
                     };
 
                     if !self.instantiated.contains_key(&key) {
@@ -1469,13 +1469,13 @@ impl Monomorphizer {
                 args,
                 ..
             } => {
-                let func_name = func.name();
+                let func_name = func.name.clone();
                 // Check if this is a call to a generic function with explicit type args
                 if !type_args.is_empty() && generic_functions.contains_key(&func_name) {
                     let key = InstantiationKey {
                         name: func_name.clone(),
                         type_args: type_args.clone(),
-                        method_info: func.method_info(),
+                        method_info: func.method_info.clone(),
                     };
                     if !self.function_instantiated.contains_key(&key) {
                         let mangled = self.function_instantiation_name(&key, type_table);
@@ -1502,9 +1502,10 @@ impl Monomorphizer {
             } => {
                 // Extract method name from method_info or fall back to function name
                 let method_name = method_func
-                    .method_info()
+                    .method_info
+                    .clone()
                     .map(|info| info.method_name)
-                    .unwrap_or_else(|| method_func.name());
+                    .unwrap_or_else(|| method_func.name.clone());
                 // Check if this is a method call with explicit type args
                 if !type_args.is_empty() {
                     // Get the struct name from the receiver type
@@ -1513,7 +1514,8 @@ impl Monomorphizer {
                     {
                         // Try both inherent method and trait method formats
                         let trait_name_opt = method_func
-                            .method_info()
+                            .method_info
+                            .clone()
                             .and_then(|info| info.trait_name.clone());
                         let mut names_to_try: Vec<(String, Option<String>)> = vec![(
                             MethodName::format_local(&struct_name, None, &method_name),
@@ -1636,7 +1638,7 @@ impl Monomorphizer {
                     let mut names_to_try =
                         vec![MethodName::format_local(&base_struct, None, &method_name)];
                     // If the function is a trait method, also try the trait method format
-                    if let Some(ref info) = method_func.method_info()
+                    if let Some(ref info) = method_func.method_info.clone()
                         && let Some(ref trait_name) = info.trait_name
                     {
                         names_to_try.push(MethodName::format_local(
@@ -1701,7 +1703,7 @@ impl Monomorphizer {
                     let mut names_to_try =
                         vec![MethodName::format_local(base_struct, None, &method_name)];
                     // If the function is a trait method, also try the trait method format
-                    if let Some(ref info) = method_func.method_info()
+                    if let Some(ref info) = method_func.method_info.clone()
                         && let Some(ref trait_name) = info.trait_name
                     {
                         names_to_try.push(MethodName::format_local(
@@ -1754,7 +1756,7 @@ impl Monomorphizer {
                 // Blanket impl fallback: if the FunctionRef has monomorph_info from a
                 // blanket impl that matches a generic function template, queue the
                 // instantiation using that template function.
-                if let FunctionRef::External {
+                if let FunctionRef {
                     monomorph_info: Some(mono),
                     ..
                 } = method_func
@@ -1812,7 +1814,7 @@ impl Monomorphizer {
             } => {
                 // Check if this is a call to a method on a monomorphized struct
                 // Use method_info metadata to get base_struct_name and method_name
-                if let FunctionRef::External {
+                if let FunctionRef {
                     method_info: Some(info),
                     monomorph_info: Some(monomorph),
                     ..
@@ -2525,7 +2527,7 @@ impl Monomorphizer {
                 // Also update the method func name if receiver type contains type params
                 // e.g., Array<T>::len -> Array<i32>::len when T->i32
                 if !substitution.is_empty()
-                    && let Some(info) = method_func.method_info()
+                    && let Some(info) = method_func.method_info.clone()
                 {
                     // Check if the struct actually needs type arg substitution.
                     // Skip for non-generic structs (e.g., String::append from template strings)
@@ -2554,8 +2556,8 @@ impl Monomorphizer {
                         || receiver_is_generic;
 
                     // Use structured method_info instead of parsing strings
-                    let old_func_name = method_func.name();
-                    let module_source = method_func.module_source();
+                    let old_func_name = method_func.name.clone();
+                    let module_source = method_func.module_source.clone();
 
                     // Build type args from substitution
                     let mut sorted_entries: Vec<_> = substitution.iter().collect();
@@ -2615,18 +2617,19 @@ impl Monomorphizer {
                                     }
                                     module_source_for_trait_impl(type_table, inner)
                                 });
-                            *method_func = FunctionRef::External {
+                            *method_func = FunctionRef {
                                 module_source: concrete_module
                                     .unwrap_or_else(|| module_source.clone()),
                                 name: new_func_name,
                                 monomorph_info: None,
                                 method_info: Some(new_info),
+                                is_cm_adapter: false,
                             };
                         } else {
                             // Normal monomorphization (e.g., Array<T>::len -> Array<i32>::len)
                             let (existing_generic_name, existing_type_args, existing_is_blanket) =
                                 match method_func {
-                                    FunctionRef::External {
+                                    FunctionRef {
                                         monomorph_info: Some(mi),
                                         ..
                                     } => (
@@ -2661,11 +2664,12 @@ impl Monomorphizer {
                             // Use the original module_source: the monomorphized method
                             // belongs to the module where the generic was defined, not the
                             // module that triggered monomorphization.
-                            *method_func = FunctionRef::External {
+                            *method_func = FunctionRef {
                                 module_source: module_source.clone(),
                                 name: new_func_name,
                                 monomorph_info,
                                 method_info: Some(new_info),
+                                is_cm_adapter: false,
                             };
                         }
                     }
@@ -2684,7 +2688,7 @@ impl Monomorphizer {
                 // Substitute type parameter names in func_name
                 // e.g., "Box<T>::new" with T->i32 becomes "Box<i32>::new"
                 if !substitution.is_empty()
-                    && let Some(info) = static_func.method_info()
+                    && let Some(info) = static_func.method_info.clone()
                 {
                     // Check if the struct actually needs type arg substitution.
                     // For StaticCall (no receiver), use the return type to infer whether
@@ -2704,8 +2708,8 @@ impl Monomorphizer {
                         || return_type_is_generic;
 
                     // Use structured method_info instead of parsing strings
-                    let old_func_name = static_func.name();
-                    let module_source = static_func.module_source();
+                    let old_func_name = static_func.name.clone();
+                    let module_source = static_func.module_source.clone();
 
                     // When method_info has explicit type args in struct_name (e.g.,
                     // "NestedMap<Array<String>,V>"), clone the existing MonomorphInfo's type_args
@@ -2714,7 +2718,7 @@ impl Monomorphizer {
                     // where ConcreteType is not in the substitution map.
                     let existing_monomorph_type_args: Option<Vec<TypeId>> =
                         if has_explicit_type_params {
-                            if let FunctionRef::External {
+                            if let FunctionRef {
                                 monomorph_info: Some(mi),
                                 ..
                             } = &*static_func
@@ -2762,7 +2766,7 @@ impl Monomorphizer {
                         // Also substitute method type args that may contain TypeParam references.
                         // The monomorph_info stores method type args as TypeIds which can be
                         // substituted, then we regenerate the mangled names.
-                        if let FunctionRef::External {
+                        if let FunctionRef {
                             monomorph_info: Some(mi),
                             ..
                         } = &*static_func
@@ -2808,21 +2812,20 @@ impl Monomorphizer {
                                 );
                                 let generic_name = base_info.to_mangled_name();
                                 // Substitute method type arg TypeIds
-                                let method_type_arg_tids: Vec<TypeId> =
-                                    if let FunctionRef::External {
-                                        monomorph_info: Some(mi),
-                                        ..
-                                    } = &*static_func
-                                    {
-                                        mi.type_args
-                                            .iter()
-                                            .map(|&tid| {
-                                                self.substitute_type(tid, substitution, type_table)
-                                            })
-                                            .collect()
-                                    } else {
-                                        Vec::new()
-                                    };
+                                let method_type_arg_tids: Vec<TypeId> = if let FunctionRef {
+                                    monomorph_info: Some(mi),
+                                    ..
+                                } = &*static_func
+                                {
+                                    mi.type_args
+                                        .iter()
+                                        .map(|&tid| {
+                                            self.substitute_type(tid, substitution, type_table)
+                                        })
+                                        .collect()
+                                } else {
+                                    Vec::new()
+                                };
                                 // For type-param receivers that resolved to generic types
                                 // (e.g., T → Option<String>), include the impl type args
                                 // (e.g., [String]) so the generic impl is correctly
@@ -2839,12 +2842,13 @@ impl Monomorphizer {
                                     is_blanket: false,
                                 })
                             };
-                            *static_func = FunctionRef::External {
+                            *static_func = FunctionRef {
                                 module_source: concrete_module
                                     .unwrap_or_else(|| module_source.clone()),
                                 name: new_func_name,
                                 monomorph_info: new_monomorph,
                                 method_info: Some(new_info),
+                                is_cm_adapter: false,
                             };
                         } else {
                             let monomorph_info = Some(MonomorphInfo {
@@ -2854,11 +2858,12 @@ impl Monomorphizer {
                             });
                             // Use the original module_source: the monomorphized method
                             // belongs to the module where the generic was defined.
-                            *static_func = FunctionRef::External {
+                            *static_func = FunctionRef {
                                 module_source: module_source.clone(),
                                 name: new_func_name,
                                 monomorph_info,
                                 method_info: Some(new_info),
+                                is_cm_adapter: false,
                             };
                         }
                     }
@@ -3372,8 +3377,8 @@ impl Monomorphizer {
                 args,
                 ..
             } => {
-                let func_name = func.name();
-                let original_method_info = func.method_info();
+                let func_name = func.name.clone();
+                let original_method_info = func.method_info.clone();
                 // If this is a generic call, rewrite to monomorphized name
                 if !type_args.is_empty() {
                     let key = InstantiationKey {
@@ -3382,7 +3387,7 @@ impl Monomorphizer {
                         method_info: original_method_info.clone(),
                     };
                     if let Some(mangled) = self.function_instantiated.get(&key) {
-                        *func = FunctionRef::External {
+                        *func = FunctionRef {
                             module_source: self.current_module_source.clone(),
                             name: mangled.clone(),
                             monomorph_info: Some(MonomorphInfo {
@@ -3391,6 +3396,7 @@ impl Monomorphizer {
                                 is_blanket: false,
                             }),
                             method_info: original_method_info,
+                            is_cm_adapter: false,
                         };
 
                         // Update the expression's type_id if it's a type parameter
@@ -3418,10 +3424,11 @@ impl Monomorphizer {
             } => {
                 // Extract method name from method_info or fall back to function name
                 let method_name = method_func
-                    .method_info()
+                    .method_info
+                    .clone()
                     .map(|info| info.method_name)
-                    .unwrap_or_else(|| method_func.name());
-                let _module_source = method_func.module_source();
+                    .unwrap_or_else(|| method_func.name.clone());
+                let _module_source = method_func.module_source.clone();
                 // If this is a generic method call, rewrite to monomorphized name
                 if !type_args.is_empty()
                     && let Some(struct_name) =
@@ -3429,7 +3436,8 @@ impl Monomorphizer {
                 {
                     // Try both inherent method and trait method formats
                     let trait_name_opt = method_func
-                        .method_info()
+                        .method_info
+                        .clone()
                         .and_then(|info| info.trait_name.clone());
                     let mut names_to_try = vec![(
                         MethodName::format_local(&struct_name, None, &method_name),
@@ -3450,8 +3458,8 @@ impl Monomorphizer {
                             method_info: None,
                         };
                         if let Some(mangled) = self.function_instantiated.get(&key) {
-                            let original_method_info = method_func.method_info();
-                            *method_func = FunctionRef::External {
+                            let original_method_info = method_func.method_info.clone();
+                            *method_func = FunctionRef {
                                 module_source: self.current_module_source.clone(),
                                 name: mangled.clone(),
                                 monomorph_info: Some(MonomorphInfo {
@@ -3460,6 +3468,7 @@ impl Monomorphizer {
                                     is_blanket: false,
                                 }),
                                 method_info: original_method_info,
+                                is_cm_adapter: false,
                             };
                             type_args.clear();
                             rewritten = true;
@@ -3502,8 +3511,8 @@ impl Monomorphizer {
                                 };
                                 if let Some(mangled) = self.function_instantiated.get(&combined_key)
                                 {
-                                    let original_method_info = method_func.method_info();
-                                    *method_func = FunctionRef::External {
+                                    let original_method_info = method_func.method_info.clone();
+                                    *method_func = FunctionRef {
                                         module_source: self.current_module_source.clone(),
                                         name: mangled.clone(),
                                         monomorph_info: Some(MonomorphInfo {
@@ -3512,6 +3521,7 @@ impl Monomorphizer {
                                             is_blanket: false,
                                         }),
                                         method_info: original_method_info,
+                                        is_cm_adapter: false,
                                     };
                                     type_args.clear();
 
@@ -3548,7 +3558,7 @@ impl Monomorphizer {
                 {
                     // Try trait method name format first (e.g., Triple^IndexValue::index_value)
                     let mut possible_keys = Vec::new();
-                    if let Some(ref info) = method_func.method_info()
+                    if let Some(ref info) = method_func.method_info.clone()
                         && let Some(ref trait_name) = info.trait_name
                     {
                         let trait_method_name =
@@ -3569,8 +3579,8 @@ impl Monomorphizer {
                     for key in possible_keys {
                         if let Some(mangled) = self.function_instantiated.get(&key) {
                             // Preserve original method_info
-                            let original_method_info = method_func.method_info();
-                            *method_func = FunctionRef::External {
+                            let original_method_info = method_func.method_info.clone();
+                            *method_func = FunctionRef {
                                 module_source: self.current_module_source.clone(),
                                 name: mangled.clone(),
                                 monomorph_info: Some(MonomorphInfo {
@@ -3579,6 +3589,7 @@ impl Monomorphizer {
                                     is_blanket: false,
                                 }),
                                 method_info: original_method_info,
+                                is_cm_adapter: false,
                             };
                             break;
                         }
@@ -3587,7 +3598,7 @@ impl Monomorphizer {
                 // Blanket impl fallback: if the FunctionRef has monomorph_info from a
                 // blanket impl, rewrite to the monomorphized function name.
                 {
-                    let blanket_lookup = if let FunctionRef::External {
+                    let blanket_lookup = if let FunctionRef {
                         monomorph_info: Some(mono),
                         ..
                     } = &*method_func
@@ -3605,8 +3616,8 @@ impl Monomorphizer {
                         None
                     };
                     if let Some((mangled, generic_name, type_args)) = blanket_lookup {
-                        let original_method_info = method_func.method_info();
-                        *method_func = FunctionRef::External {
+                        let original_method_info = method_func.method_info.clone();
+                        *method_func = FunctionRef {
                             module_source: self.current_module_source.clone(),
                             name: mangled,
                             monomorph_info: Some(MonomorphInfo {
@@ -3615,6 +3626,7 @@ impl Monomorphizer {
                                 is_blanket: true,
                             }),
                             method_info: original_method_info,
+                            is_cm_adapter: false,
                         };
                     }
                 }
@@ -3636,7 +3648,7 @@ impl Monomorphizer {
                 // Check if this is a monomorphized static call that needs rewriting.
                 // This handles calls like `Array::with_capacity` in adapter functions
                 // where monomorph_info carries the type_args for instantiation lookup.
-                if let FunctionRef::External {
+                if let FunctionRef {
                     monomorph_info: Some(monomorph),
                     method_info: Some(info),
                     ..
@@ -3665,8 +3677,8 @@ impl Monomorphizer {
                             method_info: Some(info.clone()),
                         };
                         if let Some(mangled) = self.function_instantiated.get(&key) {
-                            let original_method_info = static_func.method_info();
-                            *static_func = FunctionRef::External {
+                            let original_method_info = static_func.method_info.clone();
+                            *static_func = FunctionRef {
                                 module_source: self.current_module_source.clone(),
                                 name: mangled.clone(),
                                 monomorph_info: Some(MonomorphInfo {
@@ -3675,6 +3687,7 @@ impl Monomorphizer {
                                     is_blanket: false,
                                 }),
                                 method_info: original_method_info,
+                                is_cm_adapter: false,
                             };
                             break;
                         }
@@ -3876,11 +3889,12 @@ impl Monomorphizer {
 
             let method_call = TirExprKind::MethodCall {
                 receiver: Box::new(receiver),
-                func: FunctionRef::External {
+                func: FunctionRef {
                     module_source: ModuleSource::prelude(),
                     name: mangled_name,
                     monomorph_info: None,
                     method_info: Some(method_info),
+                    is_cm_adapter: false,
                 },
                 type_args: vec![],
                 args: vec![arg_ref],
@@ -3940,11 +3954,12 @@ impl Monomorphizer {
             let cmp_call = TirExpr::new(
                 TirExprKind::MethodCall {
                     receiver: Box::new(receiver),
-                    func: FunctionRef::External {
+                    func: FunctionRef {
                         module_source: ModuleSource::prelude(),
                         name: mangled_name,
                         monomorph_info: None,
                         method_info: Some(method_info),
+                        is_cm_adapter: false,
                     },
                     type_args: vec![],
                     args: vec![arg_ref],

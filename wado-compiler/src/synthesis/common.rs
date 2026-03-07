@@ -27,11 +27,12 @@ pub fn builtin_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirE
     let n = args.len();
     TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source: ModuleSource::builtin(),
                 name: name.to_string(),
                 monomorph_info: None,
                 method_info: None,
+                is_cm_adapter: false,
             },
             type_args: vec![],
             args,
@@ -47,11 +48,12 @@ pub fn internal_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> Tir
     let n = args.len();
     TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source: ModuleSource::internal(),
                 name: name.to_string(),
                 monomorph_info: None,
                 method_info: None,
+                is_cm_adapter: false,
             },
             type_args: vec![],
             args,
@@ -298,11 +300,12 @@ pub fn generic_static_call(
     let n = args.len();
     TirExpr::new(
         TirExprKind::StaticCall {
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source,
                 name: mangled_name,
                 monomorph_info,
                 method_info: Some(info),
+                is_cm_adapter: false,
             },
             args,
             param_is_mut: vec![false; n],
@@ -331,11 +334,12 @@ pub fn generic_method_call(
     TirExpr::new(
         TirExprKind::MethodCall {
             receiver: Box::new(receiver),
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source: method_module_source,
                 name: mangled_name,
                 monomorph_info: None,
                 method_info: Some(info),
+                is_cm_adapter: false,
             },
             type_args: vec![],
             args,
@@ -391,7 +395,7 @@ pub fn write_str_stmt(
     let call = TirExpr::new(
         TirExprKind::MethodCall {
             receiver: Box::new(fmt),
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source: ModuleSource::format(),
                 name: "Formatter::write_str".to_string(),
                 monomorph_info: None,
@@ -400,6 +404,7 @@ pub fn write_str_stmt(
                     None,
                     "write_str".to_string(),
                 )),
+                is_cm_adapter: false,
             },
             type_args: vec![],
             args: vec![TirExpr::new(
@@ -428,11 +433,12 @@ pub fn trait_method_call(
     let call = TirExpr::new(
         TirExprKind::MethodCall {
             receiver: Box::new(receiver),
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source,
                 name: fn_name,
                 monomorph_info: None,
                 method_info: Some(method_info),
+                is_cm_adapter: false,
             },
             type_args: vec![],
             args,

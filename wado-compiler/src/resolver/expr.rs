@@ -897,7 +897,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let method_call = TirExpr::new(
                     TirExprKind::MethodCall {
                         receiver: Box::new(receiver),
-                        func: FunctionRef::External {
+                        func: FunctionRef {
                             module_source: trait_info.impl_module_source.clone(),
                             name: mangled_method_name,
                             monomorph_info: None,
@@ -906,6 +906,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 Some(trait_info.trait_name.clone()),
                                 "index".to_string(),
                             )),
+                            is_cm_adapter: false,
                         },
                         type_args: vec![],
                         args: vec![index_expr],
@@ -947,7 +948,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 return TirExpr::new(
                     TirExprKind::MethodCall {
                         receiver: Box::new(receiver),
-                        func: FunctionRef::External {
+                        func: FunctionRef {
                             module_source: trait_info.impl_module_source.clone(),
                             name: mangled_method_name,
                             monomorph_info: None,
@@ -956,6 +957,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 Some(trait_info.trait_name.clone()),
                                 "index_value".to_string(),
                             )),
+                            is_cm_adapter: false,
                         },
                         type_args: vec![],
                         args: vec![index_expr],
@@ -1361,11 +1363,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                             return TirExpr::new(
                                 TirExprKind::StaticCall {
-                                    func: FunctionRef::External {
+                                    func: FunctionRef {
                                         module_source: ModuleSource::int128(),
                                         name: mangled_func_name,
                                         monomorph_info: None,
                                         method_info: Some(method_info),
+                                        is_cm_adapter: false,
                                     },
                                     args: vec![inner_literal],
                                     param_is_mut: vec![false],
@@ -1440,11 +1443,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 return TirExpr::new(
                     TirExprKind::StaticCall {
-                        func: FunctionRef::External {
+                        func: FunctionRef {
                             module_source: ModuleSource::int128(),
                             name: mangled_func_name,
                             monomorph_info: None,
                             method_info: Some(method_info),
+                            is_cm_adapter: false,
                         },
                         args: vec![casted_expr],
                         param_is_mut: vec![false],

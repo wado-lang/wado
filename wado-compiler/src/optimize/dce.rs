@@ -518,8 +518,8 @@ fn analyze_expr(
 ) {
     match &expr.kind {
         TirExprKind::Call { func, args, .. } => {
-            let original_callee_module = func.module_source();
-            let func_name = func.name();
+            let original_callee_module = func.module_source.clone();
+            let func_name = func.name.clone();
 
             // Invariant: TirExprKind::Call should never have method names (containing "::")
             // Methods use TirExprKind::MethodCall instead. The only exception is "builtin::*".
@@ -532,8 +532,7 @@ fn analyze_expr(
             // If the callee has an entry point module source (local call), use current module.
             // Exception: CM adapter functions are genuinely in the entry module
             // and should NOT be remapped to the caller's module.
-            let callee_module = if original_callee_module.is_entry_point() && !func.is_cm_adapter()
-            {
+            let callee_module = if original_callee_module.is_entry_point() && !func.is_cm_adapter {
                 current_module.clone()
             } else {
                 original_callee_module.clone()
@@ -563,7 +562,7 @@ fn analyze_expr(
             ..
         } => {
             // Collect canonical resource method names for builtin import injection.
-            if let Some(info) = func.method_info()
+            if let Some(info) = func.method_info.clone()
                 && let Some(canonical_name) = &info.canonical_name
             {
                 analysis.canonical_methods.insert(canonical_name.clone());
@@ -571,7 +570,7 @@ fn analyze_expr(
 
             // Use the func reference directly - it already has the correct mangled name
             // and monomorph_info from lowering phase
-            let func_name = func.name();
+            let func_name = func.name.clone();
 
             // Check if this is a monomorphized method using FunctionRef metadata
             if func.is_monomorphized() {
@@ -591,7 +590,7 @@ fn analyze_expr(
                 // Use the func's actual module_source — monomorphized functions
                 // are placed in the module that uses them.
                 let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                    func.module_source(),
+                    func.module_source.clone(),
                     func_name.clone(),
                     base_name,
                 ));
@@ -623,7 +622,7 @@ fn analyze_expr(
                 let base_receiver_type = current_type.clone();
 
                 // Extract method name and trait name from method_info
-                let (method_name, trait_name) = if let Some(info) = func.method_info() {
+                let (method_name, trait_name) = if let Some(info) = func.method_info.clone() {
                     (info.method_name.clone(), info.trait_name.clone())
                 } else {
                     (func_name.clone(), None)
@@ -671,10 +670,10 @@ fn analyze_expr(
                         // Box<i32>^Ord::cmp). Also mark the FunctionRef's original
                         // method target as reachable.
                         if base_struct == "Box"
-                            && let Some(info) = func.method_info()
+                            && let Some(info) = func.method_info.clone()
                         {
                             let original_method_id = FunctionId::Method(MethodName::new(
-                                func.module_source(),
+                                func.module_source.clone(),
                                 info.struct_name.clone(),
                                 info.trait_name.clone(),
                                 info.method_name.clone(),
@@ -700,9 +699,9 @@ fn analyze_expr(
                         // Also mark reachable using the FunctionRef's module source,
                         // since trait impls may live in a different module than the type
                         // (e.g., `impl Display for String` is in format.wado, not string.wado)
-                        let func_module = func.module_source();
+                        let func_module = func.module_source.clone();
                         if func_module != module_source.clone()
-                            && let Some(info) = func.method_info()
+                            && let Some(info) = func.method_info.clone()
                         {
                             let alt_method_id = FunctionId::Method(MethodName::new(
                                 func_module,
@@ -884,7 +883,7 @@ fn analyze_expr(
             }
         }
         TirExprKind::StaticCall { func, args, .. } => {
-            let func_name = func.name();
+            let func_name = func.name.clone();
             // Static method call - func_name already contains "StructName::method_name"
             // The function is registered as a free function with mangled name
             let callee_id = if func.is_monomorphized() {
@@ -901,12 +900,12 @@ fn analyze_expr(
                     .unwrap_or_else(|| func_name.clone());
                 // Use the func's actual module_source
                 FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                    func.module_source(),
+                    func.module_source.clone(),
                     func_name.clone(),
                     base_name,
                 ))
             } else {
-                let callee_module = func.module_source();
+                let callee_module = func.module_source.clone();
                 // Use current module for local calls (entry point source)
                 let callee_module = if callee_module.is_entry_point() {
                     current_module.clone()

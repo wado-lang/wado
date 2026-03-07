@@ -267,11 +267,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                             return Some(TirExpr::new(
                                 TirExprKind::StaticCall {
-                                    func: FunctionRef::External {
+                                    func: FunctionRef {
                                         module_source: ModuleSource::int128(),
                                         name: mangled_func_name,
                                         monomorph_info: None,
                                         method_info: Some(method_info),
+                                        is_cm_adapter: false,
                                     },
                                     args: vec![inner_literal],
                                     param_is_mut: vec![false],
@@ -505,7 +506,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         let new_call = TirExpr::new(
             TirExprKind::StaticCall {
-                func: FunctionRef::External {
+                func: FunctionRef {
                     module_source: impl_module_source.clone(),
                     name: new_mangled_name,
                     monomorph_info: if type_arg_ids.is_empty() {
@@ -518,6 +519,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         })
                     },
                     method_info: Some(new_method_info),
+                    is_cm_adapter: false,
                 },
                 param_is_mut: vec![false; new_args.len()],
                 args: new_args,
@@ -599,11 +601,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let insert_call = TirExpr::new(
                 TirExprKind::MethodCall {
                     receiver: Box::new(receiver),
-                    func: FunctionRef::External {
+                    func: FunctionRef {
                         module_source: self.current_module_source.clone(),
                         name: insert_mangled_name.clone(),
                         monomorph_info: None,
                         method_info: Some(insert_method_info.clone()),
+                        is_cm_adapter: false,
                     },
                     type_args: vec![],
                     args: vec![key_expr, value],
@@ -648,11 +651,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
             TirExpr::new(
                 TirExprKind::MethodCall {
                     receiver: Box::new(builder_local_final),
-                    func: FunctionRef::External {
+                    func: FunctionRef {
                         module_source: self.current_module_source.clone(),
                         name: build_mangled_name,
                         monomorph_info: build_monomorph,
                         method_info: Some(build_method_info),
+                        is_cm_adapter: false,
                     },
                     type_args: vec![],
                     args: vec![],
@@ -750,7 +754,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let capacity = tuple_lit.elements.len() as u64;
         let new_call = TirExpr::new(
             TirExprKind::StaticCall {
-                func: FunctionRef::External {
+                func: FunctionRef {
                     module_source: impl_module_source.clone(),
                     name: new_mangled_name,
                     monomorph_info: if type_arg_ids.is_empty() {
@@ -763,6 +767,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         })
                     },
                     method_info: Some(new_method_info),
+                    is_cm_adapter: false,
                 },
                 args: vec![TirExpr::new(
                     TirExprKind::IntLiteral {
@@ -835,7 +840,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let push_call = TirExpr::new(
                 TirExprKind::MethodCall {
                     receiver: Box::new(receiver),
-                    func: FunctionRef::External {
+                    func: FunctionRef {
                         module_source: impl_module_source.clone(),
                         name: push_mangled_name.clone(),
                         monomorph_info: if type_arg_ids.is_empty() {
@@ -848,6 +853,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             })
                         },
                         method_info: Some(push_method_info.clone()),
+                        is_cm_adapter: false,
                     },
                     type_args: vec![],
                     args: vec![elem_expr],
@@ -879,7 +885,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let build_call = TirExpr::new(
             TirExprKind::MethodCall {
                 receiver: Box::new(builder_local_final),
-                func: FunctionRef::External {
+                func: FunctionRef {
                     module_source: impl_module_source.clone(),
                     name: build_mangled_name,
                     monomorph_info: if type_arg_ids.is_empty() {
@@ -892,6 +898,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         })
                     },
                     method_info: Some(build_method_info),
+                    is_cm_adapter: false,
                 },
                 type_args: vec![],
                 args: vec![],

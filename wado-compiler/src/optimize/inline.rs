@@ -289,7 +289,7 @@ fn collect_callees_from_stmt(stmt: &TirStmt, callees: &mut IndexSet<String>) {
 fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
     match &expr.kind {
         TirExprKind::Call { func, args, .. } => {
-            callees.insert(func.name());
+            callees.insert(func.name.clone());
             for arg in args {
                 collect_callees_from_expr(arg, callees);
             }
@@ -1050,8 +1050,8 @@ fn try_inline_call_expr(
         return None;
     };
 
-    let call_module_source = func.module_source();
-    let func_name = func.name();
+    let call_module_source = func.module_source.clone();
+    let func_name = func.name.clone();
 
     // Look up the candidate function.
     let (candidate, inlined_key) =
@@ -1169,8 +1169,8 @@ fn try_inline_method_call_expr(
         return None;
     };
 
-    let call_module_source = func.module_source();
-    let func_name = func.name();
+    let call_module_source = func.module_source.clone();
+    let func_name = func.name.clone();
 
     // Look up the candidate function.
     let (candidate, inlined_key) =
@@ -1330,8 +1330,8 @@ fn try_inline_static_call_expr(
         return None;
     };
 
-    let call_module_source = func.module_source();
-    let func_name = func.name();
+    let call_module_source = func.module_source.clone();
+    let func_name = func.name.clone();
 
     // Look up the candidate function.
     let (candidate, inlined_key) =
@@ -2336,14 +2336,15 @@ fn remap_function_ref(func: &FunctionRef, source_module: &ModuleSource) -> Funct
     }
 
     // Only remap if the func has an entry-point module source (local call)
-    if func.module_source().is_entry_point() {
+    if func.module_source.clone().is_entry_point() {
         // Convert to External with the source module
         // Local calls within a module are not monomorphized, so monomorph_info is None
-        FunctionRef::External {
+        FunctionRef {
             module_source: source_module.clone(),
-            name: func.name(),
+            name: func.name.clone(),
             monomorph_info: None,
-            method_info: func.method_info(),
+            method_info: func.method_info.clone(),
+            is_cm_adapter: false,
         }
     } else {
         func.clone()

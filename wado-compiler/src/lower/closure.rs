@@ -1939,7 +1939,7 @@ impl ClosureLowerer {
                 ..
             } => {
                 // Check if this is a call to a known function with closure args
-                if let Some(callee_rc) = func_by_name.get(&func.name()) {
+                if let Some(callee_rc) = func_by_name.get(&func.name.clone()) {
                     let callee = callee_rc.borrow();
                     if let Some(key) = self.create_fn_param_spec_key(
                         &callee.name,
@@ -1963,7 +1963,7 @@ impl ClosureLowerer {
                 ..
             } => {
                 // Check if this is a method call with closure args
-                if let Some(callee_rc) = func_by_name.get(&func.name()) {
+                if let Some(callee_rc) = func_by_name.get(&func.name.clone()) {
                     let callee = callee_rc.borrow();
                     // Skip self parameter (first param)
                     let params_without_self: Vec<_> =
@@ -1985,7 +1985,7 @@ impl ClosureLowerer {
                 }
             }
             TirExprKind::StaticCall { func, args, .. } => {
-                if let Some(callee_rc) = func_by_name.get(&func.name()) {
+                if let Some(callee_rc) = func_by_name.get(&func.name.clone()) {
                     let callee = callee_rc.borrow();
                     if let Some(key) = self.create_fn_param_spec_key(
                         &callee.name,
@@ -2621,11 +2621,12 @@ impl ClosureLowerer {
                         return TirExpr::new(
                             TirExprKind::MethodCall {
                                 receiver: Box::new(new_callee),
-                                func: FunctionRef::External {
+                                func: FunctionRef {
                                     module_source: self.module_source.clone(),
                                     name: call_method_name,
                                     monomorph_info: None,
                                     method_info: Some(call_method_info),
+                                    is_cm_adapter: false,
                                 },
                                 args: new_args,
                                 type_args: Vec::new(),
@@ -3277,7 +3278,7 @@ impl ClosureLowerer {
                     // Get return type from the __call method
                     let return_type = functor.call_method.borrow().return_type;
 
-                    // Replace with MethodCall using FunctionRef::Resolved
+                    // Replace with MethodCall using FunctionRef::from_resolved
                     let args_owned = std::mem::take(args);
                     // Derive param_is_mut from the __call method's non-self params.
                     let param_is_mut = functor
@@ -3290,10 +3291,10 @@ impl ClosureLowerer {
                         .collect();
                     expr.kind = TirExprKind::MethodCall {
                         receiver: Box::new(callee_owned),
-                        func: FunctionRef::Resolved {
-                            func: Rc::clone(&functor.call_method),
-                            module_source: self.module_source.clone(),
-                        },
+                        func: FunctionRef::from_resolved(
+                            &functor.call_method.borrow(),
+                            self.module_source.clone(),
+                        ),
                         type_args: Vec::new(),
                         args: args_owned,
                         param_is_mut,
@@ -3462,7 +3463,7 @@ impl ClosureLowerer {
 
         // Build spec key and look up specialized function
         let key = FnParamSpecKey {
-            callee_name: func.name(),
+            callee_name: func.name.clone(),
             functor_types: functor_types.clone(),
         };
 
@@ -3521,7 +3522,7 @@ impl ClosureLowerer {
         // Build specialized method_info with the specialized method name
         // The functor suffix goes AFTER type args, so we use full_method_name()
         // and then clear method_type_args to avoid duplication
-        let specialized_method_info = func.method_info().map(|info| {
+        let specialized_method_info = func.method_info.clone().map(|info| {
             LocalMethodName {
                 struct_name: info.struct_name.clone(),
                 base_struct_name: info.base_struct_name.clone(),
@@ -3534,11 +3535,12 @@ impl ClosureLowerer {
         });
 
         // Update the function reference to use the specialized name
-        *func = FunctionRef::External {
+        *func = FunctionRef {
             module_source: self.module_source.clone(),
             name: specialized_name.clone(),
             monomorph_info: None,
             method_info: specialized_method_info,
+            is_cm_adapter: false,
         };
     }
 

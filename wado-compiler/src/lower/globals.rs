@@ -647,11 +647,12 @@ pub(super) fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, T
     for module_source in &modules_with_init {
         let call = TirExpr::new(
             TirExprKind::Call {
-                func: FunctionRef::External {
+                func: FunctionRef {
                     module_source: module_source.clone(),
                     name: "__initialize_module".to_string(),
                     monomorph_info: None,
                     method_info: None,
+                    is_cm_adapter: false,
                 },
                 type_args: Vec::new(),
                 args: Vec::new(),
@@ -714,11 +715,12 @@ pub(super) fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, T
     // Inject call to __initialize_modules at the start of entry point functions
     let init_call = TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source: entry_source.clone(),
                 name: "__initialize_modules".to_string(),
                 monomorph_info: None,
                 method_info: None,
+                is_cm_adapter: false,
             },
             type_args: Vec::new(),
             args: Vec::new(),

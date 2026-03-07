@@ -1220,132 +1220,62 @@ impl TirExpr {
     }
 }
 
-/// Reference to a function, either resolved to TIR or external
 #[derive(Debug, Clone)]
-// The External variant is intentionally large because boxing it would add pervasive
-// heap allocation overhead at 97+ call sites throughout the compiler.
-#[allow(clippy::large_enum_variant)]
-pub enum FunctionRef {
-    /// Reference to a resolved TIR function
-    Resolved {
-        func: Rc<RefCell<TirFunction>>,
-        module_source: ModuleSource,
-    },
-    /// Reference to an external/unresolved function
-    External {
-        module_source: ModuleSource,
-        name: String,
-        /// Monomorphization info for external monomorphized functions
-        monomorph_info: Option<MonomorphInfo>,
-        /// Parsed method info for external methods (None for free functions)
-        method_info: Option<LocalMethodName>,
-    },
+pub struct FunctionRef {
+    pub module_source: ModuleSource,
+    pub name: String,
+    pub monomorph_info: Option<MonomorphInfo>,
+    pub method_info: Option<LocalMethodName>,
+    pub is_cm_adapter: bool,
 }
 
 impl FunctionRef {
-    /// Get the function name
-    pub fn name(&self) -> String {
-        match self {
-            FunctionRef::Resolved { func, .. } => func.borrow().name.clone(),
-            FunctionRef::External { name, .. } => name.clone(),
-        }
-    }
-
-    /// Get the module source
-    pub fn module_source(&self) -> ModuleSource {
-        match self {
-            FunctionRef::Resolved { module_source, .. } => module_source.clone(),
-            FunctionRef::External { module_source, .. } => module_source.clone(),
+    /// Create a `FunctionRef` by extracting metadata from a resolved `TirFunction`.
+    pub fn from_resolved(func: &TirFunction, module_source: ModuleSource) -> Self {
+        Self {
+            module_source,
+            name: func.name.clone(),
+            monomorph_info: func.monomorph_info.clone(),
+            method_info: func.method_info.clone(),
+            is_cm_adapter: func.is_cm_adapter,
         }
     }
 
     /// Get the module path (for backwards compatibility)
     pub fn module_path(&self) -> Vec<String> {
-        self.module_source().to_path()
-    }
-
-    /// Check if this is a resolved reference
-    pub fn is_resolved(&self) -> bool {
-        matches!(self, FunctionRef::Resolved { .. })
-    }
-
-    /// Whether this refers to a synthesized CM adapter function.
-    pub fn is_cm_adapter(&self) -> bool {
-        match self {
-            FunctionRef::Resolved { func, .. } => func.borrow().is_cm_adapter,
-            FunctionRef::External { .. } => false,
-        }
-    }
-
-    /// Get the resolved function if available
-    pub fn as_resolved(&self) -> Option<&Rc<RefCell<TirFunction>>> {
-        match self {
-            FunctionRef::Resolved { func, .. } => Some(func),
-            FunctionRef::External { .. } => None,
-        }
+        self.module_source.to_path()
     }
 
     /// Get the fully qualified function name including module path.
-    /// For external functions, this returns "{`module_source/{name`}".
-    /// For resolved functions, this returns the method-qualified name if available.
     pub fn full_name(&self) -> String {
-        match self {
-            FunctionRef::Resolved { func, .. } => {
-                let func = func.borrow();
-                // Use method_info to create a unique name for methods
-                if let Some(info) = &func.method_info {
-                    info.to_mangled_name()
-                } else {
-                    func.name.clone()
-                }
-            }
-            FunctionRef::External {
-                module_source,
-                name,
-                ..
-            } => {
-                if module_source.is_entry_point() {
-                    name.clone()
-                } else {
-                    let path = module_source.to_path();
-                    format!("{}/{}", path.join("/"), name)
-                }
-            }
+        if let Some(info) = &self.method_info {
+            info.to_mangled_name()
+        } else if self.module_source.is_entry_point() {
+            self.name.clone()
+        } else {
+            let path = self.module_source.to_path();
+            format!("{}/{}", path.join("/"), &self.name)
         }
     }
 
     /// Get the builtin function name if this is a builtin call.
     /// Returns the qualified name (e.g., "`builtin::array_len`").
-    /// Builtin functions have `module_source` == Core { name: "builtin" }.
     pub fn builtin_name(&self) -> Option<String> {
-        match self {
-            FunctionRef::Resolved { .. } => None,
-            FunctionRef::External {
-                module_source,
-                name,
-                ..
-            } if module_source.is_core_builtin() => Some(format!("builtin::{name}")),
-            FunctionRef::External { .. } => None,
+        if self.module_source.is_core_builtin() {
+            Some(format!("builtin::{}", &self.name))
+        } else {
+            None
         }
     }
 
     /// Get the monomorphized builtin name if this is a monomorphized builtin function.
-    /// Returns the qualified name (e.g., "`builtin::array_get`") if the `generic_name`
-    /// is a known builtin function like "`array_get`", "`array_set`", etc.
     pub fn monomorphized_builtin_name(&self) -> Option<String> {
-        let generic_name = match self {
-            FunctionRef::Resolved { func, .. } => func
-                .borrow()
-                .monomorph_info
-                .as_ref()
-                .map(|i| i.generic_name.clone()),
-            FunctionRef::External { monomorph_info, .. } => {
-                monomorph_info.as_ref().map(|i| i.generic_name.clone())
-            }
-        }?;
+        let generic_name = self
+            .monomorph_info
+            .as_ref()
+            .map(|i| i.generic_name.as_str())?;
 
-        // Check if the generic name is a known builtin
-        match generic_name.as_str() {
+        match generic_name {
             "array_get" | "array_set" | "array_new" | "array_len" | "array_copy" | "array_fill"
             | "select" => Some(format!("builtin::{generic_name}")),
             _ => None,
@@ -1354,56 +1284,27 @@ impl FunctionRef {
 
     /// Check if this function is monomorphized (instantiated from a generic)
     pub fn is_monomorphized(&self) -> bool {
-        match self {
-            FunctionRef::Resolved { func, .. } => func.borrow().monomorph_info.is_some(),
-            FunctionRef::External { monomorph_info, .. } => monomorph_info.is_some(),
-        }
+        self.monomorph_info.is_some()
     }
 
     /// Get the base generic name if this is a monomorphized function.
-    /// For "Box<i32>`::get`", returns "Box".
-    /// For "Container<i32>`::transform`<i64>", returns "Container".
     pub fn base_struct_name(&self) -> Option<String> {
-        match self {
-            FunctionRef::Resolved { func, .. } => {
-                let func = func.borrow();
-                func.monomorph_info
-                    .as_ref()
-                    .and_then(|info| info.generic_name.split("::").next())
-                    .map(std::string::ToString::to_string)
-            }
-            FunctionRef::External { monomorph_info, .. } => monomorph_info
-                .as_ref()
-                .and_then(|info| info.generic_name.split("::").next())
-                .map(std::string::ToString::to_string),
-        }
-    }
-
-    /// Get parsed method info if this is a method reference.
-    /// Returns `None` for free functions.
-    pub fn method_info(&self) -> Option<LocalMethodName> {
-        match self {
-            FunctionRef::Resolved { func, .. } => func.borrow().method_info.clone(),
-            FunctionRef::External { method_info, .. } => method_info.clone(),
-        }
+        self.monomorph_info
+            .as_ref()
+            .and_then(|info| info.generic_name.split("::").next())
+            .map(std::string::ToString::to_string)
     }
 
     /// Check if this is a method (instance or static) as opposed to a free function.
     pub fn is_method(&self) -> bool {
-        match self {
-            FunctionRef::Resolved { func, .. } => func.borrow().is_method(),
-            FunctionRef::External { method_info, .. } => method_info.is_some(),
-        }
+        self.method_info.is_some()
     }
 
     /// Check if this is a trait method.
     pub fn is_trait_method(&self) -> bool {
-        match self {
-            FunctionRef::Resolved { func, .. } => func.borrow().is_trait_method(),
-            FunctionRef::External { method_info, .. } => method_info
-                .as_ref()
-                .is_some_and(LocalMethodName::is_trait_method),
-        }
+        self.method_info
+            .as_ref()
+            .is_some_and(LocalMethodName::is_trait_method)
     }
 }
 

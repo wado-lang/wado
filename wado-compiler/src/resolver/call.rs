@@ -436,11 +436,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let param_is_mut = self.lookup_function_param_is_mut(&call.callee);
         TirExpr::new(
             TirExprKind::Call {
-                func: FunctionRef::External {
+                func: FunctionRef {
                     module_source: callee_module,
                     name: func_name,
                     monomorph_info: None,
-                    method_info: None, // Free function call
+                    method_info: None, // Free function call,
+                    is_cm_adapter: false,
                 },
                 type_args,
                 args,
@@ -778,11 +779,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         TirExpr::new(
             TirExprKind::StaticCall {
-                func: FunctionRef::External {
+                func: FunctionRef {
                     module_source: ModuleSource::int128(),
                     name: mangled_func_name,
                     monomorph_info: None,
                     method_info: Some(method_info),
+                    is_cm_adapter: false,
                 },
                 args: vec![low_literal, high_literal],
                 param_is_mut: vec![false, false],
@@ -1117,11 +1119,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             return TirExpr::new(
                 TirExprKind::StaticCall {
-                    func: FunctionRef::External {
+                    func: FunctionRef {
                         module_source: self.current_module_source.clone(),
                         name: mangled_name,
                         monomorph_info,
                         method_info: Some(method_info),
+                        is_cm_adapter: false,
                     },
                     param_is_mut: vec![false; args.len()],
                     args: args.to_vec(),
