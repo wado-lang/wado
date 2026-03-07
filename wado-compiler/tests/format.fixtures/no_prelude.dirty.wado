@@ -1,0 +1,119 @@
+#![no_prelude]
+
+/// Doc comment on use
+use { println } from "core:cli";
+
+/// Doc comment on enum
+#[wasi("my-enum")]
+enum Color {
+    /// Red case
+    Red,
+    /// Green case
+    Green,
+    /// Blue case
+    Blue,
+}
+
+/// Doc comment on variant
+#[wasi("my-variant")]
+variant Shape {
+    /// Circle with radius
+    Circle(f64),
+    /// Rectangle with dimensions
+    Rectangle([f64, f64]),
+    /// No-payload point
+    Point,
+}
+
+/// Inherent impl: compact form with bounds inlined
+impl Array<T: Ord> {
+    /// Sort method
+    fn sort(&mut self) {
+    }
+
+    /// Sorted method
+    fn sorted(&self) -> Array<T> {
+        return self.sorted();
+    }
+}
+
+/// Trait impl: type params at impl level (expected, not compact)
+impl<T: Ord> Iterator for Array<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        return null;
+    }
+}
+
+/// Async effect method is preserved
+effect MyEffect {
+    async fn perform(x: i32) -> i32;
+    fn sync_op(y: String);
+}
+
+/// Resource: opaque handle without methods
+resource Handle;
+
+/// Resource: pub with methods, self: &Self normalized
+pub resource Stream {
+    /// Read data from stream
+    fn read(self: &Self, len: u64) -> Array<u8>;
+    /// Write data to stream
+    async fn write(self: &Self, data: Array<u8>);
+    /// Close the stream
+    fn close(self: &Self);
+}
+
+/// Type alias with attribute preserved
+#[wasi("wasi:http/types#field-name")]
+pub type FieldName = String;
+
+/// Type alias with attribute and no visibility
+#[wasi("wasi:http/types#status-code")]
+type StatusCode = u16;
+
+/// Enum with attributed cases (no extra blank lines)
+#[wasi("wasi:sockets/types#ip-address-family")]
+enum IpFamily {
+    #[wasi("ipv4")]
+    Ipv4,
+    #[wasi("ipv6")]
+    Ipv6,
+}
+
+/// Variant with attributed cases (no extra blank lines)
+#[wasi("wasi:http/types#scheme")]
+variant Scheme {
+    #[wasi("HTTP")]
+    Http,
+    #[wasi("HTTPS")]
+    Https,
+    #[wasi("other")]
+    Other(String),
+}
+
+/// Struct with attributed fields (no extra blank lines)
+#[wasi("wasi:http/types#dns-error-payload")]
+struct DnsError {
+    #[wasi("rcode")]
+    pub rcode: Option<String>,
+    #[wasi("info-code")]
+    pub info_code: Option<u16>,
+}
+
+// Block comment /* */ before impl
+/* inherent impl with trait bound */
+impl Array<T: Ord> {
+    /* sort in ascending order */
+    fn sort(&mut self) {
+    }
+}
+
+// async methods in effect
+effect FileIO {
+    /* read bytes */
+    async fn read(path: String) -> Array<u8>;
+    /* write bytes */
+    fn write(path: String, data: Array<u8>);
+}

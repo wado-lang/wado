@@ -1004,6 +1004,34 @@ fn test_format_golden_mess() {
     );
 }
 
+/// Golden test for no_prelude constructs: effects, resources, WASI attributes,
+/// and other syntax that requires `#![no_prelude]` or cannot compile.
+///
+/// `format.fixtures/no_prelude.dirty.wado` has dirty patterns (e.g. `self: &Self`).
+/// `format.fixtures/no_prelude.clean.wado` is the expected canonical output.
+#[test]
+fn test_format_golden_no_prelude() {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
+    let dirty = fs::read_to_string(fixtures.join("no_prelude.dirty.wado"))
+        .expect("read no_prelude dirty");
+    let clean = fs::read_to_string(fixtures.join("no_prelude.clean.wado"))
+        .expect("read no_prelude clean");
+
+    let formatted = wado_compiler::format(&dirty).expect("format no_prelude dirty failed");
+    assert_eq!(
+        formatted, clean,
+        "format(no_prelude dirty) should equal no_prelude clean\n\nActual:\n{}\n\nExpected:\n{}",
+        formatted, clean
+    );
+
+    let formatted2 =
+        wado_compiler::format(&formatted).expect("format no_prelude clean failed");
+    assert_eq!(
+        formatted, formatted2,
+        "format(no_prelude clean) should be idempotent"
+    );
+}
+
 /// Golden test for operator precedence: redundant parens are removed, necessary
 /// parens are kept, and spacing is normalized.
 ///
