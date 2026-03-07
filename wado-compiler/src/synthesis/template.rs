@@ -580,23 +580,12 @@ fn build_template_block(
                     {
                         // #:? with source text available: write source directly
                         stmts.push(write_str_stmt(&text, fmt_mut_ref, tt, span));
-                    } else if is_closure {
-                        // Closure without source text: write type signature via Rust-level dispatch
-                        // (closures have no named type and cannot have Wado trait impls).
+                    } else {
+                        // Use inspect_trait_call so that reference types (&T, &mut T) emit the
+                        // "&"/"&mut " prefix correctly before delegating to Wado Inspect impls.
+                        // For non-reference types the _ => branch delegates to trait_fmt_call.
                         let call_stmts =
                             inspect_trait_call(resolved.type_id, resolved, fmt_mut_ref, tt, span);
-                        stmts.extend(call_stmts);
-                    } else {
-                        // Delegate to the Wado-level Inspect trait, same mechanism as Display.
-                        let call_stmts = trait_fmt_call(
-                            inner_type,
-                            resolved,
-                            fmt_mut_ref,
-                            "Inspect",
-                            "inspect",
-                            tt,
-                            span,
-                        );
                         stmts.extend(call_stmts);
                     }
                 } else {
