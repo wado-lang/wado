@@ -1,0 +1,23 @@
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn translate(mut p: Point, dx: i32, dy: i32) -> Point {
+    p.x += dx;
+    p.y += dy;
+    return p;
+}
+
+export fn run() with Stdout {
+    let p = Point { x: 1, y: 2 };
+    let q = translate(p, 10, 20);
+    assert q.x == 11;
+    assert q.y == 22;
+    assert p.x == 1;
+    assert p.y == 2;
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
