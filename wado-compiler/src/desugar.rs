@@ -8,12 +8,12 @@
 use crate::ast::{
     AssertStmt, AssignExpr, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
-    ContinueStmt, EffectDecl, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FormatSpec, ForOfStmt,
-    ForStmt, Function, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, IndexExpr, Item,
-    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr,
-    MethodCallExpr, Module, Newtype, Pattern, ReturnStmt, StaticMethodCallExpr, Stmt, StructDecl,
-    StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplatePart, TemplateStringExpr,
-    TestDecl, TraitDecl, TupleLiteralExpr, UnaryExpr, UnaryOp, WhileStmt,
+    ContinueStmt, EffectDecl, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
+    Function, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, IndexExpr, Item, LabeledBlockStmt,
+    LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Newtype,
+    Pattern, ReturnStmt, StaticMethodCallExpr, Stmt, StructDecl, StructLiteralExpr,
+    StructLiteralField, TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitDecl,
+    TupleLiteralExpr, UnaryExpr, UnaryOp, WhileStmt,
 };
 use crate::unparse::unparse_expr_simple;
 
@@ -1099,7 +1099,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
         "\ncondition: {condition_source}\n"
     )));
 
-    // Add each intermediate value using inspect format
+    // Add each intermediate value
     for (var_name, source, _) in &intermediates {
         template_parts.push(TemplatePart::String(format!("{source}: ")));
         template_parts.push(TemplatePart::Interpolation {
@@ -1107,9 +1107,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
                 name: var_name.clone(),
                 span,
             })),
-            format: Some(FormatSpec {
-                spec: "?".to_string(),
-            }),
+            format: None,
         });
         template_parts.push(TemplatePart::String("\n".to_string()));
     }
