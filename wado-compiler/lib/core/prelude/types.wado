@@ -232,3 +232,65 @@ pub resource Task {
     #[canonical("task-cancel")]
     fn cancel();
 }
+
+/// A suspended thread handle, used as an argument to thread switching operations.
+/// Obtained when a thread suspends itself (e.g. via `Thread::suspend`).
+pub resource SuspendedThread;
+
+/// Component Model thread operations (Shared-Everything Threads proposal).
+///
+/// These canonicals operate on threads within a component instance.
+/// Thread functions must be bare (no captures), matching the shared function type.
+pub resource Thread {
+    /// Spawn a new thread by calling the shared function at `func_type_index`.
+    /// The function type index must be a compile-time constant.
+    #[canonical("thread-spawn-ref")]
+    fn spawn_ref(func_type_index: u32);
+
+    /// Spawn a new thread via indirect call through a shared function table.
+    /// Both `func_type_index` and `table_index` must be compile-time constants.
+    #[canonical("thread-spawn-indirect")]
+    fn spawn_indirect(func_type_index: u32, table_index: u32);
+
+    /// Returns the number of hardware threads that can be expected to execute concurrently.
+    #[canonical("thread-available-parallelism")]
+    fn available_parallelism() -> u32;
+
+    /// Yield control to allow other threads to make progress.
+    /// If `cancellable` is true, may return early if the current task is being cancelled.
+    #[canonical("thread-yield")]
+    fn yield_(cancellable: bool);
+
+    /// Returns the index of the current thread within its thread group.
+    #[canonical("thread-index")]
+    fn index() -> u32;
+
+    /// Create a new thread via indirect call through a shared function table.
+    /// Both `func_type_index` and `table_index` must be compile-time constants.
+    #[canonical("thread-new-indirect")]
+    fn new_indirect(func_type_index: u32, table_index: u32);
+
+    /// Suspend the current thread and immediately switch to the given suspended thread.
+    /// If `cancellable` is true, suspension can be interrupted by cancellation.
+    #[canonical("thread-suspend-to-suspended")]
+    fn suspend_to_suspended(target: &SuspendedThread, cancellable: bool);
+
+    /// Suspend the current thread, yielding to the transitive async-lowered calling component.
+    /// If `cancellable` is true, suspension can be interrupted by cancellation.
+    #[canonical("thread-suspend")]
+    fn suspend(cancellable: bool) -> SuspendedThread;
+
+    /// Suspend the current thread and switch to another thread.
+    /// If `cancellable` is true, suspension can be interrupted by cancellation.
+    #[canonical("thread-suspend-to")]
+    fn suspend_to(target: &SuspendedThread, cancellable: bool) -> SuspendedThread;
+
+    /// Schedule the given suspended thread to be resumed later.
+    #[canonical("thread-unsuspend")]
+    fn unsuspend(target: &SuspendedThread);
+
+    /// Yield to the given suspended thread, then resume this thread when done.
+    /// If `cancellable` is true, the yield can be interrupted by cancellation.
+    #[canonical("thread-yield-to-suspended")]
+    fn yield_to_suspended(target: &SuspendedThread, cancellable: bool);
+}
