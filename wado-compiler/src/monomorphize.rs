@@ -2536,10 +2536,8 @@ impl Monomorphizer {
                         matches!(
                             type_table.get(base),
                             ResolvedType::GenericInstance { .. }
+                                | ResolvedType::GenericResource { .. }
                                 | ResolvedType::BuiltinArray(_)
-                                | ResolvedType::Stream(_)
-                                | ResolvedType::StreamWritable(_)
-                                | ResolvedType::FutureWritable(_)
                                 | ResolvedType::Struct {
                                     is_monomorphized: true,
                                     ..

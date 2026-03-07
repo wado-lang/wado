@@ -65,16 +65,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 name,
                 module_source,
             } => (name.clone(), module_source.clone()),
-            // Stream<T> - resource methods declared in core:prelude/types.wado
-            ResolvedType::Stream(_) => ("Stream".to_string(), ModuleSource::types()),
-            // StreamWritable<T> - resource methods declared in core:prelude/types.wado
-            ResolvedType::StreamWritable(_) => {
-                ("StreamWritable".to_string(), ModuleSource::types())
-            }
-            // FutureWritable<T> - resource methods declared in core:prelude/types.wado
-            ResolvedType::FutureWritable(_) => {
-                ("FutureWritable".to_string(), ModuleSource::types())
-            }
+            // Generic resource types (Future<T>, Stream<T>, etc.) - use resource name and module
+            ResolvedType::GenericResource {
+                name,
+                module_source,
+                ..
+            } => (name.clone(), module_source.clone()),
             _ => (
                 self.type_table.borrow().mangle_type_name(base_type_id),
                 self.current_module_source.clone(),
@@ -256,37 +252,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 ResolvedType::GenericInstance {
                     type_args: receiver_type_args,
                     ..
+                }
+                | ResolvedType::GenericResource {
+                    type_args: receiver_type_args,
+                    ..
                 } if !receiver_type_args.is_empty() => {
                     impl_offset = receiver_type_args.len() as u32;
                     subst_ctx = subst_ctx.with_impl_args(&receiver_type_args);
-                }
-                // Stream<T> has one type param T
-                ResolvedType::Stream(inner) => {
-                    impl_offset = 1;
-                    subst_ctx = subst_ctx.with_impl_args(&[inner]);
-                }
-                // StreamWritable<T> has one type param T
-                ResolvedType::StreamWritable(inner) => {
-                    impl_offset = 1;
-                    subst_ctx = subst_ctx.with_impl_args(&[inner]);
-                }
-                // FutureWritable<T> has one type param T
-                ResolvedType::FutureWritable(inner) => {
-                    impl_offset = 1;
-                    subst_ctx = subst_ctx.with_impl_args(&[inner]);
                 }
                 _ => {}
             }
         } else {
             // For trait methods, just compute impl_offset for method type args
             match self.type_table.borrow().get(base_type_id).clone() {
-                ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
+                ResolvedType::GenericInstance { type_args, .. }
+                | ResolvedType::GenericResource { type_args, .. }
+                    if !type_args.is_empty() =>
+                {
                     impl_offset = type_args.len() as u32;
-                }
-                ResolvedType::Stream(_)
-                | ResolvedType::StreamWritable(_)
-                | ResolvedType::FutureWritable(_) => {
-                    impl_offset = 1;
                 }
                 _ => {}
             }
@@ -315,6 +298,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             match self.type_table.borrow().get(base_type_id).clone() {
                 ResolvedType::GenericInstance {
                     name, type_args, ..
+                }
+                | ResolvedType::GenericResource {
+                    name, type_args, ..
                 } => {
                     let type_arg_names: Vec<String> = type_args
                         .iter()
@@ -326,39 +312,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         name.clone(),
                         type_arg_names,
                         Some(type_args.clone()),
-                    )
-                }
-                // Stream<T>: base name is "Stream", one type arg
-                ResolvedType::Stream(inner) => {
-                    let inner_name = self.type_table.borrow().mangle_type_name(inner);
-                    let mangled = format!("Stream<{inner_name}>");
-                    (
-                        mangled,
-                        "Stream".to_string(),
-                        vec![inner_name],
-                        Some(vec![inner]),
-                    )
-                }
-                // StreamWritable<T>: base name is "StreamWritable", one type arg
-                ResolvedType::StreamWritable(inner) => {
-                    let inner_name = self.type_table.borrow().mangle_type_name(inner);
-                    let mangled = format!("StreamWritable<{inner_name}>");
-                    (
-                        mangled,
-                        "StreamWritable".to_string(),
-                        vec![inner_name],
-                        Some(vec![inner]),
-                    )
-                }
-                // FutureWritable<T>: base name is "FutureWritable", one type arg
-                ResolvedType::FutureWritable(inner) => {
-                    let inner_name = self.type_table.borrow().mangle_type_name(inner);
-                    let mangled = format!("FutureWritable<{inner_name}>");
-                    (
-                        mangled,
-                        "FutureWritable".to_string(),
-                        vec![inner_name],
-                        Some(vec![inner]),
                     )
                 }
                 _ => {
@@ -725,33 +678,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 name,
                 module_source,
             } => (name.clone(), module_source.clone(), name.clone(), vec![]),
-            // Generic resource types with a special ResolvedType variant (Future, Stream, etc.)
-            // are handled like generic structs for static method resolution: use the base name
-            // and inner type as a type argument for type substitution.
-            ResolvedType::Future(inner) => (
-                "Future".to_string(),
-                ModuleSource::types(),
-                "Future".to_string(),
-                vec![*inner],
-            ),
-            ResolvedType::Stream(inner) => (
-                "Stream".to_string(),
-                ModuleSource::types(),
-                "Stream".to_string(),
-                vec![*inner],
-            ),
-            ResolvedType::StreamWritable(inner) => (
-                "StreamWritable".to_string(),
-                ModuleSource::types(),
-                "StreamWritable".to_string(),
-                vec![*inner],
-            ),
-            ResolvedType::FutureWritable(inner) => (
-                "FutureWritable".to_string(),
-                ModuleSource::types(),
-                "FutureWritable".to_string(),
-                vec![*inner],
-            ),
+            // Generic resource types (Future<T>, Stream<T>, etc.) - handle like generic structs
+            // for static method resolution: use the base name and type args for substitution.
+            ResolvedType::GenericResource {
+                name,
+                module_source,
+                type_args,
+            } => {
+                let type_arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.type_table.borrow().mangle_type_name(*t))
+                    .collect();
+                let mangled = format!("{}<{}>", name, type_arg_names.join(","));
+                (name.clone(), module_source.clone(), mangled, type_args.clone())
+            }
             ResolvedType::Primitive(prim) => {
                 let name = prim.as_str().to_string();
                 (name.clone(), ModuleSource::primitives(), name, vec![])

@@ -42,11 +42,11 @@ fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String>
         ResolvedType::BuiltinArray(inner)
         | ResolvedType::Ref(inner)
         | ResolvedType::MutRef(inner)
-        | ResolvedType::Stream(inner)
-        | ResolvedType::StreamWritable(inner)
-        | ResolvedType::Future(inner)
-        | ResolvedType::FutureWritable(inner)
         | ResolvedType::Reactive(inner) => get_type_dependencies(type_table, *inner),
+        ResolvedType::GenericResource { type_args, .. } => type_args
+            .iter()
+            .flat_map(|a| get_type_dependencies(type_table, *a))
+            .collect(),
         ResolvedType::Tuple(elems) => elems
             .iter()
             .flat_map(|e| get_type_dependencies(type_table, *e))

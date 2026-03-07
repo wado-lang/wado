@@ -639,6 +639,8 @@ impl<'a> WirContext<'a> {
                 // Newtypes resolve to their base type
                 self.type_id_to_wir_type(type_table, *base_type)
             }
+            // Generic resource types (Future<T>, Stream<T>, etc.) are opaque i32 handles
+            ResolvedType::GenericResource { .. } => WirType::I32,
             _ => {
                 // For any unhandled types, use i32 as placeholder
                 WirType::I32

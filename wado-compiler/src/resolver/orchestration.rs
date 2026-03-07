@@ -726,14 +726,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
             | ResolvedType::BuiltinArray(inner)
-            | ResolvedType::Stream(inner)
-            | ResolvedType::StreamWritable(inner)
-            | ResolvedType::Future(inner)
-            | ResolvedType::FutureWritable(inner)
             | ResolvedType::Reactive(inner) => {
                 Self::collect_cross_module_deps(*inner, type_table, out);
             }
-            ResolvedType::GenericInstance { type_args, .. } => {
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => {
                 for arg in type_args {
                     Self::collect_cross_module_deps(*arg, type_table, out);
                 }

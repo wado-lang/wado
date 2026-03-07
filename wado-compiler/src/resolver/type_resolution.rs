@@ -205,36 +205,28 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .first()
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
-                self.type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::Stream(elem))
+                self.type_table.borrow_mut().make_stream(elem)
             }
             "StreamWritable" => {
                 let elem = args
                     .first()
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
-                self.type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::StreamWritable(elem))
+                self.type_table.borrow_mut().make_stream_writable(elem)
             }
             "Future" => {
                 let elem = args
                     .first()
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
-                self.type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::Future(elem))
+                self.type_table.borrow_mut().make_future(elem)
             }
             "FutureWritable" => {
                 let elem = args
                     .first()
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
-                self.type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::FutureWritable(elem))
+                self.type_table.borrow_mut().make_future_writable(elem)
             }
             _ => {
                 // Check if it's a user-defined generic struct

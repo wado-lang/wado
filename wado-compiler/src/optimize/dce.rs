@@ -828,20 +828,15 @@ fn analyze_expr(
                         ));
                         analysis.callees.insert(method_id);
                     }
-                    ResolvedType::Future(inner)
-                    | ResolvedType::FutureWritable(inner)
-                    | ResolvedType::Stream(inner)
-                    | ResolvedType::StreamWritable(inner) => {
-                        // Resource handle type method call (e.g., Future<T>^Inspect::inspect)
-                        let base = match base_receiver_type {
-                            ResolvedType::Future(_) => "Future",
-                            ResolvedType::FutureWritable(_) => "FutureWritable",
-                            ResolvedType::Stream(_) => "Stream",
-                            ResolvedType::StreamWritable(_) => "StreamWritable",
-                            _ => unreachable!(),
-                        };
-                        let type_arg_names = vec![type_table.mangle_type_name(inner)];
-                        let mangled_struct = mangle_generic_name(base, &type_arg_names);
+                    ResolvedType::GenericResource {
+                        name,
+                        type_args,
+                        ..
+                    } => {
+                        // Generic resource method call (e.g., Future<T>^Inspect::inspect)
+                        let type_arg_names: Vec<String> =
+                            type_args.iter().map(|t| type_table.mangle_type_name(*t)).collect();
+                        let mangled_struct = mangle_generic_name(name.as_str(), &type_arg_names);
                         let method_id = FunctionId::Method(MethodName::new(
                             current_module.clone(),
                             mangled_struct,
@@ -1739,12 +1734,13 @@ fn collect_type_dependencies(
         ResolvedType::BuiltinArray(inner)
         | ResolvedType::Ref(inner)
         | ResolvedType::MutRef(inner)
-        | ResolvedType::Stream(inner)
-        | ResolvedType::StreamWritable(inner)
-        | ResolvedType::Future(inner)
-        | ResolvedType::FutureWritable(inner)
         | ResolvedType::Reactive(inner) => {
             collect_type_transitive(*inner, type_table, reachable);
+        }
+        ResolvedType::GenericResource { type_args, .. } => {
+            for &arg in type_args {
+                collect_type_transitive(arg, type_table, reachable);
+            }
         }
         ResolvedType::Tuple(elements) => {
             for elem in elements {
