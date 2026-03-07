@@ -2889,14 +2889,14 @@ impl FunctionTranslator<'_, '_> {
                 let data_arg = self.translate_expr(&args[0]);
                 Some(self.emit_stream_write(handle, data_arg))
             }
-            "stream-close-readable" => Some(self.emit_drop_handle("stream-drop-readable", handle)),
-            "stream-close-writable" => Some(self.emit_drop_handle("stream-drop-writable", handle)),
+            "stream-drop-readable" => Some(self.emit_drop_handle("stream-drop-readable", handle)),
+            "stream-drop-writable" => Some(self.emit_drop_handle("stream-drop-writable", handle)),
 
             // === Future instance methods ===
             "future-read" => Some(self.emit_future_read(handle, result_type_id)),
             "future-write" => Some(self.emit_future_write_ok_none(handle)),
-            "future-close-readable" => Some(self.emit_drop_handle("future-drop-readable", handle)),
-            "future-close-writable" | "future-drop-writable" => {
+            "future-drop-readable" => Some(self.emit_drop_handle("future-drop-readable", handle)),
+            "future-drop-writable" => {
                 Some(self.emit_drop_handle("future-drop-writable", handle))
             }
 
@@ -2945,9 +2945,9 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Emit a canonical drop/close call: `{canonical}(handle)`.
+    /// Emit a canonical drop call: `{canonical}(handle)`.
     ///
-    /// Used for all CM resource close operations:
+    /// Used for all CM resource drop operations:
     /// `stream-drop-readable`, `stream-drop-writable`,
     /// `future-drop-readable`, `future-drop-writable`,
     /// `waitable-set-drop`, `subtask-drop`, `error-context-drop`.

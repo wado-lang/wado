@@ -7,12 +7,12 @@ export fn run() with Stdout {
     let [rx, tx] = Stream::<u8>::new();
 
     // Close the reader first so write sees DROPPED rather than BLOCKED
-    rx.close();
+    rx.drop();
 
     // Write data via the typed StreamWritable API
     let data: Array<u8> = [72, 101, 108, 108, 111, 10];  // "Hello\n"
     tx.write(data);
-    tx.close();
+    tx.drop();
 
     println("write ok");
 }

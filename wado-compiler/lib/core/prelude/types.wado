@@ -51,9 +51,9 @@ pub resource Future<T> {
     #[canonical("future-read")]
     fn read(&self) -> Option<T>;
 
-    /// Close the readable end of the future.
-    #[canonical("future-close-readable")]
-    fn close(&self);
+    /// Drop the readable end of the future.
+    #[canonical("future-drop-readable")]
+    fn drop(&self);
 }
 
 /// Writable end of an async value (WASI Component Model future).
@@ -62,10 +62,6 @@ pub resource FutureWritable<T> {
     /// Fulfill the future with a value.
     #[canonical("future-write")]
     fn write(&self, value: T);
-
-    /// Close the writable end without fulfilling (cancels the future).
-    #[canonical("future-close-writable")]
-    fn close(&self);
 
     /// Drop this writable end handle. Traps if no value has been written yet.
     #[canonical("future-drop-writable")]
@@ -82,14 +78,14 @@ pub resource Stream<T> {
     fn new() -> [Stream<T>, StreamWritable<T>];
 
     /// Read up to `max` elements from the stream.
-    /// Blocks until data is available or the writer closes.
+    /// Blocks until data is available or the writer drops.
     /// Returns an empty array on end-of-stream.
     #[canonical("stream-read")]
     fn read(&self, max: i32) -> Array<T>;
 
-    /// Close the readable end of the stream.
-    #[canonical("stream-close-readable")]
-    fn close(&self);
+    /// Drop the readable end of the stream.
+    #[canonical("stream-drop-readable")]
+    fn drop(&self);
 }
 
 /// Writable end of an async sequence (WASI Component Model stream).
@@ -99,9 +95,9 @@ pub resource StreamWritable<T> {
     #[canonical("stream-write")]
     fn write(&self, data: Array<T>);
 
-    /// Close the writable end, signaling end-of-stream.
-    #[canonical("stream-close-writable")]
-    fn close(&self);
+    /// Drop the writable end, signaling end-of-stream.
+    #[canonical("stream-drop-writable")]
+    fn drop(&self);
 }
 
 /// Opaque token identifying a waitable handle within a WaitableSet.
@@ -139,16 +135,16 @@ pub resource WaitableSet {
     #[canonical("waitable-set-poll")]
     fn poll(&self) -> Option<WaitEvent>;
 
-    /// Close (drop) the waitable set.
+    /// Drop the waitable set.
     #[canonical("waitable-set-drop")]
-    fn close(&self);
+    fn drop(&self);
 }
 
 /// An async subtask handle returned by CM async operations.
 pub resource Subtask {
-    /// Close (drop) a completed subtask handle.
+    /// Drop a completed subtask handle.
     #[canonical("subtask-drop")]
-    fn close(&self);
+    fn drop(&self);
 
     /// Join this subtask to a waitable set.
     /// Returns a Waitable token identifying this subtask in wait results.
@@ -166,7 +162,7 @@ pub resource ErrorContext {
     #[canonical("error-context-debug-message")]
     fn debug_message(&self) -> String;
 
-    /// Close (drop) the error context.
+    /// Drop the error context.
     #[canonical("error-context-drop")]
-    fn close(&self);
+    fn drop(&self);
 }

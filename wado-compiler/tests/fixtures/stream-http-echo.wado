@@ -16,7 +16,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
         }
         chunks.append(chunk);
     }
-    body_stream.close();
+    body_stream.drop();
 
     // Build response echoing the body
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
@@ -31,7 +31,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     for let chunk of chunks {
         resp_tx.write(chunk);
     }
-    resp_tx.close();
+    resp_tx.drop();
 
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }

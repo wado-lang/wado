@@ -6,7 +6,7 @@ export fn run() with Stdout {
     let [rx, tx] = Stream::<u8>::new();
 
     // Close writer immediately so reads see EOF
-    tx.close();
+    tx.drop();
 
     // Read loop should terminate immediately with 0-length chunk
     let mut reads = 0;
@@ -19,7 +19,7 @@ export fn run() with Stdout {
     }
 
     assert reads == 0;
-    rx.close();
+    rx.drop();
     println("multi-read ok");
 }
 

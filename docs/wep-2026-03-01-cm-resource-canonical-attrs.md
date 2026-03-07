@@ -48,16 +48,16 @@ pub resource Stream<T> {
     #[canonical("stream-read")]
     fn read(&self, max: i32) -> Array<T>;
 
-    #[canonical("stream-close-readable")]
-    fn close(&self);
+    #[canonical("stream-drop-readable")]
+    fn drop(&self);
 }
 
 pub resource StreamWritable<T> {
     #[canonical("stream-write")]
     fn write(&self, data: Array<T>);
 
-    #[canonical("stream-close-writable")]
-    fn close(&self);
+    #[canonical("stream-drop-writable")]
+    fn drop(&self);
 }
 
 pub resource Future<T> {
@@ -67,16 +67,16 @@ pub resource Future<T> {
     #[canonical("future-read")]
     fn read(&self) -> Option<T>;
 
-    #[canonical("future-close-readable")]
-    fn close(&self);
+    #[canonical("future-drop-readable")]
+    fn drop(&self);
 }
 
 pub resource FutureWritable<T> {
     #[canonical("future-write")]
     fn write(&self, value: T);
 
-    #[canonical("future-close-writable")]
-    fn close(&self);
+    #[canonical("future-drop-writable")]
+    fn drop(&self);
 }
 
 /// Opaque token identifying a waitable handle within a WaitableSet.
@@ -104,12 +104,12 @@ pub resource WaitableSet {
     fn poll(&self) -> Option<WaitEvent>;
 
     #[canonical("waitable-set-drop")]
-    fn close(&self);
+    fn drop(&self);
 }
 
 pub resource Subtask {
     #[canonical("subtask-drop")]
-    fn close(&self);
+    fn drop(&self);
 
     /// Join this subtask to a waitable set.
     /// Returns a Waitable token that identifies this subtask in wait results.
@@ -125,7 +125,7 @@ pub resource ErrorContext {
     fn debug_message(&self) -> String;
 
     #[canonical("error-context-drop")]
-    fn close(&self);
+    fn drop(&self);
 }
 ```
 
@@ -416,13 +416,13 @@ fn try_translate_canonical_method(&mut self, ...) -> Option<WirInstr> {
         "stream-new"             => self.emit_stream_new(...),
         "stream-read"            => self.emit_stream_read(...),
         "stream-write"           => self.emit_stream_write(...),
-        "stream-close-readable"  => self.emit_drop_handle("stream-close-readable", ...),
-        "stream-close-writable"  => self.emit_drop_handle("stream-close-writable", ...),
+        "stream-drop-readable"   => self.emit_drop_handle("stream-drop-readable", ...),
+        "stream-drop-writable"   => self.emit_drop_handle("stream-drop-writable", ...),
         "future-new"             => self.emit_future_new(...),
         "future-read"            => self.emit_future_read(...),
         "future-write"           => self.emit_future_write(...),
-        "future-close-readable"  => self.emit_drop_handle("future-close-readable", ...),
-        "future-close-writable"  => self.emit_drop_handle("future-close-writable", ...),
+        "future-drop-readable"   => self.emit_drop_handle("future-drop-readable", ...),
+        "future-drop-writable"   => self.emit_drop_handle("future-drop-writable", ...),
         "waitable-set-new"       => self.emit_waitable_set_new(...),
         "waitable-set-wait"      => self.emit_waitable_set_wait(...),
         "waitable-set-poll"      => self.emit_waitable_set_poll(...),
@@ -524,7 +524,7 @@ WaitableSet and Subtask are user-facing, so e2e tests are required:
 // Test that WaitableSet can be created and used directly
 export fn run() {
     let ws = WaitableSet::new();
-    ws.close();
+    ws.drop();
     println("ok");
 }
 
@@ -539,7 +539,7 @@ __DATA__
 -
   2. [x] Populate it from resource method `#[canonical]` attributes during resolution
 -
-  3. [ ] Add `ensure_canonical` to `WirBuildContext` for lazy canonical import registration
+  3. [x] Add `ensure_canonical` to `WirBuildContext` for lazy canonical import registration
 -
   4. [x] Add `try_translate_canonical_method` to WIR translation, dispatch by canonical name
 -
@@ -555,11 +555,11 @@ __DATA__
 -
   10. [x] Add `#[canonical]` attributes to resource methods in `types.wado`
 -
-  11. [ ] Add `WaitableSet`, `Subtask`, `ErrorContext` resource declarations
+  11. [x] Add `WaitableSet`, `Subtask`, `ErrorContext` resource declarations
 -
-  12. [ ] Add `Future::read` declaration
+  12. [x] Add `Future::read` declaration
 -
-  13. [ ] Update `WaitableSet::wait`/`poll` to use Wado-level return types
+  13. [x] Update `WaitableSet::wait`/`poll` to use Wado-level return types
 -
   14. [ ] Remove 13 CM functions from `builtin.wado`
 -
@@ -569,8 +569,15 @@ __DATA__
 -
   17. [ ] Add e2e tests for WaitableSet/Subtask
 -
-  18. [ ] Implement `emit_future_read`, `emit_waitable_set_wait`, `emit_waitable_set_poll`,
-          `emit_error_context_*` synthesis functions (or stub as compile errors)
+  18. [x] Implement `emit_future_read`, `emit_waitable_set_wait`, `emit_waitable_set_poll`,
+          `emit_error_context_*` synthesis functions (stubs — panic as "not yet implemented")
+-
+  19. [x] Replace dedicated `ResolvedType::Future/Stream/FutureWritable/StreamWritable` variants
+          with `ResolvedType::GenericResource { name, module_source, type_args }` (consistent
+          with how Option/Result migrated from dedicated variants to `GenericInstance`)
+-
+  20. [x] Rename resource `fn close` → `fn drop` to match WASI canonical names
+          (`future-drop-readable`, `stream-drop-readable`, `waitable-set-drop`, etc.)
 
 ## Consequences
 
