@@ -758,6 +758,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .collect();
                 self.type_table.borrow_mut().make_tuple(new_elems)
             }
+            ResolvedType::GenericResource {
+                name,
+                module_source,
+                type_args: inner_args,
+            } => {
+                let new_args: Vec<TypeId> = inner_args
+                    .iter()
+                    .map(|&arg| self.substitute_type_params(arg, type_args))
+                    .collect();
+                self.type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::GenericResource {
+                        name: name.clone(),
+                        module_source: module_source.clone(),
+                        type_args: new_args,
+                    })
+            }
             ResolvedType::GenericInstance {
                 name,
                 module_source,

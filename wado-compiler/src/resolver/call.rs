@@ -692,15 +692,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
                 "Stream" if generic.args.len() == 1 => {
                     let inner_type = self.resolve_wasi_type(&generic.args[0]);
-                    self.type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::Stream(inner_type))
+                    self.type_table.borrow_mut().make_stream(inner_type)
                 }
                 "Future" if generic.args.len() == 1 => {
                     let inner_type = self.resolve_wasi_type(&generic.args[0]);
-                    self.type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::Future(inner_type))
+                    self.type_table.borrow_mut().make_future(inner_type)
                 }
                 "Result" if generic.args.len() == 2 => {
                     let ok_type = self.resolve_wasi_type(&generic.args[0]);

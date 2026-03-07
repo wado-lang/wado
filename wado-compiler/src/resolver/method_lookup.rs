@@ -244,25 +244,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 name,
                 module_source,
             } => (name.clone(), Some(module_source.clone()), None, None),
-            // Stream<T> - resource methods declared in core:prelude/types.wado
-            ResolvedType::Stream(inner) => (
-                "Stream".to_string(),
-                Some(ModuleSource::types()),
-                Some(vec![*inner]),
-                None,
-            ),
-            // StreamWritable<T> - resource methods declared in core:prelude/types.wado
-            ResolvedType::StreamWritable(inner) => (
-                "StreamWritable".to_string(),
-                Some(ModuleSource::types()),
-                Some(vec![*inner]),
-                None,
-            ),
-            // FutureWritable<T> - resource methods declared in core:prelude/types.wado
-            ResolvedType::FutureWritable(inner) => (
-                "FutureWritable".to_string(),
-                Some(ModuleSource::types()),
-                Some(vec![*inner]),
+            // Generic resource types (Future<T>, Stream<T>, etc.)
+            ResolvedType::GenericResource {
+                name,
+                module_source,
+                type_args,
+            } => (
+                name.clone(),
+                Some(module_source.clone()),
+                if type_args.is_empty() {
+                    None
+                } else {
+                    Some(type_args.clone())
+                },
                 None,
             ),
             _ => return None,

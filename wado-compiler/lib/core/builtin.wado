@@ -9,73 +9,48 @@
 //
 // Functions with #[canonical("namespace", "name")] are imported as CM canonical built-ins.
 // Functions without #[canonical(...)] compile to Wasm instructions directly.
-/// Creates a new stream, returning (rx, tx) packed in i64.
+//
+// CM resource canonicals for the user-facing API are declared via #[canonical] attributes on
+// resource methods in core:prelude/types.wado and are registered lazily during WIR translation.
+//
+// The functions below are low-level CM primitives used by core:internal for ambient logging
+// (log_stdout, log_stderr) and async task coordination (wait_for_subtask). They are NOT part
+// of the public API — user code should use Stream<T>, WaitableSet, Subtask resources instead.
+
+/// Creates a new stream pair, returning (rx, tx) packed in i64.
 /// Low 32 bits = rx (readable end), High 32 bits = tx (writable end).
 #[canonical("wasi", "stream-new")]
 fn stream_new() -> i64;
 
-/// Reads data from a stream into linear memory.
-/// Returns BLOCKED (0xFFFF_FFFF) or copy_result | (count << 4).
-/// copy_result: 0=COMPLETED, 1=DROPPED (writer closed).
-#[canonical("wasi", "stream-read")]
-fn stream_read(rx: i32, ptr: i32, len: i32) -> i32;
-
-/// Writes data from linear memory to a stream.
-/// Returns BLOCKED (0xFFFF_FFFF) or copy_result | (count << 4).
+/// Writes data from linear memory to the writable end of a stream.
+/// Returns BLOCKED (0xFFFF_FFFF) or status flags.
 #[canonical("wasi", "stream-write")]
 fn stream_write(tx: i32, ptr: i32, len: i32) -> i32;
 
-/// Drops the writable end of a stream (close for writing).
+/// Drops the writable end of a stream (signals end-of-stream).
 #[canonical("wasi", "stream-drop-writable")]
 fn stream_drop_writable(tx: i32);
 
-/// Drops the readable end of a stream (close for reading).
-#[canonical("wasi", "stream-drop-readable")]
-fn stream_drop_readable(rx: i32);
-/// Creates a new future, returning (rx, tx) packed in i64.
-/// Low 32 bits = rx (readable end), High 32 bits = tx (writable end).
-#[canonical("wasi", "future-new")]
-fn future_new() -> i64;
-
-/// Writes data from linear memory to a future (fulfills it).
-/// ptr points to the payload value in linear memory.
-/// Returns 0 on success, non-zero on error.
-#[canonical("wasi", "future-write")]
-fn future_write(tx: i32, ptr: i32) -> i32;
-
-/// Drops the writable end of a future (closes for writing without fulfilling).
-#[canonical("wasi", "future-drop-writable")]
-fn future_drop_writable(tx: i32);
-
-/// Drops the readable end of a future.
-#[canonical("wasi", "future-drop-readable")]
-fn future_drop_readable(rx: i32);
-/// Signals task completion with a result value.
-/// Used internally by the compiler to complete async exports.
-#[canonical("wasi", "task-return")]
-fn task_return(result: i32);
-
-/// Creates a new waitable set for async task coordination.
+/// Creates a new waitable set.
 #[canonical("wasi", "waitable-set-new")]
 fn waitable_set_new() -> i32;
 
-/// Joins a waitable (task/stream/future handle) to a waitable set.
-/// waitable: the handle to join (task, stream, or future).
-/// set: the waitable set to join into (0 = remove from current set).
+/// Joins a waitable (subtask/stream/future handle) into a waitable set.
 #[canonical("wasi", "waitable-join")]
 fn waitable_join(waitable: i32, set: i32);
 
-/// Waits on a waitable set and returns the event ordinal when any task completes.
-/// Writes 8 bytes (POINTER_PAIR) to outptr:
-///   outptr+0: handle (u32) - waitable handle or 0.
-///   outptr+4: result (u32) - packed status code.
-/// Caller must allocate 8 bytes with 4-byte alignment.
+/// Blocks until an event occurs in the waitable set.
+/// Writes 8 bytes to outptr: event code (i32) and payload (i32).
 #[canonical("wasi", "waitable-set-wait")]
 fn waitable_set_wait(set: i32, outptr: i32) -> i32;
 
 /// Drops a completed subtask handle.
 #[canonical("wasi", "subtask-drop")]
 fn subtask_drop(subtask: i32);
+/// Signals task completion with a result value.
+/// Used internally by the compiler to complete async exports.
+#[canonical("wasi", "task-return")]
+fn task_return(result: i32);
 
 /// Reinterprets an i32 value as a char (no validation, no-op at Wasm level).
 /// Used internally by the stdlib for trusted conversions (e.g., UTF-8 decoding).

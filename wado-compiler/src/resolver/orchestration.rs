@@ -726,14 +726,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
             | ResolvedType::BuiltinArray(inner)
-            | ResolvedType::Stream(inner)
-            | ResolvedType::StreamWritable(inner)
-            | ResolvedType::Future(inner)
-            | ResolvedType::FutureWritable(inner)
             | ResolvedType::Reactive(inner) => {
                 Self::collect_cross_module_deps(*inner, type_table, out);
             }
-            ResolvedType::GenericInstance { type_args, .. } => {
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => {
                 for arg in type_args {
                     Self::collect_cross_module_deps(*arg, type_table, out);
                 }
@@ -1035,8 +1032,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             type_table.make_enum(named.name.clone(), info.module_source.clone())
                         } else if let Some(info) = variant_cases.get(&named.name) {
                             type_table.make_variant(named.name.clone(), info.module_source.clone())
-                        } else if flags_cases.contains_key(&named.name) {
-                            TypeTable::UNKNOWN
                         } else {
                             TypeTable::UNKNOWN
                         }

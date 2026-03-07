@@ -20,20 +20,22 @@ on-task-started:
 		echo "Development environment ready."; \
 	fi
 
+RUSTFLAGS ?= -D warnings
+
 .PHONY: build
 build: wado-compiler/lib/builtins/wado-bundled-libm.wat
-	cargo check
-	cargo check -p wado-compiler --target wasm32-unknown-unknown
-	cargo check -p wado-manifest --target wasm32-unknown-unknown
+	RUSTFLAGS="$(RUSTFLAGS)" cargo check
+	RUSTFLAGS="$(RUSTFLAGS)" cargo check -p wado-compiler --target wasm32-unknown-unknown
+	RUSTFLAGS="$(RUSTFLAGS)" cargo check -p wado-manifest --target wasm32-unknown-unknown
 
 .PHONY: hello
 hello:
-	cargo run -p wado-cli -- compile -O2 -o example/hello.wat  example/hello.wado
-	cargo run -p wado-cli -- compile -O2 -o example/hello.wasm example/hello.wado
+	RUSTFLAGS="$(RUSTFLAGS)" cargo run -p wado-cli -- compile -O2 -o example/hello.wat  example/hello.wado
+	RUSTFLAGS="$(RUSTFLAGS)" cargo run -p wado-cli -- compile -O2 -o example/hello.wasm example/hello.wado
 
 .PHONY: hello-run
 hello-run:
-	cargo run -p wado-cli -- run example/hello.wado
+	RUSTFLAGS="$(RUSTFLAGS)" cargo run -p wado-cli -- run example/hello.wado
 
 .PHONY: hello-run-wasmtime
 hello-run-wasmtime: hello
@@ -41,7 +43,7 @@ hello-run-wasmtime: hello
 
 .PHONY: test
 test:
-	RUST_TEST_THREADS=12 cargo test
+	RUSTFLAGS="$(RUSTFLAGS)" RUST_TEST_THREADS=12 cargo test
 
 .PHONY: test-wado
 test-wado:
@@ -88,7 +90,7 @@ update-golden-format-fixtures:
 
 .PHONY: clippy
 clippy:
-	cargo clippy --all --all-features
+	RUSTFLAGS="$(RUSTFLAGS)" cargo clippy --all --all-features -- -D warnings
 
 .PHONY: clippy-fix
 clippy-fix:

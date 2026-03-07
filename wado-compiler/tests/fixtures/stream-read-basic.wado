@@ -6,13 +6,13 @@ export fn run() with Stdout {
     let [rx, tx] = Stream::<u8>::new();
 
     // Close the writer so reader sees EOF
-    tx.close();
+    tx.drop();
 
     // Read from the readable end - should get empty (EOF since writer closed)
     let result = rx.read(64);
     assert result.len() == 0;
 
-    rx.close();
+    rx.drop();
     println("read ok");
 }
 

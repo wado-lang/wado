@@ -9,6 +9,10 @@ There are external references in the module for convenience:
 
 - `vendor/wasm/` - WebAssembly/spec
 - `vendor/wasi/` - WebAssembly/WASI
+- `vendor/component-model/` - WebAssembly/component-model (CM spec)
+  - Canonical built-ins: `vendor/component-model/design/mvp/CanonicalABI.md`
+  - Concurrency (async, streams, futures): `vendor/component-model/design/mvp/Concurrency.md`
+  - Explainer: `vendor/component-model/design/mvp/Explainer.md`
 - `vendor/wasmtime/` - a Wasm runtime with WASI P3 support
 - `vendor/wasm-tools/` - a Wasm toolchain, where the Wado compiler relies on
 
@@ -22,4 +26,4 @@ Run the following to sync all vendor submodules:
 mise run sync-vendor
 ```
 
-This syncs `vendor/wasmtime` to the exact version in `Cargo.lock` (required for WASI P3 compatibility), and updates other vendor submodules (`vendor/wasm`, `vendor/wasi`, `vendor/wasm-tools`) to their latest remote HEAD.
+This syncs `vendor/wasmtime` to the exact version in `Cargo.lock` (required for WASI P3 compatibility), and updates other vendor submodules (`vendor/wasm`, `vendor/wasi`, `vendor/wasm-tools`, `vendor/component-model`) to their latest remote HEAD.

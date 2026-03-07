@@ -125,13 +125,14 @@ pub fn analyze_project(project: &mut Project) {
         }
     }
 
-    // Collect canonical resource method usage from reachable functions
-    let mut used_canonical_methods: IndexSet<String> = IndexSet::new();
-    for func_id in &reachable {
-        if let Some(methods) = canonical_method_usage.get(func_id) {
-            used_canonical_methods.extend(methods.iter().cloned());
-        }
-    }
+    // Collect canonical resource method usage from reachable functions.
+    // Used only for ensuring cm_lower_array_u8 is reachable when stream-write is used.
+    let used_canonical_methods: IndexSet<String> = reachable
+        .iter()
+        .filter_map(|f| canonical_method_usage.get(f))
+        .flatten()
+        .cloned()
+        .collect();
 
     // Helper to check if a core/internal function is reachable
     let core_internal = |name: &str| -> FunctionId {
@@ -219,63 +220,20 @@ pub fn analyze_project(project: &mut Project) {
             && is_builtin_func(f)
         {
             let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
-
-            // Ambient logging builtins also need stream intrinsics
-            if name.starts_with("call_indirect_stdout") || name.starts_with("call_indirect_stderr")
-            {
-                add_import_by_name(&mut imports, "stream_new");
-                add_import_by_name(&mut imports, "stream_write");
-                add_import_by_name(&mut imports, "stream_drop_writable");
-            } else if name == "stream_create_pair" {
-                // Synthetic name from method_call.rs for Stream::new() → stream_new canonical
-                add_import_by_name(&mut imports, "stream_new");
-            } else if name == "future_create_pair" {
-                // Synthetic name from method_call.rs for Future::new() → future_new canonical
-                add_import_by_name(&mut imports, "future_new");
-            } else {
-                // Look up the builtin in the registry
-                add_import_by_name(&mut imports, name);
-            }
+            add_import_by_name(&mut imports, name);
         }
     }
 
     // realloc is always needed for memory management
     add_import_by_name(&mut imports, "realloc");
 
-    // Canonical resource method calls need their corresponding builtins
-    for canonical_name in &used_canonical_methods {
-        match canonical_name.as_str() {
-            "stream_drop_readable" => {
-                add_import_by_name(&mut imports, "stream_drop_readable");
-            }
-            "stream_read" => {
-                add_import_by_name(&mut imports, "stream_read");
-                add_import_by_name(&mut imports, "waitable_set_new");
-                add_import_by_name(&mut imports, "waitable_join");
-                add_import_by_name(&mut imports, "waitable_set_wait");
-            }
-            "stream_drop_writable" => {
-                add_import_by_name(&mut imports, "stream_drop_writable");
-            }
-            "stream_write" => {
-                add_import_by_name(&mut imports, "stream_write");
-                add_import_by_name(&mut imports, "waitable_set_new");
-                add_import_by_name(&mut imports, "waitable_join");
-                add_import_by_name(&mut imports, "waitable_set_wait");
-                // cm_lower_array_u8 is an internal function that must be reachable
-                reachable.extend(compute_reachable(
-                    &call_graph,
-                    &core_internal("cm_lower_array_u8"),
-                ));
-            }
-            "future_write" => {
-                add_import_by_name(&mut imports, "future_write");
-            }
-            "future_drop_writable" => {
-                add_import_by_name(&mut imports, "future_drop_writable");
-            }
-            _ => {}
-        }
+    // When stream-write canonical is used via resource methods, cm_lower_array_u8 must be
+    // reachable (called at WIR level by emit_stream_write, not visible in the TIR call graph).
+    if used_canonical_methods.contains("stream-write") {
+        reachable.extend(compute_reachable(
+            &call_graph,
+            &core_internal("cm_lower_array_u8"),
+        ));
     }
 
     // Async exports require task-return and potentially other canonical intrinsics.
@@ -870,20 +828,15 @@ fn analyze_expr(
                         ));
                         analysis.callees.insert(method_id);
                     }
-                    ResolvedType::Future(inner)
-                    | ResolvedType::FutureWritable(inner)
-                    | ResolvedType::Stream(inner)
-                    | ResolvedType::StreamWritable(inner) => {
-                        // Resource handle type method call (e.g., Future<T>^Inspect::inspect)
-                        let base = match base_receiver_type {
-                            ResolvedType::Future(_) => "Future",
-                            ResolvedType::FutureWritable(_) => "FutureWritable",
-                            ResolvedType::Stream(_) => "Stream",
-                            ResolvedType::StreamWritable(_) => "StreamWritable",
-                            _ => unreachable!(),
-                        };
-                        let type_arg_names = vec![type_table.mangle_type_name(inner)];
-                        let mangled_struct = mangle_generic_name(base, &type_arg_names);
+                    ResolvedType::GenericResource {
+                        name, type_args, ..
+                    } => {
+                        // Generic resource method call (e.g., Future<T>^Inspect::inspect)
+                        let type_arg_names: Vec<String> = type_args
+                            .iter()
+                            .map(|t| type_table.mangle_type_name(*t))
+                            .collect();
+                        let mangled_struct = mangle_generic_name(name.as_str(), &type_arg_names);
                         let method_id = FunctionId::Method(MethodName::new(
                             current_module.clone(),
                             mangled_struct,
@@ -1781,12 +1734,13 @@ fn collect_type_dependencies(
         ResolvedType::BuiltinArray(inner)
         | ResolvedType::Ref(inner)
         | ResolvedType::MutRef(inner)
-        | ResolvedType::Stream(inner)
-        | ResolvedType::StreamWritable(inner)
-        | ResolvedType::Future(inner)
-        | ResolvedType::FutureWritable(inner)
         | ResolvedType::Reactive(inner) => {
             collect_type_transitive(*inner, type_table, reachable);
+        }
+        ResolvedType::GenericResource { type_args, .. } => {
+            for &arg in type_args {
+                collect_type_transitive(arg, type_table, reachable);
+            }
         }
         ResolvedType::Tuple(elements) => {
             for elem in elements {

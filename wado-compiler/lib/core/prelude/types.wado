@@ -36,62 +36,247 @@ impl Default for Option<T> {
     pub fn default() -> Option<T> { return null; }
 }
 
-/// Future type - readable end of an async value (WASI Component Model primitive).
-/// This is an opaque i32 handle managed by the runtime.
+/// Readable end of an async value (WASI Component Model future).
+/// Opaque i32 handle managed by the runtime.
 ///
-/// Use `Future::<T>::new()` to create a new future pair `[Future<T>, FutureWritable<T>]`.
-/// The readable end (`Future<T>`) is passed to consumers; the writable end (`FutureWritable<T>`)
-/// is used by the producer to fulfill the future.
+/// Use `Future::<T>::new()` to create a `[Future<T>, FutureWritable<T>]` pair.
+/// The readable end is passed to consumers; the writable end fulfills the future.
 pub resource Future<T> {
-    #[canonical("future_create_pair")]
+    /// Create a new future pair: [Future<T>, FutureWritable<T>].
+    #[canonical("future-new")]
     fn new() -> [Future<T>, FutureWritable<T>];
-}
 
-/// FutureWritable type - writable end of an async value (WASI Component Model primitive).
-/// This is an opaque i32 handle managed by the runtime.
-///
-/// Obtained from `Future::<T>::new()`. Call `write(value)` to fulfill the future,
-/// or `drop()` to cancel it without fulfilling (maps to `future.drop-writable`).
-pub resource FutureWritable<T> {
-    /// Resolve the future with a value.
-    /// Currently supports writing Result<Option<Trailers>, ErrorCode>::Ok(null) (HTTP trailers).
-    #[canonical("future_write")]
-    fn write(&self, value: T);
-    /// Drop the writable end without resolving the future (cancels the future).
-    #[canonical("future_drop_writable")]
+    /// Read the value from the future.
+    /// Returns Some(value) when fulfilled, None if the writer dropped without writing.
+    #[canonical("future-read")]
+    fn read(&self) -> Option<T>;
+
+    /// Cancel an in-progress read. Blocks until cancellation completes.
+    #[canonical("future-cancel-read")]
+    fn cancel_read(&self);
+
+    /// Drop the readable end of the future.
+    #[canonical("future-drop-readable")]
     fn drop(&self);
 }
 
-/// Stream type - readable end of an async sequence (WASI Component Model primitive).
-/// This is an opaque i32 handle managed by the runtime.
-///
-/// Use `Stream::<T>::new()` to create a new stream pair `[Stream<T>, StreamWritable<T>]`.
-/// The readable end (`Stream<T>`) is passed to consumers; the writable end (`StreamWritable<T>`)
-/// is used by the producer to write data into the stream.
-pub resource Stream<T> {
-    #[canonical("stream_create_pair")]
-    fn new() -> [Stream<T>, StreamWritable<T>];
-    /// Read up to `max` elements from the stream.
-    /// Blocks until data is available or the writer closes.
-    /// Returns an empty array on end-of-stream.
-    #[canonical("stream_read")]
-    fn read(&self, max: i32) -> Array<T>;
-    /// Close the readable end of the stream.
-    #[canonical("stream_drop_readable")]
-    fn close(&self);
+/// Writable end of an async value (WASI Component Model future).
+/// Opaque i32 handle managed by the runtime.
+pub resource FutureWritable<T> {
+    /// Fulfill the future with a value.
+    #[canonical("future-write")]
+    fn write(&self, value: T);
+
+    /// Cancel an in-progress write. Blocks until cancellation completes.
+    #[canonical("future-cancel-write")]
+    fn cancel_write(&self);
+
+    /// Drop this writable end handle. Traps if no value has been written yet.
+    #[canonical("future-drop-writable")]
+    fn drop(&self);
 }
 
-/// StreamWritable type - writable end of an async sequence (WASI Component Model primitive).
-/// This is an opaque i32 handle managed by the runtime.
+/// Readable end of an async sequence (WASI Component Model stream).
+/// Opaque i32 handle managed by the runtime.
 ///
-/// Obtained from `Stream::<T>::new()`. Call `write(data)` to send data,
-/// or `close()` to signal end-of-stream (maps to `stream.drop-writable`).
+/// Use `Stream::<T>::new()` to create a `[Stream<T>, StreamWritable<T>]` pair.
+pub resource Stream<T> {
+    /// Create a new stream pair: [Stream<T>, StreamWritable<T>].
+    #[canonical("stream-new")]
+    fn new() -> [Stream<T>, StreamWritable<T>];
+
+    /// Read up to `max` elements from the stream.
+    /// Blocks until data is available or the writer drops.
+    /// Returns an empty array on end-of-stream.
+    #[canonical("stream-read")]
+    fn read(&self, max: i32) -> Array<T>;
+
+    /// Cancel an in-progress read. Blocks until cancellation completes.
+    #[canonical("stream-cancel-read")]
+    fn cancel_read(&self);
+
+    /// Drop the readable end of the stream.
+    #[canonical("stream-drop-readable")]
+    fn drop(&self);
+}
+
+/// Writable end of an async sequence (WASI Component Model stream).
+/// Opaque i32 handle managed by the runtime.
 pub resource StreamWritable<T> {
     /// Write a chunk of data to the stream.
-    /// Can be called multiple times for successive chunks.
-    #[canonical("stream_write")]
+    #[canonical("stream-write")]
     fn write(&self, data: Array<T>);
-    /// Close the writable end, signaling end-of-stream.
-    #[canonical("stream_drop_writable")]
-    fn close(&self);
+
+    /// Cancel an in-progress write. Blocks until cancellation completes.
+    #[canonical("stream-cancel-write")]
+    fn cancel_write(&self);
+
+    /// Drop the writable end, signaling end-of-stream.
+    #[canonical("stream-drop-writable")]
+    fn drop(&self);
+}
+
+/// Opaque token identifying a waitable handle within a WaitableSet.
+/// Obtained from `Subtask::join`. Compared by handle identity (==).
+pub resource Waitable;
+
+impl Eq for Waitable {
+    pub fn eq(&self, other: &Self) -> bool {
+        return *self as i32 == *other as i32;
+    }
+}
+
+/// Event returned by `WaitableSet::wait` or `WaitableSet::poll`.
+pub struct WaitEvent {
+    /// CM event code:
+    ///   1 = subtask, 2 = stream-read, 3 = stream-write, 4 = future-read, 5 = future-write, 6 = cancelled
+    pub code: i32,
+    /// Which waitable handle triggered the event.
+    pub handle: Waitable,
+    /// Event-specific data (e.g. count|status for streams).
+    pub payload: u32,
+}
+
+/// A set of waitable handles used for async task coordination.
+pub resource WaitableSet {
+    /// Create a new waitable set.
+    #[canonical("waitable-set-new")]
+    fn new() -> WaitableSet;
+
+    /// Block until an event occurs. Returns the event details.
+    #[canonical("waitable-set-wait")]
+    fn wait(&self) -> WaitEvent;
+
+    /// Non-blocking poll. Returns Some(event) if ready, None otherwise.
+    #[canonical("waitable-set-poll")]
+    fn poll(&self) -> Option<WaitEvent>;
+
+    /// Drop the waitable set.
+    #[canonical("waitable-set-drop")]
+    fn drop(&self);
+}
+
+/// An async subtask handle returned by CM async operations.
+pub resource Subtask {
+    /// Drop a completed subtask handle.
+    #[canonical("subtask-drop")]
+    fn drop(&self);
+
+    /// Cancel this in-progress subtask. Blocks until cancellation completes.
+    #[canonical("subtask-cancel")]
+    fn cancel(&self);
+
+    /// Join this subtask to a waitable set.
+    /// Returns a Waitable token identifying this subtask in wait results.
+    #[canonical("waitable-join")]
+    fn join(&self, set: &WaitableSet) -> Waitable;
+}
+
+/// An error context carrying a debug message across component boundaries.
+pub resource ErrorContext {
+    /// Create a new error context with the given message.
+    #[canonical("error-context-new")]
+    fn new(message: String) -> ErrorContext;
+
+    /// Get the debug message from this error context.
+    #[canonical("error-context-debug-message")]
+    fn debug_message(&self) -> String;
+
+    /// Drop the error context.
+    #[canonical("error-context-drop")]
+    fn drop(&self);
+}
+
+/// Backpressure control for the current component instance.
+///
+/// Signals to the host that this component is under load.
+/// Increment to enable backpressure; decrement to release it.
+/// The host will stop dispatching new calls when the counter is non-zero.
+pub resource Backpressure {
+    /// Increment the backpressure counter by 1.
+    /// The host applies backpressure when the counter is non-zero.
+    #[canonical("backpressure-inc")]
+    fn inc();
+
+    /// Decrement the backpressure counter by 1.
+    #[canonical("backpressure-dec")]
+    fn dec();
+}
+
+/// Task-local context storage for the current async task.
+///
+/// Provides typed slots (u32) for passing context values across component
+/// boundaries without threading them through call arguments.
+/// The slot index must be a compile-time constant.
+pub resource Context {
+    /// Get the value of task-local context slot `slot`.
+    /// `slot` must be a compile-time constant.
+    #[canonical("context-get")]
+    fn get(slot: u32) -> u32;
+
+    /// Set the value of task-local context slot `slot` to `value`.
+    /// `slot` must be a compile-time constant.
+    #[canonical("context-set")]
+    fn set(slot: u32, value: u32);
+}
+
+/// The current async task handle.
+///
+/// Provides operations that apply to the currently executing async task.
+pub resource Task {
+    /// Acknowledge cancellation of the current task.
+    ///
+    /// Call this in response to a cancellation signal (e.g. after receiving
+    /// `WaitEvent { code: 6 }` from `WaitableSet::wait`). Signals to the CM
+    /// runtime that the task accepts being cancelled and will clean up.
+    #[canonical("task-cancel")]
+    fn cancel();
+}
+
+/// A suspended thread handle, used as an argument to thread switching operations.
+/// Obtained when a thread suspends itself (e.g. via `Thread::suspend`).
+pub resource SuspendedThread;
+
+/// Component Model stackful-async thread operations.
+///
+/// These canonicals support cooperative threading within an async component:
+/// yielding, suspending, and switching between threads.
+pub resource Thread {
+    /// Yield control to allow other threads to make progress.
+    /// If `cancellable` is true, may return early if the current task is being cancelled.
+    #[canonical("thread-yield")]
+    fn yield_(cancellable: bool);
+
+    /// Returns the index of the current thread within its thread group.
+    #[canonical("thread-index")]
+    fn index() -> u32;
+
+    /// Create a new thread via indirect call through a shared function table.
+    /// Both `func_type_index` and `table_index` must be compile-time constants.
+    #[canonical("thread-new-indirect")]
+    fn new_indirect(func_type_index: u32, table_index: u32);
+
+    /// Suspend the current thread and immediately switch to the given suspended thread.
+    /// If `cancellable` is true, suspension can be interrupted by cancellation.
+    #[canonical("thread-suspend-to-suspended")]
+    fn suspend_to_suspended(target: &SuspendedThread, cancellable: bool);
+
+    /// Suspend the current thread, yielding to the transitive async-lowered calling component.
+    /// If `cancellable` is true, suspension can be interrupted by cancellation.
+    #[canonical("thread-suspend")]
+    fn suspend(cancellable: bool) -> SuspendedThread;
+
+    /// Suspend the current thread and switch to another thread.
+    /// If `cancellable` is true, suspension can be interrupted by cancellation.
+    #[canonical("thread-suspend-to")]
+    fn suspend_to(target: &SuspendedThread, cancellable: bool) -> SuspendedThread;
+
+    /// Schedule the given suspended thread to be resumed later.
+    #[canonical("thread-unsuspend")]
+    fn unsuspend(target: &SuspendedThread);
+
+    /// Yield to the given suspended thread, then resume this thread when done.
+    /// If `cancellable` is true, the yield can be interrupted by cancellation.
+    #[canonical("thread-yield-to-suspended")]
+    fn yield_to_suspended(target: &SuspendedThread, cancellable: bool);
 }

@@ -303,12 +303,6 @@ struct Array<u8> {  // Array<T> with T=u8
 
 enum Alignment { Left = 0, Center = 1, Right = 2 };
 
-type "functype/wasi/future-drop-writable" = fn(i32);
-
-type "functype/wasi/future-new" = fn() -> i64;
-
-type "functype/wasi/future-write" = fn(i32, i32) -> i32;
-
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
 type "functype/wasi/stream-drop-writable" = fn(i32);
@@ -397,13 +391,14 @@ type "functype/Formatter::pad" = fn(ref null Formatter, ref null String);
 
 type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref null String, i32) -> i32;
 
+type "functype/wasi/future-new" = fn() -> i64;
+
+type "functype/wasi/future-write" = fn(i32, i32) -> i32;
+
 type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref null Formatter);
 
-import fn future-drop-writable from "wasi/future-drop-writable";
-import fn future-new from "wasi/future-new";
-import fn future-write from "wasi/future-write";
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
@@ -421,6 +416,8 @@ import fn wasi:http/Fields::append from "wasi/wasi:http/Fields::append";
 import fn wasi:http/Fields::clone from "wasi/wasi:http/Fields::clone";
 import fn wasi:http/Response::new from "wasi/wasi:http/Response::new";
 import memory (1) from "mem/memory";
+import fn future-new from "wasi/future-new";
+import fn future-write from "wasi/future-write";
 
 global mut heap_offset: i32 = 8;  // from core:allocator
 
@@ -449,8 +446,8 @@ fn handle(request) {
     let cloned_still_has: bool;
     let __local_23: bool;
     let __local_24: bool;
-    let __local_25: i32;
-    let __local_26: i32;
+    let trailers_future: i32;
+    let trailers_tx: i32;
     let response_headers: i32;
     let response: i32;
     let _tx_future: i32;
@@ -617,75 +614,76 @@ fn handle(request) {
     let __len_190: i32;
     let __local_191: ref null Result<unit,HeaderError>;
     let __local_192: ref null Result<unit,HeaderError>;
-    let __pattern_temp_2: ref null "tuple/[Response, Future<Result<unit,ErrorCode>>]";
-    let __local_194: i32;
-    let __local_195: ref null String;
-    let __local_196: ref null "core:internal/Box<i32>";
-    let __local_197: ref null Formatter;
-    let __local_198: ref null "core:internal/Box<i32>";
-    let __local_199: ref null Formatter;
-    let __local_200: ref null String;
-    let __local_201: ref null "core:internal/Box<bool>";
-    let __local_202: ref null Formatter;
-    let __local_203: ref null "core:internal/Box<bool>";
-    let __local_204: ref null Formatter;
-    let __local_205: i32;
-    let __local_206: ref null Array<u8>;
-    let __local_207: u8;
-    let __local_208: ref null Array<u8>;
-    let __local_209: u8;
-    let __local_210: ref null Array<u8>;
-    let __local_211: u8;
-    let __local_212: ref null Array<u8>;
-    let __local_213: u8;
-    let __local_214: ref null Array<u8>;
-    let __local_215: u8;
-    let __local_216: ref null Array<u8>;
-    let __local_217: i32;
-    let __local_218: ref null String;
-    let __local_219: ref null "core:internal/Box<i32>";
-    let __local_220: ref null Formatter;
-    let __local_221: ref null "core:internal/Box<i32>";
-    let __local_222: ref null Formatter;
-    let __local_223: ref null String;
-    let __local_224: ref null "core:internal/Box<bool>";
-    let __local_225: ref null Formatter;
-    let __local_226: ref null "core:internal/Box<bool>";
-    let __local_227: ref null Formatter;
-    let __local_228: i32;
-    let __local_229: ref null String;
-    let __local_230: ref null "core:internal/Box<i32>";
-    let __local_231: ref null Formatter;
-    let __local_232: ref null "core:internal/Box<i32>";
-    let __local_233: ref null Formatter;
-    let __local_234: ref null String;
-    let __local_235: ref null "core:internal/Box<bool>";
-    let __local_236: ref null Formatter;
-    let __local_237: ref null "core:internal/Box<bool>";
-    let __local_238: ref null Formatter;
-    let __local_239: i32;
-    let __local_240: ref null String;
-    let __local_241: ref null "core:internal/Box<i32>";
-    let __local_242: ref null Formatter;
-    let __local_243: ref null "core:internal/Box<i32>";
-    let __local_244: ref null Formatter;
-    let __local_245: ref null String;
-    let __local_246: ref null "core:internal/Box<bool>";
-    let __local_247: ref null Formatter;
-    let __local_248: ref null "core:internal/Box<bool>";
-    let __local_249: ref null Formatter;
-    let __local_250: i32;
-    let __local_251: ref null String;
-    let __local_252: ref null "core:internal/Box<i32>";
-    let __local_253: ref null Formatter;
-    let __local_254: ref null "core:internal/Box<i32>";
-    let __local_255: ref null Formatter;
-    let __local_256: ref null String;
-    let __local_257: ref null "core:internal/Box<bool>";
-    let __local_258: ref null Formatter;
-    let __local_259: ref null "core:internal/Box<bool>";
-    let __local_260: ref null Formatter;
-    let __local_261: i32;
+    let __pattern_temp_2: ref null "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]";
+    let __pattern_temp_3: ref null "tuple/[Response, Future<Result<unit,ErrorCode>>]";
+    let __local_195: i32;
+    let __local_196: ref null String;
+    let __local_197: ref null "core:internal/Box<i32>";
+    let __local_198: ref null Formatter;
+    let __local_199: ref null "core:internal/Box<i32>";
+    let __local_200: ref null Formatter;
+    let __local_201: ref null String;
+    let __local_202: ref null "core:internal/Box<bool>";
+    let __local_203: ref null Formatter;
+    let __local_204: ref null "core:internal/Box<bool>";
+    let __local_205: ref null Formatter;
+    let __local_206: i32;
+    let __local_207: ref null Array<u8>;
+    let __local_208: u8;
+    let __local_209: ref null Array<u8>;
+    let __local_210: u8;
+    let __local_211: ref null Array<u8>;
+    let __local_212: u8;
+    let __local_213: ref null Array<u8>;
+    let __local_214: u8;
+    let __local_215: ref null Array<u8>;
+    let __local_216: u8;
+    let __local_217: ref null Array<u8>;
+    let __local_218: i32;
+    let __local_219: ref null String;
+    let __local_220: ref null "core:internal/Box<i32>";
+    let __local_221: ref null Formatter;
+    let __local_222: ref null "core:internal/Box<i32>";
+    let __local_223: ref null Formatter;
+    let __local_224: ref null String;
+    let __local_225: ref null "core:internal/Box<bool>";
+    let __local_226: ref null Formatter;
+    let __local_227: ref null "core:internal/Box<bool>";
+    let __local_228: ref null Formatter;
+    let __local_229: i32;
+    let __local_230: ref null String;
+    let __local_231: ref null "core:internal/Box<i32>";
+    let __local_232: ref null Formatter;
+    let __local_233: ref null "core:internal/Box<i32>";
+    let __local_234: ref null Formatter;
+    let __local_235: ref null String;
+    let __local_236: ref null "core:internal/Box<bool>";
+    let __local_237: ref null Formatter;
+    let __local_238: ref null "core:internal/Box<bool>";
+    let __local_239: ref null Formatter;
+    let __local_240: i32;
+    let __local_241: ref null String;
+    let __local_242: ref null "core:internal/Box<i32>";
+    let __local_243: ref null Formatter;
+    let __local_244: ref null "core:internal/Box<i32>";
+    let __local_245: ref null Formatter;
+    let __local_246: ref null String;
+    let __local_247: ref null "core:internal/Box<bool>";
+    let __local_248: ref null Formatter;
+    let __local_249: ref null "core:internal/Box<bool>";
+    let __local_250: ref null Formatter;
+    let __local_251: i32;
+    let __local_252: ref null String;
+    let __local_253: ref null "core:internal/Box<i32>";
+    let __local_254: ref null Formatter;
+    let __local_255: ref null "core:internal/Box<i32>";
+    let __local_256: ref null Formatter;
+    let __local_257: ref null String;
+    let __local_258: ref null "core:internal/Box<bool>";
+    let __local_259: ref null Formatter;
+    let __local_260: ref null "core:internal/Box<bool>";
+    let __local_261: ref null Formatter;
+    let __local_262: i32;
     fields = __cm_adapter__Fields_new();
     has_before = __cm_adapter__Fields_has(fields, String { repr: array.new_data<u8>("x-test"), used: 6 });
     __cond_4 = has_before == 0;
@@ -706,21 +704,21 @@ fn handle(request) {
             String::append(__local_30, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-fields.wado"), used: 45 });
             String::append_char(__local_30, 58);
             __local_31 = __inline_Formatter__new_1: block -> ref null Formatter {
-                __local_195 = __local_30;
-                break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_195) };
+                __local_196 = __local_30;
+                break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_196) };
             };
-            __local_197 = __local_31;
-            i32::fmt_decimal(19, __local_197);
+            __local_198 = __local_31;
+            i32::fmt_decimal(19, __local_198);
             String::append(__local_30, String { repr: array.new_data<u8>("
 condition: !has_before
 "), used: 24 });
             String::append(__local_30, String { repr: array.new_data<u8>("has_before: "), used: 12 });
             __local_31 = __inline_Formatter__new_4: block -> ref null Formatter {
-                __local_200 = __local_30;
-                break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_200) };
+                __local_201 = __local_30;
+                break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_201) };
             };
-            __local_202 = __local_31;
-            Formatter::pad(__local_202, if has_before -> ref null String {
+            __local_203 = __local_31;
+            Formatter::pad(__local_203, if has_before -> ref null String {
                 String { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 String { repr: array.new_data<u8>("false"), used: 5 };
@@ -759,21 +757,21 @@ condition: !has_before
             String::append(__local_32, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-fields.wado"), used: 45 });
             String::append_char(__local_32, 58);
             __local_33 = __inline_Formatter__new_15: block -> ref null Formatter {
-                __local_218 = __local_32;
-                break __inline_Formatter__new_15: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_218) };
+                __local_219 = __local_32;
+                break __inline_Formatter__new_15: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_219) };
             };
-            __local_220 = __local_33;
-            i32::fmt_decimal(31, __local_220);
+            __local_221 = __local_33;
+            i32::fmt_decimal(31, __local_221);
             String::append(__local_32, String { repr: array.new_data<u8>("
 condition: has_after
 "), used: 22 });
             String::append(__local_32, String { repr: array.new_data<u8>("has_after: "), used: 11 });
             __local_33 = __inline_Formatter__new_18: block -> ref null Formatter {
-                __local_223 = __local_32;
-                break __inline_Formatter__new_18: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_223) };
+                __local_224 = __local_32;
+                break __inline_Formatter__new_18: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_224) };
             };
-            __local_225 = __local_33;
-            Formatter::pad(__local_225, if has_after -> ref null String {
+            __local_226 = __local_33;
+            Formatter::pad(__local_226, if has_after -> ref null String {
                 String { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 String { repr: array.new_data<u8>("false"), used: 5 };
@@ -802,21 +800,21 @@ condition: has_after
             String::append(__local_34, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-fields.wado"), used: 45 });
             String::append_char(__local_34, 58);
             __local_35 = __inline_Formatter__new_22: block -> ref null Formatter {
-                __local_229 = __local_34;
-                break __inline_Formatter__new_22: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_229) };
+                __local_230 = __local_34;
+                break __inline_Formatter__new_22: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_230) };
             };
-            __local_231 = __local_35;
-            i32::fmt_decimal(36, __local_231);
+            __local_232 = __local_35;
+            i32::fmt_decimal(36, __local_232);
             String::append(__local_34, String { repr: array.new_data<u8>("
 condition: cloned_has
 "), used: 23 });
             String::append(__local_34, String { repr: array.new_data<u8>("cloned_has: "), used: 12 });
             __local_35 = __inline_Formatter__new_25: block -> ref null Formatter {
-                __local_234 = __local_34;
-                break __inline_Formatter__new_25: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_234) };
+                __local_235 = __local_34;
+                break __inline_Formatter__new_25: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_235) };
             };
-            __local_236 = __local_35;
-            Formatter::pad(__local_236, if cloned_has -> ref null String {
+            __local_237 = __local_35;
+            Formatter::pad(__local_237, if cloned_has -> ref null String {
                 String { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 String { repr: array.new_data<u8>("false"), used: 5 };
@@ -851,21 +849,21 @@ condition: cloned_has
             String::append(__local_36, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-fields.wado"), used: 45 });
             String::append_char(__local_36, 58);
             __local_37 = __inline_Formatter__new_29: block -> ref null Formatter {
-                __local_240 = __local_36;
-                break __inline_Formatter__new_29: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_240) };
+                __local_241 = __local_36;
+                break __inline_Formatter__new_29: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_241) };
             };
-            __local_242 = __local_37;
-            i32::fmt_decimal(46, __local_242);
+            __local_243 = __local_37;
+            i32::fmt_decimal(46, __local_243);
             String::append(__local_36, String { repr: array.new_data<u8>("
 condition: !has_deleted
 "), used: 25 });
             String::append(__local_36, String { repr: array.new_data<u8>("has_deleted: "), used: 13 });
             __local_37 = __inline_Formatter__new_32: block -> ref null Formatter {
-                __local_245 = __local_36;
-                break __inline_Formatter__new_32: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_245) };
+                __local_246 = __local_36;
+                break __inline_Formatter__new_32: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_246) };
             };
-            __local_247 = __local_37;
-            Formatter::pad(__local_247, if has_deleted -> ref null String {
+            __local_248 = __local_37;
+            Formatter::pad(__local_248, if has_deleted -> ref null String {
                 String { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 String { repr: array.new_data<u8>("false"), used: 5 };
@@ -893,21 +891,21 @@ condition: !has_deleted
             String::append(__local_38, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-fields.wado"), used: 45 });
             String::append_char(__local_38, 58);
             __local_39 = __inline_Formatter__new_36: block -> ref null Formatter {
-                __local_251 = __local_38;
-                break __inline_Formatter__new_36: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_251) };
+                __local_252 = __local_38;
+                break __inline_Formatter__new_36: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_252) };
             };
-            __local_253 = __local_39;
-            i32::fmt_decimal(50, __local_253);
+            __local_254 = __local_39;
+            i32::fmt_decimal(50, __local_254);
             String::append(__local_38, String { repr: array.new_data<u8>("
 condition: cloned_still_has
 "), used: 29 });
             String::append(__local_38, String { repr: array.new_data<u8>("cloned_still_has: "), used: 18 });
             __local_39 = __inline_Formatter__new_39: block -> ref null Formatter {
-                __local_256 = __local_38;
-                break __inline_Formatter__new_39: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_256) };
+                __local_257 = __local_38;
+                break __inline_Formatter__new_39: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_257) };
             };
-            __local_258 = __local_39;
-            Formatter::pad(__local_258, if cloned_still_has -> ref null String {
+            __local_259 = __local_39;
+            Formatter::pad(__local_259, if cloned_still_has -> ref null String {
                 String { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 String { repr: array.new_data<u8>("false"), used: 5 };
@@ -917,18 +915,17 @@ condition: cloned_still_has
         });
         unreachable;
     };
-    let __let_pattern_0: ref null "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]";
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
-    __let_pattern_0 = "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
-    __local_25 = __let_pattern_0.0;
-    __local_26 = __let_pattern_0.1;
+    __pattern_temp_2 = "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
+    trailers_future = __pattern_temp_2.0;
+    trailers_tx = __pattern_temp_2.1;
     response_headers = __cm_adapter__Fields_new();
-    let __sroa___pattern_temp_2_0: i32;
-    let __sroa___pattern_temp_2_1: i32;
-    multivalue_bind [__sroa___pattern_temp_2_0, __sroa___pattern_temp_2_1] = __cm_adapter__Response_new(response_headers, 0, 0, __local_25);
-    response = __sroa___pattern_temp_2_0;
-    _tx_future = __sroa___pattern_temp_2_1;
+    let __sroa___pattern_temp_3_0: i32;
+    let __sroa___pattern_temp_3_1: i32;
+    multivalue_bind [__sroa___pattern_temp_3_0, __sroa___pattern_temp_3_1] = __cm_adapter__Response_new(response_headers, 0, 0, trailers_future);
+    response = __sroa___pattern_temp_3_0;
+    _tx_future = __sroa___pattern_temp_3_1;
     __task_ret = Result<Response,ErrorCode>::Ok { discriminant: 0, payload_0: response };
     __tv_0 = 0;
     __tv_1 = 0;
@@ -1241,7 +1238,7 @@ condition: cloned_still_has
     builtin::store_i64[16](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[24](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[32](__fw_write_ptr_2, 0_i64);
-    drop("wasi/future-write"(__local_26, __fw_write_ptr_2));
+    drop("wasi/future-write"(trailers_tx, __fw_write_ptr_2));
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
 }
 

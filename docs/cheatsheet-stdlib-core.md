@@ -30,6 +30,17 @@ pub enum Alignment {
 ```wado
 pub resource Future<T> {
     fn new() -> [Future<T>, FutureWritable<T>];
+    fn read(&self) -> Option<T>;
+    fn cancel_read(&self);
+    fn drop(&self);
+}
+```
+
+```wado
+pub resource FutureWritable<T> {
+    fn write(&self, value: T);
+    fn cancel_write(&self);
+    fn drop(&self);
 }
 ```
 
@@ -37,14 +48,45 @@ pub resource Future<T> {
 pub resource Stream<T> {
     fn new() -> [Stream<T>, StreamWritable<T>];
     fn read(&self, max: i32) -> Array<T>;
-    fn close(&self);
+    fn cancel_read(&self);
+    fn drop(&self);
 }
 ```
 
 ```wado
 pub resource StreamWritable<T> {
     fn write(&self, data: Array<T>);
-    fn close(&self);
+    fn cancel_write(&self);
+    fn drop(&self);
+}
+```
+
+```wado
+pub resource Waitable;
+```
+
+```wado
+pub resource WaitableSet {
+    fn new() -> WaitableSet;
+    fn wait(&self) -> WaitEvent;
+    fn poll(&self) -> Option<WaitEvent>;
+    fn drop(&self);
+}
+```
+
+```wado
+pub resource Subtask {
+    fn drop(&self);
+    fn cancel(&self);
+    fn join(&self, set: &WaitableSet) -> Waitable;
+}
+```
+
+```wado
+pub resource ErrorContext {
+    fn new(message: String) -> ErrorContext;
+    fn debug_message(&self) -> String;
+    fn drop(&self);
 }
 ```
 
@@ -424,6 +466,14 @@ impl Rem for i128 {
 
 impl Default for i128 {
     pub fn default() -> i128;
+}
+```
+
+```wado
+pub struct WaitEvent {
+    code: i32,
+    handle: Waitable,
+    payload: u32,
 }
 ```
 

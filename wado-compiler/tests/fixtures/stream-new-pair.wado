@@ -7,8 +7,8 @@ export fn run() with Stdout {
     let [rx, tx] = Stream::<u8>::new();
     // rx should be Stream<u8>, tx should be StreamWritable<u8>
     // Just verify creation doesn't trap
-    tx.close();
-    rx.close();
+    tx.drop();
+    rx.drop();
     println("Stream::new() pair created");
 }
 

@@ -6,13 +6,13 @@ export fn run() with Stdout {
     let [rx, tx] = Stream::<u8>::new();
 
     // Close writer immediately (no data written)
-    tx.close();
+    tx.drop();
 
     // Read should return empty array (end-of-stream)
     let result = rx.read(64);
     assert result.len() == 0;
 
-    rx.close();
+    rx.drop();
     println("eof ok");
 }
 

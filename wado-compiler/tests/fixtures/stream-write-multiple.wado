@@ -7,12 +7,12 @@ export fn run() with Stdout {
     let [rx, tx] = Stream::<u8>::new();
 
     // Close the reader first so write sees DROPPED rather than BLOCKED
-    rx.close();
+    rx.drop();
 
     // Single write that compiles correctly
     let chunk: Array<u8> = [65, 66, 67, 10];  // "ABC\n"
     tx.write(chunk);
-    tx.close();
+    tx.drop();
 
     println("multi write ok");
 }

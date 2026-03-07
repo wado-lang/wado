@@ -294,12 +294,6 @@ struct Result<Option<Trailers>,ErrorCode>::Err {
 
 enum Alignment { Left = 0, Center = 1, Right = 2 };
 
-type "functype/wasi/future-drop-writable" = fn(i32);
-
-type "functype/wasi/future-new" = fn() -> i64;
-
-type "functype/wasi/future-write" = fn(i32, i32) -> i32;
-
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
 type "functype/wasi/stream-drop-writable" = fn(i32);
@@ -378,15 +372,16 @@ type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref 
 
 type "functype/String^Inspect::inspect" = fn(ref null String, ref null Formatter);
 
+type "functype/wasi/future-new" = fn() -> i64;
+
+type "functype/wasi/future-write" = fn(i32, i32) -> i32;
+
 type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
 
 type "functype/StrCharIter^Iterator::next" = fn(ref null StrCharIter) -> [i32, char];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref null Formatter);
 
-import fn future-drop-writable from "wasi/future-drop-writable";
-import fn future-new from "wasi/future-new";
-import fn future-write from "wasi/future-write";
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
@@ -401,6 +396,8 @@ import fn wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
 import fn wasi:http/Request::get_path_with_query from "wasi/wasi:http/Request::get_path_with_query";
 import fn wasi:http/Response::new from "wasi/wasi:http/Response::new";
 import memory (1) from "mem/memory";
+import fn future-new from "wasi/future-new";
+import fn future-write from "wasi/future-write";
 
 global mut heap_offset: i32 = 8;  // from core:allocator
 
@@ -409,8 +406,8 @@ fn handle(request) {
     let p: ref null String;
     let __v0: ref null String;
     let __cond: bool;
-    let __local_5: i32;
-    let __local_6: i32;
+    let trailers_future: i32;
+    let trailers_tx: i32;
     let headers: i32;
     let response: i32;
     let _tx_future: i32;
@@ -568,14 +565,15 @@ fn handle(request) {
     let __ptr_161: i32;
     let __len_162: i32;
     let __local_163: ref null Option<String>;
-    let __pattern_temp_1: ref null "tuple/[Response, Future<Result<unit,ErrorCode>>]";
-    let __local_165: i32;
-    let __local_166: ref null String;
-    let __local_167: ref null "core:internal/Box<i32>";
-    let __local_168: ref null Formatter;
-    let __local_169: ref null "core:internal/Box<i32>";
-    let __local_170: ref null Formatter;
-    let __local_171: ref null String;
+    let __pattern_temp_1: ref null "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]";
+    let __pattern_temp_2: ref null "tuple/[Response, Future<Result<unit,ErrorCode>>]";
+    let __local_166: i32;
+    let __local_167: ref null String;
+    let __local_168: ref null "core:internal/Box<i32>";
+    let __local_169: ref null Formatter;
+    let __local_170: ref null "core:internal/Box<i32>";
+    let __local_171: ref null Formatter;
+    let __local_172: ref null String;
     path = __cm_adapter__Request_get_path_with_query(request);
     if ref.test Option<String>::Some(path) {
         p = value_copy String(ref.cast Option<String>::Some(path).payload_0);
@@ -598,11 +596,11 @@ fn handle(request) {
                 String::append(__local_10, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-request-path.wado"), used: 51 });
                 String::append_char(__local_10, 58);
                 __local_11 = __inline_Formatter__new_1: block -> ref null Formatter {
-                    __local_166 = __local_10;
-                    break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_166) };
+                    __local_167 = __local_10;
+                    break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_167) };
                 };
-                __local_168 = __local_11;
-                i32::fmt_decimal(10, __local_168);
+                __local_169 = __local_11;
+                i32::fmt_decimal(10, __local_169);
                 String::append(__local_10, String { repr: array.new_data<u8>("
 condition: p == \"/hello\"
 "), used: 26 });
@@ -610,8 +608,8 @@ condition: p == \"/hello\"
                 String::append_char(__local_10, 58);
                 String::append_char(__local_10, 32);
                 __local_11 = __inline_Formatter__new_4: block -> ref null Formatter {
-                    __local_171 = __local_10;
-                    break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_171) };
+                    __local_172 = __local_10;
+                    break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_172) };
                 };
                 String^Inspect::inspect(__v0, __local_11);
                 String::append_char(__local_10, 10);
@@ -623,18 +621,17 @@ condition: p == \"/hello\"
         "core:internal/panic"(String { repr: array.new_data<u8>("expected path but got null"), used: 26 });
         unreachable;
     };
-    let __let_pattern_0: ref null "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]";
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
-    __let_pattern_0 = "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
-    __local_5 = __let_pattern_0.0;
-    __local_6 = __let_pattern_0.1;
+    __pattern_temp_1 = "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
+    trailers_future = __pattern_temp_1.0;
+    trailers_tx = __pattern_temp_1.1;
     headers = __cm_adapter__Fields_new();
-    let __sroa___pattern_temp_1_0: i32;
-    let __sroa___pattern_temp_1_1: i32;
-    multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = __cm_adapter__Response_new(headers, 0, 0, __local_5);
-    response = __sroa___pattern_temp_1_0;
-    _tx_future = __sroa___pattern_temp_1_1;
+    let __sroa___pattern_temp_2_0: i32;
+    let __sroa___pattern_temp_2_1: i32;
+    multivalue_bind [__sroa___pattern_temp_2_0, __sroa___pattern_temp_2_1] = __cm_adapter__Response_new(headers, 0, 0, trailers_future);
+    response = __sroa___pattern_temp_2_0;
+    _tx_future = __sroa___pattern_temp_2_1;
     __task_ret = Result<Response,ErrorCode>::Ok { discriminant: 0, payload_0: response };
     __tv_0 = 0;
     __tv_1 = 0;
@@ -947,7 +944,7 @@ condition: p == \"/hello\"
     builtin::store_i64[16](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[24](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[32](__fw_write_ptr_2, 0_i64);
-    drop("wasi/future-write"(__local_6, __fw_write_ptr_2));
+    drop("wasi/future-write"(trailers_tx, __fw_write_ptr_2));
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
 }
 

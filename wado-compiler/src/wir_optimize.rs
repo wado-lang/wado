@@ -24,8 +24,8 @@ use indexmap::{IndexMap, IndexSet};
 use crate::optimize::OptLevel;
 use crate::wir::{
     COMP_FEATURE_ARRAY_APPEND, COMP_FEATURE_STRING_APPEND, COMP_FEATURE_STRING_APPEND_CHAR,
-    WirData, WirExportDesc, WirFuncId, WirFuncType, WirImportDesc, WirInstr, WirModule, WirType,
-    WirTypeDef, WirTypeId, WirVariantType,
+    WirData, WirExportDesc, WirFuncId, WirFuncType, WirInstr, WirModule, WirType, WirTypeDef,
+    WirTypeId, WirVariantType,
 };
 
 /// Run all WIR-level optimizations on the module (in-place).
@@ -103,17 +103,11 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
 ///
 /// Note: 1-field structs are handled by `sroa_single_field_parameters` instead.
 fn sroa_multi_value_returns(module: &mut WirModule) {
-    let import_func_count = module
-        .imports
-        .iter()
-        .filter(|i| matches!(i.desc, WirImportDesc::Func { .. }))
-        .count() as u32;
-
     // Collect pinned func_ids (exported, in element tables, or RefFunc'd).
     let pinned = collect_pinned_func_ids(module);
 
     // Phase 1: identify candidate functions.
-    let candidates = find_sroa_candidates(module, import_func_count, &pinned);
+    let candidates = find_sroa_candidates(module, &pinned);
     if candidates.is_empty() {
         return;
     }
@@ -125,7 +119,7 @@ fn sroa_multi_value_returns(module: &mut WirModule) {
     }
 
     // Phase 3: rewrite confirmed functions and their call sites.
-    apply_sroa(module, &confirmed, import_func_count);
+    apply_sroa(module, &confirmed);
 }
 
 /// Information about an SROA candidate function.
@@ -263,15 +257,11 @@ fn collect_ref_funcs_instr(instr: &WirInstr, pinned: &mut IndexSet<u32>) {
 }
 
 /// Phase 1: find functions eligible for SROA.
-fn find_sroa_candidates(
-    module: &WirModule,
-    import_func_count: u32,
-    pinned: &IndexSet<u32>,
-) -> Vec<(u32, SroaCandidate)> {
+fn find_sroa_candidates(module: &WirModule, pinned: &IndexSet<u32>) -> Vec<(u32, SroaCandidate)> {
     let mut candidates = Vec::new();
 
     for (i, func) in module.functions.iter().enumerate() {
-        let func_id_index = import_func_count + u32::try_from(i).unwrap();
+        let func_id_index = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
 
         // Skip pinned functions
         if pinned.contains(&func_id_index) {
@@ -1218,7 +1208,7 @@ fn check_uses_in_subtree(instr: &WirInstr, local_name: &str) -> bool {
 }
 
 /// Phase 3: apply SROA transformations to confirmed candidates.
-fn apply_sroa(module: &mut WirModule, confirmed: &[(u32, SroaCandidate)], _import_func_count: u32) {
+fn apply_sroa(module: &mut WirModule, confirmed: &[(u32, SroaCandidate)]) {
     // Build a lookup from func_id_index → candidate info
     let candidate_map: indexmap::IndexMap<u32, &SroaCandidate> =
         confirmed.iter().map(|(id, c)| (*id, c)).collect();
@@ -2165,12 +2155,6 @@ fn take_block_result_call(
 ///   b. As an argument to another function at a position that is also being SROA'd
 /// - The function is not exported, not in an element table, and not `RefFunc`'d
 fn sroa_single_field_parameters(module: &mut WirModule) {
-    let import_func_count = module
-        .imports
-        .iter()
-        .filter(|i| matches!(i.desc, WirImportDesc::Func { .. }))
-        .count() as u32;
-
     let pinned = collect_pinned_func_ids(module);
 
     // Phase 1: identify candidate (func_id, param_index) pairs.
@@ -2180,7 +2164,7 @@ fn sroa_single_field_parameters(module: &mut WirModule) {
         indexmap::IndexMap::new();
 
     for (i, func) in module.functions.iter().enumerate() {
-        let func_id_index = import_func_count + u32::try_from(i).unwrap();
+        let func_id_index = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
         if pinned.contains(&func_id_index) || func.body.is_none() {
             continue;
         }
@@ -2225,7 +2209,7 @@ fn sroa_single_field_parameters(module: &mut WirModule) {
         let mut invalid: IndexSet<(u32, usize)> = IndexSet::new();
 
         for &(func_id_index, param_idx) in &candidates {
-            let func_array_idx = (func_id_index - import_func_count) as usize;
+            let func_array_idx = (func_id_index - crate::wir_build::DEFINED_FUNC_BASE) as usize;
             let func = &module.functions[func_array_idx];
             let param_name = &func.param_names[param_idx];
             let (_, _, ref field_name) = candidate_info[&(func_id_index, param_idx)];
@@ -2258,7 +2242,7 @@ fn sroa_single_field_parameters(module: &mut WirModule) {
     // Phase 3: apply rewrites.
     // Step A: rewrite function signatures and bodies.
     for &(func_id_index, param_idx) in &candidates {
-        let func_array_idx = (func_id_index - import_func_count) as usize;
+        let func_array_idx = (func_id_index - crate::wir_build::DEFINED_FUNC_BASE) as usize;
         let param_name = module.functions[func_array_idx].param_names[param_idx].clone();
         let (_, ref inner_ty, ref field_name) = candidate_info[&(func_id_index, param_idx)];
         let inner_ty = inner_ty.clone();
@@ -2319,7 +2303,7 @@ fn sroa_single_field_parameters(module: &mut WirModule) {
     let mut func_scalar_param_struct: indexmap::IndexMap<u32, indexmap::IndexMap<String, u32>> =
         indexmap::IndexMap::new();
     for &(func_id_index, param_idx) in &candidates {
-        let func_array_idx = (func_id_index - import_func_count) as usize;
+        let func_array_idx = (func_id_index - crate::wir_build::DEFINED_FUNC_BASE) as usize;
         let param_name = module.functions[func_array_idx].param_names[param_idx].clone();
         let (struct_type_idx, _, _) = &candidate_info[&(func_id_index, param_idx)];
         func_scalar_param_struct
@@ -2329,7 +2313,7 @@ fn sroa_single_field_parameters(module: &mut WirModule) {
     }
 
     for (i, func) in module.functions.iter_mut().enumerate() {
-        let func_id_index = import_func_count + u32::try_from(i).unwrap();
+        let func_id_index = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
         let scalar_param_structs = func_scalar_param_struct
             .get(&func_id_index)
             .cloned()
@@ -2628,7 +2612,7 @@ fn elide_dead_single_field_struct_locals(module: &mut WirModule) {
 }
 
 /// One pass: collect candidates, validate, rewrite. Returns `true` if anything changed.
-fn elide_struct_locals_one_pass(body: &mut Vec<WirInstr>) -> bool {
+fn elide_struct_locals_one_pass(body: &mut [WirInstr]) -> bool {
     // Step 1: collect LocalSet(name, StructNew { [inner] }) at any depth.
     let mut all_defs: IndexMap<String, WirInstr> = IndexMap::new();
     for instr in body.iter() {
@@ -3497,19 +3481,13 @@ fn rewrite_large_array_new_fixed(instr: &mut WirInstr, counter: &mut u32) {
 /// (replacing `ArrayNewDefault` and removing the append calls), which is then
 /// eligible for `promote_constant_arrays_to_data` and `split_large_array_literals`.
 fn collapse_array_append_sequences(module: &mut WirModule) {
-    let import_func_count = module
-        .imports
-        .iter()
-        .filter(|i| matches!(i.desc, WirImportDesc::Func { .. }))
-        .count() as u32;
-
     // Build set of function indices that have COMP_FEATURE_ARRAY_APPEND.
     let append_func_indices: IndexSet<u32> = module
         .functions
         .iter()
         .enumerate()
         .filter(|(_, f)| f.comp_features & COMP_FEATURE_ARRAY_APPEND != 0)
-        .map(|(i, _)| import_func_count + u32::try_from(i).unwrap())
+        .map(|(i, _)| crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap())
         .collect();
 
     if append_func_indices.is_empty() {
@@ -4066,18 +4044,12 @@ fn is_array_new_default(instr: &WirInstr) -> bool {
 /// ...
 /// ```
 fn simplify_short_string_appends(module: &mut WirModule) {
-    let import_func_count = module
-        .imports
-        .iter()
-        .filter(|i| matches!(i.desc, WirImportDesc::Func { .. }))
-        .count() as u32;
-
     // Find string_append and string_append_char function indices.
     let mut append_func_id: Option<WirFuncId> = None;
     let mut append_char_func_id: Option<WirFuncId> = None;
 
     for (i, f) in module.functions.iter().enumerate() {
-        let idx = import_func_count + u32::try_from(i).unwrap();
+        let idx = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
         if f.comp_features & COMP_FEATURE_STRING_APPEND != 0 {
             append_func_id = Some(WirFuncId::new(idx, f.name.fq.as_str().into()));
         }
@@ -4406,7 +4378,7 @@ fn is_wir_constant(instr: &WirInstr) -> bool {
 
 /// Process a body (list of instructions), forwarding known constants.
 /// Returns true if any changes were made.
-fn forward_fields_in_body(body: &mut Vec<WirInstr>, known: &mut FieldKnowledge<'_>) -> bool {
+fn forward_fields_in_body(body: &mut [WirInstr], known: &mut FieldKnowledge<'_>) -> bool {
     let mut changed = false;
     let mut i = 0;
     while i < body.len() {
