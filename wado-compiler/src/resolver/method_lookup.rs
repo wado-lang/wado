@@ -252,7 +252,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             } => (
                 name.clone(),
                 Some(module_source.clone()),
-                if type_args.is_empty() { None } else { Some(type_args.clone()) },
+                if type_args.is_empty() {
+                    None
+                } else {
+                    Some(type_args.clone())
+                },
                 None,
             ),
             _ => return None,

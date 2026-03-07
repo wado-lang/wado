@@ -2100,9 +2100,11 @@ fn decompose_type_for_method_name(
             let args = type_args.iter().map(|t| tt.mangle_type_name(*t)).collect();
             (name.clone(), false, args)
         }
-        ResolvedType::Reactive(inner) => {
-            ("Reactive".to_string(), false, vec![tt.mangle_type_name(*inner)])
-        }
+        ResolvedType::Reactive(inner) => (
+            "Reactive".to_string(),
+            false,
+            vec![tt.mangle_type_name(*inner)],
+        ),
         _ => {
             let name = tt.mangle_type_name(type_id);
             debug_assert!(

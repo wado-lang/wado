@@ -60,9 +60,13 @@ Create a new future pair: [Future<T>, FutureWritable<T>].
 Read the value from the future.
 Returns Some(value) when fulfilled, None if the writer dropped without writing.
 
-##### `fn close(&self)`
+##### `fn cancel_read(&self)`
 
-Close the readable end of the future.
+Cancel an in-progress read. Blocks until cancellation completes.
+
+##### `fn drop(&self)`
+
+Drop the readable end of the future.
 
 #### `pub resource FutureWritable<T>`
 
@@ -73,9 +77,9 @@ Opaque i32 handle managed by the runtime.
 
 Fulfill the future with a value.
 
-##### `fn close(&self)`
+##### `fn cancel_write(&self)`
 
-Close the writable end without fulfilling (cancels the future).
+Cancel an in-progress write. Blocks until cancellation completes.
 
 ##### `fn drop(&self)`
 
@@ -95,12 +99,16 @@ Create a new stream pair: [Stream<T>, StreamWritable<T>].
 ##### `fn read(&self, max: i32) -> Array<T>`
 
 Read up to `max` elements from the stream.
-Blocks until data is available or the writer closes.
+Blocks until data is available or the writer drops.
 Returns an empty array on end-of-stream.
 
-##### `fn close(&self)`
+##### `fn cancel_read(&self)`
 
-Close the readable end of the stream.
+Cancel an in-progress read. Blocks until cancellation completes.
+
+##### `fn drop(&self)`
+
+Drop the readable end of the stream.
 
 #### `pub resource StreamWritable<T>`
 
@@ -111,9 +119,13 @@ Opaque i32 handle managed by the runtime.
 
 Write a chunk of data to the stream.
 
-##### `fn close(&self)`
+##### `fn cancel_write(&self)`
 
-Close the writable end, signaling end-of-stream.
+Cancel an in-progress write. Blocks until cancellation completes.
+
+##### `fn drop(&self)`
+
+Drop the writable end, signaling end-of-stream.
 
 #### `pub resource Waitable`
 
@@ -136,17 +148,21 @@ Block until an event occurs. Returns the event details.
 
 Non-blocking poll. Returns Some(event) if ready, None otherwise.
 
-##### `fn close(&self)`
+##### `fn drop(&self)`
 
-Close (drop) the waitable set.
+Drop the waitable set.
 
 #### `pub resource Subtask`
 
 An async subtask handle returned by CM async operations.
 
-##### `fn close(&self)`
+##### `fn drop(&self)`
 
-Close (drop) a completed subtask handle.
+Drop a completed subtask handle.
+
+##### `fn cancel(&self)`
+
+Cancel this in-progress subtask. Blocks until cancellation completes.
 
 ##### `fn join(&self, set: &WaitableSet) -> Waitable`
 
@@ -165,9 +181,9 @@ Create a new error context with the given message.
 
 Get the debug message from this error context.
 
-##### `fn close(&self)`
+##### `fn drop(&self)`
 
-Close (drop) the error context.
+Drop the error context.
 
 ### Traits
 

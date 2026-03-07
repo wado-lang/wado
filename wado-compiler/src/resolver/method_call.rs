@@ -690,7 +690,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .map(|t| self.type_table.borrow().mangle_type_name(*t))
                     .collect();
                 let mangled = format!("{}<{}>", name, type_arg_names.join(","));
-                (name.clone(), module_source.clone(), mangled, type_args.clone())
+                (
+                    name.clone(),
+                    module_source.clone(),
+                    mangled,
+                    type_args.clone(),
+                )
             }
             ResolvedType::Primitive(prim) => {
                 let name = prim.as_str().to_string();

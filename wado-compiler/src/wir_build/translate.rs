@@ -2896,9 +2896,7 @@ impl FunctionTranslator<'_, '_> {
             "future-read" => Some(self.emit_future_read(handle, result_type_id)),
             "future-write" => Some(self.emit_future_write_ok_none(handle)),
             "future-drop-readable" => Some(self.emit_drop_handle("future-drop-readable", handle)),
-            "future-drop-writable" => {
-                Some(self.emit_drop_handle("future-drop-writable", handle))
-            }
+            "future-drop-writable" => Some(self.emit_drop_handle("future-drop-writable", handle)),
 
             // === WaitableSet instance methods ===
             "waitable-set-wait" => Some(self.emit_waitable_set_wait(handle, result_type_id)),

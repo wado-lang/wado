@@ -31,14 +31,15 @@ pub enum Alignment {
 pub resource Future<T> {
     fn new() -> [Future<T>, FutureWritable<T>];
     fn read(&self) -> Option<T>;
-    fn close(&self);
+    fn cancel_read(&self);
+    fn drop(&self);
 }
 ```
 
 ```wado
 pub resource FutureWritable<T> {
     fn write(&self, value: T);
-    fn close(&self);
+    fn cancel_write(&self);
     fn drop(&self);
 }
 ```
@@ -47,14 +48,16 @@ pub resource FutureWritable<T> {
 pub resource Stream<T> {
     fn new() -> [Stream<T>, StreamWritable<T>];
     fn read(&self, max: i32) -> Array<T>;
-    fn close(&self);
+    fn cancel_read(&self);
+    fn drop(&self);
 }
 ```
 
 ```wado
 pub resource StreamWritable<T> {
     fn write(&self, data: Array<T>);
-    fn close(&self);
+    fn cancel_write(&self);
+    fn drop(&self);
 }
 ```
 
@@ -67,13 +70,14 @@ pub resource WaitableSet {
     fn new() -> WaitableSet;
     fn wait(&self) -> WaitEvent;
     fn poll(&self) -> Option<WaitEvent>;
-    fn close(&self);
+    fn drop(&self);
 }
 ```
 
 ```wado
 pub resource Subtask {
-    fn close(&self);
+    fn drop(&self);
+    fn cancel(&self);
     fn join(&self, set: &WaitableSet) -> Waitable;
 }
 ```
@@ -82,7 +86,7 @@ pub resource Subtask {
 pub resource ErrorContext {
     fn new(message: String) -> ErrorContext;
     fn debug_message(&self) -> String;
-    fn close(&self);
+    fn drop(&self);
 }
 ```
 

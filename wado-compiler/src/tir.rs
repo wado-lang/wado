@@ -172,8 +172,10 @@ impl SubstitutionContext {
                 module_source,
                 type_args,
             } => {
-                let new_args: Vec<TypeId> =
-                    type_args.iter().map(|&a| self.substitute(a, type_table)).collect();
+                let new_args: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|&a| self.substitute(a, type_table))
+                    .collect();
                 type_table.intern(ResolvedType::GenericResource {
                     name: name.clone(),
                     module_source: module_source.clone(),

@@ -829,13 +829,13 @@ fn analyze_expr(
                         analysis.callees.insert(method_id);
                     }
                     ResolvedType::GenericResource {
-                        name,
-                        type_args,
-                        ..
+                        name, type_args, ..
                     } => {
                         // Generic resource method call (e.g., Future<T>^Inspect::inspect)
-                        let type_arg_names: Vec<String> =
-                            type_args.iter().map(|t| type_table.mangle_type_name(*t)).collect();
+                        let type_arg_names: Vec<String> = type_args
+                            .iter()
+                            .map(|t| type_table.mangle_type_name(*t))
+                            .collect();
                         let mangled_struct = mangle_generic_name(name.as_str(), &type_arg_names);
                         let method_id = FunctionId::Method(MethodName::new(
                             current_module.clone(),
