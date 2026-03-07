@@ -118,7 +118,7 @@ fn loop_example() {
 // Nested block comments
 fn nested_blocks() {
     /* outer */
-    for let j = 0; j < 5; j += 1 {
+    for let mut j = 0; j < 5; j += 1 {
         /* inner */
         let x = j * 2;
         /* done */
@@ -163,9 +163,14 @@ impl Logger {
     }
 }
 
+// Generic struct for bounded impl test
+struct MyArray<T> {
+    items: Array<T>,
+}
+
 // Block comment /* */ before impl
 /* inherent impl with trait bound */
-impl Array<T: Ord> {
+impl MyArray<T: Ord> {
     /* sort in ascending order */
     fn sort(&mut self) {
     }
@@ -177,14 +182,6 @@ trait Printable {
     fn print(&self);
     /* print with newline */
     fn println(&self);
-}
-
-// async methods in effect
-effect FileIO {
-    /* read bytes */
-    async fn read(path: String) -> Array<u8>;
-    /* write bytes */
-    fn write(path: String, data: Array<u8>);
 }
 
 // Multiple /* */ comments at the start of a function body
@@ -244,4 +241,7 @@ fn with_closures() {
 
 
     let result = double(inc(5));
+}
+
+export fn run() {
 }
