@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772846183670,
+  "lastUpdate": 1772849220504,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1076,6 +1076,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8978b8fa9dc844f1c1bae5f6b6c20b7733a5a4dd"
         },
         "date": 1772846183528,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1571,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9220,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18474,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "94b99158337e2d6b0ef0a8bb9f73d6ab310b6e02",
+          "message": "Merge pull request #525 from wado-lang/claude/update-golden-fixtures-ir-PNSyx\n\nAdd golden file tests for compiler phase outputs",
+          "timestamp": "2026-03-07T11:04:44+09:00",
+          "tree_id": "79a3d189c06650c24ee08bc1b343564e8bc5dd61",
+          "url": "https://github.com/wado-lang/wado/commit/94b99158337e2d6b0ef0a8bb9f73d6ab310b6e02"
+        },
+        "date": 1772849220358,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
