@@ -167,21 +167,20 @@ impl SubstitutionContext {
                 let new_return = self.substitute(return_type, type_table);
                 type_table.make_function(new_params, new_return, effects)
             }
-            ResolvedType::Stream(inner) => {
-                let new_inner = self.substitute(inner, type_table);
-                type_table.intern(ResolvedType::Stream(new_inner))
-            }
-            ResolvedType::StreamWritable(inner) => {
-                let new_inner = self.substitute(inner, type_table);
-                type_table.intern(ResolvedType::StreamWritable(new_inner))
-            }
-            ResolvedType::Future(inner) => {
-                let new_inner = self.substitute(inner, type_table);
-                type_table.intern(ResolvedType::Future(new_inner))
-            }
-            ResolvedType::FutureWritable(inner) => {
-                let new_inner = self.substitute(inner, type_table);
-                type_table.intern(ResolvedType::FutureWritable(new_inner))
+            ResolvedType::GenericResource {
+                name,
+                module_source,
+                type_args,
+            } => {
+                let new_args: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|&a| self.substitute(a, type_table))
+                    .collect();
+                type_table.intern(ResolvedType::GenericResource {
+                    name: name.clone(),
+                    module_source: module_source.clone(),
+                    type_args: new_args,
+                })
             }
             ResolvedType::Reactive(inner) => {
                 let new_inner = self.substitute(inner, type_table);
@@ -309,10 +308,17 @@ pub enum ResolvedType {
     // This avoids the SubtypeHierarchy overhead (discriminant struct + case subtypes).
     // Key requirement: Option<Option<T>> MUST NOT use NullableRef (ambiguous null).
     // See wep-2026-02-09-variant-independent-types.md for the general optimization strategy.
-    Stream(TypeId),
-    StreamWritable(TypeId),
-    Future(TypeId),
-    FutureWritable(TypeId),
+    //
+    // NOTE: Future<T>, Stream<T>, FutureWritable<T>, StreamWritable<T> are no longer dedicated
+    // type variants. They are represented as GenericResource { name: "Future", ... }.
+    // Use TypeTable::make_future() / as_future() etc. to create and inspect them.
+    /// Generic resource instantiation (e.g., `Future<i32>`, `Stream<String>`).
+    /// Represents opaque i32 handles to Component Model resources with type parameters.
+    GenericResource {
+        name: String,
+        module_source: ModuleSource,
+        type_args: Vec<TypeId>,
+    },
     Ref(TypeId),
     MutRef(TypeId),
     Function {
@@ -374,6 +380,7 @@ impl ResolvedType {
             | Self::Enum { module_source, .. }
             | Self::Variant { module_source, .. }
             | Self::GenericInstance { module_source, .. }
+            | Self::GenericResource { module_source, .. }
             | Self::Newtype { module_source, .. } => module_source.to_path(),
             _ => vec![],
         }
@@ -611,6 +618,56 @@ impl TypeTable {
             .clone()
             .expect("Result module source not registered; missing #[comp_feature(\"result\")] on Result variant");
         self.make_generic_instance("Result".to_string(), module_source, vec![ok, err])
+    }
+
+    /// Create a `Future<T>` generic resource type.
+    pub fn make_future(&mut self, inner: TypeId) -> TypeId {
+        self.intern(ResolvedType::GenericResource {
+            name: "Future".to_string(),
+            module_source: ModuleSource::types(),
+            type_args: vec![inner],
+        })
+    }
+
+    /// Create a `FutureWritable<T>` generic resource type.
+    pub fn make_future_writable(&mut self, inner: TypeId) -> TypeId {
+        self.intern(ResolvedType::GenericResource {
+            name: "FutureWritable".to_string(),
+            module_source: ModuleSource::types(),
+            type_args: vec![inner],
+        })
+    }
+
+    /// Create a `Stream<T>` generic resource type.
+    pub fn make_stream(&mut self, inner: TypeId) -> TypeId {
+        self.intern(ResolvedType::GenericResource {
+            name: "Stream".to_string(),
+            module_source: ModuleSource::types(),
+            type_args: vec![inner],
+        })
+    }
+
+    /// Create a `StreamWritable<T>` generic resource type.
+    pub fn make_stream_writable(&mut self, inner: TypeId) -> TypeId {
+        self.intern(ResolvedType::GenericResource {
+            name: "StreamWritable".to_string(),
+            module_source: ModuleSource::types(),
+            type_args: vec![inner],
+        })
+    }
+
+    /// If `type_id` is a `GenericResource`, return `(name, module_source, type_args)`.
+    pub fn as_generic_resource(&self, type_id: TypeId) -> Option<(&str, &ModuleSource, &[TypeId])> {
+        if let ResolvedType::GenericResource {
+            name,
+            module_source,
+            type_args,
+        } = self.get(type_id)
+        {
+            Some((name.as_str(), module_source, type_args.as_slice()))
+        } else {
+            None
+        }
     }
 
     /// Check if a type is `Option<T>`, returning the inner type if so.
@@ -893,10 +950,6 @@ impl TypeTable {
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
-            | ResolvedType::Stream(inner)
-            | ResolvedType::StreamWritable(inner)
-            | ResolvedType::Future(inner)
-            | ResolvedType::FutureWritable(inner)
             | ResolvedType::Reactive(inner) => self.contains_type_param(*inner),
             ResolvedType::Tuple(elems) => elems.iter().any(|e| self.contains_type_param(*e)),
             ResolvedType::Function {
@@ -907,7 +960,8 @@ impl TypeTable {
                 params.iter().any(|p| self.contains_type_param(*p))
                     || self.contains_type_param(*return_type)
             }
-            ResolvedType::GenericInstance { type_args, .. } => {
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => {
                 type_args.iter().any(|t| self.contains_type_param(*t))
             }
             _ => false,
@@ -947,13 +1001,11 @@ impl TypeTable {
             ResolvedType::Ref(inner) => format!("&{}", self.type_name(*inner)),
             ResolvedType::MutRef(inner) => format!("&mut {}", self.type_name(*inner)),
             ResolvedType::Variant { name, .. } => name.clone(),
-            ResolvedType::Stream(inner) => format!("Stream<{}>", self.type_name(*inner)),
-            ResolvedType::StreamWritable(inner) => {
-                format!("StreamWritable<{}>", self.type_name(*inner))
-            }
-            ResolvedType::Future(inner) => format!("Future<{}>", self.type_name(*inner)),
-            ResolvedType::FutureWritable(inner) => {
-                format!("FutureWritable<{}>", self.type_name(*inner))
+            ResolvedType::GenericResource {
+                name, type_args, ..
+            } => {
+                let arg_names: Vec<String> = type_args.iter().map(|t| self.type_name(*t)).collect();
+                format!("{}<{}>", name, arg_names.join(", "))
             }
             ResolvedType::Reactive(inner) => format!("Reactive<{}>", self.type_name(*inner)),
             ResolvedType::TypeParam { name, .. } => name.clone(),
@@ -1122,13 +1174,17 @@ impl TypeTable {
                 // For references, use the inner type's name (strip reference)
                 TypeNameInfo::Ref(self.mangle_type_name(*inner))
             }
-            ResolvedType::Stream(inner) => TypeNameInfo::Stream(self.mangle_type_name(*inner)),
-            ResolvedType::StreamWritable(inner) => {
-                TypeNameInfo::StreamWritable(self.mangle_type_name(*inner))
-            }
-            ResolvedType::Future(inner) => TypeNameInfo::Future(self.mangle_type_name(*inner)),
-            ResolvedType::FutureWritable(inner) => {
-                TypeNameInfo::FutureWritable(self.mangle_type_name(*inner))
+            ResolvedType::GenericResource {
+                name, type_args, ..
+            } => {
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_name(*t))
+                    .collect();
+                TypeNameInfo::Generic {
+                    name: name.clone(),
+                    args,
+                }
             }
             ResolvedType::Reactive(inner) => TypeNameInfo::Reactive(self.mangle_type_name(*inner)),
             ResolvedType::AssocTypeProjection {

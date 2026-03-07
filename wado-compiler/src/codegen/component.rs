@@ -16,6 +16,7 @@ use crate::ast::Type;
 use crate::bundled::wado_bundled_libm_wasm;
 use crate::component_model::{CmInstanceTypeGen, WasiFunctionInfo};
 use crate::project::Project;
+use crate::wir::WirModule;
 use indexmap::{IndexMap, IndexSet};
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
@@ -23,11 +24,8 @@ use wasm_encoder::{
 };
 
 /// Build a complete Wasm Component from a pre-built core module and project metadata.
-pub fn build_component(
-    project: &Project,
-    core_module: &[u8],
-    wasm_modules: &IndexMap<String, crate::wir::WasmModuleInfo>,
-) -> Vec<u8> {
+pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirModule) -> Vec<u8> {
+    let wasm_modules = &wir_module.wasm_modules;
     let mut builder = ComponentBuilder::default();
     let mut ctx = ComponentModelContext::new();
 
@@ -86,8 +84,26 @@ pub fn build_component(
 
     embed_bundled_modules(&mut builder, &mut ctx, bundled_functions);
 
+    // Merge canonical intrinsics from both sources (deduplicated):
+    //   1. component_plan.canonical_intrinsics — from TIR imports (task-return, realloc, etc.)
+    //   2. wir_module.needed_canonicals — lazily registered by ensure_canonical during WIR translation
+    let mut all_canonical_intrinsics: IndexSet<String> = IndexSet::new();
+    for name in &component_plan.canonical_intrinsics {
+        all_canonical_intrinsics.insert(name.clone());
+    }
+    for name in &wir_module.needed_canonicals {
+        all_canonical_intrinsics.insert(name.clone());
+    }
+    let all_canonical_intrinsics: Vec<String> = all_canonical_intrinsics.into_iter().collect();
+
     // HTTP response types for future<T> canonical intrinsics
-    let trailers_future_type = if component_plan.needs_future_intrinsics {
+    let needs_future = all_canonical_intrinsics.iter().any(|n| {
+        matches!(
+            n.as_str(),
+            "future-new" | "future-write" | "future-drop-writable" | "future-drop-readable"
+        )
+    });
+    let trailers_future_type = if needs_future {
         build_future_intrinsic_types(&mut builder, &mut ctx, stream_u8_type)
     } else {
         0
@@ -97,7 +113,7 @@ pub fn build_component(
     emit_canonical_intrinsics(
         &mut builder,
         &mut ctx,
-        &component_plan.canonical_intrinsics,
+        &all_canonical_intrinsics,
         stream_u8_type,
         result_unit_type,
         trailers_future_type,
@@ -143,7 +159,7 @@ pub fn build_component(
 
     // Build wasi instance
     let mut wasi_exports: Vec<(String, ExportKind, u32)> = Vec::new();
-    for intrinsic_name in &component_plan.canonical_intrinsics {
+    for intrinsic_name in &all_canonical_intrinsics {
         wasi_exports.push((
             intrinsic_name.clone(),
             ExportKind::Func,
@@ -680,8 +696,31 @@ fn emit_canonical_intrinsics(
             "waitable-set-wait" => {
                 builder.waitable_set_wait(false, ctx.memory_idx());
             }
+            "waitable-set-poll" => {
+                builder.waitable_set_poll(false, ctx.memory_idx());
+            }
+            "waitable-set-drop" => {
+                builder.waitable_set_drop();
+            }
             "subtask-drop" => {
                 builder.subtask_drop();
+            }
+            "error-context-new" => {
+                builder.error_context_new([
+                    CanonicalOption::UTF8,
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                ]);
+            }
+            "error-context-debug-message" => {
+                builder.error_context_debug_message([
+                    CanonicalOption::UTF8,
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                ]);
+            }
+            "error-context-drop" => {
+                builder.error_context_drop();
             }
             _ => {}
         }

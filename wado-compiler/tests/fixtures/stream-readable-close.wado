@@ -4,8 +4,8 @@ use { println, Stdout } from "core:cli";
 export fn run() with Stdout {
     let [rx, tx] = Stream::<u8>::new();
     // Close the readable end first
-    rx.close();
-    tx.close();
+    rx.drop();
+    tx.drop();
     println("close ok");
 }
 

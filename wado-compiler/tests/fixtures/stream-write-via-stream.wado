@@ -6,8 +6,8 @@ use { println, Stdout } from "core:cli";
 export fn run() with Stdout {
     // Verify Stream::new() returns correctly typed pair
     let [_rx, _tx]: [Stream<u8>, StreamWritable<u8>] = Stream::<u8>::new();
-    _tx.close();
-    _rx.close();
+    _tx.drop();
+    _rx.drop();
 
     // Use println which internally uses write_via_stream
     println("via stream ok");

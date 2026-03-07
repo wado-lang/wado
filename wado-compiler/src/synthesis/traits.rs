@@ -2094,21 +2094,17 @@ fn decompose_type_for_method_name(
             let args = vec![params.len().to_string(), tt.mangle_type_name(*return_type)];
             ("Fn".to_string(), false, args)
         }
-        ResolvedType::Future(inner)
-        | ResolvedType::FutureWritable(inner)
-        | ResolvedType::Stream(inner)
-        | ResolvedType::StreamWritable(inner)
-        | ResolvedType::Reactive(inner) => {
-            let base = match resolved {
-                ResolvedType::Future(_) => "Future",
-                ResolvedType::FutureWritable(_) => "FutureWritable",
-                ResolvedType::Stream(_) => "Stream",
-                ResolvedType::StreamWritable(_) => "StreamWritable",
-                ResolvedType::Reactive(_) => "Reactive",
-                _ => unreachable!(),
-            };
-            (base.to_string(), false, vec![tt.mangle_type_name(*inner)])
+        ResolvedType::GenericResource {
+            name, type_args, ..
+        } => {
+            let args = type_args.iter().map(|t| tt.mangle_type_name(*t)).collect();
+            (name.clone(), false, args)
         }
+        ResolvedType::Reactive(inner) => (
+            "Reactive".to_string(),
+            false,
+            vec![tt.mangle_type_name(*inner)],
+        ),
         _ => {
             let name = tt.mangle_type_name(type_id);
             debug_assert!(
@@ -2180,21 +2176,14 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<Strin
                 let args = vec![params.len().to_string(), tt.mangle_type_name(*return_type)];
                 Some((*id, "Fn".to_string(), args))
             }
-            ResolvedType::Future(inner)
-            | ResolvedType::FutureWritable(inner)
-            | ResolvedType::Stream(inner)
-            | ResolvedType::StreamWritable(inner) => {
-                if !is_concrete(*inner) {
+            ResolvedType::GenericResource {
+                name, type_args, ..
+            } => {
+                if !type_args.iter().all(|t| is_concrete(*t)) {
                     return None;
                 }
-                let base = match resolved {
-                    ResolvedType::Future(_) => "Future",
-                    ResolvedType::FutureWritable(_) => "FutureWritable",
-                    ResolvedType::Stream(_) => "Stream",
-                    ResolvedType::StreamWritable(_) => "StreamWritable",
-                    _ => unreachable!(),
-                };
-                Some((*id, base.to_string(), vec![tt.mangle_type_name(*inner)]))
+                let args = type_args.iter().map(|t| tt.mangle_type_name(*t)).collect();
+                Some((*id, name.clone(), args))
             }
             _ => None,
         })

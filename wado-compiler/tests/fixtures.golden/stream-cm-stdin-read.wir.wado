@@ -57,13 +57,9 @@ enum Alignment { Left = 0, Center = 1, Right = 2 };
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/wasi/stream-drop-readable" = fn(i32);
-
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
-
-type "functype/wasi/stream-read" = fn(i32, i32, i32) -> i32;
 
 type "functype/wasi/stream-write" = fn(i32, i32, i32) -> i32;
 
@@ -115,15 +111,17 @@ type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref null String, i32) -> i32;
 
+type "functype/wasi/stream-read" = fn(i32, i32, i32) -> i32;
+
+type "functype/wasi/stream-drop-readable" = fn(i32);
+
 type "functype/__cm_adapter__Stdin_read_via_stream" = fn() -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref null Formatter);
 
 import fn realloc from "mem/realloc";
-import fn stream-drop-readable from "wasi/stream-drop-readable";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
-import fn stream-read from "wasi/stream-read";
 import fn stream-write from "wasi/stream-write";
 import fn subtask-drop from "wasi/subtask-drop";
 import fn task-return from "wasi/task-return";
@@ -133,6 +131,8 @@ import fn waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi:cli/Stdin::read_via_stream from "wasi/wasi:cli/Stdin::read_via_stream";
 import fn wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
+import fn stream-read from "wasi/stream-read";
+import fn stream-drop-readable from "wasi/stream-drop-readable";
 
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;

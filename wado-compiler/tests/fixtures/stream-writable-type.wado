@@ -4,8 +4,8 @@ use { println, Stdout } from "core:cli";
 export fn run() with Stdout {
     // Stream::new() should return [Stream<T>, StreamWritable<T>]
     let [_rx, tx]: [Stream<u8>, StreamWritable<u8>] = Stream::<u8>::new();
-    tx.close();
-    _rx.close();
+    tx.drop();
+    _rx.drop();
     println("StreamWritable type exists");
 }
 

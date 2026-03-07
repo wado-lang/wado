@@ -35,23 +35,9 @@ export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i
 // --- Module: core:builtin ---
 fn stream_new() -> i64;
 
-fn stream_read(rx: i32, ptr: i32, len: i32) -> i32;
-
 fn stream_write(tx: i32, ptr: i32, len: i32) -> i32;
 
 fn stream_drop_writable(tx: i32);
-
-fn stream_drop_readable(rx: i32);
-
-fn future_new() -> i64;
-
-fn future_write(tx: i32, ptr: i32) -> i32;
-
-fn future_drop_writable(tx: i32);
-
-fn future_drop_readable(rx: i32);
-
-fn task_return(result: i32);
 
 fn waitable_set_new() -> i32;
 
@@ -60,6 +46,8 @@ fn waitable_join(waitable: i32, set: i32);
 fn waitable_set_wait(set: i32, outptr: i32) -> i32;
 
 fn subtask_drop(subtask: i32);
+
+fn task_return(result: i32);
 
 fn i32_as_char(value: i32) -> char;
 
@@ -75,15 +63,15 @@ fn array_get_u8(arr: builtin::array<u8>, idx: i32) -> u8;
 
 fn array_set_u8(arr: builtin::array<u8>, idx: i32, value: u8);
 
-fn array_new<T>(len: i32) -> <TypeId(26)>;
+fn array_new<T>(len: i32) -> <TypeId(27)>;
 
-fn array_get<T>(arr: <TypeId(26)>, idx: i32) -> <TypeId(20)>;
+fn array_get<T>(arr: <TypeId(27)>, idx: i32) -> <TypeId(20)>;
 
-fn array_set<T>(arr: <TypeId(26)>, idx: i32, value: <TypeId(20)>);
+fn array_set<T>(arr: <TypeId(27)>, idx: i32, value: <TypeId(20)>);
 
-fn array_copy<T>(dst: <TypeId(26)>, dst_offset: i32, src: <TypeId(26)>, src_offset: i32, len: i32);
+fn array_copy<T>(dst: <TypeId(27)>, dst_offset: i32, src: <TypeId(27)>, src_offset: i32, len: i32);
 
-fn array_fill<T>(arr: <TypeId(26)>, offset: i32, value: <TypeId(20)>, len: i32);
+fn array_fill<T>(arr: <TypeId(27)>, offset: i32, value: <TypeId(20)>, len: i32);
 
 fn i32_load(addr: i32) -> i32;
 
@@ -211,13 +199,13 @@ fn f32_hypot(x: f32, y: f32) -> f32;
 
 fn f32_fmod(x: f32, y: f32) -> f32;
 
-fn i64_add128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> <TypeId(29)>;
+fn i64_add128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> <TypeId(30)>;
 
-fn i64_sub128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> <TypeId(29)>;
+fn i64_sub128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> <TypeId(30)>;
 
-fn i64_mul_wide_u(a: i64, b: i64) -> <TypeId(29)>;
+fn i64_mul_wide_u(a: i64, b: i64) -> <TypeId(30)>;
 
-fn i64_mul_wide_s(a: i64, b: i64) -> <TypeId(29)>;
+fn i64_mul_wide_s(a: i64, b: i64) -> <TypeId(30)>;
 
 fn i32_clz(x: i32) -> i32;
 
@@ -273,9 +261,9 @@ fn f32_copysign(magnitude: f32, sign: f32) -> f32;
 
 fn f64_copysign(magnitude: f64, sign: f64) -> f64;
 
-fn inspect<T>(value: <TypeId(20)>, fmt: <TypeId(32)>);
+fn inspect<T>(value: <TypeId(20)>, fmt: <TypeId(33)>);
 
-fn display<T>(value: <TypeId(20)>, fmt: <TypeId(32)>);
+fn display<T>(value: <TypeId(20)>, fmt: <TypeId(33)>);
 
 
 // --- Module: core:cli ---
@@ -344,13 +332,13 @@ pub fn eprint(message: <TypeId(19)>) with Stderr {
     core::internal::wait_for_subtask(subtask);
 }
 
-pub fn env(name: <TypeId(19)>) -> <TypeId(33)> with Environment;
+pub fn env(name: <TypeId(19)>) -> <TypeId(34)> with Environment;
 
-pub fn args() -> <TypeId(34)> with Environment {
+pub fn args() -> <TypeId(35)> with Environment {
     return __cm_adapter__Environment_get_arguments();
 }
 
-pub fn cwd() -> <TypeId(33)> with Environment {
+pub fn cwd() -> <TypeId(34)> with Environment {
     return __cm_adapter__Environment_get_initial_cwd();
 }
 
@@ -476,17 +464,17 @@ pub fn cm_lower_list_u8(data: builtin::array<u8>, len: i32) -> i64 {
     return (ptr as i64 | (len as i64 << 32));
 }
 
-pub fn cm_lower_array_u8(arr: <TypeId(36)>) -> i64 {
+pub fn cm_lower_array_u8(arr: <TypeId(37)>) -> i64 {
     let data: builtin::array<u8> = arr."Array<u8>::internal_raw_data"();
     let len: i32 = arr."Array<u8>::len"();
     return core::internal::cm_lower_list_u8(data, len);
 }
 
-pub fn write_escaped_string(s: <TypeId(19)>, f: <TypeId(32)>) {
+pub fn write_escaped_string(s: <TypeId(19)>, f: <TypeId(33)>) {
     __for_of_2: {
-        let mut __iter_2: <TypeId(38)> = s.String::chars()."StrCharIter^IntoIterator::into_iter"();
+        let mut __iter_2: <TypeId(39)> = s.String::chars()."StrCharIter^IntoIterator::into_iter"();
         loop {
-            let __pattern_temp_0: <TypeId(41)> = __iter_2."StrCharIter^Iterator::next"();
+            let __pattern_temp_0: <TypeId(42)> = __iter_2."StrCharIter^Iterator::next"();
             if __variant_test(__pattern_temp_0, case=0, name=Some) {
                 let c: char = __variant_payload(__pattern_temp_0, case=0);
                 match c {
