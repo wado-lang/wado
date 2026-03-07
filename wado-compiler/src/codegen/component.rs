@@ -696,8 +696,31 @@ fn emit_canonical_intrinsics(
             "waitable-set-wait" => {
                 builder.waitable_set_wait(false, ctx.memory_idx());
             }
+            "waitable-set-poll" => {
+                builder.waitable_set_poll(false, ctx.memory_idx());
+            }
+            "waitable-set-drop" => {
+                builder.waitable_set_drop();
+            }
             "subtask-drop" => {
                 builder.subtask_drop();
+            }
+            "error-context-new" => {
+                builder.error_context_new([
+                    CanonicalOption::UTF8,
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                ]);
+            }
+            "error-context-debug-message" => {
+                builder.error_context_debug_message([
+                    CanonicalOption::UTF8,
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                ]);
+            }
+            "error-context-drop" => {
+                builder.error_context_drop();
             }
             _ => {}
         }

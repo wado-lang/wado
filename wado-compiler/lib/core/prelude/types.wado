@@ -51,6 +51,10 @@ pub resource Future<T> {
     #[canonical("future-read")]
     fn read(&self) -> Option<T>;
 
+    /// Cancel an in-progress read. Blocks until cancellation completes.
+    #[canonical("future-cancel-read")]
+    fn cancel_read(&self);
+
     /// Drop the readable end of the future.
     #[canonical("future-drop-readable")]
     fn drop(&self);
@@ -62,6 +66,10 @@ pub resource FutureWritable<T> {
     /// Fulfill the future with a value.
     #[canonical("future-write")]
     fn write(&self, value: T);
+
+    /// Cancel an in-progress write. Blocks until cancellation completes.
+    #[canonical("future-cancel-write")]
+    fn cancel_write(&self);
 
     /// Drop this writable end handle. Traps if no value has been written yet.
     #[canonical("future-drop-writable")]
@@ -83,6 +91,10 @@ pub resource Stream<T> {
     #[canonical("stream-read")]
     fn read(&self, max: i32) -> Array<T>;
 
+    /// Cancel an in-progress read. Blocks until cancellation completes.
+    #[canonical("stream-cancel-read")]
+    fn cancel_read(&self);
+
     /// Drop the readable end of the stream.
     #[canonical("stream-drop-readable")]
     fn drop(&self);
@@ -94,6 +106,10 @@ pub resource StreamWritable<T> {
     /// Write a chunk of data to the stream.
     #[canonical("stream-write")]
     fn write(&self, data: Array<T>);
+
+    /// Cancel an in-progress write. Blocks until cancellation completes.
+    #[canonical("stream-cancel-write")]
+    fn cancel_write(&self);
 
     /// Drop the writable end, signaling end-of-stream.
     #[canonical("stream-drop-writable")]
@@ -146,6 +162,10 @@ pub resource Subtask {
     #[canonical("subtask-drop")]
     fn drop(&self);
 
+    /// Cancel this in-progress subtask. Blocks until cancellation completes.
+    #[canonical("subtask-cancel")]
+    fn cancel(&self);
+
     /// Join this subtask to a waitable set.
     /// Returns a Waitable token identifying this subtask in wait results.
     #[canonical("waitable-join")]
@@ -165,4 +185,50 @@ pub resource ErrorContext {
     /// Drop the error context.
     #[canonical("error-context-drop")]
     fn drop(&self);
+}
+
+/// Backpressure control for the current component instance.
+///
+/// Signals to the host that this component is under load.
+/// Increment to enable backpressure; decrement to release it.
+/// The host will stop dispatching new calls when the counter is non-zero.
+pub resource Backpressure {
+    /// Increment the backpressure counter by 1.
+    /// The host applies backpressure when the counter is non-zero.
+    #[canonical("backpressure-inc")]
+    fn inc();
+
+    /// Decrement the backpressure counter by 1.
+    #[canonical("backpressure-dec")]
+    fn dec();
+}
+
+/// Task-local context storage for the current async task.
+///
+/// Provides typed slots (u32) for passing context values across component
+/// boundaries without threading them through call arguments.
+/// The slot index must be a compile-time constant.
+pub resource Context {
+    /// Get the value of task-local context slot `slot`.
+    /// `slot` must be a compile-time constant.
+    #[canonical("context-get")]
+    fn get(slot: u32) -> u32;
+
+    /// Set the value of task-local context slot `slot` to `value`.
+    /// `slot` must be a compile-time constant.
+    #[canonical("context-set")]
+    fn set(slot: u32, value: u32);
+}
+
+/// The current async task handle.
+///
+/// Provides operations that apply to the currently executing async task.
+pub resource Task {
+    /// Acknowledge cancellation of the current task.
+    ///
+    /// Call this in response to a cancellation signal (e.g. after receiving
+    /// `WaitEvent { code: 6 }` from `WaitableSet::wait`). Signals to the CM
+    /// runtime that the task accepts being cancelled and will clean up.
+    #[canonical("task-cancel")]
+    fn cancel();
 }
