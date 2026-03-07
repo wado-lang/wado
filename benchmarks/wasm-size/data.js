@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772849220504,
+  "lastUpdate": 1772849735299,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1115,6 +1115,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/94b99158337e2d6b0ef0a8bb9f73d6ab310b6e02"
         },
         "date": 1772849220358,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1571,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9220,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18474,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "62711cf2943c8c1d9f9d1ccd7ea9ae33302a984f",
+          "message": "Merge pull request #526 from wado-lang/claude/streamline-cheatsheet-bdIDM\n\nSimplify and condense cheatsheet documentation",
+          "timestamp": "2026-03-07T11:13:15+09:00",
+          "tree_id": "b0531f9ff790bf8009d8c2615405b5f9465775c0",
+          "url": "https://github.com/wado-lang/wado/commit/62711cf2943c8c1d9f9d1ccd7ea9ae33302a984f"
+        },
+        "date": 1772849735205,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
