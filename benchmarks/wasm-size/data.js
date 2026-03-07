@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772889273575,
+  "lastUpdate": 1772894449652,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1427,6 +1427,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/57540a8cf348033037fe1101faa37e36cbf495cd"
         },
         "date": 1772889273386,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1571,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9220,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18450,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b9a9281e191dff75774af66ef997437642e0c0df",
+          "message": "Merge pull request #533 from wado-lang/claude/add-mut-parameter-tests-R4SJb\n\nImplement mutable parameter semantics with value copying",
+          "timestamp": "2026-03-07T23:38:27+09:00",
+          "tree_id": "92c905a3ba1139dadc1f2646fbae407e1b349ae4",
+          "url": "https://github.com/wado-lang/wado/commit/b9a9281e191dff75774af66ef997437642e0c0df"
+        },
+        "date": 1772894449459,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
