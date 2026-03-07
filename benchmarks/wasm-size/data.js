@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772842052059,
+  "lastUpdate": 1772846183670,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1037,6 +1037,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bcde49b0f9e3776391b055ac698890bbf262ac21"
         },
         "date": 1772842051918,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1571,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9220,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18474,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8978b8fa9dc844f1c1bae5f6b6c20b7733a5a4dd",
+          "message": "Merge pull request #524 from wado-lang/claude/check-compiler-health-JOAiN\n\nRefactor lowering phase: extract pattern, closure, boxing, and globals",
+          "timestamp": "2026-03-07T10:14:07+09:00",
+          "tree_id": "b2377efcbe9ff6e8c964e01a38ee1791689fbb27",
+          "url": "https://github.com/wado-lang/wado/commit/8978b8fa9dc844f1c1bae5f6b6c20b7733a5a4dd"
+        },
+        "date": 1772846183528,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
