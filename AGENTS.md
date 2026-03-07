@@ -296,6 +296,9 @@ Wado is designed on the following Wasm features:
 - Wasm 3.0 (2025-09-17)
 - Wasm GC
 - Wasm Component Model
+  - CM spec: `vendor/component-model/design/mvp/`
+  - Canonical built-ins: `vendor/component-model/design/mvp/CanonicalABI.md`
+  - Concurrency (async, streams, futures): `vendor/component-model/design/mvp/Concurrency.md`
 - Wasm Stack Switching (not yet implemented in wasmtime)
 - WASI 0.3.0 (P3)
   - P3 is supported by wasmtime v41
