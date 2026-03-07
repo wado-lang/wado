@@ -57,7 +57,7 @@ test-cov-html:
 	@echo "Coverage report generated at target/llvm-cov/html/index.html"
 
 .PHONY: on-task-done
-on-task-done: clippy-fix update-golden-fixtures update-golden-wat-fixtures update-golden-wir-fixtures format doc-stdlib test test-wado
+on-task-done: clippy-fix update-golden-fixtures update-golden-format-fixtures update-golden-wat-fixtures update-golden-wir-fixtures format doc-stdlib test test-wado
 	@echo "All artifacts are up-to-date and tested."
 
 .PHONY: doc-stdlib
@@ -86,6 +86,15 @@ update-golden-wat-fixtures:
 	@mkdir -p wado-compiler/tests/fixtures.golden.wat
 	@rm -rf wado-compiler/tests/fixtures.golden.wat/*.*
 	cargo test -p wado-compiler --test wat_golden_gen -- generate_all --ignored --exact
+
+.PHONY: update-golden-format-fixtures
+update-golden-format-fixtures:
+	@mkdir -p wado-compiler/tests/format.fixtures.golden
+	@for f in wado-compiler/tests/format.fixtures/*.dirty.wado; do \
+		name=$$(basename "$$f" .dirty.wado); \
+		cp "$$f" "wado-compiler/tests/format.fixtures.golden/$$name.clean.wado"; \
+		cargo run --bin wado -- format -w "wado-compiler/tests/format.fixtures.golden/$$name.clean.wado"; \
+	done
 
 .PHONY: update-golden-wir-fixtures
 update-golden-wir-fixtures:
