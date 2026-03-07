@@ -546,7 +546,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
-
         // Handle custom variant construction: Shape::Circle(5.0) or MyVariant::Unit
         if let ResolvedType::Variant {
             name,

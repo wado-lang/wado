@@ -1383,7 +1383,6 @@ impl FunctionTranslator<'_, '_> {
                     return instr;
                 }
 
-
                 let translated_args: Vec<WirInstr> = args
                     .iter()
                     .enumerate()
