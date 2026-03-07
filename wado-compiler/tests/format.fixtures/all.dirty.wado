@@ -56,6 +56,39 @@ trait Container {
     fn get(&self) -> Self::Item;
 }
 
+/// Generic struct for bounded impl test
+struct MyArray<T> {
+    items: Array<T>,
+}
+
+/// Inherent impl: compact form with bounds inlined
+impl MyArray<T: Ord> {
+    /// Sort method
+    fn sort(&mut self) {
+    }
+
+    /// Sorted method
+    fn sorted(&self) -> MyArray<T> {
+        return MyArray { items: self.items };
+    }
+}
+
+/// Trait for trait-impl-with-type-params test
+trait MyIterator {
+    type Item;
+
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+/// Trait impl: type params at impl level (expected, not compact)
+impl<T: Ord> MyIterator for MyArray<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        return null;
+    }
+}
+
 /// self: &Self normalized to &self
 impl Point {
     fn get_x(self: &Self) -> i32 {

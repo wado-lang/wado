@@ -958,15 +958,16 @@ fn test_format_nested_labeled_blocks() {
 /// Golden test: format(dirty) == clean, and the result is idempotent.
 ///
 /// `format.fixtures/all.dirty.wado` exercises all the syntax constructs whose
-/// formatting was fixed. `format.fixtures/all.clean.wado` is the expected
+/// formatting was fixed. `format.fixtures.golden/all.clean.wado` is the expected
 /// canonical output. The test verifies:
 ///   1. format(dirty) == clean   (fixes are applied)
 ///   2. format(clean) == clean   (idempotency)
 #[test]
 fn test_format_golden() {
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
+    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures.golden");
     let dirty = fs::read_to_string(fixtures.join("all.dirty.wado")).expect("read dirty");
-    let clean = fs::read_to_string(fixtures.join("all.clean.wado")).expect("read clean");
+    let clean = fs::read_to_string(golden.join("all.clean.wado")).expect("read clean");
 
     let formatted = wado_compiler::format(&dirty).expect("format dirty failed");
     assert_eq!(
@@ -983,12 +984,13 @@ fn test_format_golden() {
 /// unusual positions, missing spaces in use{}, implicit self normalization, etc.
 ///
 /// `format.fixtures/mess.dirty.wado` has many deliberately weird patterns.
-/// `format.fixtures/mess.clean.wado` is the expected canonical output.
+/// `format.fixtures.golden/mess.clean.wado` is the expected canonical output.
 #[test]
 fn test_format_golden_mess() {
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
+    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures.golden");
     let dirty = fs::read_to_string(fixtures.join("mess.dirty.wado")).expect("read mess dirty");
-    let clean = fs::read_to_string(fixtures.join("mess.clean.wado")).expect("read mess clean");
+    let clean = fs::read_to_string(golden.join("mess.clean.wado")).expect("read mess clean");
 
     let formatted = wado_compiler::format(&dirty).expect("format mess dirty failed");
     assert_eq!(
@@ -1008,13 +1010,14 @@ fn test_format_golden_mess() {
 /// and other syntax that requires `#![no_prelude]` or cannot compile.
 ///
 /// `format.fixtures/no_prelude.dirty.wado` has dirty patterns (e.g. `self: &Self`).
-/// `format.fixtures/no_prelude.clean.wado` is the expected canonical output.
+/// `format.fixtures.golden/no_prelude.clean.wado` is the expected canonical output.
 #[test]
 fn test_format_golden_no_prelude() {
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
+    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures.golden");
     let dirty = fs::read_to_string(fixtures.join("no_prelude.dirty.wado"))
         .expect("read no_prelude dirty");
-    let clean = fs::read_to_string(fixtures.join("no_prelude.clean.wado"))
+    let clean = fs::read_to_string(golden.join("no_prelude.clean.wado"))
         .expect("read no_prelude clean");
 
     let formatted = wado_compiler::format(&dirty).expect("format no_prelude dirty failed");
@@ -1036,14 +1039,15 @@ fn test_format_golden_no_prelude() {
 /// parens are kept, and spacing is normalized.
 ///
 /// `format.fixtures/ops.all.dirty.wado` has redundant parens and inconsistent
-/// spacing. `format.fixtures/ops.all.clean.wado` is the expected canonical output.
+/// spacing. `format.fixtures.golden/ops.all.clean.wado` is the expected canonical output.
 #[test]
 fn test_format_golden_ops_all() {
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
+    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures.golden");
     let dirty =
         fs::read_to_string(fixtures.join("ops.all.dirty.wado")).expect("read ops.all dirty");
     let clean =
-        fs::read_to_string(fixtures.join("ops.all.clean.wado")).expect("read ops.all clean");
+        fs::read_to_string(golden.join("ops.all.clean.wado")).expect("read ops.all clean");
 
     let formatted = wado_compiler::format(&dirty).expect("format ops.all dirty failed");
     assert_eq!(
@@ -1063,14 +1067,15 @@ fn test_format_golden_ops_all() {
 /// extra blank lines, and no spacing around operators.
 ///
 /// `format.fixtures/ops.mess.dirty.wado` has messy formatting around operators.
-/// `format.fixtures/ops.mess.clean.wado` is the expected canonical output.
+/// `format.fixtures.golden/ops.mess.clean.wado` is the expected canonical output.
 #[test]
 fn test_format_golden_ops_mess() {
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
+    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures.golden");
     let dirty =
         fs::read_to_string(fixtures.join("ops.mess.dirty.wado")).expect("read ops.mess dirty");
     let clean =
-        fs::read_to_string(fixtures.join("ops.mess.clean.wado")).expect("read ops.mess clean");
+        fs::read_to_string(golden.join("ops.mess.clean.wado")).expect("read ops.mess clean");
 
     let formatted = wado_compiler::format(&dirty).expect("format ops.mess dirty failed");
     assert_eq!(
