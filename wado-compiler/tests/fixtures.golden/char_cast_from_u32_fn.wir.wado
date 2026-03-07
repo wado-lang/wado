@@ -99,7 +99,7 @@ type "functype/char::from_u32" = fn(u32) -> ref null Option<char>;
 
 type "functype/i32::fmt_decimal" = fn(ref null "core:internal/Box<i32>", ref null Formatter);
 
-type "functype/char^Display::fmt" = fn(ref null "core:internal/Box<char>", ref null Formatter);
+type "functype/char^Inspect::inspect" = fn(ref null "core:internal/Box<char>", ref null Formatter);
 
 type "functype/String::grow" = fn(ref null String, i32);
 
@@ -111,13 +111,11 @@ type "functype/String::append_char" = fn(ref null String, char);
 
 type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
 
-type "functype/Formatter::pad" = fn(ref null Formatter, ref null String);
-
 type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref null String, i32) -> i32;
 
 type "functype/i32::fmt_decimal" = fn(i32, ref null Formatter);
 
-type "functype/char^Display::fmt" = fn(char, ref null Formatter);
+type "functype/char^Inspect::inspect" = fn(char, ref null Formatter);
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -287,7 +285,7 @@ condition: c == 'A'
                     __local_57 = __local_21;
                     break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_57) };
                 };
-                char^Display::fmt(c_0, __local_22);
+                char^Inspect::inspect(c_0, __local_22);
                 String::append_char(__local_21, 10);
                 break __tmpl: __local_21;
             });
@@ -364,7 +362,7 @@ condition: c == 'A'
                     __local_71 = __local_25;
                     break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_71) };
                 };
-                char^Display::fmt(c_5, __local_26);
+                char^Inspect::inspect(c_5, __local_26);
                 String::append_char(__local_25, 10);
                 break __tmpl: __local_25;
             });
@@ -569,7 +567,7 @@ condition: uc == 'A'
                 __local_104 = __local_35;
                 break __inline_Formatter__new_39: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_104) };
             };
-            char^Display::fmt(uc, __local_36);
+            char^Inspect::inspect(uc, __local_36);
             String::append_char(__local_35, 10);
             break __tmpl: __local_35;
         });
@@ -859,19 +857,55 @@ fn i32::fmt_decimal(self, f) {
     }, offset, abs_val, digit_count);
 }
 
-fn char^Display::fmt(self, f) {
-    let s: ref null String;
-    let __local_3: ref null Formatter;
+fn char^Inspect::inspect(self, f) {
     let c: char;
-    let __local_5: i32;
-    if f.width <= 0 {
-        c = self;
-        String::append_char(f.buf, c);
+    let __local_3: ref null Formatter;
+    let __local_4: char;
+    let __local_5: ref null Formatter;
+    let __local_6: char;
+    let __local_7: ref null Formatter;
+    let __local_8: char;
+    let __local_9: ref null Formatter;
+    let __local_10: char;
+    let __local_11: ref null Formatter;
+    let __local_12: char;
+    let __local_13: ref null Formatter;
+    let __local_14: char;
+    let __local_15: ref null Formatter;
+    let __local_16: char;
+    let __local_17: ref null Formatter;
+    let __local_18: char;
+    let __local_19: ref null Formatter;
+    let __local_20: char;
+    let __local_21: ref null Formatter;
+    let __local_22: char;
+    let __local_23: ref null Formatter;
+    let __local_24: char;
+    let __local_25: ref null Formatter;
+    let __local_26: char;
+    let __local_27: ref null Formatter;
+    let __local_28: char;
+    String::append_char(f.buf, 39);
+    c = self;
+    if c == 39 {
+        String::append_char(f.buf, 92);
+        String::append_char(f.buf, 39);
+    } else if c == 92 {
+        String::append_char(f.buf, 92);
+        String::append_char(f.buf, 92);
+    } else if c == 10 {
+        String::append_char(f.buf, 92);
+        String::append_char(f.buf, 110);
+    } else if c == 13 {
+        String::append_char(f.buf, 92);
+        String::append_char(f.buf, 114);
+    } else if c == 9 {
+        String::append_char(f.buf, 92);
+        String::append_char(f.buf, 116);
     } else {
-        s = String { repr: builtin::array_new<u8>(4), used: 0 };
-        String::append_char(s, self);
-        Formatter::pad(f, s);
+        String::append_char(f.buf, c);
     };
+    String::append_char(f.buf, 39);
 }
 
 fn String::grow(self, min_capacity) {
@@ -961,48 +995,15 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l58: loop {
+            l62: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l58;
+                continue l62;
             };
         };
-    };
-}
-
-fn Formatter::pad(self, content) {
-    let content_len: i32;
-    let padding: i32;
-    let align: enum:Alignment;
-    let left_pad: i32;
-    let right_pad: i32;
-    let __local_7: ref null String;
-    content_len = content.used;
-    if if self.width <= 0 -> i32 {
-        1;
-    } else {
-        content_len >= self.width;
-    } {
-        String::append(self.buf, content);
-        return;
-    };
-    padding = self.width - content_len;
-    align = self.align;
-    if align == 0 {
-        String::append(self.buf, content);
-        Formatter::write_char_n(self, self.fill, padding);
-    } else if align == 1 {
-        left_pad = padding / 2;
-        right_pad = padding - left_pad;
-        Formatter::write_char_n(self, self.fill, left_pad);
-        String::append(self.buf, content);
-        Formatter::write_char_n(self, self.fill, right_pad);
-    } else {
-        Formatter::write_char_n(self, self.fill, padding);
-        String::append(self.buf, content);
     };
 }
 

@@ -8,13 +8,12 @@
 use crate::ast::{
     AssertStmt, AssignExpr, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
-    ContinueStmt, EffectDecl, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FormatSpec, ForOfStmt,
-    ForStmt,
-    Function, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, IndexExpr, Item, LabeledBlockStmt,
-    LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Newtype,
-    Pattern, ReturnStmt, StaticMethodCallExpr, Stmt, StructDecl, StructLiteralExpr,
-    StructLiteralField, TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitDecl,
-    TupleLiteralExpr, UnaryExpr, UnaryOp, WhileStmt,
+    ContinueStmt, EffectDecl, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
+    FormatSpec, Function, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, IndexExpr, Item,
+    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MethodCallExpr,
+    Module, Newtype, Pattern, ReturnStmt, StaticMethodCallExpr, Stmt, StructDecl,
+    StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplatePart, TemplateStringExpr,
+    TestDecl, TraitDecl, TupleLiteralExpr, UnaryExpr, UnaryOp, WhileStmt,
 };
 use crate::unparse::unparse_expr_simple;
 

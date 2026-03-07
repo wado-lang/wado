@@ -851,7 +851,13 @@ fn trait_fmt_call(
                 span,
             );
             stmts.extend(trait_fmt_call(
-                inner, deref, fmt, trait_name, method_name, tt, span,
+                inner,
+                deref,
+                fmt,
+                trait_name,
+                method_name,
+                tt,
+                span,
             ));
             stmts
         }
@@ -867,7 +873,13 @@ fn trait_fmt_call(
                 span,
             );
             stmts.extend(trait_fmt_call(
-                inner, deref, fmt, trait_name, method_name, tt, span,
+                inner,
+                deref,
+                fmt,
+                trait_name,
+                method_name,
+                tt,
+                span,
             ));
             stmts
         }
@@ -955,7 +967,6 @@ fn trait_fmt_call(
         }
     }
 }
-
 
 /// Build a `LocalMethodName` for a concrete (post-mono) type.
 ///
