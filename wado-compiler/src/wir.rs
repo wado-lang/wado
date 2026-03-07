@@ -65,6 +65,14 @@ pub struct WirModule {
     pub dead_func_indices: IndexSet<u32>,
     /// Global indices (into `globals`) extracted into `wasm_modules`; skipped by emitter.
     pub dead_global_indices: IndexSet<u32>,
+    /// CM canonical intrinsic names needed by this module (e.g., "stream-read", "waitable-set-new").
+    /// Populated during WIR translation via `WirContext::ensure_canonical`.
+    /// Used by the component codegen to determine which canonical imports to generate.
+    pub needed_canonicals: IndexSet<String>,
+    /// Original `WirFuncId` indices for each defined function (parallel to `functions`).
+    /// These are the indices stored in `Call` instructions and may differ from
+    /// `import_count + list_position` when `ensure_canonical` adds imports after registration.
+    pub func_wir_indices: Vec<u32>,
 }
 
 /// Functions and globals extracted from a `#![wasm_module("name")]` source module.
@@ -238,6 +246,8 @@ impl WirModule {
             dead_type_indices: IndexSet::new(),
             dead_func_indices: IndexSet::new(),
             dead_global_indices: IndexSet::new(),
+            needed_canonicals: IndexSet::new(),
+            func_wir_indices: Vec::new(),
         }
     }
 }

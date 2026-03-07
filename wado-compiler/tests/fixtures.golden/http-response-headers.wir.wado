@@ -286,12 +286,6 @@ struct Array<u8> {  // Array<T> with T=u8
     mut used: i32,
 }
 
-type "functype/wasi/future-drop-writable" = fn(i32);
-
-type "functype/wasi/future-new" = fn() -> i64;
-
-type "functype/wasi/future-write" = fn(i32, i32) -> i32;
-
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
 type "functype/wasi/task-return" = fn(i32, i32, i32, i64, i32, i32, i32, i32);
@@ -324,23 +318,26 @@ type "functype/core:internal/cm_lower_list_u8" = fn(ref null array<u8>, i32) -> 
 
 type "functype/Array<u8>::append" = fn(ref null Array<u8>, u8);
 
+type "functype/wasi/future-new" = fn() -> i64;
+
+type "functype/wasi/future-write" = fn(i32, i32) -> i32;
+
 type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
 
-import fn future-drop-writable from "wasi/future-drop-writable";
-import fn future-new from "wasi/future-new";
-import fn future-write from "wasi/future-write";
 import fn realloc from "mem/realloc";
 import fn task-return from "wasi/task-return";
 import fn wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
 import fn wasi:http/Fields::append from "wasi/wasi:http/Fields::append";
 import fn wasi:http/Response::new from "wasi/wasi:http/Response::new";
 import memory (1) from "mem/memory";
+import fn future-new from "wasi/future-new";
+import fn future-write from "wasi/future-write";
 
 global mut heap_offset: i32 = 8;  // from core:allocator
 
 fn handle(request) {
-    let __local_1: i32;
-    let __local_2: i32;
+    let trailers_future: i32;
+    let trailers_tx: i32;
     let headers: i32;
     let __local_4: ref null Array<u8>;
     let value: ref null Array<u8>;
@@ -497,37 +494,37 @@ fn handle(request) {
     let __packed_156: i64;
     let __ptr_157: i32;
     let __len_158: i32;
-    let __pattern_temp_0: ref null "tuple/[Response, Future<Result<unit,ErrorCode>>]";
-    let __local_160: i32;
-    let __local_161: ref null Array<u8>;
-    let __local_162: u8;
-    let __local_163: ref null Array<u8>;
-    let __local_164: u8;
-    let __local_165: ref null Array<u8>;
-    let __local_166: u8;
-    let __local_167: ref null Array<u8>;
-    let __local_168: u8;
-    let __local_169: ref null Array<u8>;
-    let __local_170: u8;
-    let __local_171: ref null Array<u8>;
-    let __local_172: i32;
-    let __let_pattern_0: ref null "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]";
+    let __pattern_temp_0: ref null "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]";
+    let __pattern_temp_1: ref null "tuple/[Response, Future<Result<unit,ErrorCode>>]";
+    let __local_161: i32;
+    let __local_162: ref null Array<u8>;
+    let __local_163: u8;
+    let __local_164: ref null Array<u8>;
+    let __local_165: u8;
+    let __local_166: ref null Array<u8>;
+    let __local_167: u8;
+    let __local_168: ref null Array<u8>;
+    let __local_169: u8;
+    let __local_170: ref null Array<u8>;
+    let __local_171: u8;
+    let __local_172: ref null Array<u8>;
+    let __local_173: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
-    __let_pattern_0 = "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
-    __local_1 = __let_pattern_0.0;
-    __local_2 = __let_pattern_0.1;
+    __pattern_temp_0 = "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
+    trailers_future = __pattern_temp_0.0;
+    trailers_tx = __pattern_temp_0.1;
     headers = __cm_adapter__Fields_new();
     value = __seq_lit: block -> ref null Array<u8> {
         __local_4 = Array<u8> { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
         break __seq_lit: __local_4;
     };
     drop(__cm_adapter__Fields_append(headers, String { repr: array.new_data<u8>("x-wado"), used: 6 }, value));
-    let __sroa___pattern_temp_0_0: i32;
-    let __sroa___pattern_temp_0_1: i32;
-    multivalue_bind [__sroa___pattern_temp_0_0, __sroa___pattern_temp_0_1] = __cm_adapter__Response_new(headers, 0, 0, __local_1);
-    response = __sroa___pattern_temp_0_0;
-    _tx_future = __sroa___pattern_temp_0_1;
+    let __sroa___pattern_temp_1_0: i32;
+    let __sroa___pattern_temp_1_1: i32;
+    multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = __cm_adapter__Response_new(headers, 0, 0, trailers_future);
+    response = __sroa___pattern_temp_1_0;
+    _tx_future = __sroa___pattern_temp_1_1;
     __task_ret = Result<Response,ErrorCode>::Ok { discriminant: 0, payload_0: response };
     __tv_0 = 0;
     __tv_1 = 0;
@@ -840,7 +837,7 @@ fn handle(request) {
     builtin::store_i64[16](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[24](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[32](__fw_write_ptr_2, 0_i64);
-    drop("wasi/future-write"(__local_2, __fw_write_ptr_2));
+    drop("wasi/future-write"(trailers_tx, __fw_write_ptr_2));
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
 }
 

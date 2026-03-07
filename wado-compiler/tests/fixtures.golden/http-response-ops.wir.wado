@@ -287,12 +287,6 @@ struct Result<Option<Trailers>,ErrorCode>::Err {
 
 enum Alignment { Left = 0, Center = 1, Right = 2 };
 
-type "functype/wasi/future-drop-writable" = fn(i32);
-
-type "functype/wasi/future-new" = fn() -> i64;
-
-type "functype/wasi/future-write" = fn(i32, i32) -> i32;
-
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
 type "functype/wasi/stream-drop-writable" = fn(i32);
@@ -367,13 +361,14 @@ type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref null String, i32) -> i32;
 
+type "functype/wasi/future-new" = fn() -> i64;
+
+type "functype/wasi/future-write" = fn(i32, i32) -> i32;
+
 type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref null Formatter);
 
-import fn future-drop-writable from "wasi/future-drop-writable";
-import fn future-new from "wasi/future-new";
-import fn future-write from "wasi/future-write";
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
@@ -389,12 +384,14 @@ import fn wasi:http/Response::new from "wasi/wasi:http/Response::new";
 import fn wasi:http/Response::get_status_code from "wasi/wasi:http/Response::get_status_code";
 import fn wasi:http/Response::set_status_code from "wasi/wasi:http/Response::set_status_code";
 import memory (1) from "mem/memory";
+import fn future-new from "wasi/future-new";
+import fn future-write from "wasi/future-write";
 
 global mut heap_offset: i32 = 8;  // from core:allocator
 
 fn handle(request) {
-    let __local_1: i32;
-    let __local_2: i32;
+    let trailers_future: i32;
+    let trailers_tx: i32;
     let headers: i32;
     let response: i32;
     let _tx_future: i32;
@@ -560,53 +557,53 @@ fn handle(request) {
     let __packed_165: i64;
     let __ptr_166: i32;
     let __len_167: i32;
-    let __pattern_temp_0: ref null "tuple/[Response, Future<Result<unit,ErrorCode>>]";
-    let __local_169: i32;
-    let __local_170: ref null String;
-    let __local_171: ref null "core:internal/Box<i32>";
-    let __local_172: ref null Formatter;
-    let __local_173: ref null "core:internal/Box<i32>";
-    let __local_174: ref null Formatter;
-    let __local_175: ref null String;
-    let __local_176: ref null "core:internal/Box<u16>";
-    let __local_177: ref null Formatter;
-    let __local_178: ref null "core:internal/Box<u16>";
-    let __local_179: ref null Formatter;
-    let __local_180: ref null "core:internal/Box<u16>";
-    let __local_181: ref null Formatter;
-    let __local_182: ref null "core:internal/Box<u16>";
-    let __local_183: ref null Formatter;
+    let __pattern_temp_0: ref null "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]";
+    let __pattern_temp_1: ref null "tuple/[Response, Future<Result<unit,ErrorCode>>]";
+    let __local_170: i32;
+    let __local_171: ref null String;
+    let __local_172: ref null "core:internal/Box<i32>";
+    let __local_173: ref null Formatter;
+    let __local_174: ref null "core:internal/Box<i32>";
+    let __local_175: ref null Formatter;
+    let __local_176: ref null String;
+    let __local_177: ref null "core:internal/Box<u16>";
+    let __local_178: ref null Formatter;
+    let __local_179: ref null "core:internal/Box<u16>";
+    let __local_180: ref null Formatter;
+    let __local_181: ref null "core:internal/Box<u16>";
+    let __local_182: ref null Formatter;
+    let __local_183: ref null "core:internal/Box<u16>";
     let __local_184: ref null Formatter;
-    let __local_185: ref null String;
-    let __local_186: i32;
-    let __local_187: ref null String;
-    let __local_188: ref null "core:internal/Box<i32>";
-    let __local_189: ref null Formatter;
-    let __local_190: ref null "core:internal/Box<i32>";
-    let __local_191: ref null Formatter;
-    let __local_192: ref null String;
-    let __local_193: ref null "core:internal/Box<u16>";
-    let __local_194: ref null Formatter;
-    let __local_195: ref null "core:internal/Box<u16>";
-    let __local_196: ref null Formatter;
-    let __local_197: ref null "core:internal/Box<u16>";
-    let __local_198: ref null Formatter;
-    let __local_199: ref null "core:internal/Box<u16>";
-    let __local_200: ref null Formatter;
+    let __local_185: ref null Formatter;
+    let __local_186: ref null String;
+    let __local_187: i32;
+    let __local_188: ref null String;
+    let __local_189: ref null "core:internal/Box<i32>";
+    let __local_190: ref null Formatter;
+    let __local_191: ref null "core:internal/Box<i32>";
+    let __local_192: ref null Formatter;
+    let __local_193: ref null String;
+    let __local_194: ref null "core:internal/Box<u16>";
+    let __local_195: ref null Formatter;
+    let __local_196: ref null "core:internal/Box<u16>";
+    let __local_197: ref null Formatter;
+    let __local_198: ref null "core:internal/Box<u16>";
+    let __local_199: ref null Formatter;
+    let __local_200: ref null "core:internal/Box<u16>";
     let __local_201: ref null Formatter;
-    let __local_202: ref null String;
-    let __let_pattern_0: ref null "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]";
+    let __local_202: ref null Formatter;
+    let __local_203: ref null String;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
-    __let_pattern_0 = "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
-    __local_1 = __let_pattern_0.0;
-    __local_2 = __let_pattern_0.1;
+    __pattern_temp_0 = "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
+    trailers_future = __pattern_temp_0.0;
+    trailers_tx = __pattern_temp_0.1;
     headers = __cm_adapter__Fields_new();
-    let __sroa___pattern_temp_0_0: i32;
-    let __sroa___pattern_temp_0_1: i32;
-    multivalue_bind [__sroa___pattern_temp_0_0, __sroa___pattern_temp_0_1] = __cm_adapter__Response_new(headers, 0, 0, __local_1);
-    response = __sroa___pattern_temp_0_0;
-    _tx_future = __sroa___pattern_temp_0_1;
+    let __sroa___pattern_temp_1_0: i32;
+    let __sroa___pattern_temp_1_1: i32;
+    multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = __cm_adapter__Response_new(headers, 0, 0, trailers_future);
+    response = __sroa___pattern_temp_1_0;
+    _tx_future = __sroa___pattern_temp_1_1;
     default_status = __cm_adapter__Response_get_status_code(response);
     __cond_8 = default_status == 200;
     if __cond_8 == 0 {
@@ -626,23 +623,23 @@ fn handle(request) {
             String::append(__local_13, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-response-ops.wado"), used: 51 });
             String::append_char(__local_13, 58);
             __local_14 = __inline_Formatter__new_1: block -> ref null Formatter {
-                __local_170 = __local_13;
-                break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_170) };
+                __local_171 = __local_13;
+                break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_171) };
             };
-            __local_172 = __local_14;
-            i32::fmt_decimal(26, __local_172);
+            __local_173 = __local_14;
+            i32::fmt_decimal(26, __local_173);
             String::append(__local_13, String { repr: array.new_data<u8>("
 condition: default_status == 200
 "), used: 34 });
             String::append(__local_13, String { repr: array.new_data<u8>("default_status: "), used: 16 });
             __local_14 = __inline_Formatter__new_4: block -> ref null Formatter {
-                __local_175 = __local_13;
-                break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_175) };
+                __local_176 = __local_13;
+                break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_176) };
             };
-            __local_177 = __local_14;
-            i32::fmt_decimal(default_status & 65535, __local_177);
-            __local_185 = String { repr: array.new_data<u8>(" as StatusCode"), used: 14 };
-            String::append(__local_177.buf, __local_185);
+            __local_178 = __local_14;
+            i32::fmt_decimal(default_status & 65535, __local_178);
+            __local_186 = String { repr: array.new_data<u8>(" as StatusCode"), used: 14 };
+            String::append(__local_178.buf, __local_186);
             String::append_char(__local_13, 10);
             break __tmpl: __local_13;
         });
@@ -668,23 +665,23 @@ condition: default_status == 200
             String::append(__local_15, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-response-ops.wado"), used: 51 });
             String::append_char(__local_15, 58);
             __local_16 = __inline_Formatter__new_11: block -> ref null Formatter {
-                __local_187 = __local_15;
-                break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_187) };
+                __local_188 = __local_15;
+                break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_188) };
             };
-            __local_189 = __local_16;
-            i32::fmt_decimal(33, __local_189);
+            __local_190 = __local_16;
+            i32::fmt_decimal(33, __local_190);
             String::append(__local_15, String { repr: array.new_data<u8>("
 condition: new_status == 404
 "), used: 30 });
             String::append(__local_15, String { repr: array.new_data<u8>("new_status: "), used: 12 });
             __local_16 = __inline_Formatter__new_14: block -> ref null Formatter {
-                __local_192 = __local_15;
-                break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_192) };
+                __local_193 = __local_15;
+                break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_193) };
             };
-            __local_194 = __local_16;
-            i32::fmt_decimal(new_status & 65535, __local_194);
-            __local_202 = String { repr: array.new_data<u8>(" as StatusCode"), used: 14 };
-            String::append(__local_194.buf, __local_202);
+            __local_195 = __local_16;
+            i32::fmt_decimal(new_status & 65535, __local_195);
+            __local_203 = String { repr: array.new_data<u8>(" as StatusCode"), used: 14 };
+            String::append(__local_195.buf, __local_203);
             String::append_char(__local_15, 10);
             break __tmpl: __local_15;
         });
@@ -1002,7 +999,7 @@ condition: new_status == 404
     builtin::store_i64[16](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[24](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[32](__fw_write_ptr_2, 0_i64);
-    drop("wasi/future-write"(__local_2, __fw_write_ptr_2));
+    drop("wasi/future-write"(trailers_tx, __fw_write_ptr_2));
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
 }
 

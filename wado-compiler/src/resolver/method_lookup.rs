@@ -244,6 +244,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 name,
                 module_source,
             } => (name.clone(), Some(module_source.clone()), None, None),
+            // Future<T> - resource methods declared in core:prelude/types.wado
+            ResolvedType::Future(inner) => (
+                "Future".to_string(),
+                Some(ModuleSource::types()),
+                Some(vec![*inner]),
+                None,
+            ),
             // Stream<T> - resource methods declared in core:prelude/types.wado
             ResolvedType::Stream(inner) => (
                 "Stream".to_string(),

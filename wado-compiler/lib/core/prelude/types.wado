@@ -36,62 +36,137 @@ impl Default for Option<T> {
     pub fn default() -> Option<T> { return null; }
 }
 
-/// Future type - readable end of an async value (WASI Component Model primitive).
-/// This is an opaque i32 handle managed by the runtime.
+/// Readable end of an async value (WASI Component Model future).
+/// Opaque i32 handle managed by the runtime.
 ///
-/// Use `Future::<T>::new()` to create a new future pair `[Future<T>, FutureWritable<T>]`.
-/// The readable end (`Future<T>`) is passed to consumers; the writable end (`FutureWritable<T>`)
-/// is used by the producer to fulfill the future.
+/// Use `Future::<T>::new()` to create a `[Future<T>, FutureWritable<T>]` pair.
+/// The readable end is passed to consumers; the writable end fulfills the future.
 pub resource Future<T> {
-    #[canonical("future_create_pair")]
+    /// Create a new future pair: [Future<T>, FutureWritable<T>].
+    #[canonical("future-new")]
     fn new() -> [Future<T>, FutureWritable<T>];
-}
 
-/// FutureWritable type - writable end of an async value (WASI Component Model primitive).
-/// This is an opaque i32 handle managed by the runtime.
-///
-/// Obtained from `Future::<T>::new()`. Call `write(value)` to fulfill the future,
-/// or `drop()` to cancel it without fulfilling (maps to `future.drop-writable`).
-pub resource FutureWritable<T> {
-    /// Resolve the future with a value.
-    /// Currently supports writing Result<Option<Trailers>, ErrorCode>::Ok(null) (HTTP trailers).
-    #[canonical("future_write")]
-    fn write(&self, value: T);
-    /// Drop the writable end without resolving the future (cancels the future).
-    #[canonical("future_drop_writable")]
-    fn drop(&self);
-}
+    /// Read the value from the future.
+    /// Returns Some(value) when fulfilled, None if the writer dropped without writing.
+    #[canonical("future-read")]
+    fn read(&self) -> Option<T>;
 
-/// Stream type - readable end of an async sequence (WASI Component Model primitive).
-/// This is an opaque i32 handle managed by the runtime.
-///
-/// Use `Stream::<T>::new()` to create a new stream pair `[Stream<T>, StreamWritable<T>]`.
-/// The readable end (`Stream<T>`) is passed to consumers; the writable end (`StreamWritable<T>`)
-/// is used by the producer to write data into the stream.
-pub resource Stream<T> {
-    #[canonical("stream_create_pair")]
-    fn new() -> [Stream<T>, StreamWritable<T>];
-    /// Read up to `max` elements from the stream.
-    /// Blocks until data is available or the writer closes.
-    /// Returns an empty array on end-of-stream.
-    #[canonical("stream_read")]
-    fn read(&self, max: i32) -> Array<T>;
-    /// Close the readable end of the stream.
-    #[canonical("stream_drop_readable")]
+    /// Close the readable end of the future.
+    #[canonical("future-close-readable")]
     fn close(&self);
 }
 
-/// StreamWritable type - writable end of an async sequence (WASI Component Model primitive).
-/// This is an opaque i32 handle managed by the runtime.
+/// Writable end of an async value (WASI Component Model future).
+/// Opaque i32 handle managed by the runtime.
+pub resource FutureWritable<T> {
+    /// Fulfill the future with a value.
+    #[canonical("future-write")]
+    fn write(&self, value: T);
+
+    /// Close the writable end without fulfilling (cancels the future).
+    #[canonical("future-close-writable")]
+    fn close(&self);
+
+    /// Drop this writable end handle. Traps if no value has been written yet.
+    #[canonical("future-drop-writable")]
+    fn drop(&self);
+}
+
+/// Readable end of an async sequence (WASI Component Model stream).
+/// Opaque i32 handle managed by the runtime.
 ///
-/// Obtained from `Stream::<T>::new()`. Call `write(data)` to send data,
-/// or `close()` to signal end-of-stream (maps to `stream.drop-writable`).
+/// Use `Stream::<T>::new()` to create a `[Stream<T>, StreamWritable<T>]` pair.
+pub resource Stream<T> {
+    /// Create a new stream pair: [Stream<T>, StreamWritable<T>].
+    #[canonical("stream-new")]
+    fn new() -> [Stream<T>, StreamWritable<T>];
+
+    /// Read up to `max` elements from the stream.
+    /// Blocks until data is available or the writer closes.
+    /// Returns an empty array on end-of-stream.
+    #[canonical("stream-read")]
+    fn read(&self, max: i32) -> Array<T>;
+
+    /// Close the readable end of the stream.
+    #[canonical("stream-close-readable")]
+    fn close(&self);
+}
+
+/// Writable end of an async sequence (WASI Component Model stream).
+/// Opaque i32 handle managed by the runtime.
 pub resource StreamWritable<T> {
     /// Write a chunk of data to the stream.
-    /// Can be called multiple times for successive chunks.
-    #[canonical("stream_write")]
+    #[canonical("stream-write")]
     fn write(&self, data: Array<T>);
+
     /// Close the writable end, signaling end-of-stream.
-    #[canonical("stream_drop_writable")]
+    #[canonical("stream-close-writable")]
+    fn close(&self);
+}
+
+/// Opaque token identifying a waitable handle within a WaitableSet.
+/// Obtained from `Subtask::join`. Compared by handle identity (==).
+pub resource Waitable;
+
+impl Eq for Waitable {
+    pub fn eq(&self, other: &Self) -> bool {
+        return *self as i32 == *other as i32;
+    }
+}
+
+/// Event returned by `WaitableSet::wait` or `WaitableSet::poll`.
+pub struct WaitEvent {
+    /// CM event code:
+    ///   1 = subtask, 2 = stream-read, 3 = stream-write, 4 = future-read, 5 = future-write, 6 = cancelled
+    pub code: i32,
+    /// Which waitable handle triggered the event.
+    pub handle: Waitable,
+    /// Event-specific data (e.g. count|status for streams).
+    pub payload: u32,
+}
+
+/// A set of waitable handles used for async task coordination.
+pub resource WaitableSet {
+    /// Create a new waitable set.
+    #[canonical("waitable-set-new")]
+    fn new() -> WaitableSet;
+
+    /// Block until an event occurs. Returns the event details.
+    #[canonical("waitable-set-wait")]
+    fn wait(&self) -> WaitEvent;
+
+    /// Non-blocking poll. Returns Some(event) if ready, None otherwise.
+    #[canonical("waitable-set-poll")]
+    fn poll(&self) -> Option<WaitEvent>;
+
+    /// Close (drop) the waitable set.
+    #[canonical("waitable-set-drop")]
+    fn close(&self);
+}
+
+/// An async subtask handle returned by CM async operations.
+pub resource Subtask {
+    /// Close (drop) a completed subtask handle.
+    #[canonical("subtask-drop")]
+    fn close(&self);
+
+    /// Join this subtask to a waitable set.
+    /// Returns a Waitable token identifying this subtask in wait results.
+    #[canonical("waitable-join")]
+    fn join(&self, set: &WaitableSet) -> Waitable;
+}
+
+/// An error context carrying a debug message across component boundaries.
+pub resource ErrorContext {
+    /// Create a new error context with the given message.
+    #[canonical("error-context-new")]
+    fn new(message: String) -> ErrorContext;
+
+    /// Get the debug message from this error context.
+    #[canonical("error-context-debug-message")]
+    fn debug_message(&self) -> String;
+
+    /// Close (drop) the error context.
+    #[canonical("error-context-drop")]
     fn close(&self);
 }

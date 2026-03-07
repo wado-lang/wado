@@ -589,54 +589,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
-        // Handle Future::<T>::new() and Stream::<T>::new()
-        // Creates a handle pair:
-        //   Future<T>::new() -> [Future<T>, FutureWritable<T>]
-        //   Stream<T>::new() -> [Stream<T>, StreamWritable<T>]
-        {
-            let target_resolved = self.type_table.borrow().get(target_type_id).clone();
-            let pair_info = match &target_resolved {
-                ResolvedType::Future(inner) if static_call.method == "new" && args.is_empty() => {
-                    Some(("future_create_pair", target_type_id, *inner, true))
-                }
-                ResolvedType::Stream(inner) if static_call.method == "new" && args.is_empty() => {
-                    Some(("stream_create_pair", target_type_id, *inner, false))
-                }
-                _ => None,
-            };
-
-            if let Some((builtin_name, handle_type, inner, is_future)) = pair_info {
-                let tx_type = if is_future {
-                    self.type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::FutureWritable(inner))
-                } else {
-                    self.type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::StreamWritable(inner))
-                };
-                let tuple_type = self
-                    .type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::Tuple(vec![handle_type, tx_type]));
-
-                return TirExpr::new(
-                    TirExprKind::Call {
-                        func: FunctionRef::External {
-                            module_source: ModuleSource::builtin(),
-                            name: builtin_name.to_string(),
-                            monomorph_info: None,
-                            method_info: None,
-                        },
-                        type_args: vec![],
-                        args: vec![],
-                    },
-                    tuple_type,
-                    static_call.span,
-                );
-            }
-        }
-
         // Handle custom variant construction: Shape::Circle(5.0) or MyVariant::Unit
         if let ResolvedType::Variant {
             name,
@@ -773,6 +725,33 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 name,
                 module_source,
             } => (name.clone(), module_source.clone(), name.clone(), vec![]),
+            // Generic resource types with a special ResolvedType variant (Future, Stream, etc.)
+            // are handled like generic structs for static method resolution: use the base name
+            // and inner type as a type argument for type substitution.
+            ResolvedType::Future(inner) => (
+                "Future".to_string(),
+                ModuleSource::types(),
+                "Future".to_string(),
+                vec![*inner],
+            ),
+            ResolvedType::Stream(inner) => (
+                "Stream".to_string(),
+                ModuleSource::types(),
+                "Stream".to_string(),
+                vec![*inner],
+            ),
+            ResolvedType::StreamWritable(inner) => (
+                "StreamWritable".to_string(),
+                ModuleSource::types(),
+                "StreamWritable".to_string(),
+                vec![*inner],
+            ),
+            ResolvedType::FutureWritable(inner) => (
+                "FutureWritable".to_string(),
+                ModuleSource::types(),
+                "FutureWritable".to_string(),
+                vec![*inner],
+            ),
             ResolvedType::Primitive(prim) => {
                 let name = prim.as_str().to_string();
                 (name.clone(), ModuleSource::primitives(), name, vec![])
@@ -918,9 +897,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
             };
 
         // Build method_info with base struct name and trait name (if applicable)
-        let method_info =
-            LocalMethodName::new(struct_name, trait_name_opt, static_call.method.clone())
-                .with_struct_type_args(&impl_type_arg_names);
+        let mut method_info = LocalMethodName::new(
+            struct_name.clone(),
+            trait_name_opt,
+            static_call.method.clone(),
+        )
+        .with_struct_type_args(&impl_type_arg_names);
+
+        // Propagate #[canonical("...")] from resource static methods so the WIR translator
+        // can intercept canonical operations (e.g., stream-new, waitable-set-new).
+        method_info.canonical_name = self.lookup_resource_static_canonical(
+            &struct_name,
+            &struct_module,
+            &static_call.method,
+        );
 
         TirExpr::new(
             TirExprKind::StaticCall {
@@ -935,6 +925,37 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return_type,
             static_call.span,
         )
+    }
+
+    /// Look up `#[canonical("...")]` for a static (no-self) method on a resource type in a module.
+    fn lookup_resource_static_canonical(
+        &self,
+        struct_name: &str,
+        struct_module: &ModuleSource,
+        method_name: &str,
+    ) -> Option<String> {
+        let module = self.loaded_modules.get(struct_module)?;
+        for item in &module.items {
+            if let crate::ast::Item::Resource(resource) = item
+                && resource.name == struct_name
+            {
+                for method in &resource.methods {
+                    let has_self = method.params.iter().any(|p| {
+                        matches!(&p.ty, crate::ast::Type::Reference(r) | crate::ast::Type::MutReference(r)
+                            if matches!(&**r, crate::ast::Type::Named(n) if n.name == "Self" || n.name == resource.name))
+                            || matches!(&p.ty, crate::ast::Type::Named(n) if n.name == "Self" || n.name == resource.name)
+                    });
+                    if method.name == method_name && !has_self {
+                        return method
+                            .attrs
+                            .iter()
+                            .find(|a| a.name == "canonical")
+                            .and_then(|a| a.args.first().cloned());
+                    }
+                }
+            }
+        }
+        None
     }
 
     /// Look up static method return type based on struct name and method name

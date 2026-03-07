@@ -608,14 +608,16 @@ impl<'a> WirEmitter<'a> {
     }
 
     fn build_func_index_map(&mut self) {
+        use crate::wir_build::DEFINED_FUNC_BASE;
         // Import functions already have indices 0..import_func_count-1
         for i in 0..self.func_index_offset {
             self.func_index_map.insert(i, i);
         }
-        // Defined functions start at import_func_count, skipping dead (extracted) ones
+        // Defined functions use DEFINED_FUNC_BASE + list_position as WirFuncId,
+        // mapped to actual Wasm indices starting after imports.
         let mut wasm_idx = self.func_index_offset;
         for (i, _func) in self.wir.functions.iter().enumerate() {
-            let wir_func_idx = self.func_index_offset + u32::try_from(i).unwrap();
+            let wir_func_idx = DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
             if self
                 .wir
                 .dead_func_indices
@@ -724,7 +726,7 @@ impl<'a> WirEmitter<'a> {
             let wasm_func = self.emit_function(func);
             code.function(&wasm_func);
             if !self.current_branch_hints.is_empty() {
-                let wir_func_idx = self.func_index_offset + u32::try_from(i).unwrap();
+                let wir_func_idx = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
                 let func_idx = self.func_index_map[&wir_func_idx];
                 self.all_branch_hints
                     .push((func_idx, std::mem::take(&mut self.current_branch_hints)));
@@ -1761,7 +1763,7 @@ impl<'a> WirEmitter<'a> {
             // Generate names from WIR functions using remapped Wasm indices
             let mut name_map = NameMap::new();
             for (i, func) in self.wir.functions.iter().enumerate() {
-                let wir_func_idx = self.func_index_offset + u32::try_from(i).unwrap();
+                let wir_func_idx = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
                 if let Some(&wasm_idx) = self.func_index_map.get(&wir_func_idx) {
                     name_map.append(wasm_idx, &func.name.display);
                 }

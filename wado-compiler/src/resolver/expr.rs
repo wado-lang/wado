@@ -758,6 +758,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .collect();
                 self.type_table.borrow_mut().make_tuple(new_elems)
             }
+            ResolvedType::Stream(inner) => {
+                let new_inner = self.substitute_type_params(inner, type_args);
+                self.type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::Stream(new_inner))
+            }
+            ResolvedType::StreamWritable(inner) => {
+                let new_inner = self.substitute_type_params(inner, type_args);
+                self.type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::StreamWritable(new_inner))
+            }
+            ResolvedType::Future(inner) => {
+                let new_inner = self.substitute_type_params(inner, type_args);
+                self.type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::Future(new_inner))
+            }
+            ResolvedType::FutureWritable(inner) => {
+                let new_inner = self.substitute_type_params(inner, type_args);
+                self.type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::FutureWritable(new_inner))
+            }
             ResolvedType::GenericInstance {
                 name,
                 module_source,

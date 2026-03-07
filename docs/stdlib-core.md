@@ -45,25 +45,52 @@ Right-aligned (default for numbers): `{x:>5}` -> " 42"
 
 #### `pub resource Future<T>`
 
-Future type - readable end of an async value (WASI Component Model primitive).
-This is an opaque i32 handle managed by the runtime.
+Readable end of an async value (WASI Component Model future).
+Opaque i32 handle managed by the runtime.
 
-Use `Future::<T>::new()` to create a new future pair `[Future<T>, FutureWritable<T>]`.
-The readable end (`Future<T>`) is passed to consumers; the writable end (`FutureWritable<T>`)
-is used by the producer to fulfill the future.
+Use `Future::<T>::new()` to create a `[Future<T>, FutureWritable<T>]` pair.
+The readable end is passed to consumers; the writable end fulfills the future.
 
 ##### `fn new() -> [Future<T>, FutureWritable<T>]`
 
+Create a new future pair: [Future<T>, FutureWritable<T>].
+
+##### `fn read(&self) -> Option<T>`
+
+Read the value from the future.
+Returns Some(value) when fulfilled, None if the writer dropped without writing.
+
+##### `fn close(&self)`
+
+Close the readable end of the future.
+
+#### `pub resource FutureWritable<T>`
+
+Writable end of an async value (WASI Component Model future).
+Opaque i32 handle managed by the runtime.
+
+##### `fn write(&self, value: T)`
+
+Fulfill the future with a value.
+
+##### `fn close(&self)`
+
+Close the writable end without fulfilling (cancels the future).
+
+##### `fn drop(&self)`
+
+Drop this writable end handle. Traps if no value has been written yet.
+
 #### `pub resource Stream<T>`
 
-Stream type - readable end of an async sequence (WASI Component Model primitive).
-This is an opaque i32 handle managed by the runtime.
+Readable end of an async sequence (WASI Component Model stream).
+Opaque i32 handle managed by the runtime.
 
-Use `Stream::<T>::new()` to create a new stream pair `[Stream<T>, StreamWritable<T>]`.
-The readable end (`Stream<T>`) is passed to consumers; the writable end (`StreamWritable<T>`)
-is used by the producer to write data into the stream.
+Use `Stream::<T>::new()` to create a `[Stream<T>, StreamWritable<T>]` pair.
 
 ##### `fn new() -> [Stream<T>, StreamWritable<T>]`
+
+Create a new stream pair: [Stream<T>, StreamWritable<T>].
 
 ##### `fn read(&self, max: i32) -> Array<T>`
 
@@ -77,20 +104,70 @@ Close the readable end of the stream.
 
 #### `pub resource StreamWritable<T>`
 
-StreamWritable type - writable end of an async sequence (WASI Component Model primitive).
-This is an opaque i32 handle managed by the runtime.
-
-Obtained from `Stream::<T>::new()`. Call `write(data)` to send data,
-or `close()` to signal end-of-stream (maps to `stream.drop-writable`).
+Writable end of an async sequence (WASI Component Model stream).
+Opaque i32 handle managed by the runtime.
 
 ##### `fn write(&self, data: Array<T>)`
 
 Write a chunk of data to the stream.
-Can be called multiple times for successive chunks.
 
 ##### `fn close(&self)`
 
 Close the writable end, signaling end-of-stream.
+
+#### `pub resource Waitable`
+
+Opaque token identifying a waitable handle within a WaitableSet.
+Obtained from `Subtask::join`. Compared by handle identity (==).
+
+#### `pub resource WaitableSet`
+
+A set of waitable handles used for async task coordination.
+
+##### `fn new() -> WaitableSet`
+
+Create a new waitable set.
+
+##### `fn wait(&self) -> WaitEvent`
+
+Block until an event occurs. Returns the event details.
+
+##### `fn poll(&self) -> Option<WaitEvent>`
+
+Non-blocking poll. Returns Some(event) if ready, None otherwise.
+
+##### `fn close(&self)`
+
+Close (drop) the waitable set.
+
+#### `pub resource Subtask`
+
+An async subtask handle returned by CM async operations.
+
+##### `fn close(&self)`
+
+Close (drop) a completed subtask handle.
+
+##### `fn join(&self, set: &WaitableSet) -> Waitable`
+
+Join this subtask to a waitable set.
+Returns a Waitable token identifying this subtask in wait results.
+
+#### `pub resource ErrorContext`
+
+An error context carrying a debug message across component boundaries.
+
+##### `fn new(message: String) -> ErrorContext`
+
+Create a new error context with the given message.
+
+##### `fn debug_message(&self) -> String`
+
+Get the debug message from this error context.
+
+##### `fn close(&self)`
+
+Close (drop) the error context.
 
 ### Traits
 
@@ -772,6 +849,23 @@ Convert i128 to String (for template string interpolation)
 ##### `impl Default for i128`
 
 ###### `pub fn default() -> i128`
+
+#### `pub struct WaitEvent`
+
+Event returned by `WaitableSet::wait` or `WaitableSet::poll`.
+
+##### `code: i32`
+
+CM event code:
+1 = subtask, 2 = stream-read, 3 = stream-write, 4 = future-read, 5 = future-write, 6 = cancelled
+
+##### `handle: Waitable`
+
+Which waitable handle triggered the event.
+
+##### `payload: u32`
+
+Event-specific data (e.g. count|status for streams).
 
 #### `pub struct String`
 
