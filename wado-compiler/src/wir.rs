@@ -1203,6 +1203,21 @@ impl WirInstr {
         instrs.iter().any(Self::always_diverges)
     }
 
+    /// Returns true if this instruction is guaranteed to produce a non-null
+    /// reference. Used to skip redundant `RefAsNonNull` wrappers.
+    pub fn is_nonnull_result(&self) -> bool {
+        matches!(
+            self,
+            Self::StructNew { .. }
+                | Self::ArrayNew { .. }
+                | Self::ArrayNewDefault { .. }
+                | Self::ArrayNewData { .. }
+                | Self::ArrayNewFixed { .. }
+                | Self::RefAsNonNull(_)
+                | Self::RefI31(_)
+        )
+    }
+
     /// Visit all child instructions of this node (non-recursive).
     /// Used by the emitter for pre-scanning (e.g., collecting `DeclareLocal`).
     #[allow(clippy::many_single_char_names)]

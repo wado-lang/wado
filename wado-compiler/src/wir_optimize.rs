@@ -16,6 +16,8 @@
 //!   sequences with `MultiValueLocalBind` to skip intermediate struct allocation.
 //! - **Constant array data promotion**: replaces `ArrayNewFixed` of constant primitive
 //!   values with `ArrayNewData` backed by a passive data segment.
+//! - **Cleanup**: removes redundant `RefAsNonNull`, `Nop`, and dead code after
+//!   `Unreachable`, normalizing WIR so that codegen can emit it as-is.
 
 use indexmap::{IndexMap, IndexSet};
 
@@ -73,6 +75,10 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
             optimize_instrs(body, types);
         }
     }
+
+    // Final cleanup pass: normalize the WIR so that codegen can emit it as-is.
+    // Removes nops, redundant ref.as_non_null, and dead code after unreachable.
+    cleanup_wir(module);
 }
 
 /// Multi-value return SROA (Scalar Replacement of Aggregates).
@@ -3705,11 +3711,12 @@ fn try_extract_array_new_default(
         return None;
     }
 
-    // First field: RefAsNonNull(ArrayNewDefault { type_id, len: I32Const(N) })
-    let WirInstr::RefAsNonNull(inner) = &fields[0] else {
-        return None;
+    // First field: ArrayNewDefault or RefAsNonNull(ArrayNewDefault)
+    let array_new_default = match &fields[0] {
+        WirInstr::RefAsNonNull(inner) => inner.as_ref(),
+        other => other,
     };
-    let WirInstr::ArrayNewDefault { type_id, len } = inner.as_ref() else {
+    let WirInstr::ArrayNewDefault { type_id, len } = array_new_default else {
         return None;
     };
     let WirInstr::I32Const(capacity) = len.as_ref() else {
@@ -3962,12 +3969,16 @@ fn rewrite_init_to_fixed(instr: &mut WirInstr, init_info: &ArrayInitInfo, values
         _ => return,
     };
 
-    // Replace fields[0]: RefAsNonNull(ArrayNewDefault) → RefAsNonNull(ArrayNewFixed)
-    if let Some(WirInstr::RefAsNonNull(inner)) = array_fields.first_mut() {
-        **inner = WirInstr::ArrayNewFixed {
+    // Replace fields[0]: ArrayNewDefault → ArrayNewFixed (with or without RefAsNonNull)
+    if let Some(first) = array_fields.first_mut() {
+        let new_fixed = WirInstr::ArrayNewFixed {
             type_id: init_info.raw_array_type_id.clone(),
             elements: values,
         };
+        match first {
+            WirInstr::RefAsNonNull(inner) => **inner = new_fixed,
+            _ => *first = new_fixed,
+        }
     }
 
     // Replace fields[used_field_index]: I32Const(0) → I32Const(N)
@@ -3983,33 +3994,31 @@ impl ArrayAccessPath {
 }
 
 /// Find the inner Array<T> fields within a wrapper struct's fields.
-/// Looks for RefAsNonNull(StructNew { fields }) pattern.
+/// Looks for `StructNew { fields }` (with or without `RefAsNonNull` wrapper).
 fn find_inner_array_fields(outer_fields: &mut [WirInstr]) -> Option<&mut Vec<WirInstr>> {
     for field in outer_fields.iter_mut() {
-        match field {
-            WirInstr::RefAsNonNull(inner) => {
-                if let WirInstr::StructNew { fields, .. } = inner.as_mut() {
-                    // Check if this has the ArrayNewDefault pattern
-                    if fields.len() == 2
-                        && matches!(&fields[0], WirInstr::RefAsNonNull(i) if matches!(i.as_ref(), WirInstr::ArrayNewDefault { .. }))
-                        && matches!(&fields[1], WirInstr::I32Const(0))
-                    {
-                        return Some(fields);
-                    }
-                }
-            }
-            WirInstr::StructNew { fields, .. } => {
-                if fields.len() == 2
-                    && matches!(&fields[0], WirInstr::RefAsNonNull(i) if matches!(i.as_ref(), WirInstr::ArrayNewDefault { .. }))
-                    && matches!(&fields[1], WirInstr::I32Const(0))
-                {
-                    return Some(fields);
-                }
-            }
-            _ => {}
+        let struct_new = match field {
+            WirInstr::RefAsNonNull(inner) => inner.as_mut(),
+            other => other,
+        };
+        if let WirInstr::StructNew { fields, .. } = struct_new
+            && fields.len() == 2
+            && is_array_new_default(&fields[0])
+            && matches!(&fields[1], WirInstr::I32Const(0))
+        {
+            return Some(fields);
         }
     }
     None
+}
+
+/// Check if an instruction is `ArrayNewDefault` (with or without `RefAsNonNull` wrapper).
+fn is_array_new_default(instr: &WirInstr) -> bool {
+    match instr {
+        WirInstr::ArrayNewDefault { .. } => true,
+        WirInstr::RefAsNonNull(inner) => matches!(inner.as_ref(), WirInstr::ArrayNewDefault { .. }),
+        _ => false,
+    }
 }
 
 /// Rewrite `String::append(buf, "short_constant")` calls into sequences of
@@ -4588,4 +4597,62 @@ fn invalidate_locals_modified_in_instr(instr: &WirInstr, known: &mut FieldKnowle
     instr.for_each_child(&mut |child| {
         invalidate_locals_modified_in_instr(child, known);
     });
+}
+
+/// Final cleanup pass: normalize WIR so that codegen can emit it as-is.
+///
+/// - Removes `RefAsNonNull(inner)` where `inner` already produces a non-null ref.
+/// - Removes `Nop` instructions from instruction sequences.
+/// - Removes dead code after `Unreachable` in instruction sequences.
+fn cleanup_wir(module: &mut WirModule) {
+    for func in &mut module.functions {
+        if let Some(body) = &mut func.body {
+            cleanup_instrs(body);
+        }
+    }
+}
+
+fn cleanup_instrs(instrs: &mut Vec<WirInstr>) {
+    for instr in instrs.iter_mut() {
+        cleanup_instr(instr);
+    }
+    // Remove nops.
+    instrs.retain(|i| !matches!(i, WirInstr::Nop));
+    // Truncate after first unreachable (dead code elimination).
+    if let Some(pos) = instrs
+        .iter()
+        .position(|i| matches!(i, WirInstr::Unreachable))
+    {
+        instrs.truncate(pos + 1);
+    }
+}
+
+fn cleanup_instr(instr: &mut WirInstr) {
+    // Recurse into nested bodies first (bottom-up).
+    match instr {
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+            cleanup_instrs(body);
+        }
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            cleanup_instr(condition);
+            cleanup_instrs(then_body);
+            if let Some(eb) = else_body {
+                cleanup_instrs(eb);
+            }
+        }
+        _ => {
+            instr.for_each_boxed_child_mut(&mut |child| cleanup_instr(child));
+        }
+    }
+    // Elide redundant RefAsNonNull wrapping a non-null-producing instruction.
+    if let WirInstr::RefAsNonNull(inner) = instr
+        && inner.is_nonnull_result()
+    {
+        *instr = std::mem::replace(inner.as_mut(), WirInstr::Nop);
+    }
 }
