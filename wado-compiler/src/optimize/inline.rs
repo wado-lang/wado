@@ -1102,7 +1102,7 @@ fn try_inline_call_expr(
             TirStmtKind::Let {
                 name: param.name.clone(),
                 local_index: new_local_index,
-                is_mut: false, // Parameters are immutable
+                is_mut: param.is_mut, // Preserve mutability from the original parameter
                 is_reactive: false,
                 type_id: arg.type_id,
                 value: arg.clone(),

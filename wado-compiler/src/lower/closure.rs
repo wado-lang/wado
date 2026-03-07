@@ -689,6 +689,7 @@ impl ClosureLowerer {
                 name: "self".to_string(),
                 type_id: self_ref_type,
                 local_index: 0,
+                is_mut: false,
                 span: collected.span,
             });
 
@@ -697,6 +698,7 @@ impl ClosureLowerer {
                     name: name.clone(),
                     type_id: *type_id,
                     local_index: (i + 1) as u32,
+                    is_mut: false,
                     span: collected.span,
                 });
             }

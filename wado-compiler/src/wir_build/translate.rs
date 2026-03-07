@@ -1275,7 +1275,10 @@ impl FunctionTranslator<'_, '_> {
                 let translated_args: Vec<WirInstr> = args
                     .iter()
                     .filter(|a| a.type_id != TypeTable::UNIT)
-                    .map(|a| self.translate_expr(a))
+                    .map(|a| {
+                        let translated = self.translate_expr(a);
+                        self.maybe_value_copy(a, translated)
+                    })
                     .collect();
 
                 if let Some(func_id) = self.resolve_function_ref(func) {
@@ -1306,11 +1309,13 @@ impl FunctionTranslator<'_, '_> {
                 }
 
                 let mut translated_args: Vec<WirInstr> = Vec::new();
-                // Receiver is always included (self/&self/&mut self is never unit)
+                // Receiver is always included (self/&self/&mut self is never unit).
+                // Receivers are always reference types — do not copy them.
                 translated_args.push(self.translate_expr(receiver));
                 for arg in args {
                     if arg.type_id != TypeTable::UNIT {
-                        translated_args.push(self.translate_expr(arg));
+                        let translated = self.translate_expr(arg);
+                        translated_args.push(self.maybe_value_copy(arg, translated));
                     }
                 }
 
@@ -1336,7 +1341,10 @@ impl FunctionTranslator<'_, '_> {
                 let translated_args: Vec<WirInstr> = args
                     .iter()
                     .filter(|a| a.type_id != TypeTable::UNIT)
-                    .map(|a| self.translate_expr(a))
+                    .map(|a| {
+                        let translated = self.translate_expr(a);
+                        self.maybe_value_copy(a, translated)
+                    })
                     .collect();
 
                 if let Some(func_id) = self.resolve_function_ref(func) {
@@ -4851,7 +4859,8 @@ impl FunctionTranslator<'_, '_> {
 
         let mut call_args = vec![env_arg];
         for arg in args {
-            call_args.push(self.translate_expr(arg));
+            let translated = self.translate_expr(arg);
+            call_args.push(self.maybe_value_copy(arg, translated));
         }
 
         // func_ref = struct.get $closure "func"

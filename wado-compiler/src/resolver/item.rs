@@ -298,6 +298,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 name: param.name.clone(),
                 type_id,
                 local_index: index,
+                is_mut: param.is_mut,
                 span: param.span,
             });
         }
@@ -559,6 +560,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 name: param.name.clone(),
                 type_id,
                 local_index: index,
+                is_mut: param.is_mut,
                 span: param.span,
             });
         }

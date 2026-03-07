@@ -2272,6 +2272,7 @@ impl Monomorphizer {
                 name: param.name.clone(),
                 type_id: self.substitute_type(param.type_id, &substitution, type_table),
                 local_index: param.local_index,
+                is_mut: param.is_mut,
                 span: param.span,
             })
             .collect();

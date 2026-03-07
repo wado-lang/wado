@@ -1361,6 +1361,7 @@ fn synthesize_adapter(
                     name: param_name.clone(),
                     type_id: TypeTable::I32,
                     local_index: next_local,
+                    is_mut: false,
                     span: synth_span(),
                 });
                 local_types.push(TypeTable::I32);
@@ -1377,6 +1378,7 @@ fn synthesize_adapter(
                     name: param_name.clone(),
                     type_id: TypeTable::I32,
                     local_index: next_local,
+                    is_mut: false,
                     span: synth_span(),
                 });
                 local_types.push(TypeTable::I32);
@@ -1395,6 +1397,7 @@ fn synthesize_adapter(
                         name,
                         type_id: *flat_ty,
                         local_index: next_local,
+                        is_mut: false,
                         span: synth_span(),
                     });
                     local_types.push(*flat_ty);
@@ -2786,6 +2789,7 @@ fn synthesize_result_export_adapter(
                 name: format!("__p{i}"),
                 type_id: cm_val_type_to_type_id(vt),
                 local_index: i as u32,
+                is_mut: false,
                 span: synth_span(),
             })
             .collect();
@@ -2835,6 +2839,7 @@ fn synthesize_result_export_adapter(
                 name: p.name.clone(),
                 type_id: p.type_id,
                 local_index: i as u32,
+                is_mut: false,
                 span: synth_span(),
             })
             .collect();
@@ -3314,6 +3319,7 @@ fn synthesize_general_export_adapter(
                 name: format!("__p{i}"),
                 type_id: cm_val_type_to_type_id(vt),
                 local_index: i as u32,
+                is_mut: false,
                 span: synth_span(),
             })
             .collect();
@@ -3361,6 +3367,7 @@ fn synthesize_general_export_adapter(
                 name: p.name.clone(),
                 type_id: p.type_id,
                 local_index: i as u32,
+                is_mut: false,
                 span: synth_span(),
             })
             .collect();
@@ -3519,6 +3526,7 @@ fn synthesize_async_export_adapter(
                 name: format!("__p{i}"),
                 type_id: cm_val_type_to_type_id(vt),
                 local_index: i as u32,
+                is_mut: false,
                 span: synth_span(),
             })
             .collect();
@@ -3566,6 +3574,7 @@ fn synthesize_async_export_adapter(
                 name: p.name.clone(),
                 type_id: p.type_id,
                 local_index: i as u32,
+                is_mut: false,
                 span: synth_span(),
             })
             .collect();

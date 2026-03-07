@@ -1952,6 +1952,7 @@ pub struct TirParam {
     pub name: String,
     pub type_id: TypeId,
     pub local_index: u32,
+    pub is_mut: bool,
     pub span: Span,
 }
 
