@@ -33,11 +33,12 @@ pub(super) fn create_i128_literal(value: i128, type_id: TypeId, span: Span) -> T
     let method_info = LocalMethodName::new("i128".to_string(), None, "from_i64".to_string());
     TirExpr::new(
         TirExprKind::StaticCall {
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source: ModuleSource::int128(),
                 name: "i128::from_i64".to_string(),
                 monomorph_info: None,
                 method_info: Some(method_info),
+                is_cm_adapter: false,
             },
             args: vec![inner_literal],
             param_is_mut: vec![false],
@@ -63,11 +64,12 @@ pub(super) fn create_u128_literal(value: u128, type_id: TypeId, span: Span) -> T
     let method_info = LocalMethodName::new("u128".to_string(), None, "from_u64".to_string());
     TirExpr::new(
         TirExprKind::StaticCall {
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source: ModuleSource::int128(),
                 name: "u128::from_u64".to_string(),
                 monomorph_info: None,
                 method_info: Some(method_info),
+                is_cm_adapter: false,
             },
             args: vec![inner_literal],
             param_is_mut: vec![false],
@@ -116,7 +118,7 @@ fn create_i128_eq_call(
     TirExpr::new(
         TirExprKind::MethodCall {
             receiver: Box::new(receiver),
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source: ModuleSource::int128(),
                 name: mangled_method_name,
                 monomorph_info: None,
@@ -125,6 +127,7 @@ fn create_i128_eq_call(
                     Some("Eq".to_string()),
                     "eq".to_string(),
                 )),
+                is_cm_adapter: false,
             },
             type_args: vec![],
             args: vec![arg_ref],
@@ -174,7 +177,7 @@ fn create_u128_eq_call(
     TirExpr::new(
         TirExprKind::MethodCall {
             receiver: Box::new(receiver),
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source: ModuleSource::int128(),
                 name: mangled_method_name,
                 monomorph_info: None,
@@ -183,6 +186,7 @@ fn create_u128_eq_call(
                     Some("Eq".to_string()),
                     "eq".to_string(),
                 )),
+                is_cm_adapter: false,
             },
             type_args: vec![],
             args: vec![arg_ref],

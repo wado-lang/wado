@@ -1318,7 +1318,7 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     eprintln!(
                         "[WIR] unresolved Call: name={:?} builtin={:?}",
-                        func.name(),
+                        func.name.clone(),
                         builtin
                     );
                     WirInstr::Unreachable
@@ -1357,14 +1357,14 @@ impl FunctionTranslator<'_, '_> {
                         args: translated_args,
                     }
                 } else {
-                    if let Some(mi) = func.method_info() {
+                    if let Some(mi) = func.method_info.clone() {
                         eprintln!(
                             "[WIR] unresolved MethodCall: name={:?} method_info={:?}",
-                            func.name(),
+                            func.name.clone(),
                             mi
                         );
                     } else {
-                        eprintln!("[WIR] unresolved MethodCall: name={:?}", func.name());
+                        eprintln!("[WIR] unresolved MethodCall: name={:?}", func.name.clone());
                     }
                     WirInstr::Unreachable
                 }
@@ -1376,7 +1376,7 @@ impl FunctionTranslator<'_, '_> {
                 ..
             } => {
                 // Canonical static resource method dispatch (e.g., Stream::new, WaitableSet::new)
-                if let Some(canonical) = func.method_info().and_then(|m| m.canonical_name)
+                if let Some(canonical) = func.method_info.clone().and_then(|m| m.canonical_name)
                     && let Some(instr) =
                         self.try_translate_canonical_static_method(&canonical, args, expr.type_id)
                 {
@@ -1400,7 +1400,7 @@ impl FunctionTranslator<'_, '_> {
                         args: translated_args,
                     }
                 } else {
-                    eprintln!("[WIR] unresolved StaticCall: name={:?}", func.name());
+                    eprintln!("[WIR] unresolved StaticCall: name={:?}", func.name.clone());
                     WirInstr::Unreachable
                 }
             }
@@ -2389,71 +2389,39 @@ impl FunctionTranslator<'_, '_> {
         &self,
         func_ref: &crate::tir::FunctionRef,
     ) -> Option<crate::wir::WirFuncId> {
-        use crate::tir::FunctionRef;
-        match func_ref {
-            FunctionRef::Resolved {
-                func,
-                module_source,
-                ..
-            } => {
-                let name = func.borrow().name.clone();
-                // Try direct name lookup
-                let fq = format!("{module_source}/{name}");
-                if let Some(id) = self.ctx.func_map.get(&fq) {
-                    return Some(id.clone());
-                }
-                // Try with method info
-                if let Some(method_info) = func_ref.method_info() {
-                    let mangled = method_info.to_mangled_name();
-                    let fq2 = format!("{module_source}/{mangled}");
-                    if let Some(id) = self.ctx.func_map.get(&fq2) {
-                        return Some(id.clone());
-                    }
-                    // Newtype fallback: if struct name is a newtype, try the base type name
-                    if let Some(id) = self.resolve_newtype_method(module_source, &method_info) {
-                        return Some(id);
-                    }
-                }
-                // Try searching all modules
-                for key in self.ctx.func_map.keys() {
-                    if key.ends_with(&format!("/{name}")) {
-                        return self.ctx.func_map.get(key).cloned();
-                    }
-                }
-                None
+        let module_source = &func_ref.module_source;
+        let name = &func_ref.name;
+
+        // Try direct name lookup
+        let fq = format!("{module_source}/{name}");
+        if let Some(id) = self.ctx.func_map.get(&fq) {
+            return Some(id.clone());
+        }
+        // Try alias registered during import collection (builtin/{func_name})
+        let alias = format!("builtin/{name}");
+        if let Some(id) = self.ctx.func_map.get(&alias) {
+            return Some(id.clone());
+        }
+        // Try with method info
+        if let Some(method_info) = &func_ref.method_info {
+            let mangled = method_info.to_mangled_name();
+            let fq2 = format!("{module_source}/{mangled}");
+            if let Some(id) = self.ctx.func_map.get(&fq2) {
+                return Some(id.clone());
             }
-            FunctionRef::External {
-                module_source,
-                name,
-                method_info,
-                ..
-            } => {
-                // Try direct name lookup
-                let fq = format!("{module_source}/{name}");
-                if let Some(id) = self.ctx.func_map.get(&fq) {
-                    return Some(id.clone());
-                }
-                // Try alias registered during import collection (builtin/{func_name})
-                let alias = format!("builtin/{name}");
-                if let Some(id) = self.ctx.func_map.get(&alias) {
-                    return Some(id.clone());
-                }
-                // Newtype fallback: if struct name is a newtype, try the base type name
-                if let Some(method_info) = method_info
-                    && let Some(id) = self.resolve_newtype_method(module_source, method_info)
-                {
-                    return Some(id);
-                }
-                // Try suffix match
-                let suffix = format!("/{name}");
-                for key in self.ctx.func_map.keys() {
-                    if key.ends_with(&suffix) {
-                        return self.ctx.func_map.get(key).cloned();
-                    }
-                }
-                None
+            // Newtype fallback: if struct name is a newtype, try the base type name
+            if let Some(id) = self.resolve_newtype_method(module_source, method_info) {
+                return Some(id);
             }
         }
+        // Try suffix match
+        let suffix = format!("/{name}");
+        for key in self.ctx.func_map.keys() {
+            if key.ends_with(&suffix) {
+                return self.ctx.func_map.get(key).cloned();
+            }
+        }
+        None
     }
 
     /// Try to resolve a method call on a newtype by substituting the base type name.
@@ -2920,7 +2888,7 @@ impl FunctionTranslator<'_, '_> {
         args: &[TirExpr],
         result_type_id: TypeId,
     ) -> Option<WirInstr> {
-        let canonical_name = func.method_info()?.canonical_name.as_ref()?.clone();
+        let canonical_name = func.method_info.clone()?.canonical_name.as_ref()?.clone();
         let handle = self.translate_expr(receiver);
         match canonical_name.as_str() {
             // === Stream instance methods ===

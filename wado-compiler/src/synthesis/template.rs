@@ -356,7 +356,7 @@ fn build_template_block(
     // let mut __r = String::with_capacity(N);
     let with_capacity_call = TirExpr::new(
         TirExprKind::StaticCall {
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source: ModuleSource::string(),
                 name: "String::with_capacity".to_string(),
                 monomorph_info: None,
@@ -365,6 +365,7 @@ fn build_template_block(
                     None,
                     "with_capacity".to_string(),
                 )),
+                is_cm_adapter: false,
             },
             args: vec![TirExpr::new(
                 TirExprKind::IntLiteral {
@@ -412,7 +413,7 @@ fn build_template_block(
                 let append_call = TirExpr::new(
                     TirExprKind::MethodCall {
                         receiver: Box::new(buf_ref),
-                        func: FunctionRef::External {
+                        func: FunctionRef {
                             module_source: ModuleSource::string(),
                             name: "String::append".to_string(),
                             monomorph_info: None,
@@ -421,6 +422,7 @@ fn build_template_block(
                                 None,
                                 "append".to_string(),
                             )),
+                            is_cm_adapter: false,
                         },
                         type_args: vec![],
                         args: vec![TirExpr::new(
@@ -457,7 +459,7 @@ fn build_template_block(
                     let append_call = TirExpr::new(
                         TirExprKind::MethodCall {
                             receiver: Box::new(buf_ref),
-                            func: FunctionRef::External {
+                            func: FunctionRef {
                                 module_source: ModuleSource::string(),
                                 name: "String::append".to_string(),
                                 monomorph_info: None,
@@ -466,6 +468,7 @@ fn build_template_block(
                                     None,
                                     "append".to_string(),
                                 )),
+                                is_cm_adapter: false,
                             },
                             type_args: vec![],
                             args: vec![derefed],
@@ -674,7 +677,7 @@ fn build_formatter_expr(
     if !has_custom_spec {
         return TirExpr::new(
             TirExprKind::StaticCall {
-                func: FunctionRef::External {
+                func: FunctionRef {
                     module_source: ModuleSource::format(),
                     name: "Formatter::new".to_string(),
                     monomorph_info: None,
@@ -683,6 +686,7 @@ fn build_formatter_expr(
                         None,
                         "new".to_string(),
                     )),
+                    is_cm_adapter: false,
                 },
                 args: vec![buf_mut_ref],
                 param_is_mut: vec![false],
@@ -955,11 +959,12 @@ fn trait_fmt_call(
             let call = TirExpr::new(
                 TirExprKind::MethodCall {
                     receiver: Box::new(receiver),
-                    func: FunctionRef::External {
+                    func: FunctionRef {
                         module_source: impl_mod,
                         name: mangled,
                         monomorph_info: None,
                         method_info: Some(info),
+                        is_cm_adapter: false,
                     },
                     type_args: vec![],
                     args: vec![fmt],
@@ -1072,7 +1077,7 @@ fn write_str_stmt(text: &str, fmt: TirExpr, tt: &Rc<RefCell<TypeTable>>, span: S
     let call = TirExpr::new(
         TirExprKind::MethodCall {
             receiver: Box::new(fmt),
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source: ModuleSource::format(),
                 name: "Formatter::write_str".to_string(),
                 monomorph_info: None,
@@ -1081,6 +1086,7 @@ fn write_str_stmt(text: &str, fmt: TirExpr, tt: &Rc<RefCell<TypeTable>>, span: S
                     None,
                     "write_str".into(),
                 )),
+                is_cm_adapter: false,
             },
             type_args: vec![],
             args: vec![TirExpr::new(

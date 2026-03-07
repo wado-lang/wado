@@ -2847,7 +2847,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let index_mut_call = TirExpr::new(
             TirExprKind::MethodCall {
                 receiver: Box::new(receiver_for_index_mut),
-                func: FunctionRef::External {
+                func: FunctionRef {
                     module_source: index_mut_info.impl_module_source.clone(),
                     name: mangled_index_mut_name,
                     monomorph_info: None,
@@ -2856,6 +2856,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         Some(index_mut_info.trait_name.clone()),
                         "index_mut".to_string(),
                     )),
+                    is_cm_adapter: false,
                 },
                 type_args: vec![],
                 args: vec![index_resolved],
@@ -2901,7 +2902,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         Some(TirExpr::new(
             TirExprKind::MethodCall {
                 receiver: Box::new(receiver_for_method),
-                func: FunctionRef::External {
+                func: FunctionRef {
                     module_source: method_call_module_source,
                     name: mangled_method_name,
                     monomorph_info: None,
@@ -2910,6 +2911,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         method_trait_name,
                         method_call.method.clone(),
                     )),
+                    is_cm_adapter: false,
                 },
                 type_args,
                 args,

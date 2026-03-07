@@ -168,11 +168,12 @@ fn match_to_switch(
             stmts: vec![TirStmt::new(
                 TirStmtKind::Expr(TirExpr::new(
                     TirExprKind::Call {
-                        func: FunctionRef::External {
+                        func: FunctionRef {
                             module_source: ModuleSource::internal(),
                             name: "unreachable".to_string(),
                             monomorph_info: None,
                             method_info: None,
+                            is_cm_adapter: false,
                         },
                         args: vec![],
                         type_args: vec![],
@@ -345,13 +346,7 @@ impl<'a> PatternLowerer<'a> {
 
         // Check if value is a builtin call
         let is_builtin_call = match &value.kind {
-            TirExprKind::Call { func: func_ref, .. } => {
-                if let FunctionRef::External { module_source, .. } = func_ref {
-                    module_source.is_core_builtin()
-                } else {
-                    false
-                }
-            }
+            TirExprKind::Call { func: func_ref, .. } => func_ref.module_source.is_core_builtin(),
             _ => false,
         };
 

@@ -135,7 +135,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         let call_expr = TirExpr::new(
                             TirExprKind::MethodCall {
                                 receiver: Box::new(receiver),
-                                func: FunctionRef::External {
+                                func: FunctionRef {
                                     module_source: ModuleSource::prelude(),
                                     name: mangled_method_name,
                                     monomorph_info: None,
@@ -144,6 +144,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         Some(trait_info.trait_name.clone()),
                                         "eq".to_string(),
                                     )),
+                                    is_cm_adapter: false,
                                 },
                                 type_args: vec![],
                                 args: vec![arg_ref],
@@ -230,7 +231,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         let cmp_call = TirExpr::new(
                             TirExprKind::MethodCall {
                                 receiver: Box::new(receiver),
-                                func: FunctionRef::External {
+                                func: FunctionRef {
                                     module_source: ModuleSource::prelude(),
                                     name: mangled_method_name,
                                     monomorph_info: None,
@@ -239,6 +240,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         Some(trait_info.trait_name.clone()),
                                         "cmp".to_string(),
                                     )),
+                                    is_cm_adapter: false,
                                 },
                                 type_args: vec![],
                                 args: vec![arg_ref],
@@ -361,7 +363,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     return TirExpr::new(
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
-                            func: FunctionRef::External {
+                            func: FunctionRef {
                                 module_source: ModuleSource::prelude(),
                                 name: mangled_method_name,
                                 monomorph_info: None,
@@ -370,6 +372,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     Some(trait_info.trait_name.clone()),
                                     method_name.to_string(),
                                 )),
+                                is_cm_adapter: false,
                             },
                             type_args: vec![],
                             args: vec![arg_ref],
@@ -426,7 +429,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     return TirExpr::new(
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
-                            func: FunctionRef::External {
+                            func: FunctionRef {
                                 module_source: ModuleSource::prelude(),
                                 name: mangled_method_name,
                                 monomorph_info: None,
@@ -435,6 +438,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     Some(trait_info.trait_name.clone()),
                                     method_name.to_string(),
                                 )),
+                                is_cm_adapter: false,
                             },
                             type_args: vec![],
                             args: vec![right.clone()], // Pass rhs directly (u32)
@@ -619,7 +623,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     return TirExpr::new(
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
-                            func: FunctionRef::External {
+                            func: FunctionRef {
                                 module_source: ModuleSource::prelude(),
                                 name: mangled_method_name,
                                 monomorph_info: None,
@@ -628,6 +632,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     Some(trait_info.trait_name.clone()),
                                     "neg".to_string(),
                                 )),
+                                is_cm_adapter: false,
                             },
                             type_args: vec![],
                             args: vec![],
@@ -670,7 +675,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     return TirExpr::new(
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
-                            func: FunctionRef::External {
+                            func: FunctionRef {
                                 module_source: ModuleSource::prelude(),
                                 name: mangled_method_name,
                                 monomorph_info: None,
@@ -679,6 +684,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     Some(trait_info.trait_name.clone()),
                                     "bitnot".to_string(),
                                 )),
+                                is_cm_adapter: false,
                             },
                             type_args: vec![],
                             args: vec![],
@@ -851,7 +857,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         return TirExpr::new(
                             TirExprKind::MethodCall {
                                 receiver: Box::new(receiver),
-                                func: FunctionRef::External {
+                                func: FunctionRef {
                                     module_source: trait_info.impl_module_source.clone(),
                                     name: mangled_method_name,
                                     monomorph_info: None,
@@ -860,6 +866,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         Some(trait_info.trait_name.clone()),
                                         "index_assign".to_string(),
                                     )),
+                                    is_cm_adapter: false,
                                 },
                                 type_args: vec![],
                                 args: vec![index_resolved, value],

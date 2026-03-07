@@ -383,11 +383,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         TirExpr::new(
             TirExprKind::MethodCall {
                 receiver: Box::new(receiver),
-                func: FunctionRef::External {
+                func: FunctionRef {
                     module_source: method_module_source,
                     name: mangled_method_name,
                     monomorph_info,
                     method_info: Some(method_info),
+                    is_cm_adapter: false,
                 },
                 type_args: method_type_args, // Use inferred type args
                 args,
@@ -868,11 +869,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         TirExpr::new(
             TirExprKind::StaticCall {
-                func: FunctionRef::External {
+                func: FunctionRef {
                     module_source: struct_module,
                     name: mangled_func_name,
                     monomorph_info,
                     method_info: Some(method_info),
+                    is_cm_adapter: false,
                 },
                 args,
                 param_is_mut,
@@ -1464,7 +1466,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         TirExpr::new(
             TirExprKind::StaticCall {
-                func: FunctionRef::External {
+                func: FunctionRef {
                     module_source: struct_module,
                     name: final_mangled_name,
                     monomorph_info,
@@ -1473,6 +1475,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         trait_name_opt,
                         method_name.to_string(),
                     )),
+                    is_cm_adapter: false,
                 },
                 args: args.to_vec(),
                 param_is_mut,

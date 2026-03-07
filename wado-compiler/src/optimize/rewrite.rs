@@ -267,7 +267,7 @@ fn try_lower_to_select(
     let false_val = try_select_value(else_block)?;
 
     // Construct: builtin::select(condition, true_val, false_val)
-    let func_ref = FunctionRef::External {
+    let func_ref = FunctionRef {
         module_source: ModuleSource::builtin(),
         name: "select".to_string(),
         monomorph_info: Some(MonomorphInfo {
@@ -276,6 +276,7 @@ fn try_lower_to_select(
             is_blanket: false,
         }),
         method_info: None,
+        is_cm_adapter: false,
     };
 
     Some(TirExpr::new(

@@ -2861,10 +2861,7 @@ fn synthesize_result_export_adapter(
         user_func.borrow().params.iter().map(|p| p.is_mut).collect();
     let call_user = TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef::Resolved {
-                func: user_func.clone(),
-                module_source: entry_source.clone(),
-            },
+            func: FunctionRef::from_resolved(&user_func.borrow(), entry_source.clone()),
             type_args: vec![],
             args: call_args,
             param_is_mut: call_user_param_is_mut,
@@ -3238,10 +3235,7 @@ fn synthesize_void_export_adapter(
     // Call the user's export function
     let call_user = TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef::Resolved {
-                func: user_func,
-                module_source: entry_source.clone(),
-            },
+            func: FunctionRef::from_resolved(&user_func.borrow(), entry_source.clone()),
             type_args: vec![],
             args: vec![],
             param_is_mut: vec![],
@@ -3393,10 +3387,7 @@ fn synthesize_general_export_adapter(
         user_func.borrow().params.iter().map(|p| p.is_mut).collect();
     let call_user = TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef::Resolved {
-                func: user_func.clone(),
-                module_source: entry_source.clone(),
-            },
+            func: FunctionRef::from_resolved(&user_func.borrow(), entry_source.clone()),
             type_args: vec![],
             args: call_args,
             param_is_mut: call_user_param_is_mut,
@@ -3600,10 +3591,7 @@ fn synthesize_async_export_adapter(
         user_func.borrow().params.iter().map(|p| p.is_mut).collect();
     let call_user = TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef::Resolved {
-                func: user_func.clone(),
-                module_source: entry_source.clone(),
-            },
+            func: FunctionRef::from_resolved(&user_func.borrow(), entry_source.clone()),
             type_args: vec![],
             args: call_args,
             param_is_mut: call_user_param_is_mut,
@@ -4593,7 +4581,7 @@ fn rewrite_calls_in_expr(
 ) {
     // Check if this is an effect-like Call that should be rewritten
     let is_effect_call = matches!(&expr.kind, TirExprKind::Call { func, .. }
-        if func.module_source().is_effect_like() && func.module_source().effect_name().is_some());
+        if func.module_source.clone().is_effect_like() && func.module_source.clone().effect_name().is_some());
     if is_effect_call
         && let TirExprKind::Call {
             func,
@@ -4602,8 +4590,8 @@ fn rewrite_calls_in_expr(
             ..
         } = &mut expr.kind
     {
-        let effect_name = func.module_source().effect_name().unwrap_or_default();
-        let method_name = func.name();
+        let effect_name = func.module_source.clone().effect_name().unwrap_or_default();
+        let method_name = func.name.clone();
         let qualified = format!("{effect_name}::{method_name}");
 
         if let Some(adapter_rc) = adapters.get(&qualified) {
@@ -4626,10 +4614,7 @@ fn rewrite_calls_in_expr(
             }
 
             // Rewrite to call the adapter function
-            *func = FunctionRef::Resolved {
-                func: adapter_rc.clone(),
-                module_source: entry_source.clone(),
-            };
+            *func = FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone());
             *type_args = vec![];
 
             // Recurse into args
@@ -4642,7 +4627,7 @@ fn rewrite_calls_in_expr(
 
     // Check if this is a resource MethodCall that should be rewritten to target an adapter
     if let TirExprKind::MethodCall { func, .. } = &expr.kind
-        && let Some(method_info) = func.method_info()
+        && let Some(method_info) = func.method_info.clone()
     {
         let qualified = format!(
             "{}::{}",
@@ -4702,10 +4687,7 @@ fn rewrite_calls_in_expr(
             let all_args_len = all_args.len();
 
             expr.kind = TirExprKind::Call {
-                func: FunctionRef::Resolved {
-                    func: adapter_rc.clone(),
-                    module_source: entry_source.clone(),
-                },
+                func: FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone()),
                 args: all_args,
                 type_args: vec![],
                 param_is_mut: vec![false; all_args_len],
@@ -4723,7 +4705,7 @@ fn rewrite_calls_in_expr(
 
     // Check if this is a resource StaticCall that should be rewritten to target an adapter
     if let TirExprKind::StaticCall { func, .. } = &expr.kind {
-        let func_name = func.name();
+        let func_name = func.name.clone();
         if let Some(adapter_rc) = adapters.get(&func_name) {
             // Look up WASI function info to flatten args at the call site
             let wasi_func_info = wasi_registry.get_function(&func_name).cloned();
@@ -4787,10 +4769,7 @@ fn rewrite_calls_in_expr(
             // Replace StaticCall with Call targeting the adapter
             let flat_args_len = flat_call_args.len();
             expr.kind = TirExprKind::Call {
-                func: FunctionRef::Resolved {
-                    func: adapter_rc.clone(),
-                    module_source: entry_source.clone(),
-                },
+                func: FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone()),
                 args: flat_call_args,
                 type_args: vec![],
                 param_is_mut: vec![false; flat_args_len],
@@ -4973,10 +4952,10 @@ fn collect_effect_calls_in_expr(
     match &expr.kind {
         TirExprKind::Call { func, args, .. } => {
             // Collect effect-like Call nodes (sync WASI calls like Environment::get_arguments)
-            if func.module_source().is_effect_like()
-                && let Some(effect_name) = func.module_source().effect_name()
+            if func.module_source.clone().is_effect_like()
+                && let Some(effect_name) = func.module_source.clone().effect_name()
             {
-                let method_name = func.name();
+                let method_name = func.name.clone();
                 let qualified = format!("{effect_name}::{method_name}");
                 if wasi_registry.get_function(&qualified).is_some() {
                     effects.insert(qualified);
@@ -4993,7 +4972,7 @@ fn collect_effect_calls_in_expr(
         }
         TirExprKind::StaticCall { func, args, .. } => {
             // Check if this is a WASI resource static method call (e.g., Response::new)
-            let func_name = func.name();
+            let func_name = func.name.clone();
             if wasi_registry.get_function(&func_name).is_some() {
                 effects.insert(func_name);
             }
@@ -5008,7 +4987,7 @@ fn collect_effect_calls_in_expr(
             ..
         } => {
             // Check if this is a WASI resource method call
-            if let Some(method_info) = func.method_info() {
+            if let Some(method_info) = func.method_info.clone() {
                 let qualified = format!(
                     "{}::{}",
                     method_info.base_struct_name, method_info.method_name
@@ -5355,7 +5334,7 @@ mod tests {
         let call = builtin_call("i32_load", vec![i32_const(0)], TypeTable::I32);
         match &call.kind {
             TirExprKind::Call { func, args, .. } => {
-                assert_eq!(func.name(), "i32_load");
+                assert_eq!(func.name.clone(), "i32_load");
                 assert_eq!(args.len(), 1);
             }
             other => panic!("expected Call, got {other:?}"),
@@ -5367,7 +5346,7 @@ mod tests {
         let call = internal_call("cm_lower_string", vec![i32_const(0)], TypeTable::I64);
         match &call.kind {
             TirExprKind::Call { func, args, .. } => {
-                assert_eq!(func.name(), "cm_lower_string");
+                assert_eq!(func.name.clone(), "cm_lower_string");
                 assert_eq!(args.len(), 1);
             }
             other => panic!("expected Call, got {other:?}"),

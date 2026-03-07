@@ -179,10 +179,7 @@ fn call_inspect_fn(
     let func_rc = ensure_inspect_fn(reg, type_id, tt, fmt_type);
     let call = TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef::Resolved {
-                func: func_rc,
-                module_source: module_source.clone(),
-            },
+            func: FunctionRef::from_resolved(&func_rc.borrow(), module_source.clone()),
             type_args: vec![],
             args: vec![val, fmt],
             param_is_mut: vec![false, false],
@@ -493,7 +490,7 @@ enum MarkerKind {
 
 fn marker_kind(expr: &TirExpr) -> MarkerKind {
     if let TirExprKind::StaticCall { func, .. } = &expr.kind {
-        let name = func.name();
+        let name = func.name.clone();
         if name == "builtin::inspect" {
             MarkerKind::Inspect
         } else if name == "builtin::display" {
@@ -873,7 +870,7 @@ fn ws(text: &str, fmt: TirExpr, tt: &Rc<RefCell<TypeTable>>, span: Span) -> TirS
     let call = TirExpr::new(
         TirExprKind::MethodCall {
             receiver: Box::new(fmt),
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source: ModuleSource::format(),
                 name: "Formatter::write_str".to_string(),
                 monomorph_info: None,
@@ -882,6 +879,7 @@ fn ws(text: &str, fmt: TirExpr, tt: &Rc<RefCell<TypeTable>>, span: Span) -> TirS
                     None,
                     "write_str".into(),
                 )),
+                is_cm_adapter: false,
             },
             type_args: vec![],
             args: vec![TirExpr::new(
@@ -902,7 +900,7 @@ fn wc(c: char, fmt: TirExpr, span: Span) -> TirStmt {
     let call = TirExpr::new(
         TirExprKind::MethodCall {
             receiver: Box::new(fmt),
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source: ModuleSource::format(),
                 name: "Formatter::write_char".to_string(),
                 monomorph_info: None,
@@ -911,6 +909,7 @@ fn wc(c: char, fmt: TirExpr, span: Span) -> TirStmt {
                     None,
                     "write_char".into(),
                 )),
+                is_cm_adapter: false,
             },
             type_args: vec![],
             args: vec![TirExpr::new(
@@ -952,7 +951,7 @@ fn display_fmt(
     let call = TirExpr::new(
         TirExprKind::MethodCall {
             receiver: Box::new(receiver),
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source: impl_mod,
                 name: mangled,
                 monomorph_info: None,
@@ -961,6 +960,7 @@ fn display_fmt(
                     Some("Display".into()),
                     "fmt".into(),
                 )),
+                is_cm_adapter: false,
             },
             type_args: vec![],
             args: vec![fmt],
@@ -996,7 +996,7 @@ fn lower_hex_fmt(
     let call = TirExpr::new(
         TirExprKind::MethodCall {
             receiver: Box::new(receiver),
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source: ModuleSource::primitives(),
                 name: mangled,
                 monomorph_info: None,
@@ -1005,6 +1005,7 @@ fn lower_hex_fmt(
                     Some("LowerHex".into()),
                     "fmt".into(),
                 )),
+                is_cm_adapter: false,
             },
             type_args: vec![],
             args: vec![fmt],
@@ -1039,11 +1040,12 @@ fn synth_string(
     s.push(wc('"', fmt.clone(), span));
     let call = TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source: ModuleSource::internal(),
                 name: "write_escaped_string".to_string(),
                 monomorph_info: None,
                 method_info: None,
+                is_cm_adapter: false,
             },
             type_args: vec![],
             args: vec![val, fmt.clone()],

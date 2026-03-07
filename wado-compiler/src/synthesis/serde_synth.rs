@@ -191,11 +191,12 @@ fn type_param_method_call(
     TirExpr::new(
         TirExprKind::MethodCall {
             receiver: Box::new(receiver),
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source,
                 name: fn_name,
                 monomorph_info: None,
                 method_info: Some(info),
+                is_cm_adapter: false,
             },
             type_args,
             args,
@@ -469,11 +470,12 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
     };
     TirExpr::new(
         TirExprKind::StaticCall {
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source,
                 name: mangled_name,
                 monomorph_info,
                 method_info: Some(method_info),
+                is_cm_adapter: false,
             },
             args: vec![],
             param_is_mut: vec![], // no args
@@ -785,11 +787,12 @@ fn generate_struct_deserialize(
             ],
             body: Box::new(TirExpr::new(
                 TirExprKind::Call {
-                    func: FunctionRef::External {
+                    func: FunctionRef {
                         module_source,
                         name: lookup_fn_name,
                         monomorph_info: None,
                         method_info: None,
+                        is_cm_adapter: false,
                     },
                     type_args: vec![],
                     args: vec![
@@ -1217,11 +1220,12 @@ fn key_get_byte_as_i32_expr(string_ref: TirExpr, index_expr: TirExpr, span: Span
     let get_byte_call = TirExpr::new(
         TirExprKind::MethodCall {
             receiver: Box::new(string_ref),
-            func: FunctionRef::External {
+            func: FunctionRef {
                 module_source: ModuleSource::prelude(),
                 name: get_byte_method.to_mangled_name(),
                 monomorph_info: None,
                 method_info: Some(get_byte_method),
+                is_cm_adapter: false,
             },
             type_args: vec![],
             args: vec![index_expr],
@@ -1741,11 +1745,12 @@ fn generate_enum_deserialize(
         let condition = TirExpr::new(
             TirExprKind::MethodCall {
                 receiver: Box::new(key_ref),
-                func: FunctionRef::External {
+                func: FunctionRef {
                     module_source: ModuleSource::prelude(),
                     name: eq_method.to_mangled_name(),
                     monomorph_info: None,
                     method_info: Some(eq_method),
+                    is_cm_adapter: false,
                 },
                 type_args: vec![],
                 args: vec![lit_ref],
@@ -2454,11 +2459,12 @@ fn generate_variant_deserialize(
         let condition = TirExpr::new(
             TirExprKind::MethodCall {
                 receiver: Box::new(key_ref),
-                func: FunctionRef::External {
+                func: FunctionRef {
                     module_source: ModuleSource::prelude(),
                     name: eq_method.to_mangled_name(),
                     monomorph_info: None,
                     method_info: Some(eq_method),
+                    is_cm_adapter: false,
                 },
                 type_args: vec![],
                 args: vec![lit_ref],

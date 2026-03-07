@@ -356,7 +356,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
         for effect in &callee_effects {
             if !self.current_effects.contains(effect) {
                 self.logger.error(EffectError {
-                    callee: func_ref.name(),
+                    callee: func_ref.name.clone(),
                     missing_effect: effect.clone(),
                     span,
                 })?;
@@ -367,35 +367,26 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
 
     /// Get the effects required by a function
     fn get_function_effects(&self, func_ref: &FunctionRef) -> Vec<String> {
-        match func_ref {
-            FunctionRef::Resolved { func, .. } => func.borrow().effects.clone(),
-            FunctionRef::External {
-                module_source,
-                name,
-                ..
-            } => {
-                // Look up in the appropriate module
-                if let Some(module) = self.modules.get(module_source) {
-                    // Check functions
-                    for func_rc in &module.functions {
-                        let func = func_rc.borrow();
-                        if func.name == *name {
-                            return func.effects.clone();
-                        }
-                    }
-                    // Check impl methods
-                    for impl_block in &module.impls {
-                        for method in &impl_block.methods {
-                            if method.name == *name {
-                                return method.effects.clone();
-                            }
-                        }
+        // Look up in the appropriate module
+        if let Some(module) = self.modules.get(&func_ref.module_source) {
+            // Check functions
+            for func_rc in &module.functions {
+                let func = func_rc.borrow();
+                if func.name == func_ref.name {
+                    return func.effects.clone();
+                }
+            }
+            // Check impl methods
+            for impl_block in &module.impls {
+                for method in &impl_block.methods {
+                    if method.name == func_ref.name {
+                        return method.effects.clone();
                     }
                 }
-                // Default: no effects required (builtins, unknown functions)
-                Vec::new()
             }
         }
+        // Default: no effects required (builtins, unknown functions)
+        Vec::new()
     }
 }
 
