@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772837508796,
+  "lastUpdate": 1772842052059,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1013,6 +1013,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 18579,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bcde49b0f9e3776391b055ac698890bbf262ac21",
+          "message": "Merge pull request #523 from wado-lang/claude/update-golden-fixture-wir-JI4eR\n\nInline data segments and cleanup redundant WIR instructions",
+          "timestamp": "2026-03-07T09:05:05+09:00",
+          "tree_id": "b2486180b94190fdd598b764df200e7e0cbdac08",
+          "url": "https://github.com/wado-lang/wado/commit/bcde49b0f9e3776391b055ac698890bbf262ac21"
+        },
+        "date": 1772842051918,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1571,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9220,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18474,
             "unit": "bytes"
           }
         ]
