@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772894449652,
+  "lastUpdate": 1772919558919,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1466,6 +1466,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b9a9281e191dff75774af66ef997437642e0c0df"
         },
         "date": 1772894449459,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1571,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9220,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18450,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "71c6a63c5b57882978a155ebcb54174f0658d27b",
+          "message": "Merge pull request #535 from wado-lang/claude/integrate-functionref-variants-RSuNq\n\nRefactor FunctionRef from enum to struct",
+          "timestamp": "2026-03-08T06:36:59+09:00",
+          "tree_id": "456b21cbc498f625b1bb3f97fbf528ff6333d523",
+          "url": "https://github.com/wado-lang/wado/commit/71c6a63c5b57882978a155ebcb54174f0658d27b"
+        },
+        "date": 1772919558729,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
