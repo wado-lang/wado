@@ -125,9 +125,9 @@ fn format_with_opts(s, opts) {
         };
     };
     return let __match_scrut_0: ref null Align; __match_scrut_0 = opts.align; if __match_scrut_0.discriminant == 0 -> ref null String {
-        String::concat(s, pad);
+        String::concat(value_copy String(s), value_copy String(pad));
     } else if __match_scrut_0.discriminant == 1 -> ref null String {
-        String::concat(pad, s);
+        String::concat(value_copy String(pad), value_copy String(s));
     } else if __match_scrut_0.discriminant == 2 -> ref null String {
         __local_5 = pad_len / 2;
         __local_6 = pad_len - __local_5;
@@ -159,7 +159,7 @@ fn format_with_opts(s, opts) {
                 };
             };
         };
-        String::concat(String::concat(__local_7, s), __local_8);
+        String::concat(String::concat(value_copy String(__local_7), value_copy String(s)), value_copy String(__local_8));
     } else {
         unreachable;
     };
@@ -176,8 +176,8 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     opts = Options { align: Align { 1 }, width: 0 };
-    s = format_with_opts(String { repr: array.new_data<u8>("test"), used: 4 }, opts);
-    "core:cli/println"(s);
+    s = format_with_opts(String { repr: array.new_data<u8>("test"), used: 4 }, value_copy Options(opts));
+    "core:cli/println"(value_copy String(s));
 }
 
 fn __cm_export__run() {
@@ -269,7 +269,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, message, 1);
+    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 

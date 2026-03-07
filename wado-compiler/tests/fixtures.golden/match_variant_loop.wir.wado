@@ -115,7 +115,7 @@ fn apply_padding(s, spec) {
     pad_len = width - s.used;
     result = String { repr: builtin::array_new<u8>(width), used: 0 };
     return let __match_scrut_0: ref null Align; __match_scrut_0 = spec.align; if __match_scrut_0.discriminant == 0 -> ref null String {
-        String::append(result, s);
+        String::append(result, value_copy String(s));
         __for_0: block {
             __local_6 = 0;
             block {
@@ -146,7 +146,7 @@ fn apply_padding(s, spec) {
                 };
             };
         };
-        String::append(result, s);
+        String::append(result, value_copy String(s));
         __for_1: block {
             __local_10 = 0;
             block {
@@ -175,7 +175,7 @@ fn apply_padding(s, spec) {
                 };
             };
         };
-        String::append(result, s);
+        String::append(result, value_copy String(s));
         result;
     } else {
         unreachable;
@@ -196,9 +196,9 @@ fn run() with Stdout {
     left = FormatSpec { align: Align { 0 }, width: 10, fill: 42 };
     center = FormatSpec { align: Align { 1 }, width: 10, fill: 42 };
     right = FormatSpec { align: Align { 2 }, width: 10, fill: 42 };
-    "core:cli/println"(apply_padding(String { repr: array.new_data<u8>("test"), used: 4 }, left));
-    "core:cli/println"(apply_padding(String { repr: array.new_data<u8>("test"), used: 4 }, center));
-    "core:cli/println"(apply_padding(String { repr: array.new_data<u8>("test"), used: 4 }, right));
+    "core:cli/println"(apply_padding(String { repr: array.new_data<u8>("test"), used: 4 }, value_copy FormatSpec(left)));
+    "core:cli/println"(apply_padding(String { repr: array.new_data<u8>("test"), used: 4 }, value_copy FormatSpec(center)));
+    "core:cli/println"(apply_padding(String { repr: array.new_data<u8>("test"), used: 4 }, value_copy FormatSpec(right)));
 }
 
 fn __cm_export__run() {
@@ -290,7 +290,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, message, 1);
+    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 

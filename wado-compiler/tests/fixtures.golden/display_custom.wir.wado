@@ -132,7 +132,7 @@ fn run() with Stdout {
         break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_6) };
     };
     Point^Display::fmt(p, f);
-    "core:cli/println"(buf);
+    "core:cli/println"(value_copy String(buf));
     o = Point { x: 0, y: 0 };
     buf = String { repr: builtin::array_new<u8>(64), used: 0 };
     f = __inline_Formatter__new_5: block -> ref null Formatter {
@@ -140,7 +140,7 @@ fn run() with Stdout {
         break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_8) };
     };
     Point^Display::fmt(o, f);
-    "core:cli/println"(buf);
+    "core:cli/println"(value_copy String(buf));
 }
 
 fn __cm_export__run() {
@@ -232,7 +232,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, message, 1);
+    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 
@@ -438,9 +438,9 @@ fn Point^Display::fmt(self, f) {
         i32::fmt_decimal(self.x, __local_12);
         break __inline_i32__to_string_2: __local_7;
     };
-    String::append(f.buf, s_5);
+    String::append(f.buf, value_copy String(s_5));
     s_14 = String { repr: array.new_data<u8>(", "), used: 2 };
-    String::append(f.buf, s_14);
+    String::append(f.buf, value_copy String(s_14));
     s_16 = __inline_i32__to_string_8: block -> ref null String {
         __local_18 = String { repr: builtin::array_new<u8>(12), used: 0 };
         __local_19 = __inline_Formatter__new_10: block -> ref null Formatter {
@@ -451,7 +451,7 @@ fn Point^Display::fmt(self, f) {
         i32::fmt_decimal(self.y, __local_23);
         break __inline_i32__to_string_8: __local_18;
     };
-    String::append(f.buf, s_16);
+    String::append(f.buf, value_copy String(s_16));
     String::append_char(f.buf, 41);
 }
 
@@ -502,20 +502,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::append(self.buf, value_copy String(sign));
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::append(self.buf, value_copy String(prefix));
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::append(self.buf, value_copy String(sign));
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::append(self.buf, value_copy String(prefix));
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -523,10 +523,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     align = self.align;
     if align == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::append(self.buf, value_copy String(sign));
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::append(self.buf, value_copy String(prefix));
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -536,10 +536,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::append(self.buf, value_copy String(sign));
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::append(self.buf, value_copy String(prefix));
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -547,10 +547,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::append(self.buf, value_copy String(sign));
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::append(self.buf, value_copy String(prefix));
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };

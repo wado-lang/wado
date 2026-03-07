@@ -179,7 +179,7 @@ fn run() with Stdout, Stderr, Preopens {
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_7 = String { repr: builtin::array_new<u8>(43), used: 0 };
         String::append(__local_7, String { repr: array.new_data<u8>("open_at: preopened dir = \""), used: 26 });
-        String::append(__local_7, preopen_path);
+        String::append(__local_7, value_copy String(preopen_path));
         String::append(__local_7, String { repr: array.new_data<u8>("\""), used: 1 });
         break __tmpl: __local_7;
     });
@@ -251,7 +251,7 @@ fn __cm_adapter__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
     let __subtask: i32;
     let __disc: i32;
     let __result_val: ref null Result<Descriptor,ErrorCode>;
-    __path_packed = "core:internal/cm_lower_string"(path);
+    __path_packed = "core:internal/cm_lower_string"(value_copy String(path));
     __async_outptr = "mem/realloc"(0, 0, 4, 8);
     __params_buf = "mem/realloc"(0, 0, 4, 24);
     builtin::store_i32(__params_buf, self);
@@ -362,7 +362,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, message, 1);
+    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 
@@ -375,7 +375,7 @@ fn "core:cli/eprintln"(message) with Stderr {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stderr::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, message, 1);
+    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 
@@ -464,12 +464,12 @@ fn "core:internal/log_stderr"(message) {  // from core:internal
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stderr::write_via_stream"(rx, 2048);
-    "core:internal/write_string_to_stream"(tx, message, 1);
+    "core:internal/write_string_to_stream"(tx, value_copy String(message), 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 
 fn "core:internal/panic"(message) {  // from core:internal
-    "core:internal/log_stderr"(message);
+    "core:internal/log_stderr"(value_copy String(message));
     unreachable;
 }
 

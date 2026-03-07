@@ -88,7 +88,7 @@ fn run() with Stdout {
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_1 = String { repr: builtin::array_new<u8>(20), used: 0 };
         String::append(__local_1, String { repr: array.new_data<u8>("{\""), used: 2 });
-        String::append(__local_1, name);
+        String::append(__local_1, value_copy String(name));
         String::append(__local_1, String { repr: array.new_data<u8>("\"}"), used: 2 });
         break __tmpl: __local_1;
     });
@@ -185,7 +185,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, message, 1);
+    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 

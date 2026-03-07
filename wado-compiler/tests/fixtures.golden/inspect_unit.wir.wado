@@ -107,7 +107,7 @@ fn run() with Stdout {
             break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_5) };
         };
         __local_7 = String { repr: array.new_data<u8>("()"), used: 2 };
-        String::append(__local_2.buf, __local_7);
+        String::append(__local_2.buf, value_copy String(__local_7));
         break __tmpl: __local_1;
     });
     "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
@@ -202,7 +202,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, message, 1);
+    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 

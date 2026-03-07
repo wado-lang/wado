@@ -123,7 +123,7 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     arr = __seq_lit: block -> ref null Array<String> {
-        __local_0 = Array<String> { repr: array.new_fixed<ref null String>(String { repr: array.new_data<u8>("hello"), used: 5 }, String { repr: array.new_data<u8>("world"), used: 5 }, String { repr: array.new_data<u8>("!"), used: 1 }), used: 3 };
+        __local_0 = Array<String> { repr: array.new_fixed<ref null String>(value_copy String(String { repr: array.new_data<u8>("hello"), used: 5 }), value_copy String(String { repr: array.new_data<u8>("world"), used: 5 }), value_copy String(String { repr: array.new_data<u8>("!"), used: 1 })), used: 3 };
         break __seq_lit: __local_0;
     };
     iter = ArrayIter<String> { repr: ref.as_non_null(arr.repr), used: 3, index: 0 };
@@ -134,7 +134,7 @@ fn run() with Stdout {
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<String>^Iterator::next(iter);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 s = __sroa___pattern_temp_0_payload_0;
-                "core:cli/println"(s);
+                "core:cli/println"(value_copy String(s));
             } else {
                 break b1;
             };
@@ -232,7 +232,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, message, 1);
+    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 

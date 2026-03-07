@@ -99,8 +99,8 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     opts = "./variant_import_struct_module.wado/Options" { align: "./variant_import_struct_module.wado/Align" { 1 }, width: 0 };
-    s1 = "./variant_import_struct_module.wado/format_with_opts"(String { repr: array.new_data<u8>("hi"), used: 2 }, opts);
-    "core:cli/println"(s1);
+    s1 = "./variant_import_struct_module.wado/format_with_opts"(String { repr: array.new_data<u8>("hi"), used: 2 }, value_copy "./variant_import_struct_module.wado/Options"(opts));
+    "core:cli/println"(value_copy String(s1));
 }
 
 fn __cm_export__run() {
@@ -145,9 +145,9 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {  // from ./
         };
     };
     return let __match_scrut_0: ref null "./variant_import_struct_module.wado/Align"; __match_scrut_0 = opts.align; if __match_scrut_0.discriminant == 0 -> ref null String {
-        String::concat(s, pad);
+        String::concat(value_copy String(s), value_copy String(pad));
     } else if __match_scrut_0.discriminant == 1 -> ref null String {
-        String::concat(pad, s);
+        String::concat(value_copy String(pad), value_copy String(s));
     } else if __match_scrut_0.discriminant == 2 -> ref null String {
         __local_5 = pad_len / 2;
         __local_6 = pad_len - __local_5;
@@ -179,7 +179,7 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {  // from ./
                 };
             };
         };
-        String::concat(String::concat(__local_7, s), __local_8);
+        String::concat(String::concat(value_copy String(__local_7), value_copy String(s)), value_copy String(__local_8));
     } else {
         unreachable;
     };
@@ -269,7 +269,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, message, 1);
+    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 

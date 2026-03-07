@@ -115,7 +115,7 @@ fn run() with Stdout {
     } else {
         String { repr: array.new_data<u8>("large"), used: 5 };
     });
-    "core:cli/println"(result);
+    "core:cli/println"(value_copy String(result));
     result2 = value_copy String(let __match_scrut_1: i32; __match_scrut_1 = 5; if 1 -> ref null String {
         __local_5 = __match_scrut_1;
         if __local_5 > 100 -> ref null String {
@@ -175,7 +175,7 @@ fn run() with Stdout {
     } else {
         String { repr: array.new_data<u8>("small"), used: 5 };
     });
-    "core:cli/println"(result2);
+    "core:cli/println"(value_copy String(result2));
 }
 
 fn __cm_export__run() {
@@ -267,7 +267,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, message, 1);
+    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 

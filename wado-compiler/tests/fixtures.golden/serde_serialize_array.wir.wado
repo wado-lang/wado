@@ -265,19 +265,19 @@ fn run() with Stdout {
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_7 = String { repr: builtin::array_new<u8>(28), used: 0 };
         String::append(__local_7, String { repr: array.new_data<u8>("Array<i32>: "), used: 12 });
-        String::append(__local_7, ser.buf);
+        String::append(__local_7, value_copy String(ser.buf));
         break __tmpl: __local_7;
     });
     ser.buf = String { repr: builtin::array_new<u8>(0), used: 0 };
     strs = __seq_lit: block -> ref null Array<String> {
-        __local_3 = Array<String> { repr: array.new_fixed<ref null String>(String { repr: array.new_data<u8>("hello"), used: 5 }, String { repr: array.new_data<u8>("world"), used: 5 }), used: 2 };
+        __local_3 = Array<String> { repr: array.new_fixed<ref null String>(value_copy String(String { repr: array.new_data<u8>("hello"), used: 5 }), value_copy String(String { repr: array.new_data<u8>("world"), used: 5 })), used: 2 };
         break __seq_lit: __local_3;
     };
     drop(Array<String>^Serialize::serialize<JsonSerializer>(strs, ser));
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_8 = String { repr: builtin::array_new<u8>(31), used: 0 };
         String::append(__local_8, String { repr: array.new_data<u8>("Array<String>: "), used: 15 });
-        String::append(__local_8, ser.buf);
+        String::append(__local_8, value_copy String(ser.buf));
         break __tmpl: __local_8;
     });
     ser.buf = String { repr: builtin::array_new<u8>(0), used: 0 };
@@ -295,7 +295,7 @@ fn run() with Stdout {
         String::append_char(__local_9, 121);
         String::append_char(__local_9, 58);
         String::append_char(__local_9, 32);
-        String::append(__local_9, ser.buf);
+        String::append(__local_9, value_copy String(ser.buf));
         break __tmpl: __local_9;
     });
 }
@@ -389,7 +389,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, message, 1);
+    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 
@@ -587,7 +587,7 @@ fn JsonSerializer^Serializer::serialize_string(self, v) {
     String::append(self, __tmpl: block -> ref null String {
         __local_2 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append_char(__local_2, 34);
-        String::append(__local_2, v);
+        String::append(__local_2, value_copy String(v));
         String::append_char(__local_2, 34);
         break __tmpl: __local_2;
     });
@@ -822,20 +822,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::append(self.buf, value_copy String(sign));
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::append(self.buf, value_copy String(prefix));
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::append(self.buf, value_copy String(sign));
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::append(self.buf, value_copy String(prefix));
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -843,10 +843,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     align = self.align;
     if align == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::append(self.buf, value_copy String(sign));
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::append(self.buf, value_copy String(prefix));
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -856,10 +856,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::append(self.buf, value_copy String(sign));
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::append(self.buf, value_copy String(prefix));
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -867,10 +867,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::append(self.buf, value_copy String(sign));
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::append(self.buf, value_copy String(prefix));
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };

@@ -145,7 +145,7 @@ fn run() with Stdout {
     } else {
         unreachable;
     });
-    "core:cli/println"(desc1);
+    "core:cli/println"(value_copy String(desc1));
     desc2 = value_copy String(let __match_scrut_1: ref null Shape; __match_scrut_1 = s2; if ref.test Shape::Circle(__match_scrut_1) -> ref null String {
         let __cast_8: ref Shape::Circle;
         __cast_8 = ref.cast Shape::Circle(__match_scrut_1);
@@ -181,7 +181,7 @@ fn run() with Stdout {
     } else {
         unreachable;
     });
-    "core:cli/println"(desc2);
+    "core:cli/println"(value_copy String(desc2));
     desc3 = value_copy String(let __match_scrut_2: ref null Shape; __match_scrut_2 = s3; if ref.test Shape::Circle(__match_scrut_2) -> ref null String {
         let __cast_12: ref Shape::Circle;
         __cast_12 = ref.cast Shape::Circle(__match_scrut_2);
@@ -217,7 +217,7 @@ fn run() with Stdout {
     } else {
         unreachable;
     });
-    "core:cli/println"(desc3);
+    "core:cli/println"(value_copy String(desc3));
 }
 
 fn __cm_export__run() {
@@ -309,7 +309,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, message, 1);
+    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 

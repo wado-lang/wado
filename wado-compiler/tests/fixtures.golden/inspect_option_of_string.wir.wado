@@ -290,7 +290,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, message, 1);
+    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 
@@ -442,13 +442,13 @@ fn Option<Option<String>>^Inspect::inspect(self, f) {
     let __local_7: ref null String;
     if ref.test Option<Option<String>>::Some(self) {
         __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
-        String::append(f.buf, __local_3);
+        String::append(f.buf, value_copy String(__local_3));
         Option<String>^Inspect::inspect(ref.as_non_null(ref.cast Option<Option<String>>::Some(self).payload_0), f);
         __local_5 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, __local_5);
+        String::append(f.buf, value_copy String(__local_5));
     } else if self.discriminant == 1 {
         __local_7 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
-        String::append(f.buf, __local_7);
+        String::append(f.buf, value_copy String(__local_7));
     };
 }
 
@@ -461,13 +461,13 @@ fn Option<String>^Inspect::inspect(self, f) {
     let __local_7: ref null String;
     if ref.test Option<String>::Some(self) {
         __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
-        String::append(f.buf, __local_3);
+        String::append(f.buf, value_copy String(__local_3));
         String^Inspect::inspect(ref.cast Option<String>::Some(self).payload_0, f);
         __local_5 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, __local_5);
+        String::append(f.buf, value_copy String(__local_5));
     } else if self.discriminant == 1 {
         __local_7 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
-        String::append(f.buf, __local_7);
+        String::append(f.buf, value_copy String(__local_7));
     };
 }
 

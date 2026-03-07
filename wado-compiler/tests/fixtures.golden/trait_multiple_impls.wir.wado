@@ -104,13 +104,13 @@ fn run() with Stdout {
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_4 = String { repr: builtin::array_new<u8>(28), used: 0 };
         String::append(__local_4, String { repr: array.new_data<u8>("A cat named "), used: 12 });
-        String::append(__local_4, __sroa_cat_name);
+        String::append(__local_4, value_copy String(__sroa_cat_name));
         break __tmpl: __local_4;
     });
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_6 = String { repr: builtin::array_new<u8>(28), used: 0 };
         String::append(__local_6, String { repr: array.new_data<u8>("A dog named "), used: 12 });
-        String::append(__local_6, __sroa_dog_name);
+        String::append(__local_6, value_copy String(__sroa_dog_name));
         break __tmpl: __local_6;
     });
 }
@@ -204,7 +204,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, message, 1);
+    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 

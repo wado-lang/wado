@@ -139,7 +139,7 @@ fn run() with Stdout {
     simple = String { repr: array.new_data<u8>("Line 1
 Line 2
 Line 3"), used: 20 };
-    "core:cli/println"(simple);
+    "core:cli/println"(value_copy String(simple));
     name = String { repr: array.new_data<u8>("Alice"), used: 5 };
     greeting = __tmpl: block -> ref null String {
         __local_6 = String { repr: builtin::array_new<u8>(54), used: 0 };
@@ -148,7 +148,7 @@ Line 3"), used: 20 };
         String::append_char(__local_6, 97);
         String::append_char(__local_6, 114);
         String::append_char(__local_6, 32);
-        String::append(__local_6, name);
+        String::append(__local_6, value_copy String(name));
         String::append(__local_6, String { repr: array.new_data<u8>(",
 
 Welcome to Wado!
@@ -156,7 +156,7 @@ Welcome to Wado!
 Best regards"), used: 33 });
         break __tmpl: __local_6;
     };
-    "core:cli/println"(greeting);
+    "core:cli/println"(value_copy String(greeting));
     result = __tmpl: block -> ref null String {
         __local_7 = String { repr: builtin::array_new<u8>(70), used: 0 };
         String::append_char(__local_7, 70);
@@ -194,7 +194,7 @@ Second: "), used: 9 });
         i32::fmt_decimal(3, __local_24);
         break __tmpl: __local_7;
     };
-    "core:cli/println"(result);
+    "core:cli/println"(value_copy String(result));
     "core:cli/println"(String { repr: array.new_data<u8>("done"), used: 4 });
 }
 
@@ -287,7 +287,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, message, 1);
+    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 
@@ -504,20 +504,20 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     } {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::append(self.buf, value_copy String(sign));
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::append(self.buf, value_copy String(prefix));
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::append(self.buf, value_copy String(sign));
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::append(self.buf, value_copy String(prefix));
         };
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
@@ -525,10 +525,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     align = self.align;
     if align == 0 {
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::append(self.buf, value_copy String(sign));
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::append(self.buf, value_copy String(prefix));
         };
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
@@ -538,10 +538,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         right_pad = padding - left_pad;
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::append(self.buf, value_copy String(sign));
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::append(self.buf, value_copy String(prefix));
         };
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
@@ -549,10 +549,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
-            String::append(self.buf, sign);
+            String::append(self.buf, value_copy String(sign));
         };
         if prefix_len > 0 {
-            String::append(self.buf, prefix);
+            String::append(self.buf, value_copy String(prefix));
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };

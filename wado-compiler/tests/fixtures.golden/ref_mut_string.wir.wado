@@ -89,13 +89,13 @@ fn run() with Stdout {
     msg = String { repr: array.new_data<u8>("Hello"), used: 5 };
     s_3 = msg;
     String::append(s_3, String { repr: array.new_data<u8>(", World!"), used: 8 });
-    "core:cli/println"(msg);
+    "core:cli/println"(value_copy String(msg));
     s_1 = String { repr: array.new_data<u8>("a"), used: 1 };
     s_4 = s_1;
     suffix = String { repr: array.new_data<u8>("b"), used: 1 };
-    String::append(s_4, suffix);
-    String::append(s_4, suffix);
-    "core:cli/println"(s_1);
+    String::append(s_4, value_copy String(suffix));
+    String::append(s_4, value_copy String(suffix));
+    "core:cli/println"(value_copy String(s_1));
 }
 
 fn __cm_export__run() {
@@ -187,7 +187,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
-    "core:cli/write_to_stream"(tx, message, 1);
+    "core:cli/write_to_stream"(tx, value_copy String(message), 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 
