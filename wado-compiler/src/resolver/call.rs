@@ -433,6 +433,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
+        let param_is_mut = self.lookup_function_param_is_mut(&call.callee);
         TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef::External {
@@ -443,6 +444,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 },
                 type_args,
                 args,
+                param_is_mut,
             },
             return_type,
             call.span,
@@ -787,6 +789,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     method_info: Some(method_info),
                 },
                 args: vec![low_literal, high_literal],
+                param_is_mut: vec![],
             },
             target_type,
             span,
@@ -860,6 +863,53 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             _ => Vec::new(),
         }
+    }
+
+    /// Look up whether each parameter of a free function is `mut`.
+    /// Returns empty vec for unknown/builtin functions (conservative: always copy).
+    pub(super) fn lookup_function_param_is_mut(&mut self, callee: &Expr) -> Vec<bool> {
+        let Expr::Ident(ident) = callee else {
+            return Vec::new();
+        };
+
+        // Qualified names (Type::method, static calls) handled elsewhere
+        if ident.name.contains("::") {
+            return Vec::new();
+        }
+
+        // Local function
+        if self.function_return_types.contains_key(&ident.name) {
+            let result: Option<Vec<bool>> = self.current_module_items.iter().find_map(|item| {
+                if let Item::Function(func) = item
+                    && func.name == ident.name
+                {
+                    return Some(func.params.iter().map(|p| p.is_mut).collect());
+                }
+                None
+            });
+            if let Some(is_muts) = result {
+                return is_muts;
+            }
+        }
+
+        // Imported function
+        if let Some(symbol) = self.symbols.lookup(&ident.name)
+            && let Some(module) = self.loaded_modules.get(&symbol.module_source)
+        {
+            let result: Option<Vec<bool>> = module.items.iter().find_map(|item| {
+                if let Item::Function(func) = item
+                    && func.name == symbol.name
+                {
+                    return Some(func.params.iter().map(|p| p.is_mut).collect());
+                }
+                None
+            });
+            if let Some(is_muts) = result {
+                return is_muts;
+            }
+        }
+
+        Vec::new()
     }
 
     /// Look up function parameter types with type args substituted.
@@ -1078,6 +1128,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         method_info: Some(method_info),
                     },
                     args: args.to_vec(),
+                    param_is_mut: vec![],
                 },
                 final_return_type,
                 call.span,

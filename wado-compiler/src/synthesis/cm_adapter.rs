@@ -2868,6 +2868,7 @@ fn synthesize_result_export_adapter(
             },
             type_args: vec![],
             args: call_args,
+            param_is_mut: vec![],
         },
         user_return_type,
         synth_span(),
@@ -3244,6 +3245,7 @@ fn synthesize_void_export_adapter(
             },
             type_args: vec![],
             args: vec![],
+            param_is_mut: vec![],
         },
         TypeTable::UNIT,
         synth_span(),
@@ -3396,6 +3398,7 @@ fn synthesize_general_export_adapter(
             },
             type_args: vec![],
             args: call_args,
+            param_is_mut: vec![],
         },
         user_return_type,
         synth_span(),
@@ -3600,6 +3603,7 @@ fn synthesize_async_export_adapter(
             },
             type_args: vec![],
             args: call_args,
+            param_is_mut: vec![],
         },
         TypeTable::UNIT,
         synth_span(),
@@ -4592,6 +4596,7 @@ fn rewrite_calls_in_expr(
             func,
             args,
             type_args,
+            ..
         } = &mut expr.kind
     {
         let effect_name = func.module_source().effect_name().unwrap_or_default();
@@ -4699,6 +4704,7 @@ fn rewrite_calls_in_expr(
                 },
                 args: all_args,
                 type_args: vec![],
+                param_is_mut: vec![],
             };
 
             // Recurse into args of the new Call
@@ -4782,6 +4788,7 @@ fn rewrite_calls_in_expr(
                 },
                 args: flat_call_args,
                 type_args: vec![],
+                param_is_mut: vec![],
             };
 
             // Recurse into args of the new Call

@@ -214,7 +214,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                     self.check_expr(arg)?;
                 }
             }
-            TirExprKind::StaticCall { func, args } => {
+            TirExprKind::StaticCall { func, args , .. } => {
                 self.check_call(func, expr.span)?;
                 for arg in args {
                     self.check_expr(arg)?;

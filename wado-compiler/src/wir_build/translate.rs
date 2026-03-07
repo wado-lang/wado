@@ -573,6 +573,19 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// Copy an argument only if the corresponding callee parameter is `mut`.
+    ///
+    /// When a parameter is not `mut`, the callee cannot reassign it, write to its
+    /// fields, or call `&mut self` methods on it — so the caller's value is safe
+    /// without a defensive copy.
+    fn maybe_value_copy_if_mut(&self, value: &TirExpr, translated: WirInstr, is_mut: bool) -> WirInstr {
+        if is_mut {
+            self.maybe_value_copy(value, translated)
+        } else {
+            translated
+        }
+    }
+
     /// Check if a source expression's root local is immutable.
     /// Returns true when the expression is a Local or `FieldAccess` chain
     /// whose root local is in the immutable set. In that case, sharing
@@ -1260,7 +1273,7 @@ impl FunctionTranslator<'_, '_> {
             },
 
             // === Function Calls ===
-            TirExprKind::Call { func, args, .. } => {
+            TirExprKind::Call { func, args, param_is_mut, .. } => {
                 // Check for instruction-builtins first
                 let builtin = func
                     .builtin_name()
@@ -1274,10 +1287,12 @@ impl FunctionTranslator<'_, '_> {
 
                 let translated_args: Vec<WirInstr> = args
                     .iter()
-                    .filter(|a| a.type_id != TypeTable::UNIT)
-                    .map(|a| {
+                    .enumerate()
+                    .filter(|(_, a)| a.type_id != TypeTable::UNIT)
+                    .map(|(i, a)| {
                         let translated = self.translate_expr(a);
-                        self.maybe_value_copy(a, translated)
+                        let is_mut = param_is_mut.get(i).copied().unwrap_or(true);
+                        self.maybe_value_copy_if_mut(a, translated, is_mut)
                     })
                     .collect();
 
@@ -1299,6 +1314,7 @@ impl FunctionTranslator<'_, '_> {
                 func,
                 receiver,
                 args,
+                param_is_mut,
                 ..
             } => {
                 // Canonical resource method dispatch: uses #[canonical("...")] from types.wado
@@ -1312,10 +1328,12 @@ impl FunctionTranslator<'_, '_> {
                 // Receiver is always included (self/&self/&mut self is never unit).
                 // Receivers are always reference types — do not copy them.
                 translated_args.push(self.translate_expr(receiver));
-                for arg in args {
+                // params[0] is self; args[i] corresponds to params[i+1]
+                for (i, arg) in args.iter().enumerate() {
                     if arg.type_id != TypeTable::UNIT {
                         let translated = self.translate_expr(arg);
-                        translated_args.push(self.maybe_value_copy(arg, translated));
+                        let is_mut = param_is_mut.get(i).copied().unwrap_or(true);
+                        translated_args.push(self.maybe_value_copy_if_mut(arg, translated, is_mut));
                     }
                 }
 
@@ -1337,13 +1355,15 @@ impl FunctionTranslator<'_, '_> {
                     WirInstr::Unreachable
                 }
             }
-            TirExprKind::StaticCall { func, args, .. } => {
+            TirExprKind::StaticCall { func, args, param_is_mut, .. } => {
                 let translated_args: Vec<WirInstr> = args
                     .iter()
-                    .filter(|a| a.type_id != TypeTable::UNIT)
-                    .map(|a| {
+                    .enumerate()
+                    .filter(|(_, a)| a.type_id != TypeTable::UNIT)
+                    .map(|(i, a)| {
                         let translated = self.translate_expr(a);
-                        self.maybe_value_copy(a, translated)
+                        let is_mut = param_is_mut.get(i).copied().unwrap_or(true);
+                        self.maybe_value_copy_if_mut(a, translated, is_mut)
                     })
                     .collect();
 

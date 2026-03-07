@@ -1467,6 +1467,7 @@ impl Monomorphizer {
                 func,
                 type_args,
                 args,
+                ..
             } => {
                 let func_name = func.name();
                 // Check if this is a call to a generic function with explicit type args
@@ -1497,6 +1498,7 @@ impl Monomorphizer {
                 func: method_func,
                 type_args,
                 args,
+                ..
             } => {
                 // Extract method name from method_info or fall back to function name
                 let method_name = method_func
@@ -1806,6 +1808,7 @@ impl Monomorphizer {
             TirExprKind::StaticCall {
                 func: static_func,
                 args,
+                ..
             } => {
                 // Check if this is a call to a method on a monomorphized struct
                 // Use method_info metadata to get base_struct_name and method_name
@@ -2509,6 +2512,7 @@ impl Monomorphizer {
                 func: method_func,
                 type_args,
                 args,
+                ..
             } => {
                 self.substitute_types_in_expr(receiver, substitution, type_table);
                 for type_arg in type_args.iter_mut() {
@@ -2677,6 +2681,7 @@ impl Monomorphizer {
             TirExprKind::StaticCall {
                 func: static_func,
                 args,
+                ..
             } => {
                 // Substitute type parameter names in func_name
                 // e.g., "Box<T>::new" with T->i32 becomes "Box<i32>::new"
@@ -3367,6 +3372,7 @@ impl Monomorphizer {
                 func,
                 type_args,
                 args,
+                ..
             } => {
                 let func_name = func.name();
                 let original_method_info = func.method_info();
@@ -3410,6 +3416,7 @@ impl Monomorphizer {
                 func: method_func,
                 type_args,
                 args,
+                ..
             } => {
                 // Extract method name from method_info or fall back to function name
                 let method_name = method_func
@@ -3626,6 +3633,7 @@ impl Monomorphizer {
             TirExprKind::StaticCall {
                 func: static_func,
                 args,
+                ..
             } => {
                 // Check if this is a monomorphized static call that needs rewriting.
                 // This handles calls like `Array::with_capacity` in adapter functions
@@ -3878,6 +3886,7 @@ impl Monomorphizer {
                 },
                 type_args: vec![],
                 args: vec![arg_ref],
+                param_is_mut: vec![],
             };
 
             if needs_negation {
@@ -3941,6 +3950,7 @@ impl Monomorphizer {
                     },
                     type_args: vec![],
                     args: vec![arg_ref],
+                    param_is_mut: vec![],
                 },
                 ordering_type_id,
                 span,

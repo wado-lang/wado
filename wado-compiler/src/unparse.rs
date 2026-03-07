@@ -3787,6 +3787,7 @@ impl<'a> TirUnparser<'a> {
                 func,
                 type_args,
                 args,
+                ..
             } => {
                 let func_name = func.name();
                 let full_name = if func.module_source().is_entry_point() {
@@ -3833,6 +3834,7 @@ impl<'a> TirUnparser<'a> {
                 func,
                 type_args,
                 args,
+                ..
             } => {
                 // Show as method call with resolved method name: receiver."Type::method"(args)
                 // This shows which method was resolved during type checking
@@ -3875,7 +3877,7 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push(')');
             }
-            TirExprKind::StaticCall { func, args } => {
+            TirExprKind::StaticCall { func, args, .. } => {
                 // Output the mangled function name (e.g., "Point::origin" or "Array<i32>::with_capacity")
                 self.output.push_str(&Self::quote_if_needed(&func.name()));
                 self.output.push('(');
