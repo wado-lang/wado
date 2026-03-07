@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772852765808,
+  "lastUpdate": 1772860384881,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1208,6 +1208,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 18474,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1d592d92dcb82120c4b6ce182ed456079614b90c",
+          "message": "Merge pull request #528 from wado-lang/claude/optimize-bounds-checking-HNC6q\n\nEliminate redundant bounds checks in loops with range guards",
+          "timestamp": "2026-03-07T14:10:40+09:00",
+          "tree_id": "aeb9f5463ff4088ffa949021ae718f2789a5ddda",
+          "url": "https://github.com/wado-lang/wado/commit/1d592d92dcb82120c4b6ce182ed456079614b90c"
+        },
+        "date": 1772860384693,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1571,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9220,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18450,
             "unit": "bytes"
           }
         ]
