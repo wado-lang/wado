@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772849735299,
+  "lastUpdate": 1772852765808,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1154,6 +1154,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/62711cf2943c8c1d9f9d1ccd7ea9ae33302a984f"
         },
         "date": 1772849735205,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1571,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9220,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18474,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "78ad16ef3984ee75fdc599f911e70a941a034a49",
+          "message": "Merge pull request #527 from wado-lang/claude/update-e2e-fixtures-wir-E7XXa\n\nSwitch golden fixtures from lowered TIR to WIR format",
+          "timestamp": "2026-03-07T12:03:47+09:00",
+          "tree_id": "a4044bab16371a4ad8777821d4481ed872054647",
+          "url": "https://github.com/wado-lang/wado/commit/78ad16ef3984ee75fdc599f911e70a941a034a49"
+        },
+        "date": 1772852765620,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
