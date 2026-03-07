@@ -1298,21 +1298,9 @@ impl FunctionTranslator<'_, '_> {
                 args,
                 ..
             } => {
-                // Special case: FutureWritable::write / FutureWritable::drop
-                if let Some(instr) = self.try_translate_future_writable_method(receiver, func, args)
-                {
-                    return instr;
-                }
-
-                // Special case: Stream::read / Stream::close
+                // Canonical resource method dispatch: uses #[canonical("...")] from types.wado
                 if let Some(instr) =
-                    self.try_translate_stream_method(receiver, func, args, expr.type_id)
-                {
-                    return instr;
-                }
-
-                // Special case: StreamWritable::write / StreamWritable::close
-                if let Some(instr) = self.try_translate_stream_writable_method(receiver, func, args)
+                    self.try_translate_canonical_method(receiver, func, args, expr.type_id)
                 {
                     return instr;
                 }
@@ -2907,32 +2895,37 @@ impl FunctionTranslator<'_, '_> {
     }
 
     // =========================================================================
-    // FutureWritable method interception
+    // Canonical resource method dispatch
     // =========================================================================
 
-    /// Check if a method call is on a `FutureWritable<T>` receiver.
-    /// If so, emit the appropriate WIR directly without going through `resolve_function_ref`.
-    fn try_translate_future_writable_method(
+    /// Dispatch canonical resource methods based on `#[canonical("...")]` attribute.
+    /// Returns `Some(WirInstr)` if the method has a canonical name and was handled.
+    fn try_translate_canonical_method(
         &mut self,
         receiver: &TirExpr,
         func: &FunctionRef,
-        _args: &[TirExpr],
+        args: &[TirExpr],
+        result_type_id: TypeId,
     ) -> Option<WirInstr> {
-        // Unwrap reference wrappers to get the base type
-        let mut recv_type = self.type_table.get(receiver.type_id).clone();
-        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = &recv_type {
-            let inner = *inner;
-            recv_type = self.type_table.get(inner).clone();
-        }
-        if !matches!(recv_type, ResolvedType::FutureWritable(_)) {
-            return None;
-        }
-        let method_name = func.method_info()?.method_name.clone();
+        let canonical_name = func.method_info()?.canonical_name.as_ref()?.clone();
         let handle = self.translate_expr(receiver);
-        match method_name.as_str() {
-            "write" => Some(self.emit_future_write_ok_none(handle)),
-            "drop" => Some(self.emit_future_writable_drop(handle)),
-            _ => None,
+        match canonical_name.as_str() {
+            "future_write" => Some(self.emit_future_write_ok_none(handle)),
+            "future_drop_writable" => Some(self.emit_future_writable_drop(handle)),
+            "stream_drop_readable" => Some(self.emit_stream_drop_readable(handle)),
+            "stream_read" => {
+                let max_arg = self.translate_expr(&args[0]);
+                Some(self.emit_stream_read(handle, max_arg, result_type_id))
+            }
+            "stream_drop_writable" => Some(self.emit_stream_drop_writable(handle)),
+            "stream_write" => {
+                let data_arg = self.translate_expr(&args[0]);
+                Some(self.emit_stream_write(handle, data_arg))
+            }
+            other => {
+                eprintln!("[WIR] unhandled canonical method: {other}");
+                None
+            }
         }
     }
 
@@ -3032,39 +3025,6 @@ impl FunctionTranslator<'_, '_> {
         })));
 
         WirInstr::Seq(seq)
-    }
-
-    // =========================================================================
-    // Stream method interception
-    // =========================================================================
-
-    /// Check if a method call is on a `Stream<T>` receiver.
-    /// Handles: `read(max)` and `close()`.
-    fn try_translate_stream_method(
-        &mut self,
-        receiver: &TirExpr,
-        func: &FunctionRef,
-        args: &[TirExpr],
-        result_type_id: TypeId,
-    ) -> Option<WirInstr> {
-        let mut recv_type = self.type_table.get(receiver.type_id).clone();
-        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = &recv_type {
-            let inner = *inner;
-            recv_type = self.type_table.get(inner).clone();
-        }
-        if !matches!(recv_type, ResolvedType::Stream(_)) {
-            return None;
-        }
-        let method_name = func.method_info()?.method_name.clone();
-        let handle = self.translate_expr(receiver);
-        match method_name.as_str() {
-            "close" => Some(self.emit_stream_drop_readable(handle)),
-            "read" => {
-                let max_arg = self.translate_expr(&args[0]);
-                Some(self.emit_stream_read(handle, max_arg, result_type_id))
-            }
-            _ => None,
-        }
     }
 
     /// Emit `stream_drop_readable(handle)`.
@@ -3402,37 +3362,6 @@ impl FunctionTranslator<'_, '_> {
     }
 
     // =========================================================================
-    // StreamWritable method interception
-    // =========================================================================
-
-    /// Check if a method call is on a `StreamWritable<T>` receiver.
-    /// Handles: `write(data)` and `close()`.
-    fn try_translate_stream_writable_method(
-        &mut self,
-        receiver: &TirExpr,
-        func: &FunctionRef,
-        args: &[TirExpr],
-    ) -> Option<WirInstr> {
-        let mut recv_type = self.type_table.get(receiver.type_id).clone();
-        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = &recv_type {
-            let inner = *inner;
-            recv_type = self.type_table.get(inner).clone();
-        }
-        if !matches!(recv_type, ResolvedType::StreamWritable(_)) {
-            return None;
-        }
-        let method_name = func.method_info()?.method_name.clone();
-        let handle = self.translate_expr(receiver);
-        match method_name.as_str() {
-            "close" => Some(self.emit_stream_drop_writable(handle)),
-            "write" => {
-                let data_arg = self.translate_expr(&args[0]);
-                Some(self.emit_stream_write(handle, data_arg))
-            }
-            _ => None,
-        }
-    }
-
     /// Emit `stream_drop_writable(handle)`.
     fn emit_stream_drop_writable(&self, handle: WirInstr) -> WirInstr {
         let Some(func_id) = self

@@ -382,6 +382,8 @@ pub(super) struct MethodInfo {
     /// If this method was inherited from a newtype's base type, the base type ID
     /// Used for method signature substitution
     pub(super) inherited_from_base: Option<TypeId>,
+    /// Canonical builtin name from `#[canonical("...")]` on resource methods.
+    pub(super) canonical_name: Option<String>,
 }
 
 /// Labeled block expression target for tracking break types

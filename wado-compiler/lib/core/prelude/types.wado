@@ -43,6 +43,7 @@ impl Default for Option<T> {
 /// The readable end (`Future<T>`) is passed to consumers; the writable end (`FutureWritable<T>`)
 /// is used by the producer to fulfill the future.
 pub resource Future<T> {
+    #[canonical("future_create_pair")]
     fn new() -> [Future<T>, FutureWritable<T>];
 }
 
@@ -54,8 +55,10 @@ pub resource Future<T> {
 pub resource FutureWritable<T> {
     /// Resolve the future with a value.
     /// Currently supports writing Result<Option<Trailers>, ErrorCode>::Ok(null) (HTTP trailers).
+    #[canonical("future_write")]
     fn write(&self, value: T);
     /// Drop the writable end without resolving the future (cancels the future).
+    #[canonical("future_drop_writable")]
     fn drop(&self);
 }
 
@@ -66,12 +69,15 @@ pub resource FutureWritable<T> {
 /// The readable end (`Stream<T>`) is passed to consumers; the writable end (`StreamWritable<T>`)
 /// is used by the producer to write data into the stream.
 pub resource Stream<T> {
+    #[canonical("stream_create_pair")]
     fn new() -> [Stream<T>, StreamWritable<T>];
     /// Read up to `max` elements from the stream.
     /// Blocks until data is available or the writer closes.
     /// Returns an empty array on end-of-stream.
+    #[canonical("stream_read")]
     fn read(&self, max: i32) -> Array<T>;
     /// Close the readable end of the stream.
+    #[canonical("stream_drop_readable")]
     fn close(&self);
 }
 
@@ -83,7 +89,9 @@ pub resource Stream<T> {
 pub resource StreamWritable<T> {
     /// Write a chunk of data to the stream.
     /// Can be called multiple times for successive chunks.
+    #[canonical("stream_write")]
     fn write(&self, data: Array<T>);
     /// Close the writable end, signaling end-of-stream.
+    #[canonical("stream_drop_writable")]
     fn close(&self);
 }

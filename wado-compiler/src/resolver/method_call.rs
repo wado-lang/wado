@@ -165,6 +165,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             self_kind,
             param_types,
             inherited_from_base,
+            canonical_name,
         } = if let Some(info) = method_info {
             info
         } else {
@@ -183,6 +184,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self_kind: ast::SelfKind::Ref,
                 param_types: vec![],
                 inherited_from_base: None,
+                canonical_name: None,
             }
         };
 
@@ -414,6 +416,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )
         .with_type_args(&impl_type_arg_names, &method_type_arg_names);
         method_info.is_type_param_receiver = is_type_param_receiver;
+        method_info.canonical_name = canonical_name;
 
         // Use trait impl module source if this is a trait method,
         // otherwise use the struct's module (where inherent methods are defined)

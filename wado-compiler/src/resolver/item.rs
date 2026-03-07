@@ -610,6 +610,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 method_name: func.name.clone(),
                 method_type_args: vec![],
                 is_type_param_receiver: false,
+                canonical_name: None,
             }),
             params,
             return_type,
