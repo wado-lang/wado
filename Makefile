@@ -94,6 +94,12 @@ update-golden-format-fixtures:
 		name=$$(basename "$$f" .dirty.wado); \
 		cp "$$f" "wado-compiler/tests/format.fixtures.golden/$$name.clean.wado"; \
 		cargo run --bin wado -- format -w "wado-compiler/tests/format.fixtures.golden/$$name.clean.wado"; \
+		if grep -q '^\#!\[no_prelude\]' "$$f"; then continue; fi; \
+		cargo run --bin wado -- dump --tir --unparse "$$f" > "wado-compiler/tests/format.fixtures.golden/$$name.tir.wado" 2>/dev/null; \
+		cargo run --bin wado -- dump --lower --unparse "$$f" > "wado-compiler/tests/format.fixtures.golden/$$name.lower.wado" 2>/dev/null; \
+		cargo run --bin wado -- dump --optimize --unparse -O2 "$$f" > "wado-compiler/tests/format.fixtures.golden/$$name.optimize.wado" 2>/dev/null; \
+		cargo run --bin wado -- dump --wir --unparse -O2 "$$f" > "wado-compiler/tests/format.fixtures.golden/$$name.wir.wado" 2>/dev/null; \
+		cargo run --bin wado -- compile --wat-to-stdout "$$f" > "wado-compiler/tests/format.fixtures.golden/$$name.wat" 2>/dev/null; \
 	done
 
 .PHONY: update-golden-wir-fixtures
