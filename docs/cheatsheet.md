@@ -36,6 +36,7 @@ Quick reference for Wado syntax.
 // Numeric literal coercion
 let x: i64 = 42;               // integer literal → i64
 let y: u8 = 255;               // integer literal → u8
+let z: u128 = 1_000_000_000;   // integer literal → u128
 let f: f32 = 3.14;             // float literal → f32
 fn foo(n: i64) { ... }
 foo(100);                       // integer literal coerced to i64
@@ -186,13 +187,20 @@ let name = "Alice";
 let greeting = `Hello, {name}!`;         // "Hello, Alice!"
 let json = `\{"key": "{name}"\}`;        // escaped braces
 
+// Float-to-string: shortest roundtrip representation (no trailing .0)
+let s = `{5.0}`;                         // "5"
+let s = `{3.14}`;                        // "3.14"
+
 // Format specifiers (see docs/wep-2026-01-17-template-format-specifiers.md)
 let formatted = `{3.14159:0.2f}`;        // "3.14"
 let hex = `{255:x}`;                     // "ff"
+let hex_alt = `{255:#x}`;               // "0xff" (alternate flag adds 0x prefix)
 
 // Inspect — debug output for any type (see docs/wep-2026-02-21-inspect-debug-output.md)
+// Inspect preserves .0 for floats to distinguish from integers
 println(`{point:?}`);                    // "Point { x: 10, y: 20 }"
-println(`{point}`);                      // same — falls back to inspect when no Display impl
+println(`{5.0:?}`);                      // "5.0" (inspect keeps .0)
+println(`{point}`);                      // falls back to inspect when no Display impl
 
 // String methods
 let n = s.len();                         // byte length
@@ -754,6 +762,8 @@ test "not yet implemented" {
     panic("TODO: implement this");
 }
 ```
+
+Test blocks compile to a `wasi:test` world. Files with test blocks are discovered and executed by `wado test`:
 
 ```sh
 wado test                       # discover and run *_test.wado files
