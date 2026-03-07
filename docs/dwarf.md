@@ -1,13 +1,20 @@
 # DWARF Metadata for Wado
 
 This document describes the plan for adding DWARF debug metadata to the Wado compiler output,
-enabling profilers to resolve symbol names and source locations for Wado programs.
+enabling source-level location mapping (file paths, line numbers) for Wado programs.
 
 ## Background
 
 Wado already emits a Wasm **Name Section** (`WirNames` / `emit_name_section` in `codegen/emit.rs`),
 which provides human-readable function names such as `Point::sum` or `Point^Display::fmt`.
-This is sufficient for some profilers, but not for source-level mapping (file paths, line numbers).
+
+**Verification**: Running `wado run --profile guest benchmark/fts/fts.wado` and inspecting the
+resulting Firefox Profiler JSON confirms that symbol names are already fully resolved — all
+16 functions appear with names like `f64::fmt_into`, `run`, `write_digits_at`, etc.
+No `<unknown>` entries appear in the sampled stacks.
+
+So the Name Section is sufficient for **symbol name resolution** in profilers.
+What is missing is **source-level mapping**: file paths and line numbers per stack frame.
 
 DWARF adds the following on top of the Name Section:
 
