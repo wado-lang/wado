@@ -563,7 +563,8 @@ fn build_template_block(
 
                 if is_inspect {
                     // Closure with alternate mode (#:?): emit source text if available,
-                    // otherwise fall back to signature via inspect trait call
+                    // otherwise fall back to signature via inspect_trait_call (closures only).
+                    // For all other types, delegate to the Wado-level Inspect trait.
                     let is_closure = matches!(
                         tt.borrow().get(inner_type).clone(),
                         ResolvedType::Function { .. }
@@ -579,20 +580,38 @@ fn build_template_block(
                     {
                         // #:? with source text available: write source directly
                         stmts.push(write_str_stmt(&text, fmt_mut_ref, tt, span));
-                    } else {
-                        // Inspect: emit Inspect::inspect trait call.
-                        // Handles references inline (writes `&`/`&mut` prefix, derefs)
-                        // and closures (writes type signature as string literal).
+                    } else if is_closure {
+                        // Closure without source text: write type signature via Rust-level dispatch
+                        // (closures have no named type and cannot have Wado trait impls).
                         let call_stmts =
                             inspect_trait_call(resolved.type_id, resolved, fmt_mut_ref, tt, span);
+                        stmts.extend(call_stmts);
+                    } else {
+                        // Delegate to the Wado-level Inspect trait, same mechanism as Display.
+                        let call_stmts = trait_fmt_call(
+                            inner_type,
+                            resolved,
+                            fmt_mut_ref,
+                            "Inspect",
+                            "inspect",
+                            tt,
+                            span,
+                        );
                         stmts.extend(call_stmts);
                     }
                 } else {
                     // Always call Display::fmt (or other format trait).
                     // Every type has a Display impl — either user-defined or
                     // auto-generated (delegates to Inspect) by the traits synthesis pass.
-                    let call_stmts =
-                        trait_fmt_call(inner_type, resolved, fmt_mut_ref, trait_name, tt, span);
+                    let call_stmts = trait_fmt_call(
+                        inner_type,
+                        resolved,
+                        fmt_mut_ref,
+                        trait_name,
+                        "fmt",
+                        tt,
+                        span,
+                    );
                     stmts.extend(call_stmts);
                 }
             }
@@ -813,7 +832,7 @@ fn deref_to_inner(expr: TirExpr, target_type: TypeId, span: Span) -> TirExpr {
     )
 }
 
-/// Build a `TraitName::fmt(&expr, &mut f)` call.
+/// Build a `TraitName::method(&expr, &mut f)` call.
 /// `type_id` is the inner (non-ref) type for name mangling.
 /// `val` is the expression whose actual type may be `&T` or `T`.
 fn trait_fmt_call(
@@ -821,10 +840,11 @@ fn trait_fmt_call(
     val: TirExpr,
     fmt: TirExpr,
     trait_name: &str,
+    method_name: &str,
     tt: &Rc<RefCell<TypeTable>>,
     span: Span,
 ) -> Vec<TirStmt> {
-    // Unit and tuple types don't have Display impls — handle inline
+    // Unit and tuple types don't have Display/Inspect impls — handle inline
     let resolved = tt.borrow().get(type_id).clone();
     match resolved {
         ResolvedType::Unit => {
@@ -837,7 +857,7 @@ fn trait_fmt_call(
     }
 
     let impl_mod = trait_impl_module(type_id, trait_name, tt);
-    let info = method_name_for_type(type_id, trait_name, "fmt", tt);
+    let info = method_name_for_type(type_id, trait_name, method_name, tt);
     let mangled = info.to_mangled_name();
 
     // Check the expression's actual type (not the stripped type_id)
@@ -875,11 +895,13 @@ fn trait_fmt_call(
     vec![TirStmt::new(TirStmtKind::Expr(call), span)]
 }
 
-/// Build `Inspect::inspect(&value, f)` call, handling references inline.
+/// Build inspect output for types that have no Wado-level Inspect impl:
+/// tuples, closures, and reference-typed tuple elements.
 ///
-/// For `&T` / `&mut T`: writes the prefix string, derefs, then inspects the inner.
-/// For closures: writes the function signature as a string literal.
-/// For other types: calls `TypeName^Inspect::inspect`.
+/// For `&T` / `&mut T` (within tuple elements): writes the prefix, derefs, recurses.
+/// For tuples: writes `[elem1, elem2, ...]` with element recursion.
+/// For closures: writes the function type signature as a string literal.
+/// For all other types: delegates to the Wado-level `Inspect::inspect` via `trait_fmt_call`.
 fn inspect_trait_call(
     original_type_id: TypeId,
     val: TirExpr,
@@ -964,71 +986,13 @@ fn inspect_trait_call(
             vec![write_str_stmt(&sig, fmt, tt, span)]
         }
         _ => {
-            // Standard Inspect trait call
+            // Delegate to the Wado-level Inspect trait.
             let inner_type = strip_refs(original_type_id, tt);
-            let impl_mod = inspect_impl_module(inner_type, tt);
-            let info = method_name_for_type(inner_type, "Inspect", "inspect", tt);
-            let mangled = info.to_mangled_name();
-
-            let val_resolved_type = tt.borrow().get(val.type_id).clone();
-            let receiver = match val_resolved_type {
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_) => val,
-                _ => {
-                    let ref_type = tt.borrow_mut().make_ref(inner_type);
-                    TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Ref,
-                            expr: Box::new(val),
-                        },
-                        ref_type,
-                        span,
-                    )
-                }
-            };
-
-            let call = TirExpr::new(
-                TirExprKind::MethodCall {
-                    receiver: Box::new(receiver),
-                    func: FunctionRef::External {
-                        module_source: impl_mod,
-                        name: mangled,
-                        monomorph_info: None,
-                        method_info: Some(info),
-                    },
-                    type_args: vec![],
-                    args: vec![fmt],
-                },
-                TypeTable::UNIT,
-                span,
-            );
-            vec![TirStmt::new(TirStmtKind::Expr(call), span)]
+            trait_fmt_call(inner_type, val, fmt, "Inspect", "inspect", tt, span)
         }
     }
 }
 
-/// Determine the module where an Inspect trait impl lives for a given type.
-fn inspect_impl_module(type_id: TypeId, tt: &Rc<RefCell<TypeTable>>) -> ModuleSource {
-    match tt.borrow().get(type_id).clone() {
-        ResolvedType::Primitive(_) => ModuleSource::primitives(),
-        ResolvedType::Struct { ref name, .. } if name == "String" => ModuleSource::format(),
-        ResolvedType::Struct {
-            ref module_source, ..
-        }
-        | ResolvedType::Enum {
-            ref module_source, ..
-        }
-        | ResolvedType::Variant {
-            ref module_source, ..
-        }
-        | ResolvedType::GenericInstance {
-            ref module_source, ..
-        }
-        | ResolvedType::Newtype {
-            ref module_source, ..
-        } => module_source.clone(),
-        _ => ModuleSource::primitives(),
-    }
-}
 
 /// Build a `LocalMethodName` for a concrete (post-mono) type.
 ///
