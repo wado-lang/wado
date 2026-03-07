@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772861852710,
+  "lastUpdate": 1772868939019,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1310,6 +1310,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d1216dfab101ffd363fe12b033818c0ee462bc05"
         },
         "date": 1772861852521,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1571,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9220,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18450,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "777fcb8faa30d55b8034b5daa2ac4ebd91e6dea8",
+          "message": "Merge pull request #531 from wado-lang/claude/update-assert-inspect-ca67S\n\nAdd inspect trait support for assert_inspect macro",
+          "timestamp": "2026-03-07T16:33:17+09:00",
+          "tree_id": "1f14c3e7965e7cfe12ab9d710093067436791d42",
+          "url": "https://github.com/wado-lang/wado/commit/777fcb8faa30d55b8034b5daa2ac4ebd91e6dea8"
+        },
+        "date": 1772868938830,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
