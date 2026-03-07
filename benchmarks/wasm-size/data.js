@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772860384881,
+  "lastUpdate": 1772861146904,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1232,6 +1232,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1d592d92dcb82120c4b6ce182ed456079614b90c"
         },
         "date": 1772860384693,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1571,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9220,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18450,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "389b31905568cc72f4e7c6be343e67d94e9a762a",
+          "message": "Merge pull request #529 from wado-lang/claude/wado-dwarf-metadata-bLdlV\n\nAdd DWARF metadata design document for source-level debugging",
+          "timestamp": "2026-03-07T14:23:33+09:00",
+          "tree_id": "bd0076a2590c626fa581ac2cc060933502e99a17",
+          "url": "https://github.com/wado-lang/wado/commit/389b31905568cc72f4e7c6be343e67d94e9a762a"
+        },
+        "date": 1772861146715,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
