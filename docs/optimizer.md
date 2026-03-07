@@ -449,7 +449,7 @@ Eligibility: all elements must be compile-time constants (`I32Const`, `I64Const`
 
 ## Testing Strategy
 
-1. Golden Fixtures: `tests/fixtures.golden/*.lowered.wado` captures optimized TIR output. Regenerate with `make update-golden-fixtures`. CI integrity check verifies golden files are up-to-date.
+1. Golden Fixtures: `tests/fixtures.golden/*.wir.wado` captures optimized WIR output. Regenerate with `make update-golden-fixtures`. CI integrity check verifies golden files are up-to-date.
 2. Benchmark Suite: sieve, mandelbrot, count-prime benchmarks.
 3. Correctness Tests: E2E fixtures ensure optimizations preserve semantics.
 4. Performance Regression: Track benchmark performance over time.
