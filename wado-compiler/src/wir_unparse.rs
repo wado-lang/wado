@@ -85,8 +85,8 @@ impl<'a> WirUnparser<'a> {
             return None;
         };
         let segment = self.data.get(data_index as usize)?;
-        let off = *off as usize;
-        let length = *length as usize;
+        let off = (*off).cast_unsigned() as usize;
+        let length = (*length).cast_unsigned() as usize;
 
         // Look up the element type from the array type definition
         let elem_type = {
