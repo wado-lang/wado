@@ -1032,8 +1032,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             type_table.make_enum(named.name.clone(), info.module_source.clone())
                         } else if let Some(info) = variant_cases.get(&named.name) {
                             type_table.make_variant(named.name.clone(), info.module_source.clone())
-                        } else if flags_cases.contains_key(&named.name) {
-                            TypeTable::UNKNOWN
                         } else {
                             TypeTable::UNKNOWN
                         }

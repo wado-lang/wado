@@ -1,0 +1,19 @@
+// Test: Assert output when matches operator is the condition
+// The matched scrutinee ident is shown via inspect in the error
+
+variant Shape {
+    Circle(f64),
+    Rectangle([f64, f64]),
+    Point,
+}
+
+export fn run() with Stdout, Stderr {
+    let s = Shape::Circle(3.0);
+    assert s matches { Rectangle(_) };
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["condition: s matches { Rectangle(_) }"]
+}

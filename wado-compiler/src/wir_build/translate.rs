@@ -3117,7 +3117,7 @@ impl FunctionTranslator<'_, '_> {
         let mut seq = vec![declare_ptr, alloc_ptr];
         for i in 0..(BUF_SIZE / 8) {
             seq.push(WirInstr::I64Store {
-                offset: u64::from((i * 8) as u32),
+                offset: u64::from((i * 8).cast_unsigned()),
                 align: 3,
                 addr: Box::new(WirInstr::LocalGet {
                     name: ptr_name.clone(),

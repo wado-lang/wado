@@ -8,6 +8,12 @@ struct Box<i32> {  // from core:internal  // Box<T> with T=i32
 
 array array<u8> (mut u8);
 
+struct StrCharIter {
+    mut repr: ref array<u8>,
+    mut used: i32,
+    mut byte_index: i32,
+}
+
 struct StrUtf8ByteIter {
     mut repr: ref array<u8>,
     mut used: i32,
@@ -28,6 +34,16 @@ struct Formatter {
     mut width: i32,
     mut precision: i32,
     mut buf: ref String,
+}
+
+variant Option<char> {
+    Some(char),
+    None,
+}
+
+struct Option<char>::Some {
+    discriminant: i32,
+    payload_0: char,
 }
 
 variant Option<u8> {
@@ -124,6 +140,8 @@ type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref null StrUtf8ByteIter) ->
 
 type "functype/StrUtf8ByteIter^Iterator::collect" = fn(ref null StrUtf8ByteIter) -> ref null Array<u8>;
 
+type "functype/StrCharIter^Iterator::next" = fn(ref null StrCharIter) -> ref null Option<char>;
+
 type "functype/String::append_char" = fn(ref null String, char);
 
 type "functype/Array<u8>::append" = fn(ref null Array<u8>, u8);
@@ -132,7 +150,11 @@ type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref null String, i32) -> i32;
 
+type "functype/String^Inspect::inspect" = fn(ref null String, ref null Formatter);
+
 type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref null StrUtf8ByteIter) -> [i32, u8];
+
+type "functype/StrCharIter^Iterator::next" = fn(ref null StrCharIter) -> [i32, char];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref null Formatter);
 
@@ -207,62 +229,62 @@ fn run() with Stdout {
     let __local_49: ref null Formatter;
     let __local_50: ref null "core:internal/Box<i32>";
     let __local_51: ref null Formatter;
-    let __local_52: ref null Array<u8>;
-    let __local_53: ref null String;
-    let __local_54: i32;
-    let __local_55: ref null String;
-    let __local_56: ref null "core:internal/Box<i32>";
-    let __local_57: ref null Formatter;
-    let __local_58: ref null "core:internal/Box<i32>";
-    let __local_59: ref null Formatter;
-    let __local_60: ref null Array<u8>;
+    let __local_52: ref null String;
+    let __local_53: ref null Array<u8>;
+    let __local_54: ref null String;
+    let __local_55: i32;
+    let __local_56: ref null String;
+    let __local_57: ref null "core:internal/Box<i32>";
+    let __local_58: ref null Formatter;
+    let __local_59: ref null "core:internal/Box<i32>";
+    let __local_60: ref null Formatter;
     let __local_61: ref null String;
-    let __local_62: i32;
+    let __local_62: ref null Array<u8>;
     let __local_63: ref null String;
-    let __local_64: ref null "core:internal/Box<i32>";
-    let __local_65: ref null Formatter;
+    let __local_64: i32;
+    let __local_65: ref null String;
     let __local_66: ref null "core:internal/Box<i32>";
     let __local_67: ref null Formatter;
-    let __local_68: ref null Array<u8>;
-    let __local_69: ref null String;
-    let __local_70: i32;
-    let __local_71: ref null String;
-    let __local_72: ref null "core:internal/Box<i32>";
-    let __local_73: ref null Formatter;
-    let __local_74: ref null "core:internal/Box<i32>";
-    let __local_75: ref null Formatter;
-    let __local_76: ref null Array<u8>;
-    let __local_77: ref null String;
-    let __local_78: i32;
+    let __local_68: ref null "core:internal/Box<i32>";
+    let __local_69: ref null Formatter;
+    let __local_70: ref null String;
+    let __local_71: ref null Array<u8>;
+    let __local_72: ref null String;
+    let __local_73: i32;
+    let __local_74: ref null String;
+    let __local_75: ref null "core:internal/Box<i32>";
+    let __local_76: ref null Formatter;
+    let __local_77: ref null "core:internal/Box<i32>";
+    let __local_78: ref null Formatter;
     let __local_79: ref null String;
-    let __local_80: ref null "core:internal/Box<i32>";
-    let __local_81: ref null Formatter;
-    let __local_82: ref null "core:internal/Box<i32>";
-    let __local_83: ref null Formatter;
-    let __local_84: ref null Array<u8>;
-    let __local_85: ref null String;
-    let __local_86: i32;
-    let __local_87: ref null String;
-    let __local_88: ref null "core:internal/Box<i32>";
-    let __local_89: ref null Formatter;
-    let __local_90: ref null "core:internal/Box<i32>";
-    let __local_91: ref null Formatter;
-    let __local_92: ref null Array<u8>;
-    let __local_93: ref null String;
-    let __local_94: i32;
-    let __local_95: ref null String;
-    let __local_96: ref null "core:internal/Box<i32>";
-    let __local_97: ref null Formatter;
-    let __local_98: ref null "core:internal/Box<i32>";
-    let __local_99: ref null Formatter;
-    let __local_100: ref null Array<u8>;
+    let __local_80: ref null Array<u8>;
+    let __local_81: ref null String;
+    let __local_82: i32;
+    let __local_83: ref null String;
+    let __local_84: ref null "core:internal/Box<i32>";
+    let __local_85: ref null Formatter;
+    let __local_86: ref null "core:internal/Box<i32>";
+    let __local_87: ref null Formatter;
+    let __local_88: ref null String;
+    let __local_89: ref null Array<u8>;
+    let __local_90: ref null String;
+    let __local_91: i32;
+    let __local_92: ref null String;
+    let __local_93: ref null "core:internal/Box<i32>";
+    let __local_94: ref null Formatter;
+    let __local_95: ref null "core:internal/Box<i32>";
+    let __local_96: ref null Formatter;
+    let __local_97: ref null String;
+    let __local_98: ref null Array<u8>;
+    let __local_99: ref null String;
+    let __local_100: i32;
     let __local_101: ref null String;
-    let __local_102: i32;
-    let __local_103: ref null String;
+    let __local_102: ref null "core:internal/Box<i32>";
+    let __local_103: ref null Formatter;
     let __local_104: ref null "core:internal/Box<i32>";
     let __local_105: ref null Formatter;
-    let __local_106: ref null "core:internal/Box<i32>";
-    let __local_107: ref null Formatter;
+    let __local_106: ref null String;
+    let __local_107: ref null Array<u8>;
     let __local_108: ref null String;
     let __local_109: i32;
     let __local_110: ref null String;
@@ -271,13 +293,23 @@ fn run() with Stdout {
     let __local_113: ref null "core:internal/Box<i32>";
     let __local_114: ref null Formatter;
     let __local_115: ref null String;
-    let __local_116: i32;
-    let __local_117: ref null String;
-    let __local_118: ref null "core:internal/Box<i32>";
-    let __local_119: ref null Formatter;
-    let __local_120: ref null "core:internal/Box<i32>";
-    let __local_121: ref null Formatter;
-    let __local_122: i32;
+    let __local_116: ref null String;
+    let __local_117: i32;
+    let __local_118: ref null String;
+    let __local_119: ref null "core:internal/Box<i32>";
+    let __local_120: ref null Formatter;
+    let __local_121: ref null "core:internal/Box<i32>";
+    let __local_122: ref null Formatter;
+    let __local_123: ref null String;
+    let __local_124: ref null String;
+    let __local_125: i32;
+    let __local_126: ref null String;
+    let __local_127: ref null "core:internal/Box<i32>";
+    let __local_128: ref null Formatter;
+    let __local_129: ref null "core:internal/Box<i32>";
+    let __local_130: ref null Formatter;
+    let __local_131: ref null String;
+    let __local_132: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -317,18 +349,22 @@ fn run() with Stdout {
 condition: encode(&empty) == \"\"
 "), used: 33 });
             String::append(__local_22, String { repr: array.new_data<u8>("encode(&empty): "), used: 16 });
-            String::append(__local_22, __v0_2);
+            __local_23 = __inline_Formatter__new_9: block -> ref null Formatter {
+                __local_52 = __local_22;
+                break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_52) };
+            };
+            String^Inspect::inspect(__v0_2, __local_23);
             String::append_char(__local_22, 10);
             break __tmpl: __local_22;
         });
         unreachable;
     };
-    __v0_4 = __inline_encode_9: block -> ref null String {
-        __local_52 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_10: block -> ref null StrUtf8ByteIter {
-            __local_53 = String { repr: array.new_data<u8>("f"), used: 1 };
-            break __inline_String__bytes_10: StrUtf8ByteIter { repr: ref.as_non_null(__local_53.repr), used: __local_53.used, index: 0 };
+    __v0_4 = __inline_encode_10: block -> ref null String {
+        __local_53 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_11: block -> ref null StrUtf8ByteIter {
+            __local_54 = String { repr: array.new_data<u8>("f"), used: 1 };
+            break __inline_String__bytes_11: StrUtf8ByteIter { repr: ref.as_non_null(__local_54.repr), used: __local_54.used, index: 0 };
         });
-        break __inline_encode_9: "core:base64/encode_impl"(__local_52, STANDARD_TABLE, 1);
+        break __inline_encode_10: "core:base64/encode_impl"(__local_53, STANDARD_TABLE, 1);
     };
     __cond_5 = String^Eq::eq(__v0_4, String { repr: array.new_data<u8>("Zg=="), used: 4 });
     if __cond_5 == 0 {
@@ -344,28 +380,32 @@ condition: encode(&empty) == \"\"
             String::append_char(__local_24, 32);
             String::append(__local_24, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
             String::append_char(__local_24, 58);
-            __local_25 = __inline_Formatter__new_12: block -> ref null Formatter {
-                __local_55 = __local_24;
-                break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_55) };
+            __local_25 = __inline_Formatter__new_13: block -> ref null Formatter {
+                __local_56 = __local_24;
+                break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_56) };
             };
-            __local_57 = __local_25;
-            i32::fmt_decimal(10, __local_57);
+            __local_58 = __local_25;
+            i32::fmt_decimal(10, __local_58);
             String::append(__local_24, String { repr: array.new_data<u8>("
 condition: encode(&\"f\".bytes().collect()) == \"Zg==\"
 "), used: 53 });
             String::append(__local_24, String { repr: array.new_data<u8>("encode(&\"f\".bytes().collect()): "), used: 32 });
-            String::append(__local_24, __v0_4);
+            __local_25 = __inline_Formatter__new_16: block -> ref null Formatter {
+                __local_61 = __local_24;
+                break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_61) };
+            };
+            String^Inspect::inspect(__v0_4, __local_25);
             String::append_char(__local_24, 10);
             break __tmpl: __local_24;
         });
         unreachable;
     };
-    __v0_6 = __inline_encode_15: block -> ref null String {
-        __local_60 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_16: block -> ref null StrUtf8ByteIter {
-            __local_61 = String { repr: array.new_data<u8>("fo"), used: 2 };
-            break __inline_String__bytes_16: StrUtf8ByteIter { repr: ref.as_non_null(__local_61.repr), used: __local_61.used, index: 0 };
+    __v0_6 = __inline_encode_17: block -> ref null String {
+        __local_62 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_18: block -> ref null StrUtf8ByteIter {
+            __local_63 = String { repr: array.new_data<u8>("fo"), used: 2 };
+            break __inline_String__bytes_18: StrUtf8ByteIter { repr: ref.as_non_null(__local_63.repr), used: __local_63.used, index: 0 };
         });
-        break __inline_encode_15: "core:base64/encode_impl"(__local_60, STANDARD_TABLE, 1);
+        break __inline_encode_17: "core:base64/encode_impl"(__local_62, STANDARD_TABLE, 1);
     };
     __cond_7 = String^Eq::eq(__v0_6, String { repr: array.new_data<u8>("Zm8="), used: 4 });
     if __cond_7 == 0 {
@@ -381,28 +421,32 @@ condition: encode(&\"f\".bytes().collect()) == \"Zg==\"
             String::append_char(__local_26, 32);
             String::append(__local_26, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
             String::append_char(__local_26, 58);
-            __local_27 = __inline_Formatter__new_18: block -> ref null Formatter {
-                __local_63 = __local_26;
-                break __inline_Formatter__new_18: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_63) };
+            __local_27 = __inline_Formatter__new_20: block -> ref null Formatter {
+                __local_65 = __local_26;
+                break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_65) };
             };
-            __local_65 = __local_27;
-            i32::fmt_decimal(11, __local_65);
+            __local_67 = __local_27;
+            i32::fmt_decimal(11, __local_67);
             String::append(__local_26, String { repr: array.new_data<u8>("
 condition: encode(&\"fo\".bytes().collect()) == \"Zm8=\"
 "), used: 54 });
             String::append(__local_26, String { repr: array.new_data<u8>("encode(&\"fo\".bytes().collect()): "), used: 33 });
-            String::append(__local_26, __v0_6);
+            __local_27 = __inline_Formatter__new_23: block -> ref null Formatter {
+                __local_70 = __local_26;
+                break __inline_Formatter__new_23: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_70) };
+            };
+            String^Inspect::inspect(__v0_6, __local_27);
             String::append_char(__local_26, 10);
             break __tmpl: __local_26;
         });
         unreachable;
     };
-    __v0_8 = __inline_encode_21: block -> ref null String {
-        __local_68 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_22: block -> ref null StrUtf8ByteIter {
-            __local_69 = String { repr: array.new_data<u8>("foo"), used: 3 };
-            break __inline_String__bytes_22: StrUtf8ByteIter { repr: ref.as_non_null(__local_69.repr), used: __local_69.used, index: 0 };
+    __v0_8 = __inline_encode_24: block -> ref null String {
+        __local_71 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_25: block -> ref null StrUtf8ByteIter {
+            __local_72 = String { repr: array.new_data<u8>("foo"), used: 3 };
+            break __inline_String__bytes_25: StrUtf8ByteIter { repr: ref.as_non_null(__local_72.repr), used: __local_72.used, index: 0 };
         });
-        break __inline_encode_21: "core:base64/encode_impl"(__local_68, STANDARD_TABLE, 1);
+        break __inline_encode_24: "core:base64/encode_impl"(__local_71, STANDARD_TABLE, 1);
     };
     __cond_9 = String^Eq::eq(__v0_8, String { repr: array.new_data<u8>("Zm9v"), used: 4 });
     if __cond_9 == 0 {
@@ -418,28 +462,32 @@ condition: encode(&\"fo\".bytes().collect()) == \"Zm8=\"
             String::append_char(__local_28, 32);
             String::append(__local_28, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
             String::append_char(__local_28, 58);
-            __local_29 = __inline_Formatter__new_24: block -> ref null Formatter {
-                __local_71 = __local_28;
-                break __inline_Formatter__new_24: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_71) };
+            __local_29 = __inline_Formatter__new_27: block -> ref null Formatter {
+                __local_74 = __local_28;
+                break __inline_Formatter__new_27: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_74) };
             };
-            __local_73 = __local_29;
-            i32::fmt_decimal(12, __local_73);
+            __local_76 = __local_29;
+            i32::fmt_decimal(12, __local_76);
             String::append(__local_28, String { repr: array.new_data<u8>("
 condition: encode(&\"foo\".bytes().collect()) == \"Zm9v\"
 "), used: 55 });
             String::append(__local_28, String { repr: array.new_data<u8>("encode(&\"foo\".bytes().collect()): "), used: 34 });
-            String::append(__local_28, __v0_8);
+            __local_29 = __inline_Formatter__new_30: block -> ref null Formatter {
+                __local_79 = __local_28;
+                break __inline_Formatter__new_30: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_79) };
+            };
+            String^Inspect::inspect(__v0_8, __local_29);
             String::append_char(__local_28, 10);
             break __tmpl: __local_28;
         });
         unreachable;
     };
-    __v0_10 = __inline_encode_27: block -> ref null String {
-        __local_76 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_28: block -> ref null StrUtf8ByteIter {
-            __local_77 = String { repr: array.new_data<u8>("foob"), used: 4 };
-            break __inline_String__bytes_28: StrUtf8ByteIter { repr: ref.as_non_null(__local_77.repr), used: __local_77.used, index: 0 };
+    __v0_10 = __inline_encode_31: block -> ref null String {
+        __local_80 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_32: block -> ref null StrUtf8ByteIter {
+            __local_81 = String { repr: array.new_data<u8>("foob"), used: 4 };
+            break __inline_String__bytes_32: StrUtf8ByteIter { repr: ref.as_non_null(__local_81.repr), used: __local_81.used, index: 0 };
         });
-        break __inline_encode_27: "core:base64/encode_impl"(__local_76, STANDARD_TABLE, 1);
+        break __inline_encode_31: "core:base64/encode_impl"(__local_80, STANDARD_TABLE, 1);
     };
     __cond_11 = String^Eq::eq(__v0_10, String { repr: array.new_data<u8>("Zm9vYg=="), used: 8 });
     if __cond_11 == 0 {
@@ -455,28 +503,32 @@ condition: encode(&\"foo\".bytes().collect()) == \"Zm9v\"
             String::append_char(__local_30, 32);
             String::append(__local_30, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
             String::append_char(__local_30, 58);
-            __local_31 = __inline_Formatter__new_30: block -> ref null Formatter {
-                __local_79 = __local_30;
-                break __inline_Formatter__new_30: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_79) };
+            __local_31 = __inline_Formatter__new_34: block -> ref null Formatter {
+                __local_83 = __local_30;
+                break __inline_Formatter__new_34: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_83) };
             };
-            __local_81 = __local_31;
-            i32::fmt_decimal(13, __local_81);
+            __local_85 = __local_31;
+            i32::fmt_decimal(13, __local_85);
             String::append(__local_30, String { repr: array.new_data<u8>("
 condition: encode(&\"foob\".bytes().collect()) == \"Zm9vYg==\"
 "), used: 60 });
             String::append(__local_30, String { repr: array.new_data<u8>("encode(&\"foob\".bytes().collect()): "), used: 35 });
-            String::append(__local_30, __v0_10);
+            __local_31 = __inline_Formatter__new_37: block -> ref null Formatter {
+                __local_88 = __local_30;
+                break __inline_Formatter__new_37: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_88) };
+            };
+            String^Inspect::inspect(__v0_10, __local_31);
             String::append_char(__local_30, 10);
             break __tmpl: __local_30;
         });
         unreachable;
     };
-    __v0_12 = __inline_encode_33: block -> ref null String {
-        __local_84 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_34: block -> ref null StrUtf8ByteIter {
-            __local_85 = String { repr: array.new_data<u8>("fooba"), used: 5 };
-            break __inline_String__bytes_34: StrUtf8ByteIter { repr: ref.as_non_null(__local_85.repr), used: __local_85.used, index: 0 };
+    __v0_12 = __inline_encode_38: block -> ref null String {
+        __local_89 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_39: block -> ref null StrUtf8ByteIter {
+            __local_90 = String { repr: array.new_data<u8>("fooba"), used: 5 };
+            break __inline_String__bytes_39: StrUtf8ByteIter { repr: ref.as_non_null(__local_90.repr), used: __local_90.used, index: 0 };
         });
-        break __inline_encode_33: "core:base64/encode_impl"(__local_84, STANDARD_TABLE, 1);
+        break __inline_encode_38: "core:base64/encode_impl"(__local_89, STANDARD_TABLE, 1);
     };
     __cond_13 = String^Eq::eq(__v0_12, String { repr: array.new_data<u8>("Zm9vYmE="), used: 8 });
     if __cond_13 == 0 {
@@ -492,28 +544,32 @@ condition: encode(&\"foob\".bytes().collect()) == \"Zm9vYg==\"
             String::append_char(__local_32, 32);
             String::append(__local_32, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
             String::append_char(__local_32, 58);
-            __local_33 = __inline_Formatter__new_36: block -> ref null Formatter {
-                __local_87 = __local_32;
-                break __inline_Formatter__new_36: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_87) };
+            __local_33 = __inline_Formatter__new_41: block -> ref null Formatter {
+                __local_92 = __local_32;
+                break __inline_Formatter__new_41: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_92) };
             };
-            __local_89 = __local_33;
-            i32::fmt_decimal(14, __local_89);
+            __local_94 = __local_33;
+            i32::fmt_decimal(14, __local_94);
             String::append(__local_32, String { repr: array.new_data<u8>("
 condition: encode(&\"fooba\".bytes().collect()) == \"Zm9vYmE=\"
 "), used: 61 });
             String::append(__local_32, String { repr: array.new_data<u8>("encode(&\"fooba\".bytes().collect()): "), used: 36 });
-            String::append(__local_32, __v0_12);
+            __local_33 = __inline_Formatter__new_44: block -> ref null Formatter {
+                __local_97 = __local_32;
+                break __inline_Formatter__new_44: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_97) };
+            };
+            String^Inspect::inspect(__v0_12, __local_33);
             String::append_char(__local_32, 10);
             break __tmpl: __local_32;
         });
         unreachable;
     };
-    __v0_14 = __inline_encode_39: block -> ref null String {
-        __local_92 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_40: block -> ref null StrUtf8ByteIter {
-            __local_93 = String { repr: array.new_data<u8>("foobar"), used: 6 };
-            break __inline_String__bytes_40: StrUtf8ByteIter { repr: ref.as_non_null(__local_93.repr), used: __local_93.used, index: 0 };
+    __v0_14 = __inline_encode_45: block -> ref null String {
+        __local_98 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_46: block -> ref null StrUtf8ByteIter {
+            __local_99 = String { repr: array.new_data<u8>("foobar"), used: 6 };
+            break __inline_String__bytes_46: StrUtf8ByteIter { repr: ref.as_non_null(__local_99.repr), used: __local_99.used, index: 0 };
         });
-        break __inline_encode_39: "core:base64/encode_impl"(__local_92, STANDARD_TABLE, 1);
+        break __inline_encode_45: "core:base64/encode_impl"(__local_98, STANDARD_TABLE, 1);
     };
     __cond_15 = String^Eq::eq(__v0_14, String { repr: array.new_data<u8>("Zm9vYmFy"), used: 8 });
     if __cond_15 == 0 {
@@ -529,28 +585,32 @@ condition: encode(&\"fooba\".bytes().collect()) == \"Zm9vYmE=\"
             String::append_char(__local_34, 32);
             String::append(__local_34, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
             String::append_char(__local_34, 58);
-            __local_35 = __inline_Formatter__new_42: block -> ref null Formatter {
-                __local_95 = __local_34;
-                break __inline_Formatter__new_42: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_95) };
+            __local_35 = __inline_Formatter__new_48: block -> ref null Formatter {
+                __local_101 = __local_34;
+                break __inline_Formatter__new_48: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_101) };
             };
-            __local_97 = __local_35;
-            i32::fmt_decimal(15, __local_97);
+            __local_103 = __local_35;
+            i32::fmt_decimal(15, __local_103);
             String::append(__local_34, String { repr: array.new_data<u8>("
 condition: encode(&\"foobar\".bytes().collect()) == \"Zm9vYmFy\"
 "), used: 62 });
             String::append(__local_34, String { repr: array.new_data<u8>("encode(&\"foobar\".bytes().collect()): "), used: 37 });
-            String::append(__local_34, __v0_14);
+            __local_35 = __inline_Formatter__new_51: block -> ref null Formatter {
+                __local_106 = __local_34;
+                break __inline_Formatter__new_51: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_106) };
+            };
+            String^Inspect::inspect(__v0_14, __local_35);
             String::append_char(__local_34, 10);
             break __tmpl: __local_34;
         });
         unreachable;
     };
-    __v0_16 = __inline_encode_url_45: block -> ref null String {
-        __local_100 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_46: block -> ref null StrUtf8ByteIter {
-            __local_101 = String { repr: array.new_data<u8>("Hello"), used: 5 };
-            break __inline_String__bytes_46: StrUtf8ByteIter { repr: ref.as_non_null(__local_101.repr), used: __local_101.used, index: 0 };
+    __v0_16 = __inline_encode_url_52: block -> ref null String {
+        __local_107 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_53: block -> ref null StrUtf8ByteIter {
+            __local_108 = String { repr: array.new_data<u8>("Hello"), used: 5 };
+            break __inline_String__bytes_53: StrUtf8ByteIter { repr: ref.as_non_null(__local_108.repr), used: __local_108.used, index: 0 };
         });
-        break __inline_encode_url_45: "core:base64/encode_impl"(__local_100, URL_SAFE_TABLE, 0);
+        break __inline_encode_url_52: "core:base64/encode_impl"(__local_107, URL_SAFE_TABLE, 0);
     };
     __cond_17 = String^Eq::eq(__v0_16, String { repr: array.new_data<u8>("SGVsbG8"), used: 7 });
     if __cond_17 == 0 {
@@ -566,25 +626,29 @@ condition: encode(&\"foobar\".bytes().collect()) == \"Zm9vYmFy\"
             String::append_char(__local_36, 32);
             String::append(__local_36, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
             String::append_char(__local_36, 58);
-            __local_37 = __inline_Formatter__new_48: block -> ref null Formatter {
-                __local_103 = __local_36;
-                break __inline_Formatter__new_48: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_103) };
+            __local_37 = __inline_Formatter__new_55: block -> ref null Formatter {
+                __local_110 = __local_36;
+                break __inline_Formatter__new_55: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_110) };
             };
-            __local_105 = __local_37;
-            i32::fmt_decimal(18, __local_105);
+            __local_112 = __local_37;
+            i32::fmt_decimal(18, __local_112);
             String::append(__local_36, String { repr: array.new_data<u8>("
 condition: encode_url(&\"Hello\".bytes().collect()) == \"SGVsbG8\"
 "), used: 64 });
             String::append(__local_36, String { repr: array.new_data<u8>("encode_url(&\"Hello\".bytes().collect()): "), used: 40 });
-            String::append(__local_36, __v0_16);
+            __local_37 = __inline_Formatter__new_58: block -> ref null Formatter {
+                __local_115 = __local_36;
+                break __inline_Formatter__new_58: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_115) };
+            };
+            String^Inspect::inspect(__v0_16, __local_37);
             String::append_char(__local_36, 10);
             break __tmpl: __local_36;
         });
         unreachable;
     };
-    __v0_18 = "core:base64/encode_with"(StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_51: block -> ref null StrUtf8ByteIter {
-        __local_108 = String { repr: array.new_data<u8>("Hello"), used: 5 };
-        break __inline_String__bytes_51: StrUtf8ByteIter { repr: ref.as_non_null(__local_108.repr), used: __local_108.used, index: 0 };
+    __v0_18 = "core:base64/encode_with"(StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_59: block -> ref null StrUtf8ByteIter {
+        __local_116 = String { repr: array.new_data<u8>("Hello"), used: 5 };
+        break __inline_String__bytes_59: StrUtf8ByteIter { repr: ref.as_non_null(__local_116.repr), used: __local_116.used, index: 0 };
     }), 2);
     __cond_19 = String^Eq::eq(__v0_18, String { repr: array.new_data<u8>("SGVsbG8"), used: 7 });
     if __cond_19 == 0 {
@@ -600,25 +664,29 @@ condition: encode_url(&\"Hello\".bytes().collect()) == \"SGVsbG8\"
             String::append_char(__local_38, 32);
             String::append(__local_38, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
             String::append_char(__local_38, 58);
-            __local_39 = __inline_Formatter__new_53: block -> ref null Formatter {
-                __local_110 = __local_38;
-                break __inline_Formatter__new_53: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_110) };
+            __local_39 = __inline_Formatter__new_61: block -> ref null Formatter {
+                __local_118 = __local_38;
+                break __inline_Formatter__new_61: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_118) };
             };
-            __local_112 = __local_39;
-            i32::fmt_decimal(21, __local_112);
+            __local_120 = __local_39;
+            i32::fmt_decimal(21, __local_120);
             String::append(__local_38, String { repr: array.new_data<u8>("
 condition: encode_with(&\"Hello\".bytes().collect(), Encoding::NoPadding) == \"SGVsbG8\"
 "), used: 86 });
             String::append(__local_38, String { repr: array.new_data<u8>("encode_with(&\"Hello\".bytes().collect(), Encoding::NoPadding): "), used: 62 });
-            String::append(__local_38, __v0_18);
+            __local_39 = __inline_Formatter__new_64: block -> ref null Formatter {
+                __local_123 = __local_38;
+                break __inline_Formatter__new_64: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_123) };
+            };
+            String^Inspect::inspect(__v0_18, __local_39);
             String::append_char(__local_38, 10);
             break __tmpl: __local_38;
         });
         unreachable;
     };
-    __v0_20 = "core:base64/encode_with"(StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_56: block -> ref null StrUtf8ByteIter {
-        __local_115 = String { repr: array.new_data<u8>("Hello"), used: 5 };
-        break __inline_String__bytes_56: StrUtf8ByteIter { repr: ref.as_non_null(__local_115.repr), used: __local_115.used, index: 0 };
+    __v0_20 = "core:base64/encode_with"(StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_65: block -> ref null StrUtf8ByteIter {
+        __local_124 = String { repr: array.new_data<u8>("Hello"), used: 5 };
+        break __inline_String__bytes_65: StrUtf8ByteIter { repr: ref.as_non_null(__local_124.repr), used: __local_124.used, index: 0 };
     }), 0);
     __cond_21 = String^Eq::eq(__v0_20, String { repr: array.new_data<u8>("SGVsbG8="), used: 8 });
     if __cond_21 == 0 {
@@ -634,17 +702,21 @@ condition: encode_with(&\"Hello\".bytes().collect(), Encoding::NoPadding) == \"S
             String::append_char(__local_40, 32);
             String::append(__local_40, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
             String::append_char(__local_40, 58);
-            __local_41 = __inline_Formatter__new_58: block -> ref null Formatter {
-                __local_117 = __local_40;
-                break __inline_Formatter__new_58: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_117) };
+            __local_41 = __inline_Formatter__new_67: block -> ref null Formatter {
+                __local_126 = __local_40;
+                break __inline_Formatter__new_67: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_126) };
             };
-            __local_119 = __local_41;
-            i32::fmt_decimal(24, __local_119);
+            __local_128 = __local_41;
+            i32::fmt_decimal(24, __local_128);
             String::append(__local_40, String { repr: array.new_data<u8>("
 condition: encode_with(&\"Hello\".bytes().collect(), Encoding::none()) == \"SGVsbG8=\"
 "), used: 84 });
             String::append(__local_40, String { repr: array.new_data<u8>("encode_with(&\"Hello\".bytes().collect(), Encoding::none()): "), used: 59 });
-            String::append(__local_40, __v0_20);
+            __local_41 = __inline_Formatter__new_70: block -> ref null Formatter {
+                __local_131 = __local_40;
+                break __inline_Formatter__new_70: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_131) };
+            };
+            String^Inspect::inspect(__v0_20, __local_41);
             String::append_char(__local_40, 10);
             break __tmpl: __local_40;
         });
@@ -1529,6 +1601,62 @@ fn StrUtf8ByteIter^Iterator::collect(self) {
     return result;
 }
 
+fn StrCharIter^Iterator::next(self) {
+    let b0: u8;
+    let b1_2: u8;
+    let code_3: u8;
+    let b1_4: u8;
+    let b2_5: u8;
+    let code_6: u8;
+    let b1_7: u8;
+    let b2_8: u8;
+    let b3: u8;
+    let code_10: u8;
+    let __local_11: u32;
+    let __local_12: u32;
+    let __local_13: u32;
+    let __local_14: u32;
+    if self.byte_index >= self.used {
+        return 1; 0;
+    };
+    b0 = builtin::array_get_u8(self.repr, self.byte_index);
+    self.byte_index = self.byte_index + 1;
+    if b0 <u 128 {
+        return 0; __inline_char__from_u32_unchecked_0: block -> char {
+            __local_11 = b0;
+            break __inline_char__from_u32_unchecked_0: __local_11;
+        };
+    };
+    if b0 <u 224 {
+        b1_2 = builtin::array_get_u8(self.repr, self.byte_index);
+        self.byte_index = self.byte_index + 1;
+        code_3 = ((b0 & 31) << 6) | (b1_2 & 63);
+        return 0; __inline_char__from_u32_unchecked_1: block -> char {
+            __local_12 = code_3;
+            break __inline_char__from_u32_unchecked_1: __local_12;
+        };
+    };
+    if b0 <u 240 {
+        b1_4 = builtin::array_get_u8(self.repr, self.byte_index);
+        b2_5 = builtin::array_get_u8(self.repr, self.byte_index + 1);
+        self.byte_index = self.byte_index + 2;
+        code_6 = (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63);
+        return 0; __inline_char__from_u32_unchecked_2: block -> char {
+            __local_13 = code_6;
+            break __inline_char__from_u32_unchecked_2: __local_13;
+        };
+    };
+    b1_7 = builtin::array_get_u8(self.repr, self.byte_index);
+    b2_8 = builtin::array_get_u8(self.repr, self.byte_index + 1);
+    b3 = builtin::array_get_u8(self.repr, self.byte_index + 2);
+    self.byte_index = self.byte_index + 3;
+    code_10 = ((((b0 & 7) << 18) | ((b1_7 & 63) << 12)) | ((b2_8 & 63) << 6)) | (b3 & 63);
+    return 0; __inline_char__from_u32_unchecked_3: block -> char {
+        __local_14 = code_10;
+        break __inline_char__from_u32_unchecked_3: __local_14;
+    };
+}
+
 fn String::append_char(self, c) {
     let code: u32;
     code = c;
@@ -1585,13 +1713,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l79: loop {
+            l83: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l79;
+                continue l83;
             };
         };
     };
@@ -1677,6 +1805,82 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
+}
+
+fn String^Inspect::inspect(self, f) {
+    let __iter_4: ref null StrCharIter;
+    let c: char;
+    let __pattern_temp_0: ref null Option<char>;
+    let __local_5: ref null Formatter;
+    let __local_6: char;
+    let __local_7: ref null StrCharIter;
+    let __local_8: ref null String;
+    let __local_9: ref null Formatter;
+    let __local_10: char;
+    let __local_11: ref null Formatter;
+    let __local_12: char;
+    let __local_13: ref null Formatter;
+    let __local_14: char;
+    let __local_15: ref null Formatter;
+    let __local_16: char;
+    let __local_17: ref null Formatter;
+    let __local_18: char;
+    let __local_19: ref null Formatter;
+    let __local_20: char;
+    let __local_21: ref null Formatter;
+    let __local_22: char;
+    let __local_23: ref null Formatter;
+    let __local_24: char;
+    let __local_25: ref null Formatter;
+    let __local_26: char;
+    let __local_27: ref null Formatter;
+    let __local_28: char;
+    let __local_29: ref null Formatter;
+    let __local_30: char;
+    let __local_31: ref null Formatter;
+    let __local_32: char;
+    let _licm_buf_33: ref null String;
+    String::append_char(f.buf, 34);
+    __iter_4 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref null StrCharIter {
+        __local_7 = __inline_String__chars_2: block -> ref null StrCharIter {
+            __local_8 = self;
+            break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
+        };
+        break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
+    };
+    _licm_buf_33 = f.buf;
+    b102: block {
+        l103: loop {
+            let __sroa___pattern_temp_0_discriminant: i32;
+            let __sroa___pattern_temp_0_payload_0: char;
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_4);
+            if __sroa___pattern_temp_0_discriminant == 0 {
+                c = __sroa___pattern_temp_0_payload_0;
+                if c == 34 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 34);
+                } else if c == 92 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 92);
+                } else if c == 10 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 110);
+                } else if c == 13 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 114);
+                } else if c == 9 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 116);
+                } else {
+                    String::append_char(_licm_buf_33, c);
+                };
+            } else {
+                break b102;
+            };
+            continue l103;
+        };
+    };
+    String::append_char(f.buf, 34);
 }
 
 export fn __cm_export__run as "run"
