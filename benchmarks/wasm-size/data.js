@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772861146904,
+  "lastUpdate": 1772861852710,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1271,6 +1271,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/389b31905568cc72f4e7c6be343e67d94e9a762a"
         },
         "date": 1772861146715,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1571,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9220,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18450,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d1216dfab101ffd363fe12b033818c0ee462bc05",
+          "message": "Merge pull request #530 from wado-lang/claude/plan-stream-future-web-N9DiF\n\nUnify resource method dispatch via canonical attributes",
+          "timestamp": "2026-03-07T14:35:10+09:00",
+          "tree_id": "303c21f5d8a16f31d3f18ccc5f19bc9b8350cd2d",
+          "url": "https://github.com/wado-lang/wado/commit/d1216dfab101ffd363fe12b033818c0ee462bc05"
+        },
+        "date": 1772861852521,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
