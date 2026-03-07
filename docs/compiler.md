@@ -61,7 +61,13 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | SynthCmAdapter  | `synthesis/cm_adapter.rs`            | CM boundary adapter synthesis (TIR functions)               |
 | CmAbi           | `cm_abi.rs`                          | Canonical ABI layout computation                            |
 | Monomorphize    | `monomorphize.rs`                    | Generic type/function instantiation (Project→Project)       |
-| Lower           | `lower.rs`                           | Closure, i128 match, global init, string lowering           |
+| Lower           | `lower.rs`                           | Lowering coordinator (`lower/`)                             |
+| LowerWideInt    | `lower/wide_int.rs`                  | i128/u128 match pattern → if-else chains                    |
+| LowerPattern    | `lower/pattern.rs`                   | LetPattern/IfPattern → explicit statements + switch         |
+| LowerGlobals    | `lower/globals.rs`                   | Global initializer extraction + `__initialize_modules`      |
+| LowerBoxing     | `lower/boxing.rs`                    | `&primitive` → `Box<T>` struct lowering                     |
+| LowerClosure    | `lower/closure.rs`                   | Closure → functor struct with `__call` methods              |
+| LowerString     | `lower/string.rs`                    | String/bytes literal collection for data section            |
 | Project         | `project.rs`                         | Project: compilation context passed through pipeline        |
 | Optimize        | `optimize.rs`                        | Optimization coordinator (`optimize/`)                      |
 | ConstFold       | `optimize/const_fold.rs`             | Constant folding for integer/float arithmetic               |
