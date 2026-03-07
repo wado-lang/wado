@@ -1015,10 +1015,10 @@ fn test_format_golden_mess() {
 fn test_format_golden_no_prelude() {
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
     let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures.golden");
-    let dirty = fs::read_to_string(fixtures.join("no_prelude.dirty.wado"))
-        .expect("read no_prelude dirty");
-    let clean = fs::read_to_string(golden.join("no_prelude.clean.wado"))
-        .expect("read no_prelude clean");
+    let dirty =
+        fs::read_to_string(fixtures.join("no_prelude.dirty.wado")).expect("read no_prelude dirty");
+    let clean =
+        fs::read_to_string(golden.join("no_prelude.clean.wado")).expect("read no_prelude clean");
 
     let formatted = wado_compiler::format(&dirty).expect("format no_prelude dirty failed");
     assert_eq!(
@@ -1027,8 +1027,7 @@ fn test_format_golden_no_prelude() {
         formatted, clean
     );
 
-    let formatted2 =
-        wado_compiler::format(&formatted).expect("format no_prelude clean failed");
+    let formatted2 = wado_compiler::format(&formatted).expect("format no_prelude clean failed");
     assert_eq!(
         formatted, formatted2,
         "format(no_prelude clean) should be idempotent"
@@ -1046,8 +1045,7 @@ fn test_format_golden_ops_all() {
     let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures.golden");
     let dirty =
         fs::read_to_string(fixtures.join("ops.all.dirty.wado")).expect("read ops.all dirty");
-    let clean =
-        fs::read_to_string(golden.join("ops.all.clean.wado")).expect("read ops.all clean");
+    let clean = fs::read_to_string(golden.join("ops.all.clean.wado")).expect("read ops.all clean");
 
     let formatted = wado_compiler::format(&dirty).expect("format ops.all dirty failed");
     assert_eq!(
