@@ -15,20 +15,20 @@ No `<unknown>` entries appear in the sampled stacks.
 
 The compiler also already has all the source information needed in WIR:
 
-| Information | Source in WIR |
-|---|---|
-| Function display name | `WirFunction.name.display` (e.g., `Point::sum`) |
-| Source file path | `WirFunction.meta.module_source` (`ModuleSource`) |
+| Information                | Source in WIR                                                           |
+| -------------------------- | ----------------------------------------------------------------------- |
+| Function display name      | `WirFunction.name.display` (e.g., `Point::sum`)                         |
+| Source file path           | `WirFunction.meta.module_source` (`ModuleSource`)                       |
 | Function start line/column | `WirFunction.meta.span` (`Span { line, column, start, end, end_line }`) |
-| `gimli` crate | Already in `Cargo.lock` v0.32.3 (transitive via wasmtime) |
+| `gimli` crate              | Already in `Cargo.lock` v0.32.3 (transitive via wasmtime)               |
 
 What the current baseline **cannot** do:
 
-| Gap | Impact |
-|---|---|
+| Gap                                     | Impact                                                                          |
+| --------------------------------------- | ------------------------------------------------------------------------------- |
 | No source file/line in panic backtraces | Wasmtime prints `wasm backtrace` with function names only; no `src/foo.wado:42` |
-| No source file/line in profiler frames | Firefox Profiler / perf show function names but cannot link to source lines |
-| No debugger support | LLDB/GDB cannot step through Wado source code |
+| No source file/line in profiler frames  | Firefox Profiler / perf show function names but cannot link to source lines     |
+| No debugger support                     | LLDB/GDB cannot step through Wado source code                                   |
 
 ## Benefits of Adding DWARF
 
@@ -73,12 +73,12 @@ for statement-level stepping.
 
 DWARF is embedded as custom sections in the Wasm binary:
 
-| Section | Role |
-|---|---|
-| `.debug_abbrev` | Abbreviation table for DIE encoding |
-| `.debug_str` | Interned string table (file names, function names) |
-| `.debug_info` | Compilation unit and subprogram (function) DIEs |
-| `.debug_line` | Line number program: instruction byte offset → source line |
+| Section         | Role                                                       |
+| --------------- | ---------------------------------------------------------- |
+| `.debug_abbrev` | Abbreviation table for DIE encoding                        |
+| `.debug_str`    | Interned string table (file names, function names)         |
+| `.debug_info`   | Compilation unit and subprogram (function) DIEs            |
+| `.debug_line`   | Line number program: instruction byte offset → source line |
 
 These are added via `wasm_encoder::RawSection` after the core module is emitted.
 
@@ -163,13 +163,13 @@ This satisfies the requirement that `wado-compiler` compiles for `wasm32-unknown
 
 ## Tool Support Matrix
 
-| Tool | Baseline (Name Section only) | After Phase 1 (function DWARF) | After Phase 2 (line table) |
-|---|---|---|---|
-| `wado run --profile guest` (Firefox Profiler) | ✅ Function names resolved | ✅ Same | ✅ Per-line attribution |
-| `wado run --profile perfmap` (perf map) | ✅ Function names resolved | ✅ Same | ✅ Same |
-| `wado run --profile jitdump` (Linux perf) | ✅ Function names | ✅ Same | ✅ Source lines visible |
-| Wasmtime `--wasm-backtrace-details` (panic traces) | ❌ Names only, no file:line | ✅ `src/foo.wado:15` per frame | ✅ Exact statement line |
-| LLDB / GDB function breakpoints | ❌ Not supported | ✅ Function-level breakpoints | ✅ Statement-level stepping |
+| Tool                                               | Baseline (Name Section only) | After Phase 1 (function DWARF) | After Phase 2 (line table)  |
+| -------------------------------------------------- | ---------------------------- | ------------------------------ | --------------------------- |
+| `wado run --profile guest` (Firefox Profiler)      | ✅ Function names resolved   | ✅ Same                        | ✅ Per-line attribution     |
+| `wado run --profile perfmap` (perf map)            | ✅ Function names resolved   | ✅ Same                        | ✅ Same                     |
+| `wado run --profile jitdump` (Linux perf)          | ✅ Function names            | ✅ Same                        | ✅ Source lines visible     |
+| Wasmtime `--wasm-backtrace-details` (panic traces) | ❌ Names only, no file:line  | ✅ `src/foo.wado:15` per frame | ✅ Exact statement line     |
+| LLDB / GDB function breakpoints                    | ❌ Not supported             | ✅ Function-level breakpoints  | ✅ Statement-level stepping |
 
 ## Known Limitations
 
