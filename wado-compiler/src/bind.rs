@@ -207,7 +207,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
         // Bind parameters as local variables
         for param in &func.params {
-            self.define(&param.name, false, false, param.span)?;
+            self.define(&param.name, param.is_mut, false, param.span)?;
         }
 
         // Bind body
@@ -707,7 +707,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
         // Bind parameters
         for param in &closure.params {
-            self.define(&param.name, false, false, closure.span)?;
+            self.define(&param.name, param.is_mut, false, closure.span)?;
         }
 
         // Bind body

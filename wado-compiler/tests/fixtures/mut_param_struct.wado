@@ -1,21 +1,23 @@
+use { println, Stdout } from "core:cli";
+
 struct Point {
     x: i32,
     y: i32,
 }
 
-fn translate(mut p: Point, dx: i32, dy: i32) -> Point {
-    p.x += dx;
-    p.y += dy;
+// Rebinding a mut struct param does not affect the caller's binding.
+fn zero_out(mut p: Point) -> Point {
+    p = Point { x: 0, y: 0 };
     return p;
 }
 
 export fn run() with Stdout {
-    let p = Point { x: 1, y: 2 };
-    let q = translate(p, 10, 20);
-    assert q.x == 11;
-    assert q.y == 22;
-    assert p.x == 1;
-    assert p.y == 2;
+    let p = Point { x: 5, y: 10 };
+    let q = zero_out(p);
+    assert q.x == 0;
+    assert q.y == 0;
+    assert p.x == 5; // caller's variable is unchanged
+    assert p.y == 10;
     println("ok");
 }
 

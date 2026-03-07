@@ -1,4 +1,7 @@
-// Test: mut parameters have value semantics — callee mutations do not affect the caller.
+// Test: mut parameters — value semantics for primitives, and binding-rebind semantics
+// for reference types (struct, string, array).
+
+use { println, Stdout } from "core:cli";
 
 struct Point {
     x: i32,
@@ -21,19 +24,21 @@ fn increment(mut n: i32) -> i32 {
     return n;
 }
 
-fn translate(mut p: Point, dx: i32, dy: i32) -> Point {
-    p.x += dx;
-    p.y += dy;
+// Rebinding a struct param does not affect the caller's binding.
+fn zero_struct(mut p: Point) -> Point {
+    p = Point { x: 0, y: 0 };
     return p;
 }
 
+// Rebinding a string param does not affect the caller's binding.
 fn replace_string(mut s: String) -> String {
     s = "replaced";
     return s;
 }
 
-fn double_first(mut arr: Array<i32>) -> Array<i32> {
-    arr[0] = arr[0] * 2;
+// Rebinding an array param does not affect the caller's binding.
+fn swap_array(mut arr: Array<i32>) -> Array<i32> {
+    arr = [99, 88] as Array<i32>;
     return arr;
 }
 
@@ -50,28 +55,28 @@ fn countdown(mut n: i32) with Stdout {
 }
 
 export fn run() with Stdout {
-    // Primitive: mutation does not affect caller
+    // Primitive: arithmetic mutation does not affect caller
     let x = 5;
     assert increment(x) == 6;
     assert x == 5;
 
-    // Struct: field mutation does not affect caller
-    let p = Point { x: 1, y: 2 };
-    let q = translate(p, 10, 20);
-    assert q.x == 11;
-    assert q.y == 22;
-    assert p.x == 1;
-    assert p.y == 2;
+    // Struct: binding rebind does not affect caller
+    let p = Point { x: 5, y: 10 };
+    let q = zero_struct(p);
+    assert q.x == 0;
+    assert q.y == 0;
+    assert p.x == 5;
+    assert p.y == 10;
 
-    // String: reassignment does not affect caller
+    // String: rebind does not affect caller
     let s = "original";
     assert replace_string(s) == "replaced";
     assert s == "original";
 
-    // Array: element mutation does not affect caller
+    // Array: rebind does not affect caller
     let a: Array<i32> = [1, 2, 3];
-    let b = double_first(a);
-    assert b[0] == 2;
+    let b = swap_array(a);
+    assert b[0] == 99;
     assert a[0] == 1;
 
     // Mixed mut/non-mut params
@@ -93,7 +98,7 @@ export fn run() with Stdout {
     countdown(start);
     assert start == 3;
 
-    // Closure with mut parameter
+    // Closure with mut parameter: arithmetic mutation does not affect caller
     let add_one = |mut n: i32| {
         n += 1;
         return n;

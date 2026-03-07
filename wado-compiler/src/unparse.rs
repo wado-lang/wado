@@ -335,6 +335,9 @@ impl<'a> Unparser<'a> {
             }
         }
         // Regular parameter
+        if param.is_mut {
+            self.output.push_str("mut ");
+        }
         self.output.push_str(&param.name);
         self.output.push_str(": ");
         self.unparse_type(&param.ty);
@@ -2136,6 +2139,9 @@ impl<'a> Unparser<'a> {
             if i > 0 {
                 self.output.push_str(", ");
             }
+            if param.is_mut {
+                self.output.push_str("mut ");
+            }
             self.output.push_str(&param.name);
             if let Some(ty) = &param.ty {
                 self.output.push_str(": ");
@@ -2747,6 +2753,9 @@ fn unparse_closure_into(c: &ClosureExpr, output: &mut String) {
     for (i, param) in c.params.iter().enumerate() {
         if i > 0 {
             output.push_str(", ");
+        }
+        if param.is_mut {
+            output.push_str("mut ");
         }
         output.push_str(&param.name);
         if let Some(ty) = &param.ty {

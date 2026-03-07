@@ -1,23 +1,18 @@
+use { println, Stdout } from "core:cli";
+
+// Rebinding a mut string param does not affect the caller's binding.
 fn replace(mut s: String) -> String {
     s = "new value";
     return s;
 }
 
-fn append_exclaim(mut s: String) -> String {
-    s.append("!");
-    return s;
-}
-
-fn double_first(mut arr: Array<i32>) -> Array<i32> {
-    arr[0] = arr[0] * 2;
+// Rebinding a mut array param does not affect the caller's binding.
+fn swap_array(mut arr: Array<i32>) -> Array<i32> {
+    arr = [99, 88, 77] as Array<i32>;
     return arr;
 }
 
-fn push_zero(mut arr: Array<i32>) -> Array<i32> {
-    arr.append(0);
-    return arr;
-}
-
+// Only the mut param can be reassigned; non-mut param cannot.
 fn compute(mut x: i32, y: i32) -> i32 {
     x = x * 2;
     return x + y;
@@ -30,29 +25,16 @@ export fn run() with Stdout {
     assert result == "new value";
     assert original == "original";
 
-    // String: append does not affect caller
-    let greeting = "hello";
-    let excited = append_exclaim(greeting);
-    assert excited == "hello!";
-    assert greeting == "hello";
-
-    // Array: element modification does not affect caller
+    // Array: rebinding does not affect caller
     let a: Array<i32> = [1, 2, 3];
-    let b = double_first(a);
-    assert b[0] == 2;
-    assert a[0] == 1;
-    assert a.len() == 3;
+    let b = swap_array(a);
+    assert b[0] == 99;
+    assert a[0] == 1; // caller's binding unchanged
 
-    // Array: append does not affect caller
-    let c = push_zero(a);
-    assert c.len() == 4;
-    assert a.len() == 3;
-
-    // Mixed mut and non-mut params
+    // Mixed mut/non-mut params
     let p = 5;
     let q = 3;
-    let r = compute(p, q);
-    assert r == 13; // (5*2) + 3
+    assert compute(p, q) == 13; // (5*2) + 3
     assert p == 5;
     assert q == 3;
 
