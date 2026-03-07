@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772868939019,
+  "lastUpdate": 1772876945759,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1349,6 +1349,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/777fcb8faa30d55b8034b5daa2ac4ebd91e6dea8"
         },
         "date": 1772868938830,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1571,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9220,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18450,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "df349ca95d8b90e50984ba911536d0e7e3587dc0",
+          "message": "Merge pull request #532 from wado-lang/claude/fix-compiler-warnings-tpcTo\n\nEnable Rust warnings as errors and fix compiler warnings",
+          "timestamp": "2026-03-07T18:46:53+09:00",
+          "tree_id": "0c6b6a4ab3c003276a65f3755348bfde396152f8",
+          "url": "https://github.com/wado-lang/wado/commit/df349ca95d8b90e50984ba911536d0e7e3587dc0"
+        },
+        "date": 1772876945569,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
