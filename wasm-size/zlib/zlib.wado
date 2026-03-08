@@ -9,7 +9,7 @@ test "gzip round-trip" {
         original.append((i % 256) as u8);
     }
     let compressed = gzip_compress(&original);
-    let decompressed = inflate_gzip(&compressed);
+    let decompressed = inflate_gzip(&compressed).unwrap();
     assert decompressed.len() == 1024;
     assert decompressed[0] == 0;
     assert decompressed[1] == 1;
@@ -33,7 +33,7 @@ export fn run() with Stdout, Stdin {
     stdin_stream.drop();
 
     // Decompress gzip and write to stdout
-    let decompressed = inflate_gzip(&data);
+    let decompressed = inflate_gzip(&data).unwrap();
     let handles = builtin::stream_new();
     let rx = handles as i32;
     let tx = (handles >> 32) as i32;

@@ -456,7 +456,18 @@ impl FunctionTranslator<'_, '_> {
                 Self::block_breaks_are_fresh(label, block, fresh_locals)
             }
 
-            // Everything else is not fresh (field access, index, etc.)
+            // Field access on a fresh struct — the struct is unaliased,
+            // so the extracted field is not shared.
+            TirExprKind::FieldAccess { expr: inner, .. } => {
+                Self::is_fresh_in_context(inner, fresh_locals)
+            }
+
+            // Variant payload extraction from a fresh variant — the variant
+            // is unaliased, so the payload is not shared.
+            TirExprKind::VariantPayload { expr: inner, .. } => {
+                Self::is_fresh_in_context(inner, fresh_locals)
+            }
+
             _ => false,
         }
     }
