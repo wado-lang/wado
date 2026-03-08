@@ -1646,13 +1646,12 @@ impl FunctionTranslator<'_, '_> {
                         .iter()
                         .map(|a| self.ctx.type_id_to_wir_type(self.type_table, a.type_id))
                         .collect();
-                    let results = if expr.type_id == TypeTable::UNIT
-                        || expr.type_id == TypeTable::NEVER
-                    {
-                        vec![]
-                    } else {
-                        vec![self.ctx.type_id_to_wir_type(self.type_table, expr.type_id)]
-                    };
+                    let results =
+                        if expr.type_id == TypeTable::UNIT || expr.type_id == TypeTable::NEVER {
+                            vec![]
+                        } else {
+                            vec![self.ctx.type_id_to_wir_type(self.type_table, expr.type_id)]
+                        };
                     self.ctx.ensure_canonical(local_name, params, results)
                 };
                 WirInstr::Call {
