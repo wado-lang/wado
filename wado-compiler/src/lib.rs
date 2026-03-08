@@ -126,6 +126,9 @@ pub use project::Project;
 pub use resolver::{Resolver, TypeError, resolve_to_project};
 pub use token::Span;
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use indexmap::IndexMap;
 
 /// Result of compiling a Wado source file
@@ -170,6 +173,34 @@ pub struct DumpResult {
     pub wir_module: Option<wir::WirModule>,
     /// Comments for unparsing
     pub comments: comment::CommentMap,
+}
+
+/// Create a snapshot of TIR modules with an independent copy of the `TypeTable`.
+///
+/// All `TirModule`s share the same `TypeTable` via `Rc<RefCell<>>`.  The
+/// optimizer's DCE prunes unreachable types from that shared table, which would
+/// corrupt earlier-phase snapshots.  This function deep-clones the `TypeTable`
+/// into a fresh `Rc` so the snapshot is immune to later mutations.
+fn snapshot_tir_modules(
+    modules: &IndexMap<ModuleSource, tir::TirModule>,
+) -> IndexMap<ModuleSource, tir::TirModule> {
+    // Deep-clone the shared TypeTable once, then replace every module's Rc
+    // with a reference to the clone.
+    let cloned_tt = modules
+        .values()
+        .next()
+        .map(|m| Rc::new(RefCell::new(m.type_table.borrow().clone())));
+
+    modules
+        .iter()
+        .map(|(source, module)| {
+            let mut m = module.clone();
+            if let Some(ref tt) = cloned_tt {
+                m.type_table = Rc::clone(tt);
+            }
+            (source.clone(), m)
+        })
+        .collect()
 }
 
 /// Compilation options for the compiler
@@ -559,14 +590,17 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             monomorphize_project(project)
         };
 
-        let mono_snapshot = Some(project.tir_modules.clone());
+        // Snapshot after monomorphize with an independent copy of the TypeTable.
+        // The optimizer's DCE prunes unreachable types from the shared TypeTable,
+        // which would corrupt earlier snapshots if they shared the same Rc.
+        let mono_snapshot = Some(snapshot_tir_modules(&project.tir_modules));
 
         // Lower
         let project = {
             let _span = logger.span("lower");
             lower_project(project)
         };
-        let lower_snapshot = Some(project.tir_modules.clone());
+        let lower_snapshot = Some(snapshot_tir_modules(&project.tir_modules));
 
         // Optimize
         let project = {
@@ -587,6 +621,10 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     } else {
         (None, None, None, None)
     };
+
+    // Snapshot the resolved TIR modules with an independent TypeTable copy
+    // so optimizer DCE doesn't corrupt the resolved-phase view.
+    let tir_modules_by_source = tir_modules_by_source.map(|m| snapshot_tir_modules(&m));
 
     Ok(DumpResult {
         source: source.to_string(),

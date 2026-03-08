@@ -3952,8 +3952,8 @@ impl<'a> TirUnparser<'a> {
             } => {
                 // If expression type is a reference, show it (for functor structs)
                 if matches!(
-                    self.type_table.get(expr.type_id),
-                    crate::tir::ResolvedType::Ref(_)
+                    self.type_table.try_get(expr.type_id),
+                    Some(crate::tir::ResolvedType::Ref(_))
                 ) {
                     self.output.push('&');
                 }
