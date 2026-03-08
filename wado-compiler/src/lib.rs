@@ -524,7 +524,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // Snapshot resolved TIR with an independent TypeTable clone so that
     // later optimization passes (which call TypeTable::retain) cannot mutate it.
     let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
-        tir_modules.as_ref().map(|m| snapshot_tir_modules(m));
+        tir_modules.as_ref().map(snapshot_tir_modules);
 
     // === Phase 7b+8+9+10: Build Project and run remaining phases ===
     // Create Project early so CM adapter synthesis runs before monomorphize,
