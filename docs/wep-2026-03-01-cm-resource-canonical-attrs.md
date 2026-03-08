@@ -551,7 +551,7 @@ __DATA__
 -
   8. [x] Update `wasm_plan.rs` to collect canonicals from WIR context
 -
-  9. [ ] Remove `method_call.rs` special cases for `Stream::new()` / `Future::new()`
+  9. [x] Remove `method_call.rs` special cases for `Stream::new()` / `Future::new()`
 -
   10. [x] Add `#[canonical]` attributes to resource methods in `types.wado`
 -
