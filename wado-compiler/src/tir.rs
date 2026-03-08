@@ -487,18 +487,6 @@ impl TypeTable {
         self.types.iter()
     }
 
-    /// Try to get a type by ID, returning `None` if the type doesn't exist.
-    /// Useful when types may have been removed by DCE.
-    pub fn try_get(&self, id: TypeId) -> Option<&ResolvedType> {
-        self.types.get(&id)
-    }
-
-    /// Try to mangle a type name, returning `None` if the type doesn't exist.
-    /// Useful when types may have been removed by DCE.
-    pub fn try_mangle_type_name(&self, id: TypeId) -> Option<String> {
-        self.try_get(id)?;
-        Some(self.mangle_type_name(id))
-    }
 
     pub fn is_integer(&self, id: TypeId) -> bool {
         // Follow newtype chain to get ultimate base type
@@ -1004,15 +992,6 @@ impl TypeTable {
         }
     }
 
-    /// Get a human-readable name for a type, returning a fallback for missing `TypeIds`.
-    /// Useful in diagnostic/unparse contexts where types may not be in the local `TypeTable`.
-    pub fn try_type_name(&self, id: TypeId) -> String {
-        if self.try_get(id).is_some() {
-            self.type_name(id)
-        } else {
-            format!("<TypeId({})>", id.0)
-        }
-    }
 
     /// Get a mangled name for a type suitable for use in struct/function names.
     ///
