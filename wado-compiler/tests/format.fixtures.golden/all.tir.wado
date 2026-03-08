@@ -55,7 +55,7 @@ fn i32_and(a: i32, b: i32) -> i32;
 
 fn i32_eqz(a: i32) -> i32;
 
-fn select<T>(cond: bool, if_true: <TypeId(19)>, if_false: <TypeId(19)>) -> <TypeId(19)>;
+fn select<T>(cond: bool, if_true: <TypeId(20)>, if_false: <TypeId(20)>) -> <TypeId(20)>;
 
 fn array_len(arr: builtin::array<u8>) -> i32;
 
@@ -63,15 +63,15 @@ fn array_get_u8(arr: builtin::array<u8>, idx: i32) -> u8;
 
 fn array_set_u8(arr: builtin::array<u8>, idx: i32, value: u8);
 
-fn array_new<T>(len: i32) -> <TypeId(29)>;
+fn array_new<T>(len: i32) -> <TypeId(30)>;
 
-fn array_get<T>(arr: <TypeId(29)>, idx: i32) -> <TypeId(19)>;
+fn array_get<T>(arr: <TypeId(30)>, idx: i32) -> <TypeId(20)>;
 
-fn array_set<T>(arr: <TypeId(29)>, idx: i32, value: <TypeId(19)>);
+fn array_set<T>(arr: <TypeId(30)>, idx: i32, value: <TypeId(20)>);
 
-fn array_copy<T>(dst: <TypeId(29)>, dst_offset: i32, src: <TypeId(29)>, src_offset: i32, len: i32);
+fn array_copy<T>(dst: <TypeId(30)>, dst_offset: i32, src: <TypeId(30)>, src_offset: i32, len: i32);
 
-fn array_fill<T>(arr: <TypeId(29)>, offset: i32, value: <TypeId(19)>, len: i32);
+fn array_fill<T>(arr: <TypeId(30)>, offset: i32, value: <TypeId(20)>, len: i32);
 
 fn i32_load(addr: i32) -> i32;
 
@@ -199,13 +199,13 @@ fn f32_hypot(x: f32, y: f32) -> f32;
 
 fn f32_fmod(x: f32, y: f32) -> f32;
 
-fn i64_add128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> <TypeId(32)>;
+fn i64_add128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> <TypeId(33)>;
 
-fn i64_sub128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> <TypeId(32)>;
+fn i64_sub128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> <TypeId(33)>;
 
-fn i64_mul_wide_u(a: i64, b: i64) -> <TypeId(32)>;
+fn i64_mul_wide_u(a: i64, b: i64) -> <TypeId(33)>;
 
-fn i64_mul_wide_s(a: i64, b: i64) -> <TypeId(32)>;
+fn i64_mul_wide_s(a: i64, b: i64) -> <TypeId(33)>;
 
 fn i32_clz(x: i32) -> i32;
 
@@ -261,9 +261,249 @@ fn f32_copysign(magnitude: f32, sign: f32) -> f32;
 
 fn f64_copysign(magnitude: f64, sign: f64) -> f64;
 
-fn inspect<T>(value: <TypeId(19)>, fmt: <TypeId(35)>);
+fn v128_const(value: <TypeId(35)>) -> v128;
 
-fn display<T>(value: <TypeId(19)>, fmt: <TypeId(35)>);
+fn v128_not(a: v128) -> v128;
+
+fn v128_and(a: v128, b: v128) -> v128;
+
+fn v128_or(a: v128, b: v128) -> v128;
+
+fn v128_xor(a: v128, b: v128) -> v128;
+
+fn v128_bitselect(a: v128, b: v128, c: v128) -> v128;
+
+fn i8x16_splat(a: i32) -> v128;
+
+fn i8x16_extract_lane_s(lane: i32, a: v128) -> i32;
+
+fn i8x16_extract_lane_u(lane: i32, a: v128) -> i32;
+
+fn i8x16_replace_lane(lane: i32, a: v128, value: i32) -> v128;
+
+fn i8x16_add(a: v128, b: v128) -> v128;
+
+fn i8x16_sub(a: v128, b: v128) -> v128;
+
+fn i8x16_neg(a: v128) -> v128;
+
+fn i8x16_eq(a: v128, b: v128) -> v128;
+
+fn i8x16_ne(a: v128, b: v128) -> v128;
+
+fn i8x16_lt_s(a: v128, b: v128) -> v128;
+
+fn i8x16_gt_s(a: v128, b: v128) -> v128;
+
+fn i8x16_le_s(a: v128, b: v128) -> v128;
+
+fn i8x16_ge_s(a: v128, b: v128) -> v128;
+
+fn i8x16_lt_u(a: v128, b: v128) -> v128;
+
+fn i8x16_gt_u(a: v128, b: v128) -> v128;
+
+fn i8x16_le_u(a: v128, b: v128) -> v128;
+
+fn i8x16_ge_u(a: v128, b: v128) -> v128;
+
+fn i8x16_shl(a: v128, b: i32) -> v128;
+
+fn i8x16_shr_s(a: v128, b: i32) -> v128;
+
+fn i8x16_shr_u(a: v128, b: i32) -> v128;
+
+fn i8x16_swizzle(a: v128, indices: v128) -> v128;
+
+fn i16x8_splat(a: i32) -> v128;
+
+fn i16x8_extract_lane_s(lane: i32, a: v128) -> i32;
+
+fn i16x8_extract_lane_u(lane: i32, a: v128) -> i32;
+
+fn i16x8_replace_lane(lane: i32, a: v128, value: i32) -> v128;
+
+fn i16x8_add(a: v128, b: v128) -> v128;
+
+fn i16x8_sub(a: v128, b: v128) -> v128;
+
+fn i16x8_mul(a: v128, b: v128) -> v128;
+
+fn i16x8_neg(a: v128) -> v128;
+
+fn i16x8_eq(a: v128, b: v128) -> v128;
+
+fn i16x8_ne(a: v128, b: v128) -> v128;
+
+fn i16x8_lt_s(a: v128, b: v128) -> v128;
+
+fn i16x8_gt_s(a: v128, b: v128) -> v128;
+
+fn i16x8_le_s(a: v128, b: v128) -> v128;
+
+fn i16x8_ge_s(a: v128, b: v128) -> v128;
+
+fn i16x8_lt_u(a: v128, b: v128) -> v128;
+
+fn i16x8_gt_u(a: v128, b: v128) -> v128;
+
+fn i16x8_le_u(a: v128, b: v128) -> v128;
+
+fn i16x8_ge_u(a: v128, b: v128) -> v128;
+
+fn i16x8_shl(a: v128, b: i32) -> v128;
+
+fn i16x8_shr_s(a: v128, b: i32) -> v128;
+
+fn i16x8_shr_u(a: v128, b: i32) -> v128;
+
+fn i32x4_splat(a: i32) -> v128;
+
+fn i32x4_extract_lane(lane: i32, a: v128) -> i32;
+
+fn i32x4_replace_lane(lane: i32, a: v128, value: i32) -> v128;
+
+fn i32x4_add(a: v128, b: v128) -> v128;
+
+fn i32x4_sub(a: v128, b: v128) -> v128;
+
+fn i32x4_mul(a: v128, b: v128) -> v128;
+
+fn i32x4_neg(a: v128) -> v128;
+
+fn i32x4_eq(a: v128, b: v128) -> v128;
+
+fn i32x4_ne(a: v128, b: v128) -> v128;
+
+fn i32x4_lt_s(a: v128, b: v128) -> v128;
+
+fn i32x4_gt_s(a: v128, b: v128) -> v128;
+
+fn i32x4_le_s(a: v128, b: v128) -> v128;
+
+fn i32x4_ge_s(a: v128, b: v128) -> v128;
+
+fn i32x4_lt_u(a: v128, b: v128) -> v128;
+
+fn i32x4_gt_u(a: v128, b: v128) -> v128;
+
+fn i32x4_le_u(a: v128, b: v128) -> v128;
+
+fn i32x4_ge_u(a: v128, b: v128) -> v128;
+
+fn i32x4_shl(a: v128, b: i32) -> v128;
+
+fn i32x4_shr_s(a: v128, b: i32) -> v128;
+
+fn i32x4_shr_u(a: v128, b: i32) -> v128;
+
+fn i64x2_splat(a: i64) -> v128;
+
+fn i64x2_extract_lane(lane: i32, a: v128) -> i64;
+
+fn i64x2_replace_lane(lane: i32, a: v128, value: i64) -> v128;
+
+fn i64x2_add(a: v128, b: v128) -> v128;
+
+fn i64x2_sub(a: v128, b: v128) -> v128;
+
+fn i64x2_mul(a: v128, b: v128) -> v128;
+
+fn i64x2_neg(a: v128) -> v128;
+
+fn i64x2_eq(a: v128, b: v128) -> v128;
+
+fn i64x2_ne(a: v128, b: v128) -> v128;
+
+fn i64x2_lt_s(a: v128, b: v128) -> v128;
+
+fn i64x2_gt_s(a: v128, b: v128) -> v128;
+
+fn i64x2_le_s(a: v128, b: v128) -> v128;
+
+fn i64x2_ge_s(a: v128, b: v128) -> v128;
+
+fn i64x2_shl(a: v128, b: i32) -> v128;
+
+fn i64x2_shr_s(a: v128, b: i32) -> v128;
+
+fn i64x2_shr_u(a: v128, b: i32) -> v128;
+
+fn f32x4_splat(a: f32) -> v128;
+
+fn f32x4_extract_lane(lane: i32, a: v128) -> f32;
+
+fn f32x4_replace_lane(lane: i32, a: v128, value: f32) -> v128;
+
+fn f32x4_add(a: v128, b: v128) -> v128;
+
+fn f32x4_sub(a: v128, b: v128) -> v128;
+
+fn f32x4_mul(a: v128, b: v128) -> v128;
+
+fn f32x4_div(a: v128, b: v128) -> v128;
+
+fn f32x4_neg(a: v128) -> v128;
+
+fn f32x4_sqrt(a: v128) -> v128;
+
+fn f32x4_abs(a: v128) -> v128;
+
+fn f32x4_eq(a: v128, b: v128) -> v128;
+
+fn f32x4_ne(a: v128, b: v128) -> v128;
+
+fn f32x4_lt(a: v128, b: v128) -> v128;
+
+fn f32x4_gt(a: v128, b: v128) -> v128;
+
+fn f32x4_le(a: v128, b: v128) -> v128;
+
+fn f32x4_ge(a: v128, b: v128) -> v128;
+
+fn f32x4_min(a: v128, b: v128) -> v128;
+
+fn f32x4_max(a: v128, b: v128) -> v128;
+
+fn f64x2_splat(a: f64) -> v128;
+
+fn f64x2_extract_lane(lane: i32, a: v128) -> f64;
+
+fn f64x2_replace_lane(lane: i32, a: v128, value: f64) -> v128;
+
+fn f64x2_add(a: v128, b: v128) -> v128;
+
+fn f64x2_sub(a: v128, b: v128) -> v128;
+
+fn f64x2_mul(a: v128, b: v128) -> v128;
+
+fn f64x2_div(a: v128, b: v128) -> v128;
+
+fn f64x2_neg(a: v128) -> v128;
+
+fn f64x2_sqrt(a: v128) -> v128;
+
+fn f64x2_abs(a: v128) -> v128;
+
+fn f64x2_eq(a: v128, b: v128) -> v128;
+
+fn f64x2_ne(a: v128, b: v128) -> v128;
+
+fn f64x2_lt(a: v128, b: v128) -> v128;
+
+fn f64x2_gt(a: v128, b: v128) -> v128;
+
+fn f64x2_le(a: v128, b: v128) -> v128;
+
+fn f64x2_ge(a: v128, b: v128) -> v128;
+
+fn f64x2_min(a: v128, b: v128) -> v128;
+
+fn f64x2_max(a: v128, b: v128) -> v128;
+
+fn inspect<T>(value: <TypeId(20)>, fmt: <TypeId(37)>);
+
+fn display<T>(value: <TypeId(20)>, fmt: <TypeId(37)>);
 
 
 // --- Module: core:cli ---
@@ -332,13 +572,13 @@ pub fn eprint(message: String) with Stderr {
     core::internal::wait_for_subtask(subtask);
 }
 
-pub fn env(name: String) -> <TypeId(36)> with Environment;
+pub fn env(name: String) -> <TypeId(38)> with Environment;
 
-pub fn args() -> <TypeId(37)> with Environment {
+pub fn args() -> <TypeId(39)> with Environment {
     return __cm_adapter__Environment_get_arguments();
 }
 
-pub fn cwd() -> <TypeId(36)> with Environment {
+pub fn cwd() -> <TypeId(38)> with Environment {
     return __cm_adapter__Environment_get_initial_cwd();
 }
 
@@ -464,17 +704,17 @@ pub fn cm_lower_list_u8(data: builtin::array<u8>, len: i32) -> i64 {
     return (ptr as i64 | (len as i64 << 32));
 }
 
-pub fn cm_lower_array_u8(arr: <TypeId(39)>) -> i64 {
+pub fn cm_lower_array_u8(arr: <TypeId(41)>) -> i64 {
     let data: builtin::array<u8> = arr."Array<u8>::internal_raw_data"();
     let len: i32 = arr."Array<u8>::len"();
     return core::internal::cm_lower_list_u8(data, len);
 }
 
-pub fn write_escaped_string(s: String, f: <TypeId(35)>) {
+pub fn write_escaped_string(s: String, f: <TypeId(37)>) {
     __for_of_2: {
-        let mut __iter_2: <TypeId(41)> = s.String::chars()."StrCharIter^IntoIterator::into_iter"();
+        let mut __iter_2: <TypeId(43)> = s.String::chars()."StrCharIter^IntoIterator::into_iter"();
         loop {
-            let __pattern_temp_0: <TypeId(44)> = __iter_2."StrCharIter^Iterator::next"();
+            let __pattern_temp_0: <TypeId(46)> = __iter_2."StrCharIter^Iterator::next"();
             if __variant_test(__pattern_temp_0, case=0, name=Some) {
                 let c: char = __variant_payload(__pattern_temp_0, case=0);
                 match c {

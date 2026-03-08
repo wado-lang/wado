@@ -55,7 +55,7 @@ fn i32_and(a: i32, b: i32) -> i32;
 
 fn i32_eqz(a: i32) -> i32;
 
-fn select<T>(cond: bool, if_true: <TypeId(18)>, if_false: <TypeId(18)>) -> <TypeId(18)>;
+fn select<T>(cond: bool, if_true: <TypeId(19)>, if_false: <TypeId(19)>) -> <TypeId(19)>;
 
 fn array_len(arr: builtin::array<u8>) -> i32;
 
@@ -63,15 +63,15 @@ fn array_get_u8(arr: builtin::array<u8>, idx: i32) -> u8;
 
 fn array_set_u8(arr: builtin::array<u8>, idx: i32, value: u8);
 
-fn array_new<T>(len: i32) -> <TypeId(25)>;
+fn array_new<T>(len: i32) -> <TypeId(26)>;
 
-fn array_get<T>(arr: <TypeId(25)>, idx: i32) -> <TypeId(18)>;
+fn array_get<T>(arr: <TypeId(26)>, idx: i32) -> <TypeId(19)>;
 
-fn array_set<T>(arr: <TypeId(25)>, idx: i32, value: <TypeId(18)>);
+fn array_set<T>(arr: <TypeId(26)>, idx: i32, value: <TypeId(19)>);
 
-fn array_copy<T>(dst: <TypeId(25)>, dst_offset: i32, src: <TypeId(25)>, src_offset: i32, len: i32);
+fn array_copy<T>(dst: <TypeId(26)>, dst_offset: i32, src: <TypeId(26)>, src_offset: i32, len: i32);
 
-fn array_fill<T>(arr: <TypeId(25)>, offset: i32, value: <TypeId(18)>, len: i32);
+fn array_fill<T>(arr: <TypeId(26)>, offset: i32, value: <TypeId(19)>, len: i32);
 
 fn i32_load(addr: i32) -> i32;
 
@@ -199,13 +199,13 @@ fn f32_hypot(x: f32, y: f32) -> f32;
 
 fn f32_fmod(x: f32, y: f32) -> f32;
 
-fn i64_add128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> <TypeId(28)>;
+fn i64_add128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> <TypeId(29)>;
 
-fn i64_sub128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> <TypeId(28)>;
+fn i64_sub128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> <TypeId(29)>;
 
-fn i64_mul_wide_u(a: i64, b: i64) -> <TypeId(28)>;
+fn i64_mul_wide_u(a: i64, b: i64) -> <TypeId(29)>;
 
-fn i64_mul_wide_s(a: i64, b: i64) -> <TypeId(28)>;
+fn i64_mul_wide_s(a: i64, b: i64) -> <TypeId(29)>;
 
 fn i32_clz(x: i32) -> i32;
 
@@ -261,9 +261,249 @@ fn f32_copysign(magnitude: f32, sign: f32) -> f32;
 
 fn f64_copysign(magnitude: f64, sign: f64) -> f64;
 
-fn inspect<T>(value: <TypeId(18)>, fmt: <TypeId(31)>);
+fn v128_const(value: <TypeId(31)>) -> v128;
 
-fn display<T>(value: <TypeId(18)>, fmt: <TypeId(31)>);
+fn v128_not(a: v128) -> v128;
+
+fn v128_and(a: v128, b: v128) -> v128;
+
+fn v128_or(a: v128, b: v128) -> v128;
+
+fn v128_xor(a: v128, b: v128) -> v128;
+
+fn v128_bitselect(a: v128, b: v128, c: v128) -> v128;
+
+fn i8x16_splat(a: i32) -> v128;
+
+fn i8x16_extract_lane_s(lane: i32, a: v128) -> i32;
+
+fn i8x16_extract_lane_u(lane: i32, a: v128) -> i32;
+
+fn i8x16_replace_lane(lane: i32, a: v128, value: i32) -> v128;
+
+fn i8x16_add(a: v128, b: v128) -> v128;
+
+fn i8x16_sub(a: v128, b: v128) -> v128;
+
+fn i8x16_neg(a: v128) -> v128;
+
+fn i8x16_eq(a: v128, b: v128) -> v128;
+
+fn i8x16_ne(a: v128, b: v128) -> v128;
+
+fn i8x16_lt_s(a: v128, b: v128) -> v128;
+
+fn i8x16_gt_s(a: v128, b: v128) -> v128;
+
+fn i8x16_le_s(a: v128, b: v128) -> v128;
+
+fn i8x16_ge_s(a: v128, b: v128) -> v128;
+
+fn i8x16_lt_u(a: v128, b: v128) -> v128;
+
+fn i8x16_gt_u(a: v128, b: v128) -> v128;
+
+fn i8x16_le_u(a: v128, b: v128) -> v128;
+
+fn i8x16_ge_u(a: v128, b: v128) -> v128;
+
+fn i8x16_shl(a: v128, b: i32) -> v128;
+
+fn i8x16_shr_s(a: v128, b: i32) -> v128;
+
+fn i8x16_shr_u(a: v128, b: i32) -> v128;
+
+fn i8x16_swizzle(a: v128, indices: v128) -> v128;
+
+fn i16x8_splat(a: i32) -> v128;
+
+fn i16x8_extract_lane_s(lane: i32, a: v128) -> i32;
+
+fn i16x8_extract_lane_u(lane: i32, a: v128) -> i32;
+
+fn i16x8_replace_lane(lane: i32, a: v128, value: i32) -> v128;
+
+fn i16x8_add(a: v128, b: v128) -> v128;
+
+fn i16x8_sub(a: v128, b: v128) -> v128;
+
+fn i16x8_mul(a: v128, b: v128) -> v128;
+
+fn i16x8_neg(a: v128) -> v128;
+
+fn i16x8_eq(a: v128, b: v128) -> v128;
+
+fn i16x8_ne(a: v128, b: v128) -> v128;
+
+fn i16x8_lt_s(a: v128, b: v128) -> v128;
+
+fn i16x8_gt_s(a: v128, b: v128) -> v128;
+
+fn i16x8_le_s(a: v128, b: v128) -> v128;
+
+fn i16x8_ge_s(a: v128, b: v128) -> v128;
+
+fn i16x8_lt_u(a: v128, b: v128) -> v128;
+
+fn i16x8_gt_u(a: v128, b: v128) -> v128;
+
+fn i16x8_le_u(a: v128, b: v128) -> v128;
+
+fn i16x8_ge_u(a: v128, b: v128) -> v128;
+
+fn i16x8_shl(a: v128, b: i32) -> v128;
+
+fn i16x8_shr_s(a: v128, b: i32) -> v128;
+
+fn i16x8_shr_u(a: v128, b: i32) -> v128;
+
+fn i32x4_splat(a: i32) -> v128;
+
+fn i32x4_extract_lane(lane: i32, a: v128) -> i32;
+
+fn i32x4_replace_lane(lane: i32, a: v128, value: i32) -> v128;
+
+fn i32x4_add(a: v128, b: v128) -> v128;
+
+fn i32x4_sub(a: v128, b: v128) -> v128;
+
+fn i32x4_mul(a: v128, b: v128) -> v128;
+
+fn i32x4_neg(a: v128) -> v128;
+
+fn i32x4_eq(a: v128, b: v128) -> v128;
+
+fn i32x4_ne(a: v128, b: v128) -> v128;
+
+fn i32x4_lt_s(a: v128, b: v128) -> v128;
+
+fn i32x4_gt_s(a: v128, b: v128) -> v128;
+
+fn i32x4_le_s(a: v128, b: v128) -> v128;
+
+fn i32x4_ge_s(a: v128, b: v128) -> v128;
+
+fn i32x4_lt_u(a: v128, b: v128) -> v128;
+
+fn i32x4_gt_u(a: v128, b: v128) -> v128;
+
+fn i32x4_le_u(a: v128, b: v128) -> v128;
+
+fn i32x4_ge_u(a: v128, b: v128) -> v128;
+
+fn i32x4_shl(a: v128, b: i32) -> v128;
+
+fn i32x4_shr_s(a: v128, b: i32) -> v128;
+
+fn i32x4_shr_u(a: v128, b: i32) -> v128;
+
+fn i64x2_splat(a: i64) -> v128;
+
+fn i64x2_extract_lane(lane: i32, a: v128) -> i64;
+
+fn i64x2_replace_lane(lane: i32, a: v128, value: i64) -> v128;
+
+fn i64x2_add(a: v128, b: v128) -> v128;
+
+fn i64x2_sub(a: v128, b: v128) -> v128;
+
+fn i64x2_mul(a: v128, b: v128) -> v128;
+
+fn i64x2_neg(a: v128) -> v128;
+
+fn i64x2_eq(a: v128, b: v128) -> v128;
+
+fn i64x2_ne(a: v128, b: v128) -> v128;
+
+fn i64x2_lt_s(a: v128, b: v128) -> v128;
+
+fn i64x2_gt_s(a: v128, b: v128) -> v128;
+
+fn i64x2_le_s(a: v128, b: v128) -> v128;
+
+fn i64x2_ge_s(a: v128, b: v128) -> v128;
+
+fn i64x2_shl(a: v128, b: i32) -> v128;
+
+fn i64x2_shr_s(a: v128, b: i32) -> v128;
+
+fn i64x2_shr_u(a: v128, b: i32) -> v128;
+
+fn f32x4_splat(a: f32) -> v128;
+
+fn f32x4_extract_lane(lane: i32, a: v128) -> f32;
+
+fn f32x4_replace_lane(lane: i32, a: v128, value: f32) -> v128;
+
+fn f32x4_add(a: v128, b: v128) -> v128;
+
+fn f32x4_sub(a: v128, b: v128) -> v128;
+
+fn f32x4_mul(a: v128, b: v128) -> v128;
+
+fn f32x4_div(a: v128, b: v128) -> v128;
+
+fn f32x4_neg(a: v128) -> v128;
+
+fn f32x4_sqrt(a: v128) -> v128;
+
+fn f32x4_abs(a: v128) -> v128;
+
+fn f32x4_eq(a: v128, b: v128) -> v128;
+
+fn f32x4_ne(a: v128, b: v128) -> v128;
+
+fn f32x4_lt(a: v128, b: v128) -> v128;
+
+fn f32x4_gt(a: v128, b: v128) -> v128;
+
+fn f32x4_le(a: v128, b: v128) -> v128;
+
+fn f32x4_ge(a: v128, b: v128) -> v128;
+
+fn f32x4_min(a: v128, b: v128) -> v128;
+
+fn f32x4_max(a: v128, b: v128) -> v128;
+
+fn f64x2_splat(a: f64) -> v128;
+
+fn f64x2_extract_lane(lane: i32, a: v128) -> f64;
+
+fn f64x2_replace_lane(lane: i32, a: v128, value: f64) -> v128;
+
+fn f64x2_add(a: v128, b: v128) -> v128;
+
+fn f64x2_sub(a: v128, b: v128) -> v128;
+
+fn f64x2_mul(a: v128, b: v128) -> v128;
+
+fn f64x2_div(a: v128, b: v128) -> v128;
+
+fn f64x2_neg(a: v128) -> v128;
+
+fn f64x2_sqrt(a: v128) -> v128;
+
+fn f64x2_abs(a: v128) -> v128;
+
+fn f64x2_eq(a: v128, b: v128) -> v128;
+
+fn f64x2_ne(a: v128, b: v128) -> v128;
+
+fn f64x2_lt(a: v128, b: v128) -> v128;
+
+fn f64x2_gt(a: v128, b: v128) -> v128;
+
+fn f64x2_le(a: v128, b: v128) -> v128;
+
+fn f64x2_ge(a: v128, b: v128) -> v128;
+
+fn f64x2_min(a: v128, b: v128) -> v128;
+
+fn f64x2_max(a: v128, b: v128) -> v128;
+
+fn inspect<T>(value: <TypeId(19)>, fmt: <TypeId(33)>);
+
+fn display<T>(value: <TypeId(19)>, fmt: <TypeId(33)>);
 
 
 // --- Module: core:internal ---
@@ -284,7 +524,7 @@ pub fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
     return arr;
 }
 
-pub fn memory_to_gc_string(ptr: i32, len: i32) -> <TypeId(23)> {
+pub fn memory_to_gc_string(ptr: i32, len: i32) -> <TypeId(24)> {
     let arr: builtin::array<u8> = core::internal::memory_to_gc_array(ptr, len);
     return "core::prelude/string.wado::String::internal_from_utf8_raw"(arr, len);
 }
@@ -304,7 +544,7 @@ pub fn gc_array_to_memory(arr: builtin::array<u8>, ptr: i32, len: i32) {
     }
 }
 
-pub fn write_string_to_stream(tx: i32, message: <TypeId(23)>, add_newline: bool) {
+pub fn write_string_to_stream(tx: i32, message: <TypeId(24)>, add_newline: bool) {
     let len: i32 = message.String::len();
     let msg_bytes: builtin::array<u8> = message.String::internal_raw_bytes();
     let alloc_size: i32 = if add_newline {
@@ -334,7 +574,7 @@ pub fn wait_for_subtask(packed: i32) {
     }
 }
 
-pub fn log_stdout(message: <TypeId(23)>) {
+pub fn log_stdout(message: <TypeId(24)>) {
     let handles: i64 = core::builtin::stream_new();
     let rx: i32 = handles as i32;
     let tx: i32 = (handles >> 32) as i32;
@@ -343,7 +583,7 @@ pub fn log_stdout(message: <TypeId(23)>) {
     core::internal::wait_for_subtask(subtask);
 }
 
-pub fn log_stderr(message: <TypeId(23)>) {
+pub fn log_stderr(message: <TypeId(24)>) {
     let handles: i64 = core::builtin::stream_new();
     let rx: i32 = handles as i32;
     let tx: i32 = (handles >> 32) as i32;
@@ -352,7 +592,7 @@ pub fn log_stderr(message: <TypeId(23)>) {
     core::internal::wait_for_subtask(subtask);
 }
 
-pub fn panic(message: <TypeId(23)>) -> ! {
+pub fn panic(message: <TypeId(24)>) -> ! {
     core::internal::log_stderr(message);
     core::builtin::unreachable();
 }
@@ -361,7 +601,7 @@ pub fn unreachable() -> ! {
     core::builtin::unreachable();
 }
 
-pub fn cm_lower_string(s: <TypeId(23)>) -> i64 {
+pub fn cm_lower_string(s: <TypeId(24)>) -> i64 {
     let len: i32 = s.String::len();
     let bytes: builtin::array<u8> = s.String::internal_raw_bytes();
     let ptr: i32 = core::builtin::realloc(0, 0, 1, len);
@@ -375,17 +615,17 @@ pub fn cm_lower_list_u8(data: builtin::array<u8>, len: i32) -> i64 {
     return (ptr as i64 | (len as i64 << 32));
 }
 
-pub fn cm_lower_array_u8(arr: <TypeId(33)>) -> i64 {
+pub fn cm_lower_array_u8(arr: <TypeId(35)>) -> i64 {
     let data: builtin::array<u8> = arr."Array<u8>::internal_raw_data"();
     let len: i32 = arr."Array<u8>::len"();
     return core::internal::cm_lower_list_u8(data, len);
 }
 
-pub fn write_escaped_string(s: <TypeId(23)>, f: <TypeId(31)>) {
+pub fn write_escaped_string(s: <TypeId(24)>, f: <TypeId(33)>) {
     __for_of_2: {
-        let mut __iter_2: <TypeId(35)> = s.String::chars()."StrCharIter^IntoIterator::into_iter"();
+        let mut __iter_2: <TypeId(37)> = s.String::chars()."StrCharIter^IntoIterator::into_iter"();
         loop {
-            let __pattern_temp_0: <TypeId(38)> = __iter_2."StrCharIter^Iterator::next"();
+            let __pattern_temp_0: <TypeId(40)> = __iter_2."StrCharIter^Iterator::next"();
             if __variant_test(__pattern_temp_0, case=0, name=Some) {
                 let c: char = __variant_payload(__pattern_temp_0, case=0);
                 match c {

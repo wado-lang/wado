@@ -813,11 +813,11 @@ See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md) for full design and rational
 
 Wado exposes WebAssembly SIMD via the `core:simd` module. A single primitive type `v128` represents a 128-bit vector, with 10 newtype aliases providing type-safe interpretations:
 
-| Category | Types |
-| -------- | ----- |
+| Category | Types                              |
+| -------- | ---------------------------------- |
 | Signed   | `i8x16`, `i16x8`, `i32x4`, `i64x2` |
 | Unsigned | `u8x16`, `u16x8`, `u32x4`, `u64x2` |
-| Float    | `f32x4`, `f64x2` |
+| Float    | `f32x4`, `f64x2`                   |
 
 All SIMD newtypes share the `v128` base and can be reinterpreted via `as` cast (zero-cost). Each type provides `splat()` construction, `extract_lane()` access, comparison methods (`eq`, `lt`, `gt`, `le`, `ge`, `ne`), and operator overloading (`+`, `-`, `*`, `/`, `&`, `|`, `^`, `~`, `<<`, `>>`).
 

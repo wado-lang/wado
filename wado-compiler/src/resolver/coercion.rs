@@ -941,7 +941,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         if needs_newtype_cast {
             Some(TirExpr::new(
-                TirExprKind::Cast { expr: Box::new(block_expr), target_type },
+                TirExprKind::Cast {
+                    expr: Box::new(block_expr),
+                    target_type,
+                },
                 target_type,
                 span,
             ))

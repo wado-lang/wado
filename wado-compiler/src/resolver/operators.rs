@@ -109,8 +109,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 // Handle Eq trait (== and !=)
                 if matches!(binary.op, BinaryOp::Eq | BinaryOp::NotEq) {
-                    let Some(trait_info) =
-                        self.find_eq_trait_impl(&struct_name, lookup_type_id)
+                    let Some(trait_info) = self.find_eq_trait_impl(&struct_name, lookup_type_id)
                     else {
                         let type_name = self.type_table.borrow().type_name(left.type_id);
                         let op_str = if binary.op == BinaryOp::Eq {
@@ -196,8 +195,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     binary.op,
                     BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
                 ) {
-                    let Some(trait_info) =
-                        self.find_ord_trait_impl(&struct_name, lookup_type_id)
+                    let Some(trait_info) = self.find_ord_trait_impl(&struct_name, lookup_type_id)
                     else {
                         let type_name = self.type_table.borrow().type_name(left.type_id);
                         let op_str = match binary.op {
@@ -352,12 +350,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 // Find the arithmetic trait implementation
                 let (trait_info_opt, impl_name) = self
-                    .find_arithmetic_trait_impl(
-                        &struct_name,
-                        left.type_id,
-                        trait_name,
-                        method_name,
-                    )
+                    .find_arithmetic_trait_impl(&struct_name, left.type_id, trait_name, method_name)
                     .map(|info| (Some(info), struct_name.clone()))
                     .unwrap_or_else(|| {
                         let info = self.find_arithmetic_trait_impl(
@@ -448,12 +441,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 // Find the shift trait implementation
                 let (trait_info_opt, impl_name) = self
-                    .find_arithmetic_trait_impl(
-                        &struct_name,
-                        left.type_id,
-                        trait_name,
-                        method_name,
-                    )
+                    .find_arithmetic_trait_impl(&struct_name, left.type_id, trait_name, method_name)
                     .map(|info| (Some(info), struct_name.clone()))
                     .unwrap_or_else(|| {
                         let info = self.find_arithmetic_trait_impl(

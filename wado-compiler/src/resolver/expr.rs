@@ -862,8 +862,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // For newtypes, also resolve the base type name for trait impl lookup
-        let (lookup_name, lookup_type_id) =
-            self.newtype_base_lookup(&struct_name, base_type_id);
+        let (lookup_name, lookup_type_id) = self.newtype_base_lookup(&struct_name, base_type_id);
 
         if !struct_name.is_empty() {
             let index_expr = self.resolve_expr(&index.index, ctx, None);
@@ -882,9 +881,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Try the direct name first, then fall back to base type name for newtypes
             let index_trait_info = self
                 .find_index_trait_impl(&struct_name, base_type_id, index_type)
-                .or_else(|| {
-                    self.find_index_trait_impl(&lookup_name, lookup_type_id, index_type)
-                });
+                .or_else(|| self.find_index_trait_impl(&lookup_name, lookup_type_id, index_type));
             if let Some(trait_info) = index_trait_info {
                 // Generate: *expr.index(index_expr)
                 // First, create the method call to .index(index_expr)

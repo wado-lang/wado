@@ -47,7 +47,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     /// For newtypes, get the base type name and ID for trait impl lookup fallback.
-    /// Returns (base_name, base_type_id) if the type is a newtype; otherwise returns the same name/id.
+    /// Returns (`base_name`, `base_type_id`) if the type is a newtype; otherwise returns the same name/id.
     pub(super) fn newtype_base_lookup(&self, name: &str, type_id: TypeId) -> (String, TypeId) {
         let tt = self.type_table.borrow();
         if let Some(base_id) = tt.get_newtype_base(type_id) {
@@ -192,12 +192,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Check newtypes — the impl block may live in the module that defines the newtype
-        if let Some(&type_id) = self.newtypes.get(struct_name) {
-            if let ResolvedType::Newtype { module_source, .. } =
+        if let Some(&type_id) = self.newtypes.get(struct_name)
+            && let ResolvedType::Newtype { module_source, .. } =
                 self.type_table.borrow().get(type_id).clone()
-            {
-                return module_source;
-            }
+        {
+            return module_source;
         }
 
         // Check loaded modules for newtype definitions
