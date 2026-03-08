@@ -791,7 +791,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     is_cm_adapter: false,
                 },
                 type_args: vec![],
-                args: vec![CallArg::new(low_literal, false), CallArg::new(high_literal, false)],
+                args: vec![
+                    CallArg::new(low_literal, false),
+                    CallArg::new(high_literal, false),
+                ],
             },
             target_type,
             span,
@@ -1131,7 +1134,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         is_cm_adapter: false,
                     },
                     type_args: vec![],
-                    args: args.iter().map(|e| CallArg::new(e.clone(), false)).collect(),
+                    args: args
+                        .iter()
+                        .map(|e| CallArg::new(e.clone(), false))
+                        .collect(),
                 },
                 final_return_type,
                 call.span,

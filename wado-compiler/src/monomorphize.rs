@@ -2583,10 +2583,7 @@ impl Monomorphizer {
                                     .cloned()
                                     .or_else(|| {
                                         let concrete_type_id = sorted_entries[0].1;
-                                        module_source_for_trait_impl(
-                                            type_table,
-                                            *concrete_type_id,
-                                        )
+                                        module_source_for_trait_impl(type_table, *concrete_type_id)
                                     });
                                 let new_monomorph = if new_info.method_type_args.is_empty() {
                                     None

@@ -2865,7 +2865,11 @@ fn synthesize_result_export_adapter(
             type_args: vec![],
             args: call_args
                 .into_iter()
-                .zip(call_user_param_is_mut.into_iter().chain(std::iter::repeat(false)))
+                .zip(
+                    call_user_param_is_mut
+                        .into_iter()
+                        .chain(std::iter::repeat(false)),
+                )
                 .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
                 .collect(),
         },
@@ -3393,7 +3397,11 @@ fn synthesize_general_export_adapter(
             type_args: vec![],
             args: call_args
                 .into_iter()
-                .zip(call_user_param_is_mut.into_iter().chain(std::iter::repeat(false)))
+                .zip(
+                    call_user_param_is_mut
+                        .into_iter()
+                        .chain(std::iter::repeat(false)),
+                )
                 .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
                 .collect(),
         },
@@ -3600,7 +3608,11 @@ fn synthesize_async_export_adapter(
             type_args: vec![],
             args: call_args
                 .into_iter()
-                .zip(call_user_param_is_mut.into_iter().chain(std::iter::repeat(false)))
+                .zip(
+                    call_user_param_is_mut
+                        .into_iter()
+                        .chain(std::iter::repeat(false)),
+                )
                 .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
                 .collect(),
         },
@@ -4695,7 +4707,10 @@ fn rewrite_calls_in_expr(
 
             expr.kind = TirExprKind::Call {
                 func: FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone()),
-                args: all_args.into_iter().map(|e| CallArg::new(e, false)).collect(),
+                args: all_args
+                    .into_iter()
+                    .map(|e| CallArg::new(e, false))
+                    .collect(),
                 type_args: vec![],
             };
 
@@ -4720,7 +4735,10 @@ fn rewrite_calls_in_expr(
 
             // Extract args before replacing
             let taken_args = if let TirExprKind::Call { args, .. } = &mut expr.kind {
-                std::mem::take(args).into_iter().map(|a| a.expr).collect::<Vec<_>>()
+                std::mem::take(args)
+                    .into_iter()
+                    .map(|a| a.expr)
+                    .collect::<Vec<_>>()
             } else {
                 unreachable!()
             };
@@ -4777,7 +4795,10 @@ fn rewrite_calls_in_expr(
             // Replace static Call with Call targeting the adapter
             expr.kind = TirExprKind::Call {
                 func: FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone()),
-                args: flat_call_args.into_iter().map(|e| CallArg::new(e, false)).collect(),
+                args: flat_call_args
+                    .into_iter()
+                    .map(|e| CallArg::new(e, false))
+                    .collect(),
                 type_args: vec![],
             };
 

@@ -754,7 +754,7 @@ fn extract_tmpl_candidate(block: &TirBlock) -> Option<TmplCandidate> {
 /// Extract the capacity argument from an `array_new<u8>(N)` call.
 fn extract_array_new_capacity(expr: &TirExpr) -> Option<TirExpr> {
     match &expr.kind {
-         TirExprKind::Call { func, args, .. } => {
+        TirExprKind::Call { func, args, .. } => {
             let name = func.name.clone();
             if name.contains("array_new") {
                 args.first().map(|a| a.expr.clone())

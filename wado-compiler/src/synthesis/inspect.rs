@@ -20,9 +20,9 @@ use indexmap::{IndexMap, IndexSet};
 
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
-    CallArg, FunctionRef, InlineHint, PrimitiveType, ResolvedType, SubstitutionContext, TirBinaryOp,
-    TirBlock, TirExpr, TirExprKind, TirFlags, TirFunction, TirModule, TirParam, TirStmt,
-    TirStmtKind, TirTemplatePart, TirUnaryOp, TirVariantDecl, TypeId, TypeTable,
+    CallArg, FunctionRef, InlineHint, PrimitiveType, ResolvedType, SubstitutionContext,
+    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFlags, TirFunction, TirModule, TirParam,
+    TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TirVariantDecl, TypeId, TypeTable,
 };
 use crate::token::Span;
 

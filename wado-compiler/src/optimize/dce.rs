@@ -571,14 +571,16 @@ fn analyze_expr(
 
                 // Detect resource method calls from WASI modules
                 let module_path = func.module_path();
-                if module_path.len() >= 2 && module_path[0] == "wasi"
-                    && let Some(pos) = func_name.find("::") {
-                        let resource_name = &func_name[..pos];
-                        let method_name = &func_name[pos + 2..];
-                        analysis
-                            .effect_calls
-                            .insert((resource_name.to_string(), method_name.to_string()));
-                    }
+                if module_path.len() >= 2
+                    && module_path[0] == "wasi"
+                    && let Some(pos) = func_name.find("::")
+                {
+                    let resource_name = &func_name[..pos];
+                    let method_name = &func_name[pos + 2..];
+                    analysis
+                        .effect_calls
+                        .insert((resource_name.to_string(), method_name.to_string()));
+                }
             } else {
                 // Free function call
                 debug_assert!(

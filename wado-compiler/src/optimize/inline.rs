@@ -1303,7 +1303,6 @@ fn try_inline_method_call_expr(
     Some((inlined_expr, inlined_key))
 }
 
-
 /// Remap locals and convert returns to break statements with the given label.
 ///
 /// Scope blocks (`LabeledBlock` stmts) whose labels are not targeted by any
@@ -1831,7 +1830,13 @@ fn remap_expr(
                     .iter()
                     .map(|a| {
                         CallArg::new(
-                            remap_expr(&a.expr, param_to_local, local_offset, param_count, source_module),
+                            remap_expr(
+                                &a.expr,
+                                param_to_local,
+                                local_offset,
+                                param_count,
+                                source_module,
+                            ),
                             a.is_mut,
                         )
                     })
@@ -1859,7 +1864,13 @@ fn remap_expr(
                     .iter()
                     .map(|a| {
                         CallArg::new(
-                            remap_expr(&a.expr, param_to_local, local_offset, param_count, source_module),
+                            remap_expr(
+                                &a.expr,
+                                param_to_local,
+                                local_offset,
+                                param_count,
+                                source_module,
+                            ),
                             a.is_mut,
                         )
                     })

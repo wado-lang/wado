@@ -1090,7 +1090,11 @@ fn write_str_stmt(text: &str, fmt: TirExpr, tt: &Rc<RefCell<TypeTable>>, span: S
             },
             type_args: vec![],
             args: vec![CallArg::new(
-                TirExpr::new(TirExprKind::StringLiteral(text.to_string()), string_type, span),
+                TirExpr::new(
+                    TirExprKind::StringLiteral(text.to_string()),
+                    string_type,
+                    span,
+                ),
                 false,
             )],
         },

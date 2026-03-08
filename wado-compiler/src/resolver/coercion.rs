@@ -522,7 +522,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     is_cm_adapter: false,
                 },
                 type_args: vec![],
-                args: new_args.into_iter().map(|e| CallArg::new(e, false)).collect(),
+                args: new_args
+                    .into_iter()
+                    .map(|e| CallArg::new(e, false))
+                    .collect(),
             },
             builder_type,
             span,

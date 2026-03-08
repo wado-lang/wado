@@ -2113,8 +2113,7 @@ impl ClosureLowerer {
 
         for (i, (param, arg)) in params.iter().zip(args.iter()).enumerate() {
             // Count closures in this arg to keep counter in sync
-            let closure_id =
-                self.count_closures_and_get_first_id(&arg.expr, &mut local_counter);
+            let closure_id = self.count_closures_and_get_first_id(&arg.expr, &mut local_counter);
 
             // Check if param is a function type and arg is a direct closure
             if let ResolvedType::Function { .. } = type_table.get(param.type_id)
@@ -2593,11 +2592,7 @@ impl ClosureLowerer {
                             .collect();
                         let call_args: Vec<CallArg> = new_args
                             .into_iter()
-                            .zip(
-                                params_is_mut
-                                    .into_iter()
-                                    .chain(std::iter::repeat(false)),
-                            )
+                            .zip(params_is_mut.into_iter().chain(std::iter::repeat(false)))
                             .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
                             .collect();
                         return TirExpr::new(
@@ -3250,11 +3245,7 @@ impl ClosureLowerer {
                         .collect();
                     let call_args: Vec<CallArg> = args_owned
                         .into_iter()
-                        .zip(
-                            params_is_mut
-                                .into_iter()
-                                .chain(std::iter::repeat(false)),
-                        )
+                        .zip(params_is_mut.into_iter().chain(std::iter::repeat(false)))
                         .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
                         .collect();
                     expr.kind = TirExprKind::MethodCall {

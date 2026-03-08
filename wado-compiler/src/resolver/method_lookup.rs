@@ -2916,7 +2916,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 type_args,
                 args: args
                     .into_iter()
-                    .zip(method_param_is_mut.into_iter().chain(std::iter::repeat(false)))
+                    .zip(
+                        method_param_is_mut
+                            .into_iter()
+                            .chain(std::iter::repeat(false)),
+                    )
                     .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
                     .collect(),
             },

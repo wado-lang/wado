@@ -864,7 +864,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     is_cm_adapter: false,
                                 },
                                 type_args: vec![],
-                                args: vec![CallArg::new(index_resolved, false), CallArg::new(value, false)],
+                                args: vec![
+                                    CallArg::new(index_resolved, false),
+                                    CallArg::new(value, false),
+                                ],
                             },
                             TypeTable::UNIT,
                             assign.span,

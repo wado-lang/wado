@@ -4,9 +4,9 @@
 //! into a sequence of WIR instructions.
 
 use crate::tir::{
-    CallArg, FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    CallArg, FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
+    TirFunction, TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
+    TypeId, TypeTable,
 };
 use crate::wir::{WirAbstractHeapType, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 use indexmap::{IndexMap, IndexSet};
@@ -1324,7 +1324,12 @@ impl FunctionTranslator<'_, '_> {
                     WirInstr::Unreachable
                 }
             }
-            TirExprKind::MethodCall { func, receiver, args, .. } => {
+            TirExprKind::MethodCall {
+                func,
+                receiver,
+                args,
+                ..
+            } => {
                 // Canonical resource method dispatch: uses #[canonical("...")] from types.wado
                 if let Some(instr) =
                     self.try_translate_canonical_method(receiver, func, args, expr.type_id)
