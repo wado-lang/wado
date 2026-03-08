@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772964365625,
+  "lastUpdate": 1772967336064,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1715,6 +1715,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 19063,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "887376718f13f253d991f0c52c1ddb2bc8dbd16d",
+          "message": "Merge pull request #540 from wado-lang/claude/zlib-custom-dictionary-review-fyIVX\n\nReplace zlib decompression panics with Result-based error handling",
+          "timestamp": "2026-03-08T19:53:11+09:00",
+          "tree_id": "c6d0d9d4ee0f5de23f731e66ea127753b2f196f2",
+          "url": "https://github.com/wado-lang/wado/commit/887376718f13f253d991f0c52c1ddb2bc8dbd16d"
+        },
+        "date": 1772967335898,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1572,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9269,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19100,
             "unit": "bytes"
           }
         ]
