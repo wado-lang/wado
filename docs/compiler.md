@@ -213,23 +213,23 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 
 **Core Library (`core/`):**
 
-| Module                         | File                      | Description                                        |
-| ------------------------------ | ------------------------- | -------------------------------------------------- |
-| `core:prelude`                 | `prelude.wado`            | Auto-imported re-exports from prelude sub-modules  |
-| `core:prelude/traits.wado`     | `prelude/traits.wado`     | Trait definitions (Eq, Ord, Iterator, etc.)        |
-| `core:prelude/types.wado`      | `prelude/types.wado`      | Core types (Option, Result, Stream, Future)        |
-| `core:prelude/string.wado`     | `prelude/string.wado`     | String type and string iterators                   |
-| `core:prelude/array.wado`      | `prelude/array.wado`      | Array type and array iterators                     |
-| `core:prelude/int128.wado`     | `prelude/int128.wado`     | u128/i128 types (re-exported from prelude)         |
-| `core:prelude/primitive.wado`  | `prelude/primitive.wado`  | Primitive type trait implementations               |
-| `core:prelude/format.wado`     | `prelude/format.wado`     | Format traits (Display, Formatter)                 |
-| `core:prelude/fpfmt.wado`      | `prelude/fpfmt.wado`      | Float-to-string formatting (pure Wado)             |
-| `core:cli`                     | `cli.wado`                | CLI output (println, eprintln, etc.)               |
-| `core:collections`             | `collections.wado`        | TreeMap and other collections                      |
-| `core:zlib`                    | `zlib.wado`               | Compression (zlib/deflate)                         |
-| `core:base64`                  | `base64.wado`             | Base64 encoding/decoding (RFC 4648)                |
-| `core:internal`                | `internal.wado`           | Compiler-generated code support, panic/unreachable |
-| `core:builtin`                 | `builtin.wado`            | Compiler intrinsics with `#[canonical(...)]` attrs |
+| Module                        | File                     | Description                                        |
+| ----------------------------- | ------------------------ | -------------------------------------------------- |
+| `core:prelude`                | `prelude.wado`           | Auto-imported re-exports from prelude sub-modules  |
+| `core:prelude/traits.wado`    | `prelude/traits.wado`    | Trait definitions (Eq, Ord, Iterator, etc.)        |
+| `core:prelude/types.wado`     | `prelude/types.wado`     | Core types (Option, Result, Stream, Future)        |
+| `core:prelude/string.wado`    | `prelude/string.wado`    | String type and string iterators                   |
+| `core:prelude/array.wado`     | `prelude/array.wado`     | Array type and array iterators                     |
+| `core:prelude/int128.wado`    | `prelude/int128.wado`    | u128/i128 types (re-exported from prelude)         |
+| `core:prelude/primitive.wado` | `prelude/primitive.wado` | Primitive type trait implementations               |
+| `core:prelude/format.wado`    | `prelude/format.wado`    | Format traits (Display, Formatter)                 |
+| `core:prelude/fpfmt.wado`     | `prelude/fpfmt.wado`     | Float-to-string formatting (pure Wado)             |
+| `core:cli`                    | `cli.wado`               | CLI output (println, eprintln, etc.)               |
+| `core:collections`            | `collections.wado`       | TreeMap and other collections                      |
+| `core:zlib`                   | `zlib.wado`              | Compression (zlib/deflate)                         |
+| `core:base64`                 | `base64.wado`            | Base64 encoding/decoding (RFC 4648)                |
+| `core:internal`               | `internal.wado`          | Compiler-generated code support, panic/unreachable |
+| `core:builtin`                | `builtin.wado`           | Compiler intrinsics with `#[canonical(...)]` attrs |
 
 **WASI Library (`wasi/`):**
 

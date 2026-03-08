@@ -275,8 +275,6 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
 }
 
 fn count_digits_i64(val) {
-    let __local_1: i64;
-    let __local_2: i64;
     let n: i32;
     let t: i64;
     if val == 0_i64 {
@@ -300,8 +298,6 @@ fn count_digits_i64(val) {
 }
 
 fn write_decimal_digits(arr, offset, abs_val, digit_count) {
-    let __local_4: i64;
-    let __local_5: i64;
     let pos: i32;
     let temp: i64;
     pos = offset + digit_count;
@@ -347,45 +343,41 @@ fn i32::fmt_decimal(self, f) {
 
 fn i64::fmt_decimal(self, f) {
     let value: i64;
-    let __local_3: i64;
     let is_negative: bool;
-    let __local_5: i64;
-    let __local_6: i64;
-    let __local_7: i64;
-    let __local_8: i64;
+    let __local_4: i64;
     let remaining_digits: i32;
-    let digit_count_10: i32;
-    let offset_11: i32;
+    let digit_count_6: i32;
+    let offset_7: i32;
     let repr: ref array<u8>;
     let abs_val: i64;
-    let digit_count_14: i32;
-    let offset_15: i32;
-    let __local_16: ref String;
-    let __local_17: ref String;
+    let digit_count_10: i32;
+    let offset_11: i32;
+    let __local_12: ref String;
+    let __local_13: ref String;
     value = self;
     is_negative = value < 0_i64;
     if value == -9223372036854775808_i64 {
         remaining_digits = count_digits_i64(922337203685477580_i64);
-        digit_count_10 = remaining_digits + 1;
-        offset_11 = Formatter::prepare_int_write(f, 1, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count_10);
+        digit_count_6 = remaining_digits + 1;
+        offset_7 = Formatter::prepare_int_write(f, 1, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count_6);
         repr = __inline_String__internal_raw_bytes_0: block -> ref array<u8> {
-            __local_16 = f.buf;
-            break __inline_String__internal_raw_bytes_0: __local_16.repr;
+            __local_12 = f.buf;
+            break __inline_String__internal_raw_bytes_0: __local_12.repr;
         };
-        write_decimal_digits(repr, offset_11, 922337203685477580_i64, remaining_digits);
-        builtin::array_set_u8(repr, offset_11 + remaining_digits, 56);
+        write_decimal_digits(repr, offset_7, 922337203685477580_i64, remaining_digits);
+        builtin::array_set_u8(repr, offset_7 + remaining_digits, 56);
     } else {
         abs_val = if is_negative -> i64 {
             0_i64 - value;
         } else {
             value;
         };
-        digit_count_14 = count_digits_i64(abs_val);
-        offset_15 = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count_14);
+        digit_count_10 = count_digits_i64(abs_val);
+        offset_11 = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count_10);
         write_decimal_digits(__inline_String__internal_raw_bytes_1: block -> ref array<u8> {
-            __local_17 = f.buf;
-            break __inline_String__internal_raw_bytes_1: __local_17.repr;
-        }, offset_15, abs_val, digit_count_14);
+            __local_13 = f.buf;
+            break __inline_String__internal_raw_bytes_1: __local_13.repr;
+        }, offset_11, abs_val, digit_count_10);
     };
 }
 
