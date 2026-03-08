@@ -14,13 +14,12 @@ use crate::world_registry::WorldExportInfo;
 ///
 /// Computed by `wasm_plan`, consumed by codegen. Contains all the structural
 /// decisions about what the component needs, so codegen can focus on encoding.
+///
+/// Canonical intrinsics (e.g., "stream-read", "task-return") are NOT stored here.
+/// They are discovered lazily during WIR translation via `WirContext::ensure_canonical`
+/// and stored in `WirModule::needed_canonicals`.
 #[derive(Debug, Clone, Default)]
 pub struct ComponentPlan {
-    /// Canonical intrinsics needed (e.g., "stream-new", "task-return").
-    /// These are TIR imports with namespace "wasi".
-    pub canonical_intrinsics: Vec<String>,
-    /// Whether future intrinsics are needed (future-new, future-write, etc.).
-    pub needs_future_intrinsics: bool,
     /// Bundled module function names (e.g., "`libm_sin`").
     /// These are TIR imports with namespace "bundled".
     pub bundled_functions: Vec<String>,
@@ -67,24 +66,11 @@ pub struct TestExportPlan {
 ///
 /// Scans TIR imports and world registry to determine what the component needs.
 /// Called by `wir_build::plan_project` at the start of the WIR pipeline.
+///
+/// Canonical intrinsics are NOT collected here — they are discovered lazily
+/// during WIR translation via `WirContext::ensure_canonical`.
 pub fn build_component_plan(project: &Project) -> ComponentPlan {
     let entry_tir = project.entry_module();
-
-    // Collect canonical intrinsics from TIR imports with namespace "wasi"
-    let canonical_intrinsics: Vec<String> = entry_tir
-        .imports
-        .iter()
-        .filter(|i| i.namespace == "wasi")
-        .map(|i| i.canonical_name.clone())
-        .collect();
-
-    // Check if future intrinsics are needed
-    let needs_future_intrinsics = canonical_intrinsics.iter().any(|name| {
-        matches!(
-            name.as_str(),
-            "future-new" | "future-write" | "future-drop-writable" | "future-drop-readable"
-        )
-    });
 
     // Collect bundled module functions from TIR imports with namespace "bundled"
     let bundled_functions: Vec<String> = entry_tir
@@ -128,8 +114,6 @@ pub fn build_component_plan(project: &Project) -> ComponentPlan {
     };
 
     ComponentPlan {
-        canonical_intrinsics,
-        needs_future_intrinsics,
         bundled_functions,
         world_exports,
         test_exports,
