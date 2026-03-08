@@ -9,44 +9,7 @@
 //
 // Functions with #[canonical("namespace", "name")] are imported as CM canonical built-ins.
 // Functions without #[canonical(...)] compile to Wasm instructions directly.
-//
-// CM resource canonicals for the user-facing API are declared via #[canonical] attributes on
-// resource methods in core:prelude/types.wado and are registered lazily during WIR translation.
-//
-// The functions below are low-level CM primitives used by core:internal for ambient logging
-// (log_stdout, log_stderr) and async task coordination (wait_for_subtask). They are NOT part
-// of the public API — user code should use Stream<T>, WaitableSet, Subtask resources instead.
 
-/// Creates a new stream pair, returning (rx, tx) packed in i64.
-/// Low 32 bits = rx (readable end), High 32 bits = tx (writable end).
-#[canonical("wasi", "stream-new")]
-fn stream_new() -> i64;
-
-/// Writes data from linear memory to the writable end of a stream.
-/// Returns BLOCKED (0xFFFF_FFFF) or status flags.
-#[canonical("wasi", "stream-write")]
-fn stream_write(tx: i32, ptr: i32, len: i32) -> i32;
-
-/// Drops the writable end of a stream (signals end-of-stream).
-#[canonical("wasi", "stream-drop-writable")]
-fn stream_drop_writable(tx: i32);
-
-/// Creates a new waitable set.
-#[canonical("wasi", "waitable-set-new")]
-fn waitable_set_new() -> i32;
-
-/// Joins a waitable (subtask/stream/future handle) into a waitable set.
-#[canonical("wasi", "waitable-join")]
-fn waitable_join(waitable: i32, set: i32);
-
-/// Blocks until an event occurs in the waitable set.
-/// Writes 8 bytes to outptr: event code (i32) and payload (i32).
-#[canonical("wasi", "waitable-set-wait")]
-fn waitable_set_wait(set: i32, outptr: i32) -> i32;
-
-/// Drops a completed subtask handle.
-#[canonical("wasi", "subtask-drop")]
-fn subtask_drop(subtask: i32);
 /// Signals task completion with a result value.
 /// Used internally by the compiler to complete async exports.
 #[canonical("wasi", "task-return")]

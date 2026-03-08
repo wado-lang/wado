@@ -32,23 +32,20 @@ pub fn gc_array_to_memory(arr: builtin::array<u8>, ptr: i32, len: i32) {
     }
 }
 
-/// Writes a string to a stream handle with an optional newline.
+/// Writes a string to a StreamWritable<u8> with an optional newline, then drops it.
 /// Internal helper for log_stdout and log_stderr.
-pub fn write_string_to_stream(tx: i32, message: String, add_newline: bool) {
+pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
     let len = message.len();
-    let msg_bytes = message.internal_raw_bytes();
     let alloc_size = if add_newline { len + 1 } else { len };
-    let ptr = builtin::realloc(0, 0, 1, alloc_size);
-    gc_array_to_memory(msg_bytes, ptr, len);
-    if add_newline {
-        builtin::i32_store8(ptr + len, '\n');
+    let mut arr = Array::<u8>::with_capacity(alloc_size);
+    for let b of message.bytes() {
+        arr.append(b);
     }
-    builtin::stream_write(tx, ptr, alloc_size);
-
-    // Free linear memory buffer
-    builtin::realloc(ptr, alloc_size, 1, 0);
-
-    builtin::stream_drop_writable(tx);
+    if add_newline {
+        arr.append('\n' as u8);
+    }
+    tx.write(arr);
+    tx.drop();
 }
 
 /// Waits for a pending async subtask to complete.
@@ -60,23 +57,21 @@ pub fn write_string_to_stream(tx: i32, message: String, add_newline: bool) {
 pub fn wait_for_subtask(packed: i32) {
     let handle = packed >> 4;
     if handle != 0 {
-        let ws = builtin::waitable_set_new();
-        builtin::waitable_join(handle, ws);
-        let ptr = builtin::realloc(0, 0, 4, 8);
-        builtin::waitable_set_wait(ws, ptr);
-        builtin::realloc(ptr, 8, 4, 0);
-        builtin::subtask_drop(handle);
+        let subtask = handle as Subtask;
+        let ws = WaitableSet::new();
+        subtask.join(&ws);
+        ws.wait();
+        subtask.drop();
+        ws.drop();
     }
 }
 
 /// Logs a message with newline to stdout (ambient, no effect required).
 /// Waits for completion.
 pub fn log_stdout(message: String) {
-    let handles = builtin::stream_new();
-    let rx = handles as i32;
-    let tx = (handles >> 32) as i32;
+    let [rx, tx] = Stream::<u8>::new();
 
-    let subtask = builtin::call_indirect_stdout_write_via_stream(rx);
+    let subtask = builtin::call_indirect_stdout_write_via_stream(rx as i32);
     write_string_to_stream(tx, message, true);
     wait_for_subtask(subtask);
 }
@@ -84,11 +79,9 @@ pub fn log_stdout(message: String) {
 /// Logs a message with newline to stderr (ambient, no effect required).
 /// Waits for completion.
 pub fn log_stderr(message: String) {
-    let handles = builtin::stream_new();
-    let rx = handles as i32;
-    let tx = (handles >> 32) as i32;
+    let [rx, tx] = Stream::<u8>::new();
 
-    let subtask = builtin::call_indirect_stderr_write_via_stream(rx);
+    let subtask = builtin::call_indirect_stderr_write_via_stream(rx as i32);
     write_string_to_stream(tx, message, true);
     wait_for_subtask(subtask);
 }

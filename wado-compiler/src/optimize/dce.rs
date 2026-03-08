@@ -246,12 +246,9 @@ pub fn analyze_project(project: &mut Project) {
             add_import_by_name(&mut imports, "task_return");
         }
 
-        // Waitable-set builtins (waitable_set_new, waitable_join, waitable_set_wait, subtask_drop)
-        // are added automatically via reachability from internal::wait_for_subtask
-        //
-        // HTTP handler exports need future intrinsics (future-new, future-write,
-        // future-drop-writable) for response creation, but these are now registered
-        // lazily by WIR synthesis via ensure_canonical() — no DCE injection needed.
+        // CM resource canonicals (stream-new, stream-write, waitable-set-new, subtask-drop, etc.)
+        // are registered lazily by WIR synthesis via `ensure_canonical()` when resource methods
+        // are called. No DCE injection needed — they are discovered through normal reachability.
     }
 
     // Store imports in the entry module

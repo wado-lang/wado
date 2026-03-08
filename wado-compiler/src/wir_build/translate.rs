@@ -4129,16 +4129,12 @@ impl FunctionTranslator<'_, '_> {
             else_body: None,
         });
 
-        // Free linear memory: realloc(ptr, len, 1, 0)
-        instrs.push(WirInstr::Drop(Box::new(WirInstr::Call {
-            func_id: realloc_id,
-            args: vec![
-                WirInstr::LocalGet { name: ptr_name },
-                WirInstr::LocalGet { name: len_name },
-                WirInstr::I32Const(1),
-                WirInstr::I32Const(0),
-            ],
-        })));
+        // NOTE: Do NOT free the linear memory buffer here.
+        // Wasmtime retains a reference to the buffer after synchronous stream.write
+        // returns (the buffer may be accessed during SYNC_COPYING suspension).
+        // Freeing it causes memory corruption when subsequent CM calls (e.g. open_at)
+        // allocate overlapping memory. The buffer is effectively leaked.
+        // TODO: free after the consuming subtask completes (wait_for_subtask).
 
         WirInstr::Seq(instrs)
     }
