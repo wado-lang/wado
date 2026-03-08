@@ -487,7 +487,6 @@ impl TypeTable {
         self.types.iter()
     }
 
-
     pub fn is_integer(&self, id: TypeId) -> bool {
         // Follow newtype chain to get ultimate base type
         let base_id = self.get_ultimate_base_type(id);
@@ -991,7 +990,6 @@ impl TypeTable {
             ResolvedType::Newtype { name, .. } => name.clone(),
         }
     }
-
 
     /// Get a mangled name for a type suitable for use in struct/function names.
     ///

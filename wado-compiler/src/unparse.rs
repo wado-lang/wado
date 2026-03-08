@@ -3453,8 +3453,7 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push_str(name);
                 self.output.push_str(": ");
-                self.output
-                    .push_str(&self.type_table.type_name(*type_id));
+                self.output.push_str(&self.type_table.type_name(*type_id));
                 self.output.push_str(" = ");
                 self.unparse_expr(value);
                 self.output.push_str(";\n");
@@ -3803,8 +3802,7 @@ impl<'a> TirUnparser<'a> {
                         if i > 0 {
                             self.output.push_str(", ");
                         }
-                        self.output
-                            .push_str(&self.type_table.type_name(*type_arg));
+                        self.output.push_str(&self.type_table.type_name(*type_arg));
                     }
                     self.output.push('>');
                 }
@@ -3861,8 +3859,7 @@ impl<'a> TirUnparser<'a> {
                         if i > 0 {
                             self.output.push_str(", ");
                         }
-                        self.output
-                            .push_str(&self.type_table.type_name(*type_arg));
+                        self.output.push_str(&self.type_table.type_name(*type_arg));
                     }
                     self.output.push('>');
                 }
@@ -3992,8 +3989,7 @@ impl<'a> TirUnparser<'a> {
                     }
                     self.output.push_str(name);
                     self.output.push_str(": ");
-                    self.output
-                        .push_str(&self.type_table.type_name(*type_id));
+                    self.output.push_str(&self.type_table.type_name(*type_id));
                 }
                 self.output.push('|');
                 // Show captures if any

@@ -1849,7 +1849,6 @@ pub fn remove_unreachable_types(project: &mut Project) {
         module.variants.retain(|v| keep_variants.contains(&v.name));
         module.enums.retain(|e| keep_enums.contains(&e.name));
     }
-
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

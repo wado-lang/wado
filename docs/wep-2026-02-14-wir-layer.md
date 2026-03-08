@@ -51,7 +51,7 @@ WIR is a tree-structured IR that maps almost 1:1 to Wasm instructions, but with 
 | File                      | Description                                                                                                         |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `wir.rs`                  | WIR data structures: `WirModule`, `WirTypeDef`, `WirType`, `WirInstr`, `WirTypeId`, `WirFuncId`, `WirName`, etc.    |
-| `wir_unparse.rs`          | WIR → pseudo-Wado rendering for `wado dump --wir`                                                                    |
+| `wir_unparse.rs`          | WIR → pseudo-Wado rendering for `wado dump --wir`                                                                   |
 | `tir_to_wir/mod.rs`       | Pipeline entry: `compile_with_wir(&Project) -> Vec<u8>` — orchestrates build → emit → validate → component wrapping |
 | `tir_to_wir/context.rs`   | `WirContext` — builder that accumulates types, functions, and module-level entries during translation               |
 | `tir_to_wir/types.rs`     | Type registration: translates TIR type definitions to `Vec<WirTypeDef>` with multi-phase topological sorting        |

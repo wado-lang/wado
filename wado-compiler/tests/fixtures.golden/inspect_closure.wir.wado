@@ -24,6 +24,32 @@ struct Formatter {
     mut buf: ref String,
 }
 
+struct [i64, i64] {
+    mut 0: i64,
+    mut 1: i64,
+}
+
+struct [u64, i32] {
+    mut 0: u64,
+    mut 1: i32,
+}
+
+struct [bool, bool, SpecialKind] {
+    mut 0: bool,
+    mut 1: bool,
+    mut 2: i32,
+}
+
+struct [u128, u128] {
+    mut 0: ref struct,
+    mut 1: ref struct,
+}
+
+struct [i128, i128] {
+    mut 0: ref struct,
+    mut 1: ref struct,
+}
+
 struct __Closure_5 {
     mut __capture_0: ref "core:internal/Box<i32>",
 }
@@ -40,8 +66,27 @@ struct __Closure_0 {}
 
 array array<u64> (mut u64);
 
+array array<char> (mut char);
+
+array array<String> (mut ref String);
+
+struct Array<String> {  // Array<T> with T=String
+    mut repr: ref array<String>,
+    mut used: i32,
+}
+
+struct Array<u8> {  // Array<T> with T=u8
+    mut repr: ref array<u8>,
+    mut used: i32,
+}
+
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
+    mut used: i32,
+}
+
+struct Array<char> {  // Array<T> with T=char
+    mut repr: ref array<char>,
     mut used: i32,
 }
 
@@ -54,11 +99,32 @@ struct CanonicalClosure_0 {
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct);
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, i32, i32) -> i32;
 
 struct CanonicalClosure_1 {
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_1",
+}
+
+type "functype/$canonical_closure_fn_2" = fn(ref null struct, ref String) -> ref String;
+
+struct CanonicalClosure_2 {
+    env: ref null struct,
+    func: ref "functype/$canonical_closure_fn_2",
+}
+
+type "functype/$canonical_closure_fn_3" = fn(ref null struct) -> i32;
+
+struct CanonicalClosure_3 {
+    env: ref null struct,
+    func: ref "functype/$canonical_closure_fn_3",
+}
+
+type "functype/$canonical_closure_fn_4" = fn(ref null struct);
+
+struct CanonicalClosure_4 {
+    env: ref null struct,
+    func: ref "functype/$canonical_closure_fn_4",
 }
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
@@ -103,28 +169,7 @@ type "functype/__Closure_0::__call" = fn(ref __Closure_0, i32) -> i32;
 
 type "functype/__Closure_5::__call" = fn(ref __Closure_5);
 
-type "functype/$canonical_closure_fn_2" = fn(ref null struct, i32, i32) -> i32;
-
-struct CanonicalClosure_2 {
-    env: ref null struct,
-    func: ref "functype/$canonical_closure_fn_2",
-}
-
-type "functype/$canonical_closure_fn_3" = fn(ref null struct, ref String) -> ref String;
-
-struct CanonicalClosure_3 {
-    env: ref null struct,
-    func: ref "functype/$canonical_closure_fn_3",
-}
-
-type "functype/$canonical_closure_fn_4" = fn(ref null struct) -> i32;
-
-struct CanonicalClosure_4 {
-    env: ref null struct,
-    func: ref "functype/$canonical_closure_fn_4",
-}
-
-type "functype/$canonical_closure_fn_3" = fn(ref null struct, ref String) -> [ref array<u8>, i32];
+type "functype/$canonical_closure_fn_2" = fn(ref null struct, ref String) -> [ref array<u8>, i32];
 
 type "functype/__Closure_5::__call" = fn(ref "core:internal/Box<i32>");
 
@@ -313,7 +358,7 @@ fn run() with Stdout {
         break __tmpl: __local_27;
     });
     count = "core:internal/Box<i32>" { value: 0 };
-    inc = "canonical/CanonicalClosure_1" { env: __Closure_5 { __capture_0: ref.as_non_null(count) }, func: ref.as_non_null(ref.func "closure/__closure_wrapper_5") };
+    inc = "canonical/CanonicalClosure_4" { env: __Closure_5 { __capture_0: ref.as_non_null(count) }, func: ref.as_non_null(ref.func "closure/__closure_wrapper_5") };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_29 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_30 = __inline_Formatter__new_28: block -> ref Formatter {

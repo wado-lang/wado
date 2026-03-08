@@ -30,6 +30,32 @@ struct Formatter {
     mut buf: ref String,
 }
 
+struct [i64, i64] {
+    mut 0: i64,
+    mut 1: i64,
+}
+
+struct [u64, i32] {
+    mut 0: u64,
+    mut 1: i32,
+}
+
+struct [bool, bool, SpecialKind] {
+    mut 0: bool,
+    mut 1: bool,
+    mut 2: i32,
+}
+
+struct [u128, u128] {
+    mut 0: ref struct,
+    mut 1: ref struct,
+}
+
+struct [i128, i128] {
+    mut 0: ref struct,
+    mut 1: ref struct,
+}
+
 struct AllHidden {
     mut secret1: i32,
     mut secret2: i32,
@@ -39,6 +65,22 @@ struct User {
     mut name: ref String,
     mut password: ref String,
     mut age: i32,
+}
+
+array array<u64> (mut u64);
+
+array array<char> (mut char);
+
+array array<String> (mut ref String);
+
+variant Option<String> {
+    Some(ref String),
+    None,
+}
+
+struct Option<String>::Some {
+    discriminant: i32,
+    payload_0: ref String,
 }
 
 variant Option<char> {
@@ -51,10 +93,63 @@ struct Option<char>::Some {
     payload_0: char,
 }
 
-array array<u64> (mut u64);
+variant Option<i32> {
+    Some(i32),
+    None,
+}
+
+struct Option<i32>::Some {
+    discriminant: i32,
+    payload_0: i32,
+}
+
+variant Option<f64> {
+    Some(f64),
+    None,
+}
+
+struct Option<f64>::Some {
+    discriminant: i32,
+    payload_0: f64,
+}
+
+variant Option<f32> {
+    Some(f32),
+    None,
+}
+
+struct Option<f32>::Some {
+    discriminant: i32,
+    payload_0: f32,
+}
+
+variant Option<u8> {
+    Some(u8),
+    None,
+}
+
+struct Option<u8>::Some {
+    discriminant: i32,
+    payload_0: u8,
+}
+
+struct Array<String> {  // Array<T> with T=String
+    mut repr: ref array<String>,
+    mut used: i32,
+}
+
+struct Array<u8> {  // Array<T> with T=u8
+    mut repr: ref array<u8>,
+    mut used: i32,
+}
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
+    mut used: i32,
+}
+
+struct Array<char> {  // Array<T> with T=char
+    mut repr: ref array<char>,
     mut used: i32,
 }
 

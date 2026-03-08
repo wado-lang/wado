@@ -85,6 +85,27 @@ struct [i64, i64] {
     mut 1: i64,
 }
 
+struct [u64, i32] {
+    mut 0: u64,
+    mut 1: i32,
+}
+
+struct [bool, bool, SpecialKind] {
+    mut 0: bool,
+    mut 1: bool,
+    mut 2: i32,
+}
+
+struct [u128, u128] {
+    mut 0: ref struct,
+    mut 1: ref struct,
+}
+
+struct [i128, i128] {
+    mut 0: ref struct,
+    mut 1: ref struct,
+}
+
 struct __Closure_0 {}
 
 struct Config {
@@ -92,6 +113,10 @@ struct Config {
     mut port: i32,
     mut debug: bool,
 }
+
+array array<u64> (mut u64);
+
+array array<char> (mut char);
 
 variant Option<char> {
     Some(char),
@@ -111,6 +136,26 @@ variant Option<i32> {
 struct Option<i32>::Some {
     discriminant: i32,
     payload_0: i32,
+}
+
+variant Option<f64> {
+    Some(f64),
+    None,
+}
+
+struct Option<f64>::Some {
+    discriminant: i32,
+    payload_0: f64,
+}
+
+variant Option<f32> {
+    Some(f32),
+    None,
+}
+
+struct Option<f32>::Some {
+    discriminant: i32,
+    payload_0: f32,
 }
 
 variant Option<u8> {
@@ -163,6 +208,36 @@ struct Result<unit,SerializeError>::Err {
     payload_0: ref "core:serde/SerializeError",
 }
 
+variant Result<i8,DeserializeError> {
+    Ok(i8),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<i8,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: i8,
+}
+
+struct Result<i8,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
+variant Result<i16,DeserializeError> {
+    Ok(i16),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<i16,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: i16,
+}
+
+struct Result<i16,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
 variant Result<i32,DeserializeError> {
     Ok(i32),
     Err(ref "core:serde/DeserializeError"),
@@ -174,6 +249,111 @@ struct Result<i32,DeserializeError>::Ok {
 }
 
 struct Result<i32,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
+variant Result<i64,DeserializeError> {
+    Ok(i64),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<i64,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: i64,
+}
+
+struct Result<i64,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
+variant Result<u8,DeserializeError> {
+    Ok(u8),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<u8,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: u8,
+}
+
+struct Result<u8,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
+variant Result<u16,DeserializeError> {
+    Ok(u16),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<u16,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: u16,
+}
+
+struct Result<u16,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
+variant Result<u32,DeserializeError> {
+    Ok(u32),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<u32,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: u32,
+}
+
+struct Result<u32,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
+variant Result<u64,DeserializeError> {
+    Ok(u64),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<u64,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: u64,
+}
+
+struct Result<u64,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
+variant Result<f32,DeserializeError> {
+    Ok(f32),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<f32,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: f32,
+}
+
+struct Result<f32,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
+variant Result<f64,DeserializeError> {
+    Ok(f64),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<f64,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: f64,
+}
+
+struct Result<f64,DeserializeError>::Err {
     discriminant: i32,
     payload_0: ref "core:serde/DeserializeError",
 }
@@ -248,6 +428,16 @@ struct Result<JsonStructSerializer,SerializeError>::Err {
     payload_0: ref "core:serde/SerializeError",
 }
 
+variant Option<String> {
+    Some(ref String),
+    None,
+}
+
+struct Option<String>::Some {
+    discriminant: i32,
+    payload_0: ref String,
+}
+
 variant Result<JsonStructAccess,DeserializeError> {
     Ok(ref "core:json/JsonStructAccess"),
     Err(ref "core:serde/DeserializeError"),
@@ -259,6 +449,136 @@ struct Result<JsonStructAccess,DeserializeError>::Ok {
 }
 
 struct Result<JsonStructAccess,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
+variant Result<Tuple<i64,i64>,DeserializeError> {
+    Ok(ref "tuple/[i64, i64]"),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<Tuple<i64,i64>,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: ref "tuple/[i64, i64]",
+}
+
+struct Result<Tuple<i64,i64>,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
+variant Option<i64> {
+    Some(i64),
+    None,
+}
+
+struct Option<i64>::Some {
+    discriminant: i32,
+    payload_0: i64,
+}
+
+variant Result<Tuple<u64,i32>,DeserializeError> {
+    Ok(ref "tuple/[u64, i32]"),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<Tuple<u64,i32>,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: ref "tuple/[u64, i32]",
+}
+
+struct Result<Tuple<u64,i32>,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
+variant Option<u64> {
+    Some(u64),
+    None,
+}
+
+struct Option<u64>::Some {
+    discriminant: i32,
+    payload_0: u64,
+}
+
+variant Result<Tuple<bool,bool,SpecialKind>,DeserializeError> {
+    Ok(ref "tuple/[bool, bool, SpecialKind]"),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<Tuple<bool,bool,SpecialKind>,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: ref "tuple/[bool, bool, SpecialKind]",
+}
+
+struct Result<Tuple<bool,bool,SpecialKind>,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
+variant Option<bool> {
+    Some(bool),
+    None,
+}
+
+struct Option<bool>::Some {
+    discriminant: i32,
+    payload_0: bool,
+}
+
+variant Option<SpecialKind> {
+    Some(i32),
+    None,
+}
+
+struct Option<SpecialKind>::Some {
+    discriminant: i32,
+    payload_0: i32,
+}
+
+variant Result<Tuple<u128,u128>,DeserializeError> {
+    Ok(ref "tuple/[u128, u128]"),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<Tuple<u128,u128>,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: ref "tuple/[u128, u128]",
+}
+
+struct Result<Tuple<u128,u128>,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
+variant Result<Tuple<i128,i128>,DeserializeError> {
+    Ok(ref "tuple/[i128, i128]"),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<Tuple<i128,i128>,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: ref "tuple/[i128, i128]",
+}
+
+struct Result<Tuple<i128,i128>,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
+variant Result<Option<String>,DeserializeError> {
+    Ok(ref Option<String>),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<Option<String>,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: ref Option<String>,
+}
+
+struct Result<Option<String>,DeserializeError>::Err {
     discriminant: i32,
     payload_0: ref "core:serde/DeserializeError",
 }
@@ -278,10 +598,78 @@ struct Result<Option<i32>,DeserializeError>::Err {
     payload_0: ref "core:serde/DeserializeError",
 }
 
-array array<u64> (mut u64);
+variant Result<Option<i64>,DeserializeError> {
+    Ok(ref Option<i64>),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<Option<i64>,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: ref Option<i64>,
+}
+
+struct Result<Option<i64>,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
+variant Result<Option<u64>,DeserializeError> {
+    Ok(ref Option<u64>),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<Option<u64>,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: ref Option<u64>,
+}
+
+struct Result<Option<u64>,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
+variant Result<Option<bool>,DeserializeError> {
+    Ok(ref Option<bool>),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<Option<bool>,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: ref Option<bool>,
+}
+
+struct Result<Option<bool>,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
+variant Result<Option<SpecialKind>,DeserializeError> {
+    Ok(ref Option<SpecialKind>),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<Option<SpecialKind>,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: ref Option<SpecialKind>,
+}
+
+struct Result<Option<SpecialKind>,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
+}
+
+struct Array<u8> {  // Array<T> with T=u8
+    mut repr: ref array<u8>,
+    mut used: i32,
+}
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
+    mut used: i32,
+}
+
+struct Array<char> {  // Array<T> with T=char
+    mut repr: ref array<char>,
     mut used: i32,
 }
 
