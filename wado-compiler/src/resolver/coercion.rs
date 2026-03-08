@@ -707,7 +707,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         let base_name = self.struct_name_for_type(target_type)?;
-        let seq_info = self.find_sequence_literal_trait_impl(&base_name, target_type)?;
+        let (seq_info, needs_newtype_cast) = self
+            .find_sequence_literal_trait_impl(&base_name, target_type)
+            .map(|info| (info, false))
+            .or_else(|| {
+                // For newtypes, try the base type's SequenceLiteral impl
+                let base_type = self.type_table.borrow().get_newtype_base(target_type)?;
+                let base_name = self.struct_name_for_type(base_type)?;
+                self.find_sequence_literal_trait_impl(&base_name, base_type)
+                    .map(|info| (info, true))
+            })?;
         let element_type = seq_info.element_type;
         let push_self_kind = seq_info.self_kind;
         let trait_name = seq_info.trait_name.clone();
@@ -920,7 +929,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         ctx.exit_scope();
 
-        Some(TirExpr::new(
+        let block_expr = TirExpr::new(
             TirExprKind::LabeledBlock {
                 label,
                 block: TirBlock::new(stmts, span),
@@ -928,7 +937,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
             },
             output_type,
             span,
-        ))
+        );
+
+        if needs_newtype_cast {
+            Some(TirExpr::new(
+                TirExprKind::Cast { expr: Box::new(block_expr), target_type },
+                target_type,
+                span,
+            ))
+        } else {
+            Some(block_expr)
+        }
     }
 
     /// Emit a type error when `actual` is a reference type (`&T` or `&mut T`)
