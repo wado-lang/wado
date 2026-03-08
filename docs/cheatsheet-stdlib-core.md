@@ -1402,7 +1402,7 @@ zlib compression and decompression (RFC 1950/1951/1952).
 ```wado
 pub global Z_OK: i32;
 pub global Z_STREAM_END: i32;
-pub global Z_NEED_DICT: i32;
+
 pub global Z_ERRNO: i32;
 pub global Z_STREAM_ERROR: i32;
 pub global Z_DATA_ERROR: i32;
@@ -1465,7 +1465,6 @@ impl DeflateStream {
     pub fn new_with_strategy(level: i32, strategy: i32) -> DeflateStream;
     pub fn new_with_format(level: i32, format: i32) -> DeflateStream;
     pub fn new_full(level: i32, strategy: i32, format: i32) -> DeflateStream;
-    pub fn set_dictionary(&mut self, dict: &Array<u8>);
     pub fn set_header(&mut self, header: &GzipHeader);
     pub fn params(&mut self, level: i32, strategy: i32);
     pub fn bound(&self, source_len: i32) -> i32;
@@ -1488,15 +1487,13 @@ pub struct InflateStream {
 impl InflateStream {
     pub fn new() -> InflateStream;
     pub fn new_with_format(format: i32) -> InflateStream;
-    pub fn set_dictionary(&mut self, dict: &Array<u8>);
-    pub fn get_dictionary(&self) -> Array<u8>;
     pub fn get_total_in(&self) -> i32;
     pub fn get_total_out(&self) -> i32;
     pub fn reset(&mut self);
     pub fn copy(&self) -> InflateStream;
     pub fn update(&mut self, chunk: &Array<u8>);
-    pub fn finish(&mut self) -> Array<u8>;
-    pub fn decompress(&self, input: &Array<u8>) -> Array<u8>;
+    pub fn finish(&mut self) -> Result<Array<u8>, String>;
+    pub fn decompress(&self, input: &Array<u8>) -> Result<Array<u8>, String>;
 }
 ```
 
@@ -1512,7 +1509,7 @@ pub fn crc32_init() -> u32;
 pub fn crc32_combine(crc1: u32, crc2: u32, len2: i32) -> u32;
 pub fn compress_bound(source_len: i32) -> i32;
 pub fn inflate_raw(input: &Array<u8>) -> Array<u8>;
-pub fn inflate_zlib(input: &Array<u8>) -> Array<u8>;
+pub fn inflate_zlib(input: &Array<u8>) -> Result<Array<u8>, String>;
 pub fn deflate_stored(input: &Array<u8>) -> Array<u8>;
 pub fn zlib_compress_stored(input: &Array<u8>) -> Array<u8>;
 pub fn deflate_huffman(input: &Array<u8>) -> Array<u8>;
@@ -1520,14 +1517,14 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
 pub fn zlib_compress(input: &Array<u8>) -> Array<u8>;
 pub fn compress2(input: &Array<u8>, level: i32) -> Array<u8>;
 pub fn compress_with_strategy(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>;
-pub fn inflate_gzip(input: &Array<u8>) -> Array<u8>;
+pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, String>;
 pub fn gzip_compress(input: &Array<u8>) -> Array<u8>;
 pub fn gzip_compress2(input: &Array<u8>, level: i32) -> Array<u8>;
-pub fn uncompress(input: &Array<u8>) -> Array<u8>;
+pub fn uncompress(input: &Array<u8>) -> Result<Array<u8>, String>;
 pub fn deflate_raw(input: &Array<u8>) -> Array<u8>;
 pub fn deflate_raw2(input: &Array<u8>, level: i32) -> Array<u8>;
-pub fn uncompress2(input: &Array<u8>, max_output: i32) -> Array<u8>;
+pub fn uncompress2(input: &Array<u8>, max_output: i32) -> Result<Array<u8>, String>;
 pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHeader) -> Array<u8>;
-pub fn inflate_get_gzip_header(input: &Array<u8>) -> GzipHeader;
+pub fn inflate_get_gzip_header(input: &Array<u8>) -> Result<GzipHeader, String>;
 pub fn inflate_sync_find(input: &Array<u8>, start: i32) -> i32;
 ```

@@ -2339,8 +2339,6 @@ zlib compression and decompression (RFC 1950/1951/1952).
 
 #### `pub global Z_STREAM_END: i32`
 
-#### `pub global Z_NEED_DICT: i32`
-
 #### `pub global Z_ERRNO: i32`
 
 #### `pub global Z_STREAM_ERROR: i32`
@@ -2451,10 +2449,6 @@ Creates a new DeflateStream with format selection (ZLIB_FORMAT, RAW_FORMAT, GZIP
 
 Creates a new DeflateStream with all parameters specified.
 
-##### `pub fn set_dictionary(&mut self, dict: &Array<u8>)`
-
-Sets a preset dictionary for compression.
-
 ##### `pub fn set_header(&mut self, header: &GzipHeader)`
 
 Sets a custom gzip header (only for GZIP_FORMAT).
@@ -2513,14 +2507,6 @@ Creates a new InflateStream with zlib format (default).
 
 Creates a new InflateStream with the specified format.
 
-##### `pub fn set_dictionary(&mut self, dict: &Array<u8>)`
-
-Sets a preset dictionary for decompression.
-
-##### `pub fn get_dictionary(&self) -> Array<u8>`
-
-Returns a copy of the preset dictionary.
-
 ##### `pub fn get_total_in(&self) -> i32`
 
 Returns the total input bytes processed.
@@ -2541,11 +2527,11 @@ Creates a copy of this stream.
 
 Adds a compressed data chunk to the stream buffer.
 
-##### `pub fn finish(&mut self) -> Array<u8>`
+##### `pub fn finish(&mut self) -> Result<Array<u8>, String>`
 
 Decompresses all buffered data and returns the result.
 
-##### `pub fn decompress(&self, input: &Array<u8>) -> Array<u8>`
+##### `pub fn decompress(&self, input: &Array<u8>) -> Result<Array<u8>, String>`
 
 Decompresses data in one shot and returns the result.
 
@@ -2587,7 +2573,7 @@ Returns the maximum compressed size for a given source length.
 
 Decompresses raw DEFLATE data (no header/checksum).
 
-#### `pub fn inflate_zlib(input: &Array<u8>) -> Array<u8>`
+#### `pub fn inflate_zlib(input: &Array<u8>) -> Result<Array<u8>, String>`
 
 Decompresses zlib-wrapped data (RFC 1950).
 
@@ -2619,7 +2605,7 @@ Compresses data in zlib format with the specified compression level.
 
 Compresses data in zlib format with the specified compression level and strategy.
 
-#### `pub fn inflate_gzip(input: &Array<u8>) -> Array<u8>`
+#### `pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, String>`
 
 Decompresses gzip-wrapped data (RFC 1952).
 
@@ -2631,7 +2617,7 @@ Compresses data in gzip format with default compression level.
 
 Compresses data in gzip format with the specified compression level.
 
-#### `pub fn uncompress(input: &Array<u8>) -> Array<u8>`
+#### `pub fn uncompress(input: &Array<u8>) -> Result<Array<u8>, String>`
 
 Decompresses zlib-wrapped data (alias for `inflate_zlib`).
 
@@ -2643,7 +2629,7 @@ Compresses data as raw DEFLATE (no header/checksum) with default level.
 
 Compresses data as raw DEFLATE (no header/checksum) with the specified level.
 
-#### `pub fn uncompress2(input: &Array<u8>, max_output: i32) -> Array<u8>`
+#### `pub fn uncompress2(input: &Array<u8>, max_output: i32) -> Result<Array<u8>, String>`
 
 Decompresses zlib-wrapped data with a maximum output size limit.
 
@@ -2651,7 +2637,7 @@ Decompresses zlib-wrapped data with a maximum output size limit.
 
 Compresses data in gzip format with a custom header and compression level.
 
-#### `pub fn inflate_get_gzip_header(input: &Array<u8>) -> GzipHeader`
+#### `pub fn inflate_get_gzip_header(input: &Array<u8>) -> Result<GzipHeader, String>`
 
 Extracts the gzip header from compressed data without decompressing.
 
