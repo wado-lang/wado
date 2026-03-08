@@ -17,7 +17,7 @@ test "compression round-trip" {
         data.append((i % 256) as u8);
     }
     let compressed = zlib_compress(&data);
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert decompressed.len() == 100;
     assert decompressed[0] == 0;
     assert decompressed[99] == 99;
@@ -52,7 +52,7 @@ export fn run() with Stdout, MonotonicClock {
     let t2 = MonotonicClock::now();
     let mut decompressed: Array<u8> = [];
     for let mut iter = 0; iter < iterations; iter += 1 {
-        decompressed = inflate_zlib(&compressed);
+        decompressed = inflate_zlib(&compressed).unwrap();
     }
     let t3 = MonotonicClock::now();
 

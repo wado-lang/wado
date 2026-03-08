@@ -1,7 +1,6 @@
 use {
     Z_OK,
     Z_STREAM_END,
-    Z_NEED_DICT,
     Z_ERRNO,
     Z_STREAM_ERROR,
     Z_DATA_ERROR,
@@ -97,7 +96,6 @@ fn make_repeated(byte: u8, count: i32) -> Array<u8> {
 test "return codes" {
     assert Z_OK == 0;
     assert Z_STREAM_END == 1;
-    assert Z_NEED_DICT == 2;
     assert Z_ERRNO == -1;
     assert Z_STREAM_ERROR == -2;
     assert Z_DATA_ERROR == -3;
@@ -194,14 +192,14 @@ test "inflate zlib Hello" {
     let expected: Array<u8> = [72 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8];
     let compressed: Array<u8> = [120 as u8, 156 as u8, 243 as u8, 72 as u8, 205 as u8, 201 as u8, 201 as u8, 7 as u8,
         0 as u8, 5 as u8, 140 as u8, 1 as u8, 245 as u8];
-    let result = inflate_zlib(&compressed);
+    let result = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&expected, &result), "inflate Hello mismatch";
 }
 
 test "inflate zlib 1000xA" {
     let compressed: Array<u8> = [120 as u8, 156 as u8, 115 as u8, 116 as u8, 28 as u8, 5 as u8, 163 as u8, 96 as u8,
         20 as u8, 12 as u8, 119 as u8, 0 as u8, 0 as u8, 137 as u8, 12 as u8, 253 as u8, 233 as u8];
-    let result = inflate_zlib(&compressed);
+    let result = inflate_zlib(&compressed).unwrap();
     assert result.len() == 1000;
     for let mut i = 0; i < 1000; i += 1 {
         assert result[i] == 65 as u8;
@@ -212,7 +210,7 @@ test "inflate zlib Hello World x20" {
     let compressed: Array<u8> = [120 as u8, 156 as u8, 243 as u8, 72 as u8, 205 as u8, 201 as u8, 201 as u8, 215 as u8,
         81 as u8, 8 as u8, 207 as u8, 47 as u8, 202 as u8, 73 as u8, 81 as u8, 84 as u8, 240 as u8, 24 as u8, 229 as u8,
         65 as u8, 121 as u8, 0 as u8, 245 as u8, 131 as u8, 90 as u8, 181 as u8];
-    let result = inflate_zlib(&compressed);
+    let result = inflate_zlib(&compressed).unwrap();
     assert result.len() == 280;
     let expected_unit: Array<u8> = [72 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8, 44 as u8, 32 as u8, 87 as u8,
         111 as u8, 114 as u8, 108 as u8, 100 as u8, 33 as u8, 32 as u8];
@@ -248,7 +246,7 @@ test "inflate zlib bytes 0-255" {
         232 as u8, 233 as u8, 234 as u8, 235 as u8, 236 as u8, 237 as u8, 238 as u8, 239 as u8, 240 as u8, 241 as u8,
         242 as u8, 243 as u8, 244 as u8, 245 as u8, 246 as u8, 247 as u8, 248 as u8, 249 as u8, 250 as u8, 251 as u8,
         252 as u8, 253 as u8, 254 as u8, 255 as u8, 173 as u8, 246 as u8, 127 as u8, 129 as u8];
-    let result = inflate_zlib(&compressed);
+    let result = inflate_zlib(&compressed).unwrap();
     assert result.len() == 256;
     for let mut i = 0; i < 256; i += 1 {
         assert result[i] == i as u8;
@@ -257,35 +255,35 @@ test "inflate zlib bytes 0-255" {
 
 test "inflate zlib empty" {
     let compressed: Array<u8> = [120 as u8, 156 as u8, 3 as u8, 0 as u8, 0 as u8, 0 as u8, 0 as u8, 1 as u8];
-    let result = inflate_zlib(&compressed);
+    let result = inflate_zlib(&compressed).unwrap();
     assert result.len() == 0;
 }
 
 test "stored block round-trip Hello" {
     let data: Array<u8> = [72 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8];
     let compressed = zlib_compress_stored(&data);
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "stored block round-trip 1000 bytes" {
     let data = make_pattern_data(1000);
     let compressed = zlib_compress_stored(&data);
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "Huffman round-trip Hello" {
     let data: Array<u8> = [72 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8];
     let compressed = zlib_compress(&data);
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "Huffman round-trip empty" {
     let data: Array<u8> = [];
     let compressed = zlib_compress(&data);
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert decompressed.len() == 0;
 }
 
@@ -293,14 +291,14 @@ test "Huffman round-trip repetitive data" {
     let data = make_repeated(65 as u8, 1000);
     let compressed = zlib_compress(&data);
     assert compressed.len() < data.len(), "repetitive data should compress";
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "Huffman round-trip mixed data" {
     let data = make_pattern_data(500);
     let compressed = zlib_compress(&data);
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
@@ -315,7 +313,7 @@ test "Huffman round-trip Hello World x20" {
     }
     let compressed = zlib_compress(&data);
     assert compressed.len() < data.len(), "repetitive text should compress";
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
@@ -327,28 +325,28 @@ test "compress_bound exceeds source length" {
 test "compression level 0 (stored) round-trip" {
     let data = make_pattern_data(1000);
     let compressed = compress2(&data, Z_NO_COMPRESSION);
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "compression level 1 (fastest) round-trip" {
     let data = make_pattern_data(1000);
     let compressed = compress2(&data, Z_BEST_SPEED);
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "compression level 6 (default) round-trip" {
     let data = make_pattern_data(1000);
     let compressed = compress2(&data, Z_DEFAULT_COMPRESSION);
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "compression level 9 (best) round-trip" {
     let data = make_pattern_data(1000);
     let compressed = compress2(&data, Z_BEST_COMPRESSION);
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
@@ -362,21 +360,21 @@ test "stored is larger than compressed" {
 test "strategy Huffman-only round-trip" {
     let data = make_pattern_data(1000);
     let compressed = compress_with_strategy(&data, 6, Z_HUFFMAN_ONLY);
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "strategy RLE round-trip" {
     let data = make_repeated(65 as u8, 1000);
     let compressed = compress_with_strategy(&data, 6, Z_RLE);
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "strategy fixed round-trip" {
     let data = make_pattern_data(1000);
     let compressed = compress_with_strategy(&data, 6, Z_FIXED);
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
@@ -409,29 +407,29 @@ test "gzip round-trip" {
     assert compressed[0] == 0x1F as u8, "gzip magic byte 1";
     assert compressed[1] == 0x8B as u8, "gzip magic byte 2";
     assert compressed[2] == 8 as u8, "gzip method deflate";
-    let decompressed = inflate_gzip(&compressed);
+    let decompressed = inflate_gzip(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "gzip compression levels" {
     let data = string_to_bytes("Hello, gzip!");
     let c1 = gzip_compress2(&data, Z_BEST_SPEED);
-    assert bytes_equal(&data, &inflate_gzip(&c1));
+    assert bytes_equal(&data, &inflate_gzip(&c1).unwrap());
     let c9 = gzip_compress2(&data, Z_BEST_COMPRESSION);
-    assert bytes_equal(&data, &inflate_gzip(&c9));
+    assert bytes_equal(&data, &inflate_gzip(&c9).unwrap());
 }
 
 test "gzip large data" {
     let data = make_pattern_data(5000);
     let compressed = gzip_compress(&data);
-    let decompressed = inflate_gzip(&compressed);
+    let decompressed = inflate_gzip(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "gzip uncompress auto-detection" {
     let data = make_pattern_data(5000);
     let compressed = gzip_compress(&data);
-    let decompressed = uncompress(&compressed);
+    let decompressed = uncompress(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
@@ -449,7 +447,7 @@ test "gzip multi-member" {
         multi.append(gz2[i]);
     }
 
-    let decompressed = inflate_gzip(&multi);
+    let decompressed = inflate_gzip(&multi).unwrap();
     assert decompressed.len() == seg1.len() + seg2.len();
     for let mut i = 0; i < seg1.len(); i += 1 {
         assert decompressed[i] == seg1[i];
@@ -463,7 +461,7 @@ test "DeflateStream one-shot" {
     let data = make_pattern_data(500);
     let mut ds = DeflateStream::new(Z_DEFAULT_COMPRESSION);
     let compressed = ds.compress(&data);
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
@@ -472,7 +470,7 @@ test "InflateStream one-shot" {
     let mut ds = DeflateStream::new(Z_DEFAULT_COMPRESSION);
     let compressed = ds.compress(&data);
     let is = InflateStream::new();
-    let decompressed = is.decompress(&compressed);
+    let decompressed = is.decompress(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
@@ -491,7 +489,7 @@ test "DeflateStream chunked update/finish" {
     ds.update(&chunk1);
     ds.update(&chunk2);
     let compressed = ds.finish();
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
@@ -513,21 +511,7 @@ test "InflateStream chunked update/finish" {
     let mut is = InflateStream::new();
     is.update(&c1);
     is.update(&c2);
-    let decompressed = is.finish();
-    assert bytes_equal(&data, &decompressed);
-}
-
-test "DeflateStream preset dictionary" {
-    let dict = string_to_bytes("common pattern data ");
-    let data = string_to_bytes("common pattern data here");
-
-    let mut ds = DeflateStream::new(Z_DEFAULT_COMPRESSION);
-    ds.set_dictionary(&dict);
-    let compressed = ds.compress(&data);
-
-    let mut is = InflateStream::new();
-    is.set_dictionary(&dict);
-    let decompressed = is.decompress(&compressed);
+    let decompressed = is.finish().unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
@@ -535,7 +519,7 @@ test "DeflateStream with different level" {
     let data = make_pattern_data(500);
     let mut ds = DeflateStream::new(Z_BEST_SPEED);
     let compressed = ds.compress(&data);
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
@@ -546,7 +530,7 @@ test "stream raw format round-trip" {
     assert compressed[0] != 0x78 as u8, "raw stream should not have zlib header";
 
     let is = InflateStream::new_with_format(RAW_FORMAT);
-    let decompressed = is.decompress(&compressed);
+    let decompressed = is.decompress(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
@@ -558,7 +542,7 @@ test "stream gzip format round-trip" {
     assert compressed[1] == 0x8B as u8, "gzip magic 2";
 
     let is = InflateStream::new_with_format(GZIP_FORMAT);
-    let decompressed = is.decompress(&compressed);
+    let decompressed = is.decompress(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
@@ -568,7 +552,7 @@ test "stream auto-detect zlib" {
     let compressed = ds.compress(&data);
 
     let is = InflateStream::new_with_format(AUTO_FORMAT);
-    let decompressed = is.decompress(&compressed);
+    let decompressed = is.decompress(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
@@ -578,7 +562,7 @@ test "stream auto-detect gzip" {
     let compressed = ds.compress(&data);
 
     let is = InflateStream::new_with_format(AUTO_FORMAT);
-    let decompressed = is.decompress(&compressed);
+    let decompressed = is.decompress(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
@@ -621,14 +605,14 @@ test "compress_bound is an upper bound" {
 test "uncompress round-trip" {
     let data = make_pattern_data(100);
     let compressed = compress2(&data, Z_DEFAULT_COMPRESSION);
-    let decompressed = uncompress(&compressed);
+    let decompressed = uncompress(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "uncompress2 with limit" {
     let data = make_pattern_data(100);
     let compressed = compress2(&data, Z_DEFAULT_COMPRESSION);
-    let decompressed = uncompress2(&compressed, 200);
+    let decompressed = uncompress2(&compressed, 200).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
@@ -636,7 +620,7 @@ test "round-trip large data (>32KB window boundary)" {
     // Regression: inflate_zlib failed for data exceeding the 32KB LZ77 window
     let data = make_pattern_data(34054);
     let compressed = zlib_compress(&data);
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert decompressed.len() == 34054, "decompressed size mismatch";
     assert bytes_equal(&data, &decompressed);
 }
@@ -644,7 +628,17 @@ test "round-trip large data (>32KB window boundary)" {
 test "round-trip 100KB data" {
     let data = make_pattern_data(100000);
     let compressed = zlib_compress(&data);
-    let decompressed = inflate_zlib(&compressed);
+    let decompressed = inflate_zlib(&compressed).unwrap();
     assert decompressed.len() == 100000, "decompressed size mismatch";
     assert bytes_equal(&data, &decompressed);
+}
+
+test "inflate_zlib error on invalid data" {
+    let bad: Array<u8> = [0 as u8, 0 as u8];
+    assert inflate_zlib(&bad) matches { Err(_) };
+}
+
+test "inflate_gzip error on invalid data" {
+    let bad: Array<u8> = [0 as u8, 0 as u8];
+    assert inflate_gzip(&bad) matches { Err(_) };
 }

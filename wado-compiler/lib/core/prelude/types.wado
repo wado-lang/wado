@@ -32,6 +32,42 @@ impl<T: Eq, E: Eq> Eq for Result<T, E> {
     }
 }
 
+impl Option<T> {
+    /// Returns the contained value, panicking if None.
+    pub fn unwrap(&self) -> T {
+        if let Some(v) = *self {
+            return v;
+        }
+        panic("called Option::unwrap() on a None value");
+    }
+}
+
+impl Result<T, E> {
+    /// Returns the contained Ok value, panicking if Err.
+    pub fn unwrap(&self) -> T {
+        if let Ok(v) = *self {
+            return v;
+        }
+        panic("called Result::unwrap() on an Err value");
+    }
+
+    /// Returns true if this is an Ok value.
+    pub fn is_ok(&self) -> bool {
+        if let Ok(_) = *self {
+            return true;
+        }
+        return false;
+    }
+
+    /// Returns true if this is an Err value.
+    pub fn is_err(&self) -> bool {
+        if let Err(_) = *self {
+            return true;
+        }
+        return false;
+    }
+}
+
 impl Default for Option<T> {
     pub fn default() -> Option<T> { return null; }
 }

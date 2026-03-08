@@ -1,30 +1,47 @@
-//! zlib compression and decompression (RFC 1950/1951/1952).
+//! zlib compression and decompression.
+//!
+//! A pure Wado port of zlib 1.3.1 (https://github.com/madler/zlib).
+//! This code is derived from the original zlib by Jean-loup Gailly and Mark Adler,
+//! and is licensed under the zlib License (https://github.com/madler/zlib/blob/develop/LICENSE).
+//!
+//! Implements DEFLATE (RFC 1951) and gzip (RFC 1952) fully.
+//! RFC 1950 (zlib format) is supported except for preset dictionaries (FDICT);
+//! streams with FDICT set will return `ZlibError::PresetDictionaryNotSupported`.
+//!
+//! Features:
+//!   - Adler-32 and CRC-32 checksums (with combine operations)
+//!   - DEFLATE inflate (decompression) with dynamic/fixed Huffman and stored blocks
+//!   - DEFLATE deflate (compression) with fixed and dynamic Huffman codes + LZ77
+//!   - Compression levels 0-9 with strategy selection
+//!   - zlib and gzip format support
+//!   - Streaming deflate/inflate API
+//!
+//! Usage - Compression:
+//!   let input: Array<u8> = [...];
+//!   let compressed = zlib_compress(&input);
+//!   let compressed_fast = compress2(&input, Z_BEST_SPEED);
+//!   let compressed_best = compress2(&input, Z_BEST_COMPRESSION);
+//!
+//! Usage - Decompression:
+//!   let decompressed = inflate_zlib(&compressed);
+//!   let decompressed_gz = inflate_gzip(&gzipped_data);
 
-// zlib port to Wado
-//
-// Original: zlib 1.3.1 - https://github.com/madler/zlib
-// Copyright (C) 1995-2024 Jean-loup Gailly and Mark Adler
-// License: zlib License (see https://github.com/madler/zlib/blob/develop/LICENSE)
-//
-// This is a pure Wado port of the zlib compression library. It implements:
-//   - Adler-32 and CRC-32 checksums (with combine operations)
-//   - DEFLATE inflate (decompression) with dynamic/fixed Huffman and stored blocks
-//   - DEFLATE deflate (compression) with fixed and dynamic Huffman codes + LZ77
-//   - Compression levels 0-9 with strategy selection
-//   - zlib and gzip format support
-//   - Streaming deflate/inflate API
-//   - Preset dictionary support
-//
-// Usage - Compression:
-//   let input: Array<u8> = [...];
-//   let compressed = zlib_compress(&input);
-//   let compressed_fast = compress2(&input, Z_BEST_SPEED);
-//   let compressed_best = compress2(&input, Z_BEST_COMPRESSION);
-//
-// Usage - Decompression:
-//   let decompressed = inflate_zlib(&compressed);
-//   let decompressed_gz = inflate_gzip(&gzipped_data);
 
+/// Error type for zlib/gzip decompression operations.
+pub enum ZlibError {
+    DataTooShort,
+    InvalidHeader,
+    InvalidMagicNumber,
+    UnsupportedCompressionMethod,
+    PresetDictionaryNotSupported,
+    Adler32Mismatch,
+    Crc32Mismatch,
+    TruncatedExtraField,
+    HeaderExtendsPastEnd,
+    TruncatedTrailer,
+    IsizeMismatch,
+    OutputExceedsMax,
+}
 
 /// Returns the zlib version string.
 pub fn zlib_version() -> String {
@@ -35,7 +52,7 @@ pub fn zlib_version() -> String {
 // Return codes
 pub global Z_OK: i32 = 0;
 pub global Z_STREAM_END: i32 = 1;
-pub global Z_NEED_DICT: i32 = 2;
+
 pub global Z_ERRNO: i32 = -1;
 pub global Z_STREAM_ERROR: i32 = -2;
 pub global Z_DATA_ERROR: i32 = -3;
@@ -1325,20 +1342,25 @@ pub fn inflate_raw(input: &Array<u8>) -> Array<u8> {
 
 // Decompress zlib-format data (2-byte header + deflate + 4-byte adler32)
 /// Decompresses zlib-wrapped data (RFC 1950).
-pub fn inflate_zlib(input: &Array<u8>) -> Array<u8> {
+pub fn inflate_zlib(input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
     // Skip 2-byte zlib header
     if input.len() < 6 {
-        panic("zlib data too short");
+        return Result::<Array<u8>, ZlibError>::Err(ZlibError::DataTooShort);
     }
 
     // Check zlib header
     let cmf = input[0];
     let flg = input[1];
     if (cmf as i32 * 256 + flg as i32) % 31 != 0 {
-        panic("invalid zlib header");
+        return Result::<Array<u8>, ZlibError>::Err(ZlibError::InvalidHeader);
     }
     if cmf & 0x0F != 8 {
-        panic("unsupported compression method");
+        return Result::<Array<u8>, ZlibError>::Err(ZlibError::UnsupportedCompressionMethod);
+    }
+
+    // Preset dictionary is not supported
+    if flg & 0x20 != 0 {
+        return Result::<Array<u8>, ZlibError>::Err(ZlibError::PresetDictionaryNotSupported);
     }
 
     // Decompress directly from input, skipping header (2 bytes) and trailer (4 bytes adler32)
@@ -1348,10 +1370,10 @@ pub fn inflate_zlib(input: &Array<u8>) -> Array<u8> {
     let computed = adler32(adler32_init(), &result, 0, result.len());
     let stored = input[input.len() - 4] as u32 << 24 | input[input.len() - 3] as u32 << 16 | input[input.len() - 2] as u32 << 8 | input[input.len() - 1] as u32;
     if computed != stored {
-        panic("adler32 checksum mismatch");
+        return Result::<Array<u8>, ZlibError>::Err(ZlibError::Adler32Mismatch);
     }
 
-    return result;
+    return Result::<Array<u8>, ZlibError>::Ok(result);
 }
 
 
@@ -2847,17 +2869,17 @@ global GZIP_FNAME: u8 = 8;
 global GZIP_FCOMMENT: u8 = 16;
 
 // Parse a single gzip member header, returning the data start position
-fn gzip_parse_header(input: &Array<u8>, start: i32) -> i32 {
+fn gzip_parse_header(input: &Array<u8>, start: i32) -> Result<i32, ZlibError> {
     if start + 10 > input.len() {
-        panic("gzip data too short");
+        return Result::<i32, ZlibError>::Err(ZlibError::DataTooShort);
     }
 
     if input[start] != GZIP_MAGIC1 || input[start + 1] != GZIP_MAGIC2 {
-        panic("invalid gzip magic number");
+        return Result::<i32, ZlibError>::Err(ZlibError::InvalidMagicNumber);
     }
 
     if input[start + 2] != 8 {
-        panic("unsupported gzip compression method");
+        return Result::<i32, ZlibError>::Err(ZlibError::UnsupportedCompressionMethod);
     }
 
     let flags = input[start + 3];
@@ -2866,7 +2888,7 @@ fn gzip_parse_header(input: &Array<u8>, start: i32) -> i32 {
     // Skip extra field
     if flags & GZIP_FEXTRA != 0 {
         if pos + 2 > input.len() {
-            panic("gzip: truncated extra field");
+            return Result::<i32, ZlibError>::Err(ZlibError::TruncatedExtraField);
         }
         let xlen = input[pos] as i32 | input[pos + 1] as i32 << 8;
         pos += 2 + xlen;
@@ -2894,15 +2916,15 @@ fn gzip_parse_header(input: &Array<u8>, start: i32) -> i32 {
     }
 
     if pos >= input.len() {
-        panic("gzip: header extends past end of data");
+        return Result::<i32, ZlibError>::Err(ZlibError::HeaderExtendsPastEnd);
     }
 
-    return pos;
+    return Result::<i32, ZlibError>::Ok(pos);
 }
 
 // Decompress gzip-format data (supports multi-member gzip files)
 /// Decompresses gzip-wrapped data (RFC 1952).
-pub fn inflate_gzip(input: &Array<u8>) -> Array<u8> {
+pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
     let mut output: Array<u8> = [];
     let mut member_start = 0;
 
@@ -2916,7 +2938,11 @@ pub fn inflate_gzip(input: &Array<u8>) -> Array<u8> {
             break;
         }
 
-        let data_start = gzip_parse_header(input, member_start);
+        let header_result = gzip_parse_header(input, member_start);
+        if let Err(e) = header_result {
+            return Result::<Array<u8>, ZlibError>::Err(e);
+        }
+        let data_start = header_result.unwrap();
 
         // Decompress using inflate_raw_ex to know how many bytes were consumed
         let remaining = input.len() - data_start;
@@ -2927,20 +2953,20 @@ pub fn inflate_gzip(input: &Array<u8>) -> Array<u8> {
         // Trailer starts after consumed deflate bytes
         let trailer_pos = data_start + consumed;
         if trailer_pos + 8 > input.len() {
-            panic("gzip: truncated trailer");
+            return Result::<Array<u8>, ZlibError>::Err(ZlibError::TruncatedTrailer);
         }
 
         // Verify CRC32
         let stored_crc = input[trailer_pos] as u32 | input[trailer_pos + 1] as u32 << 8 | input[trailer_pos + 2] as u32 << 16 | input[trailer_pos + 3] as u32 << 24;
         let computed_crc = crc32(crc32_init(), &member_output, 0, member_output.len());
         if computed_crc != stored_crc {
-            panic("gzip CRC32 checksum mismatch");
+            return Result::<Array<u8>, ZlibError>::Err(ZlibError::Crc32Mismatch);
         }
 
         // Verify ISIZE (original size mod 2^32)
         let stored_size = input[trailer_pos + 4] as u32 | input[trailer_pos + 5] as u32 << 8 | input[trailer_pos + 6] as u32 << 16 | input[trailer_pos + 7] as u32 << 24;
         if stored_size != member_output.len() as u32 {
-            panic("gzip ISIZE mismatch");
+            return Result::<Array<u8>, ZlibError>::Err(ZlibError::IsizeMismatch);
         }
 
         // Append member output
@@ -2953,10 +2979,10 @@ pub fn inflate_gzip(input: &Array<u8>) -> Array<u8> {
     }
 
     if output.len() == 0 && member_start == 0 {
-        panic("gzip data too short");
+        return Result::<Array<u8>, ZlibError>::Err(ZlibError::DataTooShort);
     }
 
-    return output;
+    return Result::<Array<u8>, ZlibError>::Ok(output);
 }
 
 // Compress data in gzip format
@@ -3014,9 +3040,9 @@ pub fn gzip_compress2(input: &Array<u8>, level: i32) -> Array<u8> {
 
 // Auto-detect format and decompress (zlib or gzip)
 /// Decompresses zlib-wrapped data (alias for `inflate_zlib`).
-pub fn uncompress(input: &Array<u8>) -> Array<u8> {
+pub fn uncompress(input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
     if input.len() < 2 {
-        panic("compressed data too short");
+        return Result::<Array<u8>, ZlibError>::Err(ZlibError::DataTooShort);
     }
     // Check for gzip magic
     if input[0] == GZIP_MAGIC1 && input[1] == GZIP_MAGIC2 {
@@ -3041,12 +3067,16 @@ pub fn deflate_raw2(input: &Array<u8>, level: i32) -> Array<u8> {
 
 // uncompress2: decompress with output size limit
 /// Decompresses zlib-wrapped data with a maximum output size limit.
-pub fn uncompress2(input: &Array<u8>, max_output: i32) -> Array<u8> {
-    let result = uncompress(input);
-    if result.len() > max_output {
-        panic("decompressed size exceeds max_output");
+pub fn uncompress2(input: &Array<u8>, max_output: i32) -> Result<Array<u8>, ZlibError> {
+    let uncompress_result = uncompress(input);
+    if let Err(e) = uncompress_result {
+        return Result::<Array<u8>, ZlibError>::Err(e);
     }
-    return result;
+    let result = uncompress_result.unwrap();
+    if result.len() > max_output {
+        return Result::<Array<u8>, ZlibError>::Err(ZlibError::OutputExceedsMax);
+    }
+    return Result::<Array<u8>, ZlibError>::Ok(result);
 }
 
 
@@ -3225,15 +3255,15 @@ fn bytes_to_string(buf: &Array<u8>, offset: i32, len: i32) -> String {
 
 // Extract gzip header information from compressed data
 /// Extracts the gzip header from compressed data without decompressing.
-pub fn inflate_get_gzip_header(input: &Array<u8>) -> GzipHeader {
+pub fn inflate_get_gzip_header(input: &Array<u8>) -> Result<GzipHeader, ZlibError> {
     if input.len() < 10 {
-        panic("gzip data too short for header");
+        return Result::<GzipHeader, ZlibError>::Err(ZlibError::DataTooShort);
     }
     if input[0] != GZIP_MAGIC1 || input[1] != GZIP_MAGIC2 {
-        panic("invalid gzip magic number");
+        return Result::<GzipHeader, ZlibError>::Err(ZlibError::InvalidMagicNumber);
     }
     if input[2] != 8 {
-        panic("unsupported gzip compression method");
+        return Result::<GzipHeader, ZlibError>::Err(ZlibError::UnsupportedCompressionMethod);
     }
 
     let flags = input[3];
@@ -3250,7 +3280,7 @@ pub fn inflate_get_gzip_header(input: &Array<u8>) -> GzipHeader {
     // Extra field
     if flags & GZIP_FEXTRA != 0 {
         if pos + 2 > input.len() {
-            panic("gzip: truncated extra field");
+            return Result::<GzipHeader, ZlibError>::Err(ZlibError::TruncatedExtraField);
         }
         let xlen = input[pos] as i32 | input[pos + 1] as i32 << 8;
         pos += 2;
@@ -3285,7 +3315,7 @@ pub fn inflate_get_gzip_header(input: &Array<u8>) -> GzipHeader {
 
     header.hcrc = flags & GZIP_FHCRC != 0;
 
-    return header;
+    return Result::<GzipHeader, ZlibError>::Ok(header);
 }
 
 
@@ -3299,8 +3329,6 @@ pub struct DeflateStream {
     level: i32,
     strategy: i32,
     format: i32,  // ZLIB_FORMAT, RAW_FORMAT, or GZIP_FORMAT
-    dict: Array<u8>,  // preset dictionary
-    has_dict: bool,
     buffer: Array<u8>,  // accumulated input data
     finished: bool,
     total_in: i32,  // total input bytes processed
@@ -3316,8 +3344,6 @@ impl DeflateStream {
             level,
             strategy: Z_DEFAULT_STRATEGY,
             format: ZLIB_FORMAT,
-            dict: [],
-            has_dict: false,
             buffer: [],
             finished: false,
             total_in: 0,
@@ -3333,8 +3359,6 @@ impl DeflateStream {
             level,
             strategy,
             format: ZLIB_FORMAT,
-            dict: [],
-            has_dict: false,
             buffer: [],
             finished: false,
             total_in: 0,
@@ -3350,8 +3374,6 @@ impl DeflateStream {
             level,
             strategy: Z_DEFAULT_STRATEGY,
             format,
-            dict: [],
-            has_dict: false,
             buffer: [],
             finished: false,
             total_in: 0,
@@ -3367,8 +3389,6 @@ impl DeflateStream {
             level,
             strategy,
             format,
-            dict: [],
-            has_dict: false,
             buffer: [],
             finished: false,
             total_in: 0,
@@ -3376,15 +3396,6 @@ impl DeflateStream {
             gzip_header: GzipHeader::new(),
             has_gzip_header: false,
         };
-    }
-
-    /// Sets a preset dictionary for compression.
-    pub fn set_dictionary(&mut self, dict: &Array<u8>) {
-        self.dict = [];
-        for let mut i = 0; i < dict.len(); i += 1 {
-            self.dict.append(dict[i]);
-        }
-        self.has_dict = true;
     }
 
     /// Sets a custom gzip header (only for GZIP_FORMAT).
@@ -3442,16 +3453,10 @@ impl DeflateStream {
         for let mut i = 0; i < self.buffer.len(); i += 1 {
             buf_copy.append(self.buffer[i]);
         }
-        let mut dict_copy: Array<u8> = Array::<u8>::with_capacity(self.dict.len());
-        for let mut i = 0; i < self.dict.len(); i += 1 {
-            dict_copy.append(self.dict[i]);
-        }
         return DeflateStream {
             level: self.level,
             strategy: self.strategy,
             format: self.format,
-            dict: dict_copy,
-            has_dict: self.has_dict,
             buffer: buf_copy,
             finished: self.finished,
             total_in: self.total_in,
@@ -3514,72 +3519,11 @@ impl DeflateStream {
     }
 
     fn compress_raw(&self, input: &Array<u8>) -> Array<u8> {
-        if self.has_dict {
-            let mut combined: Array<u8> = Array::<u8>::with_capacity(self.dict.len() + input.len());
-            for let mut i = 0; i < self.dict.len(); i += 1 {
-                combined.append(self.dict[i]);
-            }
-            for let mut i = 0; i < input.len(); i += 1 {
-                combined.append(input[i]);
-            }
-            return deflate_with_level(&combined, self.level, self.strategy);
-        }
         return deflate_with_level(input, self.level, self.strategy);
     }
 
     fn compress_zlib(&self, input: &Array<u8>) -> Array<u8> {
-        if !self.has_dict {
-            return zlib_wrap(input, &deflate_with_level(input, self.level, self.strategy), self.level);
-        }
-
-        // Compress with dictionary
-        let mut combined: Array<u8> = Array::<u8>::with_capacity(self.dict.len() + input.len());
-        for let mut i = 0; i < self.dict.len(); i += 1 {
-            combined.append(self.dict[i]);
-        }
-        for let mut i = 0; i < input.len(); i += 1 {
-            combined.append(input[i]);
-        }
-
-        let deflated = deflate_with_level(&combined, self.level, self.strategy);
-        let mut output: Array<u8> = Array::<u8>::with_capacity(deflated.len() + 10);
-
-        // zlib header with FDICT flag
-        let cmf = 0x78;
-        let flevel = if self.level <= 1 {
-            0;
-        } else if self.level <= 5 {
-            1;
-        } else if self.level <= 6 {
-            2;
-        } else {
-            3;
-        };
-        let mut flg = flevel << 6 | 32;
-        let rem = (cmf * 256 + flg) % 31;
-        if rem != 0 {
-            flg += 31 - rem;
-        }
-        output.append(cmf as u8);
-        output.append(flg as u8);
-
-        let dict_id = adler32(adler32_init(), &self.dict, 0, self.dict.len());
-        output.append((dict_id >> 24 & 0xFF) as u8);
-        output.append((dict_id >> 16 & 0xFF) as u8);
-        output.append((dict_id >> 8 & 0xFF) as u8);
-        output.append((dict_id & 0xFF) as u8);
-
-        for let mut i = 0; i < deflated.len(); i += 1 {
-            output.append(deflated[i]);
-        }
-
-        let checksum = adler32(adler32_init(), &combined, 0, combined.len());
-        output.append((checksum >> 24 & 0xFF) as u8);
-        output.append((checksum >> 16 & 0xFF) as u8);
-        output.append((checksum >> 8 & 0xFF) as u8);
-        output.append((checksum & 0xFF) as u8);
-
-        return output;
+        return zlib_wrap(input, &deflate_with_level(input, self.level, self.strategy), self.level);
     }
 
     fn compress_gzip(&self, input: &Array<u8>) -> Array<u8> {
@@ -3592,8 +3536,6 @@ impl DeflateStream {
 
 /// Streaming inflate decompressor. Supports chunked input via update()/finish().
 pub struct InflateStream {
-    dict: Array<u8>,
-    has_dict: bool,
     format: i32,  // ZLIB_FORMAT, RAW_FORMAT, or GZIP_FORMAT (-1 = auto-detect)
     buffer: Array<u8>,  // accumulated compressed data
     total_in: i32,
@@ -3607,8 +3549,6 @@ impl InflateStream {
     /// Creates a new InflateStream with zlib format (default).
     pub fn new() -> InflateStream {
         return InflateStream {
-            dict: [],
-            has_dict: false,
             format: ZLIB_FORMAT,
             buffer: [],
             total_in: 0,
@@ -3619,31 +3559,11 @@ impl InflateStream {
     /// Creates a new InflateStream with the specified format.
     pub fn new_with_format(format: i32) -> InflateStream {
         return InflateStream {
-            dict: [],
-            has_dict: false,
             format,
             buffer: [],
             total_in: 0,
             total_out: 0,
         };
-    }
-
-    /// Sets a preset dictionary for decompression.
-    pub fn set_dictionary(&mut self, dict: &Array<u8>) {
-        self.dict = [];
-        for let mut i = 0; i < dict.len(); i += 1 {
-            self.dict.append(dict[i]);
-        }
-        self.has_dict = true;
-    }
-
-    /// Returns a copy of the preset dictionary.
-    pub fn get_dictionary(&self) -> Array<u8> {
-        let mut copy: Array<u8> = Array::<u8>::with_capacity(self.dict.len());
-        for let mut i = 0; i < self.dict.len(); i += 1 {
-            copy.append(self.dict[i]);
-        }
-        return copy;
     }
 
     /// Returns the total input bytes processed.
@@ -3669,13 +3589,7 @@ impl InflateStream {
         for let mut i = 0; i < self.buffer.len(); i += 1 {
             buf_copy.append(self.buffer[i]);
         }
-        let mut dict_copy: Array<u8> = Array::<u8>::with_capacity(self.dict.len());
-        for let mut i = 0; i < self.dict.len(); i += 1 {
-            dict_copy.append(self.dict[i]);
-        }
         return InflateStream {
-            dict: dict_copy,
-            has_dict: self.has_dict,
             format: self.format,
             buffer: buf_copy,
             total_in: self.total_in,
@@ -3691,73 +3605,29 @@ impl InflateStream {
     }
 
     /// Decompresses all buffered data and returns the result.
-    pub fn finish(&mut self) -> Array<u8> {
-        let result = self.decompress(&self.buffer);
+    pub fn finish(&mut self) -> Result<Array<u8>, ZlibError> {
+        let decompress_result = self.decompress(&self.buffer);
+        if let Err(e) = decompress_result {
+            return Result::<Array<u8>, ZlibError>::Err(e);
+        }
+        let result = decompress_result.unwrap();
         self.total_in += self.buffer.len();
         self.total_out += result.len();
         self.buffer = [];
-        return result;
+        return Result::<Array<u8>, ZlibError>::Ok(result);
     }
 
     /// Decompresses data in one shot and returns the result.
-    pub fn decompress(&self, input: &Array<u8>) -> Array<u8> {
+    pub fn decompress(&self, input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
         if self.format == RAW_FORMAT {
-            return inflate_raw(input);
+            return Result::<Array<u8>, ZlibError>::Ok(inflate_raw(input));
         } else if self.format == GZIP_FORMAT {
             return inflate_gzip(input);
         } else if self.format == AUTO_FORMAT {
             return uncompress(input);
         }
         // ZLIB_FORMAT (default)
-        return self.decompress_zlib(input);
-    }
-
-    fn decompress_zlib(&self, input: &Array<u8>) -> Array<u8> {
-        if input.len() < 6 {
-            panic("zlib data too short");
-        }
-
-        let cmf = input[0];
-        let flg = input[1];
-        if (cmf as i32 * 256 + flg as i32) % 31 != 0 {
-            panic("invalid zlib header");
-        }
-        if cmf & 0x0F != 8 {
-            panic("unsupported compression method");
-        }
-
-        let has_fdict = flg & 0x20 != 0;
-        let mut data_start = 2;
-
-        if has_fdict {
-            if !self.has_dict {
-                panic("compressed data requires preset dictionary");
-            }
-            data_start += 4;
-        }
-
-        let raw_result = inflate_raw_from(input, data_start, input.len() - data_start - 4);
-
-        // Verify adler32
-        let computed = adler32(adler32_init(), &raw_result, 0, raw_result.len());
-        let stored = input[input.len() - 4] as u32 << 24 | input[input.len() - 3] as u32 << 16 | input[input.len() - 2] as u32 << 8 | input[input.len() - 1] as u32;
-        if computed != stored {
-            panic("adler32 checksum mismatch");
-        }
-
-        if has_fdict && self.has_dict {
-            let dict_len = self.dict.len();
-            if raw_result.len() < dict_len {
-                panic("decompressed data shorter than dictionary");
-            }
-            let mut result: Array<u8> = Array::<u8>::with_capacity(raw_result.len() - dict_len);
-            for let mut i = dict_len; i < raw_result.len(); i += 1 {
-                result.append(raw_result[i]);
-            }
-            return result;
-        }
-
-        return raw_result;
+        return inflate_zlib(input);
     }
 }
 

@@ -56,25 +56,25 @@ export fn run() with Stdout, Stdin {
     }
 
     if cmd == 0 {
-        let result = inflate_zlib(&data);
+        let result = inflate_zlib(&data).unwrap();
         print_bytes(&result);
     } else if cmd == 1 {
         let result = inflate_raw(&data);
         print_bytes(&result);
     } else if cmd == 2 {
-        let result = inflate_gzip(&data);
+        let result = inflate_gzip(&data).unwrap();
         print_bytes(&result);
     } else if cmd == 3 {
         let is = InflateStream::new_with_format(RAW_FORMAT);
-        let result = is.decompress(&data);
+        let result = is.decompress(&data).unwrap();
         print_bytes(&result);
     } else if cmd == 4 {
         let is = InflateStream::new_with_format(GZIP_FORMAT);
-        let result = is.decompress(&data);
+        let result = is.decompress(&data).unwrap();
         print_bytes(&result);
     } else if cmd == 5 {
         let is = InflateStream::new_with_format(AUTO_FORMAT);
-        let result = is.decompress(&data);
+        let result = is.decompress(&data).unwrap();
         print_bytes(&result);
     } else {
         println(`error: unknown command {cmd}`);
