@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772940417486,
+  "lastUpdate": 1772945010810,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1559,6 +1559,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 18450,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f921e264470e1c2d59d1ae1ef97692f1e9869b89",
+          "message": "Merge pull request #537 from wado-lang/claude/investigate-wasm-locals-dQKTk\n\nRemove null qualifier from reference types in WIR output",
+          "timestamp": "2026-03-08T13:41:12+09:00",
+          "tree_id": "ae031c9320bef6da5358e0eccb2d621703cfeb4b",
+          "url": "https://github.com/wado-lang/wado/commit/f921e264470e1c2d59d1ae1ef97692f1e9869b89"
+        },
+        "date": 1772945010619,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1572,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9269,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19063,
             "unit": "bytes"
           }
         ]
