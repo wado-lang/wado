@@ -1337,7 +1337,7 @@ impl FunctionTranslator<'_, '_> {
                 // Receivers are always reference types — do not copy them.
                 translated_args.push(self.translate_expr(receiver));
                 // params[0] is self; args[i] corresponds to params[i+1]
-                for arg in args.iter() {
+                for arg in args {
                     if arg.expr.type_id != TypeTable::UNIT {
                         let translated = self.translate_expr(&arg.expr);
                         translated_args

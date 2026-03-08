@@ -293,7 +293,7 @@ pub fn generic_static_call(
             is_blanket: false,
         })
     };
-    let n = args.len();
+    let _n = args.len();
     TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef {
@@ -326,7 +326,7 @@ pub fn generic_method_call(
 ) -> TirExpr {
     let info = LocalMethodName::new(struct_name.to_string(), None, method_name.to_string());
     let mangled_name = info.to_mangled_name();
-    let n = args.len();
+    let _n = args.len();
     TirExpr::new(
         TirExprKind::MethodCall {
             receiver: Box::new(receiver),
@@ -422,7 +422,7 @@ pub fn trait_method_call(
     span: Span,
 ) -> TirStmt {
     let fn_name = method_info.to_mangled_name();
-    let n = args.len();
+    let _n = args.len();
     let call = TirExpr::new(
         TirExprKind::MethodCall {
             receiver: Box::new(receiver),
