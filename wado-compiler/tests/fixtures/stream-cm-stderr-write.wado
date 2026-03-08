@@ -11,7 +11,7 @@ export fn run() with Stderr {
     let [rx, tx] = Stream::<u8>::new();
 
     // 1. Start stderr consumer FIRST (non-blocking, returns subtask handle)
-    let subtask = builtin::call_indirect_stderr_write_via_stream(rx as i32);
+    let subtask = Stderr::write_via_stream(rx);
 
     // 2. Write "err msg\n" as raw bytes to the stream via resource API
     let data: Array<u8> = [101, 114, 114, 32, 109, 115, 103, 10];

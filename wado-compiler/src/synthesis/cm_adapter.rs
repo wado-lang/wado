@@ -1689,7 +1689,14 @@ fn synthesize_adapter(
     // The adapter's return type to the Wado caller:
     let adapter_return_type;
 
-    if func_info.is_async {
+    if func_info.is_async && func_info.has_streaming_param() {
+        // Streaming async function (has Stream<T> or Future<T> parameter):
+        // The caller must write to the stream before the subtask completes,
+        // so we cannot wait inside the adapter. Return the packed subtask handle
+        // (i32) directly. The caller is responsible for waiting via wait_for_subtask().
+        body_stmts.push(return_stmt(Some(raw_call_expr)));
+        adapter_return_type = TypeTable::I32;
+    } else if func_info.is_async {
         // WASI P3 async calling convention: the lowered function returns a subtask
         // handle (i32). 0 = completed synchronously; non-zero = async task in-flight.
         // In both cases, the result is written to the async results buffer in linear memory.
@@ -4112,6 +4119,17 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
                         project.wasi_registry,
                     );
                 }
+                // Sync local_types with any Let stmts that were updated by the rewrite
+                // (e.g., streaming adapter calls changing the let binding type to i32).
+                if !func.local_types.is_empty() {
+                    let mut updates = Vec::new();
+                    if let Some(body) = &func.body {
+                        collect_local_type_updates(body, &func.local_types, &mut updates);
+                    }
+                    for (idx, type_id) in updates {
+                        func.local_types[idx] = type_id;
+                    }
+                }
             }
         }
     }
@@ -4526,6 +4544,49 @@ fn flatten_arg_for_call_site(arg: &TirExpr, flat_tys: &[TypeId], flat_args: &mut
     }
 }
 
+/// Collect local type updates from Let stmts that were modified by the rewrite.
+/// This is needed because the lower phase pre-populates `local_types`, and the streaming
+/// adapter rewrite changes Let binding types from Result<..> to i32.
+fn collect_local_type_updates(
+    block: &TirBlock,
+    local_types: &[TypeId],
+    updates: &mut Vec<(usize, TypeId)>,
+) {
+    for stmt in &block.stmts {
+        match &stmt.kind {
+            TirStmtKind::Let {
+                local_index,
+                type_id,
+                ..
+            } => {
+                let idx = *local_index as usize;
+                if idx < local_types.len() && local_types[idx] != *type_id {
+                    updates.push((idx, *type_id));
+                }
+            }
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            }
+            | TirStmtKind::IfPattern {
+                then_block,
+                else_block,
+                ..
+            } => {
+                collect_local_type_updates(then_block, local_types, updates);
+                if let Some(blk) = else_block {
+                    collect_local_type_updates(blk, local_types, updates);
+                }
+            }
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+                collect_local_type_updates(body, local_types, updates);
+            }
+            _ => {}
+        }
+    }
+}
+
 fn rewrite_calls_in_block(
     block: &mut TirBlock,
     adapters: &IndexMap<String, Rc<RefCell<TirFunction>>>,
@@ -4544,7 +4605,18 @@ fn rewrite_calls_in_stmt(
     wasi_registry: &WasiRegistry,
 ) {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
+        TirStmtKind::Let {
+            value, type_id, ..
+        } => {
+            let old_type = value.type_id;
+            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry);
+            // If the expression type changed (e.g., streaming adapter returns i32
+            // instead of Result<(), ErrorCode>), update the let binding's type.
+            if value.type_id != old_type {
+                *type_id = value.type_id;
+            }
+        }
+        TirStmtKind::Expr(value) => {
             rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry);
         }
         TirStmtKind::Return { value } => {
@@ -4615,20 +4687,46 @@ fn rewrite_calls_in_expr(
         let qualified = format!("{effect_name}::{method_name}");
 
         if let Some(adapter_rc) = adapters.get(&qualified) {
+            // Check if this is a streaming async function
+            let is_streaming = wasi_registry
+                .get_function(&qualified)
+                .is_some_and(|f| f.is_async && f.has_streaming_param());
+
             // Fix up adapter function types from the call site
             {
                 let mut adapter = adapter_rc.borrow_mut();
-                if adapter.return_type != expr.type_id {
+                if is_streaming {
+                    // Streaming adapters return i32 (packed subtask handle).
+                    // Fix the call site's type to match.
+                    expr.type_id = TypeTable::I32;
+                } else if adapter.return_type != expr.type_id {
                     adapter.return_type = expr.type_id;
                     fixup_return_type_in_body(&mut adapter, expr.type_id);
                 }
                 for (i, arg) in args.iter().enumerate() {
                     if i < adapter.params.len() && adapter.params[i].type_id != arg.expr.type_id {
-                        let local_idx = adapter.params[i].local_index as usize;
-                        adapter.params[i].type_id = arg.expr.type_id;
-                        if local_idx < adapter.local_types.len() {
-                            adapter.local_types[local_idx] = arg.expr.type_id;
+                        if is_streaming && adapter.params[i].type_id == TypeTable::I32 {
+                            // Streaming: keep adapter param as i32, cast the arg instead
+                        } else {
+                            let local_idx = adapter.params[i].local_index as usize;
+                            adapter.params[i].type_id = arg.expr.type_id;
+                            if local_idx < adapter.local_types.len() {
+                                adapter.local_types[local_idx] = arg.expr.type_id;
+                            }
                         }
+                    }
+                }
+            }
+
+            // For streaming adapters, cast GC ref args to i32
+            if is_streaming {
+                for arg in args.iter_mut() {
+                    if arg.expr.type_id != TypeTable::I32 {
+                        let original = std::mem::replace(
+                            &mut arg.expr,
+                            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
+                        );
+                        arg.expr = cast(original, TypeTable::I32);
                     }
                 }
             }

@@ -335,10 +335,14 @@ fn f32_reinterpret_i32(i: i32) -> f32;
 fn unreachable() -> !;
 /// Calls stdout's write_via_stream indirectly (ambient, no effect required).
 /// Returns the subtask handle for the async operation.
+/// Internal only: used by core:internal for ambient logging (panic, assert).
+/// Public API should use Stdout::write_via_stream() through the effect system.
 fn call_indirect_stdout_write_via_stream(rx: i32) -> i32;
 
 /// Calls stderr's write_via_stream indirectly (ambient, no effect required).
 /// Returns the subtask handle for the async operation.
+/// Internal only: used by core:internal for ambient logging (panic, assert).
+/// Public API should use Stderr::write_via_stream() through the effect system.
 fn call_indirect_stderr_write_via_stream(rx: i32) -> i32;
 /// Absolute value of f32
 /// Maps to Wasm f32.abs instruction

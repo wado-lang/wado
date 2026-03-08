@@ -4129,12 +4129,11 @@ impl FunctionTranslator<'_, '_> {
             else_body: None,
         });
 
-        // NOTE: Do NOT free the linear memory buffer here.
-        // Wasmtime retains a reference to the buffer after synchronous stream.write
-        // returns (the buffer may be accessed during SYNC_COPYING suspension).
-        // Freeing it causes memory corruption when subsequent CM calls (e.g. open_at)
-        // allocate overlapping memory. The buffer is effectively leaked.
-        // TODO: free after the consuming subtask completes (wait_for_subtask).
+        // TODO: Free the linear memory buffer after stream.write completes.
+        // Currently deferred because the bump allocator's rewind-on-free optimization
+        // causes subsequent allocations to land at the same address, corrupting data
+        // that wasmtime still references. Proper free will be added when the allocator
+        // is replaced with a real implementation.
 
         WirInstr::Seq(instrs)
     }

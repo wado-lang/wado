@@ -68,6 +68,8 @@ pub fn wait_for_subtask(packed: i32) {
 
 /// Logs a message with newline to stdout (ambient, no effect required).
 /// Waits for completion.
+/// Uses builtin::call_indirect_* to bypass the effect system — this is
+/// intentional for logging/debugging which must work without effects.
 pub fn log_stdout(message: String) {
     let [rx, tx] = Stream::<u8>::new();
 
@@ -78,6 +80,8 @@ pub fn log_stdout(message: String) {
 
 /// Logs a message with newline to stderr (ambient, no effect required).
 /// Waits for completion.
+/// Uses builtin::call_indirect_* to bypass the effect system — this is
+/// intentional for logging/debugging which must work without effects.
 pub fn log_stderr(message: String) {
     let [rx, tx] = Stream::<u8>::new();
 
