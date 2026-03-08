@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772957296636,
+  "lastUpdate": 1772957627515,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1622,6 +1622,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/08ef99abf7b2e769af57317b4d840ca0072f81d6"
         },
         "date": 1772957296445,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1572,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9269,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19063,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6312b6766118c4353509899b7b4d744e8e08ff41",
+          "message": "Merge pull request #538 from wado-lang/claude/refactor-primitives-wado-QKsZO\n\nRename primitives.wado to primitive.wado and clean up code",
+          "timestamp": "2026-03-08T17:11:23+09:00",
+          "tree_id": "a804af97eeb88623d9596b79c5954dfec147b7f9",
+          "url": "https://github.com/wado-lang/wado/commit/6312b6766118c4353509899b7b4d744e8e08ff41"
+        },
+        "date": 1772957627318,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
