@@ -46,6 +46,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
+    /// For newtypes, get the base type name and ID for trait impl lookup fallback.
+    /// Returns (base_name, base_type_id) if the type is a newtype; otherwise returns the same name/id.
+    pub(super) fn newtype_base_lookup(&self, name: &str, type_id: TypeId) -> (String, TypeId) {
+        let tt = self.type_table.borrow();
+        if let Some(base_id) = tt.get_newtype_base(type_id) {
+            drop(tt);
+            if let Some(base_name) = self.struct_name_for_type(base_id) {
+                return (base_name, base_id);
+            }
+        }
+        (name.to_string(), type_id)
+    }
+
     /// Check if a name refers to a known type (struct, variant, enum, flags, newtype, or primitive).
     /// Used to distinguish concrete types from type parameters in impl blocks,
     /// since the parser treats all args in `<String, V>` as type params.
