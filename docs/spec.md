@@ -807,6 +807,31 @@ Available operations:
 | Bitwise    | `&`, `\|`, `^`, `~`, `<<`, `>>`               |
 | Conversion | `from_u64()`, `from_i64()`, `low()`, `high()` |
 
+### SIMD Types (v128)
+
+See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md) for full design and rationale.
+
+Wado exposes WebAssembly SIMD via the `core:simd` module. A single primitive type `v128` represents a 128-bit vector, with 10 newtype aliases providing type-safe interpretations:
+
+| Category | Types |
+| -------- | ----- |
+| Signed   | `i8x16`, `i16x8`, `i32x4`, `i64x2` |
+| Unsigned | `u8x16`, `u16x8`, `u32x4`, `u64x2` |
+| Float    | `f32x4`, `f64x2` |
+
+All SIMD newtypes share the `v128` base and can be reinterpreted via `as` cast (zero-cost). Each type provides `splat()` construction, `extract_lane()` access, comparison methods (`eq`, `lt`, `gt`, `le`, `ge`, `ne`), and operator overloading (`+`, `-`, `*`, `/`, `&`, `|`, `^`, `~`, `<<`, `>>`).
+
+Tuple literal coercion is supported via the `SequenceLiteral` trait:
+
+```wado
+use { i32x4, f64x2 } from "core:simd";
+
+let v: i32x4 = [1, 2, 3, 4];     // tuple literal coercion
+let w = i32x4::splat(10);         // broadcast
+let sum = v + w;                   // [11, 12, 13, 14]
+let mask = v.lt(&w);              // per-lane comparison mask
+```
+
 ### Reference Types
 
 References in Wado provide indirect access to values. Unlike Rust, Wado uses a GC-based memory model with no borrow checker, enabling simpler semantics at the cost of runtime overhead.
