@@ -2145,7 +2145,7 @@ fn strip_refs(type_id: TypeId, tt: &TypeTable) -> TypeId {
 fn inspect_impl_module(type_id: TypeId, tt: &TypeTable, default: &ModuleSource) -> ModuleSource {
     use crate::tir::ResolvedType;
     match tt.get(type_id).clone() {
-        ResolvedType::Primitive(_) => ModuleSource::primitives(),
+        ResolvedType::Primitive(_) => ModuleSource::primitive(),
         ResolvedType::Struct { ref name, .. } if name == "String" => ModuleSource::format(),
         ResolvedType::Struct {
             ref module_source, ..

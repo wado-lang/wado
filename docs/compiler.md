@@ -221,7 +221,7 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 | `core:prelude/string.wado`     | `prelude/string.wado`     | String type and string iterators                   |
 | `core:prelude/array.wado`      | `prelude/array.wado`      | Array type and array iterators                     |
 | `core:prelude/int128.wado`     | `prelude/int128.wado`     | u128/i128 types (re-exported from prelude)         |
-| `core:prelude/primitives.wado` | `prelude/primitives.wado` | Primitive type trait implementations               |
+| `core:prelude/primitive.wado`  | `prelude/primitive.wado`  | Primitive type trait implementations               |
 | `core:prelude/format.wado`     | `prelude/format.wado`     | Format traits (Display, Formatter)                 |
 | `core:prelude/fpfmt.wado`      | `prelude/fpfmt.wado`      | Float-to-string formatting (pure Wado)             |
 | `core:cli`                     | `cli.wado`                | CLI output (println, eprintln, etc.)               |

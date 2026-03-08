@@ -131,7 +131,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
     /// Find the module source for a struct by name
     pub(super) fn find_struct_module_source(&self, struct_name: &str) -> ModuleSource {
-        // Check if it's a primitive type - impl blocks live in core:prelude/primitives.wado
+        // Check if it's a primitive type - impl blocks live in core:prelude/primitive.wado
         // Note: i128/u128 are structs (in prelude/int128.wado), not primitives
         if matches!(
             struct_name,
@@ -147,7 +147,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 | "bool"
                 | "char"
         ) {
-            return ModuleSource::primitives();
+            return ModuleSource::primitive();
         }
 
         // Check current module

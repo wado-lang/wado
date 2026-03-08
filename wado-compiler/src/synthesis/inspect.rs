@@ -991,7 +991,7 @@ fn lower_hex_fmt(
         TirExprKind::MethodCall {
             receiver: Box::new(receiver),
             func: FunctionRef {
-                module_source: ModuleSource::primitives(),
+                module_source: ModuleSource::primitive(),
                 name: mangled,
                 monomorph_info: None,
                 method_info: Some(LocalMethodName::new(
@@ -1012,12 +1012,12 @@ fn lower_hex_fmt(
 
 fn display_impl_module(type_id: TypeId, tt: &Rc<RefCell<TypeTable>>) -> ModuleSource {
     match tt.borrow().get(type_id).clone() {
-        ResolvedType::Primitive(_) => ModuleSource::primitives(),
+        ResolvedType::Primitive(_) => ModuleSource::primitive(),
         ResolvedType::Struct { name, .. } if name == "String" => ModuleSource::format(),
         ResolvedType::Struct { module_source, .. } | ResolvedType::Enum { module_source, .. } => {
             module_source
         }
-        _ => ModuleSource::primitives(),
+        _ => ModuleSource::primitive(),
     }
 }
 
