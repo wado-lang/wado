@@ -25,6 +25,22 @@
 //   let decompressed_gz = inflate_gzip(&gzipped_data);
 
 
+/// Error type for zlib/gzip decompression operations.
+pub enum ZlibError {
+    DataTooShort,
+    InvalidHeader,
+    InvalidMagicNumber,
+    UnsupportedCompressionMethod,
+    PresetDictionaryNotSupported,
+    Adler32Mismatch,
+    Crc32Mismatch,
+    TruncatedExtraField,
+    HeaderExtendsPastEnd,
+    TruncatedTrailer,
+    IsizeMismatch,
+    OutputExceedsMax,
+}
+
 /// Returns the zlib version string.
 pub fn zlib_version() -> String {
     return "1.3.1.wado";
@@ -1324,25 +1340,25 @@ pub fn inflate_raw(input: &Array<u8>) -> Array<u8> {
 
 // Decompress zlib-format data (2-byte header + deflate + 4-byte adler32)
 /// Decompresses zlib-wrapped data (RFC 1950).
-pub fn inflate_zlib(input: &Array<u8>) -> Result<Array<u8>, String> {
+pub fn inflate_zlib(input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
     // Skip 2-byte zlib header
     if input.len() < 6 {
-        return Result::<Array<u8>, String>::Err("zlib data too short");
+        return Result::<Array<u8>, ZlibError>::Err(ZlibError::DataTooShort);
     }
 
     // Check zlib header
     let cmf = input[0];
     let flg = input[1];
     if (cmf as i32 * 256 + flg as i32) % 31 != 0 {
-        return Result::<Array<u8>, String>::Err("invalid zlib header");
+        return Result::<Array<u8>, ZlibError>::Err(ZlibError::InvalidHeader);
     }
     if cmf & 0x0F != 8 {
-        return Result::<Array<u8>, String>::Err("unsupported compression method");
+        return Result::<Array<u8>, ZlibError>::Err(ZlibError::UnsupportedCompressionMethod);
     }
 
     // Preset dictionary is not supported
     if flg & 0x20 != 0 {
-        return Result::<Array<u8>, String>::Err("preset dictionary is not supported");
+        return Result::<Array<u8>, ZlibError>::Err(ZlibError::PresetDictionaryNotSupported);
     }
 
     // Decompress directly from input, skipping header (2 bytes) and trailer (4 bytes adler32)
@@ -1352,10 +1368,10 @@ pub fn inflate_zlib(input: &Array<u8>) -> Result<Array<u8>, String> {
     let computed = adler32(adler32_init(), &result, 0, result.len());
     let stored = input[input.len() - 4] as u32 << 24 | input[input.len() - 3] as u32 << 16 | input[input.len() - 2] as u32 << 8 | input[input.len() - 1] as u32;
     if computed != stored {
-        return Result::<Array<u8>, String>::Err("adler32 checksum mismatch");
+        return Result::<Array<u8>, ZlibError>::Err(ZlibError::Adler32Mismatch);
     }
 
-    return Result::<Array<u8>, String>::Ok(result);
+    return Result::<Array<u8>, ZlibError>::Ok(result);
 }
 
 
@@ -2851,17 +2867,17 @@ global GZIP_FNAME: u8 = 8;
 global GZIP_FCOMMENT: u8 = 16;
 
 // Parse a single gzip member header, returning the data start position
-fn gzip_parse_header(input: &Array<u8>, start: i32) -> Result<i32, String> {
+fn gzip_parse_header(input: &Array<u8>, start: i32) -> Result<i32, ZlibError> {
     if start + 10 > input.len() {
-        return Result::<i32, String>::Err("gzip data too short");
+        return Result::<i32, ZlibError>::Err(ZlibError::DataTooShort);
     }
 
     if input[start] != GZIP_MAGIC1 || input[start + 1] != GZIP_MAGIC2 {
-        return Result::<i32, String>::Err("invalid gzip magic number");
+        return Result::<i32, ZlibError>::Err(ZlibError::InvalidMagicNumber);
     }
 
     if input[start + 2] != 8 {
-        return Result::<i32, String>::Err("unsupported gzip compression method");
+        return Result::<i32, ZlibError>::Err(ZlibError::UnsupportedCompressionMethod);
     }
 
     let flags = input[start + 3];
@@ -2870,7 +2886,7 @@ fn gzip_parse_header(input: &Array<u8>, start: i32) -> Result<i32, String> {
     // Skip extra field
     if flags & GZIP_FEXTRA != 0 {
         if pos + 2 > input.len() {
-            return Result::<i32, String>::Err("gzip: truncated extra field");
+            return Result::<i32, ZlibError>::Err(ZlibError::TruncatedExtraField);
         }
         let xlen = input[pos] as i32 | input[pos + 1] as i32 << 8;
         pos += 2 + xlen;
@@ -2898,15 +2914,15 @@ fn gzip_parse_header(input: &Array<u8>, start: i32) -> Result<i32, String> {
     }
 
     if pos >= input.len() {
-        return Result::<i32, String>::Err("gzip: header extends past end of data");
+        return Result::<i32, ZlibError>::Err(ZlibError::HeaderExtendsPastEnd);
     }
 
-    return Result::<i32, String>::Ok(pos);
+    return Result::<i32, ZlibError>::Ok(pos);
 }
 
 // Decompress gzip-format data (supports multi-member gzip files)
 /// Decompresses gzip-wrapped data (RFC 1952).
-pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, String> {
+pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
     let mut output: Array<u8> = [];
     let mut member_start = 0;
 
@@ -2922,7 +2938,7 @@ pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, String> {
 
         let header_result = gzip_parse_header(input, member_start);
         if let Err(e) = header_result {
-            return Result::<Array<u8>, String>::Err(e);
+            return Result::<Array<u8>, ZlibError>::Err(e);
         }
         let data_start = header_result.unwrap();
 
@@ -2935,20 +2951,20 @@ pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, String> {
         // Trailer starts after consumed deflate bytes
         let trailer_pos = data_start + consumed;
         if trailer_pos + 8 > input.len() {
-            return Result::<Array<u8>, String>::Err("gzip: truncated trailer");
+            return Result::<Array<u8>, ZlibError>::Err(ZlibError::TruncatedTrailer);
         }
 
         // Verify CRC32
         let stored_crc = input[trailer_pos] as u32 | input[trailer_pos + 1] as u32 << 8 | input[trailer_pos + 2] as u32 << 16 | input[trailer_pos + 3] as u32 << 24;
         let computed_crc = crc32(crc32_init(), &member_output, 0, member_output.len());
         if computed_crc != stored_crc {
-            return Result::<Array<u8>, String>::Err("gzip CRC32 checksum mismatch");
+            return Result::<Array<u8>, ZlibError>::Err(ZlibError::Crc32Mismatch);
         }
 
         // Verify ISIZE (original size mod 2^32)
         let stored_size = input[trailer_pos + 4] as u32 | input[trailer_pos + 5] as u32 << 8 | input[trailer_pos + 6] as u32 << 16 | input[trailer_pos + 7] as u32 << 24;
         if stored_size != member_output.len() as u32 {
-            return Result::<Array<u8>, String>::Err("gzip ISIZE mismatch");
+            return Result::<Array<u8>, ZlibError>::Err(ZlibError::IsizeMismatch);
         }
 
         // Append member output
@@ -2961,10 +2977,10 @@ pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, String> {
     }
 
     if output.len() == 0 && member_start == 0 {
-        return Result::<Array<u8>, String>::Err("gzip data too short");
+        return Result::<Array<u8>, ZlibError>::Err(ZlibError::DataTooShort);
     }
 
-    return Result::<Array<u8>, String>::Ok(output);
+    return Result::<Array<u8>, ZlibError>::Ok(output);
 }
 
 // Compress data in gzip format
@@ -3022,9 +3038,9 @@ pub fn gzip_compress2(input: &Array<u8>, level: i32) -> Array<u8> {
 
 // Auto-detect format and decompress (zlib or gzip)
 /// Decompresses zlib-wrapped data (alias for `inflate_zlib`).
-pub fn uncompress(input: &Array<u8>) -> Result<Array<u8>, String> {
+pub fn uncompress(input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
     if input.len() < 2 {
-        return Result::<Array<u8>, String>::Err("compressed data too short");
+        return Result::<Array<u8>, ZlibError>::Err(ZlibError::DataTooShort);
     }
     // Check for gzip magic
     if input[0] == GZIP_MAGIC1 && input[1] == GZIP_MAGIC2 {
@@ -3049,16 +3065,16 @@ pub fn deflate_raw2(input: &Array<u8>, level: i32) -> Array<u8> {
 
 // uncompress2: decompress with output size limit
 /// Decompresses zlib-wrapped data with a maximum output size limit.
-pub fn uncompress2(input: &Array<u8>, max_output: i32) -> Result<Array<u8>, String> {
+pub fn uncompress2(input: &Array<u8>, max_output: i32) -> Result<Array<u8>, ZlibError> {
     let uncompress_result = uncompress(input);
     if let Err(e) = uncompress_result {
-        return Result::<Array<u8>, String>::Err(e);
+        return Result::<Array<u8>, ZlibError>::Err(e);
     }
     let result = uncompress_result.unwrap();
     if result.len() > max_output {
-        return Result::<Array<u8>, String>::Err("decompressed size exceeds max_output");
+        return Result::<Array<u8>, ZlibError>::Err(ZlibError::OutputExceedsMax);
     }
-    return Result::<Array<u8>, String>::Ok(result);
+    return Result::<Array<u8>, ZlibError>::Ok(result);
 }
 
 
@@ -3237,15 +3253,15 @@ fn bytes_to_string(buf: &Array<u8>, offset: i32, len: i32) -> String {
 
 // Extract gzip header information from compressed data
 /// Extracts the gzip header from compressed data without decompressing.
-pub fn inflate_get_gzip_header(input: &Array<u8>) -> Result<GzipHeader, String> {
+pub fn inflate_get_gzip_header(input: &Array<u8>) -> Result<GzipHeader, ZlibError> {
     if input.len() < 10 {
-        return Result::<GzipHeader, String>::Err("gzip data too short for header");
+        return Result::<GzipHeader, ZlibError>::Err(ZlibError::DataTooShort);
     }
     if input[0] != GZIP_MAGIC1 || input[1] != GZIP_MAGIC2 {
-        return Result::<GzipHeader, String>::Err("invalid gzip magic number");
+        return Result::<GzipHeader, ZlibError>::Err(ZlibError::InvalidMagicNumber);
     }
     if input[2] != 8 {
-        return Result::<GzipHeader, String>::Err("unsupported gzip compression method");
+        return Result::<GzipHeader, ZlibError>::Err(ZlibError::UnsupportedCompressionMethod);
     }
 
     let flags = input[3];
@@ -3262,7 +3278,7 @@ pub fn inflate_get_gzip_header(input: &Array<u8>) -> Result<GzipHeader, String> 
     // Extra field
     if flags & GZIP_FEXTRA != 0 {
         if pos + 2 > input.len() {
-            return Result::<GzipHeader, String>::Err("gzip: truncated extra field");
+            return Result::<GzipHeader, ZlibError>::Err(ZlibError::TruncatedExtraField);
         }
         let xlen = input[pos] as i32 | input[pos + 1] as i32 << 8;
         pos += 2;
@@ -3297,7 +3313,7 @@ pub fn inflate_get_gzip_header(input: &Array<u8>) -> Result<GzipHeader, String> 
 
     header.hcrc = flags & GZIP_FHCRC != 0;
 
-    return Result::<GzipHeader, String>::Ok(header);
+    return Result::<GzipHeader, ZlibError>::Ok(header);
 }
 
 
@@ -3587,22 +3603,22 @@ impl InflateStream {
     }
 
     /// Decompresses all buffered data and returns the result.
-    pub fn finish(&mut self) -> Result<Array<u8>, String> {
+    pub fn finish(&mut self) -> Result<Array<u8>, ZlibError> {
         let decompress_result = self.decompress(&self.buffer);
         if let Err(e) = decompress_result {
-            return Result::<Array<u8>, String>::Err(e);
+            return Result::<Array<u8>, ZlibError>::Err(e);
         }
         let result = decompress_result.unwrap();
         self.total_in += self.buffer.len();
         self.total_out += result.len();
         self.buffer = [];
-        return Result::<Array<u8>, String>::Ok(result);
+        return Result::<Array<u8>, ZlibError>::Ok(result);
     }
 
     /// Decompresses data in one shot and returns the result.
-    pub fn decompress(&self, input: &Array<u8>) -> Result<Array<u8>, String> {
+    pub fn decompress(&self, input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
         if self.format == RAW_FORMAT {
-            return Result::<Array<u8>, String>::Ok(inflate_raw(input));
+            return Result::<Array<u8>, ZlibError>::Ok(inflate_raw(input));
         } else if self.format == GZIP_FORMAT {
             return inflate_gzip(input);
         } else if self.format == AUTO_FORMAT {

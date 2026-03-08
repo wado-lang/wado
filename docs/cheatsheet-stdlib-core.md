@@ -1436,6 +1436,25 @@ pub global GZIP_FORMAT: i32;
 pub global AUTO_FORMAT: i32;
 ```
 
+### Enums
+
+```wado
+pub enum ZlibError {
+    DataTooShort,
+    InvalidHeader,
+    InvalidMagicNumber,
+    UnsupportedCompressionMethod,
+    PresetDictionaryNotSupported,
+    Adler32Mismatch,
+    Crc32Mismatch,
+    TruncatedExtraField,
+    HeaderExtendsPastEnd,
+    TruncatedTrailer,
+    IsizeMismatch,
+    OutputExceedsMax,
+}
+```
+
 ### Structs
 
 ```wado
@@ -1492,8 +1511,8 @@ impl InflateStream {
     pub fn reset(&mut self);
     pub fn copy(&self) -> InflateStream;
     pub fn update(&mut self, chunk: &Array<u8>);
-    pub fn finish(&mut self) -> Result<Array<u8>, String>;
-    pub fn decompress(&self, input: &Array<u8>) -> Result<Array<u8>, String>;
+    pub fn finish(&mut self) -> Result<Array<u8>, ZlibError>;
+    pub fn decompress(&self, input: &Array<u8>) -> Result<Array<u8>, ZlibError>;
 }
 ```
 
@@ -1509,7 +1528,7 @@ pub fn crc32_init() -> u32;
 pub fn crc32_combine(crc1: u32, crc2: u32, len2: i32) -> u32;
 pub fn compress_bound(source_len: i32) -> i32;
 pub fn inflate_raw(input: &Array<u8>) -> Array<u8>;
-pub fn inflate_zlib(input: &Array<u8>) -> Result<Array<u8>, String>;
+pub fn inflate_zlib(input: &Array<u8>) -> Result<Array<u8>, ZlibError>;
 pub fn deflate_stored(input: &Array<u8>) -> Array<u8>;
 pub fn zlib_compress_stored(input: &Array<u8>) -> Array<u8>;
 pub fn deflate_huffman(input: &Array<u8>) -> Array<u8>;
@@ -1517,14 +1536,14 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
 pub fn zlib_compress(input: &Array<u8>) -> Array<u8>;
 pub fn compress2(input: &Array<u8>, level: i32) -> Array<u8>;
 pub fn compress_with_strategy(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>;
-pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, String>;
+pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, ZlibError>;
 pub fn gzip_compress(input: &Array<u8>) -> Array<u8>;
 pub fn gzip_compress2(input: &Array<u8>, level: i32) -> Array<u8>;
-pub fn uncompress(input: &Array<u8>) -> Result<Array<u8>, String>;
+pub fn uncompress(input: &Array<u8>) -> Result<Array<u8>, ZlibError>;
 pub fn deflate_raw(input: &Array<u8>) -> Array<u8>;
 pub fn deflate_raw2(input: &Array<u8>, level: i32) -> Array<u8>;
-pub fn uncompress2(input: &Array<u8>, max_output: i32) -> Result<Array<u8>, String>;
+pub fn uncompress2(input: &Array<u8>, max_output: i32) -> Result<Array<u8>, ZlibError>;
 pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHeader) -> Array<u8>;
-pub fn inflate_get_gzip_header(input: &Array<u8>) -> Result<GzipHeader, String>;
+pub fn inflate_get_gzip_header(input: &Array<u8>) -> Result<GzipHeader, ZlibError>;
 pub fn inflate_sync_find(input: &Array<u8>, start: i32) -> i32;
 ```
