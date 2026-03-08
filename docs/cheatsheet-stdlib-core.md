@@ -1275,11 +1275,12 @@ pub effect Stderr {
 ### Functions
 
 ```wado
-pub fn write_to_stream(tx: i32, message: String, add_newline: bool);
+pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool);
 pub fn println(message: String) with Stdout;
 pub fn eprintln(message: String) with Stderr;
 pub fn print(message: String) with Stdout;
 pub fn eprint(message: String) with Stderr;
+pub fn print_bytes(data: Array<u8>) with Stdout;
 pub fn env(name: String) -> Option<String> with Environment;
 pub fn args() -> Array<String> with Environment;
 pub fn cwd() -> Option<String> with Environment;

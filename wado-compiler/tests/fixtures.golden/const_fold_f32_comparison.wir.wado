@@ -12,9 +12,21 @@ struct Box<f32> {  // from core:internal  // Box<T> with T=f32
 
 array array<u8> (mut u8);
 
+struct StrUtf8ByteIter {
+    mut repr: ref array<u8>,
+    mut used: i32,
+    mut index: i32,
+}
+
 struct String {
     mut repr: ref array<u8>,
     mut used: i32,
+}
+
+struct WaitEvent {
+    mut code: i32,
+    mut handle: i32,
+    mut payload: u32,
 }
 
 struct Formatter {
@@ -28,7 +40,27 @@ struct Formatter {
     mut buf: ref String,
 }
 
+struct [Stream<u8>, StreamWritable<u8>] {
+    mut 0: i32,
+    mut 1: i32,
+}
+
 array array<u64> (mut u64);
+
+variant Option<u8> {
+    Some(u8),
+    None,
+}
+
+struct Option<u8>::Some {
+    discriminant: i32,
+    payload_0: u8,
+}
+
+struct Array<u8> {  // Array<T> with T=u8
+    mut repr: ref array<u8>,
+    mut used: i32,
+}
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
@@ -39,25 +71,13 @@ enum Alignment { Left = 0, Center = 1, Right = 2 };
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/wasi/stream-drop-writable" = fn(i32);
-
-type "functype/wasi/stream-new" = fn() -> i64;
-
-type "functype/wasi/stream-write" = fn(i32, i32, i32) -> i32;
-
-type "functype/wasi/subtask-drop" = fn(i32);
-
 type "functype/wasi/task-return" = fn(i32);
-
-type "functype/wasi/waitable-join" = fn(i32, i32);
-
-type "functype/wasi/waitable-set-new" = fn() -> i32;
-
-type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/run" = fn();
+
+type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_export__run" = fn();
 
@@ -69,23 +89,52 @@ type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:cli/println" = fn(ref String);
 
+type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
+
 type "functype/core:internal/wait_for_subtask" = fn(i32);
+
+type "functype/core:internal/cm_lower_list_u8" = fn(ref array<u8>, i32) -> i64;
+
+type "functype/core:internal/cm_lower_array_u8" = fn(ref Array<u8>) -> i64;
 
 type "functype/__initialize_module" = fn();
 
+type "functype/core:cli/Array<u8>::append" = fn(ref Array<u8>, u8);
+
 type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
 
+type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> ref Option<u8>;
+
+type "functype/wasi/stream-write" = fn(i32, i32, i32) -> i32;
+
+type "functype/wasi/waitable-set-new" = fn() -> i32;
+
+type "functype/wasi/waitable-join" = fn(i32, i32);
+
+type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
+
+type "functype/wasi/stream-drop-writable" = fn(i32);
+
+type "functype/wasi/stream-new" = fn() -> i64;
+
+type "functype/wasi/subtask-drop" = fn(i32);
+
+type "functype/wasi/waitable-set-drop" = fn(i32);
+
+type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> [i32, u8];
+
 import fn realloc from "mem/realloc";
-import fn stream-drop-writable from "wasi/stream-drop-writable";
-import fn stream-new from "wasi/stream-new";
-import fn stream-write from "wasi/stream-write";
-import fn subtask-drop from "wasi/subtask-drop";
 import fn task-return from "wasi/task-return";
-import fn waitable-join from "wasi/waitable-join";
-import fn waitable-set-new from "wasi/waitable-set-new";
-import fn waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
+import fn stream-write from "wasi/stream-write";
+import fn waitable-set-new from "wasi/waitable-set-new";
+import fn waitable-join from "wasi/waitable-join";
+import fn waitable-set-wait from "wasi/waitable-set-wait";
+import fn stream-drop-writable from "wasi/stream-drop-writable";
+import fn stream-new from "wasi/stream-new";
+import fn subtask-drop from "wasi/subtask-drop";
+import fn waitable-set-drop from "wasi/waitable-set-drop";
 
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
@@ -184,6 +233,12 @@ fn run() with Stdout {
     "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
 }
 
+fn __cm_adapter__Stdout_write_via_stream(data) {
+    let __async_outptr: i32;
+    __async_outptr = "mem/realloc"(0, 0, 4, 8);
+    return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
+}
+
 fn __cm_export__run() {
     run();
     "wasi/task-return"(0);
@@ -228,68 +283,127 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
-    let ptr: i32;
-    let i: i32;
-    let byte: u8;
+    let arr: ref Array<u8>;
+    let __iter_0: ref StrUtf8ByteIter;
+    let b: u8;
+    let __pattern_temp_0: ref Option<u8>;
     let __local_9: ref String;
-    let __local_10: ref String;
+    let __local_10: i32;
+    let __local_11: ref StrUtf8ByteIter;
+    let __local_12: ref String;
     len = message.used;
-    msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
         len + 1;
     } else {
         len;
     };
-    ptr = "mem/realloc"(0, 0, 1, alloc_size);
-    __for_0: block {
-        i = 0;
-        block {
-            l7: loop {
-                if (i < len) == 0 {
-                    break __for_0;
-                };
-                byte = builtin::array_get_u8(msg_bytes, i);
-                builtin::store_u8(ptr + i, byte);
-                i = i + 1;
-                continue l7;
+    arr = Array<u8> { repr: builtin::array_new<u8>(alloc_size), used: 0 };
+    __iter_0 = __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: block -> ref StrUtf8ByteIter {
+        __local_11 = StrUtf8ByteIter { repr: ref.as_non_null(message.repr), used: message.used, index: 0 };
+        break __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: __local_11;
+    };
+    b6: block {
+        l7: loop {
+            let __sroa___pattern_temp_0_discriminant: i32;
+            let __sroa___pattern_temp_0_payload_0: u8;
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(__iter_0);
+            if __sroa___pattern_temp_0_discriminant == 0 {
+                b = __sroa___pattern_temp_0_payload_0;
+                "core:cli/Array<u8>::append"(arr, b);
+            } else {
+                break b6;
             };
+            continue l7;
         };
     };
     if add_newline {
-        builtin::store_u8(ptr + len, 10);
+        "core:cli/Array<u8>::append"(arr, 10);
     };
-    drop("wasi/stream-write"(tx, ptr, alloc_size));
+    let __sw_handle_1: i32;
+    let __sw_ptr_1: i32;
+    let __sw_len_1: i32;
+    let __sw_result_1: i32;
+    let __sw_packed_1: i64;
+    __sw_handle_1 = tx;
+    __sw_packed_1 = "core:internal/cm_lower_array_u8"(arr);
+    __sw_ptr_1 = builtin::i32_wrap_i64(__sw_packed_1);
+    __sw_len_1 = builtin::i32_wrap_i64(__sw_packed_1 >>u 32_i64);
+    __sw_result_1 = "wasi/stream-write"(__sw_handle_1, __sw_ptr_1, __sw_len_1);
+    if __sw_result_1 == -1 {
+        let __sw_evt_1: i32;
+        __sw_result_1 = "wasi/waitable-set-new"();
+        "wasi/waitable-join"(__sw_handle_1, __sw_result_1);
+        __sw_evt_1 = "mem/realloc"(0, 0, 4, 8);
+        drop("wasi/waitable-set-wait"(__sw_result_1, __sw_evt_1));
+        drop("mem/realloc"(__sw_evt_1, 8, 4, 0));
+    };
+    drop("mem/realloc"(__sw_ptr_1, __sw_len_1, 1, 0));
     "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:cli/println"(message) with Stdout {  // from core:cli
-    let handles: i64;
     let rx: i32;
     let tx: i32;
     let subtask: i32;
-    handles = "wasi/stream-new"();
-    rx = builtin::i32_wrap_i64(handles);
-    tx = builtin::i32_wrap_i64(handles >> 32_i64);
-    subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
+    let __pattern_temp_0: ref "tuple/[Stream<u8>, StreamWritable<u8>]";
+    let __pair_temp_1: i64;
+    __pair_temp_1 = "wasi/stream-new"();
+    __pattern_temp_0 = "tuple/[Stream<u8>, StreamWritable<u8>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
+    rx = __pattern_temp_0.0;
+    tx = __pattern_temp_0.1;
+    subtask = __cm_adapter__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
 }
 
+fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
+    let i: i32;
+    __for_1: block {
+        i = 0;
+        block {
+            l12: loop {
+                if (i < len) == 0 {
+                    break __for_1;
+                };
+                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+                i = i + 1;
+                continue l12;
+            };
+        };
+    };
+}
+
 fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
     let handle: i32;
+    let subtask: i32;
     let ws: i32;
-    let ptr: i32;
     handle = packed >> 4;
     if handle != 0 {
+        subtask = handle;
         ws = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(handle, ws);
-        ptr = "mem/realloc"(0, 0, 4, 8);
-        drop("wasi/waitable-set-wait"(ws, ptr));
-        drop("mem/realloc"(ptr, 8, 4, 0));
-        "wasi/subtask-drop"(handle);
+        drop(let __wj_handle_1: i32; __wj_handle_1 = subtask; "wasi/waitable-join"(__wj_handle_1, ws); __wj_handle_1);
+        drop(let __wsw_ws_2: i32; let __wsw_outptr_2: i32; let __wsw_code_2: i32; __wsw_ws_2 = ws; __wsw_outptr_2 = "mem/realloc"(0, 0, 4, 8); __wsw_code_2 = "wasi/waitable-set-wait"(__wsw_ws_2, __wsw_outptr_2); let __wsw_handle_2: i32; let __wsw_payload_2: i32; __wsw_handle_2 = builtin::load_i32(__wsw_outptr_2); __wsw_payload_2 = builtin::load_i32[4](__wsw_outptr_2); drop("mem/realloc"(__wsw_outptr_2, 8, 4, 0)); WaitEvent { code: __wsw_code_2, handle: __wsw_handle_2, payload: __wsw_payload_2 });
+        "wasi/subtask-drop"(subtask);
+        "wasi/waitable-set-drop"(ws);
     };
+}
+
+fn "core:internal/cm_lower_list_u8"(data, len) {  // from core:internal
+    let ptr: i32;
+    ptr = "mem/realloc"(0, 0, 1, len);
+    "core:internal/gc_array_to_memory"(data, ptr, len);
+    return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
+}
+
+fn "core:internal/cm_lower_array_u8"(arr) {  // from core:internal
+    let data: ref array<u8>;
+    let len: i32;
+    let __local_3: ref Array<u8>;
+    let __local_4: ref Array<u8>;
+    data = arr.repr;
+    len = arr.used;
+    return "core:internal/cm_lower_list_u8"(data, len);
 }
 
 fn __initialize_module() {
@@ -339,6 +453,28 @@ fn __initialize_module() {
     let __local_43: ref Array<u64>;
 }
 
+fn "core:cli/Array<u8>::append"(self, value) {  // from core:cli
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<u8>;
+    let __local_6: i32;
+    let __local_7: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<u8>(new_capacity);
+        builtin::array_copy<u8>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set_u8(self.repr, used, value);
+    self.used = used + 1;
+}
+
 fn Array<u64>::append(self, value) {
     let used: i32;
     let capacity: i32;
@@ -359,6 +495,16 @@ fn Array<u64>::append(self, value) {
     };
     builtin::array_set<u64>(self.repr, used, value);
     self.used = used + 1;
+}
+
+fn StrUtf8ByteIter^Iterator::next(self) {
+    let byte: u8;
+    if self.index >= self.used {
+        return 1; 0;
+    };
+    byte = builtin::array_get_u8(self.repr, self.index);
+    self.index = self.index + 1;
+    return 0; byte;
 }
 
 export fn __cm_export__run as "run"

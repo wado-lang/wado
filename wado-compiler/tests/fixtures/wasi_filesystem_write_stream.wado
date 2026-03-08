@@ -10,6 +10,7 @@
 
 use { println, Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { wait_for_subtask } from "core:internal";
 
 export fn run() with Stdout, Stderr, Preopens {
     let dirs = Preopens::get_directories();
@@ -35,11 +36,13 @@ export fn run() with Stdout, Stderr, Preopens {
         let data: Array<u8> = [72, 101, 108, 108, 111, 44, 32, 83, 116, 114, 101, 97, 109, 33, 10];
         write_tx.write(data);
         write_tx.drop();
-        file.write_via_stream(write_rx, 0 as Filesize);
+        let subtask1 = file.write_via_stream(write_rx, 0 as Filesize);
+        wait_for_subtask(subtask1);
 
         // Read back via stream
         let [read_stream, _done] = file.read_via_stream(0 as Filesize);
-        Stdout::write_via_stream(read_stream);
+        let subtask2 = Stdout::write_via_stream(read_stream);
+        wait_for_subtask(subtask2);
     } else {
         println("failed to open file for writing");
     }

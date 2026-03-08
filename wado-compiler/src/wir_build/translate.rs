@@ -3140,29 +3140,35 @@ impl FunctionTranslator<'_, '_> {
             }),
         });
 
-        // Construct WaitEvent { code, handle: i32_load(outptr), payload: i32_load(outptr+4) }
-        let wait_event = self.struct_new(
-            struct_type_id,
-            vec![
-                WirInstr::LocalGet {
-                    name: code_name.clone(),
-                },
-                WirInstr::I32Load {
-                    offset: 0,
-                    align: 2,
-                    addr: Box::new(WirInstr::LocalGet {
-                        name: outptr_name.clone(),
-                    }),
-                },
-                WirInstr::I32Load {
-                    offset: 4,
-                    align: 2,
-                    addr: Box::new(WirInstr::LocalGet {
-                        name: outptr_name.clone(),
-                    }),
-                },
-            ],
-        );
+        // Load values from outptr BEFORE freeing the buffer
+        let handle_name = format!("__wsw_handle_{suffix}");
+        let payload_name = format!("__wsw_payload_{suffix}");
+        for (name, ty) in [(&handle_name, WirType::I32), (&payload_name, WirType::I32)] {
+            instrs.push(WirInstr::DeclareLocal {
+                name: name.clone(),
+                ty,
+            });
+        }
+        instrs.push(WirInstr::LocalSet {
+            name: handle_name.clone(),
+            value: Box::new(WirInstr::I32Load {
+                offset: 0,
+                align: 2,
+                addr: Box::new(WirInstr::LocalGet {
+                    name: outptr_name.clone(),
+                }),
+            }),
+        });
+        instrs.push(WirInstr::LocalSet {
+            name: payload_name.clone(),
+            value: Box::new(WirInstr::I32Load {
+                offset: 4,
+                align: 2,
+                addr: Box::new(WirInstr::LocalGet {
+                    name: outptr_name.clone(),
+                }),
+            }),
+        });
 
         // Free outptr: realloc(outptr, 8, 4, 0)
         instrs.push(WirInstr::Drop(Box::new(WirInstr::Call {
@@ -3177,6 +3183,17 @@ impl FunctionTranslator<'_, '_> {
             ],
         })));
 
+        // Construct WaitEvent { code, handle, payload } from saved locals
+        let wait_event = self.struct_new(
+            struct_type_id,
+            vec![
+                WirInstr::LocalGet {
+                    name: code_name.clone(),
+                },
+                WirInstr::LocalGet { name: handle_name },
+                WirInstr::LocalGet { name: payload_name },
+            ],
+        );
         instrs.push(wait_event);
 
         WirInstr::Seq(instrs)
@@ -3267,32 +3284,38 @@ impl FunctionTranslator<'_, '_> {
             _ => return WirInstr::Unreachable,
         };
 
-        // Build WaitEvent struct from memory
-        let wait_event = self.struct_new(
-            wait_event_struct_id,
-            vec![
-                WirInstr::LocalGet {
-                    name: code_name.clone(),
-                },
-                WirInstr::I32Load {
-                    offset: 0,
-                    align: 2,
-                    addr: Box::new(WirInstr::LocalGet {
-                        name: outptr_name.clone(),
-                    }),
-                },
-                WirInstr::I32Load {
-                    offset: 4,
-                    align: 2,
-                    addr: Box::new(WirInstr::LocalGet {
-                        name: outptr_name.clone(),
-                    }),
-                },
-            ],
-        );
+        // Load values from outptr BEFORE freeing the buffer
+        let handle_name = format!("__wsp_handle_{suffix}");
+        let payload_name = format!("__wsp_payload_{suffix}");
+        for (name, ty) in [(&handle_name, WirType::I32), (&payload_name, WirType::I32)] {
+            instrs.push(WirInstr::DeclareLocal {
+                name: name.clone(),
+                ty,
+            });
+        }
+        instrs.push(WirInstr::LocalSet {
+            name: handle_name.clone(),
+            value: Box::new(WirInstr::I32Load {
+                offset: 0,
+                align: 2,
+                addr: Box::new(WirInstr::LocalGet {
+                    name: outptr_name.clone(),
+                }),
+            }),
+        });
+        instrs.push(WirInstr::LocalSet {
+            name: payload_name.clone(),
+            value: Box::new(WirInstr::I32Load {
+                offset: 4,
+                align: 2,
+                addr: Box::new(WirInstr::LocalGet {
+                    name: outptr_name.clone(),
+                }),
+            }),
+        });
 
         // Free outptr
-        let free_outptr = WirInstr::Drop(Box::new(WirInstr::Call {
+        instrs.push(WirInstr::Drop(Box::new(WirInstr::Call {
             func_id: realloc_id,
             args: vec![
                 WirInstr::LocalGet {
@@ -3302,7 +3325,19 @@ impl FunctionTranslator<'_, '_> {
                 WirInstr::I32Const(4),
                 WirInstr::I32Const(0),
             ],
-        }));
+        })));
+
+        // Build WaitEvent struct from saved locals
+        let wait_event = self.struct_new(
+            wait_event_struct_id,
+            vec![
+                WirInstr::LocalGet {
+                    name: code_name.clone(),
+                },
+                WirInstr::LocalGet { name: handle_name },
+                WirInstr::LocalGet { name: payload_name },
+            ],
+        );
 
         // Build Option::Some(wait_event) or Option::None based on code
         let some_variant = self.build_variant_case_wir(result_type_id, 0, "Some", Some(wait_event));
@@ -3312,8 +3347,6 @@ impl FunctionTranslator<'_, '_> {
         let option_wir_type = self
             .ctx
             .type_id_to_wir_type(self.type_table, result_type_id);
-
-        instrs.push(free_outptr);
 
         // if code == 0 (EVENT_NONE) { None } else { Some(WaitEvent { ... }) }
         instrs.push(WirInstr::If {
@@ -4140,12 +4173,16 @@ impl FunctionTranslator<'_, '_> {
             else_body: None,
         });
 
-        // Free linear memory: realloc(ptr, len, 1, 0)
+        // Free the linear memory buffer after stream.write completes.
         instrs.push(WirInstr::Drop(Box::new(WirInstr::Call {
             func_id: realloc_id,
             args: vec![
-                WirInstr::LocalGet { name: ptr_name },
-                WirInstr::LocalGet { name: len_name },
+                WirInstr::LocalGet {
+                    name: ptr_name.clone(),
+                },
+                WirInstr::LocalGet {
+                    name: len_name.clone(),
+                },
                 WirInstr::I32Const(1),
                 WirInstr::I32Const(0),
             ],

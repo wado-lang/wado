@@ -144,6 +144,17 @@ impl WasiFunctionInfo {
         }
     }
 
+    /// Whether this async function has a `Stream<T>` or `Future<T>` parameter.
+    ///
+    /// Streaming async functions cannot be waited on inside the adapter because
+    /// the caller must write to the stream before the subtask completes.
+    /// The adapter returns the raw subtask handle (i32) for these functions.
+    pub fn has_streaming_param(&self) -> bool {
+        self.params.iter().any(|(_, _, ty)| {
+            matches!(ty, Type::Generic(g) if matches!(g.name.as_str(), "Stream" | "Future"))
+        })
+    }
+
     /// Check if a return type requires Memory + Realloc in canon lower.
     fn return_type_requires_memory(ty: &Type) -> bool {
         match ty {
