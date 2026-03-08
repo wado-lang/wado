@@ -104,66 +104,66 @@ struct SerializeError {
 
 array array<u64> (mut u64);
 
-array array<String> (mut ref null String);
+array array<String> (mut ref String);
 
 variant Option<Point> {
-    Some(ref null Point),
+    Some(ref Point),
     None,
 }
 
 struct Option<Point>::Some {
     discriminant: i32,
-    payload_0: ref null Point,
+    payload_0: ref Point,
 }
 
 variant Option<String> {
-    Some(ref null String),
+    Some(ref String),
     None,
 }
 
 struct Option<String>::Some {
     discriminant: i32,
-    payload_0: ref null String,
+    payload_0: ref String,
 }
 
 variant Result<unit,SerializeError> {
     Ok,
-    Err(ref null SerializeError),
+    Err(ref SerializeError),
 }
 
 struct Result<unit,SerializeError>::Err {
     discriminant: i32,
-    payload_0: ref null SerializeError,
+    payload_0: ref SerializeError,
 }
 
 variant Result<JsonSeqSerializer,SerializeError> {
-    Ok(ref null JsonSeqSerializer),
-    Err(ref null SerializeError),
+    Ok(ref JsonSeqSerializer),
+    Err(ref SerializeError),
 }
 
 struct Result<JsonSeqSerializer,SerializeError>::Ok {
     discriminant: i32,
-    payload_0: ref null JsonSeqSerializer,
+    payload_0: ref JsonSeqSerializer,
 }
 
 struct Result<JsonSeqSerializer,SerializeError>::Err {
     discriminant: i32,
-    payload_0: ref null SerializeError,
+    payload_0: ref SerializeError,
 }
 
 variant Result<JsonStructSerializer,SerializeError> {
-    Ok(ref null JsonStructSerializer),
-    Err(ref null SerializeError),
+    Ok(ref JsonStructSerializer),
+    Err(ref SerializeError),
 }
 
 struct Result<JsonStructSerializer,SerializeError>::Ok {
     discriminant: i32,
-    payload_0: ref null JsonStructSerializer,
+    payload_0: ref JsonStructSerializer,
 }
 
 struct Result<JsonStructSerializer,SerializeError>::Err {
     discriminant: i32,
-    payload_0: ref null SerializeError,
+    payload_0: ref SerializeError,
 }
 
 struct Array<String> {  // Array<T> with T=String
@@ -216,121 +216,121 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref null array<u8>, i32, i32);
+type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
-type "functype/core:internal/write_string_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/core:internal/log_stderr" = fn(ref null String);
+type "functype/core:internal/log_stderr" = fn(ref String);
 
-type "functype/core:internal/panic" = fn(ref null String);
+type "functype/core:internal/panic" = fn(ref String);
 
 type "functype/core:internal/unreachable" = fn();
 
-type "functype/unpack64" = fn(f64) -> ref null UnpackResult;
+type "functype/unpack64" = fn(f64) -> ref UnpackResult;
 
 type "functype/unrounded_round" = fn(u64) -> u64;
 
 type "functype/unrounded_div" = fn(u64, u64) -> u64;
 
-type "functype/pow10_coarse" = fn(i32) -> ref null PmHiLo;
+type "functype/pow10_coarse" = fn(i32) -> ref PmHiLo;
 
 type "functype/pow10_fine" = fn(i32) -> u64;
 
-type "functype/mul_pow10" = fn(i32) -> ref null PmHiLo;
+type "functype/mul_pow10" = fn(i32) -> ref PmHiLo;
 
 type "functype/uscale" = fn(u64, u64, u64, i32) -> u64;
 
-type "functype/fixed_width_for_prec" = fn(f64, i32) -> ref null FormatResult;
+type "functype/fixed_width_for_prec" = fn(f64, i32) -> ref FormatResult;
 
-type "functype/short" = fn(f64) -> ref null FormatResult;
+type "functype/short" = fn(f64) -> ref FormatResult;
 
-type "functype/trim_zeros" = fn(u64, i32) -> ref null "tuple/[u64, i32]";
+type "functype/trim_zeros" = fn(u64, i32) -> ref "tuple/[u64, i32]";
 
-type "functype/write_digits_at" = fn(ref null String, i32, u64, i32);
+type "functype/write_digits_at" = fn(ref String, i32, u64, i32);
 
-type "functype/write_decimal" = fn(ref null String, u64, i32, i32);
+type "functype/write_decimal" = fn(ref String, u64, i32, i32);
 
-type "functype/write_decimal_prec" = fn(ref null String, u64, i32, i32, i32);
+type "functype/write_decimal_prec" = fn(ref String, u64, i32, i32, i32);
 
-type "functype/check_special" = fn(f64) -> ref null "tuple/[bool, bool, SpecialKind]";
+type "functype/check_special" = fn(f64) -> ref "tuple/[bool, bool, SpecialKind]";
 
 type "functype/__initialize_module" = fn();
 
 type "functype/count_digits_i64" = fn(i64) -> i32;
 
-type "functype/write_decimal_digits" = fn(ref null array<u8>, i32, i64, i32);
+type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/fmt_float_special" = fn(ref null Formatter, bool, enum:SpecialKind, ref null String);
+type "functype/fmt_float_special" = fn(ref Formatter, bool, enum:SpecialKind, ref String);
 
-type "functype/fmt_float_sign" = fn(ref null Formatter, bool);
+type "functype/fmt_float_sign" = fn(ref Formatter, bool);
 
-type "functype/Array<u64>::append" = fn(ref null Array<u64>, u64);
+type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
 
-type "functype/i32::fmt_decimal" = fn(ref null "core:internal/Box<i32>", ref null Formatter);
+type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
-type "functype/f64::fmt_into" = fn(ref null "core:internal/Box<f64>", ref null Formatter);
+type "functype/f64::fmt_into" = fn(ref "core:internal/Box<f64>", ref Formatter);
 
-type "functype/f64::fmt_fixed" = fn(ref null "core:internal/Box<f64>", i32, ref null Formatter);
+type "functype/f64::fmt_fixed" = fn(ref "core:internal/Box<f64>", i32, ref Formatter);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::internal_reserve_uninit" = fn(ref null String, i32) -> i32;
+type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append_byte_filled" = fn(ref null String, u8, i32);
+type "functype/String::append_byte_filled" = fn(ref String, u8, i32);
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref null String, char);
+type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/JsonSerializer^Serializer::serialize_i32" = fn(ref null JsonSerializer, i32) -> ref null Result<unit,SerializeError>;
+type "functype/JsonSerializer^Serializer::serialize_i32" = fn(ref JsonSerializer, i32) -> ref Result<unit,SerializeError>;
 
-type "functype/JsonSerializer^Serializer::serialize_f64" = fn(ref null JsonSerializer, f64) -> ref null Result<unit,SerializeError>;
+type "functype/JsonSerializer^Serializer::serialize_f64" = fn(ref JsonSerializer, f64) -> ref Result<unit,SerializeError>;
 
-type "functype/JsonSerializer^Serializer::serialize_bool" = fn(ref null JsonSerializer, bool) -> ref null Result<unit,SerializeError>;
+type "functype/JsonSerializer^Serializer::serialize_bool" = fn(ref JsonSerializer, bool) -> ref Result<unit,SerializeError>;
 
-type "functype/JsonSerializer^Serializer::serialize_string" = fn(ref null JsonSerializer, ref null String) -> ref null Result<unit,SerializeError>;
+type "functype/JsonSerializer^Serializer::serialize_string" = fn(ref JsonSerializer, ref String) -> ref Result<unit,SerializeError>;
 
-type "functype/JsonSerializer^Serializer::begin_seq" = fn(ref null JsonSerializer, i32) -> ref null Result<JsonSeqSerializer,SerializeError>;
+type "functype/JsonSerializer^Serializer::begin_seq" = fn(ref JsonSerializer, i32) -> ref Result<JsonSeqSerializer,SerializeError>;
 
-type "functype/JsonSerializer^Serializer::begin_struct" = fn(ref null JsonSerializer, ref null String, i32) -> ref null Result<JsonStructSerializer,SerializeError>;
+type "functype/JsonSerializer^Serializer::begin_struct" = fn(ref JsonSerializer, ref String, i32) -> ref Result<JsonStructSerializer,SerializeError>;
 
-type "functype/Array<String>::append" = fn(ref null Array<String>, ref null String);
+type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
 
-type "functype/User^Serialize::serialize<JsonSerializer>" = fn(ref null User, ref null JsonSerializer) -> ref null Result<unit,SerializeError>;
+type "functype/User^Serialize::serialize<JsonSerializer>" = fn(ref User, ref JsonSerializer) -> ref Result<unit,SerializeError>;
 
-type "functype/JsonStructSerializer^SerializeStruct::field<Array<String>>" = fn(ref null JsonStructSerializer, ref null String, ref null Array<String>) -> ref null Result<unit,SerializeError>;
+type "functype/JsonStructSerializer^SerializeStruct::field<Array<String>>" = fn(ref JsonStructSerializer, ref String, ref Array<String>) -> ref Result<unit,SerializeError>;
 
-type "functype/Array<String>^Serialize::serialize<JsonSerializer>" = fn(ref null Array<String>, ref null JsonSerializer) -> ref null Result<unit,SerializeError>;
+type "functype/Array<String>^Serialize::serialize<JsonSerializer>" = fn(ref Array<String>, ref JsonSerializer) -> ref Result<unit,SerializeError>;
 
-type "functype/JsonSeqSerializer^SerializeSeq::element<String>" = fn(ref null JsonSeqSerializer, ref null String) -> ref null Result<unit,SerializeError>;
+type "functype/JsonSeqSerializer^SerializeSeq::element<String>" = fn(ref JsonSeqSerializer, ref String) -> ref Result<unit,SerializeError>;
 
-type "functype/ArrayIter<String>^Iterator::next" = fn(ref null ArrayIter<String>) -> ref null Option<String>;
+type "functype/ArrayIter<String>^Iterator::next" = fn(ref ArrayIter<String>) -> ref Option<String>;
 
-type "functype/JsonStructSerializer^SerializeStruct::field<Option<Point>>" = fn(ref null JsonStructSerializer, ref null String, ref null "core:internal/Box<Option<Point>>") -> ref null Result<unit,SerializeError>;
+type "functype/JsonStructSerializer^SerializeStruct::field<Option<Point>>" = fn(ref JsonStructSerializer, ref String, ref "core:internal/Box<Option<Point>>") -> ref Result<unit,SerializeError>;
 
-type "functype/Option<Point>^Serialize::serialize<JsonSerializer>" = fn(ref null "core:internal/Box<Option<Point>>", ref null JsonSerializer) -> ref null Result<unit,SerializeError>;
+type "functype/Option<Point>^Serialize::serialize<JsonSerializer>" = fn(ref "core:internal/Box<Option<Point>>", ref JsonSerializer) -> ref Result<unit,SerializeError>;
 
-type "functype/Point^Serialize::serialize<JsonSerializer>" = fn(ref null Point, ref null JsonSerializer) -> ref null Result<unit,SerializeError>;
+type "functype/Point^Serialize::serialize<JsonSerializer>" = fn(ref Point, ref JsonSerializer) -> ref Result<unit,SerializeError>;
 
-type "functype/JsonStructSerializer^SerializeStruct::field<f64>" = fn(ref null JsonStructSerializer, ref null String, ref null "core:internal/Box<f64>") -> ref null Result<unit,SerializeError>;
+type "functype/JsonStructSerializer^SerializeStruct::field<f64>" = fn(ref JsonStructSerializer, ref String, ref "core:internal/Box<f64>") -> ref Result<unit,SerializeError>;
 
-type "functype/JsonStructSerializer^SerializeStruct::field<bool>" = fn(ref null JsonStructSerializer, ref null String, ref null "core:internal/Box<bool>") -> ref null Result<unit,SerializeError>;
+type "functype/JsonStructSerializer^SerializeStruct::field<bool>" = fn(ref JsonStructSerializer, ref String, ref "core:internal/Box<bool>") -> ref Result<unit,SerializeError>;
 
-type "functype/JsonStructSerializer^SerializeStruct::field<i32>" = fn(ref null JsonStructSerializer, ref null String, ref null "core:internal/Box<i32>") -> ref null Result<unit,SerializeError>;
+type "functype/JsonStructSerializer^SerializeStruct::field<i32>" = fn(ref JsonStructSerializer, ref String, ref "core:internal/Box<i32>") -> ref Result<unit,SerializeError>;
 
-type "functype/JsonStructSerializer^SerializeStruct::field<String>" = fn(ref null JsonStructSerializer, ref null String, ref null String) -> ref null Result<unit,SerializeError>;
+type "functype/JsonStructSerializer^SerializeStruct::field<String>" = fn(ref JsonStructSerializer, ref String, ref String) -> ref Result<unit,SerializeError>;
 
-type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
+type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
-type "functype/Formatter::apply_padding" = fn(ref null Formatter, i32);
+type "functype/Formatter::apply_padding" = fn(ref Formatter, i32);
 
-type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref null String, i32) -> i32;
+type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
 
 type "functype/unpack64" = fn(f64) -> [u64, i32];
 
@@ -346,43 +346,43 @@ type "functype/trim_zeros" = fn(u64, i32) -> [u64, i32];
 
 type "functype/check_special" = fn(f64) -> [bool, bool, i32];
 
-type "functype/ArrayIter<String>^Iterator::next" = fn(ref null ArrayIter<String>) -> [i32, ref null String];
+type "functype/ArrayIter<String>^Iterator::next" = fn(ref ArrayIter<String>) -> [i32, ref null String];
 
-type "functype/i32::fmt_decimal" = fn(i32, ref null Formatter);
+type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
-type "functype/f64::fmt_into" = fn(f64, ref null Formatter);
+type "functype/f64::fmt_into" = fn(f64, ref Formatter);
 
-type "functype/f64::fmt_fixed" = fn(f64, i32, ref null Formatter);
+type "functype/f64::fmt_fixed" = fn(f64, i32, ref Formatter);
 
-type "functype/JsonSerializer^Serializer::serialize_i32" = fn(ref JsonWriter, i32) -> ref null Result<unit,SerializeError>;
+type "functype/JsonSerializer^Serializer::serialize_i32" = fn(ref JsonWriter, i32) -> ref Result<unit,SerializeError>;
 
-type "functype/JsonSerializer^Serializer::serialize_f64" = fn(ref JsonWriter, f64) -> ref null Result<unit,SerializeError>;
+type "functype/JsonSerializer^Serializer::serialize_f64" = fn(ref JsonWriter, f64) -> ref Result<unit,SerializeError>;
 
-type "functype/JsonSerializer^Serializer::serialize_bool" = fn(ref JsonWriter, bool) -> ref null Result<unit,SerializeError>;
+type "functype/JsonSerializer^Serializer::serialize_bool" = fn(ref JsonWriter, bool) -> ref Result<unit,SerializeError>;
 
-type "functype/JsonSerializer^Serializer::serialize_string" = fn(ref JsonWriter, ref null String) -> ref null Result<unit,SerializeError>;
+type "functype/JsonSerializer^Serializer::serialize_string" = fn(ref JsonWriter, ref String) -> ref Result<unit,SerializeError>;
 
-type "functype/JsonSerializer^Serializer::begin_seq" = fn(ref JsonWriter, i32) -> ref null Result<JsonSeqSerializer,SerializeError>;
+type "functype/JsonSerializer^Serializer::begin_seq" = fn(ref JsonWriter, i32) -> ref Result<JsonSeqSerializer,SerializeError>;
 
-type "functype/JsonSerializer^Serializer::begin_struct" = fn(ref JsonWriter, ref null String, i32) -> ref null Result<JsonStructSerializer,SerializeError>;
+type "functype/JsonSerializer^Serializer::begin_struct" = fn(ref JsonWriter, ref String, i32) -> ref Result<JsonStructSerializer,SerializeError>;
 
-type "functype/User^Serialize::serialize<JsonSerializer>" = fn(ref null User, ref JsonWriter) -> ref null Result<unit,SerializeError>;
+type "functype/User^Serialize::serialize<JsonSerializer>" = fn(ref User, ref JsonWriter) -> ref Result<unit,SerializeError>;
 
-type "functype/Array<String>^Serialize::serialize<JsonSerializer>" = fn(ref null Array<String>, ref JsonWriter) -> ref null Result<unit,SerializeError>;
+type "functype/Array<String>^Serialize::serialize<JsonSerializer>" = fn(ref Array<String>, ref JsonWriter) -> ref Result<unit,SerializeError>;
 
-type "functype/JsonStructSerializer^SerializeStruct::field<Option<Point>>" = fn(ref null JsonStructSerializer, ref null String, ref Option<Point>) -> ref null Result<unit,SerializeError>;
+type "functype/JsonStructSerializer^SerializeStruct::field<Option<Point>>" = fn(ref JsonStructSerializer, ref String, ref Option<Point>) -> ref Result<unit,SerializeError>;
 
-type "functype/Option<Point>^Serialize::serialize<JsonSerializer>" = fn(ref Option<Point>, ref null JsonSerializer) -> ref null Result<unit,SerializeError>;
+type "functype/Option<Point>^Serialize::serialize<JsonSerializer>" = fn(ref Option<Point>, ref JsonSerializer) -> ref Result<unit,SerializeError>;
 
-type "functype/Option<Point>^Serialize::serialize<JsonSerializer>" = fn(ref Option<Point>, ref JsonWriter) -> ref null Result<unit,SerializeError>;
+type "functype/Option<Point>^Serialize::serialize<JsonSerializer>" = fn(ref Option<Point>, ref JsonWriter) -> ref Result<unit,SerializeError>;
 
-type "functype/Point^Serialize::serialize<JsonSerializer>" = fn(ref null Point, ref JsonWriter) -> ref null Result<unit,SerializeError>;
+type "functype/Point^Serialize::serialize<JsonSerializer>" = fn(ref Point, ref JsonWriter) -> ref Result<unit,SerializeError>;
 
-type "functype/JsonStructSerializer^SerializeStruct::field<f64>" = fn(ref null JsonStructSerializer, ref null String, f64) -> ref null Result<unit,SerializeError>;
+type "functype/JsonStructSerializer^SerializeStruct::field<f64>" = fn(ref JsonStructSerializer, ref String, f64) -> ref Result<unit,SerializeError>;
 
-type "functype/JsonStructSerializer^SerializeStruct::field<bool>" = fn(ref null JsonStructSerializer, ref null String, bool) -> ref null Result<unit,SerializeError>;
+type "functype/JsonStructSerializer^SerializeStruct::field<bool>" = fn(ref JsonStructSerializer, ref String, bool) -> ref Result<unit,SerializeError>;
 
-type "functype/JsonStructSerializer^SerializeStruct::field<i32>" = fn(ref null JsonStructSerializer, ref null String, i32) -> ref null Result<unit,SerializeError>;
+type "functype/JsonStructSerializer^SerializeStruct::field<i32>" = fn(ref JsonStructSerializer, ref String, i32) -> ref Result<unit,SerializeError>;
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -402,35 +402,35 @@ global mut POW10: ref null Array<u64> = ref.null none;
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let __local_0: ref null "core:internal/Box<i32>";
-    let s: ref null String;
-    let point: ref null Point;
-    let __local_3: ref null Array<String>;
-    let user: ref null User;
-    let __local_5: ref null Array<String>;
-    let user2: ref null User;
-    let __local_7: ref null "core:internal/Box<i32>";
-    let __local_8: ref null JsonSerializer;
-    let __local_9: ref null String;
-    let __local_10: ref null JsonSerializer;
-    let __local_11: ref null Point;
-    let __local_12: ref null JsonSerializer;
+    let __local_0: ref "core:internal/Box<i32>";
+    let s: ref String;
+    let point: ref Point;
+    let __local_3: ref Array<String>;
+    let user: ref User;
+    let __local_5: ref Array<String>;
+    let user2: ref User;
+    let __local_7: ref "core:internal/Box<i32>";
+    let __local_8: ref JsonSerializer;
+    let __local_9: ref String;
+    let __local_10: ref JsonSerializer;
+    let __local_11: ref Point;
+    let __local_12: ref JsonSerializer;
     let __local_13: i32;
-    let __local_14: ref null Array<String>;
-    let __local_15: ref null String;
-    let __local_16: ref null Array<String>;
-    let __local_17: ref null String;
-    let __local_18: ref null Array<String>;
-    let __local_19: ref null User;
-    let __local_20: ref null JsonSerializer;
+    let __local_14: ref Array<String>;
+    let __local_15: ref String;
+    let __local_16: ref Array<String>;
+    let __local_17: ref String;
+    let __local_18: ref Array<String>;
+    let __local_19: ref User;
+    let __local_20: ref JsonSerializer;
     let __local_21: i32;
-    let __local_22: ref null Array<String>;
-    let __local_23: ref null User;
-    let __local_24: ref null JsonSerializer;
-    let __local_25: ref null "core:internal/Box<i32>";
-    let __local_26: ref null JsonSerializer;
-    let __local_27: ref null String;
-    let __local_28: ref null JsonSerializer;
+    let __local_22: ref Array<String>;
+    let __local_23: ref User;
+    let __local_24: ref JsonSerializer;
+    let __local_25: ref "core:internal/Box<i32>";
+    let __local_26: ref JsonSerializer;
+    let __local_27: ref String;
+    let __local_28: ref JsonSerializer;
     let __local_29: i32;
     let __local_30: i32;
     let __local_31: i32;
@@ -441,46 +441,46 @@ fn run() with Stdout {
         __initialize_module();
         __modules_initialized = 1;
     };
-    "core:cli/println"(__inline_to_json_i32__1: block -> ref null String {
+    "core:cli/println"(__inline_to_json_i32__1: block -> ref String {
         __local_8 = JsonSerializer { w: JsonWriter { buf: String { repr: builtin::array_new<u8>(0), used: 0 } } };
-        drop(__inline_i32_Serialize__serialize_JsonSerializer__0: block -> ref null Result<unit,SerializeError> {
+        drop(__inline_i32_Serialize__serialize_JsonSerializer__0: block -> ref Result<unit,SerializeError> {
             __local_26 = __local_8;
             break __inline_i32_Serialize__serialize_JsonSerializer__0: JsonSerializer^Serializer::serialize_i32(__local_26.w, 42);
         });
         break __inline_to_json_i32__1: __local_8.w.buf;
     });
     s = String { repr: array.new_data<u8>("hello"), used: 5 };
-    "core:cli/println"(__inline_to_json_String__2: block -> ref null String {
+    "core:cli/println"(__inline_to_json_String__2: block -> ref String {
         __local_9 = s;
         __local_10 = JsonSerializer { w: JsonWriter { buf: String { repr: builtin::array_new<u8>(0), used: 0 } } };
-        drop(__inline_String_Serialize__serialize_JsonSerializer__1: block -> ref null Result<unit,SerializeError> {
+        drop(__inline_String_Serialize__serialize_JsonSerializer__1: block -> ref Result<unit,SerializeError> {
             __local_28 = __local_10;
             break __inline_String_Serialize__serialize_JsonSerializer__1: JsonSerializer^Serializer::serialize_string(__local_28.w, __local_9);
         });
         break __inline_to_json_String__2: __local_10.w.buf;
     });
     point = Point { x: 1.5, y: 2.5 };
-    "core:cli/println"(__inline_to_json_Point__3: block -> ref null String {
+    "core:cli/println"(__inline_to_json_Point__3: block -> ref String {
         __local_11 = point;
         __local_12 = JsonSerializer { w: JsonWriter { buf: String { repr: builtin::array_new<u8>(0), used: 0 } } };
         drop(Point^Serialize::serialize<JsonSerializer>(__local_11, __local_12.w));
         break __inline_to_json_Point__3: __local_12.w.buf;
     });
-    user = User { name: String { repr: array.new_data<u8>("Alice"), used: 5 }, age: 30, active: 1, location: Option<Point>::Some { discriminant: 0, payload_0: Point { x: 10, y: 20 } }, tags: ref.as_non_null(__seq_lit: block -> ref null Array<String> {
-        __local_3 = Array<String> { repr: array.new_fixed<ref null String>(String { repr: array.new_data<u8>("admin"), used: 5 }, String { repr: array.new_data<u8>("user"), used: 4 }), used: 2 };
+    user = User { name: String { repr: array.new_data<u8>("Alice"), used: 5 }, age: 30, active: 1, location: Option<Point>::Some { discriminant: 0, payload_0: Point { x: 10, y: 20 } }, tags: ref.as_non_null(__seq_lit: block -> ref Array<String> {
+        __local_3 = Array<String> { repr: array.new_fixed<ref String>(String { repr: array.new_data<u8>("admin"), used: 5 }, String { repr: array.new_data<u8>("user"), used: 4 }), used: 2 };
         break __seq_lit: __local_3;
     }) };
-    "core:cli/println"(__inline_to_json_User__8: block -> ref null String {
+    "core:cli/println"(__inline_to_json_User__8: block -> ref String {
         __local_19 = user;
         __local_20 = JsonSerializer { w: JsonWriter { buf: String { repr: builtin::array_new<u8>(0), used: 0 } } };
         drop(User^Serialize::serialize<JsonSerializer>(__local_19, __local_20.w));
         break __inline_to_json_User__8: __local_20.w.buf;
     });
-    user2 = User { name: String { repr: array.new_data<u8>("Bob"), used: 3 }, age: 25, active: 0, location: Option<Point> { 1 }, tags: ref.as_non_null(__seq_lit: block -> ref null Array<String> {
-        __local_5 = Array<String> { repr: builtin::array_new<ref null String>(0), used: 0 };
+    user2 = User { name: String { repr: array.new_data<u8>("Bob"), used: 3 }, age: 25, active: 0, location: Option<Point> { 1 }, tags: ref.as_non_null(__seq_lit: block -> ref Array<String> {
+        __local_5 = Array<String> { repr: builtin::array_new<ref String>(0), used: 0 };
         break __seq_lit: __local_5;
     }) };
-    "core:cli/println"(__inline_to_json_User__11: block -> ref null String {
+    "core:cli/println"(__inline_to_json_User__11: block -> ref String {
         __local_23 = user2;
         __local_24 = JsonSerializer { w: JsonWriter { buf: String { repr: builtin::array_new<u8>(0), used: 0 } } };
         drop(User^Serialize::serialize<JsonSerializer>(__local_23, __local_24.w));
@@ -532,13 +532,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -600,11 +600,11 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
 
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from core:internal
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
+    let __local_7: ref String;
+    let __local_8: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -914,7 +914,7 @@ fn mul_pow10(p) {
     let __local_2: i32;
     let q: i32;
     let r: i32;
-    let c: ref null PmHiLo;
+    let c: ref PmHiLo;
     let f: u64;
     let borrow: u64;
     let c_hi_raw: u64;
@@ -996,13 +996,13 @@ fn uscale(x, pm_hi, pm_lo, s) {
 }
 
 fn fixed_width_for_prec(f, precision) {
-    let unpack: ref null UnpackResult;
+    let unpack: ref UnpackResult;
     let m: u64;
     let e: i32;
     let log10_e63: i32;
     let p1: i32;
     let lp1: i32;
-    let pm1: ref null PmHiLo;
+    let pm1: ref PmHiLo;
     let s1: i32;
     let u1: u64;
     let d1_floor: u64;
@@ -1011,7 +1011,7 @@ fn fixed_width_for_prec(f, precision) {
     let n: i32;
     let p: i32;
     let lp: i32;
-    let pm: ref null PmHiLo;
+    let pm: ref PmHiLo;
     let s: i32;
     let u: u64;
     let d: u64;
@@ -1022,7 +1022,7 @@ fn fixed_width_for_prec(f, precision) {
     let __local_25: i32;
     let __local_26: i32;
     let __local_27: i32;
-    let __local_28: ref null Array<u64>;
+    let __local_28: ref Array<u64>;
     let __local_29: i32;
     let __sroa_unpack_mantissa: u64;
     let __sroa_unpack_exponent: i32;
@@ -1076,7 +1076,7 @@ fn fixed_width_for_prec(f, precision) {
 
 fn short(f) {
     let __local_1: i32;
-    let unpack: ref null UnpackResult;
+    let unpack: ref UnpackResult;
     let m: u64;
     let e: i32;
     let min_m: u64;
@@ -1086,7 +1086,7 @@ fn short(f) {
     let max_m: u64;
     let odd: i32;
     let lp: i32;
-    let pm: ref null PmHiLo;
+    let pm: ref PmHiLo;
     let s: i32;
     let dmin: u64;
     let dmax: u64;
@@ -1095,7 +1095,7 @@ fn short(f) {
     let digits: u64;
     let exponent: i32;
     let d: u64;
-    let __pattern_temp_0: ref null "tuple/[u64, i32]";
+    let __pattern_temp_0: ref "tuple/[u64, i32]";
     let __local_22: i32;
     let __local_23: i32;
     let __local_24: i32;
@@ -1224,7 +1224,7 @@ fn trim_zeros(x, p) {
     d1 = __inline_rotate_right_0: block -> u64 {
         __local_17 = __inline_u64_mul_1: block -> u64 {
             __local_19 = xv;
-            let __let_pattern_0: ref null "tuple/[i64, i64]";
+            let __let_pattern_0: ref "tuple/[i64, i64]";
             __let_pattern_0 = multivalue_struct_new "tuple/[i64, i64]"(i64.mul_wide_u(__local_19, -3689348814741910323_i64));
             __local_21 = __let_pattern_0.0;
             break __inline_u64_mul_1: __local_21;
@@ -1240,7 +1240,7 @@ fn trim_zeros(x, p) {
     d8 = __inline_rotate_right_2: block -> u64 {
         __local_22 = __inline_u64_mul_3: block -> u64 {
             __local_24 = xv;
-            let __let_pattern_1: ref null "tuple/[i64, i64]";
+            let __let_pattern_1: ref "tuple/[i64, i64]";
             __let_pattern_1 = multivalue_struct_new "tuple/[i64, i64]"(i64.mul_wide_u(__local_24, -4078282918271054303_i64));
             __local_26 = __let_pattern_1.0;
             break __inline_u64_mul_3: __local_26;
@@ -1254,7 +1254,7 @@ fn trim_zeros(x, p) {
     d4 = __inline_rotate_right_4: block -> u64 {
         __local_27 = __inline_u64_mul_5: block -> u64 {
             __local_29 = xv;
-            let __let_pattern_2: ref null "tuple/[i64, i64]";
+            let __let_pattern_2: ref "tuple/[i64, i64]";
             __let_pattern_2 = multivalue_struct_new "tuple/[i64, i64]"(i64.mul_wide_u(__local_29, -3276141747490816367_i64));
             __local_31 = __let_pattern_2.0;
             break __inline_u64_mul_5: __local_31;
@@ -1268,7 +1268,7 @@ fn trim_zeros(x, p) {
     d2 = __inline_rotate_right_6: block -> u64 {
         __local_32 = __inline_u64_mul_7: block -> u64 {
             __local_34 = xv;
-            let __let_pattern_3: ref null "tuple/[i64, i64]";
+            let __let_pattern_3: ref "tuple/[i64, i64]";
             __let_pattern_3 = multivalue_struct_new "tuple/[i64, i64]"(i64.mul_wide_u(__local_34, -8116567392432202711_i64));
             __local_36 = __let_pattern_3.0;
             break __inline_u64_mul_7: __local_36;
@@ -1282,7 +1282,7 @@ fn trim_zeros(x, p) {
     d1b = __inline_rotate_right_8: block -> u64 {
         __local_37 = __inline_u64_mul_9: block -> u64 {
             __local_39 = xv;
-            let __let_pattern_4: ref null "tuple/[i64, i64]";
+            let __let_pattern_4: ref "tuple/[i64, i64]";
             __let_pattern_4 = multivalue_struct_new "tuple/[i64, i64]"(i64.mul_wide_u(__local_39, -3689348814741910323_i64));
             __local_41 = __let_pattern_4.0;
             break __inline_u64_mul_9: __local_41;
@@ -1299,10 +1299,10 @@ fn trim_zeros(x, p) {
 fn write_digits_at(buf, offset, val, nd) {
     let v: u64;
     let idx: i32;
-    let __local_6: ref null String;
+    let __local_6: ref String;
     let index: i32;
     let value: u8;
-    let _licm_repr_9: ref null array<u8>;
+    let _licm_repr_9: ref array<u8>;
     v = val;
     idx = (offset + nd) - 1;
     _licm_repr_9 = buf.repr;
@@ -1326,22 +1326,22 @@ fn write_decimal(buf, d, p, nd) {
     let digit_offset: i32;
     let start_6: i32;
     let start_7: i32;
-    let raw: ref null array<u8>;
-    let __local_9: ref null String;
+    let raw: ref array<u8>;
+    let __local_9: ref String;
     let n_10: i32;
-    let __local_11: ref null String;
-    let __local_12: ref null String;
+    let __local_11: ref String;
+    let __local_12: ref String;
     let __local_13: i32;
-    let __local_14: ref null String;
-    let __local_15: ref null String;
+    let __local_14: ref String;
+    let __local_15: ref String;
     let __local_16: i32;
-    let __local_17: ref null String;
+    let __local_17: ref String;
     let n_18: i32;
-    let __local_19: ref null String;
-    let __local_20: ref null String;
+    let __local_19: ref String;
+    let __local_20: ref String;
     let n_21: i32;
-    let __local_22: ref null String;
-    let __local_23: ref null String;
+    let __local_22: ref String;
+    let __local_23: ref String;
     let index: i32;
     let __local_25: u8;
     decimal_pos = nd + p;
@@ -1387,41 +1387,41 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
     let skip_17: i32;
     let total: i32;
     let start_19: i32;
-    let raw_20: ref null array<u8>;
+    let raw_20: ref array<u8>;
     let trailing_21: i32;
     let start_22: i32;
-    let raw_23: ref null array<u8>;
-    let __local_24: ref null String;
+    let raw_23: ref array<u8>;
+    let __local_24: ref String;
     let __local_25: i32;
-    let __local_26: ref null String;
+    let __local_26: ref String;
     let __local_27: i32;
-    let __local_28: ref null String;
-    let __local_29: ref null String;
+    let __local_28: ref String;
+    let __local_29: ref String;
     let __local_30: i32;
-    let __local_31: ref null String;
+    let __local_31: ref String;
     let __local_32: i32;
-    let __local_33: ref null String;
-    let __local_34: ref null String;
+    let __local_33: ref String;
+    let __local_34: ref String;
     let __local_35: i32;
-    let __local_36: ref null String;
+    let __local_36: ref String;
     let n_37: i32;
-    let __local_38: ref null String;
+    let __local_38: ref String;
     let __local_39: i32;
-    let __local_40: ref null String;
-    let __local_41: ref null String;
+    let __local_40: ref String;
+    let __local_41: ref String;
     let __local_42: i32;
-    let __local_43: ref null String;
-    let __local_44: ref null String;
+    let __local_43: ref String;
+    let __local_44: ref String;
     let index_45: i32;
     let __local_46: u8;
-    let __local_47: ref null String;
-    let __local_48: ref null String;
+    let __local_47: ref String;
+    let __local_48: ref String;
     let n_49: i32;
-    let __local_50: ref null String;
-    let __local_51: ref null String;
+    let __local_50: ref String;
+    let __local_51: ref String;
     let index_52: i32;
     let __local_53: u8;
-    let __local_54: ref null String;
+    let __local_54: ref String;
     let __local_55: i32;
     if precision < 0 {
         write_decimal(buf, d, p, nd);
@@ -1528,51 +1528,51 @@ fn check_special(f) {
 }
 
 fn __initialize_module() {
-    let __local_0: ref null Array<u64>;
+    let __local_0: ref Array<u64>;
     let __local_1: i32;
-    let __local_2: ref null Array<u64>;
+    let __local_2: ref Array<u64>;
     let __local_3: u64;
-    let __local_4: ref null Array<u64>;
+    let __local_4: ref Array<u64>;
     let __local_5: u64;
-    let __local_6: ref null Array<u64>;
+    let __local_6: ref Array<u64>;
     let __local_7: u64;
-    let __local_8: ref null Array<u64>;
+    let __local_8: ref Array<u64>;
     let __local_9: u64;
-    let __local_10: ref null Array<u64>;
+    let __local_10: ref Array<u64>;
     let __local_11: u64;
-    let __local_12: ref null Array<u64>;
+    let __local_12: ref Array<u64>;
     let __local_13: u64;
-    let __local_14: ref null Array<u64>;
+    let __local_14: ref Array<u64>;
     let __local_15: u64;
-    let __local_16: ref null Array<u64>;
+    let __local_16: ref Array<u64>;
     let __local_17: u64;
-    let __local_18: ref null Array<u64>;
+    let __local_18: ref Array<u64>;
     let __local_19: u64;
-    let __local_20: ref null Array<u64>;
+    let __local_20: ref Array<u64>;
     let __local_21: u64;
-    let __local_22: ref null Array<u64>;
+    let __local_22: ref Array<u64>;
     let __local_23: u64;
-    let __local_24: ref null Array<u64>;
+    let __local_24: ref Array<u64>;
     let __local_25: u64;
-    let __local_26: ref null Array<u64>;
+    let __local_26: ref Array<u64>;
     let __local_27: u64;
-    let __local_28: ref null Array<u64>;
+    let __local_28: ref Array<u64>;
     let __local_29: u64;
-    let __local_30: ref null Array<u64>;
+    let __local_30: ref Array<u64>;
     let __local_31: u64;
-    let __local_32: ref null Array<u64>;
+    let __local_32: ref Array<u64>;
     let __local_33: u64;
-    let __local_34: ref null Array<u64>;
+    let __local_34: ref Array<u64>;
     let __local_35: u64;
-    let __local_36: ref null Array<u64>;
+    let __local_36: ref Array<u64>;
     let __local_37: u64;
-    let __local_38: ref null Array<u64>;
+    let __local_38: ref Array<u64>;
     let __local_39: u64;
-    let __local_40: ref null Array<u64>;
+    let __local_40: ref Array<u64>;
     let __local_41: u64;
-    let __local_42: ref null Array<u64>;
+    let __local_42: ref Array<u64>;
     let __local_43: i32;
-    POW10 = __seq_lit: block -> ref null Array<u64> {
+    POW10 = __seq_lit: block -> ref Array<u64> {
         __local_0 = Array<u64> { repr: array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64), used: 20 };
         break __seq_lit: __local_0;
     };
@@ -1631,8 +1631,8 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
 
 fn fmt_float_special(f, is_neg, kind, zero_repr) {
     let mark: i32;
-    let __local_5: ref null Formatter;
-    let __local_6: ref null String;
+    let __local_5: ref Formatter;
+    let __local_6: ref String;
     mark = __inline_String__len_1: block -> i32 {
         __local_6 = f.buf;
         break __inline_String__len_1: __local_6.used;
@@ -1642,13 +1642,13 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
         String::append_char(f.buf, 97);
         String::append_char(f.buf, 78);
     } else if kind == 2 {
-        String::append(f.buf, if is_neg -> ref null String {
+        String::append(f.buf, if is_neg -> ref String {
             String { repr: array.new_data<u8>("-inf"), used: 4 };
         } else {
             String { repr: array.new_data<u8>("inf"), used: 3 };
         });
     } else {
-        String::append(f.buf, if is_neg -> ref null String {
+        String::append(f.buf, if is_neg -> ref String {
             String { repr: array.new_data<u8>("-"), used: 1 };
         } else {
             String { repr: builtin::array_new<u8>(0), used: 0 };
@@ -1670,7 +1670,7 @@ fn Array<u64>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u64>;
+    let new_repr: ref array<u64>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;
@@ -1693,7 +1693,7 @@ fn i32::fmt_decimal(self, f) {
     let abs_val: i64;
     let digit_count: i32;
     let offset: i32;
-    let __local_6: ref null String;
+    let __local_6: ref String;
     is_negative = self < 0;
     abs_val = if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
@@ -1702,7 +1702,7 @@ fn i32::fmt_decimal(self, f) {
     };
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref null array<u8> {
+    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
     }, offset, abs_val, digit_count);
@@ -1714,20 +1714,20 @@ fn f64::fmt_into(self, f) {
     let is_neg: bool;
     let kind: enum:SpecialKind;
     let abs_f: f64;
-    let result: ref null FormatResult;
+    let result: ref FormatResult;
     let d: u64;
     let p: i32;
     let nd: i32;
     let mark: i32;
-    let __pattern_temp_0: ref null "tuple/[bool, bool, SpecialKind]";
+    let __pattern_temp_0: ref "tuple/[bool, bool, SpecialKind]";
     let __local_13: u64;
     let __local_14: i32;
     let __local_15: i32;
     let __local_16: u64;
     let __local_17: i32;
-    let __local_18: ref null Formatter;
-    let __local_19: ref null String;
-    let __local_20: ref null Array<u64>;
+    let __local_18: ref Formatter;
+    let __local_19: ref String;
+    let __local_20: ref Array<u64>;
     let __local_21: i32;
     if f.precision >= 0 {
         f64::fmt_fixed(self, f.precision, f);
@@ -1785,22 +1785,22 @@ fn f64::fmt_fixed(self, precision, f) {
     let kind: enum:SpecialKind;
     let mark_7: i32;
     let abs_f: f64;
-    let result: ref null FormatResult;
+    let result: ref FormatResult;
     let d: u64;
     let p: i32;
     let nd: i32;
     let mark_13: i32;
-    let __pattern_temp_0: ref null "tuple/[bool, bool, SpecialKind]";
-    let __local_15: ref null Formatter;
-    let __local_16: ref null String;
+    let __pattern_temp_0: ref "tuple/[bool, bool, SpecialKind]";
+    let __local_15: ref Formatter;
+    let __local_16: ref String;
     let __local_17: u64;
     let __local_18: i32;
     let __local_19: i32;
     let __local_20: u64;
     let __local_21: i32;
-    let __local_22: ref null Formatter;
-    let __local_23: ref null String;
-    let __local_24: ref null Array<u64>;
+    let __local_22: ref Formatter;
+    let __local_23: ref String;
+    let __local_24: ref Array<u64>;
     let __local_25: i32;
     value = self;
     let __sroa___pattern_temp_0_0: bool;
@@ -1878,7 +1878,7 @@ fn f64::fmt_fixed(self, precision, f) {
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -1927,8 +1927,8 @@ fn String::append_byte_filled(self, byte, n) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -1969,20 +1969,20 @@ fn String::append_char(self, c) {
 }
 
 fn JsonSerializer^Serializer::serialize_i32(self, v) {
-    let __local_2: ref null String;
-    let __local_3: ref null Formatter;
-    let self_4: ref null JsonWriter;
-    let s: ref null String;
+    let __local_2: ref String;
+    let __local_3: ref Formatter;
+    let self_4: ref JsonWriter;
+    let s: ref String;
     let __local_6: i32;
-    let __local_7: ref null String;
-    let __local_8: ref null "core:internal/Box<i32>";
-    let __local_9: ref null Formatter;
-    let __local_10: ref null "core:internal/Box<i32>";
-    let __local_11: ref null Formatter;
+    let __local_7: ref String;
+    let __local_8: ref "core:internal/Box<i32>";
+    let __local_9: ref Formatter;
+    let __local_10: ref "core:internal/Box<i32>";
+    let __local_11: ref Formatter;
     self_4 = self;
-    s = __tmpl: block -> ref null String {
+    s = __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = __inline_Formatter__new_2: block -> ref null Formatter {
+        __local_3 = __inline_Formatter__new_2: block -> ref Formatter {
             __local_7 = __local_2;
             break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_7) };
         };
@@ -1995,18 +1995,18 @@ fn JsonSerializer^Serializer::serialize_i32(self, v) {
 }
 
 fn JsonSerializer^Serializer::serialize_f64(self, v) {
-    let __local_2: ref null String;
-    let __local_3: ref null Formatter;
-    let self_4: ref null JsonWriter;
-    let s: ref null String;
+    let __local_2: ref String;
+    let __local_3: ref Formatter;
+    let self_4: ref JsonWriter;
+    let s: ref String;
     let __local_6: i32;
-    let __local_7: ref null String;
-    let __local_8: ref null "core:internal/Box<f64>";
-    let __local_9: ref null Formatter;
+    let __local_7: ref String;
+    let __local_8: ref "core:internal/Box<f64>";
+    let __local_9: ref Formatter;
     self_4 = self;
-    s = __tmpl: block -> ref null String {
+    s = __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = __inline_Formatter__new_2: block -> ref null Formatter {
+        __local_3 = __inline_Formatter__new_2: block -> ref Formatter {
             __local_7 = __local_2;
             break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_7) };
         };
@@ -2019,10 +2019,10 @@ fn JsonSerializer^Serializer::serialize_f64(self, v) {
 }
 
 fn JsonSerializer^Serializer::serialize_bool(self, v) {
-    let self_2: ref null JsonWriter;
-    let s_3: ref null String;
-    let self_4: ref null JsonWriter;
-    let s_5: ref null String;
+    let self_2: ref JsonWriter;
+    let s_3: ref String;
+    let self_4: ref JsonWriter;
+    let s_5: ref String;
     if v {
         self_2 = self;
         s_3 = String { repr: array.new_data<u8>("true"), used: 4 };
@@ -2036,12 +2036,12 @@ fn JsonSerializer^Serializer::serialize_bool(self, v) {
 }
 
 fn JsonSerializer^Serializer::serialize_string(self, v) {
-    let __local_2: ref null String;
-    let self_3: ref null JsonWriter;
-    let s: ref null String;
+    let __local_2: ref String;
+    let self_3: ref JsonWriter;
+    let s: ref String;
     let __local_5: i32;
     self_3 = self;
-    s = __tmpl: block -> ref null String {
+    s = __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append_char(__local_2, 34);
         String::append(__local_2, v);
@@ -2053,8 +2053,8 @@ fn JsonSerializer^Serializer::serialize_string(self, v) {
 }
 
 fn JsonSerializer^Serializer::begin_seq(self, len) {
-    let self_2: ref null JsonWriter;
-    let s: ref null String;
+    let self_2: ref JsonWriter;
+    let s: ref String;
     self_2 = self;
     s = String { repr: array.new_data<u8>("["), used: 1 };
     String::append(self_2.buf, s);
@@ -2062,8 +2062,8 @@ fn JsonSerializer^Serializer::begin_seq(self, len) {
 }
 
 fn JsonSerializer^Serializer::begin_struct(self, name, fields) {
-    let self_3: ref null JsonWriter;
-    let s: ref null String;
+    let self_3: ref JsonWriter;
+    let s: ref String;
     self_3 = self;
     s = String { repr: array.new_data<u8>("{"), used: 1 };
     String::append(self_3.buf, s);
@@ -2074,7 +2074,7 @@ fn Array<String>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<String>;
+    let new_repr: ref array<String>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;
@@ -2084,21 +2084,21 @@ fn Array<String>::append(self, value) {
             __local_6 = capacity * 2;
             break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
         };
-        new_repr = builtin::array_new<ref null String>(new_capacity);
-        builtin::array_copy<ref null String>(new_repr, 0, self.repr, 0, used);
+        new_repr = builtin::array_new<ref String>(new_capacity);
+        builtin::array_copy<ref String>(new_repr, 0, self.repr, 0, used);
         self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<ref null String>(self.repr, used, value);
+    builtin::array_set<ref String>(self.repr, used, value);
     self.used = used + 1;
 }
 
 fn User^Serialize::serialize<JsonSerializer>(self, s) {
-    let st_2: ref null Result<JsonStructSerializer,SerializeError>;
-    let st_3: ref null JsonStructSerializer;
-    let __local_4: ref null Result<JsonStructSerializer,SerializeError>;
-    let __local_5: ref null JsonStructSerializer;
-    let __local_6: ref null JsonWriter;
-    let __local_7: ref null String;
+    let st_2: ref Result<JsonStructSerializer,SerializeError>;
+    let st_3: ref JsonStructSerializer;
+    let __local_4: ref Result<JsonStructSerializer,SerializeError>;
+    let __local_5: ref JsonStructSerializer;
+    let __local_6: ref JsonWriter;
+    let __local_7: ref String;
     st_2 = JsonSerializer^Serializer::begin_struct(s, String { repr: array.new_data<u8>("User"), used: 4 }, 5);
     if ref.test Result<JsonStructSerializer,SerializeError>::Ok(st_2) {
         st_3 = value_copy JsonStructSerializer(ref.cast Result<JsonStructSerializer,SerializeError>::Ok(st_2).payload_0);
@@ -2107,7 +2107,7 @@ fn User^Serialize::serialize<JsonSerializer>(self, s) {
         drop(JsonStructSerializer^SerializeStruct::field<bool>(st_3, String { repr: array.new_data<u8>("active"), used: 6 }, self.active));
         drop(JsonStructSerializer^SerializeStruct::field<Option<Point>>(st_3, String { repr: array.new_data<u8>("location"), used: 8 }, ref.as_non_null(self.location)));
         drop(JsonStructSerializer^SerializeStruct::field<Array<String>>(st_3, String { repr: array.new_data<u8>("tags"), used: 4 }, self.tags));
-        return __inline_JsonStructSerializer_SerializeStruct__end_0: block -> ref null Result<unit,SerializeError> {
+        return __inline_JsonStructSerializer_SerializeStruct__end_0: block -> ref Result<unit,SerializeError> {
             __local_6 = st_3.w;
             __local_7 = String { repr: array.new_data<u8>("}"), used: 1 };
             String::append(__local_6.buf, __local_7);
@@ -2118,12 +2118,12 @@ fn User^Serialize::serialize<JsonSerializer>(self, s) {
 }
 
 fn JsonStructSerializer^SerializeStruct::field<Array<String>>(self, name, value) {
-    let ser: ref null JsonSerializer;
-    let __local_4: ref null String;
-    let self_5: ref null JsonWriter;
-    let s_6: ref null String;
-    let self_7: ref null JsonWriter;
-    let s_8: ref null String;
+    let ser: ref JsonSerializer;
+    let __local_4: ref String;
+    let self_5: ref JsonWriter;
+    let s_6: ref String;
+    let self_7: ref JsonWriter;
+    let s_8: ref String;
     let __local_9: i32;
     if self.count > 0 {
         self_5 = self.w;
@@ -2131,7 +2131,7 @@ fn JsonStructSerializer^SerializeStruct::field<Array<String>>(self, name, value)
         String::append(self_5.buf, s_6);
     };
     self_7 = self.w;
-    s_8 = __tmpl: block -> ref null String {
+    s_8 = __tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(19), used: 0 };
         String::append_char(__local_4, 34);
         String::append(__local_4, name);
@@ -2148,21 +2148,21 @@ fn JsonStructSerializer^SerializeStruct::field<Array<String>>(self, name, value)
 }
 
 fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
-    let seq_2: ref null Result<JsonSeqSerializer,SerializeError>;
-    let seq_3: ref null JsonSeqSerializer;
-    let __iter_0: ref null ArrayIter<String>;
-    let item: ref null String;
-    let __local_6: ref null Result<JsonSeqSerializer,SerializeError>;
-    let __pattern_temp_1: ref null Option<String>;
-    let __local_8: ref null Array<String>;
-    let __local_9: ref null Array<String>;
-    let __local_10: ref null JsonSeqSerializer;
-    let __local_11: ref null JsonWriter;
-    let __local_12: ref null String;
+    let seq_2: ref Result<JsonSeqSerializer,SerializeError>;
+    let seq_3: ref JsonSeqSerializer;
+    let __iter_0: ref ArrayIter<String>;
+    let item: ref String;
+    let __local_6: ref Result<JsonSeqSerializer,SerializeError>;
+    let __pattern_temp_1: ref Option<String>;
+    let __local_8: ref Array<String>;
+    let __local_9: ref Array<String>;
+    let __local_10: ref JsonSeqSerializer;
+    let __local_11: ref JsonWriter;
+    let __local_12: ref String;
     seq_2 = JsonSerializer^Serializer::begin_seq(s, self.used);
     if ref.test Result<JsonSeqSerializer,SerializeError>::Ok(seq_2) {
         seq_3 = value_copy JsonSeqSerializer(ref.cast Result<JsonSeqSerializer,SerializeError>::Ok(seq_2).payload_0);
-        __iter_0 = __inline_Array_String__IntoIterator__into_iter_1: block -> ref null ArrayIter<String> {
+        __iter_0 = __inline_Array_String__IntoIterator__into_iter_1: block -> ref ArrayIter<String> {
             __local_9 = self;
             break __inline_Array_String__IntoIterator__into_iter_1: ArrayIter<String> { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
         };
@@ -2172,7 +2172,7 @@ fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
                 let __sroa___pattern_temp_1_payload_0: ref null String;
                 multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<String>^Iterator::next(__iter_0);
                 if __sroa___pattern_temp_1_discriminant == 0 {
-                    item = __sroa___pattern_temp_1_payload_0;
+                    item = ref.as_non_null(__sroa___pattern_temp_1_payload_0);
                     drop(JsonSeqSerializer^SerializeSeq::element<String>(seq_3, item));
                 } else {
                     break b159;
@@ -2180,7 +2180,7 @@ fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
                 continue l160;
             };
         };
-        return __inline_JsonSeqSerializer_SerializeSeq__end_2: block -> ref null Result<unit,SerializeError> {
+        return __inline_JsonSeqSerializer_SerializeSeq__end_2: block -> ref Result<unit,SerializeError> {
             __local_11 = seq_3.w;
             __local_12 = String { repr: array.new_data<u8>("]"), used: 1 };
             String::append(__local_11.buf, __local_12);
@@ -2191,18 +2191,18 @@ fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
 }
 
 fn JsonSeqSerializer^SerializeSeq::element<String>(self, value) {
-    let ser: ref null JsonSerializer;
-    let self_3: ref null JsonWriter;
-    let s: ref null String;
-    let __local_5: ref null String;
-    let __local_6: ref null JsonSerializer;
+    let ser: ref JsonSerializer;
+    let self_3: ref JsonWriter;
+    let s: ref String;
+    let __local_5: ref String;
+    let __local_6: ref JsonSerializer;
     if self.count > 0 {
         self_3 = self.w;
         s = String { repr: array.new_data<u8>(","), used: 1 };
         String::append(self_3.buf, s);
     };
     ser = JsonSerializer { w: ref.as_non_null(self.w) };
-    drop(__inline_String_Serialize__serialize_JsonSerializer__1: block -> ref null Result<unit,SerializeError> {
+    drop(__inline_String_Serialize__serialize_JsonSerializer__1: block -> ref Result<unit,SerializeError> {
         __local_6 = ser;
         break __inline_String_Serialize__serialize_JsonSerializer__1: JsonSerializer^Serializer::serialize_string(__local_6.w, value);
     });
@@ -2212,22 +2212,22 @@ fn JsonSeqSerializer^SerializeSeq::element<String>(self, value) {
 }
 
 fn ArrayIter<String>^Iterator::next(self) {
-    let item: ref null String;
+    let item: ref String;
     if self.index >= self.used {
         return 1; ref.null none;
     };
-    item = builtin::array_get<ref null String>(self.repr, self.index);
+    item = builtin::array_get<ref String>(self.repr, self.index);
     self.index = self.index + 1;
-    return 0; item;
+    return 0; ref.as_non_null(item);
 }
 
 fn JsonStructSerializer^SerializeStruct::field<Option<Point>>(self, name, value) {
-    let ser: ref null JsonSerializer;
-    let __local_4: ref null String;
-    let self_5: ref null JsonWriter;
-    let s_6: ref null String;
-    let self_7: ref null JsonWriter;
-    let s_8: ref null String;
+    let ser: ref JsonSerializer;
+    let __local_4: ref String;
+    let self_5: ref JsonWriter;
+    let s_6: ref String;
+    let self_7: ref JsonWriter;
+    let s_8: ref String;
     let __local_9: i32;
     if self.count > 0 {
         self_5 = self.w;
@@ -2235,7 +2235,7 @@ fn JsonStructSerializer^SerializeStruct::field<Option<Point>>(self, name, value)
         String::append(self_5.buf, s_6);
     };
     self_7 = self.w;
-    s_8 = __tmpl: block -> ref null String {
+    s_8 = __tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(19), used: 0 };
         String::append_char(__local_4, 34);
         String::append(__local_4, name);
@@ -2252,17 +2252,17 @@ fn JsonStructSerializer^SerializeStruct::field<Option<Point>>(self, name, value)
 }
 
 fn Option<Point>^Serialize::serialize<JsonSerializer>(self, s) {
-    let v: ref null Point;
-    let __pattern_temp_0: ref null Option<Point>;
-    let __local_4: ref null JsonSerializer;
-    let __local_5: ref null JsonWriter;
-    let __local_6: ref null String;
+    let v: ref Point;
+    let __pattern_temp_0: ref Option<Point>;
+    let __local_4: ref JsonSerializer;
+    let __local_5: ref JsonWriter;
+    let __local_6: ref String;
     __pattern_temp_0 = value_copy Option<Point>(self);
     if ref.test Option<Point>::Some(__pattern_temp_0) {
         v = ref.cast Option<Point>::Some(__pattern_temp_0).payload_0;
         return Point^Serialize::serialize<JsonSerializer>(v, s);
     };
-    return __inline_JsonSerializer_Serializer__serialize_null_0: block -> ref null Result<unit,SerializeError> {
+    return __inline_JsonSerializer_Serializer__serialize_null_0: block -> ref Result<unit,SerializeError> {
         __local_5 = s;
         __local_6 = String { repr: array.new_data<u8>("null"), used: 4 };
         String::append(__local_5.buf, __local_6);
@@ -2271,18 +2271,18 @@ fn Option<Point>^Serialize::serialize<JsonSerializer>(self, s) {
 }
 
 fn Point^Serialize::serialize<JsonSerializer>(self, s) {
-    let st_2: ref null Result<JsonStructSerializer,SerializeError>;
-    let st_3: ref null JsonStructSerializer;
-    let __local_4: ref null Result<JsonStructSerializer,SerializeError>;
-    let __local_5: ref null JsonStructSerializer;
-    let __local_6: ref null JsonWriter;
-    let __local_7: ref null String;
+    let st_2: ref Result<JsonStructSerializer,SerializeError>;
+    let st_3: ref JsonStructSerializer;
+    let __local_4: ref Result<JsonStructSerializer,SerializeError>;
+    let __local_5: ref JsonStructSerializer;
+    let __local_6: ref JsonWriter;
+    let __local_7: ref String;
     st_2 = JsonSerializer^Serializer::begin_struct(s, String { repr: array.new_data<u8>("Point"), used: 5 }, 2);
     if ref.test Result<JsonStructSerializer,SerializeError>::Ok(st_2) {
         st_3 = value_copy JsonStructSerializer(ref.cast Result<JsonStructSerializer,SerializeError>::Ok(st_2).payload_0);
         drop(JsonStructSerializer^SerializeStruct::field<f64>(st_3, String { repr: array.new_data<u8>("x"), used: 1 }, self.x));
         drop(JsonStructSerializer^SerializeStruct::field<f64>(st_3, String { repr: array.new_data<u8>("y"), used: 1 }, self.y));
-        return __inline_JsonStructSerializer_SerializeStruct__end_0: block -> ref null Result<unit,SerializeError> {
+        return __inline_JsonStructSerializer_SerializeStruct__end_0: block -> ref Result<unit,SerializeError> {
             __local_6 = st_3.w;
             __local_7 = String { repr: array.new_data<u8>("}"), used: 1 };
             String::append(__local_6.buf, __local_7);
@@ -2293,22 +2293,22 @@ fn Point^Serialize::serialize<JsonSerializer>(self, s) {
 }
 
 fn JsonStructSerializer^SerializeStruct::field<f64>(self, name, value) {
-    let ser: ref null JsonSerializer;
-    let __local_4: ref null String;
-    let self_5: ref null JsonWriter;
-    let s_6: ref null String;
-    let self_7: ref null JsonWriter;
-    let s_8: ref null String;
+    let ser: ref JsonSerializer;
+    let __local_4: ref String;
+    let self_5: ref JsonWriter;
+    let s_6: ref String;
+    let self_7: ref JsonWriter;
+    let s_8: ref String;
     let __local_9: i32;
-    let __local_10: ref null "core:internal/Box<f64>";
-    let __local_11: ref null JsonSerializer;
+    let __local_10: ref "core:internal/Box<f64>";
+    let __local_11: ref JsonSerializer;
     if self.count > 0 {
         self_5 = self.w;
         s_6 = String { repr: array.new_data<u8>(","), used: 1 };
         String::append(self_5.buf, s_6);
     };
     self_7 = self.w;
-    s_8 = __tmpl: block -> ref null String {
+    s_8 = __tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(19), used: 0 };
         String::append_char(__local_4, 34);
         String::append(__local_4, name);
@@ -2318,7 +2318,7 @@ fn JsonStructSerializer^SerializeStruct::field<f64>(self, name, value) {
     };
     String::append(self_7.buf, s_8);
     ser = JsonSerializer { w: ref.as_non_null(self.w) };
-    drop(__inline_f64_Serialize__serialize_JsonSerializer__3: block -> ref null Result<unit,SerializeError> {
+    drop(__inline_f64_Serialize__serialize_JsonSerializer__3: block -> ref Result<unit,SerializeError> {
         __local_11 = ser;
         break __inline_f64_Serialize__serialize_JsonSerializer__3: JsonSerializer^Serializer::serialize_f64(__local_11.w, value);
     });
@@ -2328,22 +2328,22 @@ fn JsonStructSerializer^SerializeStruct::field<f64>(self, name, value) {
 }
 
 fn JsonStructSerializer^SerializeStruct::field<bool>(self, name, value) {
-    let ser: ref null JsonSerializer;
-    let __local_4: ref null String;
-    let self_5: ref null JsonWriter;
-    let s_6: ref null String;
-    let self_7: ref null JsonWriter;
-    let s_8: ref null String;
+    let ser: ref JsonSerializer;
+    let __local_4: ref String;
+    let self_5: ref JsonWriter;
+    let s_6: ref String;
+    let self_7: ref JsonWriter;
+    let s_8: ref String;
     let __local_9: i32;
-    let __local_10: ref null "core:internal/Box<bool>";
-    let __local_11: ref null JsonSerializer;
+    let __local_10: ref "core:internal/Box<bool>";
+    let __local_11: ref JsonSerializer;
     if self.count > 0 {
         self_5 = self.w;
         s_6 = String { repr: array.new_data<u8>(","), used: 1 };
         String::append(self_5.buf, s_6);
     };
     self_7 = self.w;
-    s_8 = __tmpl: block -> ref null String {
+    s_8 = __tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(19), used: 0 };
         String::append_char(__local_4, 34);
         String::append(__local_4, name);
@@ -2353,7 +2353,7 @@ fn JsonStructSerializer^SerializeStruct::field<bool>(self, name, value) {
     };
     String::append(self_7.buf, s_8);
     ser = JsonSerializer { w: ref.as_non_null(self.w) };
-    drop(__inline_bool_Serialize__serialize_JsonSerializer__3: block -> ref null Result<unit,SerializeError> {
+    drop(__inline_bool_Serialize__serialize_JsonSerializer__3: block -> ref Result<unit,SerializeError> {
         __local_11 = ser;
         break __inline_bool_Serialize__serialize_JsonSerializer__3: JsonSerializer^Serializer::serialize_bool(__local_11.w, value);
     });
@@ -2363,22 +2363,22 @@ fn JsonStructSerializer^SerializeStruct::field<bool>(self, name, value) {
 }
 
 fn JsonStructSerializer^SerializeStruct::field<i32>(self, name, value) {
-    let ser: ref null JsonSerializer;
-    let __local_4: ref null String;
-    let self_5: ref null JsonWriter;
-    let s_6: ref null String;
-    let self_7: ref null JsonWriter;
-    let s_8: ref null String;
+    let ser: ref JsonSerializer;
+    let __local_4: ref String;
+    let self_5: ref JsonWriter;
+    let s_6: ref String;
+    let self_7: ref JsonWriter;
+    let s_8: ref String;
     let __local_9: i32;
-    let __local_10: ref null "core:internal/Box<i32>";
-    let __local_11: ref null JsonSerializer;
+    let __local_10: ref "core:internal/Box<i32>";
+    let __local_11: ref JsonSerializer;
     if self.count > 0 {
         self_5 = self.w;
         s_6 = String { repr: array.new_data<u8>(","), used: 1 };
         String::append(self_5.buf, s_6);
     };
     self_7 = self.w;
-    s_8 = __tmpl: block -> ref null String {
+    s_8 = __tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(19), used: 0 };
         String::append_char(__local_4, 34);
         String::append(__local_4, name);
@@ -2388,7 +2388,7 @@ fn JsonStructSerializer^SerializeStruct::field<i32>(self, name, value) {
     };
     String::append(self_7.buf, s_8);
     ser = JsonSerializer { w: ref.as_non_null(self.w) };
-    drop(__inline_i32_Serialize__serialize_JsonSerializer__3: block -> ref null Result<unit,SerializeError> {
+    drop(__inline_i32_Serialize__serialize_JsonSerializer__3: block -> ref Result<unit,SerializeError> {
         __local_11 = ser;
         break __inline_i32_Serialize__serialize_JsonSerializer__3: JsonSerializer^Serializer::serialize_i32(__local_11.w, value);
     });
@@ -2398,22 +2398,22 @@ fn JsonStructSerializer^SerializeStruct::field<i32>(self, name, value) {
 }
 
 fn JsonStructSerializer^SerializeStruct::field<String>(self, name, value) {
-    let ser: ref null JsonSerializer;
-    let __local_4: ref null String;
-    let self_5: ref null JsonWriter;
-    let s_6: ref null String;
-    let self_7: ref null JsonWriter;
-    let s_8: ref null String;
+    let ser: ref JsonSerializer;
+    let __local_4: ref String;
+    let self_5: ref JsonWriter;
+    let s_6: ref String;
+    let self_7: ref JsonWriter;
+    let s_8: ref String;
     let __local_9: i32;
-    let __local_10: ref null String;
-    let __local_11: ref null JsonSerializer;
+    let __local_10: ref String;
+    let __local_11: ref JsonSerializer;
     if self.count > 0 {
         self_5 = self.w;
         s_6 = String { repr: array.new_data<u8>(","), used: 1 };
         String::append(self_5.buf, s_6);
     };
     self_7 = self.w;
-    s_8 = __tmpl: block -> ref null String {
+    s_8 = __tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(19), used: 0 };
         String::append_char(__local_4, 34);
         String::append(__local_4, name);
@@ -2423,7 +2423,7 @@ fn JsonStructSerializer^SerializeStruct::field<String>(self, name, value) {
     };
     String::append(self_7.buf, s_8);
     ser = JsonSerializer { w: ref.as_non_null(self.w) };
-    drop(__inline_String_Serialize__serialize_JsonSerializer__3: block -> ref null Result<unit,SerializeError> {
+    drop(__inline_String_Serialize__serialize_JsonSerializer__3: block -> ref Result<unit,SerializeError> {
         __local_11 = ser;
         break __inline_String_Serialize__serialize_JsonSerializer__3: JsonSerializer^Serializer::serialize_string(__local_11.w, value);
     });
@@ -2434,7 +2434,7 @@ fn JsonStructSerializer^SerializeStruct::field<String>(self, name, value) {
 
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
-    let _licm_buf_4: ref null String;
+    let _licm_buf_4: ref String;
     __for_0: block {
         i = 0;
         _licm_buf_4 = self.buf;
@@ -2462,31 +2462,31 @@ fn Formatter::apply_padding(self, start_pos) {
     let j_9: i32;
     let i_10: i32;
     let j_11: i32;
-    let __local_12: ref null String;
-    let __local_13: ref null String;
+    let __local_12: ref String;
+    let __local_13: ref String;
     let index_14: i32;
     let value_15: u8;
-    let __local_16: ref null String;
+    let __local_16: ref String;
     let __local_17: i32;
-    let __local_18: ref null String;
+    let __local_18: ref String;
     let index_19: i32;
     let __local_20: u8;
-    let __local_21: ref null String;
+    let __local_21: ref String;
     let index_22: i32;
     let value_23: u8;
-    let __local_24: ref null String;
+    let __local_24: ref String;
     let __local_25: i32;
-    let __local_26: ref null String;
+    let __local_26: ref String;
     let index_27: i32;
     let __local_28: u8;
-    let _licm_buf_29: ref null String;
-    let _licm_buf_30: ref null String;
-    let _licm_buf_31: ref null String;
-    let _licm_buf_32: ref null String;
-    let _licm_repr_33: ref null array<u8>;
-    let _licm_repr_34: ref null array<u8>;
-    let _licm_repr_35: ref null array<u8>;
-    let _licm_repr_36: ref null array<u8>;
+    let _licm_buf_29: ref String;
+    let _licm_buf_30: ref String;
+    let _licm_buf_31: ref String;
+    let _licm_buf_32: ref String;
+    let _licm_repr_33: ref array<u8>;
+    let _licm_repr_34: ref array<u8>;
+    let _licm_repr_35: ref array<u8>;
+    let _licm_repr_36: ref array<u8>;
     content_len = __inline_String__len_0: block -> i32 {
         __local_12 = self.buf;
         break __inline_String__len_0: __local_12.used;
@@ -2582,7 +2582,7 @@ fn Formatter::apply_padding(self, start_pos) {
 }
 
 fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
-    let sign: ref null String;
+    let sign: ref String;
     let sign_len: i32;
     let prefix_len: i32;
     let content_len: i32;
@@ -2592,8 +2592,8 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
-    let __local_14: ref null String;
-    let __local_15: ref null String;
+    let __local_14: ref String;
+    let __local_15: ref String;
     sign = String { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };

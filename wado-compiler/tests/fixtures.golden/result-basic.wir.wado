@@ -15,7 +15,7 @@ struct String {
 
 variant Result<i32,String> {
     Ok(i32),
-    Err(ref null String),
+    Err(ref String),
 }
 
 struct Result<i32,String>::Ok {
@@ -25,7 +25,7 @@ struct Result<i32,String>::Ok {
 
 struct Result<i32,String>::Err {
     discriminant: i32,
-    payload_0: ref null String,
+    payload_0: ref String,
 }
 
 array array<u64> (mut u64);
@@ -63,9 +63,9 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
@@ -85,9 +85,9 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let ok_val: ref null Result<i32,String>;
-    let err_val: ref null Result<i32,String>;
-    let __local_2: ref null Array<u64>;
+    let ok_val: ref Result<i32,String>;
+    let err_val: ref Result<i32,String>;
+    let __local_2: ref Array<u64>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -143,13 +143,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {

@@ -55,19 +55,19 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref null array<u8>, i32, i32);
+type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
-type "functype/core:internal/write_string_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/core:internal/log_stderr" = fn(ref null String);
+type "functype/core:internal/log_stderr" = fn(ref String);
 
-type "functype/core:internal/panic" = fn(ref null String);
+type "functype/core:internal/panic" = fn(ref String);
 
-type "functype/Array<i32>^IndexAssign::index_assign" = fn(ref null Array<i32>, i32, i32);
+type "functype/Array<i32>^IndexAssign::index_assign" = fn(ref Array<i32>, i32, i32);
 
-type "functype/Array<i32>::append" = fn(ref null Array<i32>, i32);
+type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -85,17 +85,17 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() {
-    let __local_0: ref null Array<i32>;
-    let arr: ref null Array<i32>;
-    let __local_2: ref null Array<u64>;
+    let __local_0: ref Array<i32>;
+    let arr: ref Array<i32>;
+    let __local_2: ref Array<u64>;
     let __local_3: i32;
-    let __local_4: ref null Array<i32>;
+    let __local_4: ref Array<i32>;
     let __local_5: i32;
-    let __local_6: ref null Array<i32>;
+    let __local_6: ref Array<i32>;
     let __local_7: i32;
-    let __local_8: ref null Array<i32>;
+    let __local_8: ref Array<i32>;
     let __local_9: i32;
-    let __local_10: ref null Array<i32>;
+    let __local_10: ref Array<i32>;
     let __local_11: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -103,7 +103,7 @@ fn run() {
         };
         __modules_initialized = 1;
     };
-    arr = __seq_lit: block -> ref null Array<i32> {
+    arr = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_0;
     };
@@ -171,11 +171,11 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
 
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from core:internal
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
+    let __local_7: ref String;
+    let __local_8: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -238,7 +238,7 @@ fn Array<i32>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<i32>;
+    let new_repr: ref array<i32>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;

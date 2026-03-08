@@ -66,31 +66,31 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
 type "functype/count_digits_i64" = fn(i64) -> i32;
 
-type "functype/write_decimal_digits" = fn(ref null array<u8>, i32, i64, i32);
+type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/i32::fmt_decimal" = fn(ref null "core:internal/Box<i32>", ref null Formatter);
+type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::internal_reserve_uninit" = fn(ref null String, i32) -> i32;
+type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref null String, char);
+type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
+type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
-type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref null String, i32) -> i32;
+type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
 
-type "functype/i32::fmt_decimal" = fn(i32, ref null Formatter);
+type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -108,118 +108,118 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let __local_0: ref null Pair;
+    let __local_0: ref Pair;
     let __local_1: i32;
     let __local_2: bool;
     let __local_3: i32;
     let __local_4: bool;
-    let __local_5: ref null Pair;
+    let __local_5: ref Pair;
     let __local_6: i32;
     let __local_7: bool;
     let __local_8: i32;
     let __local_9: bool;
-    let __local_10: ref null Pair;
+    let __local_10: ref Pair;
     let __local_11: i32;
     let __local_12: bool;
     let __local_13: i32;
     let __local_14: bool;
-    let __local_15: ref null String;
-    let __local_16: ref null Formatter;
-    let __local_17: ref null String;
-    let __local_18: ref null Formatter;
-    let __local_19: ref null String;
-    let __local_20: ref null Formatter;
-    let __local_21: ref null String;
-    let __local_22: ref null Formatter;
-    let __local_23: ref null String;
-    let __local_24: ref null Formatter;
-    let __local_25: ref null String;
-    let __local_26: ref null Formatter;
-    let __local_27: ref null String;
-    let __local_28: ref null Formatter;
-    let __local_29: ref null Array<u64>;
+    let __local_15: ref String;
+    let __local_16: ref Formatter;
+    let __local_17: ref String;
+    let __local_18: ref Formatter;
+    let __local_19: ref String;
+    let __local_20: ref Formatter;
+    let __local_21: ref String;
+    let __local_22: ref Formatter;
+    let __local_23: ref String;
+    let __local_24: ref Formatter;
+    let __local_25: ref String;
+    let __local_26: ref Formatter;
+    let __local_27: ref String;
+    let __local_28: ref Formatter;
+    let __local_29: ref Array<u64>;
     let __local_30: i32;
-    let __local_31: ref null String;
-    let __local_32: ref null "core:internal/Box<i32>";
-    let __local_33: ref null Formatter;
-    let __local_34: ref null "core:internal/Box<i32>";
-    let __local_35: ref null Formatter;
-    let __local_36: ref null String;
-    let __local_37: ref null "core:internal/Box<i32>";
-    let __local_38: ref null Formatter;
-    let __local_39: ref null "core:internal/Box<i32>";
-    let __local_40: ref null Formatter;
+    let __local_31: ref String;
+    let __local_32: ref "core:internal/Box<i32>";
+    let __local_33: ref Formatter;
+    let __local_34: ref "core:internal/Box<i32>";
+    let __local_35: ref Formatter;
+    let __local_36: ref String;
+    let __local_37: ref "core:internal/Box<i32>";
+    let __local_38: ref Formatter;
+    let __local_39: ref "core:internal/Box<i32>";
+    let __local_40: ref Formatter;
     let __local_41: i32;
-    let __local_42: ref null String;
-    let __local_43: ref null "core:internal/Box<i32>";
-    let __local_44: ref null Formatter;
-    let __local_45: ref null "core:internal/Box<i32>";
-    let __local_46: ref null Formatter;
-    let __local_47: ref null String;
-    let __local_48: ref null "core:internal/Box<i32>";
-    let __local_49: ref null Formatter;
-    let __local_50: ref null "core:internal/Box<i32>";
-    let __local_51: ref null Formatter;
+    let __local_42: ref String;
+    let __local_43: ref "core:internal/Box<i32>";
+    let __local_44: ref Formatter;
+    let __local_45: ref "core:internal/Box<i32>";
+    let __local_46: ref Formatter;
+    let __local_47: ref String;
+    let __local_48: ref "core:internal/Box<i32>";
+    let __local_49: ref Formatter;
+    let __local_50: ref "core:internal/Box<i32>";
+    let __local_51: ref Formatter;
     let __local_52: i32;
-    let __local_53: ref null String;
-    let __local_54: ref null "core:internal/Box<i32>";
-    let __local_55: ref null Formatter;
-    let __local_56: ref null "core:internal/Box<i32>";
-    let __local_57: ref null Formatter;
-    let __local_58: ref null String;
-    let __local_59: ref null "core:internal/Box<i32>";
-    let __local_60: ref null Formatter;
-    let __local_61: ref null "core:internal/Box<i32>";
-    let __local_62: ref null Formatter;
+    let __local_53: ref String;
+    let __local_54: ref "core:internal/Box<i32>";
+    let __local_55: ref Formatter;
+    let __local_56: ref "core:internal/Box<i32>";
+    let __local_57: ref Formatter;
+    let __local_58: ref String;
+    let __local_59: ref "core:internal/Box<i32>";
+    let __local_60: ref Formatter;
+    let __local_61: ref "core:internal/Box<i32>";
+    let __local_62: ref Formatter;
     let __local_63: i32;
-    let __local_64: ref null String;
-    let __local_65: ref null "core:internal/Box<i32>";
-    let __local_66: ref null Formatter;
-    let __local_67: ref null "core:internal/Box<i32>";
-    let __local_68: ref null Formatter;
-    let __local_69: ref null String;
-    let __local_70: ref null "core:internal/Box<i32>";
-    let __local_71: ref null Formatter;
-    let __local_72: ref null "core:internal/Box<i32>";
-    let __local_73: ref null Formatter;
+    let __local_64: ref String;
+    let __local_65: ref "core:internal/Box<i32>";
+    let __local_66: ref Formatter;
+    let __local_67: ref "core:internal/Box<i32>";
+    let __local_68: ref Formatter;
+    let __local_69: ref String;
+    let __local_70: ref "core:internal/Box<i32>";
+    let __local_71: ref Formatter;
+    let __local_72: ref "core:internal/Box<i32>";
+    let __local_73: ref Formatter;
     let __local_74: i32;
-    let __local_75: ref null String;
-    let __local_76: ref null "core:internal/Box<i32>";
-    let __local_77: ref null Formatter;
-    let __local_78: ref null "core:internal/Box<i32>";
-    let __local_79: ref null Formatter;
-    let __local_80: ref null String;
-    let __local_81: ref null "core:internal/Box<i32>";
-    let __local_82: ref null Formatter;
-    let __local_83: ref null "core:internal/Box<i32>";
-    let __local_84: ref null Formatter;
+    let __local_75: ref String;
+    let __local_76: ref "core:internal/Box<i32>";
+    let __local_77: ref Formatter;
+    let __local_78: ref "core:internal/Box<i32>";
+    let __local_79: ref Formatter;
+    let __local_80: ref String;
+    let __local_81: ref "core:internal/Box<i32>";
+    let __local_82: ref Formatter;
+    let __local_83: ref "core:internal/Box<i32>";
+    let __local_84: ref Formatter;
     let __local_85: i32;
-    let __local_86: ref null String;
-    let __local_87: ref null "core:internal/Box<i32>";
-    let __local_88: ref null Formatter;
-    let __local_89: ref null "core:internal/Box<i32>";
-    let __local_90: ref null Formatter;
-    let __local_91: ref null String;
-    let __local_92: ref null "core:internal/Box<i32>";
-    let __local_93: ref null Formatter;
-    let __local_94: ref null "core:internal/Box<i32>";
-    let __local_95: ref null Formatter;
+    let __local_86: ref String;
+    let __local_87: ref "core:internal/Box<i32>";
+    let __local_88: ref Formatter;
+    let __local_89: ref "core:internal/Box<i32>";
+    let __local_90: ref Formatter;
+    let __local_91: ref String;
+    let __local_92: ref "core:internal/Box<i32>";
+    let __local_93: ref Formatter;
+    let __local_94: ref "core:internal/Box<i32>";
+    let __local_95: ref Formatter;
     let __local_96: i32;
-    let __local_97: ref null String;
-    let __local_98: ref null "core:internal/Box<i32>";
-    let __local_99: ref null Formatter;
-    let __local_100: ref null "core:internal/Box<i32>";
-    let __local_101: ref null Formatter;
-    let __local_102: ref null String;
-    let __local_103: ref null "core:internal/Box<i32>";
-    let __local_104: ref null Formatter;
-    let __local_105: ref null "core:internal/Box<i32>";
-    let __local_106: ref null Formatter;
-    let __local_107: ref null String;
-    let __local_108: ref null "core:internal/Box<i32>";
-    let __local_109: ref null Formatter;
-    let __local_110: ref null "core:internal/Box<i32>";
-    let __local_111: ref null Formatter;
+    let __local_97: ref String;
+    let __local_98: ref "core:internal/Box<i32>";
+    let __local_99: ref Formatter;
+    let __local_100: ref "core:internal/Box<i32>";
+    let __local_101: ref Formatter;
+    let __local_102: ref String;
+    let __local_103: ref "core:internal/Box<i32>";
+    let __local_104: ref Formatter;
+    let __local_105: ref "core:internal/Box<i32>";
+    let __local_106: ref Formatter;
+    let __local_107: ref String;
+    let __local_108: ref "core:internal/Box<i32>";
+    let __local_109: ref Formatter;
+    let __local_110: ref "core:internal/Box<i32>";
+    let __local_111: ref Formatter;
     let __local_112: i32;
     let __local_113: i32;
     let __sroa_p2_a: i32;
@@ -241,9 +241,9 @@ fn run() with Stdout {
     __sroa_p3_a = 100;
     __sroa_p3_b = 200;
     __sroa_p3_b = 300;
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_27 = String { repr: builtin::array_new<u8>(52), used: 0 };
-        __local_28 = __inline_Formatter__new_45: block -> ref null Formatter {
+        __local_28 = __inline_Formatter__new_45: block -> ref Formatter {
             __local_97 = __local_27;
             break __inline_Formatter__new_45: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_97) };
         };
@@ -251,7 +251,7 @@ fn run() with Stdout {
         i32::fmt_decimal(10, __local_99);
         String::append_char(__local_27, 44);
         String::append_char(__local_27, 32);
-        __local_28 = __inline_Formatter__new_48: block -> ref null Formatter {
+        __local_28 = __inline_Formatter__new_48: block -> ref Formatter {
             __local_102 = __local_27;
             break __inline_Formatter__new_48: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_102) };
         };
@@ -259,7 +259,7 @@ fn run() with Stdout {
         i32::fmt_decimal(42, __local_104);
         String::append_char(__local_27, 44);
         String::append_char(__local_27, 32);
-        __local_28 = __inline_Formatter__new_51: block -> ref null Formatter {
+        __local_28 = __inline_Formatter__new_51: block -> ref Formatter {
             __local_107 = __local_27;
             break __inline_Formatter__new_51: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_107) };
         };
@@ -313,13 +313,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -433,7 +433,7 @@ fn i32::fmt_decimal(self, f) {
     let abs_val: i64;
     let digit_count: i32;
     let offset: i32;
-    let __local_6: ref null String;
+    let __local_6: ref String;
     is_negative = self < 0;
     abs_val = if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
@@ -442,7 +442,7 @@ fn i32::fmt_decimal(self, f) {
     };
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref null array<u8> {
+    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
     }, offset, abs_val, digit_count);
@@ -451,7 +451,7 @@ fn i32::fmt_decimal(self, f) {
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -487,8 +487,8 @@ fn String::internal_reserve_uninit(self, n) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -530,7 +530,7 @@ fn String::append_char(self, c) {
 
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
-    let _licm_buf_4: ref null String;
+    let _licm_buf_4: ref String;
     __for_0: block {
         i = 0;
         _licm_buf_4 = self.buf;
@@ -548,7 +548,7 @@ fn Formatter::write_char_n(self, c, n) {
 }
 
 fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
-    let sign: ref null String;
+    let sign: ref String;
     let sign_len: i32;
     let prefix_len: i32;
     let content_len: i32;
@@ -558,8 +558,8 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
-    let __local_14: ref null String;
-    let __local_15: ref null String;
+    let __local_14: ref String;
+    let __local_15: ref String;
     sign = String { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };

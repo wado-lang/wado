@@ -58,19 +58,19 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref null array<u8>, i32, i32);
+type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/core:internal/cm_lower_list_u8" = fn(ref null array<u8>, i32) -> i64;
+type "functype/core:internal/cm_lower_list_u8" = fn(ref array<u8>, i32) -> i64;
 
-type "functype/core:internal/cm_lower_array_u8" = fn(ref null Array<u8>) -> i64;
+type "functype/core:internal/cm_lower_array_u8" = fn(ref Array<u8>) -> i64;
 
-type "functype/Array<u8>::append" = fn(ref null Array<u8>, u8);
+type "functype/Array<u8>::append" = fn(ref Array<u8>, u8);
 
 type "functype/wasi/stream-drop-readable" = fn(i32);
 
@@ -93,20 +93,20 @@ global mut __modules_initialized: bool = 0;
 fn run() with Stdout {
     let rx: i32;
     let tx: i32;
-    let __local_2: ref null Array<u8>;
-    let chunk: ref null Array<u8>;
-    let __pattern_temp_0: ref null "tuple/[Stream<u8>, StreamWritable<u8>]";
-    let __local_5: ref null Array<u64>;
+    let __local_2: ref Array<u8>;
+    let chunk: ref Array<u8>;
+    let __pattern_temp_0: ref "tuple/[Stream<u8>, StreamWritable<u8>]";
+    let __local_5: ref Array<u64>;
     let __local_6: i32;
-    let __local_7: ref null Array<u8>;
+    let __local_7: ref Array<u8>;
     let __local_8: u8;
-    let __local_9: ref null Array<u8>;
+    let __local_9: ref Array<u8>;
     let __local_10: u8;
-    let __local_11: ref null Array<u8>;
+    let __local_11: ref Array<u8>;
     let __local_12: u8;
-    let __local_13: ref null Array<u8>;
+    let __local_13: ref Array<u8>;
     let __local_14: u8;
-    let __local_15: ref null Array<u8>;
+    let __local_15: ref Array<u8>;
     let __local_16: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -120,7 +120,7 @@ fn run() with Stdout {
     rx = __pattern_temp_0.0;
     tx = __pattern_temp_0.1;
     "wasi/stream-drop-readable"(rx);
-    chunk = __seq_lit: block -> ref null Array<u8> {
+    chunk = __seq_lit: block -> ref Array<u8> {
         __local_2 = Array<u8> { repr: array.new_fixed<u8>(65, 66, 67, 10), used: 4 };
         break __seq_lit: __local_2;
     };
@@ -191,13 +191,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -280,10 +280,10 @@ fn "core:internal/cm_lower_list_u8"(data, len) {  // from core:internal
 }
 
 fn "core:internal/cm_lower_array_u8"(arr) {  // from core:internal
-    let data: ref null array<u8>;
+    let data: ref array<u8>;
     let len: i32;
-    let __local_3: ref null Array<u8>;
-    let __local_4: ref null Array<u8>;
+    let __local_3: ref Array<u8>;
+    let __local_4: ref Array<u8>;
     data = arr.repr;
     len = arr.used;
     return "core:internal/cm_lower_list_u8"(data, len);
@@ -293,7 +293,7 @@ fn Array<u8>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;

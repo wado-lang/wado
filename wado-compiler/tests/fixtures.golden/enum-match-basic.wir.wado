@@ -50,9 +50,9 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
@@ -72,7 +72,7 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let __local_0: ref null Array<u64>;
+    let __local_0: ref Array<u64>;
     let __local_1: enum:Color;
     let __local_2: enum:Color;
     let __local_3: enum:Color;
@@ -82,45 +82,45 @@ fn run() with Stdout {
         };
         __modules_initialized = 1;
     };
-    "core:cli/println"(__inline_color_name_2: block -> ref null String {
+    "core:cli/println"(__inline_color_name_2: block -> ref String {
         __local_1 = 0;
         let __match_scrut_0: enum:Color;
         __match_scrut_0 = __local_1;
-        if __match_scrut_0 == 0 -> ref null String {
+        if __match_scrut_0 == 0 -> ref String {
             String { repr: array.new_data<u8>("red"), used: 3 };
-        } else if __match_scrut_0 == 1 -> ref null String {
+        } else if __match_scrut_0 == 1 -> ref String {
             String { repr: array.new_data<u8>("green"), used: 5 };
-        } else if __match_scrut_0 == 2 -> ref null String {
+        } else if __match_scrut_0 == 2 -> ref String {
             String { repr: array.new_data<u8>("blue"), used: 4 };
         } else {
             unreachable;
         };
         break __inline_color_name_2;
     });
-    "core:cli/println"(__inline_color_name_3: block -> ref null String {
+    "core:cli/println"(__inline_color_name_3: block -> ref String {
         __local_2 = 1;
         let __match_scrut_1: enum:Color;
         __match_scrut_1 = __local_2;
-        if __match_scrut_1 == 0 -> ref null String {
+        if __match_scrut_1 == 0 -> ref String {
             String { repr: array.new_data<u8>("red"), used: 3 };
-        } else if __match_scrut_1 == 1 -> ref null String {
+        } else if __match_scrut_1 == 1 -> ref String {
             String { repr: array.new_data<u8>("green"), used: 5 };
-        } else if __match_scrut_1 == 2 -> ref null String {
+        } else if __match_scrut_1 == 2 -> ref String {
             String { repr: array.new_data<u8>("blue"), used: 4 };
         } else {
             unreachable;
         };
         break __inline_color_name_3;
     });
-    "core:cli/println"(__inline_color_name_4: block -> ref null String {
+    "core:cli/println"(__inline_color_name_4: block -> ref String {
         __local_3 = 2;
         let __match_scrut_2: enum:Color;
         __match_scrut_2 = __local_3;
-        if __match_scrut_2 == 0 -> ref null String {
+        if __match_scrut_2 == 0 -> ref String {
             String { repr: array.new_data<u8>("red"), used: 3 };
-        } else if __match_scrut_2 == 1 -> ref null String {
+        } else if __match_scrut_2 == 1 -> ref String {
             String { repr: array.new_data<u8>("green"), used: 5 };
-        } else if __match_scrut_2 == 2 -> ref null String {
+        } else if __match_scrut_2 == 2 -> ref String {
             String { repr: array.new_data<u8>("blue"), used: 4 };
         } else {
             unreachable;
@@ -173,13 +173,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {

@@ -117,15 +117,15 @@ type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/double_wrapper" = fn(ref null Wrapper) -> i32;
+type "functype/double_wrapper" = fn(ref Wrapper) -> i32;
 
-type "functype/triple_wrapper" = fn(ref null Wrapper) -> i32;
+type "functype/triple_wrapper" = fn(ref Wrapper) -> i32;
 
-type "functype/process_wrapper" = fn(ref null Wrapper) -> i32;
+type "functype/process_wrapper" = fn(ref Wrapper) -> i32;
 
 type "functype/conditional_wrapper" = fn(bool) -> i32;
 
-type "functype/add_amounts" = fn(ref null Amount, ref null Amount) -> f64;
+type "functype/add_amounts" = fn(ref Amount, ref Amount) -> f64;
 
 type "functype/sum_wrappers" = fn() -> i32;
 
@@ -139,101 +139,101 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref null array<u8>, i32, i32);
+type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
-type "functype/core:internal/write_string_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/core:internal/log_stderr" = fn(ref null String);
+type "functype/core:internal/log_stderr" = fn(ref String);
 
-type "functype/core:internal/panic" = fn(ref null String);
+type "functype/core:internal/panic" = fn(ref String);
 
 type "functype/core:internal/unreachable" = fn();
 
-type "functype/unpack64" = fn(f64) -> ref null UnpackResult;
+type "functype/unpack64" = fn(f64) -> ref UnpackResult;
 
 type "functype/unrounded_round" = fn(u64) -> u64;
 
 type "functype/unrounded_div" = fn(u64, u64) -> u64;
 
-type "functype/pow10_coarse" = fn(i32) -> ref null PmHiLo;
+type "functype/pow10_coarse" = fn(i32) -> ref PmHiLo;
 
 type "functype/pow10_fine" = fn(i32) -> u64;
 
-type "functype/mul_pow10" = fn(i32) -> ref null PmHiLo;
+type "functype/mul_pow10" = fn(i32) -> ref PmHiLo;
 
 type "functype/uscale" = fn(u64, u64, u64, i32) -> u64;
 
-type "functype/fixed_width_for_prec" = fn(f64, i32) -> ref null FormatResult;
+type "functype/fixed_width_for_prec" = fn(f64, i32) -> ref FormatResult;
 
-type "functype/short" = fn(f64) -> ref null FormatResult;
+type "functype/short" = fn(f64) -> ref FormatResult;
 
-type "functype/trim_zeros" = fn(u64, i32) -> ref null "tuple/[u64, i32]";
+type "functype/trim_zeros" = fn(u64, i32) -> ref "tuple/[u64, i32]";
 
-type "functype/write_digits_at" = fn(ref null String, i32, u64, i32);
+type "functype/write_digits_at" = fn(ref String, i32, u64, i32);
 
-type "functype/write_decimal" = fn(ref null String, u64, i32, i32);
+type "functype/write_decimal" = fn(ref String, u64, i32, i32);
 
-type "functype/write_exp" = fn(ref null String, u64, i32, i32, bool);
+type "functype/write_exp" = fn(ref String, u64, i32, i32, bool);
 
-type "functype/write_decimal_prec" = fn(ref null String, u64, i32, i32, i32);
+type "functype/write_decimal_prec" = fn(ref String, u64, i32, i32, i32);
 
-type "functype/check_special" = fn(f64) -> ref null "tuple/[bool, bool, SpecialKind]";
+type "functype/check_special" = fn(f64) -> ref "tuple/[bool, bool, SpecialKind]";
 
 type "functype/__initialize_module" = fn();
 
 type "functype/count_digits_i64" = fn(i64) -> i32;
 
-type "functype/write_decimal_digits" = fn(ref null array<u8>, i32, i64, i32);
+type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/fmt_float_special" = fn(ref null Formatter, bool, enum:SpecialKind, ref null String);
+type "functype/fmt_float_special" = fn(ref Formatter, bool, enum:SpecialKind, ref String);
 
-type "functype/fmt_float_sign" = fn(ref null Formatter, bool);
+type "functype/fmt_float_sign" = fn(ref Formatter, bool);
 
-type "functype/Array<u64>::append" = fn(ref null Array<u64>, u64);
+type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
 
-type "functype/i32::fmt_decimal" = fn(ref null "core:internal/Box<i32>", ref null Formatter);
+type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
-type "functype/f64::inspect_into" = fn(ref null "core:internal/Box<f64>", ref null Formatter);
+type "functype/f64::inspect_into" = fn(ref "core:internal/Box<f64>", ref Formatter);
 
-type "functype/f64::fmt_fixed" = fn(ref null "core:internal/Box<f64>", i32, ref null Formatter);
+type "functype/f64::fmt_fixed" = fn(ref "core:internal/Box<f64>", i32, ref Formatter);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::internal_reserve_uninit" = fn(ref null String, i32) -> i32;
+type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append_byte_filled" = fn(ref null String, u8, i32);
+type "functype/String::append_byte_filled" = fn(ref String, u8, i32);
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/String^Eq::eq" = fn(ref null String, ref null String) -> bool;
+type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
-type "functype/String::append_char" = fn(ref null String, char);
+type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/Wrapper::get" = fn(ref null Wrapper) -> i32;
+type "functype/Wrapper::get" = fn(ref Wrapper) -> i32;
 
-type "functype/Wrapper::doubled" = fn(ref null Wrapper) -> i32;
+type "functype/Wrapper::doubled" = fn(ref Wrapper) -> i32;
 
-type "functype/Wrapper::set" = fn(ref null Wrapper, i32);
+type "functype/Wrapper::set" = fn(ref Wrapper, i32);
 
-type "functype/Amount::as_cents" = fn(ref null Amount) -> i32;
+type "functype/Amount::as_cents" = fn(ref Amount) -> i32;
 
-type "functype/Label::len" = fn(ref null Label) -> i32;
+type "functype/Label::len" = fn(ref Label) -> i32;
 
-type "functype/Flag::is_set" = fn(ref null Flag) -> bool;
+type "functype/Flag::is_set" = fn(ref Flag) -> bool;
 
-type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
+type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
-type "functype/Formatter::pad" = fn(ref null Formatter, ref null String);
+type "functype/Formatter::pad" = fn(ref Formatter, ref String);
 
-type "functype/Formatter::apply_padding" = fn(ref null Formatter, i32);
+type "functype/Formatter::apply_padding" = fn(ref Formatter, i32);
 
-type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref null String, i32) -> i32;
+type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
 
 type "functype/unpack64" = fn(f64) -> [u64, i32];
 
@@ -255,15 +255,15 @@ type "functype/triple_wrapper" = fn(i32) -> i32;
 
 type "functype/process_wrapper" = fn(i32) -> i32;
 
-type "functype/add_amounts" = fn(f64, ref null Amount) -> f64;
+type "functype/add_amounts" = fn(f64, ref Amount) -> f64;
 
 type "functype/add_amounts" = fn(f64, f64) -> f64;
 
-type "functype/i32::fmt_decimal" = fn(i32, ref null Formatter);
+type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
-type "functype/f64::inspect_into" = fn(f64, ref null Formatter);
+type "functype/f64::inspect_into" = fn(f64, ref Formatter);
 
-type "functype/f64::fmt_fixed" = fn(f64, i32, ref null Formatter);
+type "functype/f64::fmt_fixed" = fn(f64, i32, ref Formatter);
 
 type "functype/Wrapper::get" = fn(i32) -> i32;
 
@@ -309,8 +309,8 @@ fn process_wrapper(w) {
 }
 
 fn conditional_wrapper(flag) {
-    let w: ref null Wrapper;
-    w = value_copy Wrapper(if flag -> ref null Wrapper {
+    let w: ref Wrapper;
+    w = value_copy Wrapper(if flag -> ref Wrapper {
         Wrapper { inner: 10 };
     } else {
         Wrapper { inner: 20 };
@@ -325,7 +325,7 @@ fn add_amounts(a, b) {
 fn sum_wrappers() {
     let total: i32;
     let i: i32;
-    let w: ref null Wrapper;
+    let w: ref Wrapper;
     total = 0;
     __for_0: block {
         i = 0;
@@ -344,8 +344,8 @@ fn sum_wrappers() {
 }
 
 fn mixed_single_fields() {
-    let w: ref null Wrapper;
-    let f: ref null Flag;
+    let w: ref Wrapper;
+    let f: ref Flag;
     let result: i32;
     result = if Flag::is_set(1) -> i32 {
         Wrapper::get(42);
@@ -356,21 +356,21 @@ fn mixed_single_fields() {
 }
 
 fn run() with Stdout {
-    let w: ref null Wrapper;
+    let w: ref Wrapper;
     let __v0_1: i32;
     let __cond_2: bool;
     let __v0_3: i32;
     let __cond_4: bool;
-    let a: ref null Amount;
+    let a: ref Amount;
     let __v0_6: i32;
     let __cond_7: bool;
-    let l: ref null Label;
+    let l: ref Label;
     let __v0_9: i32;
     let __cond_10: bool;
-    let f: ref null Flag;
+    let f: ref Flag;
     let __v0_12: bool;
     let __cond_13: bool;
-    let f2: ref null Flag;
+    let f2: ref Flag;
     let __v0_15: bool;
     let __cond_16: bool;
     let __v0_17: i32;
@@ -383,8 +383,8 @@ fn run() with Stdout {
     let __cond_24: bool;
     let __v0_25: i32;
     let __cond_26: bool;
-    let a1: ref null Amount;
-    let a2: ref null Amount;
+    let a1: ref Amount;
+    let a2: ref Amount;
     let sum: f64;
     let __local_30: f64;
     let __cond_31: bool;
@@ -392,248 +392,248 @@ fn run() with Stdout {
     let __cond_33: bool;
     let __v0_34: i32;
     let __cond_35: bool;
-    let __local_36: ref null Wrapper;
+    let __local_36: ref Wrapper;
     let __cond_37: bool;
-    let w3: ref null Wrapper;
+    let w3: ref Wrapper;
     let __v0_39: i32;
     let __cond_40: bool;
-    let __local_41: ref null Point;
+    let __local_41: ref Point;
     let __local_42: i32;
     let __local_43: i32;
     let __local_44: i32;
     let __local_45: bool;
-    let __local_46: ref null String;
-    let __local_47: ref null Formatter;
-    let __local_48: ref null String;
-    let __local_49: ref null Formatter;
-    let __local_50: ref null String;
-    let __local_51: ref null Formatter;
-    let __local_52: ref null String;
-    let __local_53: ref null Formatter;
-    let __local_54: ref null String;
-    let __local_55: ref null Formatter;
-    let __local_56: ref null String;
-    let __local_57: ref null Formatter;
-    let __local_58: ref null String;
-    let __local_59: ref null Formatter;
-    let __local_60: ref null String;
-    let __local_61: ref null Formatter;
-    let __local_62: ref null String;
-    let __local_63: ref null Formatter;
-    let __local_64: ref null String;
-    let __local_65: ref null Formatter;
-    let __local_66: ref null String;
-    let __local_67: ref null Formatter;
-    let __local_68: ref null String;
-    let __local_69: ref null Formatter;
-    let __local_70: ref null String;
-    let __local_71: ref null Formatter;
-    let __local_72: ref null String;
-    let __local_73: ref null Formatter;
-    let __local_74: ref null String;
-    let __local_75: ref null Formatter;
-    let __local_76: ref null String;
-    let __local_77: ref null Formatter;
-    let __local_78: ref null String;
-    let __local_79: ref null Formatter;
-    let __local_80: ref null String;
-    let __local_81: ref null Formatter;
+    let __local_46: ref String;
+    let __local_47: ref Formatter;
+    let __local_48: ref String;
+    let __local_49: ref Formatter;
+    let __local_50: ref String;
+    let __local_51: ref Formatter;
+    let __local_52: ref String;
+    let __local_53: ref Formatter;
+    let __local_54: ref String;
+    let __local_55: ref Formatter;
+    let __local_56: ref String;
+    let __local_57: ref Formatter;
+    let __local_58: ref String;
+    let __local_59: ref Formatter;
+    let __local_60: ref String;
+    let __local_61: ref Formatter;
+    let __local_62: ref String;
+    let __local_63: ref Formatter;
+    let __local_64: ref String;
+    let __local_65: ref Formatter;
+    let __local_66: ref String;
+    let __local_67: ref Formatter;
+    let __local_68: ref String;
+    let __local_69: ref Formatter;
+    let __local_70: ref String;
+    let __local_71: ref Formatter;
+    let __local_72: ref String;
+    let __local_73: ref Formatter;
+    let __local_74: ref String;
+    let __local_75: ref Formatter;
+    let __local_76: ref String;
+    let __local_77: ref Formatter;
+    let __local_78: ref String;
+    let __local_79: ref Formatter;
+    let __local_80: ref String;
+    let __local_81: ref Formatter;
     let __local_82: i32;
-    let __local_83: ref null String;
-    let __local_84: ref null "core:internal/Box<i32>";
-    let __local_85: ref null Formatter;
-    let __local_86: ref null "core:internal/Box<i32>";
-    let __local_87: ref null Formatter;
-    let __local_88: ref null String;
-    let __local_89: ref null "core:internal/Box<i32>";
-    let __local_90: ref null Formatter;
-    let __local_91: ref null "core:internal/Box<i32>";
-    let __local_92: ref null Formatter;
+    let __local_83: ref String;
+    let __local_84: ref "core:internal/Box<i32>";
+    let __local_85: ref Formatter;
+    let __local_86: ref "core:internal/Box<i32>";
+    let __local_87: ref Formatter;
+    let __local_88: ref String;
+    let __local_89: ref "core:internal/Box<i32>";
+    let __local_90: ref Formatter;
+    let __local_91: ref "core:internal/Box<i32>";
+    let __local_92: ref Formatter;
     let __local_93: i32;
-    let __local_94: ref null String;
-    let __local_95: ref null "core:internal/Box<i32>";
-    let __local_96: ref null Formatter;
-    let __local_97: ref null "core:internal/Box<i32>";
-    let __local_98: ref null Formatter;
-    let __local_99: ref null String;
-    let __local_100: ref null "core:internal/Box<i32>";
-    let __local_101: ref null Formatter;
-    let __local_102: ref null "core:internal/Box<i32>";
-    let __local_103: ref null Formatter;
+    let __local_94: ref String;
+    let __local_95: ref "core:internal/Box<i32>";
+    let __local_96: ref Formatter;
+    let __local_97: ref "core:internal/Box<i32>";
+    let __local_98: ref Formatter;
+    let __local_99: ref String;
+    let __local_100: ref "core:internal/Box<i32>";
+    let __local_101: ref Formatter;
+    let __local_102: ref "core:internal/Box<i32>";
+    let __local_103: ref Formatter;
     let __local_104: i32;
-    let __local_105: ref null String;
-    let __local_106: ref null "core:internal/Box<i32>";
-    let __local_107: ref null Formatter;
-    let __local_108: ref null "core:internal/Box<i32>";
-    let __local_109: ref null Formatter;
-    let __local_110: ref null String;
-    let __local_111: ref null "core:internal/Box<i32>";
-    let __local_112: ref null Formatter;
-    let __local_113: ref null "core:internal/Box<i32>";
-    let __local_114: ref null Formatter;
+    let __local_105: ref String;
+    let __local_106: ref "core:internal/Box<i32>";
+    let __local_107: ref Formatter;
+    let __local_108: ref "core:internal/Box<i32>";
+    let __local_109: ref Formatter;
+    let __local_110: ref String;
+    let __local_111: ref "core:internal/Box<i32>";
+    let __local_112: ref Formatter;
+    let __local_113: ref "core:internal/Box<i32>";
+    let __local_114: ref Formatter;
     let __local_115: i32;
-    let __local_116: ref null String;
-    let __local_117: ref null "core:internal/Box<i32>";
-    let __local_118: ref null Formatter;
-    let __local_119: ref null "core:internal/Box<i32>";
-    let __local_120: ref null Formatter;
-    let __local_121: ref null String;
-    let __local_122: ref null "core:internal/Box<i32>";
-    let __local_123: ref null Formatter;
-    let __local_124: ref null "core:internal/Box<i32>";
-    let __local_125: ref null Formatter;
+    let __local_116: ref String;
+    let __local_117: ref "core:internal/Box<i32>";
+    let __local_118: ref Formatter;
+    let __local_119: ref "core:internal/Box<i32>";
+    let __local_120: ref Formatter;
+    let __local_121: ref String;
+    let __local_122: ref "core:internal/Box<i32>";
+    let __local_123: ref Formatter;
+    let __local_124: ref "core:internal/Box<i32>";
+    let __local_125: ref Formatter;
     let __local_126: i32;
-    let __local_127: ref null String;
-    let __local_128: ref null "core:internal/Box<i32>";
-    let __local_129: ref null Formatter;
-    let __local_130: ref null "core:internal/Box<i32>";
-    let __local_131: ref null Formatter;
-    let __local_132: ref null String;
-    let __local_133: ref null "core:internal/Box<bool>";
-    let __local_134: ref null Formatter;
-    let __local_135: ref null "core:internal/Box<bool>";
-    let __local_136: ref null Formatter;
+    let __local_127: ref String;
+    let __local_128: ref "core:internal/Box<i32>";
+    let __local_129: ref Formatter;
+    let __local_130: ref "core:internal/Box<i32>";
+    let __local_131: ref Formatter;
+    let __local_132: ref String;
+    let __local_133: ref "core:internal/Box<bool>";
+    let __local_134: ref Formatter;
+    let __local_135: ref "core:internal/Box<bool>";
+    let __local_136: ref Formatter;
     let __local_137: i32;
-    let __local_138: ref null String;
-    let __local_139: ref null "core:internal/Box<i32>";
-    let __local_140: ref null Formatter;
-    let __local_141: ref null "core:internal/Box<i32>";
-    let __local_142: ref null Formatter;
-    let __local_143: ref null String;
-    let __local_144: ref null "core:internal/Box<bool>";
-    let __local_145: ref null Formatter;
-    let __local_146: ref null "core:internal/Box<bool>";
-    let __local_147: ref null Formatter;
+    let __local_138: ref String;
+    let __local_139: ref "core:internal/Box<i32>";
+    let __local_140: ref Formatter;
+    let __local_141: ref "core:internal/Box<i32>";
+    let __local_142: ref Formatter;
+    let __local_143: ref String;
+    let __local_144: ref "core:internal/Box<bool>";
+    let __local_145: ref Formatter;
+    let __local_146: ref "core:internal/Box<bool>";
+    let __local_147: ref Formatter;
     let __local_148: i32;
-    let __local_149: ref null String;
-    let __local_150: ref null "core:internal/Box<i32>";
-    let __local_151: ref null Formatter;
-    let __local_152: ref null "core:internal/Box<i32>";
-    let __local_153: ref null Formatter;
-    let __local_154: ref null String;
-    let __local_155: ref null "core:internal/Box<i32>";
-    let __local_156: ref null Formatter;
-    let __local_157: ref null "core:internal/Box<i32>";
-    let __local_158: ref null Formatter;
+    let __local_149: ref String;
+    let __local_150: ref "core:internal/Box<i32>";
+    let __local_151: ref Formatter;
+    let __local_152: ref "core:internal/Box<i32>";
+    let __local_153: ref Formatter;
+    let __local_154: ref String;
+    let __local_155: ref "core:internal/Box<i32>";
+    let __local_156: ref Formatter;
+    let __local_157: ref "core:internal/Box<i32>";
+    let __local_158: ref Formatter;
     let __local_159: i32;
-    let __local_160: ref null String;
-    let __local_161: ref null "core:internal/Box<i32>";
-    let __local_162: ref null Formatter;
-    let __local_163: ref null "core:internal/Box<i32>";
-    let __local_164: ref null Formatter;
-    let __local_165: ref null String;
-    let __local_166: ref null "core:internal/Box<i32>";
-    let __local_167: ref null Formatter;
-    let __local_168: ref null "core:internal/Box<i32>";
-    let __local_169: ref null Formatter;
+    let __local_160: ref String;
+    let __local_161: ref "core:internal/Box<i32>";
+    let __local_162: ref Formatter;
+    let __local_163: ref "core:internal/Box<i32>";
+    let __local_164: ref Formatter;
+    let __local_165: ref String;
+    let __local_166: ref "core:internal/Box<i32>";
+    let __local_167: ref Formatter;
+    let __local_168: ref "core:internal/Box<i32>";
+    let __local_169: ref Formatter;
     let __local_170: i32;
-    let __local_171: ref null String;
-    let __local_172: ref null "core:internal/Box<i32>";
-    let __local_173: ref null Formatter;
-    let __local_174: ref null "core:internal/Box<i32>";
-    let __local_175: ref null Formatter;
-    let __local_176: ref null String;
-    let __local_177: ref null "core:internal/Box<i32>";
-    let __local_178: ref null Formatter;
-    let __local_179: ref null "core:internal/Box<i32>";
-    let __local_180: ref null Formatter;
+    let __local_171: ref String;
+    let __local_172: ref "core:internal/Box<i32>";
+    let __local_173: ref Formatter;
+    let __local_174: ref "core:internal/Box<i32>";
+    let __local_175: ref Formatter;
+    let __local_176: ref String;
+    let __local_177: ref "core:internal/Box<i32>";
+    let __local_178: ref Formatter;
+    let __local_179: ref "core:internal/Box<i32>";
+    let __local_180: ref Formatter;
     let __local_181: i32;
-    let __local_182: ref null String;
-    let __local_183: ref null "core:internal/Box<i32>";
-    let __local_184: ref null Formatter;
-    let __local_185: ref null "core:internal/Box<i32>";
-    let __local_186: ref null Formatter;
-    let __local_187: ref null String;
-    let __local_188: ref null "core:internal/Box<i32>";
-    let __local_189: ref null Formatter;
-    let __local_190: ref null "core:internal/Box<i32>";
-    let __local_191: ref null Formatter;
+    let __local_182: ref String;
+    let __local_183: ref "core:internal/Box<i32>";
+    let __local_184: ref Formatter;
+    let __local_185: ref "core:internal/Box<i32>";
+    let __local_186: ref Formatter;
+    let __local_187: ref String;
+    let __local_188: ref "core:internal/Box<i32>";
+    let __local_189: ref Formatter;
+    let __local_190: ref "core:internal/Box<i32>";
+    let __local_191: ref Formatter;
     let __local_192: i32;
-    let __local_193: ref null String;
-    let __local_194: ref null "core:internal/Box<i32>";
-    let __local_195: ref null Formatter;
-    let __local_196: ref null "core:internal/Box<i32>";
-    let __local_197: ref null Formatter;
-    let __local_198: ref null String;
-    let __local_199: ref null "core:internal/Box<i32>";
-    let __local_200: ref null Formatter;
-    let __local_201: ref null "core:internal/Box<i32>";
-    let __local_202: ref null Formatter;
+    let __local_193: ref String;
+    let __local_194: ref "core:internal/Box<i32>";
+    let __local_195: ref Formatter;
+    let __local_196: ref "core:internal/Box<i32>";
+    let __local_197: ref Formatter;
+    let __local_198: ref String;
+    let __local_199: ref "core:internal/Box<i32>";
+    let __local_200: ref Formatter;
+    let __local_201: ref "core:internal/Box<i32>";
+    let __local_202: ref Formatter;
     let __local_203: i32;
-    let __local_204: ref null String;
-    let __local_205: ref null "core:internal/Box<i32>";
-    let __local_206: ref null Formatter;
-    let __local_207: ref null "core:internal/Box<i32>";
-    let __local_208: ref null Formatter;
-    let __local_209: ref null String;
-    let __local_210: ref null "core:internal/Box<f64>";
-    let __local_211: ref null Formatter;
+    let __local_204: ref String;
+    let __local_205: ref "core:internal/Box<i32>";
+    let __local_206: ref Formatter;
+    let __local_207: ref "core:internal/Box<i32>";
+    let __local_208: ref Formatter;
+    let __local_209: ref String;
+    let __local_210: ref "core:internal/Box<f64>";
+    let __local_211: ref Formatter;
     let __local_212: i32;
-    let __local_213: ref null String;
-    let __local_214: ref null "core:internal/Box<i32>";
-    let __local_215: ref null Formatter;
-    let __local_216: ref null "core:internal/Box<i32>";
-    let __local_217: ref null Formatter;
-    let __local_218: ref null String;
-    let __local_219: ref null "core:internal/Box<i32>";
-    let __local_220: ref null Formatter;
-    let __local_221: ref null "core:internal/Box<i32>";
-    let __local_222: ref null Formatter;
+    let __local_213: ref String;
+    let __local_214: ref "core:internal/Box<i32>";
+    let __local_215: ref Formatter;
+    let __local_216: ref "core:internal/Box<i32>";
+    let __local_217: ref Formatter;
+    let __local_218: ref String;
+    let __local_219: ref "core:internal/Box<i32>";
+    let __local_220: ref Formatter;
+    let __local_221: ref "core:internal/Box<i32>";
+    let __local_222: ref Formatter;
     let __local_223: i32;
-    let __local_224: ref null String;
-    let __local_225: ref null "core:internal/Box<i32>";
-    let __local_226: ref null Formatter;
-    let __local_227: ref null "core:internal/Box<i32>";
-    let __local_228: ref null Formatter;
-    let __local_229: ref null String;
-    let __local_230: ref null "core:internal/Box<i32>";
-    let __local_231: ref null Formatter;
-    let __local_232: ref null "core:internal/Box<i32>";
-    let __local_233: ref null Formatter;
+    let __local_224: ref String;
+    let __local_225: ref "core:internal/Box<i32>";
+    let __local_226: ref Formatter;
+    let __local_227: ref "core:internal/Box<i32>";
+    let __local_228: ref Formatter;
+    let __local_229: ref String;
+    let __local_230: ref "core:internal/Box<i32>";
+    let __local_231: ref Formatter;
+    let __local_232: ref "core:internal/Box<i32>";
+    let __local_233: ref Formatter;
     let __local_234: i32;
-    let __local_235: ref null String;
-    let __local_236: ref null "core:internal/Box<i32>";
-    let __local_237: ref null Formatter;
-    let __local_238: ref null "core:internal/Box<i32>";
-    let __local_239: ref null Formatter;
+    let __local_235: ref String;
+    let __local_236: ref "core:internal/Box<i32>";
+    let __local_237: ref Formatter;
+    let __local_238: ref "core:internal/Box<i32>";
+    let __local_239: ref Formatter;
     let __local_240: i32;
-    let __local_241: ref null String;
-    let __local_242: ref null "core:internal/Box<i32>";
-    let __local_243: ref null Formatter;
-    let __local_244: ref null "core:internal/Box<i32>";
-    let __local_245: ref null Formatter;
+    let __local_241: ref String;
+    let __local_242: ref "core:internal/Box<i32>";
+    let __local_243: ref Formatter;
+    let __local_244: ref "core:internal/Box<i32>";
+    let __local_245: ref Formatter;
     let __local_246: i32;
-    let __local_247: ref null String;
-    let __local_248: ref null "core:internal/Box<i32>";
-    let __local_249: ref null Formatter;
-    let __local_250: ref null "core:internal/Box<i32>";
-    let __local_251: ref null Formatter;
-    let __local_252: ref null String;
-    let __local_253: ref null "core:internal/Box<i32>";
-    let __local_254: ref null Formatter;
-    let __local_255: ref null "core:internal/Box<i32>";
-    let __local_256: ref null Formatter;
+    let __local_247: ref String;
+    let __local_248: ref "core:internal/Box<i32>";
+    let __local_249: ref Formatter;
+    let __local_250: ref "core:internal/Box<i32>";
+    let __local_251: ref Formatter;
+    let __local_252: ref String;
+    let __local_253: ref "core:internal/Box<i32>";
+    let __local_254: ref Formatter;
+    let __local_255: ref "core:internal/Box<i32>";
+    let __local_256: ref Formatter;
     let __local_257: i32;
-    let __local_258: ref null String;
-    let __local_259: ref null "core:internal/Box<i32>";
-    let __local_260: ref null Formatter;
-    let __local_261: ref null "core:internal/Box<i32>";
-    let __local_262: ref null Formatter;
-    let __local_263: ref null String;
-    let __local_264: ref null "core:internal/Box<i32>";
-    let __local_265: ref null Formatter;
-    let __local_266: ref null "core:internal/Box<i32>";
-    let __local_267: ref null Formatter;
-    let __local_268: ref null String;
-    let __local_269: ref null "core:internal/Box<i32>";
-    let __local_270: ref null Formatter;
-    let __local_271: ref null "core:internal/Box<i32>";
-    let __local_272: ref null Formatter;
-    let __local_273: ref null String;
-    let __local_274: ref null "core:internal/Box<i32>";
-    let __local_275: ref null Formatter;
-    let __local_276: ref null "core:internal/Box<i32>";
-    let __local_277: ref null Formatter;
+    let __local_258: ref String;
+    let __local_259: ref "core:internal/Box<i32>";
+    let __local_260: ref Formatter;
+    let __local_261: ref "core:internal/Box<i32>";
+    let __local_262: ref Formatter;
+    let __local_263: ref String;
+    let __local_264: ref "core:internal/Box<i32>";
+    let __local_265: ref Formatter;
+    let __local_266: ref "core:internal/Box<i32>";
+    let __local_267: ref Formatter;
+    let __local_268: ref String;
+    let __local_269: ref "core:internal/Box<i32>";
+    let __local_270: ref Formatter;
+    let __local_271: ref "core:internal/Box<i32>";
+    let __local_272: ref Formatter;
+    let __local_273: ref String;
+    let __local_274: ref "core:internal/Box<i32>";
+    let __local_275: ref Formatter;
+    let __local_276: ref "core:internal/Box<i32>";
+    let __local_277: ref Formatter;
     let __local_278: i32;
     let __local_279: i32;
     let __local_280: i32;
@@ -648,7 +648,7 @@ fn run() with Stdout {
     __v0_1 = Wrapper::get(w.inner);
     __cond_2 = __v0_1 == 42;
     if __cond_2 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_46 = String { repr: builtin::array_new<u8>(125), used: 0 };
             String::append(__local_46, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_46, 114);
@@ -660,7 +660,7 @@ fn run() with Stdout {
             String::append_char(__local_46, 32);
             String::append(__local_46, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_single_field.wado"), used: 55 });
             String::append_char(__local_46, 58);
-            __local_47 = __inline_Formatter__new_2: block -> ref null Formatter {
+            __local_47 = __inline_Formatter__new_2: block -> ref Formatter {
                 __local_83 = __local_46;
                 break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_83) };
             };
@@ -670,7 +670,7 @@ fn run() with Stdout {
 condition: w.get() == 42
 "), used: 26 });
             String::append(__local_46, String { repr: array.new_data<u8>("w.get(): "), used: 9 });
-            __local_47 = __inline_Formatter__new_5: block -> ref null Formatter {
+            __local_47 = __inline_Formatter__new_5: block -> ref Formatter {
                 __local_88 = __local_46;
                 break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_88) };
             };
@@ -684,7 +684,7 @@ condition: w.get() == 42
     __v0_3 = Wrapper::doubled(w.inner);
     __cond_4 = __v0_3 == 84;
     if __cond_4 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_48 = String { repr: builtin::array_new<u8>(133), used: 0 };
             String::append(__local_48, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_48, 114);
@@ -696,7 +696,7 @@ condition: w.get() == 42
             String::append_char(__local_48, 32);
             String::append(__local_48, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_single_field.wado"), used: 55 });
             String::append_char(__local_48, 58);
-            __local_49 = __inline_Formatter__new_9: block -> ref null Formatter {
+            __local_49 = __inline_Formatter__new_9: block -> ref Formatter {
                 __local_94 = __local_48;
                 break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_94) };
             };
@@ -706,7 +706,7 @@ condition: w.get() == 42
 condition: w.doubled() == 84
 "), used: 30 });
             String::append(__local_48, String { repr: array.new_data<u8>("w.doubled(): "), used: 13 });
-            __local_49 = __inline_Formatter__new_12: block -> ref null Formatter {
+            __local_49 = __inline_Formatter__new_12: block -> ref Formatter {
                 __local_99 = __local_48;
                 break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_99) };
             };
@@ -720,7 +720,7 @@ condition: w.doubled() == 84
     __v0_6 = Amount::as_cents(19.5);
     __cond_7 = __v0_6 == 1950;
     if __cond_7 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_50 = String { repr: builtin::array_new<u8>(137), used: 0 };
             String::append(__local_50, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_50, 114);
@@ -732,7 +732,7 @@ condition: w.doubled() == 84
             String::append_char(__local_50, 32);
             String::append(__local_50, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_single_field.wado"), used: 55 });
             String::append_char(__local_50, 58);
-            __local_51 = __inline_Formatter__new_16: block -> ref null Formatter {
+            __local_51 = __inline_Formatter__new_16: block -> ref Formatter {
                 __local_105 = __local_50;
                 break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_105) };
             };
@@ -742,7 +742,7 @@ condition: w.doubled() == 84
 condition: a.as_cents() == 1950
 "), used: 33 });
             String::append(__local_50, String { repr: array.new_data<u8>("a.as_cents(): "), used: 14 });
-            __local_51 = __inline_Formatter__new_19: block -> ref null Formatter {
+            __local_51 = __inline_Formatter__new_19: block -> ref Formatter {
                 __local_110 = __local_50;
                 break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_110) };
             };
@@ -756,7 +756,7 @@ condition: a.as_cents() == 1950
     __v0_9 = Label::len(String { repr: array.new_data<u8>("hello"), used: 5 });
     __cond_10 = __v0_9 == 5;
     if __cond_10 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_52 = String { repr: builtin::array_new<u8>(124), used: 0 };
             String::append(__local_52, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_52, 114);
@@ -768,7 +768,7 @@ condition: a.as_cents() == 1950
             String::append_char(__local_52, 32);
             String::append(__local_52, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_single_field.wado"), used: 55 });
             String::append_char(__local_52, 58);
-            __local_53 = __inline_Formatter__new_23: block -> ref null Formatter {
+            __local_53 = __inline_Formatter__new_23: block -> ref Formatter {
                 __local_116 = __local_52;
                 break __inline_Formatter__new_23: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_116) };
             };
@@ -778,7 +778,7 @@ condition: a.as_cents() == 1950
 condition: l.len() == 5
 "), used: 25 });
             String::append(__local_52, String { repr: array.new_data<u8>("l.len(): "), used: 9 });
-            __local_53 = __inline_Formatter__new_26: block -> ref null Formatter {
+            __local_53 = __inline_Formatter__new_26: block -> ref Formatter {
                 __local_121 = __local_52;
                 break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_121) };
             };
@@ -792,7 +792,7 @@ condition: l.len() == 5
     __v0_12 = Flag::is_set(1);
     __cond_13 = __v0_12 == 1;
     if __cond_13 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_54 = String { repr: builtin::array_new<u8>(133), used: 0 };
             String::append(__local_54, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_54, 114);
@@ -804,7 +804,7 @@ condition: l.len() == 5
             String::append_char(__local_54, 32);
             String::append(__local_54, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_single_field.wado"), used: 55 });
             String::append_char(__local_54, 58);
-            __local_55 = __inline_Formatter__new_30: block -> ref null Formatter {
+            __local_55 = __inline_Formatter__new_30: block -> ref Formatter {
                 __local_127 = __local_54;
                 break __inline_Formatter__new_30: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_127) };
             };
@@ -814,12 +814,12 @@ condition: l.len() == 5
 condition: f.is_set() == true
 "), used: 31 });
             String::append(__local_54, String { repr: array.new_data<u8>("f.is_set(): "), used: 12 });
-            __local_55 = __inline_Formatter__new_33: block -> ref null Formatter {
+            __local_55 = __inline_Formatter__new_33: block -> ref Formatter {
                 __local_132 = __local_54;
                 break __inline_Formatter__new_33: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_132) };
             };
             __local_134 = __local_55;
-            Formatter::pad(__local_134, if __v0_12 -> ref null String {
+            Formatter::pad(__local_134, if __v0_12 -> ref String {
                 String { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 String { repr: array.new_data<u8>("false"), used: 5 };
@@ -832,7 +832,7 @@ condition: f.is_set() == true
     __v0_15 = Flag::is_set(0);
     __cond_16 = __v0_15 == 0;
     if __cond_16 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_56 = String { repr: builtin::array_new<u8>(136), used: 0 };
             String::append(__local_56, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_56, 114);
@@ -844,7 +844,7 @@ condition: f.is_set() == true
             String::append_char(__local_56, 32);
             String::append(__local_56, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_single_field.wado"), used: 55 });
             String::append_char(__local_56, 58);
-            __local_57 = __inline_Formatter__new_37: block -> ref null Formatter {
+            __local_57 = __inline_Formatter__new_37: block -> ref Formatter {
                 __local_138 = __local_56;
                 break __inline_Formatter__new_37: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_138) };
             };
@@ -854,12 +854,12 @@ condition: f.is_set() == true
 condition: f2.is_set() == false
 "), used: 33 });
             String::append(__local_56, String { repr: array.new_data<u8>("f2.is_set(): "), used: 13 });
-            __local_57 = __inline_Formatter__new_40: block -> ref null Formatter {
+            __local_57 = __inline_Formatter__new_40: block -> ref Formatter {
                 __local_143 = __local_56;
                 break __inline_Formatter__new_40: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_143) };
             };
             __local_145 = __local_57;
-            Formatter::pad(__local_145, if __v0_15 -> ref null String {
+            Formatter::pad(__local_145, if __v0_15 -> ref String {
                 String { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 String { repr: array.new_data<u8>("false"), used: 5 };
@@ -872,7 +872,7 @@ condition: f2.is_set() == false
     __v0_17 = double_wrapper(w.inner);
     __cond_18 = __v0_17 == 84;
     if __cond_18 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_58 = String { repr: builtin::array_new<u8>(147), used: 0 };
             String::append(__local_58, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_58, 114);
@@ -884,7 +884,7 @@ condition: f2.is_set() == false
             String::append_char(__local_58, 32);
             String::append(__local_58, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_single_field.wado"), used: 55 });
             String::append_char(__local_58, 58);
-            __local_59 = __inline_Formatter__new_44: block -> ref null Formatter {
+            __local_59 = __inline_Formatter__new_44: block -> ref Formatter {
                 __local_149 = __local_58;
                 break __inline_Formatter__new_44: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_149) };
             };
@@ -894,7 +894,7 @@ condition: f2.is_set() == false
 condition: double_wrapper(&w) == 84
 "), used: 37 });
             String::append(__local_58, String { repr: array.new_data<u8>("double_wrapper(&w): "), used: 20 });
-            __local_59 = __inline_Formatter__new_47: block -> ref null Formatter {
+            __local_59 = __inline_Formatter__new_47: block -> ref Formatter {
                 __local_154 = __local_58;
                 break __inline_Formatter__new_47: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_154) };
             };
@@ -908,7 +908,7 @@ condition: double_wrapper(&w) == 84
     __v0_19 = triple_wrapper(w.inner);
     __cond_20 = __v0_19 == 126;
     if __cond_20 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_60 = String { repr: builtin::array_new<u8>(148), used: 0 };
             String::append(__local_60, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_60, 114);
@@ -920,7 +920,7 @@ condition: double_wrapper(&w) == 84
             String::append_char(__local_60, 32);
             String::append(__local_60, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_single_field.wado"), used: 55 });
             String::append_char(__local_60, 58);
-            __local_61 = __inline_Formatter__new_51: block -> ref null Formatter {
+            __local_61 = __inline_Formatter__new_51: block -> ref Formatter {
                 __local_160 = __local_60;
                 break __inline_Formatter__new_51: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_160) };
             };
@@ -930,7 +930,7 @@ condition: double_wrapper(&w) == 84
 condition: triple_wrapper(&w) == 126
 "), used: 38 });
             String::append(__local_60, String { repr: array.new_data<u8>("triple_wrapper(&w): "), used: 20 });
-            __local_61 = __inline_Formatter__new_54: block -> ref null Formatter {
+            __local_61 = __inline_Formatter__new_54: block -> ref Formatter {
                 __local_165 = __local_60;
                 break __inline_Formatter__new_54: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_165) };
             };
@@ -944,7 +944,7 @@ condition: triple_wrapper(&w) == 126
     __v0_21 = process_wrapper(w.inner);
     __cond_22 = __v0_21 == 210;
     if __cond_22 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_62 = String { repr: builtin::array_new<u8>(150), used: 0 };
             String::append(__local_62, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_62, 114);
@@ -956,7 +956,7 @@ condition: triple_wrapper(&w) == 126
             String::append_char(__local_62, 32);
             String::append(__local_62, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_single_field.wado"), used: 55 });
             String::append_char(__local_62, 58);
-            __local_63 = __inline_Formatter__new_58: block -> ref null Formatter {
+            __local_63 = __inline_Formatter__new_58: block -> ref Formatter {
                 __local_171 = __local_62;
                 break __inline_Formatter__new_58: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_171) };
             };
@@ -966,7 +966,7 @@ condition: triple_wrapper(&w) == 126
 condition: process_wrapper(&w) == 210
 "), used: 39 });
             String::append(__local_62, String { repr: array.new_data<u8>("process_wrapper(&w): "), used: 21 });
-            __local_63 = __inline_Formatter__new_61: block -> ref null Formatter {
+            __local_63 = __inline_Formatter__new_61: block -> ref Formatter {
                 __local_176 = __local_62;
                 break __inline_Formatter__new_61: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_176) };
             };
@@ -980,7 +980,7 @@ condition: process_wrapper(&w) == 210
     __v0_23 = conditional_wrapper(1);
     __cond_24 = __v0_23 == 10;
     if __cond_24 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_64 = String { repr: builtin::array_new<u8>(161), used: 0 };
             String::append(__local_64, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_64, 114);
@@ -992,7 +992,7 @@ condition: process_wrapper(&w) == 210
             String::append_char(__local_64, 32);
             String::append(__local_64, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_single_field.wado"), used: 55 });
             String::append_char(__local_64, 58);
-            __local_65 = __inline_Formatter__new_65: block -> ref null Formatter {
+            __local_65 = __inline_Formatter__new_65: block -> ref Formatter {
                 __local_182 = __local_64;
                 break __inline_Formatter__new_65: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_182) };
             };
@@ -1002,7 +1002,7 @@ condition: process_wrapper(&w) == 210
 condition: conditional_wrapper(true) == 10
 "), used: 44 });
             String::append(__local_64, String { repr: array.new_data<u8>("conditional_wrapper(true): "), used: 27 });
-            __local_65 = __inline_Formatter__new_68: block -> ref null Formatter {
+            __local_65 = __inline_Formatter__new_68: block -> ref Formatter {
                 __local_187 = __local_64;
                 break __inline_Formatter__new_68: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_187) };
             };
@@ -1016,7 +1016,7 @@ condition: conditional_wrapper(true) == 10
     __v0_25 = conditional_wrapper(0);
     __cond_26 = __v0_25 == 20;
     if __cond_26 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_66 = String { repr: builtin::array_new<u8>(163), used: 0 };
             String::append(__local_66, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_66, 114);
@@ -1028,7 +1028,7 @@ condition: conditional_wrapper(true) == 10
             String::append_char(__local_66, 32);
             String::append(__local_66, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_single_field.wado"), used: 55 });
             String::append_char(__local_66, 58);
-            __local_67 = __inline_Formatter__new_72: block -> ref null Formatter {
+            __local_67 = __inline_Formatter__new_72: block -> ref Formatter {
                 __local_193 = __local_66;
                 break __inline_Formatter__new_72: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_193) };
             };
@@ -1038,7 +1038,7 @@ condition: conditional_wrapper(true) == 10
 condition: conditional_wrapper(false) == 20
 "), used: 45 });
             String::append(__local_66, String { repr: array.new_data<u8>("conditional_wrapper(false): "), used: 28 });
-            __local_67 = __inline_Formatter__new_75: block -> ref null Formatter {
+            __local_67 = __inline_Formatter__new_75: block -> ref Formatter {
                 __local_198 = __local_66;
                 break __inline_Formatter__new_75: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_198) };
             };
@@ -1052,7 +1052,7 @@ condition: conditional_wrapper(false) == 20
     sum = add_amounts(10.5, 20.3);
     __cond_31 = sum == 30.8;
     if __cond_31 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_68 = String { repr: builtin::array_new<u8>(119), used: 0 };
             String::append(__local_68, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_68, 114);
@@ -1064,7 +1064,7 @@ condition: conditional_wrapper(false) == 20
             String::append_char(__local_68, 32);
             String::append(__local_68, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_single_field.wado"), used: 55 });
             String::append_char(__local_68, 58);
-            __local_69 = __inline_Formatter__new_79: block -> ref null Formatter {
+            __local_69 = __inline_Formatter__new_79: block -> ref Formatter {
                 __local_204 = __local_68;
                 break __inline_Formatter__new_79: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_204) };
             };
@@ -1078,7 +1078,7 @@ condition: sum == 30.8
             String::append_char(__local_68, 109);
             String::append_char(__local_68, 58);
             String::append_char(__local_68, 32);
-            __local_69 = __inline_Formatter__new_82: block -> ref null Formatter {
+            __local_69 = __inline_Formatter__new_82: block -> ref Formatter {
                 __local_209 = __local_68;
                 break __inline_Formatter__new_82: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_209) };
             };
@@ -1092,7 +1092,7 @@ condition: sum == 30.8
     __v0_32 = sum_wrappers();
     __cond_33 = __v0_32 == 100;
     if __cond_33 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_70 = String { repr: builtin::array_new<u8>(140), used: 0 };
             String::append(__local_70, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_70, 114);
@@ -1104,7 +1104,7 @@ condition: sum == 30.8
             String::append_char(__local_70, 32);
             String::append(__local_70, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_single_field.wado"), used: 55 });
             String::append_char(__local_70, 58);
-            __local_71 = __inline_Formatter__new_85: block -> ref null Formatter {
+            __local_71 = __inline_Formatter__new_85: block -> ref Formatter {
                 __local_213 = __local_70;
                 break __inline_Formatter__new_85: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_213) };
             };
@@ -1114,7 +1114,7 @@ condition: sum == 30.8
 condition: sum_wrappers() == 100
 "), used: 34 });
             String::append(__local_70, String { repr: array.new_data<u8>("sum_wrappers(): "), used: 16 });
-            __local_71 = __inline_Formatter__new_88: block -> ref null Formatter {
+            __local_71 = __inline_Formatter__new_88: block -> ref Formatter {
                 __local_218 = __local_70;
                 break __inline_Formatter__new_88: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_218) };
             };
@@ -1128,7 +1128,7 @@ condition: sum_wrappers() == 100
     __v0_34 = mixed_single_fields();
     __cond_35 = __v0_34 == 42;
     if __cond_35 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_72 = String { repr: builtin::array_new<u8>(153), used: 0 };
             String::append(__local_72, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_72, 114);
@@ -1140,7 +1140,7 @@ condition: sum_wrappers() == 100
             String::append_char(__local_72, 32);
             String::append(__local_72, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_single_field.wado"), used: 55 });
             String::append_char(__local_72, 58);
-            __local_73 = __inline_Formatter__new_92: block -> ref null Formatter {
+            __local_73 = __inline_Formatter__new_92: block -> ref Formatter {
                 __local_224 = __local_72;
                 break __inline_Formatter__new_92: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_224) };
             };
@@ -1150,7 +1150,7 @@ condition: sum_wrappers() == 100
 condition: mixed_single_fields() == 42
 "), used: 40 });
             String::append(__local_72, String { repr: array.new_data<u8>("mixed_single_fields(): "), used: 23 });
-            __local_73 = __inline_Formatter__new_95: block -> ref null Formatter {
+            __local_73 = __inline_Formatter__new_95: block -> ref Formatter {
                 __local_229 = __local_72;
                 break __inline_Formatter__new_95: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_229) };
             };
@@ -1161,9 +1161,9 @@ condition: mixed_single_fields() == 42
         });
         unreachable;
     };
-    __cond_37 = String^Eq::eq(__tmpl: block -> ref null String {
+    __cond_37 = String^Eq::eq(__tmpl: block -> ref String {
         __local_74 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_75 = __inline_Formatter__new_99: block -> ref null Formatter {
+        __local_75 = __inline_Formatter__new_99: block -> ref Formatter {
             __local_235 = __local_74;
             break __inline_Formatter__new_99: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_235) };
         };
@@ -1172,7 +1172,7 @@ condition: mixed_single_fields() == 42
         break __tmpl: __local_74;
     }, String { repr: array.new_data<u8>("99"), used: 2 });
     if __cond_37 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_76 = String { repr: builtin::array_new<u8>(106), used: 0 };
             String::append(__local_76, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_76, 114);
@@ -1184,7 +1184,7 @@ condition: mixed_single_fields() == 42
             String::append_char(__local_76, 32);
             String::append(__local_76, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_single_field.wado"), used: 55 });
             String::append_char(__local_76, 58);
-            __local_77 = __inline_Formatter__new_103: block -> ref null Formatter {
+            __local_77 = __inline_Formatter__new_103: block -> ref Formatter {
                 __local_241 = __local_76;
                 break __inline_Formatter__new_103: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_241) };
             };
@@ -1202,7 +1202,7 @@ condition: `{w2.inner}` == \"99\"
     __v0_39 = w3.inner;
     __cond_40 = __v0_39 == 77;
     if __cond_40 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_78 = String { repr: builtin::array_new<u8>(127), used: 0 };
             String::append(__local_78, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_78, 114);
@@ -1214,7 +1214,7 @@ condition: `{w2.inner}` == \"99\"
             String::append_char(__local_78, 32);
             String::append(__local_78, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_single_field.wado"), used: 55 });
             String::append_char(__local_78, 58);
-            __local_79 = __inline_Formatter__new_107: block -> ref null Formatter {
+            __local_79 = __inline_Formatter__new_107: block -> ref Formatter {
                 __local_247 = __local_78;
                 break __inline_Formatter__new_107: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_247) };
             };
@@ -1224,7 +1224,7 @@ condition: `{w2.inner}` == \"99\"
 condition: w3.inner == 77
 "), used: 27 });
             String::append(__local_78, String { repr: array.new_data<u8>("w3.inner: "), used: 10 });
-            __local_79 = __inline_Formatter__new_110: block -> ref null Formatter {
+            __local_79 = __inline_Formatter__new_110: block -> ref Formatter {
                 __local_252 = __local_78;
                 break __inline_Formatter__new_110: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_252) };
             };
@@ -1282,13 +1282,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -1350,11 +1350,11 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
 
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from core:internal
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
+    let __local_7: ref String;
+    let __local_8: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -1664,7 +1664,7 @@ fn mul_pow10(p) {
     let __local_2: i32;
     let q: i32;
     let r: i32;
-    let c: ref null PmHiLo;
+    let c: ref PmHiLo;
     let f: u64;
     let borrow: u64;
     let c_hi_raw: u64;
@@ -1746,13 +1746,13 @@ fn uscale(x, pm_hi, pm_lo, s) {
 }
 
 fn fixed_width_for_prec(f, precision) {
-    let unpack: ref null UnpackResult;
+    let unpack: ref UnpackResult;
     let m: u64;
     let e: i32;
     let log10_e63: i32;
     let p1: i32;
     let lp1: i32;
-    let pm1: ref null PmHiLo;
+    let pm1: ref PmHiLo;
     let s1: i32;
     let u1: u64;
     let d1_floor: u64;
@@ -1761,7 +1761,7 @@ fn fixed_width_for_prec(f, precision) {
     let n: i32;
     let p: i32;
     let lp: i32;
-    let pm: ref null PmHiLo;
+    let pm: ref PmHiLo;
     let s: i32;
     let u: u64;
     let d: u64;
@@ -1772,7 +1772,7 @@ fn fixed_width_for_prec(f, precision) {
     let __local_25: i32;
     let __local_26: i32;
     let __local_27: i32;
-    let __local_28: ref null Array<u64>;
+    let __local_28: ref Array<u64>;
     let __local_29: i32;
     let __sroa_unpack_mantissa: u64;
     let __sroa_unpack_exponent: i32;
@@ -1826,7 +1826,7 @@ fn fixed_width_for_prec(f, precision) {
 
 fn short(f) {
     let __local_1: i32;
-    let unpack: ref null UnpackResult;
+    let unpack: ref UnpackResult;
     let m: u64;
     let e: i32;
     let min_m: u64;
@@ -1836,7 +1836,7 @@ fn short(f) {
     let max_m: u64;
     let odd: i32;
     let lp: i32;
-    let pm: ref null PmHiLo;
+    let pm: ref PmHiLo;
     let s: i32;
     let dmin: u64;
     let dmax: u64;
@@ -1845,7 +1845,7 @@ fn short(f) {
     let digits: u64;
     let exponent: i32;
     let d: u64;
-    let __pattern_temp_0: ref null "tuple/[u64, i32]";
+    let __pattern_temp_0: ref "tuple/[u64, i32]";
     let __local_22: i32;
     let __local_23: i32;
     let __local_24: i32;
@@ -1974,7 +1974,7 @@ fn trim_zeros(x, p) {
     d1 = __inline_rotate_right_0: block -> u64 {
         __local_17 = __inline_u64_mul_1: block -> u64 {
             __local_19 = xv;
-            let __let_pattern_0: ref null "tuple/[i64, i64]";
+            let __let_pattern_0: ref "tuple/[i64, i64]";
             __let_pattern_0 = multivalue_struct_new "tuple/[i64, i64]"(i64.mul_wide_u(__local_19, -3689348814741910323_i64));
             __local_21 = __let_pattern_0.0;
             break __inline_u64_mul_1: __local_21;
@@ -1990,7 +1990,7 @@ fn trim_zeros(x, p) {
     d8 = __inline_rotate_right_2: block -> u64 {
         __local_22 = __inline_u64_mul_3: block -> u64 {
             __local_24 = xv;
-            let __let_pattern_1: ref null "tuple/[i64, i64]";
+            let __let_pattern_1: ref "tuple/[i64, i64]";
             __let_pattern_1 = multivalue_struct_new "tuple/[i64, i64]"(i64.mul_wide_u(__local_24, -4078282918271054303_i64));
             __local_26 = __let_pattern_1.0;
             break __inline_u64_mul_3: __local_26;
@@ -2004,7 +2004,7 @@ fn trim_zeros(x, p) {
     d4 = __inline_rotate_right_4: block -> u64 {
         __local_27 = __inline_u64_mul_5: block -> u64 {
             __local_29 = xv;
-            let __let_pattern_2: ref null "tuple/[i64, i64]";
+            let __let_pattern_2: ref "tuple/[i64, i64]";
             __let_pattern_2 = multivalue_struct_new "tuple/[i64, i64]"(i64.mul_wide_u(__local_29, -3276141747490816367_i64));
             __local_31 = __let_pattern_2.0;
             break __inline_u64_mul_5: __local_31;
@@ -2018,7 +2018,7 @@ fn trim_zeros(x, p) {
     d2 = __inline_rotate_right_6: block -> u64 {
         __local_32 = __inline_u64_mul_7: block -> u64 {
             __local_34 = xv;
-            let __let_pattern_3: ref null "tuple/[i64, i64]";
+            let __let_pattern_3: ref "tuple/[i64, i64]";
             __let_pattern_3 = multivalue_struct_new "tuple/[i64, i64]"(i64.mul_wide_u(__local_34, -8116567392432202711_i64));
             __local_36 = __let_pattern_3.0;
             break __inline_u64_mul_7: __local_36;
@@ -2032,7 +2032,7 @@ fn trim_zeros(x, p) {
     d1b = __inline_rotate_right_8: block -> u64 {
         __local_37 = __inline_u64_mul_9: block -> u64 {
             __local_39 = xv;
-            let __let_pattern_4: ref null "tuple/[i64, i64]";
+            let __let_pattern_4: ref "tuple/[i64, i64]";
             __let_pattern_4 = multivalue_struct_new "tuple/[i64, i64]"(i64.mul_wide_u(__local_39, -3689348814741910323_i64));
             __local_41 = __let_pattern_4.0;
             break __inline_u64_mul_9: __local_41;
@@ -2049,10 +2049,10 @@ fn trim_zeros(x, p) {
 fn write_digits_at(buf, offset, val, nd) {
     let v: u64;
     let idx: i32;
-    let __local_6: ref null String;
+    let __local_6: ref String;
     let index: i32;
     let value: u8;
-    let _licm_repr_9: ref null array<u8>;
+    let _licm_repr_9: ref array<u8>;
     v = val;
     idx = (offset + nd) - 1;
     _licm_repr_9 = buf.repr;
@@ -2076,22 +2076,22 @@ fn write_decimal(buf, d, p, nd) {
     let digit_offset: i32;
     let start_6: i32;
     let start_7: i32;
-    let raw: ref null array<u8>;
-    let __local_9: ref null String;
+    let raw: ref array<u8>;
+    let __local_9: ref String;
     let n_10: i32;
-    let __local_11: ref null String;
-    let __local_12: ref null String;
+    let __local_11: ref String;
+    let __local_12: ref String;
     let __local_13: i32;
-    let __local_14: ref null String;
-    let __local_15: ref null String;
+    let __local_14: ref String;
+    let __local_15: ref String;
     let __local_16: i32;
-    let __local_17: ref null String;
+    let __local_17: ref String;
     let n_18: i32;
-    let __local_19: ref null String;
-    let __local_20: ref null String;
+    let __local_19: ref String;
+    let __local_20: ref String;
     let n_21: i32;
-    let __local_22: ref null String;
-    let __local_23: ref null String;
+    let __local_22: ref String;
+    let __local_23: ref String;
     let index: i32;
     let __local_25: u8;
     decimal_pos = nd + p;
@@ -2124,18 +2124,18 @@ fn write_decimal(buf, d, p, nd) {
 fn write_exp(buf, d, p, nd, upper) {
     let exp: i32;
     let start_6: i32;
-    let raw: ref null array<u8>;
+    let raw: ref array<u8>;
     let start_8: i32;
     let abs_exp: i32;
-    let __local_10: ref null String;
-    let __local_11: ref null String;
+    let __local_10: ref String;
+    let __local_11: ref String;
     let n: i32;
-    let __local_13: ref null String;
-    let __local_14: ref null String;
+    let __local_13: ref String;
+    let __local_14: ref String;
     let index: i32;
     let __local_16: u8;
-    let __local_17: ref null String;
-    let __local_18: ref null String;
+    let __local_17: ref String;
+    let __local_18: ref String;
     let __local_19: i32;
     let __local_20: u32;
     let __local_21: i32;
@@ -2162,7 +2162,7 @@ fn write_exp(buf, d, p, nd, upper) {
         String::append_byte_filled(buf, 48, 1);
         write_digits_at(buf, start_8, d, 1);
     };
-    String::append(buf, if upper -> ref null String {
+    String::append(buf, if upper -> ref String {
         String { repr: array.new_data<u8>("E"), used: 1 };
     } else {
         String { repr: array.new_data<u8>("e"), used: 1 };
@@ -2229,41 +2229,41 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
     let skip_17: i32;
     let total: i32;
     let start_19: i32;
-    let raw_20: ref null array<u8>;
+    let raw_20: ref array<u8>;
     let trailing_21: i32;
     let start_22: i32;
-    let raw_23: ref null array<u8>;
-    let __local_24: ref null String;
+    let raw_23: ref array<u8>;
+    let __local_24: ref String;
     let __local_25: i32;
-    let __local_26: ref null String;
+    let __local_26: ref String;
     let __local_27: i32;
-    let __local_28: ref null String;
-    let __local_29: ref null String;
+    let __local_28: ref String;
+    let __local_29: ref String;
     let __local_30: i32;
-    let __local_31: ref null String;
+    let __local_31: ref String;
     let __local_32: i32;
-    let __local_33: ref null String;
-    let __local_34: ref null String;
+    let __local_33: ref String;
+    let __local_34: ref String;
     let __local_35: i32;
-    let __local_36: ref null String;
+    let __local_36: ref String;
     let n_37: i32;
-    let __local_38: ref null String;
+    let __local_38: ref String;
     let __local_39: i32;
-    let __local_40: ref null String;
-    let __local_41: ref null String;
+    let __local_40: ref String;
+    let __local_41: ref String;
     let __local_42: i32;
-    let __local_43: ref null String;
-    let __local_44: ref null String;
+    let __local_43: ref String;
+    let __local_44: ref String;
     let index_45: i32;
     let __local_46: u8;
-    let __local_47: ref null String;
-    let __local_48: ref null String;
+    let __local_47: ref String;
+    let __local_48: ref String;
     let n_49: i32;
-    let __local_50: ref null String;
-    let __local_51: ref null String;
+    let __local_50: ref String;
+    let __local_51: ref String;
     let index_52: i32;
     let __local_53: u8;
-    let __local_54: ref null String;
+    let __local_54: ref String;
     let __local_55: i32;
     if precision < 0 {
         write_decimal(buf, d, p, nd);
@@ -2370,51 +2370,51 @@ fn check_special(f) {
 }
 
 fn __initialize_module() {
-    let __local_0: ref null Array<u64>;
+    let __local_0: ref Array<u64>;
     let __local_1: i32;
-    let __local_2: ref null Array<u64>;
+    let __local_2: ref Array<u64>;
     let __local_3: u64;
-    let __local_4: ref null Array<u64>;
+    let __local_4: ref Array<u64>;
     let __local_5: u64;
-    let __local_6: ref null Array<u64>;
+    let __local_6: ref Array<u64>;
     let __local_7: u64;
-    let __local_8: ref null Array<u64>;
+    let __local_8: ref Array<u64>;
     let __local_9: u64;
-    let __local_10: ref null Array<u64>;
+    let __local_10: ref Array<u64>;
     let __local_11: u64;
-    let __local_12: ref null Array<u64>;
+    let __local_12: ref Array<u64>;
     let __local_13: u64;
-    let __local_14: ref null Array<u64>;
+    let __local_14: ref Array<u64>;
     let __local_15: u64;
-    let __local_16: ref null Array<u64>;
+    let __local_16: ref Array<u64>;
     let __local_17: u64;
-    let __local_18: ref null Array<u64>;
+    let __local_18: ref Array<u64>;
     let __local_19: u64;
-    let __local_20: ref null Array<u64>;
+    let __local_20: ref Array<u64>;
     let __local_21: u64;
-    let __local_22: ref null Array<u64>;
+    let __local_22: ref Array<u64>;
     let __local_23: u64;
-    let __local_24: ref null Array<u64>;
+    let __local_24: ref Array<u64>;
     let __local_25: u64;
-    let __local_26: ref null Array<u64>;
+    let __local_26: ref Array<u64>;
     let __local_27: u64;
-    let __local_28: ref null Array<u64>;
+    let __local_28: ref Array<u64>;
     let __local_29: u64;
-    let __local_30: ref null Array<u64>;
+    let __local_30: ref Array<u64>;
     let __local_31: u64;
-    let __local_32: ref null Array<u64>;
+    let __local_32: ref Array<u64>;
     let __local_33: u64;
-    let __local_34: ref null Array<u64>;
+    let __local_34: ref Array<u64>;
     let __local_35: u64;
-    let __local_36: ref null Array<u64>;
+    let __local_36: ref Array<u64>;
     let __local_37: u64;
-    let __local_38: ref null Array<u64>;
+    let __local_38: ref Array<u64>;
     let __local_39: u64;
-    let __local_40: ref null Array<u64>;
+    let __local_40: ref Array<u64>;
     let __local_41: u64;
-    let __local_42: ref null Array<u64>;
+    let __local_42: ref Array<u64>;
     let __local_43: i32;
-    POW10 = __seq_lit: block -> ref null Array<u64> {
+    POW10 = __seq_lit: block -> ref Array<u64> {
         __local_0 = Array<u64> { repr: array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64), used: 20 };
         break __seq_lit: __local_0;
     };
@@ -2473,8 +2473,8 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
 
 fn fmt_float_special(f, is_neg, kind, zero_repr) {
     let mark: i32;
-    let __local_5: ref null Formatter;
-    let __local_6: ref null String;
+    let __local_5: ref Formatter;
+    let __local_6: ref String;
     mark = __inline_String__len_1: block -> i32 {
         __local_6 = f.buf;
         break __inline_String__len_1: __local_6.used;
@@ -2484,13 +2484,13 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
         String::append_char(f.buf, 97);
         String::append_char(f.buf, 78);
     } else if kind == 2 {
-        String::append(f.buf, if is_neg -> ref null String {
+        String::append(f.buf, if is_neg -> ref String {
             String { repr: array.new_data<u8>("-inf"), used: 4 };
         } else {
             String { repr: array.new_data<u8>("inf"), used: 3 };
         });
     } else {
-        String::append(f.buf, if is_neg -> ref null String {
+        String::append(f.buf, if is_neg -> ref String {
             String { repr: array.new_data<u8>("-"), used: 1 };
         } else {
             String { repr: builtin::array_new<u8>(0), used: 0 };
@@ -2512,7 +2512,7 @@ fn Array<u64>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u64>;
+    let new_repr: ref array<u64>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;
@@ -2535,7 +2535,7 @@ fn i32::fmt_decimal(self, f) {
     let abs_val: i64;
     let digit_count: i32;
     let offset: i32;
-    let __local_6: ref null String;
+    let __local_6: ref String;
     is_negative = self < 0;
     abs_val = if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
@@ -2544,7 +2544,7 @@ fn i32::fmt_decimal(self, f) {
     };
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref null array<u8> {
+    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
     }, offset, abs_val, digit_count);
@@ -2556,21 +2556,21 @@ fn f64::inspect_into(self, f) {
     let is_neg: bool;
     let kind: enum:SpecialKind;
     let abs_f: f64;
-    let result: ref null FormatResult;
+    let result: ref FormatResult;
     let d: u64;
     let p: i32;
     let nd: i32;
     let exp: i32;
     let mark: i32;
-    let __pattern_temp_0: ref null "tuple/[bool, bool, SpecialKind]";
+    let __pattern_temp_0: ref "tuple/[bool, bool, SpecialKind]";
     let __local_14: u64;
     let __local_15: i32;
     let __local_16: i32;
     let __local_17: u64;
     let __local_18: i32;
-    let __local_19: ref null Formatter;
-    let __local_20: ref null String;
-    let __local_21: ref null Array<u64>;
+    let __local_19: ref Formatter;
+    let __local_20: ref String;
+    let __local_21: ref Array<u64>;
     let __local_22: i32;
     if f.precision >= 0 {
         f64::fmt_fixed(self, f.precision, f);
@@ -2641,22 +2641,22 @@ fn f64::fmt_fixed(self, precision, f) {
     let kind: enum:SpecialKind;
     let mark_7: i32;
     let abs_f: f64;
-    let result: ref null FormatResult;
+    let result: ref FormatResult;
     let d: u64;
     let p: i32;
     let nd: i32;
     let mark_13: i32;
-    let __pattern_temp_0: ref null "tuple/[bool, bool, SpecialKind]";
-    let __local_15: ref null Formatter;
-    let __local_16: ref null String;
+    let __pattern_temp_0: ref "tuple/[bool, bool, SpecialKind]";
+    let __local_15: ref Formatter;
+    let __local_16: ref String;
     let __local_17: u64;
     let __local_18: i32;
     let __local_19: i32;
     let __local_20: u64;
     let __local_21: i32;
-    let __local_22: ref null Formatter;
-    let __local_23: ref null String;
-    let __local_24: ref null Array<u64>;
+    let __local_22: ref Formatter;
+    let __local_23: ref String;
+    let __local_24: ref Array<u64>;
     let __local_25: i32;
     value = self;
     let __sroa___pattern_temp_0_0: bool;
@@ -2734,7 +2734,7 @@ fn f64::fmt_fixed(self, precision, f) {
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -2783,8 +2783,8 @@ fn String::append_byte_filled(self, byte, n) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -2800,13 +2800,13 @@ fn String::append(self, other) {
 fn String^Eq::eq(self, other) {
     let len_a: i32;
     let len_b: i32;
-    let a_repr: ref null array<u8>;
-    let b_repr: ref null array<u8>;
+    let a_repr: ref array<u8>;
+    let b_repr: ref array<u8>;
     let i: i32;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_7: ref String;
+    let __local_8: ref String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len_a = self.used;
     len_b = other.used;
     if len_a != len_b {
@@ -2876,7 +2876,7 @@ fn Amount::as_cents(self) {
 }
 
 fn Label::len(self) {
-    let __local_1: ref null String;
+    let __local_1: ref String;
     return __inline_String__len_0: block -> i32 {
         __local_1 = self;
         break __inline_String__len_0: __local_1.used;
@@ -2889,7 +2889,7 @@ fn Flag::is_set(self) {
 
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
-    let _licm_buf_4: ref null String;
+    let _licm_buf_4: ref String;
     __for_0: block {
         i = 0;
         _licm_buf_4 = self.buf;
@@ -2912,7 +2912,7 @@ fn Formatter::pad(self, content) {
     let align: enum:Alignment;
     let left_pad: i32;
     let right_pad: i32;
-    let __local_7: ref null String;
+    let __local_7: ref String;
     content_len = content.used;
     if if self.width <= 0 -> i32 {
         1;
@@ -2950,31 +2950,31 @@ fn Formatter::apply_padding(self, start_pos) {
     let j_9: i32;
     let i_10: i32;
     let j_11: i32;
-    let __local_12: ref null String;
-    let __local_13: ref null String;
+    let __local_12: ref String;
+    let __local_13: ref String;
     let index_14: i32;
     let value_15: u8;
-    let __local_16: ref null String;
+    let __local_16: ref String;
     let __local_17: i32;
-    let __local_18: ref null String;
+    let __local_18: ref String;
     let index_19: i32;
     let __local_20: u8;
-    let __local_21: ref null String;
+    let __local_21: ref String;
     let index_22: i32;
     let value_23: u8;
-    let __local_24: ref null String;
+    let __local_24: ref String;
     let __local_25: i32;
-    let __local_26: ref null String;
+    let __local_26: ref String;
     let index_27: i32;
     let __local_28: u8;
-    let _licm_buf_29: ref null String;
-    let _licm_buf_30: ref null String;
-    let _licm_buf_31: ref null String;
-    let _licm_buf_32: ref null String;
-    let _licm_repr_33: ref null array<u8>;
-    let _licm_repr_34: ref null array<u8>;
-    let _licm_repr_35: ref null array<u8>;
-    let _licm_repr_36: ref null array<u8>;
+    let _licm_buf_29: ref String;
+    let _licm_buf_30: ref String;
+    let _licm_buf_31: ref String;
+    let _licm_buf_32: ref String;
+    let _licm_repr_33: ref array<u8>;
+    let _licm_repr_34: ref array<u8>;
+    let _licm_repr_35: ref array<u8>;
+    let _licm_repr_36: ref array<u8>;
     content_len = __inline_String__len_0: block -> i32 {
         __local_12 = self.buf;
         break __inline_String__len_0: __local_12.used;
@@ -3070,7 +3070,7 @@ fn Formatter::apply_padding(self, start_pos) {
 }
 
 fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
-    let sign: ref null String;
+    let sign: ref String;
     let sign_len: i32;
     let prefix_len: i32;
     let content_len: i32;
@@ -3080,8 +3080,8 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
-    let __local_14: ref null String;
-    let __local_15: ref null String;
+    let __local_14: ref String;
+    let __local_15: ref String;
     sign = String { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };

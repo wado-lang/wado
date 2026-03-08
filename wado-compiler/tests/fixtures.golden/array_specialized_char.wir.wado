@@ -88,31 +88,31 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/char^Display::fmt" = fn(ref null "core:internal/Box<char>", ref null Formatter);
+type "functype/char^Display::fmt" = fn(ref "core:internal/Box<char>", ref Formatter);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref null String, char);
+type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/ArrayIter<char>^Iterator::next" = fn(ref null ArrayIter<char>) -> ref null Option<char>;
+type "functype/ArrayIter<char>^Iterator::next" = fn(ref ArrayIter<char>) -> ref Option<char>;
 
-type "functype/Array<char>::append" = fn(ref null Array<char>, char);
+type "functype/Array<char>::append" = fn(ref Array<char>, char);
 
-type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
+type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
-type "functype/Formatter::pad" = fn(ref null Formatter, ref null String);
+type "functype/Formatter::pad" = fn(ref Formatter, ref String);
 
-type "functype/ArrayIter<char>^Iterator::next" = fn(ref null ArrayIter<char>) -> [i32, char];
+type "functype/ArrayIter<char>^Iterator::next" = fn(ref ArrayIter<char>) -> [i32, char];
 
-type "functype/char^Display::fmt" = fn(char, ref null Formatter);
+type "functype/char^Display::fmt" = fn(char, ref Formatter);
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -130,19 +130,19 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let __local_0: ref null Array<char>;
-    let arr: ref null Array<char>;
-    let __iter_0: ref null ArrayIter<char>;
+    let __local_0: ref Array<char>;
+    let arr: ref Array<char>;
+    let __iter_0: ref ArrayIter<char>;
     let x: char;
-    let __local_4: ref null String;
-    let __local_5: ref null Formatter;
-    let __pattern_temp_0: ref null Option<char>;
-    let __local_7: ref null Array<u64>;
+    let __local_4: ref String;
+    let __local_5: ref Formatter;
+    let __pattern_temp_0: ref Option<char>;
+    let __local_7: ref Array<u64>;
     let __local_8: i32;
-    let __local_9: ref null Array<char>;
-    let __local_10: ref null Array<char>;
+    let __local_9: ref Array<char>;
+    let __local_10: ref Array<char>;
     let __local_11: i32;
-    let __local_12: ref null String;
+    let __local_12: ref String;
     let __local_13: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -150,7 +150,7 @@ fn run() with Stdout {
         };
         __modules_initialized = 1;
     };
-    arr = __seq_lit: block -> ref null Array<char> {
+    arr = __seq_lit: block -> ref Array<char> {
         __local_0 = Array<char> { repr: builtin::array_new<char>(0), used: 0 };
         break __seq_lit: __local_0;
     };
@@ -165,9 +165,9 @@ fn run() with Stdout {
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<char>^Iterator::next(__iter_0);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 x = __sroa___pattern_temp_0_payload_0;
-                "core:cli/println"(__tmpl: block -> ref null String {
+                "core:cli/println"(__tmpl: block -> ref String {
                     __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
-                    __local_5 = __inline_Formatter__new_6: block -> ref null Formatter {
+                    __local_5 = __inline_Formatter__new_6: block -> ref Formatter {
                         __local_12 = __local_4;
                         break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
                     };
@@ -226,13 +226,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -291,8 +291,8 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
 }
 
 fn char^Display::fmt(self, f) {
-    let s: ref null String;
-    let __local_3: ref null Formatter;
+    let s: ref String;
+    let __local_3: ref Formatter;
     let c: char;
     let __local_5: i32;
     if f.width <= 0 {
@@ -308,7 +308,7 @@ fn char^Display::fmt(self, f) {
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -332,8 +332,8 @@ fn String::grow(self, min_capacity) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -387,7 +387,7 @@ fn Array<char>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<char>;
+    let new_repr: ref array<char>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;
@@ -407,7 +407,7 @@ fn Array<char>::append(self, value) {
 
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
-    let _licm_buf_4: ref null String;
+    let _licm_buf_4: ref String;
     __for_0: block {
         i = 0;
         _licm_buf_4 = self.buf;
@@ -430,7 +430,7 @@ fn Formatter::pad(self, content) {
     let align: enum:Alignment;
     let left_pad: i32;
     let right_pad: i32;
-    let __local_7: ref null String;
+    let __local_7: ref String;
     content_len = content.used;
     if if self.width <= 0 -> i32 {
         1;

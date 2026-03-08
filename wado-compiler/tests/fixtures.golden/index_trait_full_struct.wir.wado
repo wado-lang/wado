@@ -74,43 +74,43 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
 type "functype/count_digits_i64" = fn(i64) -> i32;
 
-type "functype/write_decimal_digits" = fn(ref null array<u8>, i32, i64, i32);
+type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/i32::fmt_decimal" = fn(ref null "core:internal/Box<i32>", ref null Formatter);
+type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::internal_reserve_uninit" = fn(ref null String, i32) -> i32;
+type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref null String, char);
+type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/Value::describe" = fn(ref null Value) -> ref null String;
+type "functype/Value::describe" = fn(ref Value) -> ref String;
 
-type "functype/Container::stats" = fn(ref null Container) -> ref null String;
+type "functype/Container::stats" = fn(ref Container) -> ref String;
 
-type "functype/Container::total" = fn(ref null Container) -> i32;
+type "functype/Container::total" = fn(ref Container) -> i32;
 
-type "functype/Container^Index::index" = fn(ref null Container, i32) -> ref null Value;
+type "functype/Container^Index::index" = fn(ref Container, i32) -> ref Value;
 
-type "functype/Container^IndexMut::index_mut" = fn(ref null Container, i32) -> ref null Value;
+type "functype/Container^IndexMut::index_mut" = fn(ref Container, i32) -> ref Value;
 
-type "functype/Container^IndexAssign::index_assign" = fn(ref null Container, i32, ref null Value);
+type "functype/Container^IndexAssign::index_assign" = fn(ref Container, i32, ref Value);
 
-type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
+type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
-type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref null String, i32) -> i32;
+type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
 
-type "functype/i32::fmt_decimal" = fn(i32, ref null Formatter);
+type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -128,54 +128,54 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let c: ref null Container;
-    let v0: ref null Value;
-    let v1: ref null Value;
-    let __local_3: ref null String;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
-    let __local_6: ref null String;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
-    let __local_9: ref null String;
-    let __local_10: ref null Formatter;
-    let __local_11: ref null String;
-    let __local_12: ref null String;
-    let __local_13: ref null String;
-    let __local_14: ref null Array<u64>;
+    let c: ref Container;
+    let v0: ref Value;
+    let v1: ref Value;
+    let __local_3: ref String;
+    let __local_4: ref String;
+    let __local_5: ref String;
+    let __local_6: ref String;
+    let __local_7: ref String;
+    let __local_8: ref String;
+    let __local_9: ref String;
+    let __local_10: ref Formatter;
+    let __local_11: ref String;
+    let __local_12: ref String;
+    let __local_13: ref String;
+    let __local_14: ref Array<u64>;
     let __local_15: i32;
-    let __local_16: ref null String;
+    let __local_16: ref String;
     let __local_17: i32;
-    let __local_18: ref null String;
+    let __local_18: ref String;
     let __local_19: i32;
-    let __local_20: ref null String;
-    let __local_21: ref null Value;
-    let __local_22: ref null Value;
-    let __local_23: ref null Value;
+    let __local_20: ref String;
+    let __local_21: ref Value;
+    let __local_22: ref Value;
+    let __local_23: ref Value;
     let __local_24: i32;
     let __local_25: i32;
-    let self_26: ref null Value;
-    let self_27: ref null Value;
+    let self_26: ref Value;
+    let self_27: ref Value;
     let __local_28: i32;
-    let self_29: ref null Value;
+    let self_29: ref Value;
     let __local_30: i32;
     let __local_31: i32;
     let __local_32: i32;
     let __local_33: i32;
     let __local_34: i32;
-    let __local_35: ref null String;
+    let __local_35: ref String;
     let __local_36: i32;
     let __local_37: i32;
-    let __local_38: ref null String;
-    let __local_39: ref null "core:internal/Box<i32>";
-    let __local_40: ref null Formatter;
-    let __local_41: ref null "core:internal/Box<i32>";
-    let __local_42: ref null Formatter;
+    let __local_38: ref String;
+    let __local_39: ref "core:internal/Box<i32>";
+    let __local_40: ref Formatter;
+    let __local_41: ref "core:internal/Box<i32>";
+    let __local_42: ref Formatter;
     let __local_43: i32;
-    let __local_44: ref null Container;
+    let __local_44: ref Container;
     let __local_45: i32;
-    let self_46: ref null Value;
-    let self_47: ref null Value;
+    let self_46: ref Value;
+    let self_47: ref Value;
     let __local_48: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -183,23 +183,23 @@ fn run() with Stdout {
         };
         __modules_initialized = 1;
     };
-    c = __inline_Container__from_values_5: block -> ref null Container {
-        __local_21 = __inline_Value__new_2: block -> ref null Value {
+    c = __inline_Container__from_values_5: block -> ref Container {
+        __local_21 = __inline_Value__new_2: block -> ref Value {
             __local_16 = String { repr: array.new_data<u8>("a"), used: 1 };
             break __inline_Value__new_2: Value { n: 10, tag: ref.as_non_null(__local_16) };
         };
-        __local_22 = __inline_Value__new_3: block -> ref null Value {
+        __local_22 = __inline_Value__new_3: block -> ref Value {
             __local_18 = String { repr: array.new_data<u8>("b"), used: 1 };
             break __inline_Value__new_3: Value { n: 20, tag: ref.as_non_null(__local_18) };
         };
-        __local_23 = __inline_Value__new_4: block -> ref null Value {
+        __local_23 = __inline_Value__new_4: block -> ref Value {
             __local_20 = String { repr: array.new_data<u8>("c"), used: 1 };
             break __inline_Value__new_4: Value { n: 30, tag: ref.as_non_null(__local_20) };
         };
         break __inline_Container__from_values_5: Container { v0: ref.as_non_null(__local_21), v1: ref.as_non_null(__local_22), v2: ref.as_non_null(__local_23), read_count: 0, write_count: 0 };
     };
     v0 = Container^Index::index(c, 0);
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(20), used: 0 };
         String::append_char(__local_3, 118);
         String::append_char(__local_3, 48);
@@ -209,7 +209,7 @@ fn run() with Stdout {
         break __tmpl: __local_3;
     });
     v1 = Container^Index::index(c, 1);
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(20), used: 0 };
         String::append_char(__local_4, 118);
         String::append_char(__local_4, 49);
@@ -225,7 +225,7 @@ fn run() with Stdout {
     self_29 = Container^IndexMut::index_mut(c, 2);
     self_29.n = self_29.n + 200;
     "core:cli/println"(String { repr: array.new_data<u8>("After mutations:"), used: 16 });
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_5 = String { repr: builtin::array_new<u8>(20), used: 0 };
         String::append_char(__local_5, 118);
         String::append_char(__local_5, 48);
@@ -234,7 +234,7 @@ fn run() with Stdout {
         String::append(__local_5, Value::describe(c.v0));
         break __tmpl: __local_5;
     });
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_6 = String { repr: builtin::array_new<u8>(20), used: 0 };
         String::append_char(__local_6, 118);
         String::append_char(__local_6, 49);
@@ -243,7 +243,7 @@ fn run() with Stdout {
         String::append(__local_6, Value::describe(c.v1));
         break __tmpl: __local_6;
     });
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_7 = String { repr: builtin::array_new<u8>(20), used: 0 };
         String::append_char(__local_7, 118);
         String::append_char(__local_7, 50);
@@ -252,17 +252,17 @@ fn run() with Stdout {
         String::append(__local_7, Value::describe(c.v2));
         break __tmpl: __local_7;
     });
-    Container^IndexAssign::index_assign(c, 2, __inline_Value__new_14: block -> ref null Value {
+    Container^IndexAssign::index_assign(c, 2, __inline_Value__new_14: block -> ref Value {
         __local_35 = String { repr: array.new_data<u8>("replaced"), used: 8 };
         break __inline_Value__new_14: Value { n: 999, tag: ref.as_non_null(__local_35) };
     });
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_8 = String { repr: builtin::array_new<u8>(31), used: 0 };
         String::append(__local_8, String { repr: array.new_data<u8>("After replace: "), used: 15 });
         String::append(__local_8, Value::describe(c.v2));
         break __tmpl: __local_8;
     });
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_9 = String { repr: builtin::array_new<u8>(23), used: 0 };
         String::append_char(__local_9, 84);
         String::append_char(__local_9, 111);
@@ -271,7 +271,7 @@ fn run() with Stdout {
         String::append_char(__local_9, 108);
         String::append_char(__local_9, 58);
         String::append_char(__local_9, 32);
-        __local_10 = __inline_Formatter__new_17: block -> ref null Formatter {
+        __local_10 = __inline_Formatter__new_17: block -> ref Formatter {
             __local_38 = __local_9;
             break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_38) };
         };
@@ -279,7 +279,7 @@ fn run() with Stdout {
         i32::fmt_decimal(Container::total(c), __local_40);
         break __tmpl: __local_9;
     });
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_11 = String { repr: builtin::array_new<u8>(23), used: 0 };
         String::append_char(__local_11, 83);
         String::append_char(__local_11, 116);
@@ -293,7 +293,7 @@ fn run() with Stdout {
     });
     c.read_count = 0;
     c.write_count = 0;
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_12 = String { repr: builtin::array_new<u8>(29), used: 0 };
         String::append(__local_12, String { repr: array.new_data<u8>("After reset: "), used: 13 });
         String::append(__local_12, Container::stats(c));
@@ -303,7 +303,7 @@ fn run() with Stdout {
     self_46.n = self_46.n + 1;
     self_47 = Container^IndexMut::index_mut(c, 1);
     self_47.n = self_47.n + 1;
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_13 = String { repr: builtin::array_new<u8>(29), used: 0 };
         String::append(__local_13, String { repr: array.new_data<u8>("Final stats: "), used: 13 });
         String::append(__local_13, Container::stats(c));
@@ -355,13 +355,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -475,7 +475,7 @@ fn i32::fmt_decimal(self, f) {
     let abs_val: i64;
     let digit_count: i32;
     let offset: i32;
-    let __local_6: ref null String;
+    let __local_6: ref String;
     is_negative = self < 0;
     abs_val = if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
@@ -484,7 +484,7 @@ fn i32::fmt_decimal(self, f) {
     };
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref null array<u8> {
+    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
     }, offset, abs_val, digit_count);
@@ -493,7 +493,7 @@ fn i32::fmt_decimal(self, f) {
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -529,8 +529,8 @@ fn String::internal_reserve_uninit(self, n) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -571,19 +571,19 @@ fn String::append_char(self, c) {
 }
 
 fn Value::describe(self) {
-    let __local_1: ref null String;
-    let __local_2: ref null Formatter;
+    let __local_1: ref String;
+    let __local_2: ref Formatter;
     let __local_3: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null "core:internal/Box<i32>";
-    let __local_6: ref null Formatter;
-    let __local_7: ref null "core:internal/Box<i32>";
-    let __local_8: ref null Formatter;
-    return __tmpl: block -> ref null String {
+    let __local_4: ref String;
+    let __local_5: ref "core:internal/Box<i32>";
+    let __local_6: ref Formatter;
+    let __local_7: ref "core:internal/Box<i32>";
+    let __local_8: ref Formatter;
+    return __tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(33), used: 0 };
         String::append(__local_1, self.tag);
         String::append_char(__local_1, 58);
-        __local_2 = __inline_Formatter__new_1: block -> ref null Formatter {
+        __local_2 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_4 = __local_1;
             break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_4) };
         };
@@ -594,20 +594,20 @@ fn Value::describe(self) {
 }
 
 fn Container::stats(self) {
-    let __local_1: ref null String;
-    let __local_2: ref null Formatter;
+    let __local_1: ref String;
+    let __local_2: ref Formatter;
     let __local_3: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null "core:internal/Box<i32>";
-    let __local_6: ref null Formatter;
-    let __local_7: ref null "core:internal/Box<i32>";
-    let __local_8: ref null Formatter;
-    let __local_9: ref null String;
-    let __local_10: ref null "core:internal/Box<i32>";
-    let __local_11: ref null Formatter;
-    let __local_12: ref null "core:internal/Box<i32>";
-    let __local_13: ref null Formatter;
-    return __tmpl: block -> ref null String {
+    let __local_4: ref String;
+    let __local_5: ref "core:internal/Box<i32>";
+    let __local_6: ref Formatter;
+    let __local_7: ref "core:internal/Box<i32>";
+    let __local_8: ref Formatter;
+    let __local_9: ref String;
+    let __local_10: ref "core:internal/Box<i32>";
+    let __local_11: ref Formatter;
+    let __local_12: ref "core:internal/Box<i32>";
+    let __local_13: ref Formatter;
+    return __tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(47), used: 0 };
         String::append_char(__local_1, 114);
         String::append_char(__local_1, 101);
@@ -615,14 +615,14 @@ fn Container::stats(self) {
         String::append_char(__local_1, 100);
         String::append_char(__local_1, 115);
         String::append_char(__local_1, 61);
-        __local_2 = __inline_Formatter__new_1: block -> ref null Formatter {
+        __local_2 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_4 = __local_1;
             break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_4) };
         };
         __local_6 = __local_2;
         i32::fmt_decimal(self.read_count, __local_6);
         String::append(__local_1, String { repr: array.new_data<u8>(", writes="), used: 9 });
-        __local_2 = __inline_Formatter__new_4: block -> ref null Formatter {
+        __local_2 = __inline_Formatter__new_4: block -> ref Formatter {
             __local_9 = __local_1;
             break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_9) };
         };
@@ -670,7 +670,7 @@ fn Container^IndexAssign::index_assign(self, idx, value) {
 
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
-    let _licm_buf_4: ref null String;
+    let _licm_buf_4: ref String;
     __for_0: block {
         i = 0;
         _licm_buf_4 = self.buf;
@@ -688,7 +688,7 @@ fn Formatter::write_char_n(self, c, n) {
 }
 
 fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
-    let sign: ref null String;
+    let sign: ref String;
     let sign_len: i32;
     let prefix_len: i32;
     let content_len: i32;
@@ -698,8 +698,8 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
-    let __local_14: ref null String;
-    let __local_15: ref null String;
+    let __local_14: ref String;
+    let __local_15: ref String;
     sign = String { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };

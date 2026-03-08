@@ -75,43 +75,43 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref null array<u8>, i32, i32);
+type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
-type "functype/core:internal/write_string_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/core:internal/log_stderr" = fn(ref null String);
+type "functype/core:internal/log_stderr" = fn(ref String);
 
-type "functype/core:internal/panic" = fn(ref null String);
+type "functype/core:internal/panic" = fn(ref String);
 
 type "functype/count_digits_i64" = fn(i64) -> i32;
 
-type "functype/write_decimal_digits" = fn(ref null array<u8>, i32, i64, i32);
+type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/i32::fmt_decimal" = fn(ref null "core:internal/Box<i32>", ref null Formatter);
+type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::internal_reserve_uninit" = fn(ref null String, i32) -> i32;
+type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref null String, char);
+type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/Option<i32>^Inspect::inspect" = fn(ref null "core:internal/Box<Option<i32>>", ref null Formatter);
+type "functype/Option<i32>^Inspect::inspect" = fn(ref "core:internal/Box<Option<i32>>", ref Formatter);
 
-type "functype/Option<i32>^Eq::eq" = fn(ref null "core:internal/Box<Option<i32>>", ref null "core:internal/Box<Option<i32>>") -> bool;
+type "functype/Option<i32>^Eq::eq" = fn(ref "core:internal/Box<Option<i32>>", ref "core:internal/Box<Option<i32>>") -> bool;
 
-type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
+type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
-type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref null String, i32) -> i32;
+type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
 
-type "functype/i32::fmt_decimal" = fn(i32, ref null Formatter);
+type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
-type "functype/Option<i32>^Inspect::inspect" = fn(ref Option<i32>, ref null Formatter);
+type "functype/Option<i32>^Inspect::inspect" = fn(ref Option<i32>, ref Formatter);
 
-type "functype/Option<i32>^Eq::eq" = fn(ref Option<i32>, ref null "core:internal/Box<Option<i32>>") -> bool;
+type "functype/Option<i32>^Eq::eq" = fn(ref Option<i32>, ref "core:internal/Box<Option<i32>>") -> bool;
 
 type "functype/Option<i32>^Eq::eq" = fn(ref Option<i32>, ref Option<i32>) -> bool;
 
@@ -131,22 +131,22 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout, Stderr {
-    let v: ref null Option<i32>;
-    let expected: ref null Option<i32>;
-    let __local_2: ref null Option<i32>;
-    let __local_3: ref null Option<i32>;
+    let v: ref Option<i32>;
+    let expected: ref Option<i32>;
+    let __local_2: ref Option<i32>;
+    let __local_3: ref Option<i32>;
     let __cond: bool;
-    let __local_5: ref null String;
-    let __local_6: ref null Formatter;
-    let __local_7: ref null Array<u64>;
+    let __local_5: ref String;
+    let __local_6: ref Formatter;
+    let __local_7: ref Array<u64>;
     let __local_8: i32;
-    let __local_9: ref null String;
-    let __local_10: ref null "core:internal/Box<i32>";
-    let __local_11: ref null Formatter;
-    let __local_12: ref null "core:internal/Box<i32>";
-    let __local_13: ref null Formatter;
-    let __local_14: ref null String;
-    let __local_15: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref "core:internal/Box<i32>";
+    let __local_11: ref Formatter;
+    let __local_12: ref "core:internal/Box<i32>";
+    let __local_13: ref Formatter;
+    let __local_14: ref String;
+    let __local_15: ref String;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -157,7 +157,7 @@ fn run() with Stdout, Stderr {
     expected = Option<i32>::Some { discriminant: 0, payload_0: 99 };
     __cond = Option<i32>^Eq::eq(ref.as_non_null(v), ref.as_non_null(expected));
     if __cond == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_5 = String { repr: builtin::array_new<u8>(146), used: 0 };
             String::append(__local_5, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_5, 114);
@@ -169,7 +169,7 @@ fn run() with Stdout, Stderr {
             String::append_char(__local_5, 32);
             String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/assert_inspect_variant.wado"), used: 56 });
             String::append_char(__local_5, 58);
-            __local_6 = __inline_Formatter__new_3: block -> ref null Formatter {
+            __local_6 = __inline_Formatter__new_3: block -> ref Formatter {
                 __local_9 = __local_5;
                 break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_9) };
             };
@@ -181,14 +181,14 @@ condition: v == expected
             String::append_char(__local_5, 118);
             String::append_char(__local_5, 58);
             String::append_char(__local_5, 32);
-            __local_6 = __inline_Formatter__new_6: block -> ref null Formatter {
+            __local_6 = __inline_Formatter__new_6: block -> ref Formatter {
                 __local_14 = __local_5;
                 break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_14) };
             };
             Option<i32>^Inspect::inspect(ref.as_non_null(v), __local_6);
             String::append_char(__local_5, 10);
             String::append(__local_5, String { repr: array.new_data<u8>("expected: "), used: 10 });
-            __local_6 = __inline_Formatter__new_7: block -> ref null Formatter {
+            __local_6 = __inline_Formatter__new_7: block -> ref Formatter {
                 __local_15 = __local_5;
                 break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_15) };
             };
@@ -261,11 +261,11 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
 
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from core:internal
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
+    let __local_7: ref String;
+    let __local_8: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -372,7 +372,7 @@ fn i32::fmt_decimal(self, f) {
     let abs_val: i64;
     let digit_count: i32;
     let offset: i32;
-    let __local_6: ref null String;
+    let __local_6: ref String;
     is_negative = self < 0;
     abs_val = if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
@@ -381,7 +381,7 @@ fn i32::fmt_decimal(self, f) {
     };
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref null array<u8> {
+    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
     }, offset, abs_val, digit_count);
@@ -390,7 +390,7 @@ fn i32::fmt_decimal(self, f) {
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -426,8 +426,8 @@ fn String::internal_reserve_uninit(self, n) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -468,16 +468,16 @@ fn String::append_char(self, c) {
 }
 
 fn Option<i32>^Inspect::inspect(self, f) {
-    let __local_2: ref null Formatter;
-    let __local_3: ref null String;
-    let __local_4: ref null "core:internal/Box<i32>";
-    let __local_5: ref null Formatter;
-    let __local_6: ref null "core:internal/Box<i32>";
-    let __local_7: ref null Formatter;
-    let __local_8: ref null Formatter;
-    let __local_9: ref null String;
-    let __local_10: ref null Formatter;
-    let __local_11: ref null String;
+    let __local_2: ref Formatter;
+    let __local_3: ref String;
+    let __local_4: ref "core:internal/Box<i32>";
+    let __local_5: ref Formatter;
+    let __local_6: ref "core:internal/Box<i32>";
+    let __local_7: ref Formatter;
+    let __local_8: ref Formatter;
+    let __local_9: ref String;
+    let __local_10: ref Formatter;
+    let __local_11: ref String;
     if ref.test Option<i32>::Some(self) {
         __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
         String::append(f.buf, __local_3);
@@ -493,11 +493,11 @@ fn Option<i32>^Inspect::inspect(self, f) {
 fn Option<i32>^Eq::eq(self, other) {
     let __local_2: i32;
     let __local_3: i32;
-    return let __match_scrut_0: ref null Option<i32>; __match_scrut_0 = self; if ref.test Option<i32>::Some(__match_scrut_0) -> bool {
+    return let __match_scrut_0: ref Option<i32>; __match_scrut_0 = self; if ref.test Option<i32>::Some(__match_scrut_0) -> bool {
         let __cast_2: ref Option<i32>::Some;
         __cast_2 = ref.cast Option<i32>::Some(__match_scrut_0);
         __local_2 = __cast_2.payload_0;
-        let __match_scrut_2: ref null Option<i32>;
+        let __match_scrut_2: ref Option<i32>;
         __match_scrut_2 = other;
         if ref.test Option<i32>::Some(__match_scrut_2) -> bool {
             let __cast_3: ref Option<i32>::Some;
@@ -510,7 +510,7 @@ fn Option<i32>^Eq::eq(self, other) {
             unreachable;
         };
     } else if __match_scrut_0.discriminant == 1 -> bool {
-        let __match_scrut_1: ref null Option<i32>;
+        let __match_scrut_1: ref Option<i32>;
         __match_scrut_1 = other;
         if ref.test Option<i32>::Some(__match_scrut_1) -> bool {
             let __cast_1: ref Option<i32>::Some;
@@ -528,7 +528,7 @@ fn Option<i32>^Eq::eq(self, other) {
 
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
-    let _licm_buf_4: ref null String;
+    let _licm_buf_4: ref String;
     __for_0: block {
         i = 0;
         _licm_buf_4 = self.buf;
@@ -546,7 +546,7 @@ fn Formatter::write_char_n(self, c, n) {
 }
 
 fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
-    let sign: ref null String;
+    let sign: ref String;
     let sign_len: i32;
     let prefix_len: i32;
     let content_len: i32;
@@ -556,8 +556,8 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
-    let __local_14: ref null String;
-    let __local_15: ref null String;
+    let __local_14: ref String;
+    let __local_15: ref String;
     sign = String { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };

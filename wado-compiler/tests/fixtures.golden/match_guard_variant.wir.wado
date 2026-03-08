@@ -58,9 +58,9 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
@@ -80,16 +80,16 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let opt1: ref null Option<i32>;
-    let opt2: ref null Option<i32>;
-    let none: ref null Option<i32>;
+    let opt1: ref Option<i32>;
+    let opt2: ref Option<i32>;
+    let none: ref Option<i32>;
     let __local_3: i32;
-    let msg1: ref null String;
+    let msg1: ref String;
     let __local_5: i32;
-    let msg2: ref null String;
+    let msg2: ref String;
     let __local_7: i32;
-    let msg3: ref null String;
-    let __local_9: ref null Array<u64>;
+    let msg3: ref String;
+    let __local_9: ref Array<u64>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -99,85 +99,85 @@ fn run() with Stdout {
     opt1 = Option<i32>::Some { discriminant: 0, payload_0: 42 };
     opt2 = Option<i32>::Some { discriminant: 0, payload_0: 3 };
     none = Option<i32> { 1 };
-    msg1 = value_copy String(let __match_scrut_0: ref null Option<i32>; __match_scrut_0 = opt1; if ref.test Option<i32>::Some(__match_scrut_0) -> ref null String {
+    msg1 = value_copy String(let __match_scrut_0: ref Option<i32>; __match_scrut_0 = opt1; if ref.test Option<i32>::Some(__match_scrut_0) -> ref String {
         let __cast_3: ref Option<i32>::Some;
         __cast_3 = ref.cast Option<i32>::Some(__match_scrut_0);
         __local_3 = __cast_3.payload_0;
-        if __local_3 > 10 -> ref null String {
+        if __local_3 > 10 -> ref String {
             let __cast_2: ref Option<i32>::Some;
             __cast_2 = ref.cast Option<i32>::Some(__match_scrut_0);
             __local_3 = __cast_2.payload_0;
             String { repr: array.new_data<u8>("large value"), used: 11 };
-        } else if ref.test Option<i32>::Some(__match_scrut_0) -> ref null String {
+        } else if ref.test Option<i32>::Some(__match_scrut_0) -> ref String {
             let __cast_1: ref Option<i32>::Some;
             __cast_1 = ref.cast Option<i32>::Some(__match_scrut_0);
             String { repr: array.new_data<u8>("small value"), used: 11 };
-        } else if __match_scrut_0.discriminant == 1 -> ref null String {
+        } else if __match_scrut_0.discriminant == 1 -> ref String {
             String { repr: array.new_data<u8>("no value"), used: 8 };
         } else {
             unreachable;
         };
-    } else if ref.test Option<i32>::Some(__match_scrut_0) -> ref null String {
+    } else if ref.test Option<i32>::Some(__match_scrut_0) -> ref String {
         let __cast_1: ref Option<i32>::Some;
         __cast_1 = ref.cast Option<i32>::Some(__match_scrut_0);
         String { repr: array.new_data<u8>("small value"), used: 11 };
-    } else if __match_scrut_0.discriminant == 1 -> ref null String {
+    } else if __match_scrut_0.discriminant == 1 -> ref String {
         String { repr: array.new_data<u8>("no value"), used: 8 };
     } else {
         unreachable;
     });
     "core:cli/println"(msg1);
-    msg2 = value_copy String(let __match_scrut_1: ref null Option<i32>; __match_scrut_1 = opt2; if ref.test Option<i32>::Some(__match_scrut_1) -> ref null String {
+    msg2 = value_copy String(let __match_scrut_1: ref Option<i32>; __match_scrut_1 = opt2; if ref.test Option<i32>::Some(__match_scrut_1) -> ref String {
         let __cast_6: ref Option<i32>::Some;
         __cast_6 = ref.cast Option<i32>::Some(__match_scrut_1);
         __local_5 = __cast_6.payload_0;
-        if __local_5 > 10 -> ref null String {
+        if __local_5 > 10 -> ref String {
             let __cast_5: ref Option<i32>::Some;
             __cast_5 = ref.cast Option<i32>::Some(__match_scrut_1);
             __local_5 = __cast_5.payload_0;
             String { repr: array.new_data<u8>("large value"), used: 11 };
-        } else if ref.test Option<i32>::Some(__match_scrut_1) -> ref null String {
+        } else if ref.test Option<i32>::Some(__match_scrut_1) -> ref String {
             let __cast_4: ref Option<i32>::Some;
             __cast_4 = ref.cast Option<i32>::Some(__match_scrut_1);
             String { repr: array.new_data<u8>("small value"), used: 11 };
-        } else if __match_scrut_1.discriminant == 1 -> ref null String {
+        } else if __match_scrut_1.discriminant == 1 -> ref String {
             String { repr: array.new_data<u8>("no value"), used: 8 };
         } else {
             unreachable;
         };
-    } else if ref.test Option<i32>::Some(__match_scrut_1) -> ref null String {
+    } else if ref.test Option<i32>::Some(__match_scrut_1) -> ref String {
         let __cast_4: ref Option<i32>::Some;
         __cast_4 = ref.cast Option<i32>::Some(__match_scrut_1);
         String { repr: array.new_data<u8>("small value"), used: 11 };
-    } else if __match_scrut_1.discriminant == 1 -> ref null String {
+    } else if __match_scrut_1.discriminant == 1 -> ref String {
         String { repr: array.new_data<u8>("no value"), used: 8 };
     } else {
         unreachable;
     });
     "core:cli/println"(msg2);
-    msg3 = value_copy String(let __match_scrut_2: ref null Option<i32>; __match_scrut_2 = none; if ref.test Option<i32>::Some(__match_scrut_2) -> ref null String {
+    msg3 = value_copy String(let __match_scrut_2: ref Option<i32>; __match_scrut_2 = none; if ref.test Option<i32>::Some(__match_scrut_2) -> ref String {
         let __cast_9: ref Option<i32>::Some;
         __cast_9 = ref.cast Option<i32>::Some(__match_scrut_2);
         __local_7 = __cast_9.payload_0;
-        if __local_7 > 10 -> ref null String {
+        if __local_7 > 10 -> ref String {
             let __cast_8: ref Option<i32>::Some;
             __cast_8 = ref.cast Option<i32>::Some(__match_scrut_2);
             __local_7 = __cast_8.payload_0;
             String { repr: array.new_data<u8>("large value"), used: 11 };
-        } else if ref.test Option<i32>::Some(__match_scrut_2) -> ref null String {
+        } else if ref.test Option<i32>::Some(__match_scrut_2) -> ref String {
             let __cast_7: ref Option<i32>::Some;
             __cast_7 = ref.cast Option<i32>::Some(__match_scrut_2);
             String { repr: array.new_data<u8>("small value"), used: 11 };
-        } else if __match_scrut_2.discriminant == 1 -> ref null String {
+        } else if __match_scrut_2.discriminant == 1 -> ref String {
             String { repr: array.new_data<u8>("no value"), used: 8 };
         } else {
             unreachable;
         };
-    } else if ref.test Option<i32>::Some(__match_scrut_2) -> ref null String {
+    } else if ref.test Option<i32>::Some(__match_scrut_2) -> ref String {
         let __cast_7: ref Option<i32>::Some;
         __cast_7 = ref.cast Option<i32>::Some(__match_scrut_2);
         String { repr: array.new_data<u8>("small value"), used: 11 };
-    } else if __match_scrut_2.discriminant == 1 -> ref null String {
+    } else if __match_scrut_2.discriminant == 1 -> ref String {
         String { repr: array.new_data<u8>("no value"), used: 8 };
     } else {
         unreachable;
@@ -229,13 +229,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {

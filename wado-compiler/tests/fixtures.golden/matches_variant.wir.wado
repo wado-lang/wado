@@ -58,9 +58,9 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
@@ -80,12 +80,12 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let circle: ref null Shape;
-    let point: ref null Shape;
+    let circle: ref Shape;
+    let point: ref Shape;
     let __local_2: f64;
     let big_circle: bool;
     let point_is_circle: bool;
-    let __local_5: ref null Array<u64>;
+    let __local_5: ref Array<u64>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -94,7 +94,7 @@ fn run() with Stdout {
     };
     circle = Shape::Circle { discriminant: 0, payload_0: 5 };
     point = Shape { 1 };
-    let __match_scrut_0: ref null Shape;
+    let __match_scrut_0: ref Shape;
     __match_scrut_0 = circle;
     if if ref.test Shape::Circle(__match_scrut_0) -> bool {
         let __cast_1: ref Shape::Circle;
@@ -105,7 +105,7 @@ fn run() with Stdout {
     } {
         "core:cli/println"(String { repr: array.new_data<u8>("circle is a Circle"), used: 18 });
     };
-    let __match_scrut_1: ref null Shape;
+    let __match_scrut_1: ref Shape;
     __match_scrut_1 = circle;
     big_circle = if ref.test Shape::Circle(__match_scrut_1) -> bool {
         let __cast_2: ref Shape::Circle;
@@ -118,7 +118,7 @@ fn run() with Stdout {
     if big_circle {
         "core:cli/println"(String { repr: array.new_data<u8>("circle is a big Circle"), used: 22 });
     };
-    let __match_scrut_2: ref null Shape;
+    let __match_scrut_2: ref Shape;
     __match_scrut_2 = point;
     point_is_circle = if ref.test Shape::Circle(__match_scrut_2) -> bool {
         let __cast_3: ref Shape::Circle;
@@ -132,7 +132,7 @@ fn run() with Stdout {
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("point is not Circle"), used: 19 });
     };
-    let __match_scrut_3: ref null Shape;
+    let __match_scrut_3: ref Shape;
     __match_scrut_3 = point;
     if __match_scrut_3.discriminant == 1 {
         "core:cli/println"(String { repr: array.new_data<u8>("point is Point"), used: 14 });
@@ -183,13 +183,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {

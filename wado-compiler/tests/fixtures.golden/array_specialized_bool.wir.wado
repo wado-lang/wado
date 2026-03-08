@@ -88,27 +88,27 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref null String, char);
+type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/ArrayIter<bool>^Iterator::next" = fn(ref null ArrayIter<bool>) -> ref null Option<bool>;
+type "functype/ArrayIter<bool>^Iterator::next" = fn(ref ArrayIter<bool>) -> ref Option<bool>;
 
-type "functype/Array<bool>::append" = fn(ref null Array<bool>, bool);
+type "functype/Array<bool>::append" = fn(ref Array<bool>, bool);
 
-type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
+type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
-type "functype/Formatter::pad" = fn(ref null Formatter, ref null String);
+type "functype/Formatter::pad" = fn(ref Formatter, ref String);
 
-type "functype/ArrayIter<bool>^Iterator::next" = fn(ref null ArrayIter<bool>) -> [i32, bool];
+type "functype/ArrayIter<bool>^Iterator::next" = fn(ref ArrayIter<bool>) -> [i32, bool];
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -126,23 +126,23 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let __local_0: ref null Array<bool>;
-    let arr: ref null Array<bool>;
-    let __iter_0: ref null ArrayIter<bool>;
+    let __local_0: ref Array<bool>;
+    let arr: ref Array<bool>;
+    let __iter_0: ref ArrayIter<bool>;
     let x: bool;
-    let __local_4: ref null String;
-    let __local_5: ref null Formatter;
-    let __pattern_temp_0: ref null Option<bool>;
-    let __local_7: ref null Array<u64>;
+    let __local_4: ref String;
+    let __local_5: ref Formatter;
+    let __pattern_temp_0: ref Option<bool>;
+    let __local_7: ref Array<u64>;
     let __local_8: i32;
-    let __local_9: ref null Array<bool>;
-    let __local_10: ref null Array<bool>;
+    let __local_9: ref Array<bool>;
+    let __local_10: ref Array<bool>;
     let __local_11: i32;
-    let __local_12: ref null String;
-    let __local_13: ref null "core:internal/Box<bool>";
-    let __local_14: ref null Formatter;
-    let __local_15: ref null "core:internal/Box<bool>";
-    let __local_16: ref null Formatter;
+    let __local_12: ref String;
+    let __local_13: ref "core:internal/Box<bool>";
+    let __local_14: ref Formatter;
+    let __local_15: ref "core:internal/Box<bool>";
+    let __local_16: ref Formatter;
     let __local_17: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -150,7 +150,7 @@ fn run() with Stdout {
         };
         __modules_initialized = 1;
     };
-    arr = __seq_lit: block -> ref null Array<bool> {
+    arr = __seq_lit: block -> ref Array<bool> {
         __local_0 = Array<bool> { repr: builtin::array_new<bool>(0), used: 0 };
         break __seq_lit: __local_0;
     };
@@ -165,14 +165,14 @@ fn run() with Stdout {
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<bool>^Iterator::next(__iter_0);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 x = __sroa___pattern_temp_0_payload_0;
-                "core:cli/println"(__tmpl: block -> ref null String {
+                "core:cli/println"(__tmpl: block -> ref String {
                     __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
-                    __local_5 = __inline_Formatter__new_6: block -> ref null Formatter {
+                    __local_5 = __inline_Formatter__new_6: block -> ref Formatter {
                         __local_12 = __local_4;
                         break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
                     };
                     __local_14 = __local_5;
-                    Formatter::pad(__local_14, if x -> ref null String {
+                    Formatter::pad(__local_14, if x -> ref String {
                         String { repr: array.new_data<u8>("true"), used: 4 };
                     } else {
                         String { repr: array.new_data<u8>("false"), used: 5 };
@@ -231,13 +231,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -298,7 +298,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -322,8 +322,8 @@ fn String::grow(self, min_capacity) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -377,7 +377,7 @@ fn Array<bool>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<bool>;
+    let new_repr: ref array<bool>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;
@@ -397,7 +397,7 @@ fn Array<bool>::append(self, value) {
 
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
-    let _licm_buf_4: ref null String;
+    let _licm_buf_4: ref String;
     __for_0: block {
         i = 0;
         _licm_buf_4 = self.buf;
@@ -420,7 +420,7 @@ fn Formatter::pad(self, content) {
     let align: enum:Alignment;
     let left_pad: i32;
     let right_pad: i32;
-    let __local_7: ref null String;
+    let __local_7: ref String;
     content_len = content.used;
     if if self.width <= 0 -> i32 {
         1;

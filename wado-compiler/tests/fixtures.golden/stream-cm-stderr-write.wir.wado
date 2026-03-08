@@ -53,17 +53,17 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref null array<u8>, i32, i32);
+type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
-type "functype/core:internal/write_string_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/core:internal/log_stderr" = fn(ref null String);
+type "functype/core:internal/log_stderr" = fn(ref String);
 
-type "functype/core:internal/panic" = fn(ref null String);
+type "functype/core:internal/panic" = fn(ref String);
 
-type "functype/Array<u8>::append" = fn(ref null Array<u8>, u8);
+type "functype/Array<u8>::append" = fn(ref Array<u8>, u8);
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -85,33 +85,33 @@ fn run() with Stderr {
     let rx: i32;
     let tx: i32;
     let subtask: i32;
-    let __local_4: ref null Array<u8>;
-    let data: ref null Array<u8>;
+    let __local_4: ref Array<u8>;
+    let data: ref Array<u8>;
     let ptr: i32;
     let i: i32;
-    let __local_8: ref null Array<u64>;
+    let __local_8: ref Array<u64>;
     let __local_9: i32;
-    let __local_10: ref null Array<u8>;
+    let __local_10: ref Array<u8>;
     let __local_11: u8;
-    let __local_12: ref null Array<u8>;
+    let __local_12: ref Array<u8>;
     let __local_13: u8;
-    let __local_14: ref null Array<u8>;
+    let __local_14: ref Array<u8>;
     let __local_15: u8;
-    let __local_16: ref null Array<u8>;
+    let __local_16: ref Array<u8>;
     let __local_17: u8;
-    let __local_18: ref null Array<u8>;
+    let __local_18: ref Array<u8>;
     let __local_19: u8;
-    let __local_20: ref null Array<u8>;
+    let __local_20: ref Array<u8>;
     let __local_21: u8;
-    let __local_22: ref null Array<u8>;
+    let __local_22: ref Array<u8>;
     let __local_23: u8;
-    let __local_24: ref null Array<u8>;
+    let __local_24: ref Array<u8>;
     let __local_25: u8;
-    let __local_26: ref null Array<u8>;
-    let __local_27: ref null Array<u8>;
+    let __local_26: ref Array<u8>;
+    let __local_27: ref Array<u8>;
     let __local_28: i32;
     let _licm_used_29: i32;
-    let _licm_repr_30: ref null array<u8>;
+    let _licm_repr_30: ref array<u8>;
     let __local_31: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -123,7 +123,7 @@ fn run() with Stderr {
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
     subtask = "wasi/wasi:cli/Stderr::write_via_stream"(rx, 2048);
-    data = __seq_lit: block -> ref null Array<u8> {
+    data = __seq_lit: block -> ref Array<u8> {
         __local_4 = Array<u8> { repr: array.new_fixed<u8>(101, 114, 114, 32, 109, 115, 103, 10), used: 8 };
         break __seq_lit: __local_4;
     };
@@ -216,11 +216,11 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
 
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from core:internal
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
+    let __local_7: ref String;
+    let __local_8: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -275,7 +275,7 @@ fn Array<u8>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;

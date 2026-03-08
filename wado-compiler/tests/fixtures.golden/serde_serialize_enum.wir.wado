@@ -23,12 +23,12 @@ struct SerializeError {
 
 variant Result<unit,SerializeError> {
     Ok,
-    Err(ref null SerializeError),
+    Err(ref SerializeError),
 }
 
 struct Result<unit,SerializeError>::Err {
     discriminant: i32,
-    payload_0: ref null SerializeError,
+    payload_0: ref SerializeError,
 }
 
 array array<u64> (mut u64);
@@ -68,23 +68,23 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref null JsonSerializer, ref null String, ref null String, i32) -> ref null Result<unit,SerializeError>;
+type "functype/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref JsonSerializer, ref String, ref String, i32) -> ref Result<unit,SerializeError>;
 
-type "functype/Color^Serialize::serialize<JsonSerializer>" = fn(enum:Color, ref null JsonSerializer) -> ref null Result<unit,SerializeError>;
+type "functype/Color^Serialize::serialize<JsonSerializer>" = fn(enum:Color, ref JsonSerializer) -> ref Result<unit,SerializeError>;
 
-type "functype/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref String, ref null String, ref null String, i32) -> ref null Result<unit,SerializeError>;
+type "functype/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref String, ref String, ref String, i32) -> ref Result<unit,SerializeError>;
 
-type "functype/Color^Serialize::serialize<JsonSerializer>" = fn(enum:Color, ref String) -> ref null Result<unit,SerializeError>;
+type "functype/Color^Serialize::serialize<JsonSerializer>" = fn(enum:Color, ref String) -> ref Result<unit,SerializeError>;
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -102,10 +102,10 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let ser: ref null JsonSerializer;
+    let ser: ref JsonSerializer;
     let c: enum:Color;
     let c2: enum:Color;
-    let __local_3: ref null Array<u64>;
+    let __local_3: ref Array<u64>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -166,13 +166,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -233,7 +233,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -257,8 +257,8 @@ fn String::grow(self, min_capacity) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -272,9 +272,9 @@ fn String::append(self, other) {
 }
 
 fn JsonSerializer^Serializer::serialize_unit_variant(self, type_name, variant_name, disc) {
-    let __local_4: ref null String;
+    let __local_4: ref String;
     let __local_5: i32;
-    String::append(self, __tmpl: block -> ref null String {
+    String::append(self, __tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append(__local_4, String { repr: array.new_data<u8>("\""), used: 1 });
         String::append(__local_4, variant_name);
@@ -285,11 +285,11 @@ fn JsonSerializer^Serializer::serialize_unit_variant(self, type_name, variant_na
 }
 
 fn Color^Serialize::serialize<JsonSerializer>(self, s) {
-    return let __match_scrut_0: enum:Color; __match_scrut_0 = self; if __match_scrut_0 == 0 -> ref null Result<unit,SerializeError> {
+    return let __match_scrut_0: enum:Color; __match_scrut_0 = self; if __match_scrut_0 == 0 -> ref Result<unit,SerializeError> {
         JsonSerializer^Serializer::serialize_unit_variant(s, String { repr: array.new_data<u8>("Color"), used: 5 }, String { repr: array.new_data<u8>("Red"), used: 3 }, 0);
-    } else if __match_scrut_0 == 1 -> ref null Result<unit,SerializeError> {
+    } else if __match_scrut_0 == 1 -> ref Result<unit,SerializeError> {
         JsonSerializer^Serializer::serialize_unit_variant(s, String { repr: array.new_data<u8>("Color"), used: 5 }, String { repr: array.new_data<u8>("Green"), used: 5 }, 1);
-    } else if __match_scrut_0 == 2 -> ref null Result<unit,SerializeError> {
+    } else if __match_scrut_0 == 2 -> ref Result<unit,SerializeError> {
         JsonSerializer^Serializer::serialize_unit_variant(s, String { repr: array.new_data<u8>("Color"), used: 5 }, String { repr: array.new_data<u8>("Blue"), used: 4 }, 2);
     } else {
         unreachable;

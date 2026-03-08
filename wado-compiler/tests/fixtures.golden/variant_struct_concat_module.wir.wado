@@ -51,7 +51,7 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/format_str" = fn(ref null String, ref null Opts) -> ref null String;
+type "functype/format_str" = fn(ref String, ref Opts) -> ref String;
 
 type "functype/run" = fn();
 
@@ -61,17 +61,17 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/String::concat" = fn(ref null String, ref null String) -> ref null String;
+type "functype/String::concat" = fn(ref String, ref String) -> ref String;
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -89,13 +89,13 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn format_str(s, opts) {
-    let pad: ref null String;
+    let pad: ref String;
     pad = String { repr: array.new_data<u8>("  "), used: 2 };
-    return let __match_scrut_0: ref null Align; __match_scrut_0 = opts.align; if __match_scrut_0.discriminant == 0 -> ref null String {
+    return let __match_scrut_0: ref Align; __match_scrut_0 = opts.align; if __match_scrut_0.discriminant == 0 -> ref String {
         String::concat(s, pad);
-    } else if __match_scrut_0.discriminant == 1 -> ref null String {
+    } else if __match_scrut_0.discriminant == 1 -> ref String {
         String::concat(pad, s);
-    } else if __match_scrut_0.discriminant == 2 -> ref null String {
+    } else if __match_scrut_0.discriminant == 2 -> ref String {
         String::concat(String::concat(pad, s), pad);
     } else {
         unreachable;
@@ -103,10 +103,10 @@ fn format_str(s, opts) {
 }
 
 fn run() with Stdout {
-    let opts: ref null Opts;
-    let s: ref null String;
-    let __local_2: ref null String;
-    let __local_3: ref null Array<u64>;
+    let opts: ref Opts;
+    let s: ref String;
+    let __local_2: ref String;
+    let __local_3: ref Array<u64>;
     let __local_4: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -116,7 +116,7 @@ fn run() with Stdout {
     };
     opts = Opts { align: Align { 1 }, width: 0 };
     s = format_str(String { repr: array.new_data<u8>("hi"), used: 2 }, opts);
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append(__local_2, String { repr: array.new_data<u8>("["), used: 1 });
         String::append(__local_2, s);
@@ -169,13 +169,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -236,7 +236,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -260,8 +260,8 @@ fn String::grow(self, min_capacity) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -278,11 +278,11 @@ fn String::concat(a, b) {
     let len_a: i32;
     let len_b: i32;
     let total: i32;
-    let repr: ref null array<u8>;
-    let __local_6: ref null String;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
-    let __local_9: ref null String;
+    let repr: ref array<u8>;
+    let __local_6: ref String;
+    let __local_7: ref String;
+    let __local_8: ref String;
+    let __local_9: ref String;
     len_a = a.used;
     len_b = b.used;
     total = len_a + len_b;

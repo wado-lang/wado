@@ -88,37 +88,37 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
 type "functype/count_digits_i64" = fn(i64) -> i32;
 
-type "functype/write_decimal_digits" = fn(ref null array<u8>, i32, i64, i32);
+type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/i64::fmt_decimal" = fn(ref null "core:internal/Box<i64>", ref null Formatter);
+type "functype/i64::fmt_decimal" = fn(ref "core:internal/Box<i64>", ref Formatter);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::internal_reserve_uninit" = fn(ref null String, i32) -> i32;
+type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref null String, char);
+type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/ArrayIter<i64>^Iterator::next" = fn(ref null ArrayIter<i64>) -> ref null Option<i64>;
+type "functype/ArrayIter<i64>^Iterator::next" = fn(ref ArrayIter<i64>) -> ref Option<i64>;
 
-type "functype/Array<i64>::append" = fn(ref null Array<i64>, i64);
+type "functype/Array<i64>::append" = fn(ref Array<i64>, i64);
 
-type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
+type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
-type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref null String, i32) -> i32;
+type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
 
-type "functype/ArrayIter<i64>^Iterator::next" = fn(ref null ArrayIter<i64>) -> [i32, i64];
+type "functype/ArrayIter<i64>^Iterator::next" = fn(ref ArrayIter<i64>) -> [i32, i64];
 
-type "functype/i64::fmt_decimal" = fn(i64, ref null Formatter);
+type "functype/i64::fmt_decimal" = fn(i64, ref Formatter);
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -136,23 +136,23 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let __local_0: ref null Array<i64>;
-    let arr: ref null Array<i64>;
-    let __iter_0: ref null ArrayIter<i64>;
+    let __local_0: ref Array<i64>;
+    let arr: ref Array<i64>;
+    let __iter_0: ref ArrayIter<i64>;
     let x: i64;
-    let __local_4: ref null String;
-    let __local_5: ref null Formatter;
-    let __pattern_temp_0: ref null Option<i64>;
-    let __local_7: ref null Array<u64>;
+    let __local_4: ref String;
+    let __local_5: ref Formatter;
+    let __pattern_temp_0: ref Option<i64>;
+    let __local_7: ref Array<u64>;
     let __local_8: i32;
-    let __local_9: ref null Array<i64>;
-    let __local_10: ref null Array<i64>;
+    let __local_9: ref Array<i64>;
+    let __local_10: ref Array<i64>;
     let __local_11: i32;
-    let __local_12: ref null String;
-    let __local_13: ref null "core:internal/Box<i64>";
-    let __local_14: ref null Formatter;
-    let __local_15: ref null "core:internal/Box<i64>";
-    let __local_16: ref null Formatter;
+    let __local_12: ref String;
+    let __local_13: ref "core:internal/Box<i64>";
+    let __local_14: ref Formatter;
+    let __local_15: ref "core:internal/Box<i64>";
+    let __local_16: ref Formatter;
     let __local_17: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -160,7 +160,7 @@ fn run() with Stdout {
         };
         __modules_initialized = 1;
     };
-    arr = __seq_lit: block -> ref null Array<i64> {
+    arr = __seq_lit: block -> ref Array<i64> {
         __local_0 = Array<i64> { repr: builtin::array_new<i64>(0), used: 0 };
         break __seq_lit: __local_0;
     };
@@ -175,9 +175,9 @@ fn run() with Stdout {
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i64>^Iterator::next(__iter_0);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 x = __sroa___pattern_temp_0_payload_0;
-                "core:cli/println"(__tmpl: block -> ref null String {
+                "core:cli/println"(__tmpl: block -> ref String {
                     __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
-                    __local_5 = __inline_Formatter__new_6: block -> ref null Formatter {
+                    __local_5 = __inline_Formatter__new_6: block -> ref Formatter {
                         __local_12 = __local_4;
                         break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
                     };
@@ -237,13 +237,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -363,19 +363,19 @@ fn i64::fmt_decimal(self, f) {
     let remaining_digits: i32;
     let digit_count_10: i32;
     let offset_11: i32;
-    let repr: ref null array<u8>;
+    let repr: ref array<u8>;
     let abs_val: i64;
     let digit_count_14: i32;
     let offset_15: i32;
-    let __local_16: ref null String;
-    let __local_17: ref null String;
+    let __local_16: ref String;
+    let __local_17: ref String;
     value = self;
     is_negative = value < 0_i64;
     if value == -9223372036854775808_i64 {
         remaining_digits = count_digits_i64(922337203685477580_i64);
         digit_count_10 = remaining_digits + 1;
         offset_11 = Formatter::prepare_int_write(f, 1, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count_10);
-        repr = __inline_String__internal_raw_bytes_0: block -> ref null array<u8> {
+        repr = __inline_String__internal_raw_bytes_0: block -> ref array<u8> {
             __local_16 = f.buf;
             break __inline_String__internal_raw_bytes_0: __local_16.repr;
         };
@@ -389,7 +389,7 @@ fn i64::fmt_decimal(self, f) {
         };
         digit_count_14 = count_digits_i64(abs_val);
         offset_15 = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count_14);
-        write_decimal_digits(__inline_String__internal_raw_bytes_1: block -> ref null array<u8> {
+        write_decimal_digits(__inline_String__internal_raw_bytes_1: block -> ref array<u8> {
             __local_17 = f.buf;
             break __inline_String__internal_raw_bytes_1: __local_17.repr;
         }, offset_15, abs_val, digit_count_14);
@@ -399,7 +399,7 @@ fn i64::fmt_decimal(self, f) {
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -435,8 +435,8 @@ fn String::internal_reserve_uninit(self, n) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -490,7 +490,7 @@ fn Array<i64>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<i64>;
+    let new_repr: ref array<i64>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;
@@ -510,7 +510,7 @@ fn Array<i64>::append(self, value) {
 
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
-    let _licm_buf_4: ref null String;
+    let _licm_buf_4: ref String;
     __for_0: block {
         i = 0;
         _licm_buf_4 = self.buf;
@@ -528,7 +528,7 @@ fn Formatter::write_char_n(self, c, n) {
 }
 
 fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
-    let sign: ref null String;
+    let sign: ref String;
     let sign_len: i32;
     let prefix_len: i32;
     let content_len: i32;
@@ -538,8 +538,8 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
-    let __local_14: ref null String;
-    let __local_15: ref null String;
+    let __local_14: ref String;
+    let __local_15: ref String;
     sign = String { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };

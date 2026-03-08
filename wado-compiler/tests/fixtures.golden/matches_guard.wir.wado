@@ -58,9 +58,9 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
@@ -80,16 +80,16 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let opt1: ref null Option<i32>;
-    let opt2: ref null Option<i32>;
-    let none: ref null Option<i32>;
+    let opt1: ref Option<i32>;
+    let opt2: ref Option<i32>;
+    let none: ref Option<i32>;
     let __local_3: i32;
     let is_large: bool;
     let __local_5: i32;
     let is_small: bool;
     let __local_7: i32;
     let none_large: bool;
-    let __local_9: ref null Array<u64>;
+    let __local_9: ref Array<u64>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -99,7 +99,7 @@ fn run() with Stdout {
     opt1 = Option<i32>::Some { discriminant: 0, payload_0: 10 };
     opt2 = Option<i32>::Some { discriminant: 0, payload_0: 3 };
     none = Option<i32> { 1 };
-    let __match_scrut_0: ref null Option<i32>;
+    let __match_scrut_0: ref Option<i32>;
     __match_scrut_0 = opt1;
     is_large = if ref.test Option<i32>::Some(__match_scrut_0) -> bool {
         let __cast_1: ref Option<i32>::Some;
@@ -112,7 +112,7 @@ fn run() with Stdout {
     if is_large {
         "core:cli/println"(String { repr: array.new_data<u8>("opt1 has value > 5"), used: 18 });
     };
-    let __match_scrut_1: ref null Option<i32>;
+    let __match_scrut_1: ref Option<i32>;
     __match_scrut_1 = opt2;
     is_small = if ref.test Option<i32>::Some(__match_scrut_1) -> bool {
         let __cast_2: ref Option<i32>::Some;
@@ -127,7 +127,7 @@ fn run() with Stdout {
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("opt2 does not have value > 5"), used: 28 });
     };
-    let __match_scrut_2: ref null Option<i32>;
+    let __match_scrut_2: ref Option<i32>;
     __match_scrut_2 = none;
     none_large = if ref.test Option<i32>::Some(__match_scrut_2) -> bool {
         let __cast_3: ref Option<i32>::Some;
@@ -188,13 +188,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {

@@ -18,16 +18,16 @@ struct [String, i32] {
     mut 1: i32,
 }
 
-array array<Tuple<String,i32>> (mut ref null "tuple/[String, i32]");
+array array<Tuple<String,i32>> (mut ref "tuple/[String, i32]");
 
 variant Option<Tuple<String,i32>> {
-    Some(ref null "tuple/[String, i32]"),
+    Some(ref "tuple/[String, i32]"),
     None,
 }
 
 struct Option<Tuple<String,i32>>::Some {
     discriminant: i32,
-    payload_0: ref null "tuple/[String, i32]",
+    payload_0: ref "tuple/[String, i32]",
 }
 
 array array<u64> (mut u64);
@@ -80,19 +80,19 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/Holder<String,i32>::process" = fn(ref null Holder<String,i32>);
+type "functype/Holder<String,i32>::process" = fn(ref Holder<String,i32>);
 
-type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref null ArrayIter<Tuple<String,i32>>) -> ref null Option<Tuple<String,i32>>;
+type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref ArrayIter<Tuple<String,i32>>) -> ref Option<Tuple<String,i32>>;
 
-type "functype/Array<Tuple<String,i32>>::append" = fn(ref null Array<Tuple<String,i32>>, ref null "tuple/[String, i32]");
+type "functype/Array<Tuple<String,i32>>::append" = fn(ref Array<Tuple<String,i32>>, ref "tuple/[String, i32]");
 
-type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref null ArrayIter<Tuple<String,i32>>) -> [i32, ref null "tuple/[String, i32]"];
+type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref ArrayIter<Tuple<String,i32>>) -> [i32, ref null "tuple/[String, i32]"];
 
 type "functype/Holder<String,i32>::process" = fn(ref Array<Tuple<String,i32>>);
 
@@ -112,15 +112,15 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let __local_0: ref null Array<Tuple<String,i32>>;
-    let h: ref null Holder<String,i32>;
-    let __local_2: ref null Array<u64>;
+    let __local_0: ref Array<Tuple<String,i32>>;
+    let h: ref Holder<String,i32>;
+    let __local_2: ref Array<u64>;
     let __local_3: i32;
-    let __local_4: ref null Array<Tuple<String,i32>>;
-    let __local_5: ref null "tuple/[String, i32]";
-    let __local_6: ref null Array<Tuple<String,i32>>;
-    let __local_7: ref null "tuple/[String, i32]";
-    let __local_8: ref null Array<Tuple<String,i32>>;
+    let __local_4: ref Array<Tuple<String,i32>>;
+    let __local_5: ref "tuple/[String, i32]";
+    let __local_6: ref Array<Tuple<String,i32>>;
+    let __local_7: ref "tuple/[String, i32]";
+    let __local_8: ref Array<Tuple<String,i32>>;
     let __local_9: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -128,8 +128,8 @@ fn run() with Stdout {
         };
         __modules_initialized = 1;
     };
-    Holder<String,i32>::process(ref.as_non_null(__seq_lit: block -> ref null Array<Tuple<String,i32>> {
-        __local_0 = Array<Tuple<String,i32>> { repr: array.new_fixed<ref null "tuple/[String, i32]">("tuple/[String, i32]" { 0: String { repr: array.new_data<u8>("a"), used: 1 }, 1: 1 }, "tuple/[String, i32]" { 0: String { repr: array.new_data<u8>("b"), used: 1 }, 1: 2 }), used: 2 };
+    Holder<String,i32>::process(ref.as_non_null(__seq_lit: block -> ref Array<Tuple<String,i32>> {
+        __local_0 = Array<Tuple<String,i32>> { repr: array.new_fixed<ref "tuple/[String, i32]">("tuple/[String, i32]" { 0: String { repr: array.new_data<u8>("a"), used: 1 }, 1: 1 }, "tuple/[String, i32]" { 0: String { repr: array.new_data<u8>("b"), used: 1 }, 1: 2 }), used: 2 };
         break __seq_lit: __local_0;
     }));
     "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
@@ -179,13 +179,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -244,11 +244,11 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
 }
 
 fn Holder<String,i32>::process(self) {
-    let __iter_0: ref null ArrayIter<Tuple<String,i32>>;
-    let pair: ref null "tuple/[String, i32]";
-    let __pattern_temp_0: ref null Option<Tuple<String,i32>>;
-    let __local_4: ref null Array<Tuple<String,i32>>;
-    __iter_0 = __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: block -> ref null ArrayIter<Tuple<String,i32>> {
+    let __iter_0: ref ArrayIter<Tuple<String,i32>>;
+    let pair: ref "tuple/[String, i32]";
+    let __pattern_temp_0: ref Option<Tuple<String,i32>>;
+    let __local_4: ref Array<Tuple<String,i32>>;
+    __iter_0 = __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: block -> ref ArrayIter<Tuple<String,i32>> {
         __local_4 = self;
         break __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: ArrayIter<Tuple<String,i32>> { repr: ref.as_non_null(__local_4.repr), used: __local_4.used, index: 0 };
     };
@@ -258,7 +258,7 @@ fn Holder<String,i32>::process(self) {
             let __sroa___pattern_temp_0_payload_0: ref null "tuple/[String, i32]";
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_0);
             if __sroa___pattern_temp_0_discriminant == 0 {
-                pair = __sroa___pattern_temp_0_payload_0;
+                pair = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
             } else {
                 break b11;
             };
@@ -268,20 +268,20 @@ fn Holder<String,i32>::process(self) {
 }
 
 fn ArrayIter<Tuple<String,i32>>^Iterator::next(self) {
-    let item: ref null "tuple/[String, i32]";
+    let item: ref "tuple/[String, i32]";
     if self.index >= self.used {
         return 1; ref.null none;
     };
-    item = builtin::array_get<ref null "tuple/[String, i32]">(self.repr, self.index);
+    item = builtin::array_get<ref "tuple/[String, i32]">(self.repr, self.index);
     self.index = self.index + 1;
-    return 0; item;
+    return 0; ref.as_non_null(item);
 }
 
 fn Array<Tuple<String,i32>>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<Tuple<String,i32>>;
+    let new_repr: ref array<Tuple<String,i32>>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;
@@ -291,11 +291,11 @@ fn Array<Tuple<String,i32>>::append(self, value) {
             __local_6 = capacity * 2;
             break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
         };
-        new_repr = builtin::array_new<ref null "tuple/[String, i32]">(new_capacity);
-        builtin::array_copy<ref null "tuple/[String, i32]">(new_repr, 0, self.repr, 0, used);
+        new_repr = builtin::array_new<ref "tuple/[String, i32]">(new_capacity);
+        builtin::array_copy<ref "tuple/[String, i32]">(new_repr, 0, self.repr, 0, used);
         self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<ref null "tuple/[String, i32]">(self.repr, used, value);
+    builtin::array_set<ref "tuple/[String, i32]">(self.repr, used, value);
     self.used = used + 1;
 }
 

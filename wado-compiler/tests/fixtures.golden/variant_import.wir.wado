@@ -54,9 +54,9 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
@@ -76,8 +76,8 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let c: ref null "./variant_import_module.wado/Color";
-    let __local_1: ref null Array<u64>;
+    let c: ref "./variant_import_module.wado/Color";
+    let __local_1: ref Array<u64>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -85,7 +85,7 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     c = "./variant_import_module.wado/Color" { 0 };
-    let __match_scrut_0: ref null "./variant_import_module.wado/Color";
+    let __match_scrut_0: ref "./variant_import_module.wado/Color";
     __match_scrut_0 = c;
     if __match_scrut_0.discriminant == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("red"), used: 3 });
@@ -138,13 +138,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {

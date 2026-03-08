@@ -110,69 +110,69 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref null array<u8>, i32, i32);
+type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
-type "functype/core:internal/write_string_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/core:internal/log_stderr" = fn(ref null String);
+type "functype/core:internal/log_stderr" = fn(ref String);
 
-type "functype/core:internal/panic" = fn(ref null String);
+type "functype/core:internal/panic" = fn(ref String);
 
 type "functype/core:internal/unreachable" = fn();
 
-type "functype/unpack64" = fn(f64) -> ref null UnpackResult;
+type "functype/unpack64" = fn(f64) -> ref UnpackResult;
 
 type "functype/unrounded_round" = fn(u64) -> u64;
 
 type "functype/unrounded_div" = fn(u64, u64) -> u64;
 
-type "functype/pow10_coarse" = fn(i32) -> ref null PmHiLo;
+type "functype/pow10_coarse" = fn(i32) -> ref PmHiLo;
 
 type "functype/pow10_fine" = fn(i32) -> u64;
 
-type "functype/mul_pow10" = fn(i32) -> ref null PmHiLo;
+type "functype/mul_pow10" = fn(i32) -> ref PmHiLo;
 
 type "functype/uscale" = fn(u64, u64, u64, i32) -> u64;
 
-type "functype/fixed_width_for_prec" = fn(f64, i32) -> ref null FormatResult;
+type "functype/fixed_width_for_prec" = fn(f64, i32) -> ref FormatResult;
 
-type "functype/short" = fn(f64) -> ref null FormatResult;
+type "functype/short" = fn(f64) -> ref FormatResult;
 
-type "functype/trim_zeros" = fn(u64, i32) -> ref null "tuple/[u64, i32]";
+type "functype/trim_zeros" = fn(u64, i32) -> ref "tuple/[u64, i32]";
 
-type "functype/write_digits_at" = fn(ref null String, i32, u64, i32);
+type "functype/write_digits_at" = fn(ref String, i32, u64, i32);
 
-type "functype/write_decimal" = fn(ref null String, u64, i32, i32);
+type "functype/write_decimal" = fn(ref String, u64, i32, i32);
 
-type "functype/write_decimal_prec" = fn(ref null String, u64, i32, i32, i32);
+type "functype/write_decimal_prec" = fn(ref String, u64, i32, i32, i32);
 
-type "functype/check_special" = fn(f64) -> ref null "tuple/[bool, bool, SpecialKind]";
+type "functype/check_special" = fn(f64) -> ref "tuple/[bool, bool, SpecialKind]";
 
 type "functype/__initialize_module" = fn();
 
-type "functype/fmt_float_special" = fn(ref null Formatter, bool, enum:SpecialKind, ref null String);
+type "functype/fmt_float_special" = fn(ref Formatter, bool, enum:SpecialKind, ref String);
 
-type "functype/fmt_float_sign" = fn(ref null Formatter, bool);
+type "functype/fmt_float_sign" = fn(ref Formatter, bool);
 
-type "functype/Array<u64>::append" = fn(ref null Array<u64>, u64);
+type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
 
-type "functype/f64::fmt_into" = fn(ref null "core:internal/Box<f64>", ref null Formatter);
+type "functype/f64::fmt_into" = fn(ref "core:internal/Box<f64>", ref Formatter);
 
-type "functype/f64::fmt_fixed" = fn(ref null "core:internal/Box<f64>", i32, ref null Formatter);
+type "functype/f64::fmt_fixed" = fn(ref "core:internal/Box<f64>", i32, ref Formatter);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append_byte_filled" = fn(ref null String, u8, i32);
+type "functype/String::append_byte_filled" = fn(ref String, u8, i32);
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/Formatter::apply_padding" = fn(ref null Formatter, i32);
+type "functype/Formatter::apply_padding" = fn(ref Formatter, i32);
 
 type "functype/unpack64" = fn(f64) -> [u64, i32];
 
@@ -188,9 +188,9 @@ type "functype/trim_zeros" = fn(u64, i32) -> [u64, i32];
 
 type "functype/check_special" = fn(f64) -> [bool, bool, i32];
 
-type "functype/f64::fmt_into" = fn(f64, ref null Formatter);
+type "functype/f64::fmt_into" = fn(f64, ref Formatter);
 
-type "functype/f64::fmt_fixed" = fn(f64, i32, ref null Formatter);
+type "functype/f64::fmt_fixed" = fn(f64, i32, ref Formatter);
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -210,25 +210,25 @@ global mut POW10: ref null Array<u64> = ref.null none;
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let c: ref null Shape;
+    let c: ref Shape;
     let r_1: f64;
-    let p: ref null Shape;
+    let p: ref Shape;
     let r_3: f64;
-    let __local_4: ref null String;
-    let __local_5: ref null Formatter;
-    let __local_6: ref null String;
-    let __local_7: ref null Formatter;
-    let __local_8: ref null Shape;
-    let __local_9: ref null Shape;
-    let __local_10: ref null Shape;
+    let __local_4: ref String;
+    let __local_5: ref Formatter;
+    let __local_6: ref String;
+    let __local_7: ref Formatter;
+    let __local_8: ref Shape;
+    let __local_9: ref Shape;
+    let __local_10: ref Shape;
     let __local_11: i32;
-    let __local_12: ref null String;
-    let __local_13: ref null "core:internal/Box<f64>";
-    let __local_14: ref null Formatter;
+    let __local_12: ref String;
+    let __local_13: ref "core:internal/Box<f64>";
+    let __local_14: ref Formatter;
     let __local_15: i32;
-    let __local_16: ref null String;
-    let __local_17: ref null "core:internal/Box<f64>";
-    let __local_18: ref null Formatter;
+    let __local_16: ref String;
+    let __local_17: ref "core:internal/Box<f64>";
+    let __local_18: ref Formatter;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -239,10 +239,10 @@ fn run() with Stdout {
     c = Shape::Circle { discriminant: 0, payload_0: 5 };
     if ref.test Shape::Circle(c) {
         r_1 = ref.cast Shape::Circle(c).payload_0;
-        "core:cli/println"(__tmpl: block -> ref null String {
+        "core:cli/println"(__tmpl: block -> ref String {
             __local_4 = String { repr: builtin::array_new<u8>(35), used: 0 };
             String::append(__local_4, String { repr: array.new_data<u8>("Circle with radius "), used: 19 });
-            __local_5 = __inline_Formatter__new_2: block -> ref null Formatter {
+            __local_5 = __inline_Formatter__new_2: block -> ref Formatter {
                 __local_12 = __local_4;
                 break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
             };
@@ -256,10 +256,10 @@ fn run() with Stdout {
     p = Shape { 1 };
     if ref.test Shape::Circle(p) {
         r_3 = ref.cast Shape::Circle(p).payload_0;
-        "core:cli/println"(__tmpl: block -> ref null String {
+        "core:cli/println"(__tmpl: block -> ref String {
             __local_6 = String { repr: builtin::array_new<u8>(35), used: 0 };
             String::append(__local_6, String { repr: array.new_data<u8>("Circle with radius "), used: 19 });
-            __local_7 = __inline_Formatter__new_5: block -> ref null Formatter {
+            __local_7 = __inline_Formatter__new_5: block -> ref Formatter {
                 __local_16 = __local_6;
                 break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_16) };
             };
@@ -321,13 +321,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -389,11 +389,11 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
 
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from core:internal
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
+    let __local_7: ref String;
+    let __local_8: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -703,7 +703,7 @@ fn mul_pow10(p) {
     let __local_2: i32;
     let q: i32;
     let r: i32;
-    let c: ref null PmHiLo;
+    let c: ref PmHiLo;
     let f: u64;
     let borrow: u64;
     let c_hi_raw: u64;
@@ -785,13 +785,13 @@ fn uscale(x, pm_hi, pm_lo, s) {
 }
 
 fn fixed_width_for_prec(f, precision) {
-    let unpack: ref null UnpackResult;
+    let unpack: ref UnpackResult;
     let m: u64;
     let e: i32;
     let log10_e63: i32;
     let p1: i32;
     let lp1: i32;
-    let pm1: ref null PmHiLo;
+    let pm1: ref PmHiLo;
     let s1: i32;
     let u1: u64;
     let d1_floor: u64;
@@ -800,7 +800,7 @@ fn fixed_width_for_prec(f, precision) {
     let n: i32;
     let p: i32;
     let lp: i32;
-    let pm: ref null PmHiLo;
+    let pm: ref PmHiLo;
     let s: i32;
     let u: u64;
     let d: u64;
@@ -811,7 +811,7 @@ fn fixed_width_for_prec(f, precision) {
     let __local_25: i32;
     let __local_26: i32;
     let __local_27: i32;
-    let __local_28: ref null Array<u64>;
+    let __local_28: ref Array<u64>;
     let __local_29: i32;
     let __sroa_unpack_mantissa: u64;
     let __sroa_unpack_exponent: i32;
@@ -865,7 +865,7 @@ fn fixed_width_for_prec(f, precision) {
 
 fn short(f) {
     let __local_1: i32;
-    let unpack: ref null UnpackResult;
+    let unpack: ref UnpackResult;
     let m: u64;
     let e: i32;
     let min_m: u64;
@@ -875,7 +875,7 @@ fn short(f) {
     let max_m: u64;
     let odd: i32;
     let lp: i32;
-    let pm: ref null PmHiLo;
+    let pm: ref PmHiLo;
     let s: i32;
     let dmin: u64;
     let dmax: u64;
@@ -884,7 +884,7 @@ fn short(f) {
     let digits: u64;
     let exponent: i32;
     let d: u64;
-    let __pattern_temp_0: ref null "tuple/[u64, i32]";
+    let __pattern_temp_0: ref "tuple/[u64, i32]";
     let __local_22: i32;
     let __local_23: i32;
     let __local_24: i32;
@@ -1013,7 +1013,7 @@ fn trim_zeros(x, p) {
     d1 = __inline_rotate_right_0: block -> u64 {
         __local_17 = __inline_u64_mul_1: block -> u64 {
             __local_19 = xv;
-            let __let_pattern_0: ref null "tuple/[i64, i64]";
+            let __let_pattern_0: ref "tuple/[i64, i64]";
             __let_pattern_0 = multivalue_struct_new "tuple/[i64, i64]"(i64.mul_wide_u(__local_19, -3689348814741910323_i64));
             __local_21 = __let_pattern_0.0;
             break __inline_u64_mul_1: __local_21;
@@ -1029,7 +1029,7 @@ fn trim_zeros(x, p) {
     d8 = __inline_rotate_right_2: block -> u64 {
         __local_22 = __inline_u64_mul_3: block -> u64 {
             __local_24 = xv;
-            let __let_pattern_1: ref null "tuple/[i64, i64]";
+            let __let_pattern_1: ref "tuple/[i64, i64]";
             __let_pattern_1 = multivalue_struct_new "tuple/[i64, i64]"(i64.mul_wide_u(__local_24, -4078282918271054303_i64));
             __local_26 = __let_pattern_1.0;
             break __inline_u64_mul_3: __local_26;
@@ -1043,7 +1043,7 @@ fn trim_zeros(x, p) {
     d4 = __inline_rotate_right_4: block -> u64 {
         __local_27 = __inline_u64_mul_5: block -> u64 {
             __local_29 = xv;
-            let __let_pattern_2: ref null "tuple/[i64, i64]";
+            let __let_pattern_2: ref "tuple/[i64, i64]";
             __let_pattern_2 = multivalue_struct_new "tuple/[i64, i64]"(i64.mul_wide_u(__local_29, -3276141747490816367_i64));
             __local_31 = __let_pattern_2.0;
             break __inline_u64_mul_5: __local_31;
@@ -1057,7 +1057,7 @@ fn trim_zeros(x, p) {
     d2 = __inline_rotate_right_6: block -> u64 {
         __local_32 = __inline_u64_mul_7: block -> u64 {
             __local_34 = xv;
-            let __let_pattern_3: ref null "tuple/[i64, i64]";
+            let __let_pattern_3: ref "tuple/[i64, i64]";
             __let_pattern_3 = multivalue_struct_new "tuple/[i64, i64]"(i64.mul_wide_u(__local_34, -8116567392432202711_i64));
             __local_36 = __let_pattern_3.0;
             break __inline_u64_mul_7: __local_36;
@@ -1071,7 +1071,7 @@ fn trim_zeros(x, p) {
     d1b = __inline_rotate_right_8: block -> u64 {
         __local_37 = __inline_u64_mul_9: block -> u64 {
             __local_39 = xv;
-            let __let_pattern_4: ref null "tuple/[i64, i64]";
+            let __let_pattern_4: ref "tuple/[i64, i64]";
             __let_pattern_4 = multivalue_struct_new "tuple/[i64, i64]"(i64.mul_wide_u(__local_39, -3689348814741910323_i64));
             __local_41 = __let_pattern_4.0;
             break __inline_u64_mul_9: __local_41;
@@ -1088,10 +1088,10 @@ fn trim_zeros(x, p) {
 fn write_digits_at(buf, offset, val, nd) {
     let v: u64;
     let idx: i32;
-    let __local_6: ref null String;
+    let __local_6: ref String;
     let index: i32;
     let value: u8;
-    let _licm_repr_9: ref null array<u8>;
+    let _licm_repr_9: ref array<u8>;
     v = val;
     idx = (offset + nd) - 1;
     _licm_repr_9 = buf.repr;
@@ -1115,22 +1115,22 @@ fn write_decimal(buf, d, p, nd) {
     let digit_offset: i32;
     let start_6: i32;
     let start_7: i32;
-    let raw: ref null array<u8>;
-    let __local_9: ref null String;
+    let raw: ref array<u8>;
+    let __local_9: ref String;
     let n_10: i32;
-    let __local_11: ref null String;
-    let __local_12: ref null String;
+    let __local_11: ref String;
+    let __local_12: ref String;
     let __local_13: i32;
-    let __local_14: ref null String;
-    let __local_15: ref null String;
+    let __local_14: ref String;
+    let __local_15: ref String;
     let __local_16: i32;
-    let __local_17: ref null String;
+    let __local_17: ref String;
     let n_18: i32;
-    let __local_19: ref null String;
-    let __local_20: ref null String;
+    let __local_19: ref String;
+    let __local_20: ref String;
     let n_21: i32;
-    let __local_22: ref null String;
-    let __local_23: ref null String;
+    let __local_22: ref String;
+    let __local_23: ref String;
     let index: i32;
     let __local_25: u8;
     decimal_pos = nd + p;
@@ -1175,41 +1175,41 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
     let skip_17: i32;
     let total: i32;
     let start_19: i32;
-    let raw_20: ref null array<u8>;
+    let raw_20: ref array<u8>;
     let trailing_21: i32;
     let start_22: i32;
-    let raw_23: ref null array<u8>;
-    let __local_24: ref null String;
+    let raw_23: ref array<u8>;
+    let __local_24: ref String;
     let __local_25: i32;
-    let __local_26: ref null String;
+    let __local_26: ref String;
     let __local_27: i32;
-    let __local_28: ref null String;
-    let __local_29: ref null String;
+    let __local_28: ref String;
+    let __local_29: ref String;
     let __local_30: i32;
-    let __local_31: ref null String;
+    let __local_31: ref String;
     let __local_32: i32;
-    let __local_33: ref null String;
-    let __local_34: ref null String;
+    let __local_33: ref String;
+    let __local_34: ref String;
     let __local_35: i32;
-    let __local_36: ref null String;
+    let __local_36: ref String;
     let n_37: i32;
-    let __local_38: ref null String;
+    let __local_38: ref String;
     let __local_39: i32;
-    let __local_40: ref null String;
-    let __local_41: ref null String;
+    let __local_40: ref String;
+    let __local_41: ref String;
     let __local_42: i32;
-    let __local_43: ref null String;
-    let __local_44: ref null String;
+    let __local_43: ref String;
+    let __local_44: ref String;
     let index_45: i32;
     let __local_46: u8;
-    let __local_47: ref null String;
-    let __local_48: ref null String;
+    let __local_47: ref String;
+    let __local_48: ref String;
     let n_49: i32;
-    let __local_50: ref null String;
-    let __local_51: ref null String;
+    let __local_50: ref String;
+    let __local_51: ref String;
     let index_52: i32;
     let __local_53: u8;
-    let __local_54: ref null String;
+    let __local_54: ref String;
     let __local_55: i32;
     if precision < 0 {
         write_decimal(buf, d, p, nd);
@@ -1315,51 +1315,51 @@ fn check_special(f) {
 }
 
 fn __initialize_module() {
-    let __local_0: ref null Array<u64>;
+    let __local_0: ref Array<u64>;
     let __local_1: i32;
-    let __local_2: ref null Array<u64>;
+    let __local_2: ref Array<u64>;
     let __local_3: u64;
-    let __local_4: ref null Array<u64>;
+    let __local_4: ref Array<u64>;
     let __local_5: u64;
-    let __local_6: ref null Array<u64>;
+    let __local_6: ref Array<u64>;
     let __local_7: u64;
-    let __local_8: ref null Array<u64>;
+    let __local_8: ref Array<u64>;
     let __local_9: u64;
-    let __local_10: ref null Array<u64>;
+    let __local_10: ref Array<u64>;
     let __local_11: u64;
-    let __local_12: ref null Array<u64>;
+    let __local_12: ref Array<u64>;
     let __local_13: u64;
-    let __local_14: ref null Array<u64>;
+    let __local_14: ref Array<u64>;
     let __local_15: u64;
-    let __local_16: ref null Array<u64>;
+    let __local_16: ref Array<u64>;
     let __local_17: u64;
-    let __local_18: ref null Array<u64>;
+    let __local_18: ref Array<u64>;
     let __local_19: u64;
-    let __local_20: ref null Array<u64>;
+    let __local_20: ref Array<u64>;
     let __local_21: u64;
-    let __local_22: ref null Array<u64>;
+    let __local_22: ref Array<u64>;
     let __local_23: u64;
-    let __local_24: ref null Array<u64>;
+    let __local_24: ref Array<u64>;
     let __local_25: u64;
-    let __local_26: ref null Array<u64>;
+    let __local_26: ref Array<u64>;
     let __local_27: u64;
-    let __local_28: ref null Array<u64>;
+    let __local_28: ref Array<u64>;
     let __local_29: u64;
-    let __local_30: ref null Array<u64>;
+    let __local_30: ref Array<u64>;
     let __local_31: u64;
-    let __local_32: ref null Array<u64>;
+    let __local_32: ref Array<u64>;
     let __local_33: u64;
-    let __local_34: ref null Array<u64>;
+    let __local_34: ref Array<u64>;
     let __local_35: u64;
-    let __local_36: ref null Array<u64>;
+    let __local_36: ref Array<u64>;
     let __local_37: u64;
-    let __local_38: ref null Array<u64>;
+    let __local_38: ref Array<u64>;
     let __local_39: u64;
-    let __local_40: ref null Array<u64>;
+    let __local_40: ref Array<u64>;
     let __local_41: u64;
-    let __local_42: ref null Array<u64>;
+    let __local_42: ref Array<u64>;
     let __local_43: i32;
-    POW10 = __seq_lit: block -> ref null Array<u64> {
+    POW10 = __seq_lit: block -> ref Array<u64> {
         __local_0 = Array<u64> { repr: array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64), used: 20 };
         break __seq_lit: __local_0;
     };
@@ -1367,8 +1367,8 @@ fn __initialize_module() {
 
 fn fmt_float_special(f, is_neg, kind, zero_repr) {
     let mark: i32;
-    let __local_5: ref null Formatter;
-    let __local_6: ref null String;
+    let __local_5: ref Formatter;
+    let __local_6: ref String;
     mark = __inline_String__len_1: block -> i32 {
         __local_6 = f.buf;
         break __inline_String__len_1: __local_6.used;
@@ -1376,13 +1376,13 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
     if kind == 3 {
         String::append(f.buf, String { repr: array.new_data<u8>("NaN"), used: 3 });
     } else if kind == 2 {
-        String::append(f.buf, if is_neg -> ref null String {
+        String::append(f.buf, if is_neg -> ref String {
             String { repr: array.new_data<u8>("-inf"), used: 4 };
         } else {
             String { repr: array.new_data<u8>("inf"), used: 3 };
         });
     } else {
-        String::append(f.buf, if is_neg -> ref null String {
+        String::append(f.buf, if is_neg -> ref String {
             String { repr: array.new_data<u8>("-"), used: 1 };
         } else {
             String { repr: builtin::array_new<u8>(0), used: 0 };
@@ -1404,7 +1404,7 @@ fn Array<u64>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u64>;
+    let new_repr: ref array<u64>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;
@@ -1428,20 +1428,20 @@ fn f64::fmt_into(self, f) {
     let is_neg: bool;
     let kind: enum:SpecialKind;
     let abs_f: f64;
-    let result: ref null FormatResult;
+    let result: ref FormatResult;
     let d: u64;
     let p: i32;
     let nd: i32;
     let mark: i32;
-    let __pattern_temp_0: ref null "tuple/[bool, bool, SpecialKind]";
+    let __pattern_temp_0: ref "tuple/[bool, bool, SpecialKind]";
     let __local_13: u64;
     let __local_14: i32;
     let __local_15: i32;
     let __local_16: u64;
     let __local_17: i32;
-    let __local_18: ref null Formatter;
-    let __local_19: ref null String;
-    let __local_20: ref null Array<u64>;
+    let __local_18: ref Formatter;
+    let __local_19: ref String;
+    let __local_20: ref Array<u64>;
     let __local_21: i32;
     if f.precision >= 0 {
         f64::fmt_fixed(self, f.precision, f);
@@ -1499,22 +1499,22 @@ fn f64::fmt_fixed(self, precision, f) {
     let kind: enum:SpecialKind;
     let mark_7: i32;
     let abs_f: f64;
-    let result: ref null FormatResult;
+    let result: ref FormatResult;
     let d: u64;
     let p: i32;
     let nd: i32;
     let mark_13: i32;
-    let __pattern_temp_0: ref null "tuple/[bool, bool, SpecialKind]";
-    let __local_15: ref null Formatter;
-    let __local_16: ref null String;
+    let __pattern_temp_0: ref "tuple/[bool, bool, SpecialKind]";
+    let __local_15: ref Formatter;
+    let __local_16: ref String;
     let __local_17: u64;
     let __local_18: i32;
     let __local_19: i32;
     let __local_20: u64;
     let __local_21: i32;
-    let __local_22: ref null Formatter;
-    let __local_23: ref null String;
-    let __local_24: ref null Array<u64>;
+    let __local_22: ref Formatter;
+    let __local_23: ref String;
+    let __local_24: ref Array<u64>;
     let __local_25: i32;
     value = self;
     let __sroa___pattern_temp_0_0: bool;
@@ -1592,7 +1592,7 @@ fn f64::fmt_fixed(self, precision, f) {
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -1629,8 +1629,8 @@ fn String::append_byte_filled(self, byte, n) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -1654,31 +1654,31 @@ fn Formatter::apply_padding(self, start_pos) {
     let j_9: i32;
     let i_10: i32;
     let j_11: i32;
-    let __local_12: ref null String;
-    let __local_13: ref null String;
+    let __local_12: ref String;
+    let __local_13: ref String;
     let index_14: i32;
     let value_15: u8;
-    let __local_16: ref null String;
+    let __local_16: ref String;
     let __local_17: i32;
-    let __local_18: ref null String;
+    let __local_18: ref String;
     let index_19: i32;
     let __local_20: u8;
-    let __local_21: ref null String;
+    let __local_21: ref String;
     let index_22: i32;
     let value_23: u8;
-    let __local_24: ref null String;
+    let __local_24: ref String;
     let __local_25: i32;
-    let __local_26: ref null String;
+    let __local_26: ref String;
     let index_27: i32;
     let __local_28: u8;
-    let _licm_buf_29: ref null String;
-    let _licm_buf_30: ref null String;
-    let _licm_buf_31: ref null String;
-    let _licm_buf_32: ref null String;
-    let _licm_repr_33: ref null array<u8>;
-    let _licm_repr_34: ref null array<u8>;
-    let _licm_repr_35: ref null array<u8>;
-    let _licm_repr_36: ref null array<u8>;
+    let _licm_buf_29: ref String;
+    let _licm_buf_30: ref String;
+    let _licm_buf_31: ref String;
+    let _licm_buf_32: ref String;
+    let _licm_repr_33: ref array<u8>;
+    let _licm_repr_34: ref array<u8>;
+    let _licm_repr_35: ref array<u8>;
+    let _licm_repr_36: ref array<u8>;
     content_len = __inline_String__len_0: block -> i32 {
         __local_12 = self.buf;
         break __inline_String__len_0: __local_12.used;

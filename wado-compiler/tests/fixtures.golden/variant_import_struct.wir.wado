@@ -55,23 +55,23 @@ type "functype/run" = fn();
 
 type "functype/__cm_export__run" = fn();
 
-type "functype/./variant_import_struct_module.wado/format_with_opts" = fn(ref null String, ref null "./variant_import_struct_module.wado/Options") -> ref null String;
+type "functype/./variant_import_struct_module.wado/format_with_opts" = fn(ref String, ref "./variant_import_struct_module.wado/Options") -> ref String;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/String::concat" = fn(ref null String, ref null String) -> ref null String;
+type "functype/String::concat" = fn(ref String, ref String) -> ref String;
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -89,18 +89,18 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let __local_0: ref null "./variant_import_struct_module.wado/Options";
-    let s1: ref null String;
-    let s2: ref null String;
-    let s3: ref null String;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
-    let __local_6: ref null String;
-    let __local_7: ref null Array<u64>;
+    let __local_0: ref "./variant_import_struct_module.wado/Options";
+    let s1: ref String;
+    let s2: ref String;
+    let s3: ref String;
+    let __local_4: ref String;
+    let __local_5: ref String;
+    let __local_6: ref String;
+    let __local_7: ref Array<u64>;
     let __local_8: i32;
     let __local_9: i32;
     let __local_10: i32;
-    let __sroa_opts_align: ref null "./variant_import_struct_module.wado/Align";
+    let __sroa_opts_align: ref "./variant_import_struct_module.wado/Align";
     let __sroa_opts_width: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -112,7 +112,7 @@ fn run() with Stdout {
     __sroa_opts_width = 0;
     __sroa_opts_width = 10;
     s1 = "./variant_import_struct_module.wado/format_with_opts"(String { repr: array.new_data<u8>("hi"), used: 2 }, "./variant_import_struct_module.wado/Options" { align: ref.as_non_null(__sroa_opts_align), width: 10 });
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append(__local_4, String { repr: array.new_data<u8>("["), used: 1 });
         String::append(__local_4, s1);
@@ -121,7 +121,7 @@ fn run() with Stdout {
     });
     __sroa_opts_align = "./variant_import_struct_module.wado/Align" { 0 };
     s2 = "./variant_import_struct_module.wado/format_with_opts"(String { repr: array.new_data<u8>("hi"), used: 2 }, "./variant_import_struct_module.wado/Options" { align: ref.as_non_null(__sroa_opts_align), width: 10 });
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_5 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append(__local_5, String { repr: array.new_data<u8>("["), used: 1 });
         String::append(__local_5, s2);
@@ -130,7 +130,7 @@ fn run() with Stdout {
     });
     __sroa_opts_align = "./variant_import_struct_module.wado/Align" { 2 };
     s3 = "./variant_import_struct_module.wado/format_with_opts"(String { repr: array.new_data<u8>("hi"), used: 2 }, "./variant_import_struct_module.wado/Options" { align: ref.as_non_null(__sroa_opts_align), width: 10 });
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_6 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append(__local_6, String { repr: array.new_data<u8>("["), used: 1 });
         String::append(__local_6, s3);
@@ -146,16 +146,16 @@ fn __cm_export__run() {
 
 fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {  // from ./variant_import_struct_module.wado
     let pad_len: i32;
-    let pad: ref null String;
+    let pad: ref String;
     let i: i32;
     let __local_5: i32;
     let __local_6: i32;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
+    let __local_7: ref String;
+    let __local_8: ref String;
     let __local_9: i32;
     let __local_10: i32;
-    let __local_11: ref null String;
-    let __local_12: ref null String;
+    let __local_11: ref String;
+    let __local_12: ref String;
     let __local_13: i32;
     let __local_14: i32;
     let __local_15: i32;
@@ -180,11 +180,11 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {  // from ./
             };
         };
     };
-    return let __match_scrut_0: ref null "./variant_import_struct_module.wado/Align"; __match_scrut_0 = opts.align; if __match_scrut_0.discriminant == 0 -> ref null String {
+    return let __match_scrut_0: ref "./variant_import_struct_module.wado/Align"; __match_scrut_0 = opts.align; if __match_scrut_0.discriminant == 0 -> ref String {
         String::concat(s, pad);
-    } else if __match_scrut_0.discriminant == 1 -> ref null String {
+    } else if __match_scrut_0.discriminant == 1 -> ref String {
         String::concat(pad, s);
-    } else if __match_scrut_0.discriminant == 2 -> ref null String {
+    } else if __match_scrut_0.discriminant == 2 -> ref String {
         __local_5 = pad_len / 2;
         __local_6 = pad_len - __local_5;
         __local_7 = String { repr: builtin::array_new<u8>(__local_5), used: 0 };
@@ -260,13 +260,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -327,7 +327,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -351,8 +351,8 @@ fn String::grow(self, min_capacity) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -369,11 +369,11 @@ fn String::concat(a, b) {
     let len_a: i32;
     let len_b: i32;
     let total: i32;
-    let repr: ref null array<u8>;
-    let __local_6: ref null String;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
-    let __local_9: ref null String;
+    let repr: ref array<u8>;
+    let __local_6: ref String;
+    let __local_7: ref String;
+    let __local_8: ref String;
+    let __local_9: ref String;
     len_a = a.used;
     len_b = b.used;
     total = len_a + len_b;

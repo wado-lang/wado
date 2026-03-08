@@ -58,9 +58,9 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
@@ -80,12 +80,12 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let opt: ref null Option<i32>;
-    let none: ref null Option<i32>;
+    let opt: ref Option<i32>;
+    let none: ref Option<i32>;
     let is_some: bool;
     let is_none: bool;
     let not_none: bool;
-    let __local_5: ref null Array<u64>;
+    let __local_5: ref Array<u64>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -94,7 +94,7 @@ fn run() with Stdout {
     };
     opt = Option<i32>::Some { discriminant: 0, payload_0: 42 };
     none = Option<i32> { 1 };
-    let __match_scrut_0: ref null Option<i32>;
+    let __match_scrut_0: ref Option<i32>;
     __match_scrut_0 = opt;
     is_some = if ref.test Option<i32>::Some(__match_scrut_0) -> bool {
         let __cast_1: ref Option<i32>::Some;
@@ -106,7 +106,7 @@ fn run() with Stdout {
     if is_some {
         "core:cli/println"(String { repr: array.new_data<u8>("opt is Some"), used: 11 });
     };
-    let __match_scrut_1: ref null Option<i32>;
+    let __match_scrut_1: ref Option<i32>;
     __match_scrut_1 = none;
     is_none = if __match_scrut_1.discriminant == 1 -> bool {
         1;
@@ -116,7 +116,7 @@ fn run() with Stdout {
     if is_none {
         "core:cli/println"(String { repr: array.new_data<u8>("none is None"), used: 12 });
     };
-    not_none = let __match_scrut_2: ref null Option<i32>; __match_scrut_2 = opt; if __match_scrut_2.discriminant == 1 -> bool {
+    not_none = let __match_scrut_2: ref Option<i32>; __match_scrut_2 = opt; if __match_scrut_2.discriminant == 1 -> bool {
         1;
     } else {
         0;
@@ -170,13 +170,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
