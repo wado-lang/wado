@@ -401,11 +401,19 @@ fn synthesize_lift_wasi_enum(
     local_types: &mut Vec<TypeId>,
 ) -> TirExpr {
     let disc_local = alloc_local(next_local, local_types, TypeTable::I32);
+    // CM spec: enum discriminant is u8 for ≤256 cases, u16 for ≤65536, u32 otherwise.
+    let load_name = if case_names.len() <= 256 {
+        "i32_load8_u"
+    } else if case_names.len() <= 65536 {
+        "i32_load16_u"
+    } else {
+        "i32_load"
+    };
     stmts.push(let_stmt(
         "__edisc",
         disc_local,
         TypeTable::I32,
-        builtin_call("i32_load", vec![addr], TypeTable::I32),
+        builtin_call(load_name, vec![addr], TypeTable::I32),
     ));
 
     let result_local = alloc_local(next_local, local_types, enum_type);
@@ -725,11 +733,12 @@ fn synthesize_lift_result_inner(
     let payload_offset = layout.offsets[1];
 
     let disc_local = alloc_local(next_local, local_types, TypeTable::I32);
+    // Result is a variant with 2 cases; CM spec discriminant is u8 (1 byte).
     stmts.push(let_stmt(
         "__disc",
         disc_local,
         TypeTable::I32,
-        builtin_call("i32_load", vec![addr.clone()], TypeTable::I32),
+        builtin_call("i32_load8_u", vec![addr.clone()], TypeTable::I32),
     ));
 
     // Determine the proper variant TypeId for Result<ok_ty, err_ty> so that the
@@ -1068,6 +1077,126 @@ pub fn flatten_param_type(ty: &Type) -> Vec<TypeId> {
                 })
                 .collect()
         }
+    }
+}
+
+/// Compute the CM Canonical ABI byte size for a flags type given its label count.
+/// Per the CM spec: ≤8 labels → 1 byte, ≤16 → 2 bytes, >16 → ceil(n/32)*4 bytes.
+fn cm_flags_byte_size(count: usize) -> u32 {
+    if count == 0 {
+        0
+    } else if count <= 8 {
+        1
+    } else if count <= 16 {
+        2
+    } else {
+        4 * ((count as u32 + 31) / 32)
+    }
+}
+
+/// Compute the CM Canonical ABI alignment for a flags type given its label count.
+fn cm_flags_byte_align(count: usize) -> u32 {
+    if count == 0 {
+        1
+    } else if count <= 8 {
+        1
+    } else if count <= 16 {
+        2
+    } else {
+        4
+    }
+}
+
+/// Compute the CM Canonical ABI byte size for an enum type given its variant count.
+/// Per the CM spec discriminant_type: ≤256 → 1 byte, ≤65536 → 2 bytes, else 4 bytes.
+fn cm_enum_byte_size(count: usize) -> u32 {
+    if count <= 256 {
+        1
+    } else if count <= 65536 {
+        2
+    } else {
+        4
+    }
+}
+
+/// Compute the CM Canonical ABI size for a param type, resolving WASI flags/enum sizes.
+fn cm_param_size(
+    ty: &Type,
+    wasi_registry: &crate::component_model::WasiRegistry,
+) -> u32 {
+    if let Type::Named(named) = ty {
+        if let Some(members) = wasi_registry.get_flags_members(&named.name) {
+            return cm_flags_byte_size(members.len());
+        }
+        if let Some(variants) = wasi_registry.get_enum_variants(&named.name) {
+            return cm_enum_byte_size(variants.len());
+        }
+    }
+    cm_abi::cm_size(ty)
+}
+
+/// Compute the CM Canonical ABI alignment for a param type, resolving WASI flags/enum alignments.
+fn cm_param_align(
+    ty: &Type,
+    wasi_registry: &crate::component_model::WasiRegistry,
+) -> u32 {
+    if let Type::Named(named) = ty {
+        if let Some(members) = wasi_registry.get_flags_members(&named.name) {
+            return cm_flags_byte_align(members.len());
+        }
+        if let Some(variants) = wasi_registry.get_enum_variants(&named.name) {
+            // Enum alignment equals its discriminant size
+            return cm_enum_byte_size(variants.len());
+        }
+    }
+    cm_abi::cm_align(ty)
+}
+
+/// Produce a store plan for writing a param type to memory: list of (sub_offset, store_instruction).
+/// Each entry consumes one flat arg from the flat_args vector.
+fn cm_param_store_plan(
+    ty: &Type,
+    wasi_registry: &crate::component_model::WasiRegistry,
+) -> Vec<(u32, &'static str)> {
+    if let Type::Named(named) = ty {
+        // Check WASI flags types
+        if let Some(members) = wasi_registry.get_flags_members(&named.name) {
+            let store = match cm_flags_byte_size(members.len()) {
+                0 => return vec![],
+                1 => "i32_store8",
+                2 => "i32_store16",
+                _ => "i32_store",
+            };
+            return vec![(0, store)];
+        }
+        // Check WASI enum types
+        if let Some(variants) = wasi_registry.get_enum_variants(&named.name) {
+            let store = match cm_enum_byte_size(variants.len()) {
+                1 => "i32_store8",
+                2 => "i32_store16",
+                _ => "i32_store",
+            };
+            return vec![(0, store)];
+        }
+        // Standard named types
+        return match named.name.as_str() {
+            "bool" | "u8" | "i8" => vec![(0, "i32_store8")],
+            "u16" | "i16" => vec![(0, "i32_store16")],
+            "i64" | "u64" => vec![(0, "i64_store")],
+            "f32" => vec![(0, "f32_store")],
+            "f64" => vec![(0, "f64_store")],
+            "String" => vec![(0, "i32_store"), (4, "i32_store")],
+            // i32, u32, char, resource handles
+            _ => vec![(0, "i32_store")],
+        };
+    }
+    match ty {
+        Type::Reference(_) | Type::MutReference(_) => vec![(0, "i32_store")],
+        Type::Generic(g) => match g.name.as_str() {
+            "Array" => vec![(0, "i32_store"), (4, "i32_store")],
+            _ => vec![(0, "i32_store")],
+        },
+        _ => vec![(0, "i32_store")],
     }
 }
 
@@ -1573,31 +1702,26 @@ fn synthesize_adapter(
         async_outptr_info = Some((async_outptr_local, async_result_size, async_result_align));
 
         if flat_args.len() > MAX_FLAT_ASYNC_PARAMS {
-            // Indirect calling: write all flat_args to a memory buffer and pass params_ptr.
-            // Compute buffer layout based on flat type sizes.
-            let flat_types: Vec<TypeId> = func_info
-                .params
-                .iter()
-                .flat_map(|(_, _, ty)| flatten_param_type(ty))
-                .collect();
+            // Indirect calling: write all params to a memory buffer using CM layout.
+            // The buffer layout follows the Component Model Canonical ABI spec,
+            // which uses component-level type sizes (e.g., flags with ≤8 labels = 1 byte,
+            // enums with ≤256 cases = 1 byte), NOT flat type sizes (all i32 = 4 bytes).
 
+            // Step 1: Compute buffer layout using CM component-level param types.
             let mut buf_offset = 0u32;
             let mut buf_max_align = 1u32;
-            let mut buf_offsets: Vec<u32> = Vec::with_capacity(flat_types.len());
-            for &flat_ty in &flat_types {
-                let (sz, al): (u32, u32) = match flat_ty {
-                    TypeTable::I64 => (8, 8),
-                    TypeTable::F64 => (8, 8),
-                    _ => (4, 4),
-                };
+            let mut param_offsets: Vec<u32> = Vec::with_capacity(func_info.params.len());
+            for (_, _, ty) in &func_info.params {
+                let sz = cm_param_size(ty, wasi_registry);
+                let al = cm_param_align(ty, wasi_registry);
                 buf_offset = (buf_offset + al - 1) & !(al - 1);
-                buf_offsets.push(buf_offset);
+                param_offsets.push(buf_offset);
                 buf_offset += sz;
                 buf_max_align = buf_max_align.max(al);
             }
             let buf_total_size = (buf_offset + buf_max_align - 1) & !(buf_max_align - 1);
 
-            // Allocate the params buffer.
+            // Step 2: Allocate the params buffer.
             let params_buf_local = next_local;
             body_stmts.push(let_stmt(
                 "__params_buf",
@@ -1617,30 +1741,30 @@ fn synthesize_adapter(
             local_types.push(TypeTable::I32);
             next_local += 1;
 
-            // Write each flat arg to the params buffer at the computed offset.
-            for (i, (flat_arg, &flat_ty)) in flat_args.iter().zip(flat_types.iter()).enumerate() {
-                let offset = buf_offsets[i];
-                let addr = if offset == 0 {
-                    local_ref(params_buf_local, "__params_buf", TypeTable::I32)
-                } else {
-                    binary(
-                        crate::tir::TirBinaryOp::Add,
-                        local_ref(params_buf_local, "__params_buf", TypeTable::I32),
-                        i32_const(offset as i32),
-                        TypeTable::I32,
-                    )
-                };
-                let store_name = match flat_ty {
-                    TypeTable::I64 => "i64_store",
-                    TypeTable::F32 => "f32_store",
-                    TypeTable::F64 => "f64_store",
-                    _ => "i32_store",
-                };
-                body_stmts.push(expr_stmt(builtin_call(
-                    store_name,
-                    vec![addr, flat_arg.clone()],
-                    TypeTable::UNIT,
-                )));
+            // Step 3: Write each param's flat values to the buffer at CM-computed offsets.
+            let mut flat_idx = 0;
+            for (param_idx, (_, _, ty)) in func_info.params.iter().enumerate() {
+                let base_offset = param_offsets[param_idx];
+                let stores = cm_param_store_plan(ty, wasi_registry);
+                for (sub_offset, store_name) in &stores {
+                    let offset = base_offset + sub_offset;
+                    let addr = if offset == 0 {
+                        local_ref(params_buf_local, "__params_buf", TypeTable::I32)
+                    } else {
+                        binary(
+                            crate::tir::TirBinaryOp::Add,
+                            local_ref(params_buf_local, "__params_buf", TypeTable::I32),
+                            i32_const(offset as i32),
+                            TypeTable::I32,
+                        )
+                    };
+                    body_stmts.push(expr_stmt(builtin_call(
+                        store_name,
+                        vec![addr, flat_args[flat_idx].clone()],
+                        TypeTable::UNIT,
+                    )));
+                    flat_idx += 1;
+                }
             }
 
             // Replace flat_args with (params_buf, async_outptr).
