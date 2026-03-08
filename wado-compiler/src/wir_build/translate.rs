@@ -2756,7 +2756,6 @@ impl FunctionTranslator<'_, '_> {
                 Some(WirInstr::F32ReinterpretI32(Box::new(o)))
             }
 
-            // === SIMD v128 ===
             "builtin::v128_const" => {
                 // The argument is an i128 literal interpreted as v128 bit pattern
                 let o = self.translate_expr(&args[0].expr);

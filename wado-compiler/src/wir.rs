@@ -914,7 +914,6 @@ pub enum WirInstr {
     F64PromoteF32(Box<WirInstr>),
     F64ReinterpretI64(Box<WirInstr>),
 
-    // === SIMD v128 ===
     V128Const(i128),
     V128Not(Box<WirInstr>),
     V128And(Box<WirInstr>, Box<WirInstr>),
