@@ -13,7 +13,7 @@ struct String {
     mut used: i32,
 }
 
-array array<String> (mut ref null String);
+array array<String> (mut ref String);
 
 struct Array<String> {  // Array<T> with T=String
     mut repr: ref array<String>,
@@ -57,27 +57,27 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref null array<u8>, i32, i32);
+type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
-type "functype/core:internal/write_string_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/core:internal/log_stderr" = fn(ref null String);
+type "functype/core:internal/log_stderr" = fn(ref String);
 
-type "functype/core:internal/panic" = fn(ref null String);
+type "functype/core:internal/panic" = fn(ref String);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/Array<String>::append" = fn(ref null Array<String>, ref null String);
+type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
 
-type "functype/Array<String>^IndexAssign::index_assign" = fn(ref null Array<String>, i32, ref null String);
+type "functype/Array<String>^IndexAssign::index_assign" = fn(ref Array<String>, i32, ref String);
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -96,40 +96,40 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let __local_0: ref null Array<String>;
-    let strings: ref null Array<String>;
-    let __local_2: ref null Array<String>;
-    let messages: ref null Array<String>;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
-    let __local_6: ref null Array<u64>;
+    let __local_0: ref Array<String>;
+    let strings: ref Array<String>;
+    let __local_2: ref Array<String>;
+    let messages: ref Array<String>;
+    let __local_4: ref String;
+    let __local_5: ref String;
+    let __local_6: ref Array<u64>;
     let __local_7: i32;
     let __local_8: i32;
-    let __local_9: ref null Array<String>;
-    let __local_10: ref null String;
-    let __local_11: ref null Array<String>;
-    let __local_12: ref null String;
-    let __local_13: ref null Array<String>;
-    let __local_14: ref null String;
-    let __local_15: ref null Array<String>;
+    let __local_9: ref Array<String>;
+    let __local_10: ref String;
+    let __local_11: ref Array<String>;
+    let __local_12: ref String;
+    let __local_13: ref Array<String>;
+    let __local_14: ref String;
+    let __local_15: ref Array<String>;
     let __local_16: i32;
-    let __local_17: ref null Array<String>;
+    let __local_17: ref Array<String>;
     let __local_18: i32;
-    let __local_19: ref null Array<String>;
+    let __local_19: ref Array<String>;
     let __local_20: i32;
-    let __local_21: ref null Array<String>;
+    let __local_21: ref Array<String>;
     let __local_22: i32;
     let __local_23: i32;
     let __local_24: i32;
-    let __local_25: ref null Array<String>;
-    let __local_26: ref null String;
-    let __local_27: ref null Array<String>;
-    let __local_28: ref null String;
-    let __local_29: ref null Array<String>;
+    let __local_25: ref Array<String>;
+    let __local_26: ref String;
+    let __local_27: ref Array<String>;
+    let __local_28: ref String;
+    let __local_29: ref Array<String>;
     let __local_30: i32;
-    let __local_31: ref null Array<String>;
+    let __local_31: ref Array<String>;
     let __local_32: i32;
-    let __local_33: ref null Array<String>;
+    let __local_33: ref Array<String>;
     let __local_34: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -137,61 +137,61 @@ fn run() with Stdout {
         };
         __modules_initialized = 1;
     };
-    strings = __seq_lit: block -> ref null Array<String> {
-        __local_0 = Array<String> { repr: array.new_fixed<ref null String>(String { repr: array.new_data<u8>("a"), used: 1 }, String { repr: array.new_data<u8>("b"), used: 1 }, String { repr: array.new_data<u8>("c"), used: 1 }), used: 3 };
+    strings = __seq_lit: block -> ref Array<String> {
+        __local_0 = Array<String> { repr: array.new_fixed<ref String>(String { repr: array.new_data<u8>("a"), used: 1 }, String { repr: array.new_data<u8>("b"), used: 1 }, String { repr: array.new_data<u8>("c"), used: 1 }), used: 3 };
         break __seq_lit: __local_0;
     };
     Array<String>^IndexAssign::index_assign(strings, 0, String { repr: array.new_data<u8>("hello"), used: 5 });
     Array<String>^IndexAssign::index_assign(strings, 1, String { repr: array.new_data<u8>("world"), used: 5 });
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(50), used: 0 };
-        String::append(__local_4, __inline_Array_String__IndexValue__index_value_9: block -> ref null String {
+        String::append(__local_4, __inline_Array_String__IndexValue__index_value_9: block -> ref String {
             if 0 >= strings.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
-            break __inline_Array_String__IndexValue__index_value_9: builtin::array_get<ref null String>(strings.repr, 0);
+            break __inline_Array_String__IndexValue__index_value_9: builtin::array_get<ref String>(strings.repr, 0);
         });
         String::append(__local_4, String { repr: array.new_data<u8>(" "), used: 1 });
-        String::append(__local_4, __inline_Array_String__IndexValue__index_value_10: block -> ref null String {
+        String::append(__local_4, __inline_Array_String__IndexValue__index_value_10: block -> ref String {
             if 1 >= strings.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
-            break __inline_Array_String__IndexValue__index_value_10: builtin::array_get<ref null String>(strings.repr, 1);
+            break __inline_Array_String__IndexValue__index_value_10: builtin::array_get<ref String>(strings.repr, 1);
         });
         String::append(__local_4, String { repr: array.new_data<u8>(" "), used: 1 });
-        String::append(__local_4, __inline_Array_String__IndexValue__index_value_11: block -> ref null String {
+        String::append(__local_4, __inline_Array_String__IndexValue__index_value_11: block -> ref String {
             if 2 >= strings.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
-            break __inline_Array_String__IndexValue__index_value_11: builtin::array_get<ref null String>(strings.repr, 2);
+            break __inline_Array_String__IndexValue__index_value_11: builtin::array_get<ref String>(strings.repr, 2);
         });
         break __tmpl: __local_4;
     });
-    messages = __seq_lit: block -> ref null Array<String> {
-        __local_2 = Array<String> { repr: array.new_fixed<ref null String>(String { repr: builtin::array_new<u8>(0), used: 0 }, String { repr: builtin::array_new<u8>(0), used: 0 }), used: 2 };
+    messages = __seq_lit: block -> ref Array<String> {
+        __local_2 = Array<String> { repr: array.new_fixed<ref String>(String { repr: builtin::array_new<u8>(0), used: 0 }, String { repr: builtin::array_new<u8>(0), used: 0 }), used: 2 };
         break __seq_lit: __local_2;
     };
     Array<String>^IndexAssign::index_assign(messages, 0, String { repr: array.new_data<u8>("first"), used: 5 });
     Array<String>^IndexAssign::index_assign(messages, 1, String { repr: array.new_data<u8>("second"), used: 6 });
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_5 = String { repr: builtin::array_new<u8>(33), used: 0 };
-        String::append(__local_5, __inline_Array_String__IndexValue__index_value_18: block -> ref null String {
+        String::append(__local_5, __inline_Array_String__IndexValue__index_value_18: block -> ref String {
             if 0 >= messages.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
-            break __inline_Array_String__IndexValue__index_value_18: builtin::array_get<ref null String>(messages.repr, 0);
+            break __inline_Array_String__IndexValue__index_value_18: builtin::array_get<ref String>(messages.repr, 0);
         });
         String::append(__local_5, String { repr: array.new_data<u8>(" "), used: 1 });
-        String::append(__local_5, __inline_Array_String__IndexValue__index_value_19: block -> ref null String {
+        String::append(__local_5, __inline_Array_String__IndexValue__index_value_19: block -> ref String {
             if 1 >= messages.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
-            break __inline_Array_String__IndexValue__index_value_19: builtin::array_get<ref null String>(messages.repr, 1);
+            break __inline_Array_String__IndexValue__index_value_19: builtin::array_get<ref String>(messages.repr, 1);
         });
         break __tmpl: __local_5;
     });
@@ -241,13 +241,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -309,11 +309,11 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
 
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from core:internal
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
+    let __local_7: ref String;
+    let __local_8: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -367,7 +367,7 @@ fn "core:internal/panic"(message) {  // from core:internal
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -391,8 +391,8 @@ fn String::grow(self, min_capacity) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -409,7 +409,7 @@ fn Array<String>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<String>;
+    let new_repr: ref array<String>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;
@@ -419,11 +419,11 @@ fn Array<String>::append(self, value) {
             __local_6 = capacity * 2;
             break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
         };
-        new_repr = builtin::array_new<ref null String>(new_capacity);
-        builtin::array_copy<ref null String>(new_repr, 0, self.repr, 0, used);
+        new_repr = builtin::array_new<ref String>(new_capacity);
+        builtin::array_copy<ref String>(new_repr, 0, self.repr, 0, used);
         self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<ref null String>(self.repr, used, value);
+    builtin::array_set<ref String>(self.repr, used, value);
     self.used = used + 1;
 }
 
@@ -432,7 +432,7 @@ fn Array<String>^IndexAssign::index_assign(self, index, value) {
         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     };
-    builtin::array_set<ref null String>(self.repr, index, value);
+    builtin::array_set<ref String>(self.repr, index, value);
 }
 
 export fn __cm_export__run as "run"

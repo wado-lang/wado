@@ -24,7 +24,7 @@ struct Formatter {
     mut buf: ref String,
 }
 
-array array<Array<i32>> (mut ref null Array<i32>);
+array array<Array<i32>> (mut ref Array<i32>);
 
 array array<i32> (mut i32);
 
@@ -77,49 +77,49 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref null array<u8>, i32, i32);
+type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
-type "functype/core:internal/write_string_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/core:internal/log_stderr" = fn(ref null String);
+type "functype/core:internal/log_stderr" = fn(ref String);
 
-type "functype/core:internal/panic" = fn(ref null String);
+type "functype/core:internal/panic" = fn(ref String);
 
 type "functype/count_digits_i64" = fn(i64) -> i32;
 
-type "functype/write_decimal_digits" = fn(ref null array<u8>, i32, i64, i32);
+type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/i32::fmt_decimal" = fn(ref null "core:internal/Box<i32>", ref null Formatter);
+type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::internal_reserve_uninit" = fn(ref null String, i32) -> i32;
+type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref null String, char);
+type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/Array<Array<i32>>^Inspect::inspect" = fn(ref null Array<Array<i32>>, ref null Formatter);
+type "functype/Array<Array<i32>>^Inspect::inspect" = fn(ref Array<Array<i32>>, ref Formatter);
 
-type "functype/Array<Array<i32>>^IndexAssign::index_assign" = fn(ref null Array<Array<i32>>, i32, ref null Array<i32>);
+type "functype/Array<Array<i32>>^IndexAssign::index_assign" = fn(ref Array<Array<i32>>, i32, ref Array<i32>);
 
-type "functype/Array<i32>^Inspect::inspect" = fn(ref null Array<i32>, ref null Formatter);
+type "functype/Array<i32>^Inspect::inspect" = fn(ref Array<i32>, ref Formatter);
 
-type "functype/Array<i32>::append" = fn(ref null Array<i32>, i32);
+type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
-type "functype/Array<Array<i32>>::append" = fn(ref null Array<Array<i32>>, ref null Array<i32>);
+type "functype/Array<Array<i32>>::append" = fn(ref Array<Array<i32>>, ref Array<i32>);
 
-type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
+type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
-type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref null String, i32) -> i32;
+type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
 
-type "functype/i32::fmt_decimal" = fn(i32, ref null Formatter);
+type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -138,95 +138,95 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let __local_0: ref null Array<Array<i32>>;
-    let __local_1: ref null Array<i32>;
-    let __local_2: ref null Array<i32>;
-    let matrix: ref null Array<Array<i32>>;
-    let row: ref null Array<i32>;
-    let __local_5: ref null Array<i32>;
-    let new_row: ref null Array<i32>;
-    let __local_7: ref null String;
-    let __local_8: ref null Formatter;
-    let __local_9: ref null String;
-    let __local_10: ref null Formatter;
-    let __local_11: ref null Array<u64>;
+    let __local_0: ref Array<Array<i32>>;
+    let __local_1: ref Array<i32>;
+    let __local_2: ref Array<i32>;
+    let matrix: ref Array<Array<i32>>;
+    let row: ref Array<i32>;
+    let __local_5: ref Array<i32>;
+    let new_row: ref Array<i32>;
+    let __local_7: ref String;
+    let __local_8: ref Formatter;
+    let __local_9: ref String;
+    let __local_10: ref Formatter;
+    let __local_11: ref Array<u64>;
     let __local_12: i32;
     let __local_13: i32;
-    let __local_14: ref null Array<Array<i32>>;
-    let __local_15: ref null Array<i32>;
+    let __local_14: ref Array<Array<i32>>;
+    let __local_15: ref Array<i32>;
     let __local_16: i32;
     let __local_17: i32;
-    let __local_18: ref null Array<i32>;
+    let __local_18: ref Array<i32>;
     let __local_19: i32;
-    let __local_20: ref null Array<i32>;
+    let __local_20: ref Array<i32>;
     let __local_21: i32;
-    let __local_22: ref null Array<i32>;
-    let __local_23: ref null Array<Array<i32>>;
-    let __local_24: ref null Array<i32>;
+    let __local_22: ref Array<i32>;
+    let __local_23: ref Array<Array<i32>>;
+    let __local_24: ref Array<i32>;
     let __local_25: i32;
     let __local_26: i32;
-    let __local_27: ref null Array<i32>;
+    let __local_27: ref Array<i32>;
     let __local_28: i32;
-    let __local_29: ref null Array<i32>;
+    let __local_29: ref Array<i32>;
     let __local_30: i32;
-    let __local_31: ref null Array<i32>;
-    let __local_32: ref null Array<Array<i32>>;
-    let __local_33: ref null Array<Array<i32>>;
+    let __local_31: ref Array<i32>;
+    let __local_32: ref Array<Array<i32>>;
+    let __local_33: ref Array<Array<i32>>;
     let __local_34: i32;
     let __local_35: i32;
-    let __local_36: ref null String;
+    let __local_36: ref String;
     let __local_37: i32;
     let __local_38: i32;
-    let __local_39: ref null Array<i32>;
+    let __local_39: ref Array<i32>;
     let __local_40: i32;
-    let __local_41: ref null Array<i32>;
+    let __local_41: ref Array<i32>;
     let __local_42: i32;
-    let __local_43: ref null Array<i32>;
+    let __local_43: ref Array<i32>;
     let __local_44: i32;
-    let __local_45: ref null Array<i32>;
+    let __local_45: ref Array<i32>;
     let __local_46: i32;
-    let __local_47: ref null String;
+    let __local_47: ref String;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
         };
         __modules_initialized = 1;
     };
-    matrix = __seq_lit: block -> ref null Array<Array<i32>> {
-        __local_0 = Array<Array<i32>> { repr: array.new_fixed<ref null Array<i32>>(__seq_lit: block -> ref null Array<i32> {
+    matrix = __seq_lit: block -> ref Array<Array<i32>> {
+        __local_0 = Array<Array<i32>> { repr: array.new_fixed<ref Array<i32>>(__seq_lit: block -> ref Array<i32> {
             __local_1 = Array<i32> { repr: array.new_fixed<i32>(1, 2), used: 2 };
             break __seq_lit: __local_1;
-        }, __seq_lit: block -> ref null Array<i32> {
+        }, __seq_lit: block -> ref Array<i32> {
             __local_2 = Array<i32> { repr: array.new_fixed<i32>(3, 4), used: 2 };
             break __seq_lit: __local_2;
         }), used: 2 };
         break __seq_lit: __local_0;
     };
-    row = __inline_Array_Array_i32___IndexValue__index_value_17: block -> ref null Array<i32> {
+    row = __inline_Array_Array_i32___IndexValue__index_value_17: block -> ref Array<i32> {
         if 0 >= matrix.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_Array_i32___IndexValue__index_value_17: builtin::array_get<ref null Array<i32>>(matrix.repr, 0);
+        break __inline_Array_Array_i32___IndexValue__index_value_17: builtin::array_get<ref Array<i32>>(matrix.repr, 0);
     };
     Array<i32>::append(row, 99);
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_7 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_8 = __inline_Formatter__new_19: block -> ref null Formatter {
+        __local_8 = __inline_Formatter__new_19: block -> ref Formatter {
             __local_36 = __local_7;
             break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_36) };
         };
         Array<i32>^Inspect::inspect(row, __local_8);
         break __tmpl: __local_7;
     });
-    new_row = __seq_lit: block -> ref null Array<i32> {
+    new_row = __seq_lit: block -> ref Array<i32> {
         __local_5 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_5;
     };
     Array<Array<i32>>^IndexAssign::index_assign(matrix, 0, new_row);
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_9 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_10 = __inline_Formatter__new_27: block -> ref null Formatter {
+        __local_10 = __inline_Formatter__new_27: block -> ref Formatter {
             __local_47 = __local_9;
             break __inline_Formatter__new_27: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_47) };
         };
@@ -280,13 +280,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -348,11 +348,11 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
 
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from core:internal
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
+    let __local_7: ref String;
+    let __local_8: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -459,7 +459,7 @@ fn i32::fmt_decimal(self, f) {
     let abs_val: i64;
     let digit_count: i32;
     let offset: i32;
-    let __local_6: ref null String;
+    let __local_6: ref String;
     is_negative = self < 0;
     abs_val = if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
@@ -468,7 +468,7 @@ fn i32::fmt_decimal(self, f) {
     };
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref null array<u8> {
+    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
     }, offset, abs_val, digit_count);
@@ -477,7 +477,7 @@ fn i32::fmt_decimal(self, f) {
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -513,8 +513,8 @@ fn String::internal_reserve_uninit(self, n) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -556,17 +556,17 @@ fn String::append_char(self, c) {
 
 fn Array<Array<i32>>^Inspect::inspect(self, f) {
     let i: i32;
-    let __local_3: ref null Formatter;
+    let __local_3: ref Formatter;
     let __local_4: char;
-    let __local_5: ref null Array<Array<i32>>;
-    let __local_6: ref null Formatter;
-    let s: ref null String;
-    let __local_8: ref null Array<Array<i32>>;
+    let __local_5: ref Array<Array<i32>>;
+    let __local_6: ref Formatter;
+    let s: ref String;
+    let __local_8: ref Array<Array<i32>>;
     let __local_9: i32;
-    let __local_10: ref null Formatter;
+    let __local_10: ref Formatter;
     let __local_11: char;
     let _licm_used_12: i32;
-    let _licm_repr_13: ref null array<Array<i32>>;
+    let _licm_repr_13: ref array<Array<i32>>;
     String::append_char(f.buf, 91);
     __for_5: block {
         i = 0;
@@ -581,9 +581,9 @@ fn Array<Array<i32>>^Inspect::inspect(self, f) {
                     s = String { repr: array.new_data<u8>(", "), used: 2 };
                     String::append(f.buf, s);
                 };
-                Array<i32>^Inspect::inspect(__inline_Array_Array_i32___IndexValue__index_value_3: block -> ref null Array<i32> {
+                Array<i32>^Inspect::inspect(__inline_Array_Array_i32___IndexValue__index_value_3: block -> ref Array<i32> {
                     __local_9 = i;
-                    break __inline_Array_Array_i32___IndexValue__index_value_3: builtin::array_get<ref null Array<i32>>(_licm_repr_13, __local_9);
+                    break __inline_Array_Array_i32___IndexValue__index_value_3: builtin::array_get<ref Array<i32>>(_licm_repr_13, __local_9);
                 }, f);
                 i = i + 1;
                 continue l35;
@@ -598,26 +598,26 @@ fn Array<Array<i32>>^IndexAssign::index_assign(self, index, value) {
         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     };
-    builtin::array_set<ref null Array<i32>>(self.repr, index, value);
+    builtin::array_set<ref Array<i32>>(self.repr, index, value);
 }
 
 fn Array<i32>^Inspect::inspect(self, f) {
     let i: i32;
-    let __local_3: ref null Formatter;
+    let __local_3: ref Formatter;
     let __local_4: char;
-    let __local_5: ref null Array<i32>;
-    let __local_6: ref null Formatter;
-    let s: ref null String;
-    let self_8: ref null "core:internal/Box<i32>";
-    let __local_9: ref null Formatter;
-    let __local_10: ref null Array<i32>;
+    let __local_5: ref Array<i32>;
+    let __local_6: ref Formatter;
+    let s: ref String;
+    let self_8: ref "core:internal/Box<i32>";
+    let __local_9: ref Formatter;
+    let __local_10: ref Array<i32>;
     let __local_11: i32;
-    let __local_12: ref null "core:internal/Box<i32>";
-    let __local_13: ref null Formatter;
-    let __local_14: ref null Formatter;
+    let __local_12: ref "core:internal/Box<i32>";
+    let __local_13: ref Formatter;
+    let __local_14: ref Formatter;
     let __local_15: char;
     let _licm_used_16: i32;
-    let _licm_repr_17: ref null array<i32>;
+    let _licm_repr_17: ref array<i32>;
     String::append_char(f.buf, 91);
     __for_5: block {
         i = 0;
@@ -648,7 +648,7 @@ fn Array<i32>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<i32>;
+    let new_repr: ref array<i32>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;
@@ -670,7 +670,7 @@ fn Array<Array<i32>>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<Array<i32>>;
+    let new_repr: ref array<Array<i32>>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;
@@ -680,17 +680,17 @@ fn Array<Array<i32>>::append(self, value) {
             __local_6 = capacity * 2;
             break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
         };
-        new_repr = builtin::array_new<ref null Array<i32>>(new_capacity);
-        builtin::array_copy<ref null Array<i32>>(new_repr, 0, self.repr, 0, used);
+        new_repr = builtin::array_new<ref Array<i32>>(new_capacity);
+        builtin::array_copy<ref Array<i32>>(new_repr, 0, self.repr, 0, used);
         self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<ref null Array<i32>>(self.repr, used, value);
+    builtin::array_set<ref Array<i32>>(self.repr, used, value);
     self.used = used + 1;
 }
 
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
-    let _licm_buf_4: ref null String;
+    let _licm_buf_4: ref String;
     __for_0: block {
         i = 0;
         _licm_buf_4 = self.buf;
@@ -708,7 +708,7 @@ fn Formatter::write_char_n(self, c, n) {
 }
 
 fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
-    let sign: ref null String;
+    let sign: ref String;
     let sign_len: i32;
     let prefix_len: i32;
     let content_len: i32;
@@ -718,8 +718,8 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
-    let __local_14: ref null String;
-    let __local_15: ref null String;
+    let __local_14: ref String;
+    let __local_15: ref String;
     sign = String { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };

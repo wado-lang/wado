@@ -457,19 +457,19 @@ impl<'a> WirContext<'a> {
                 if let Some(type_id) = self.struct_type_map.get(&lookup_name) {
                     WirType::Ref {
                         type_id: type_id.clone(),
-                        nullable: true,
+                        nullable: false,
                     }
                 } else if let Some(type_id) = self.lookup_struct_by_name(name) {
                     // Fallback: monomorphized structs may have a different module_source
                     WirType::Ref {
                         type_id: type_id.clone(),
-                        nullable: true,
+                        nullable: false,
                     }
                 } else {
                     // Fallback: use abstract struct ref
                     WirType::AbstractRef {
                         heap_type: crate::wir::WirAbstractHeapType::Struct,
-                        nullable: true,
+                        nullable: false,
                     }
                 }
             }
@@ -482,12 +482,12 @@ impl<'a> WirContext<'a> {
                 if let Some(type_id) = self.type_map.get(&array_fq) {
                     WirType::Ref {
                         type_id: type_id.clone(),
-                        nullable: true,
+                        nullable: false,
                     }
                 } else {
                     WirType::AbstractRef {
                         heap_type: crate::wir::WirAbstractHeapType::Struct,
-                        nullable: true,
+                        nullable: false,
                     }
                 }
             }
@@ -504,13 +504,13 @@ impl<'a> WirContext<'a> {
                 if let Some(tid) = self.struct_type_map.get(&struct_name) {
                     WirType::Ref {
                         type_id: tid.clone(),
-                        nullable: true,
+                        nullable: false,
                     }
                 } else if let Some(tid) = self.lookup_struct_by_name(&mangled) {
                     // Fallback: monomorphized structs may have a different module_source
                     WirType::Ref {
                         type_id: tid.clone(),
-                        nullable: true,
+                        nullable: false,
                     }
                 } else {
                     // Try as variant (in type_map)
@@ -518,12 +518,12 @@ impl<'a> WirContext<'a> {
                     if let Some(tid) = self.type_map.get(&variant_fq) {
                         WirType::Ref {
                             type_id: tid.clone(),
-                            nullable: true,
+                            nullable: false,
                         }
                     } else {
                         WirType::AbstractRef {
                             heap_type: crate::wir::WirAbstractHeapType::Struct,
-                            nullable: true,
+                            nullable: false,
                         }
                     }
                 }
@@ -532,7 +532,7 @@ impl<'a> WirContext<'a> {
                 if let Some(type_id) = self.array_type_map.get(elem_type_id) {
                     WirType::Ref {
                         type_id: type_id.clone(),
-                        nullable: true,
+                        nullable: false,
                     }
                 } else {
                     // Fallback: look up by element type name (handles cross-module TypeIds)
@@ -540,12 +540,12 @@ impl<'a> WirContext<'a> {
                     if let Some(type_id) = self.array_type_by_name.get(&elem_name) {
                         WirType::Ref {
                             type_id: type_id.clone(),
-                            nullable: true,
+                            nullable: false,
                         }
                     } else {
                         WirType::AbstractRef {
                             heap_type: crate::wir::WirAbstractHeapType::Array,
-                            nullable: true,
+                            nullable: false,
                         }
                     }
                 }
@@ -575,12 +575,12 @@ impl<'a> WirContext<'a> {
                 if let Some(type_id) = self.type_map.get(&fq) {
                     WirType::Ref {
                         type_id: type_id.clone(),
-                        nullable: true,
+                        nullable: false,
                     }
                 } else {
                     WirType::AbstractRef {
                         heap_type: crate::wir::WirAbstractHeapType::Struct,
-                        nullable: true,
+                        nullable: false,
                     }
                 }
             }
@@ -588,12 +588,12 @@ impl<'a> WirContext<'a> {
                 if let Some(type_id) = self.tuple_type_map.get(elements) {
                     WirType::Ref {
                         type_id: type_id.clone(),
-                        nullable: true,
+                        nullable: false,
                     }
                 } else {
                     WirType::AbstractRef {
                         heap_type: crate::wir::WirAbstractHeapType::Struct,
-                        nullable: true,
+                        nullable: false,
                     }
                 }
             }
@@ -617,7 +617,7 @@ impl<'a> WirContext<'a> {
                         if let Some(tid) = self.lookup_struct_by_name(&box_name) {
                             WirType::Ref {
                                 type_id: tid.clone(),
-                                nullable: true,
+                                nullable: false,
                             }
                         } else {
                             // Fallback: treat as value type (no boxing available)
@@ -632,7 +632,7 @@ impl<'a> WirContext<'a> {
                 // IndirectCall will RefCast to the specific canonical closure struct.
                 WirType::AbstractRef {
                     heap_type: crate::wir::WirAbstractHeapType::Struct,
-                    nullable: true,
+                    nullable: false,
                 }
             }
             ResolvedType::Newtype { base_type, .. } => {

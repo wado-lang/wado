@@ -69,39 +69,39 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref null array<u8>, i32, i32);
+type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
-type "functype/core:internal/write_string_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/core:internal/log_stderr" = fn(ref null String);
+type "functype/core:internal/log_stderr" = fn(ref String);
 
-type "functype/core:internal/panic" = fn(ref null String);
+type "functype/core:internal/panic" = fn(ref String);
 
 type "functype/count_digits_i64" = fn(i64) -> i32;
 
-type "functype/write_decimal_digits" = fn(ref null array<u8>, i32, i64, i32);
+type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/i32::fmt_decimal" = fn(ref null "core:internal/Box<i32>", ref null Formatter);
+type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::internal_reserve_uninit" = fn(ref null String, i32) -> i32;
+type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref null String, char);
+type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/String::truncate_bytes" = fn(ref null String, i32);
+type "functype/String::truncate_bytes" = fn(ref String, i32);
 
-type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
+type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
-type "functype/Formatter::pad" = fn(ref null Formatter, ref null String);
+type "functype/Formatter::pad" = fn(ref Formatter, ref String);
 
-type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref null String, i32) -> i32;
+type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
 
-type "functype/i32::fmt_decimal" = fn(i32, ref null Formatter);
+type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -119,8 +119,8 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() {
-    let s: ref null String;
-    let __local_1: ref null Array<u64>;
+    let s: ref String;
+    let __local_1: ref Array<u64>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -132,8 +132,8 @@ fn run() {
 }
 
 fn __cm_export__run() {
-    let s: ref null String;
-    let __local_1: ref null Array<u64>;
+    let s: ref String;
+    let __local_1: ref Array<u64>;
     __inline___initialize_modules_1: block {
         if __modules_initialized {
             break __inline___initialize_modules_1;
@@ -201,11 +201,11 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
 
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from core:internal
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
+    let __local_7: ref String;
+    let __local_8: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -312,7 +312,7 @@ fn i32::fmt_decimal(self, f) {
     let abs_val: i64;
     let digit_count: i32;
     let offset: i32;
-    let __local_6: ref null String;
+    let __local_6: ref String;
     is_negative = self < 0;
     abs_val = if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
@@ -321,7 +321,7 @@ fn i32::fmt_decimal(self, f) {
     };
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref null array<u8> {
+    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
     }, offset, abs_val, digit_count);
@@ -330,7 +330,7 @@ fn i32::fmt_decimal(self, f) {
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -366,8 +366,8 @@ fn String::internal_reserve_uninit(self, n) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -416,53 +416,53 @@ fn String::truncate_bytes(self, byte_len) {
     let __local_7: u8;
     let __v3: bool;
     let __cond_9: bool;
-    let __local_10: ref null String;
-    let __local_11: ref null Formatter;
-    let __local_12: ref null String;
-    let __local_13: ref null Formatter;
+    let __local_10: ref String;
+    let __local_11: ref Formatter;
+    let __local_12: ref String;
+    let __local_13: ref Formatter;
     let __local_14: i32;
-    let __local_15: ref null String;
-    let __local_16: ref null "core:internal/Box<i32>";
-    let __local_17: ref null Formatter;
-    let __local_18: ref null "core:internal/Box<i32>";
-    let __local_19: ref null Formatter;
-    let __local_20: ref null String;
-    let __local_21: ref null "core:internal/Box<i32>";
-    let __local_22: ref null Formatter;
-    let __local_23: ref null "core:internal/Box<i32>";
-    let __local_24: ref null Formatter;
+    let __local_15: ref String;
+    let __local_16: ref "core:internal/Box<i32>";
+    let __local_17: ref Formatter;
+    let __local_18: ref "core:internal/Box<i32>";
+    let __local_19: ref Formatter;
+    let __local_20: ref String;
+    let __local_21: ref "core:internal/Box<i32>";
+    let __local_22: ref Formatter;
+    let __local_23: ref "core:internal/Box<i32>";
+    let __local_24: ref Formatter;
     let __local_25: i32;
-    let __local_26: ref null String;
-    let __local_27: ref null "core:internal/Box<i32>";
-    let __local_28: ref null Formatter;
-    let __local_29: ref null "core:internal/Box<i32>";
-    let __local_30: ref null Formatter;
-    let __local_31: ref null String;
-    let __local_32: ref null "core:internal/Box<u8>";
-    let __local_33: ref null Formatter;
-    let __local_34: ref null "core:internal/Box<u8>";
-    let __local_35: ref null Formatter;
-    let __local_36: ref null String;
-    let __local_37: ref null "core:internal/Box<bool>";
-    let __local_38: ref null Formatter;
-    let __local_39: ref null "core:internal/Box<bool>";
-    let __local_40: ref null Formatter;
-    let __local_41: ref null String;
-    let __local_42: ref null "core:internal/Box<u8>";
-    let __local_43: ref null Formatter;
-    let __local_44: ref null "core:internal/Box<u8>";
-    let __local_45: ref null Formatter;
-    let __local_46: ref null String;
-    let __local_47: ref null "core:internal/Box<bool>";
-    let __local_48: ref null Formatter;
-    let __local_49: ref null "core:internal/Box<bool>";
-    let __local_50: ref null Formatter;
+    let __local_26: ref String;
+    let __local_27: ref "core:internal/Box<i32>";
+    let __local_28: ref Formatter;
+    let __local_29: ref "core:internal/Box<i32>";
+    let __local_30: ref Formatter;
+    let __local_31: ref String;
+    let __local_32: ref "core:internal/Box<u8>";
+    let __local_33: ref Formatter;
+    let __local_34: ref "core:internal/Box<u8>";
+    let __local_35: ref Formatter;
+    let __local_36: ref String;
+    let __local_37: ref "core:internal/Box<bool>";
+    let __local_38: ref Formatter;
+    let __local_39: ref "core:internal/Box<bool>";
+    let __local_40: ref Formatter;
+    let __local_41: ref String;
+    let __local_42: ref "core:internal/Box<u8>";
+    let __local_43: ref Formatter;
+    let __local_44: ref "core:internal/Box<u8>";
+    let __local_45: ref Formatter;
+    let __local_46: ref String;
+    let __local_47: ref "core:internal/Box<bool>";
+    let __local_48: ref Formatter;
+    let __local_49: ref "core:internal/Box<bool>";
+    let __local_50: ref Formatter;
     if byte_len >= self.used {
         return;
     };
     __cond_3 = byte_len >= 0;
     if __cond_3 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_10 = String { repr: builtin::array_new<u8>(144), used: 0 };
             String::append(__local_10, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append(__local_10, String { repr: array.new_data<u8>("String::truncate_bytes"), used: 22 });
@@ -472,7 +472,7 @@ fn String::truncate_bytes(self, byte_len) {
             String::append_char(__local_10, 32);
             String::append(__local_10, String { repr: array.new_data<u8>("core:prelude/string.wado"), used: 24 });
             String::append_char(__local_10, 58);
-            __local_11 = __inline_Formatter__new_1: block -> ref null Formatter {
+            __local_11 = __inline_Formatter__new_1: block -> ref Formatter {
                 __local_15 = __local_10;
                 break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_15) };
             };
@@ -485,7 +485,7 @@ fn String::truncate_bytes(self, byte_len) {
 condition: byte_len >= 0
 "), used: 26 });
             String::append(__local_10, String { repr: array.new_data<u8>("byte_len: "), used: 10 });
-            __local_11 = __inline_Formatter__new_4: block -> ref null Formatter {
+            __local_11 = __inline_Formatter__new_4: block -> ref Formatter {
                 __local_20 = __local_10;
                 break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_20) };
             };
@@ -506,7 +506,7 @@ condition: byte_len >= 0
             __v3;
         };
         if __cond_9 == 0 {
-            "core:internal/panic"(__tmpl: block -> ref null String {
+            "core:internal/panic"(__tmpl: block -> ref String {
                 __local_12 = String { repr: builtin::array_new<u8>(220), used: 0 };
                 String::append(__local_12, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
                 String::append(__local_12, String { repr: array.new_data<u8>("String::truncate_bytes"), used: 22 });
@@ -516,7 +516,7 @@ condition: byte_len >= 0
                 String::append_char(__local_12, 32);
                 String::append(__local_12, String { repr: array.new_data<u8>("core:prelude/string.wado"), used: 24 });
                 String::append_char(__local_12, 58);
-                __local_13 = __inline_Formatter__new_8: block -> ref null Formatter {
+                __local_13 = __inline_Formatter__new_8: block -> ref Formatter {
                     __local_26 = __local_12;
                     break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_26) };
                 };
@@ -531,7 +531,7 @@ condition: b < 0x80 || b >= 0xC0
                 String::append_char(__local_12, 98);
                 String::append_char(__local_12, 58);
                 String::append_char(__local_12, 32);
-                __local_13 = __inline_Formatter__new_11: block -> ref null Formatter {
+                __local_13 = __inline_Formatter__new_11: block -> ref Formatter {
                     __local_31 = __local_12;
                     break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_31) };
                 };
@@ -539,12 +539,12 @@ condition: b < 0x80 || b >= 0xC0
                 i32::fmt_decimal(b, __local_33);
                 String::append_char(__local_12, 10);
                 String::append(__local_12, String { repr: array.new_data<u8>("b < 0x80: "), used: 10 });
-                __local_13 = __inline_Formatter__new_14: block -> ref null Formatter {
+                __local_13 = __inline_Formatter__new_14: block -> ref Formatter {
                     __local_36 = __local_12;
                     break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_36) };
                 };
                 __local_38 = __local_13;
-                Formatter::pad(__local_38, if __v1 -> ref null String {
+                Formatter::pad(__local_38, if __v1 -> ref String {
                     String { repr: array.new_data<u8>("true"), used: 4 };
                 } else {
                     String { repr: array.new_data<u8>("false"), used: 5 };
@@ -553,7 +553,7 @@ condition: b < 0x80 || b >= 0xC0
                 String::append_char(__local_12, 98);
                 String::append_char(__local_12, 58);
                 String::append_char(__local_12, 32);
-                __local_13 = __inline_Formatter__new_17: block -> ref null Formatter {
+                __local_13 = __inline_Formatter__new_17: block -> ref Formatter {
                     __local_41 = __local_12;
                     break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_41) };
                 };
@@ -561,12 +561,12 @@ condition: b < 0x80 || b >= 0xC0
                 i32::fmt_decimal(b, __local_43);
                 String::append_char(__local_12, 10);
                 String::append(__local_12, String { repr: array.new_data<u8>("b >= 0xC0: "), used: 11 });
-                __local_13 = __inline_Formatter__new_20: block -> ref null Formatter {
+                __local_13 = __inline_Formatter__new_20: block -> ref Formatter {
                     __local_46 = __local_12;
                     break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_46) };
                 };
                 __local_48 = __local_13;
-                Formatter::pad(__local_48, if __v3 -> ref null String {
+                Formatter::pad(__local_48, if __v3 -> ref String {
                     String { repr: array.new_data<u8>("true"), used: 4 };
                 } else {
                     String { repr: array.new_data<u8>("false"), used: 5 };
@@ -582,7 +582,7 @@ condition: b < 0x80 || b >= 0xC0
 
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
-    let _licm_buf_4: ref null String;
+    let _licm_buf_4: ref String;
     __for_0: block {
         i = 0;
         _licm_buf_4 = self.buf;
@@ -605,7 +605,7 @@ fn Formatter::pad(self, content) {
     let align: enum:Alignment;
     let left_pad: i32;
     let right_pad: i32;
-    let __local_7: ref null String;
+    let __local_7: ref String;
     content_len = content.used;
     if if self.width <= 0 -> i32 {
         1;
@@ -633,7 +633,7 @@ fn Formatter::pad(self, content) {
 }
 
 fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
-    let sign: ref null String;
+    let sign: ref String;
     let sign_len: i32;
     let prefix_len: i32;
     let content_len: i32;
@@ -643,8 +643,8 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
-    let __local_14: ref null String;
-    let __local_15: ref null String;
+    let __local_14: ref String;
+    let __local_15: ref String;
     sign = String { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };

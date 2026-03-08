@@ -52,7 +52,7 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/apply_padding" = fn(ref null String, ref null FormatSpec) -> ref null String;
+type "functype/apply_padding" = fn(ref String, ref FormatSpec) -> ref String;
 
 type "functype/run" = fn();
 
@@ -62,17 +62,17 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref null String, char);
+type "functype/String::append_char" = fn(ref String, char);
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -93,15 +93,15 @@ fn apply_padding(s, spec) {
     let width: i32;
     let fill: char;
     let pad_len: i32;
-    let result: ref null String;
+    let result: ref String;
     let __local_6: i32;
     let __local_7: i32;
     let __local_8: i32;
     let __local_9: i32;
     let __local_10: i32;
     let __local_11: i32;
-    let __local_12: ref null String;
-    let __local_13: ref null String;
+    let __local_12: ref String;
+    let __local_13: ref String;
     let __local_14: i32;
     width = spec.width;
     if if width <= 0 -> i32 {
@@ -114,7 +114,7 @@ fn apply_padding(s, spec) {
     fill = spec.fill;
     pad_len = width - s.used;
     result = String { repr: builtin::array_new<u8>(width), used: 0 };
-    return let __match_scrut_0: ref null Align; __match_scrut_0 = spec.align; if __match_scrut_0.discriminant == 0 -> ref null String {
+    return let __match_scrut_0: ref Align; __match_scrut_0 = spec.align; if __match_scrut_0.discriminant == 0 -> ref String {
         String::append(result, s);
         __for_0: block {
             __local_6 = 0;
@@ -130,7 +130,7 @@ fn apply_padding(s, spec) {
             };
         };
         result;
-    } else if __match_scrut_0.discriminant == 1 -> ref null String {
+    } else if __match_scrut_0.discriminant == 1 -> ref String {
         __local_7 = pad_len / 2;
         __local_8 = pad_len - __local_7;
         __for_0: block {
@@ -161,7 +161,7 @@ fn apply_padding(s, spec) {
             };
         };
         result;
-    } else if __match_scrut_0.discriminant == 2 -> ref null String {
+    } else if __match_scrut_0.discriminant == 2 -> ref String {
         __for_0: block {
             __local_11 = 0;
             block {
@@ -183,10 +183,10 @@ fn apply_padding(s, spec) {
 }
 
 fn run() with Stdout {
-    let left: ref null FormatSpec;
-    let center: ref null FormatSpec;
-    let right: ref null FormatSpec;
-    let __local_3: ref null Array<u64>;
+    let left: ref FormatSpec;
+    let center: ref FormatSpec;
+    let right: ref FormatSpec;
+    let __local_3: ref Array<u64>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -245,13 +245,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -312,7 +312,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -336,8 +336,8 @@ fn String::grow(self, min_capacity) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;

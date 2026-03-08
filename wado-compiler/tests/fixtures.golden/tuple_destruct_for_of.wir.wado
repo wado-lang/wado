@@ -29,7 +29,7 @@ struct [i32, String] {
     mut 1: ref String,
 }
 
-array array<Tuple<i32,String>> (mut ref null "tuple/[i32, String]");
+array array<Tuple<i32,String>> (mut ref "tuple/[i32, String]");
 
 struct ArrayIter<Tuple<i32,String>> {  // ArrayIter<T> with T=Tuple<i32,String>
     mut repr: ref array<Tuple<i32,String>>,
@@ -38,13 +38,13 @@ struct ArrayIter<Tuple<i32,String>> {  // ArrayIter<T> with T=Tuple<i32,String>
 }
 
 variant Option<Tuple<i32,String>> {
-    Some(ref null "tuple/[i32, String]"),
+    Some(ref "tuple/[i32, String]"),
     None,
 }
 
 struct Option<Tuple<i32,String>>::Some {
     discriminant: i32,
-    payload_0: ref null "tuple/[i32, String]",
+    payload_0: ref "tuple/[i32, String]",
 }
 
 array array<u64> (mut u64);
@@ -89,37 +89,37 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
 type "functype/count_digits_i64" = fn(i64) -> i32;
 
-type "functype/write_decimal_digits" = fn(ref null array<u8>, i32, i64, i32);
+type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/i32::fmt_decimal" = fn(ref null "core:internal/Box<i32>", ref null Formatter);
+type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::internal_reserve_uninit" = fn(ref null String, i32) -> i32;
+type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref null String, char);
+type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/ArrayIter<Tuple<i32,String>>^Iterator::next" = fn(ref null ArrayIter<Tuple<i32,String>>) -> ref null Option<Tuple<i32,String>>;
+type "functype/ArrayIter<Tuple<i32,String>>^Iterator::next" = fn(ref ArrayIter<Tuple<i32,String>>) -> ref Option<Tuple<i32,String>>;
 
-type "functype/Array<Tuple<i32,String>>::append" = fn(ref null Array<Tuple<i32,String>>, ref null "tuple/[i32, String]");
+type "functype/Array<Tuple<i32,String>>::append" = fn(ref Array<Tuple<i32,String>>, ref "tuple/[i32, String]");
 
-type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
+type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
-type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref null String, i32) -> i32;
+type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
 
-type "functype/ArrayIter<Tuple<i32,String>>^Iterator::next" = fn(ref null ArrayIter<Tuple<i32,String>>) -> [i32, ref null "tuple/[i32, String]"];
+type "functype/ArrayIter<Tuple<i32,String>>^Iterator::next" = fn(ref ArrayIter<Tuple<i32,String>>) -> [i32, ref null "tuple/[i32, String]"];
 
-type "functype/i32::fmt_decimal" = fn(i32, ref null Formatter);
+type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -137,45 +137,45 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let __local_0: ref null Array<Tuple<i32,String>>;
-    let pairs: ref null Array<Tuple<i32,String>>;
-    let __iter_0: ref null ArrayIter<Tuple<i32,String>>;
+    let __local_0: ref Array<Tuple<i32,String>>;
+    let pairs: ref Array<Tuple<i32,String>>;
+    let __iter_0: ref ArrayIter<Tuple<i32,String>>;
     let num: i32;
-    let name_4: ref null String;
-    let __iter_1: ref null ArrayIter<Tuple<i32,String>>;
-    let name_6: ref null String;
-    let __local_7: ref null String;
-    let __local_8: ref null Formatter;
-    let __pattern_temp_0: ref null Option<Tuple<i32,String>>;
-    let __pattern_temp_1: ref null "tuple/[i32, String]";
-    let __pattern_temp_2: ref null Option<Tuple<i32,String>>;
-    let __pattern_temp_3: ref null "tuple/[i32, String]";
-    let __local_13: ref null Array<u64>;
+    let name_4: ref String;
+    let __iter_1: ref ArrayIter<Tuple<i32,String>>;
+    let name_6: ref String;
+    let __local_7: ref String;
+    let __local_8: ref Formatter;
+    let __pattern_temp_0: ref Option<Tuple<i32,String>>;
+    let __pattern_temp_1: ref "tuple/[i32, String]";
+    let __pattern_temp_2: ref Option<Tuple<i32,String>>;
+    let __pattern_temp_3: ref "tuple/[i32, String]";
+    let __local_13: ref Array<u64>;
     let __local_14: i32;
     let __local_15: i32;
-    let __local_16: ref null Array<Tuple<i32,String>>;
-    let __local_17: ref null "tuple/[i32, String]";
-    let __local_18: ref null Array<Tuple<i32,String>>;
-    let __local_19: ref null "tuple/[i32, String]";
-    let __local_20: ref null Array<Tuple<i32,String>>;
-    let __local_21: ref null "tuple/[i32, String]";
-    let __local_22: ref null Array<Tuple<i32,String>>;
-    let __local_23: ref null Array<Tuple<i32,String>>;
+    let __local_16: ref Array<Tuple<i32,String>>;
+    let __local_17: ref "tuple/[i32, String]";
+    let __local_18: ref Array<Tuple<i32,String>>;
+    let __local_19: ref "tuple/[i32, String]";
+    let __local_20: ref Array<Tuple<i32,String>>;
+    let __local_21: ref "tuple/[i32, String]";
+    let __local_22: ref Array<Tuple<i32,String>>;
+    let __local_23: ref Array<Tuple<i32,String>>;
     let __local_24: i32;
-    let __local_25: ref null String;
-    let __local_26: ref null "core:internal/Box<i32>";
-    let __local_27: ref null Formatter;
-    let __local_28: ref null "core:internal/Box<i32>";
-    let __local_29: ref null Formatter;
-    let __local_30: ref null Array<Tuple<i32,String>>;
+    let __local_25: ref String;
+    let __local_26: ref "core:internal/Box<i32>";
+    let __local_27: ref Formatter;
+    let __local_28: ref "core:internal/Box<i32>";
+    let __local_29: ref Formatter;
+    let __local_30: ref Array<Tuple<i32,String>>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
         };
         __modules_initialized = 1;
     };
-    pairs = __seq_lit: block -> ref null Array<Tuple<i32,String>> {
-        __local_0 = Array<Tuple<i32,String>> { repr: array.new_fixed<ref null "tuple/[i32, String]">("tuple/[i32, String]" { 0: 1, 1: String { repr: array.new_data<u8>("one"), used: 3 } }, "tuple/[i32, String]" { 0: 2, 1: String { repr: array.new_data<u8>("two"), used: 3 } }, "tuple/[i32, String]" { 0: 3, 1: String { repr: array.new_data<u8>("three"), used: 5 } }), used: 3 };
+    pairs = __seq_lit: block -> ref Array<Tuple<i32,String>> {
+        __local_0 = Array<Tuple<i32,String>> { repr: array.new_fixed<ref "tuple/[i32, String]">("tuple/[i32, String]" { 0: 1, 1: String { repr: array.new_data<u8>("one"), used: 3 } }, "tuple/[i32, String]" { 0: 2, 1: String { repr: array.new_data<u8>("two"), used: 3 } }, "tuple/[i32, String]" { 0: 3, 1: String { repr: array.new_data<u8>("three"), used: 5 } }), used: 3 };
         break __seq_lit: __local_0;
     };
     __iter_0 = ArrayIter<Tuple<i32,String>> { repr: ref.as_non_null(pairs.repr), used: 3, index: 0 };
@@ -185,12 +185,12 @@ fn run() with Stdout {
             let __sroa___pattern_temp_0_payload_0: ref null "tuple/[i32, String]";
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<Tuple<i32,String>>^Iterator::next(__iter_0);
             if __sroa___pattern_temp_0_discriminant == 0 {
-                __pattern_temp_1 = __sroa___pattern_temp_0_payload_0;
+                __pattern_temp_1 = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
                 num = __pattern_temp_1.0;
                 name_4 = __pattern_temp_1.1;
-                "core:cli/println"(__tmpl: block -> ref null String {
+                "core:cli/println"(__tmpl: block -> ref String {
                     __local_7 = String { repr: builtin::array_new<u8>(34), used: 0 };
-                    __local_8 = __inline_Formatter__new_10: block -> ref null Formatter {
+                    __local_8 = __inline_Formatter__new_10: block -> ref Formatter {
                         __local_25 = __local_7;
                         break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_25) };
                     };
@@ -214,7 +214,7 @@ fn run() with Stdout {
             let __sroa___pattern_temp_2_payload_0: ref null "tuple/[i32, String]";
             multivalue_bind [__sroa___pattern_temp_2_discriminant, __sroa___pattern_temp_2_payload_0] = ArrayIter<Tuple<i32,String>>^Iterator::next(__iter_1);
             if __sroa___pattern_temp_2_discriminant == 0 {
-                __pattern_temp_3 = __sroa___pattern_temp_2_payload_0;
+                __pattern_temp_3 = ref.as_non_null(__sroa___pattern_temp_2_payload_0);
                 drop(__pattern_temp_3.0);
                 name_6 = __pattern_temp_3.1;
                 "core:cli/println"(name_6);
@@ -270,13 +270,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -390,7 +390,7 @@ fn i32::fmt_decimal(self, f) {
     let abs_val: i64;
     let digit_count: i32;
     let offset: i32;
-    let __local_6: ref null String;
+    let __local_6: ref String;
     is_negative = self < 0;
     abs_val = if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
@@ -399,7 +399,7 @@ fn i32::fmt_decimal(self, f) {
     };
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref null array<u8> {
+    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
     }, offset, abs_val, digit_count);
@@ -408,7 +408,7 @@ fn i32::fmt_decimal(self, f) {
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -444,8 +444,8 @@ fn String::internal_reserve_uninit(self, n) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -486,20 +486,20 @@ fn String::append_char(self, c) {
 }
 
 fn ArrayIter<Tuple<i32,String>>^Iterator::next(self) {
-    let item: ref null "tuple/[i32, String]";
+    let item: ref "tuple/[i32, String]";
     if self.index >= self.used {
         return 1; ref.null none;
     };
-    item = builtin::array_get<ref null "tuple/[i32, String]">(self.repr, self.index);
+    item = builtin::array_get<ref "tuple/[i32, String]">(self.repr, self.index);
     self.index = self.index + 1;
-    return 0; item;
+    return 0; ref.as_non_null(item);
 }
 
 fn Array<Tuple<i32,String>>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<Tuple<i32,String>>;
+    let new_repr: ref array<Tuple<i32,String>>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;
@@ -509,17 +509,17 @@ fn Array<Tuple<i32,String>>::append(self, value) {
             __local_6 = capacity * 2;
             break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
         };
-        new_repr = builtin::array_new<ref null "tuple/[i32, String]">(new_capacity);
-        builtin::array_copy<ref null "tuple/[i32, String]">(new_repr, 0, self.repr, 0, used);
+        new_repr = builtin::array_new<ref "tuple/[i32, String]">(new_capacity);
+        builtin::array_copy<ref "tuple/[i32, String]">(new_repr, 0, self.repr, 0, used);
         self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<ref null "tuple/[i32, String]">(self.repr, used, value);
+    builtin::array_set<ref "tuple/[i32, String]">(self.repr, used, value);
     self.used = used + 1;
 }
 
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
-    let _licm_buf_4: ref null String;
+    let _licm_buf_4: ref String;
     __for_0: block {
         i = 0;
         _licm_buf_4 = self.buf;
@@ -537,7 +537,7 @@ fn Formatter::write_char_n(self, c, n) {
 }
 
 fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
-    let sign: ref null String;
+    let sign: ref String;
     let sign_len: i32;
     let prefix_len: i32;
     let content_len: i32;
@@ -547,8 +547,8 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
-    let __local_14: ref null String;
-    let __local_15: ref null String;
+    let __local_14: ref String;
+    let __local_15: ref String;
     sign = String { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };

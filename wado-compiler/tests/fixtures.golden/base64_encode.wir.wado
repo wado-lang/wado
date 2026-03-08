@@ -100,63 +100,63 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:base64/encode_impl" = fn(ref null Array<u8>, ref null Array<u8>, bool) -> ref null String;
+type "functype/core:base64/encode_impl" = fn(ref Array<u8>, ref Array<u8>, bool) -> ref String;
 
-type "functype/core:base64/encode_with" = fn(ref null Array<u8>, u32) -> ref null String;
+type "functype/core:base64/encode_with" = fn(ref Array<u8>, u32) -> ref String;
 
 type "functype/core:base64/__initialize_module" = fn();
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref null array<u8>, i32, i32);
+type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
-type "functype/core:internal/write_string_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/core:internal/log_stderr" = fn(ref null String);
+type "functype/core:internal/log_stderr" = fn(ref String);
 
-type "functype/core:internal/panic" = fn(ref null String);
+type "functype/core:internal/panic" = fn(ref String);
 
 type "functype/count_digits_i64" = fn(i64) -> i32;
 
-type "functype/write_decimal_digits" = fn(ref null array<u8>, i32, i64, i32);
+type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/core:base64/Array<u8>::append" = fn(ref null Array<u8>, u8);
+type "functype/core:base64/Array<u8>::append" = fn(ref Array<u8>, u8);
 
-type "functype/i32::fmt_decimal" = fn(ref null "core:internal/Box<i32>", ref null Formatter);
+type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::internal_reserve_uninit" = fn(ref null String, i32) -> i32;
+type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/String^Eq::eq" = fn(ref null String, ref null String) -> bool;
+type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
-type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref null StrUtf8ByteIter) -> ref null Option<u8>;
+type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> ref Option<u8>;
 
-type "functype/StrUtf8ByteIter^Iterator::collect" = fn(ref null StrUtf8ByteIter) -> ref null Array<u8>;
+type "functype/StrUtf8ByteIter^Iterator::collect" = fn(ref StrUtf8ByteIter) -> ref Array<u8>;
 
-type "functype/StrCharIter^Iterator::next" = fn(ref null StrCharIter) -> ref null Option<char>;
+type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<char>;
 
-type "functype/String::append_char" = fn(ref null String, char);
+type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/Array<u8>::append" = fn(ref null Array<u8>, u8);
+type "functype/Array<u8>::append" = fn(ref Array<u8>, u8);
 
-type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
+type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
-type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref null String, i32) -> i32;
+type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
 
-type "functype/String^Inspect::inspect" = fn(ref null String, ref null Formatter);
+type "functype/String^Inspect::inspect" = fn(ref String, ref Formatter);
 
-type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref null StrUtf8ByteIter) -> [i32, u8];
+type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> [i32, u8];
 
-type "functype/StrCharIter^Iterator::next" = fn(ref null StrCharIter) -> [i32, char];
+type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
-type "functype/i32::fmt_decimal" = fn(i32, ref null Formatter);
+type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -177,139 +177,139 @@ global mut URL_SAFE_TABLE: ref null Array<u8> = ref.null none;  // from core:bas
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let __local_0: ref null Array<u8>;
-    let empty: ref null Array<u8>;
-    let __v0_2: ref null String;
+    let __local_0: ref Array<u8>;
+    let empty: ref Array<u8>;
+    let __v0_2: ref String;
     let __cond_3: bool;
-    let __v0_4: ref null String;
+    let __v0_4: ref String;
     let __cond_5: bool;
-    let __v0_6: ref null String;
+    let __v0_6: ref String;
     let __cond_7: bool;
-    let __v0_8: ref null String;
+    let __v0_8: ref String;
     let __cond_9: bool;
-    let __v0_10: ref null String;
+    let __v0_10: ref String;
     let __cond_11: bool;
-    let __v0_12: ref null String;
+    let __v0_12: ref String;
     let __cond_13: bool;
-    let __v0_14: ref null String;
+    let __v0_14: ref String;
     let __cond_15: bool;
-    let __v0_16: ref null String;
+    let __v0_16: ref String;
     let __cond_17: bool;
-    let __v0_18: ref null String;
+    let __v0_18: ref String;
     let __cond_19: bool;
-    let __v0_20: ref null String;
+    let __v0_20: ref String;
     let __cond_21: bool;
-    let __local_22: ref null String;
-    let __local_23: ref null Formatter;
-    let __local_24: ref null String;
-    let __local_25: ref null Formatter;
-    let __local_26: ref null String;
-    let __local_27: ref null Formatter;
-    let __local_28: ref null String;
-    let __local_29: ref null Formatter;
-    let __local_30: ref null String;
-    let __local_31: ref null Formatter;
-    let __local_32: ref null String;
-    let __local_33: ref null Formatter;
-    let __local_34: ref null String;
-    let __local_35: ref null Formatter;
-    let __local_36: ref null String;
-    let __local_37: ref null Formatter;
-    let __local_38: ref null String;
-    let __local_39: ref null Formatter;
-    let __local_40: ref null String;
-    let __local_41: ref null Formatter;
-    let __local_42: ref null Array<u64>;
+    let __local_22: ref String;
+    let __local_23: ref Formatter;
+    let __local_24: ref String;
+    let __local_25: ref Formatter;
+    let __local_26: ref String;
+    let __local_27: ref Formatter;
+    let __local_28: ref String;
+    let __local_29: ref Formatter;
+    let __local_30: ref String;
+    let __local_31: ref Formatter;
+    let __local_32: ref String;
+    let __local_33: ref Formatter;
+    let __local_34: ref String;
+    let __local_35: ref Formatter;
+    let __local_36: ref String;
+    let __local_37: ref Formatter;
+    let __local_38: ref String;
+    let __local_39: ref Formatter;
+    let __local_40: ref String;
+    let __local_41: ref Formatter;
+    let __local_42: ref Array<u64>;
     let __local_43: i32;
     let __local_44: i32;
-    let __local_45: ref null Array<u8>;
-    let __local_46: ref null Array<u8>;
+    let __local_45: ref Array<u8>;
+    let __local_46: ref Array<u8>;
     let __local_47: i32;
-    let __local_48: ref null String;
-    let __local_49: ref null "core:internal/Box<i32>";
-    let __local_50: ref null Formatter;
-    let __local_51: ref null "core:internal/Box<i32>";
-    let __local_52: ref null Formatter;
-    let __local_53: ref null String;
-    let __local_54: ref null Array<u8>;
-    let __local_55: ref null String;
+    let __local_48: ref String;
+    let __local_49: ref "core:internal/Box<i32>";
+    let __local_50: ref Formatter;
+    let __local_51: ref "core:internal/Box<i32>";
+    let __local_52: ref Formatter;
+    let __local_53: ref String;
+    let __local_54: ref Array<u8>;
+    let __local_55: ref String;
     let __local_56: i32;
-    let __local_57: ref null String;
-    let __local_58: ref null "core:internal/Box<i32>";
-    let __local_59: ref null Formatter;
-    let __local_60: ref null "core:internal/Box<i32>";
-    let __local_61: ref null Formatter;
-    let __local_62: ref null String;
-    let __local_63: ref null Array<u8>;
-    let __local_64: ref null String;
+    let __local_57: ref String;
+    let __local_58: ref "core:internal/Box<i32>";
+    let __local_59: ref Formatter;
+    let __local_60: ref "core:internal/Box<i32>";
+    let __local_61: ref Formatter;
+    let __local_62: ref String;
+    let __local_63: ref Array<u8>;
+    let __local_64: ref String;
     let __local_65: i32;
-    let __local_66: ref null String;
-    let __local_67: ref null "core:internal/Box<i32>";
-    let __local_68: ref null Formatter;
-    let __local_69: ref null "core:internal/Box<i32>";
-    let __local_70: ref null Formatter;
-    let __local_71: ref null String;
-    let __local_72: ref null Array<u8>;
-    let __local_73: ref null String;
+    let __local_66: ref String;
+    let __local_67: ref "core:internal/Box<i32>";
+    let __local_68: ref Formatter;
+    let __local_69: ref "core:internal/Box<i32>";
+    let __local_70: ref Formatter;
+    let __local_71: ref String;
+    let __local_72: ref Array<u8>;
+    let __local_73: ref String;
     let __local_74: i32;
-    let __local_75: ref null String;
-    let __local_76: ref null "core:internal/Box<i32>";
-    let __local_77: ref null Formatter;
-    let __local_78: ref null "core:internal/Box<i32>";
-    let __local_79: ref null Formatter;
-    let __local_80: ref null String;
-    let __local_81: ref null Array<u8>;
-    let __local_82: ref null String;
+    let __local_75: ref String;
+    let __local_76: ref "core:internal/Box<i32>";
+    let __local_77: ref Formatter;
+    let __local_78: ref "core:internal/Box<i32>";
+    let __local_79: ref Formatter;
+    let __local_80: ref String;
+    let __local_81: ref Array<u8>;
+    let __local_82: ref String;
     let __local_83: i32;
-    let __local_84: ref null String;
-    let __local_85: ref null "core:internal/Box<i32>";
-    let __local_86: ref null Formatter;
-    let __local_87: ref null "core:internal/Box<i32>";
-    let __local_88: ref null Formatter;
-    let __local_89: ref null String;
-    let __local_90: ref null Array<u8>;
-    let __local_91: ref null String;
+    let __local_84: ref String;
+    let __local_85: ref "core:internal/Box<i32>";
+    let __local_86: ref Formatter;
+    let __local_87: ref "core:internal/Box<i32>";
+    let __local_88: ref Formatter;
+    let __local_89: ref String;
+    let __local_90: ref Array<u8>;
+    let __local_91: ref String;
     let __local_92: i32;
-    let __local_93: ref null String;
-    let __local_94: ref null "core:internal/Box<i32>";
-    let __local_95: ref null Formatter;
-    let __local_96: ref null "core:internal/Box<i32>";
-    let __local_97: ref null Formatter;
-    let __local_98: ref null String;
-    let __local_99: ref null Array<u8>;
-    let __local_100: ref null String;
+    let __local_93: ref String;
+    let __local_94: ref "core:internal/Box<i32>";
+    let __local_95: ref Formatter;
+    let __local_96: ref "core:internal/Box<i32>";
+    let __local_97: ref Formatter;
+    let __local_98: ref String;
+    let __local_99: ref Array<u8>;
+    let __local_100: ref String;
     let __local_101: i32;
-    let __local_102: ref null String;
-    let __local_103: ref null "core:internal/Box<i32>";
-    let __local_104: ref null Formatter;
-    let __local_105: ref null "core:internal/Box<i32>";
-    let __local_106: ref null Formatter;
-    let __local_107: ref null String;
-    let __local_108: ref null Array<u8>;
-    let __local_109: ref null String;
+    let __local_102: ref String;
+    let __local_103: ref "core:internal/Box<i32>";
+    let __local_104: ref Formatter;
+    let __local_105: ref "core:internal/Box<i32>";
+    let __local_106: ref Formatter;
+    let __local_107: ref String;
+    let __local_108: ref Array<u8>;
+    let __local_109: ref String;
     let __local_110: i32;
-    let __local_111: ref null String;
-    let __local_112: ref null "core:internal/Box<i32>";
-    let __local_113: ref null Formatter;
-    let __local_114: ref null "core:internal/Box<i32>";
-    let __local_115: ref null Formatter;
-    let __local_116: ref null String;
-    let __local_117: ref null String;
+    let __local_111: ref String;
+    let __local_112: ref "core:internal/Box<i32>";
+    let __local_113: ref Formatter;
+    let __local_114: ref "core:internal/Box<i32>";
+    let __local_115: ref Formatter;
+    let __local_116: ref String;
+    let __local_117: ref String;
     let __local_118: i32;
-    let __local_119: ref null String;
-    let __local_120: ref null "core:internal/Box<i32>";
-    let __local_121: ref null Formatter;
-    let __local_122: ref null "core:internal/Box<i32>";
-    let __local_123: ref null Formatter;
-    let __local_124: ref null String;
-    let __local_125: ref null String;
+    let __local_119: ref String;
+    let __local_120: ref "core:internal/Box<i32>";
+    let __local_121: ref Formatter;
+    let __local_122: ref "core:internal/Box<i32>";
+    let __local_123: ref Formatter;
+    let __local_124: ref String;
+    let __local_125: ref String;
     let __local_126: i32;
-    let __local_127: ref null String;
-    let __local_128: ref null "core:internal/Box<i32>";
-    let __local_129: ref null Formatter;
-    let __local_130: ref null "core:internal/Box<i32>";
-    let __local_131: ref null Formatter;
-    let __local_132: ref null String;
+    let __local_127: ref String;
+    let __local_128: ref "core:internal/Box<i32>";
+    let __local_129: ref Formatter;
+    let __local_130: ref "core:internal/Box<i32>";
+    let __local_131: ref Formatter;
+    let __local_132: ref String;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -317,17 +317,17 @@ fn run() with Stdout {
         "core:base64/__initialize_module"();
         __modules_initialized = 1;
     };
-    empty = __seq_lit: block -> ref null Array<u8> {
+    empty = __seq_lit: block -> ref Array<u8> {
         __local_0 = Array<u8> { repr: builtin::array_new<u8>(0), used: 0 };
         break __seq_lit: __local_0;
     };
-    __v0_2 = __inline_encode_5: block -> ref null String {
+    __v0_2 = __inline_encode_5: block -> ref String {
         __local_46 = empty;
         break __inline_encode_5: "core:base64/encode_impl"(__local_46, STANDARD_TABLE, 1);
     };
     __cond_3 = String^Eq::eq(__v0_2, String { repr: builtin::array_new<u8>(0), used: 0 });
     if __cond_3 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_22 = String { repr: builtin::array_new<u8>(139), used: 0 };
             String::append(__local_22, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_22, 114);
@@ -339,7 +339,7 @@ fn run() with Stdout {
             String::append_char(__local_22, 32);
             String::append(__local_22, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
             String::append_char(__local_22, 58);
-            __local_23 = __inline_Formatter__new_7: block -> ref null Formatter {
+            __local_23 = __inline_Formatter__new_7: block -> ref Formatter {
                 __local_48 = __local_22;
                 break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_48) };
             };
@@ -349,7 +349,7 @@ fn run() with Stdout {
 condition: encode(&empty) == \"\"
 "), used: 33 });
             String::append(__local_22, String { repr: array.new_data<u8>("encode(&empty): "), used: 16 });
-            __local_23 = __inline_Formatter__new_10: block -> ref null Formatter {
+            __local_23 = __inline_Formatter__new_10: block -> ref Formatter {
                 __local_53 = __local_22;
                 break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_53) };
             };
@@ -359,8 +359,8 @@ condition: encode(&empty) == \"\"
         });
         unreachable;
     };
-    __v0_4 = __inline_encode_11: block -> ref null String {
-        __local_54 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_12: block -> ref null StrUtf8ByteIter {
+    __v0_4 = __inline_encode_11: block -> ref String {
+        __local_54 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_12: block -> ref StrUtf8ByteIter {
             __local_55 = String { repr: array.new_data<u8>("f"), used: 1 };
             break __inline_String__bytes_12: StrUtf8ByteIter { repr: ref.as_non_null(__local_55.repr), used: __local_55.used, index: 0 };
         });
@@ -368,7 +368,7 @@ condition: encode(&empty) == \"\"
     };
     __cond_5 = String^Eq::eq(__v0_4, String { repr: array.new_data<u8>("Zg=="), used: 4 });
     if __cond_5 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_24 = String { repr: builtin::array_new<u8>(175), used: 0 };
             String::append(__local_24, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_24, 114);
@@ -380,7 +380,7 @@ condition: encode(&empty) == \"\"
             String::append_char(__local_24, 32);
             String::append(__local_24, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
             String::append_char(__local_24, 58);
-            __local_25 = __inline_Formatter__new_14: block -> ref null Formatter {
+            __local_25 = __inline_Formatter__new_14: block -> ref Formatter {
                 __local_57 = __local_24;
                 break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_57) };
             };
@@ -390,7 +390,7 @@ condition: encode(&empty) == \"\"
 condition: encode(&\"f\".bytes().collect()) == \"Zg==\"
 "), used: 53 });
             String::append(__local_24, String { repr: array.new_data<u8>("encode(&\"f\".bytes().collect()): "), used: 32 });
-            __local_25 = __inline_Formatter__new_17: block -> ref null Formatter {
+            __local_25 = __inline_Formatter__new_17: block -> ref Formatter {
                 __local_62 = __local_24;
                 break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_62) };
             };
@@ -400,8 +400,8 @@ condition: encode(&\"f\".bytes().collect()) == \"Zg==\"
         });
         unreachable;
     };
-    __v0_6 = __inline_encode_18: block -> ref null String {
-        __local_63 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_19: block -> ref null StrUtf8ByteIter {
+    __v0_6 = __inline_encode_18: block -> ref String {
+        __local_63 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_19: block -> ref StrUtf8ByteIter {
             __local_64 = String { repr: array.new_data<u8>("fo"), used: 2 };
             break __inline_String__bytes_19: StrUtf8ByteIter { repr: ref.as_non_null(__local_64.repr), used: __local_64.used, index: 0 };
         });
@@ -409,7 +409,7 @@ condition: encode(&\"f\".bytes().collect()) == \"Zg==\"
     };
     __cond_7 = String^Eq::eq(__v0_6, String { repr: array.new_data<u8>("Zm8="), used: 4 });
     if __cond_7 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_26 = String { repr: builtin::array_new<u8>(177), used: 0 };
             String::append(__local_26, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_26, 114);
@@ -421,7 +421,7 @@ condition: encode(&\"f\".bytes().collect()) == \"Zg==\"
             String::append_char(__local_26, 32);
             String::append(__local_26, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
             String::append_char(__local_26, 58);
-            __local_27 = __inline_Formatter__new_21: block -> ref null Formatter {
+            __local_27 = __inline_Formatter__new_21: block -> ref Formatter {
                 __local_66 = __local_26;
                 break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_66) };
             };
@@ -431,7 +431,7 @@ condition: encode(&\"f\".bytes().collect()) == \"Zg==\"
 condition: encode(&\"fo\".bytes().collect()) == \"Zm8=\"
 "), used: 54 });
             String::append(__local_26, String { repr: array.new_data<u8>("encode(&\"fo\".bytes().collect()): "), used: 33 });
-            __local_27 = __inline_Formatter__new_24: block -> ref null Formatter {
+            __local_27 = __inline_Formatter__new_24: block -> ref Formatter {
                 __local_71 = __local_26;
                 break __inline_Formatter__new_24: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_71) };
             };
@@ -441,8 +441,8 @@ condition: encode(&\"fo\".bytes().collect()) == \"Zm8=\"
         });
         unreachable;
     };
-    __v0_8 = __inline_encode_25: block -> ref null String {
-        __local_72 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_26: block -> ref null StrUtf8ByteIter {
+    __v0_8 = __inline_encode_25: block -> ref String {
+        __local_72 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_26: block -> ref StrUtf8ByteIter {
             __local_73 = String { repr: array.new_data<u8>("foo"), used: 3 };
             break __inline_String__bytes_26: StrUtf8ByteIter { repr: ref.as_non_null(__local_73.repr), used: __local_73.used, index: 0 };
         });
@@ -450,7 +450,7 @@ condition: encode(&\"fo\".bytes().collect()) == \"Zm8=\"
     };
     __cond_9 = String^Eq::eq(__v0_8, String { repr: array.new_data<u8>("Zm9v"), used: 4 });
     if __cond_9 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_28 = String { repr: builtin::array_new<u8>(179), used: 0 };
             String::append(__local_28, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_28, 114);
@@ -462,7 +462,7 @@ condition: encode(&\"fo\".bytes().collect()) == \"Zm8=\"
             String::append_char(__local_28, 32);
             String::append(__local_28, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
             String::append_char(__local_28, 58);
-            __local_29 = __inline_Formatter__new_28: block -> ref null Formatter {
+            __local_29 = __inline_Formatter__new_28: block -> ref Formatter {
                 __local_75 = __local_28;
                 break __inline_Formatter__new_28: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_75) };
             };
@@ -472,7 +472,7 @@ condition: encode(&\"fo\".bytes().collect()) == \"Zm8=\"
 condition: encode(&\"foo\".bytes().collect()) == \"Zm9v\"
 "), used: 55 });
             String::append(__local_28, String { repr: array.new_data<u8>("encode(&\"foo\".bytes().collect()): "), used: 34 });
-            __local_29 = __inline_Formatter__new_31: block -> ref null Formatter {
+            __local_29 = __inline_Formatter__new_31: block -> ref Formatter {
                 __local_80 = __local_28;
                 break __inline_Formatter__new_31: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_80) };
             };
@@ -482,8 +482,8 @@ condition: encode(&\"foo\".bytes().collect()) == \"Zm9v\"
         });
         unreachable;
     };
-    __v0_10 = __inline_encode_32: block -> ref null String {
-        __local_81 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_33: block -> ref null StrUtf8ByteIter {
+    __v0_10 = __inline_encode_32: block -> ref String {
+        __local_81 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_33: block -> ref StrUtf8ByteIter {
             __local_82 = String { repr: array.new_data<u8>("foob"), used: 4 };
             break __inline_String__bytes_33: StrUtf8ByteIter { repr: ref.as_non_null(__local_82.repr), used: __local_82.used, index: 0 };
         });
@@ -491,7 +491,7 @@ condition: encode(&\"foo\".bytes().collect()) == \"Zm9v\"
     };
     __cond_11 = String^Eq::eq(__v0_10, String { repr: array.new_data<u8>("Zm9vYg=="), used: 8 });
     if __cond_11 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_30 = String { repr: builtin::array_new<u8>(185), used: 0 };
             String::append(__local_30, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_30, 114);
@@ -503,7 +503,7 @@ condition: encode(&\"foo\".bytes().collect()) == \"Zm9v\"
             String::append_char(__local_30, 32);
             String::append(__local_30, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
             String::append_char(__local_30, 58);
-            __local_31 = __inline_Formatter__new_35: block -> ref null Formatter {
+            __local_31 = __inline_Formatter__new_35: block -> ref Formatter {
                 __local_84 = __local_30;
                 break __inline_Formatter__new_35: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_84) };
             };
@@ -513,7 +513,7 @@ condition: encode(&\"foo\".bytes().collect()) == \"Zm9v\"
 condition: encode(&\"foob\".bytes().collect()) == \"Zm9vYg==\"
 "), used: 60 });
             String::append(__local_30, String { repr: array.new_data<u8>("encode(&\"foob\".bytes().collect()): "), used: 35 });
-            __local_31 = __inline_Formatter__new_38: block -> ref null Formatter {
+            __local_31 = __inline_Formatter__new_38: block -> ref Formatter {
                 __local_89 = __local_30;
                 break __inline_Formatter__new_38: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_89) };
             };
@@ -523,8 +523,8 @@ condition: encode(&\"foob\".bytes().collect()) == \"Zm9vYg==\"
         });
         unreachable;
     };
-    __v0_12 = __inline_encode_39: block -> ref null String {
-        __local_90 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_40: block -> ref null StrUtf8ByteIter {
+    __v0_12 = __inline_encode_39: block -> ref String {
+        __local_90 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_40: block -> ref StrUtf8ByteIter {
             __local_91 = String { repr: array.new_data<u8>("fooba"), used: 5 };
             break __inline_String__bytes_40: StrUtf8ByteIter { repr: ref.as_non_null(__local_91.repr), used: __local_91.used, index: 0 };
         });
@@ -532,7 +532,7 @@ condition: encode(&\"foob\".bytes().collect()) == \"Zm9vYg==\"
     };
     __cond_13 = String^Eq::eq(__v0_12, String { repr: array.new_data<u8>("Zm9vYmE="), used: 8 });
     if __cond_13 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_32 = String { repr: builtin::array_new<u8>(187), used: 0 };
             String::append(__local_32, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_32, 114);
@@ -544,7 +544,7 @@ condition: encode(&\"foob\".bytes().collect()) == \"Zm9vYg==\"
             String::append_char(__local_32, 32);
             String::append(__local_32, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
             String::append_char(__local_32, 58);
-            __local_33 = __inline_Formatter__new_42: block -> ref null Formatter {
+            __local_33 = __inline_Formatter__new_42: block -> ref Formatter {
                 __local_93 = __local_32;
                 break __inline_Formatter__new_42: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_93) };
             };
@@ -554,7 +554,7 @@ condition: encode(&\"foob\".bytes().collect()) == \"Zm9vYg==\"
 condition: encode(&\"fooba\".bytes().collect()) == \"Zm9vYmE=\"
 "), used: 61 });
             String::append(__local_32, String { repr: array.new_data<u8>("encode(&\"fooba\".bytes().collect()): "), used: 36 });
-            __local_33 = __inline_Formatter__new_45: block -> ref null Formatter {
+            __local_33 = __inline_Formatter__new_45: block -> ref Formatter {
                 __local_98 = __local_32;
                 break __inline_Formatter__new_45: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_98) };
             };
@@ -564,8 +564,8 @@ condition: encode(&\"fooba\".bytes().collect()) == \"Zm9vYmE=\"
         });
         unreachable;
     };
-    __v0_14 = __inline_encode_46: block -> ref null String {
-        __local_99 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_47: block -> ref null StrUtf8ByteIter {
+    __v0_14 = __inline_encode_46: block -> ref String {
+        __local_99 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_47: block -> ref StrUtf8ByteIter {
             __local_100 = String { repr: array.new_data<u8>("foobar"), used: 6 };
             break __inline_String__bytes_47: StrUtf8ByteIter { repr: ref.as_non_null(__local_100.repr), used: __local_100.used, index: 0 };
         });
@@ -573,7 +573,7 @@ condition: encode(&\"fooba\".bytes().collect()) == \"Zm9vYmE=\"
     };
     __cond_15 = String^Eq::eq(__v0_14, String { repr: array.new_data<u8>("Zm9vYmFy"), used: 8 });
     if __cond_15 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_34 = String { repr: builtin::array_new<u8>(189), used: 0 };
             String::append(__local_34, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_34, 114);
@@ -585,7 +585,7 @@ condition: encode(&\"fooba\".bytes().collect()) == \"Zm9vYmE=\"
             String::append_char(__local_34, 32);
             String::append(__local_34, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
             String::append_char(__local_34, 58);
-            __local_35 = __inline_Formatter__new_49: block -> ref null Formatter {
+            __local_35 = __inline_Formatter__new_49: block -> ref Formatter {
                 __local_102 = __local_34;
                 break __inline_Formatter__new_49: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_102) };
             };
@@ -595,7 +595,7 @@ condition: encode(&\"fooba\".bytes().collect()) == \"Zm9vYmE=\"
 condition: encode(&\"foobar\".bytes().collect()) == \"Zm9vYmFy\"
 "), used: 62 });
             String::append(__local_34, String { repr: array.new_data<u8>("encode(&\"foobar\".bytes().collect()): "), used: 37 });
-            __local_35 = __inline_Formatter__new_52: block -> ref null Formatter {
+            __local_35 = __inline_Formatter__new_52: block -> ref Formatter {
                 __local_107 = __local_34;
                 break __inline_Formatter__new_52: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_107) };
             };
@@ -605,8 +605,8 @@ condition: encode(&\"foobar\".bytes().collect()) == \"Zm9vYmFy\"
         });
         unreachable;
     };
-    __v0_16 = __inline_encode_url_53: block -> ref null String {
-        __local_108 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_54: block -> ref null StrUtf8ByteIter {
+    __v0_16 = __inline_encode_url_53: block -> ref String {
+        __local_108 = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_54: block -> ref StrUtf8ByteIter {
             __local_109 = String { repr: array.new_data<u8>("Hello"), used: 5 };
             break __inline_String__bytes_54: StrUtf8ByteIter { repr: ref.as_non_null(__local_109.repr), used: __local_109.used, index: 0 };
         });
@@ -614,7 +614,7 @@ condition: encode(&\"foobar\".bytes().collect()) == \"Zm9vYmFy\"
     };
     __cond_17 = String^Eq::eq(__v0_16, String { repr: array.new_data<u8>("SGVsbG8"), used: 7 });
     if __cond_17 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_36 = String { repr: builtin::array_new<u8>(194), used: 0 };
             String::append(__local_36, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_36, 114);
@@ -626,7 +626,7 @@ condition: encode(&\"foobar\".bytes().collect()) == \"Zm9vYmFy\"
             String::append_char(__local_36, 32);
             String::append(__local_36, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
             String::append_char(__local_36, 58);
-            __local_37 = __inline_Formatter__new_56: block -> ref null Formatter {
+            __local_37 = __inline_Formatter__new_56: block -> ref Formatter {
                 __local_111 = __local_36;
                 break __inline_Formatter__new_56: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_111) };
             };
@@ -636,7 +636,7 @@ condition: encode(&\"foobar\".bytes().collect()) == \"Zm9vYmFy\"
 condition: encode_url(&\"Hello\".bytes().collect()) == \"SGVsbG8\"
 "), used: 64 });
             String::append(__local_36, String { repr: array.new_data<u8>("encode_url(&\"Hello\".bytes().collect()): "), used: 40 });
-            __local_37 = __inline_Formatter__new_59: block -> ref null Formatter {
+            __local_37 = __inline_Formatter__new_59: block -> ref Formatter {
                 __local_116 = __local_36;
                 break __inline_Formatter__new_59: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_116) };
             };
@@ -646,13 +646,13 @@ condition: encode_url(&\"Hello\".bytes().collect()) == \"SGVsbG8\"
         });
         unreachable;
     };
-    __v0_18 = "core:base64/encode_with"(StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_60: block -> ref null StrUtf8ByteIter {
+    __v0_18 = "core:base64/encode_with"(StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_60: block -> ref StrUtf8ByteIter {
         __local_117 = String { repr: array.new_data<u8>("Hello"), used: 5 };
         break __inline_String__bytes_60: StrUtf8ByteIter { repr: ref.as_non_null(__local_117.repr), used: __local_117.used, index: 0 };
     }), 2);
     __cond_19 = String^Eq::eq(__v0_18, String { repr: array.new_data<u8>("SGVsbG8"), used: 7 });
     if __cond_19 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_38 = String { repr: builtin::array_new<u8>(238), used: 0 };
             String::append(__local_38, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_38, 114);
@@ -664,7 +664,7 @@ condition: encode_url(&\"Hello\".bytes().collect()) == \"SGVsbG8\"
             String::append_char(__local_38, 32);
             String::append(__local_38, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
             String::append_char(__local_38, 58);
-            __local_39 = __inline_Formatter__new_62: block -> ref null Formatter {
+            __local_39 = __inline_Formatter__new_62: block -> ref Formatter {
                 __local_119 = __local_38;
                 break __inline_Formatter__new_62: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_119) };
             };
@@ -674,7 +674,7 @@ condition: encode_url(&\"Hello\".bytes().collect()) == \"SGVsbG8\"
 condition: encode_with(&\"Hello\".bytes().collect(), Encoding::NoPadding) == \"SGVsbG8\"
 "), used: 86 });
             String::append(__local_38, String { repr: array.new_data<u8>("encode_with(&\"Hello\".bytes().collect(), Encoding::NoPadding): "), used: 62 });
-            __local_39 = __inline_Formatter__new_65: block -> ref null Formatter {
+            __local_39 = __inline_Formatter__new_65: block -> ref Formatter {
                 __local_124 = __local_38;
                 break __inline_Formatter__new_65: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_124) };
             };
@@ -684,13 +684,13 @@ condition: encode_with(&\"Hello\".bytes().collect(), Encoding::NoPadding) == \"S
         });
         unreachable;
     };
-    __v0_20 = "core:base64/encode_with"(StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_66: block -> ref null StrUtf8ByteIter {
+    __v0_20 = "core:base64/encode_with"(StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_66: block -> ref StrUtf8ByteIter {
         __local_125 = String { repr: array.new_data<u8>("Hello"), used: 5 };
         break __inline_String__bytes_66: StrUtf8ByteIter { repr: ref.as_non_null(__local_125.repr), used: __local_125.used, index: 0 };
     }), 0);
     __cond_21 = String^Eq::eq(__v0_20, String { repr: array.new_data<u8>("SGVsbG8="), used: 8 });
     if __cond_21 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref null String {
+        "core:internal/panic"(__tmpl: block -> ref String {
             __local_40 = String { repr: builtin::array_new<u8>(233), used: 0 };
             String::append(__local_40, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
             String::append_char(__local_40, 114);
@@ -702,7 +702,7 @@ condition: encode_with(&\"Hello\".bytes().collect(), Encoding::NoPadding) == \"S
             String::append_char(__local_40, 32);
             String::append(__local_40, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_encode.wado"), used: 47 });
             String::append_char(__local_40, 58);
-            __local_41 = __inline_Formatter__new_68: block -> ref null Formatter {
+            __local_41 = __inline_Formatter__new_68: block -> ref Formatter {
                 __local_127 = __local_40;
                 break __inline_Formatter__new_68: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_127) };
             };
@@ -712,7 +712,7 @@ condition: encode_with(&\"Hello\".bytes().collect(), Encoding::NoPadding) == \"S
 condition: encode_with(&\"Hello\".bytes().collect(), Encoding::none()) == \"SGVsbG8=\"
 "), used: 84 });
             String::append(__local_40, String { repr: array.new_data<u8>("encode_with(&\"Hello\".bytes().collect(), Encoding::none()): "), used: 59 });
-            __local_41 = __inline_Formatter__new_71: block -> ref null Formatter {
+            __local_41 = __inline_Formatter__new_71: block -> ref Formatter {
                 __local_132 = __local_40;
                 break __inline_Formatter__new_71: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_132) };
             };
@@ -770,7 +770,7 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
     let len: i32;
     let remainder: i32;
-    let out: ref null String;
+    let out: ref String;
     let i: i32;
     let b0_7: i32;
     let b1_8: i32;
@@ -778,48 +778,48 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
     let b0_10: i32;
     let b0_11: i32;
     let b1_12: i32;
-    let __local_13: ref null Array<u8>;
+    let __local_13: ref Array<u8>;
     let __local_14: i32;
-    let __local_15: ref null Array<u8>;
+    let __local_15: ref Array<u8>;
     let __local_16: i32;
-    let __local_17: ref null Array<u8>;
+    let __local_17: ref Array<u8>;
     let __local_18: i32;
-    let __local_19: ref null Array<u8>;
+    let __local_19: ref Array<u8>;
     let __local_20: i32;
-    let __local_21: ref null Array<u8>;
+    let __local_21: ref Array<u8>;
     let __local_22: i32;
-    let __local_23: ref null Array<u8>;
+    let __local_23: ref Array<u8>;
     let __local_24: i32;
-    let __local_25: ref null Array<u8>;
+    let __local_25: ref Array<u8>;
     let __local_26: i32;
-    let __local_27: ref null Array<u8>;
+    let __local_27: ref Array<u8>;
     let __local_28: i32;
-    let __local_29: ref null Array<u8>;
+    let __local_29: ref Array<u8>;
     let __local_30: i32;
-    let __local_31: ref null Array<u8>;
+    let __local_31: ref Array<u8>;
     let __local_32: i32;
-    let __local_33: ref null Array<u8>;
+    let __local_33: ref Array<u8>;
     let __local_34: i32;
-    let __local_35: ref null Array<u8>;
+    let __local_35: ref Array<u8>;
     let __local_36: i32;
-    let __local_37: ref null Array<u8>;
+    let __local_37: ref Array<u8>;
     let __local_38: i32;
-    let __local_39: ref null Array<u8>;
+    let __local_39: ref Array<u8>;
     let __local_40: i32;
-    let __local_41: ref null Array<u8>;
+    let __local_41: ref Array<u8>;
     let __local_42: i32;
-    let __local_43: ref null Array<u8>;
+    let __local_43: ref Array<u8>;
     let __local_44: i32;
     let _licm_used_45: i32;
-    let _licm_repr_46: ref null array<u8>;
+    let _licm_repr_46: ref array<u8>;
     let _licm_used_47: i32;
-    let _licm_repr_48: ref null array<u8>;
+    let _licm_repr_48: ref array<u8>;
     len = data.used;
     if len == 0 {
         return String { repr: builtin::array_new<u8>(0), used: 0 };
     };
     remainder = len % 3;
-    out = __inline_String__with_capacity_1: block -> ref null String {
+    out = __inline_String__with_capacity_1: block -> ref String {
         __local_14 = ((len + 2) / 3) * 4;
         break __inline_String__with_capacity_1: String { repr: builtin::array_new<u8>(__local_14), used: 0 };
     };
@@ -982,275 +982,275 @@ fn "core:base64/encode_with"(data, encoding) {  // from core:base64
 }
 
 fn "core:base64/__initialize_module"() {  // from core:base64
-    let __local_0: ref null Array<u8>;
-    let __local_1: ref null Array<u8>;
+    let __local_0: ref Array<u8>;
+    let __local_1: ref Array<u8>;
     let __local_2: i32;
     let __local_3: i32;
-    let __local_4: ref null Array<u8>;
+    let __local_4: ref Array<u8>;
     let __local_5: u8;
-    let __local_6: ref null Array<u8>;
+    let __local_6: ref Array<u8>;
     let __local_7: u8;
-    let __local_8: ref null Array<u8>;
+    let __local_8: ref Array<u8>;
     let __local_9: u8;
-    let __local_10: ref null Array<u8>;
+    let __local_10: ref Array<u8>;
     let __local_11: u8;
-    let __local_12: ref null Array<u8>;
+    let __local_12: ref Array<u8>;
     let __local_13: u8;
-    let __local_14: ref null Array<u8>;
+    let __local_14: ref Array<u8>;
     let __local_15: u8;
-    let __local_16: ref null Array<u8>;
+    let __local_16: ref Array<u8>;
     let __local_17: u8;
-    let __local_18: ref null Array<u8>;
+    let __local_18: ref Array<u8>;
     let __local_19: u8;
-    let __local_20: ref null Array<u8>;
+    let __local_20: ref Array<u8>;
     let __local_21: u8;
-    let __local_22: ref null Array<u8>;
+    let __local_22: ref Array<u8>;
     let __local_23: u8;
-    let __local_24: ref null Array<u8>;
+    let __local_24: ref Array<u8>;
     let __local_25: u8;
-    let __local_26: ref null Array<u8>;
+    let __local_26: ref Array<u8>;
     let __local_27: u8;
-    let __local_28: ref null Array<u8>;
+    let __local_28: ref Array<u8>;
     let __local_29: u8;
-    let __local_30: ref null Array<u8>;
+    let __local_30: ref Array<u8>;
     let __local_31: u8;
-    let __local_32: ref null Array<u8>;
+    let __local_32: ref Array<u8>;
     let __local_33: u8;
-    let __local_34: ref null Array<u8>;
+    let __local_34: ref Array<u8>;
     let __local_35: u8;
-    let __local_36: ref null Array<u8>;
+    let __local_36: ref Array<u8>;
     let __local_37: u8;
-    let __local_38: ref null Array<u8>;
+    let __local_38: ref Array<u8>;
     let __local_39: u8;
-    let __local_40: ref null Array<u8>;
+    let __local_40: ref Array<u8>;
     let __local_41: u8;
-    let __local_42: ref null Array<u8>;
+    let __local_42: ref Array<u8>;
     let __local_43: u8;
-    let __local_44: ref null Array<u8>;
+    let __local_44: ref Array<u8>;
     let __local_45: u8;
-    let __local_46: ref null Array<u8>;
+    let __local_46: ref Array<u8>;
     let __local_47: u8;
-    let __local_48: ref null Array<u8>;
+    let __local_48: ref Array<u8>;
     let __local_49: u8;
-    let __local_50: ref null Array<u8>;
+    let __local_50: ref Array<u8>;
     let __local_51: u8;
-    let __local_52: ref null Array<u8>;
+    let __local_52: ref Array<u8>;
     let __local_53: u8;
-    let __local_54: ref null Array<u8>;
+    let __local_54: ref Array<u8>;
     let __local_55: u8;
-    let __local_56: ref null Array<u8>;
+    let __local_56: ref Array<u8>;
     let __local_57: u8;
-    let __local_58: ref null Array<u8>;
+    let __local_58: ref Array<u8>;
     let __local_59: u8;
-    let __local_60: ref null Array<u8>;
+    let __local_60: ref Array<u8>;
     let __local_61: u8;
-    let __local_62: ref null Array<u8>;
+    let __local_62: ref Array<u8>;
     let __local_63: u8;
-    let __local_64: ref null Array<u8>;
+    let __local_64: ref Array<u8>;
     let __local_65: u8;
-    let __local_66: ref null Array<u8>;
+    let __local_66: ref Array<u8>;
     let __local_67: u8;
-    let __local_68: ref null Array<u8>;
+    let __local_68: ref Array<u8>;
     let __local_69: u8;
-    let __local_70: ref null Array<u8>;
+    let __local_70: ref Array<u8>;
     let __local_71: u8;
-    let __local_72: ref null Array<u8>;
+    let __local_72: ref Array<u8>;
     let __local_73: u8;
-    let __local_74: ref null Array<u8>;
+    let __local_74: ref Array<u8>;
     let __local_75: u8;
-    let __local_76: ref null Array<u8>;
+    let __local_76: ref Array<u8>;
     let __local_77: u8;
-    let __local_78: ref null Array<u8>;
+    let __local_78: ref Array<u8>;
     let __local_79: u8;
-    let __local_80: ref null Array<u8>;
+    let __local_80: ref Array<u8>;
     let __local_81: u8;
-    let __local_82: ref null Array<u8>;
+    let __local_82: ref Array<u8>;
     let __local_83: u8;
-    let __local_84: ref null Array<u8>;
+    let __local_84: ref Array<u8>;
     let __local_85: u8;
-    let __local_86: ref null Array<u8>;
+    let __local_86: ref Array<u8>;
     let __local_87: u8;
-    let __local_88: ref null Array<u8>;
+    let __local_88: ref Array<u8>;
     let __local_89: u8;
-    let __local_90: ref null Array<u8>;
+    let __local_90: ref Array<u8>;
     let __local_91: u8;
-    let __local_92: ref null Array<u8>;
+    let __local_92: ref Array<u8>;
     let __local_93: u8;
-    let __local_94: ref null Array<u8>;
+    let __local_94: ref Array<u8>;
     let __local_95: u8;
-    let __local_96: ref null Array<u8>;
+    let __local_96: ref Array<u8>;
     let __local_97: u8;
-    let __local_98: ref null Array<u8>;
+    let __local_98: ref Array<u8>;
     let __local_99: u8;
-    let __local_100: ref null Array<u8>;
+    let __local_100: ref Array<u8>;
     let __local_101: u8;
-    let __local_102: ref null Array<u8>;
+    let __local_102: ref Array<u8>;
     let __local_103: u8;
-    let __local_104: ref null Array<u8>;
+    let __local_104: ref Array<u8>;
     let __local_105: u8;
-    let __local_106: ref null Array<u8>;
+    let __local_106: ref Array<u8>;
     let __local_107: u8;
-    let __local_108: ref null Array<u8>;
+    let __local_108: ref Array<u8>;
     let __local_109: u8;
-    let __local_110: ref null Array<u8>;
+    let __local_110: ref Array<u8>;
     let __local_111: u8;
-    let __local_112: ref null Array<u8>;
+    let __local_112: ref Array<u8>;
     let __local_113: u8;
-    let __local_114: ref null Array<u8>;
+    let __local_114: ref Array<u8>;
     let __local_115: u8;
-    let __local_116: ref null Array<u8>;
+    let __local_116: ref Array<u8>;
     let __local_117: u8;
-    let __local_118: ref null Array<u8>;
+    let __local_118: ref Array<u8>;
     let __local_119: u8;
-    let __local_120: ref null Array<u8>;
+    let __local_120: ref Array<u8>;
     let __local_121: u8;
-    let __local_122: ref null Array<u8>;
+    let __local_122: ref Array<u8>;
     let __local_123: u8;
-    let __local_124: ref null Array<u8>;
+    let __local_124: ref Array<u8>;
     let __local_125: u8;
-    let __local_126: ref null Array<u8>;
+    let __local_126: ref Array<u8>;
     let __local_127: u8;
-    let __local_128: ref null Array<u8>;
+    let __local_128: ref Array<u8>;
     let __local_129: u8;
-    let __local_130: ref null Array<u8>;
+    let __local_130: ref Array<u8>;
     let __local_131: u8;
-    let __local_132: ref null Array<u8>;
+    let __local_132: ref Array<u8>;
     let __local_133: i32;
     let __local_134: i32;
-    let __local_135: ref null Array<u8>;
+    let __local_135: ref Array<u8>;
     let __local_136: u8;
-    let __local_137: ref null Array<u8>;
+    let __local_137: ref Array<u8>;
     let __local_138: u8;
-    let __local_139: ref null Array<u8>;
+    let __local_139: ref Array<u8>;
     let __local_140: u8;
-    let __local_141: ref null Array<u8>;
+    let __local_141: ref Array<u8>;
     let __local_142: u8;
-    let __local_143: ref null Array<u8>;
+    let __local_143: ref Array<u8>;
     let __local_144: u8;
-    let __local_145: ref null Array<u8>;
+    let __local_145: ref Array<u8>;
     let __local_146: u8;
-    let __local_147: ref null Array<u8>;
+    let __local_147: ref Array<u8>;
     let __local_148: u8;
-    let __local_149: ref null Array<u8>;
+    let __local_149: ref Array<u8>;
     let __local_150: u8;
-    let __local_151: ref null Array<u8>;
+    let __local_151: ref Array<u8>;
     let __local_152: u8;
-    let __local_153: ref null Array<u8>;
+    let __local_153: ref Array<u8>;
     let __local_154: u8;
-    let __local_155: ref null Array<u8>;
+    let __local_155: ref Array<u8>;
     let __local_156: u8;
-    let __local_157: ref null Array<u8>;
+    let __local_157: ref Array<u8>;
     let __local_158: u8;
-    let __local_159: ref null Array<u8>;
+    let __local_159: ref Array<u8>;
     let __local_160: u8;
-    let __local_161: ref null Array<u8>;
+    let __local_161: ref Array<u8>;
     let __local_162: u8;
-    let __local_163: ref null Array<u8>;
+    let __local_163: ref Array<u8>;
     let __local_164: u8;
-    let __local_165: ref null Array<u8>;
+    let __local_165: ref Array<u8>;
     let __local_166: u8;
-    let __local_167: ref null Array<u8>;
+    let __local_167: ref Array<u8>;
     let __local_168: u8;
-    let __local_169: ref null Array<u8>;
+    let __local_169: ref Array<u8>;
     let __local_170: u8;
-    let __local_171: ref null Array<u8>;
+    let __local_171: ref Array<u8>;
     let __local_172: u8;
-    let __local_173: ref null Array<u8>;
+    let __local_173: ref Array<u8>;
     let __local_174: u8;
-    let __local_175: ref null Array<u8>;
+    let __local_175: ref Array<u8>;
     let __local_176: u8;
-    let __local_177: ref null Array<u8>;
+    let __local_177: ref Array<u8>;
     let __local_178: u8;
-    let __local_179: ref null Array<u8>;
+    let __local_179: ref Array<u8>;
     let __local_180: u8;
-    let __local_181: ref null Array<u8>;
+    let __local_181: ref Array<u8>;
     let __local_182: u8;
-    let __local_183: ref null Array<u8>;
+    let __local_183: ref Array<u8>;
     let __local_184: u8;
-    let __local_185: ref null Array<u8>;
+    let __local_185: ref Array<u8>;
     let __local_186: u8;
-    let __local_187: ref null Array<u8>;
+    let __local_187: ref Array<u8>;
     let __local_188: u8;
-    let __local_189: ref null Array<u8>;
+    let __local_189: ref Array<u8>;
     let __local_190: u8;
-    let __local_191: ref null Array<u8>;
+    let __local_191: ref Array<u8>;
     let __local_192: u8;
-    let __local_193: ref null Array<u8>;
+    let __local_193: ref Array<u8>;
     let __local_194: u8;
-    let __local_195: ref null Array<u8>;
+    let __local_195: ref Array<u8>;
     let __local_196: u8;
-    let __local_197: ref null Array<u8>;
+    let __local_197: ref Array<u8>;
     let __local_198: u8;
-    let __local_199: ref null Array<u8>;
+    let __local_199: ref Array<u8>;
     let __local_200: u8;
-    let __local_201: ref null Array<u8>;
+    let __local_201: ref Array<u8>;
     let __local_202: u8;
-    let __local_203: ref null Array<u8>;
+    let __local_203: ref Array<u8>;
     let __local_204: u8;
-    let __local_205: ref null Array<u8>;
+    let __local_205: ref Array<u8>;
     let __local_206: u8;
-    let __local_207: ref null Array<u8>;
+    let __local_207: ref Array<u8>;
     let __local_208: u8;
-    let __local_209: ref null Array<u8>;
+    let __local_209: ref Array<u8>;
     let __local_210: u8;
-    let __local_211: ref null Array<u8>;
+    let __local_211: ref Array<u8>;
     let __local_212: u8;
-    let __local_213: ref null Array<u8>;
+    let __local_213: ref Array<u8>;
     let __local_214: u8;
-    let __local_215: ref null Array<u8>;
+    let __local_215: ref Array<u8>;
     let __local_216: u8;
-    let __local_217: ref null Array<u8>;
+    let __local_217: ref Array<u8>;
     let __local_218: u8;
-    let __local_219: ref null Array<u8>;
+    let __local_219: ref Array<u8>;
     let __local_220: u8;
-    let __local_221: ref null Array<u8>;
+    let __local_221: ref Array<u8>;
     let __local_222: u8;
-    let __local_223: ref null Array<u8>;
+    let __local_223: ref Array<u8>;
     let __local_224: u8;
-    let __local_225: ref null Array<u8>;
+    let __local_225: ref Array<u8>;
     let __local_226: u8;
-    let __local_227: ref null Array<u8>;
+    let __local_227: ref Array<u8>;
     let __local_228: u8;
-    let __local_229: ref null Array<u8>;
+    let __local_229: ref Array<u8>;
     let __local_230: u8;
-    let __local_231: ref null Array<u8>;
+    let __local_231: ref Array<u8>;
     let __local_232: u8;
-    let __local_233: ref null Array<u8>;
+    let __local_233: ref Array<u8>;
     let __local_234: u8;
-    let __local_235: ref null Array<u8>;
+    let __local_235: ref Array<u8>;
     let __local_236: u8;
-    let __local_237: ref null Array<u8>;
+    let __local_237: ref Array<u8>;
     let __local_238: u8;
-    let __local_239: ref null Array<u8>;
+    let __local_239: ref Array<u8>;
     let __local_240: u8;
-    let __local_241: ref null Array<u8>;
+    let __local_241: ref Array<u8>;
     let __local_242: u8;
-    let __local_243: ref null Array<u8>;
+    let __local_243: ref Array<u8>;
     let __local_244: u8;
-    let __local_245: ref null Array<u8>;
+    let __local_245: ref Array<u8>;
     let __local_246: u8;
-    let __local_247: ref null Array<u8>;
+    let __local_247: ref Array<u8>;
     let __local_248: u8;
-    let __local_249: ref null Array<u8>;
+    let __local_249: ref Array<u8>;
     let __local_250: u8;
-    let __local_251: ref null Array<u8>;
+    let __local_251: ref Array<u8>;
     let __local_252: u8;
-    let __local_253: ref null Array<u8>;
+    let __local_253: ref Array<u8>;
     let __local_254: u8;
-    let __local_255: ref null Array<u8>;
+    let __local_255: ref Array<u8>;
     let __local_256: u8;
-    let __local_257: ref null Array<u8>;
+    let __local_257: ref Array<u8>;
     let __local_258: u8;
-    let __local_259: ref null Array<u8>;
+    let __local_259: ref Array<u8>;
     let __local_260: u8;
-    let __local_261: ref null Array<u8>;
+    let __local_261: ref Array<u8>;
     let __local_262: u8;
-    let __local_263: ref null Array<u8>;
-    STANDARD_TABLE = __seq_lit: block -> ref null Array<u8> {
+    let __local_263: ref Array<u8>;
+    STANDARD_TABLE = __seq_lit: block -> ref Array<u8> {
         __local_0 = Array<u8> { repr: array.new_fixed<u8>(65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 43, 47), used: 64 };
         break __seq_lit: __local_0;
     };
-    URL_SAFE_TABLE = __seq_lit: block -> ref null Array<u8> {
+    URL_SAFE_TABLE = __seq_lit: block -> ref Array<u8> {
         __local_1 = Array<u8> { repr: array.new_fixed<u8>(65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 45, 95), used: 64 };
         break __seq_lit: __local_1;
     };
@@ -1258,13 +1258,13 @@ fn "core:base64/__initialize_module"() {  // from core:base64
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -1326,11 +1326,11 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
 
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from core:internal
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
+    let __local_7: ref String;
+    let __local_8: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -1436,7 +1436,7 @@ fn "core:base64/Array<u8>::append"(self, value) {  // from core:base64
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;
@@ -1459,7 +1459,7 @@ fn i32::fmt_decimal(self, f) {
     let abs_val: i64;
     let digit_count: i32;
     let offset: i32;
-    let __local_6: ref null String;
+    let __local_6: ref String;
     is_negative = self < 0;
     abs_val = if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
@@ -1468,7 +1468,7 @@ fn i32::fmt_decimal(self, f) {
     };
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref null array<u8> {
+    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
     }, offset, abs_val, digit_count);
@@ -1477,7 +1477,7 @@ fn i32::fmt_decimal(self, f) {
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -1513,8 +1513,8 @@ fn String::internal_reserve_uninit(self, n) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -1530,13 +1530,13 @@ fn String::append(self, other) {
 fn String^Eq::eq(self, other) {
     let len_a: i32;
     let len_b: i32;
-    let a_repr: ref null array<u8>;
-    let b_repr: ref null array<u8>;
+    let a_repr: ref array<u8>;
+    let b_repr: ref array<u8>;
     let i: i32;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_7: ref String;
+    let __local_8: ref String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len_a = self.used;
     len_b = other.used;
     if len_a != len_b {
@@ -1573,14 +1573,14 @@ fn StrUtf8ByteIter^Iterator::next(self) {
 }
 
 fn StrUtf8ByteIter^Iterator::collect(self) {
-    let __local_1: ref null Array<u8>;
-    let result: ref null Array<u8>;
+    let __local_1: ref Array<u8>;
+    let result: ref Array<u8>;
     let item: u8;
-    let __pattern_temp_0: ref null Option<u8>;
+    let __pattern_temp_0: ref Option<u8>;
     let __local_5: i32;
     let __local_6: i32;
-    let __local_7: ref null Array<u8>;
-    result = __seq_lit: block -> ref null Array<u8> {
+    let __local_7: ref Array<u8>;
+    result = __seq_lit: block -> ref Array<u8> {
         __local_1 = Array<u8> { repr: builtin::array_new<u8>(0), used: 0 };
         break __seq_lit: __local_1;
     };
@@ -1688,7 +1688,7 @@ fn Array<u8>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;
@@ -1708,7 +1708,7 @@ fn Array<u8>::append(self, value) {
 
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
-    let _licm_buf_4: ref null String;
+    let _licm_buf_4: ref String;
     __for_0: block {
         i = 0;
         _licm_buf_4 = self.buf;
@@ -1726,7 +1726,7 @@ fn Formatter::write_char_n(self, c, n) {
 }
 
 fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
-    let sign: ref null String;
+    let sign: ref String;
     let sign_len: i32;
     let prefix_len: i32;
     let content_len: i32;
@@ -1736,8 +1736,8 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
-    let __local_14: ref null String;
-    let __local_15: ref null String;
+    let __local_14: ref String;
+    let __local_15: ref String;
     sign = String { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };
@@ -1808,41 +1808,41 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
 }
 
 fn String^Inspect::inspect(self, f) {
-    let __iter_4: ref null StrCharIter;
+    let __iter_4: ref StrCharIter;
     let c: char;
-    let __pattern_temp_0: ref null Option<char>;
-    let __local_5: ref null Formatter;
+    let __pattern_temp_0: ref Option<char>;
+    let __local_5: ref Formatter;
     let __local_6: char;
-    let __local_7: ref null StrCharIter;
-    let __local_8: ref null String;
-    let __local_9: ref null Formatter;
+    let __local_7: ref StrCharIter;
+    let __local_8: ref String;
+    let __local_9: ref Formatter;
     let __local_10: char;
-    let __local_11: ref null Formatter;
+    let __local_11: ref Formatter;
     let __local_12: char;
-    let __local_13: ref null Formatter;
+    let __local_13: ref Formatter;
     let __local_14: char;
-    let __local_15: ref null Formatter;
+    let __local_15: ref Formatter;
     let __local_16: char;
-    let __local_17: ref null Formatter;
+    let __local_17: ref Formatter;
     let __local_18: char;
-    let __local_19: ref null Formatter;
+    let __local_19: ref Formatter;
     let __local_20: char;
-    let __local_21: ref null Formatter;
+    let __local_21: ref Formatter;
     let __local_22: char;
-    let __local_23: ref null Formatter;
+    let __local_23: ref Formatter;
     let __local_24: char;
-    let __local_25: ref null Formatter;
+    let __local_25: ref Formatter;
     let __local_26: char;
-    let __local_27: ref null Formatter;
+    let __local_27: ref Formatter;
     let __local_28: char;
-    let __local_29: ref null Formatter;
+    let __local_29: ref Formatter;
     let __local_30: char;
-    let __local_31: ref null Formatter;
+    let __local_31: ref Formatter;
     let __local_32: char;
-    let _licm_buf_33: ref null String;
+    let _licm_buf_33: ref String;
     String::append_char(f.buf, 34);
-    __iter_4 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref null StrCharIter {
-        __local_7 = __inline_String__chars_2: block -> ref null StrCharIter {
+    __iter_4 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
+        __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
             break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
         };

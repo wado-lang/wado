@@ -65,35 +65,35 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref null array<u8>, i32, i32);
+type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
-type "functype/core:internal/write_string_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/core:internal/log_stderr" = fn(ref null String);
+type "functype/core:internal/log_stderr" = fn(ref String);
 
-type "functype/core:internal/panic" = fn(ref null String);
+type "functype/core:internal/panic" = fn(ref String);
 
-type "functype/u128^Eq::eq" = fn(ref null u128, ref null u128) -> bool;
+type "functype/u128^Eq::eq" = fn(ref u128, ref u128) -> bool;
 
-type "functype/u128^Add::add" = fn(ref null u128, ref null u128) -> ref null u128;
+type "functype/u128^Add::add" = fn(ref u128, ref u128) -> ref u128;
 
-type "functype/u128^Sub::sub" = fn(ref null u128, ref null u128) -> ref null u128;
+type "functype/u128^Sub::sub" = fn(ref u128, ref u128) -> ref u128;
 
-type "functype/u128^Mul::mul" = fn(ref null u128, ref null u128) -> ref null u128;
+type "functype/u128^Mul::mul" = fn(ref u128, ref u128) -> ref u128;
 
-type "functype/i128^Eq::eq" = fn(ref null i128, ref null i128) -> bool;
+type "functype/i128^Eq::eq" = fn(ref i128, ref i128) -> bool;
 
-type "functype/i128^Add::add" = fn(ref null i128, ref null i128) -> ref null i128;
+type "functype/i128^Add::add" = fn(ref i128, ref i128) -> ref i128;
 
-type "functype/i128^Sub::sub" = fn(ref null i128, ref null i128) -> ref null i128;
+type "functype/i128^Sub::sub" = fn(ref i128, ref i128) -> ref i128;
 
-type "functype/i128^Mul::mul" = fn(ref null i128, ref null i128) -> ref null i128;
+type "functype/i128^Mul::mul" = fn(ref i128, ref i128) -> ref i128;
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -112,82 +112,82 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let x_u128: ref null u128;
-    let x_i128: ref null i128;
-    let a1: ref null u128;
-    let a2: ref null u128;
-    let a3: ref null i128;
-    let a4: ref null i128;
-    let b1: ref null u128;
-    let b2: ref null u128;
-    let b3: ref null i128;
-    let b4: ref null i128;
-    let c1: ref null u128;
-    let c2: ref null u128;
-    let c3: ref null i128;
-    let c4: ref null i128;
-    let __local_14: ref null Array<u64>;
+    let x_u128: ref u128;
+    let x_i128: ref i128;
+    let a1: ref u128;
+    let a2: ref u128;
+    let a3: ref i128;
+    let a4: ref i128;
+    let b1: ref u128;
+    let b2: ref u128;
+    let b3: ref i128;
+    let b4: ref i128;
+    let c1: ref u128;
+    let c2: ref u128;
+    let c3: ref i128;
+    let c4: ref i128;
+    let __local_14: ref Array<u64>;
     let __local_15: u64;
     let __local_16: u64;
     let __local_17: i64;
     let __local_18: u64;
     let cond_19: bool;
-    let label_20: ref null String;
+    let label_20: ref String;
     let __local_21: u64;
     let __local_22: u64;
     let cond_23: bool;
-    let label_24: ref null String;
+    let label_24: ref String;
     let __local_25: u64;
     let __local_26: i64;
     let __local_27: i64;
     let cond_28: bool;
-    let label_29: ref null String;
+    let label_29: ref String;
     let __local_30: u64;
     let __local_31: i64;
     let __local_32: i64;
     let __local_33: i64;
     let cond_34: bool;
-    let label_35: ref null String;
+    let label_35: ref String;
     let __local_36: u64;
     let __local_37: i64;
     let __local_38: u64;
     let cond_39: bool;
-    let label_40: ref null String;
+    let label_40: ref String;
     let __local_41: u64;
     let __local_42: u64;
     let cond_43: bool;
-    let label_44: ref null String;
+    let label_44: ref String;
     let __local_45: u64;
     let __local_46: i64;
     let __local_47: i64;
     let cond_48: bool;
-    let label_49: ref null String;
+    let label_49: ref String;
     let __local_50: u64;
     let __local_51: i64;
     let __local_52: i64;
     let __local_53: i64;
     let cond_54: bool;
-    let label_55: ref null String;
+    let label_55: ref String;
     let __local_56: i64;
     let __local_57: i64;
     let __local_58: u64;
     let cond_59: bool;
-    let label_60: ref null String;
+    let label_60: ref String;
     let __local_61: u64;
     let __local_62: u64;
     let cond_63: bool;
-    let label_64: ref null String;
+    let label_64: ref String;
     let __local_65: u64;
     let __local_66: i64;
     let __local_67: i64;
     let cond_68: bool;
-    let label_69: ref null String;
+    let label_69: ref String;
     let __local_70: u64;
     let __local_71: i64;
     let __local_72: i64;
     let __local_73: i64;
     let cond_74: bool;
-    let label_75: ref null String;
+    let label_75: ref String;
     let __local_76: u64;
     let __local_77: i64;
     __inline___initialize_modules_0: block {
@@ -329,13 +329,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -397,11 +397,11 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
 
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from core:internal
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
+    let __local_7: ref String;
+    let __local_8: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {

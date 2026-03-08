@@ -53,9 +53,9 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
@@ -75,13 +75,13 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let __local_0: ref null "./pub_use_prelude_types.wado/MyPoint";
+    let __local_0: ref "./pub_use_prelude_types.wado/MyPoint";
     let __local_1: i32;
     let __local_2: i32;
-    let __local_3: ref null Array<u64>;
+    let __local_3: ref Array<u64>;
     let __local_4: i32;
     let __local_5: i32;
-    let __local_6: ref null "./pub_use_prelude_types.wado/MyPoint";
+    let __local_6: ref "./pub_use_prelude_types.wado/MyPoint";
     let __local_7: i32;
     let __local_8: i32;
     let __local_9: i32;
@@ -139,13 +139,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {

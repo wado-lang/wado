@@ -13,7 +13,7 @@ struct String {
     mut used: i32,
 }
 
-array array<String> (mut ref null String);
+array array<String> (mut ref String);
 
 struct ArrayIter<String> {  // ArrayIter<T> with T=String
     mut repr: ref array<String>,
@@ -22,13 +22,13 @@ struct ArrayIter<String> {  // ArrayIter<T> with T=String
 }
 
 variant Option<String> {
-    Some(ref null String),
+    Some(ref String),
     None,
 }
 
 struct Option<String>::Some {
     discriminant: i32,
-    payload_0: ref null String,
+    payload_0: ref String,
 }
 
 struct Array<String> {  // Array<T> with T=String
@@ -71,17 +71,17 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/Array<String>::append" = fn(ref null Array<String>, ref null String);
+type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
 
-type "functype/ArrayIter<String>^Iterator::next" = fn(ref null ArrayIter<String>) -> ref null Option<String>;
+type "functype/ArrayIter<String>^Iterator::next" = fn(ref ArrayIter<String>) -> ref Option<String>;
 
-type "functype/ArrayIter<String>^Iterator::next" = fn(ref null ArrayIter<String>) -> [i32, ref null String];
+type "functype/ArrayIter<String>^Iterator::next" = fn(ref ArrayIter<String>) -> [i32, ref null String];
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -99,31 +99,31 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let __local_0: ref null Array<String>;
-    let arr: ref null Array<String>;
-    let iter: ref null ArrayIter<String>;
-    let s: ref null String;
-    let __pattern_temp_0: ref null Option<String>;
-    let __local_5: ref null Array<u64>;
+    let __local_0: ref Array<String>;
+    let arr: ref Array<String>;
+    let iter: ref ArrayIter<String>;
+    let s: ref String;
+    let __pattern_temp_0: ref Option<String>;
+    let __local_5: ref Array<u64>;
     let __local_6: i32;
     let __local_7: i32;
-    let __local_8: ref null Array<String>;
-    let __local_9: ref null String;
-    let __local_10: ref null Array<String>;
-    let __local_11: ref null String;
-    let __local_12: ref null Array<String>;
-    let __local_13: ref null String;
-    let __local_14: ref null Array<String>;
-    let __local_15: ref null Array<String>;
-    let __local_16: ref null Array<String>;
+    let __local_8: ref Array<String>;
+    let __local_9: ref String;
+    let __local_10: ref Array<String>;
+    let __local_11: ref String;
+    let __local_12: ref Array<String>;
+    let __local_13: ref String;
+    let __local_14: ref Array<String>;
+    let __local_15: ref Array<String>;
+    let __local_16: ref Array<String>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
         };
         __modules_initialized = 1;
     };
-    arr = __seq_lit: block -> ref null Array<String> {
-        __local_0 = Array<String> { repr: array.new_fixed<ref null String>(String { repr: array.new_data<u8>("hello"), used: 5 }, String { repr: array.new_data<u8>("world"), used: 5 }, String { repr: array.new_data<u8>("!"), used: 1 }), used: 3 };
+    arr = __seq_lit: block -> ref Array<String> {
+        __local_0 = Array<String> { repr: array.new_fixed<ref String>(String { repr: array.new_data<u8>("hello"), used: 5 }, String { repr: array.new_data<u8>("world"), used: 5 }, String { repr: array.new_data<u8>("!"), used: 1 }), used: 3 };
         break __seq_lit: __local_0;
     };
     iter = ArrayIter<String> { repr: ref.as_non_null(arr.repr), used: 3, index: 0 };
@@ -133,7 +133,7 @@ fn run() with Stdout {
             let __sroa___pattern_temp_0_payload_0: ref null String;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<String>^Iterator::next(iter);
             if __sroa___pattern_temp_0_discriminant == 0 {
-                s = __sroa___pattern_temp_0_payload_0;
+                s = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
                 "core:cli/println"(s);
             } else {
                 break b1;
@@ -187,13 +187,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -255,7 +255,7 @@ fn Array<String>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<String>;
+    let new_repr: ref array<String>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;
@@ -265,22 +265,22 @@ fn Array<String>::append(self, value) {
             __local_6 = capacity * 2;
             break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
         };
-        new_repr = builtin::array_new<ref null String>(new_capacity);
-        builtin::array_copy<ref null String>(new_repr, 0, self.repr, 0, used);
+        new_repr = builtin::array_new<ref String>(new_capacity);
+        builtin::array_copy<ref String>(new_repr, 0, self.repr, 0, used);
         self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<ref null String>(self.repr, used, value);
+    builtin::array_set<ref String>(self.repr, used, value);
     self.used = used + 1;
 }
 
 fn ArrayIter<String>^Iterator::next(self) {
-    let item: ref null String;
+    let item: ref String;
     if self.index >= self.used {
         return 1; ref.null none;
     };
-    item = builtin::array_get<ref null String>(self.repr, self.index);
+    item = builtin::array_get<ref String>(self.repr, self.index);
     self.index = self.index + 1;
-    return 0; item;
+    return 0; ref.as_non_null(item);
 }
 
 export fn __cm_export__run as "run"

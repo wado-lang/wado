@@ -61,21 +61,21 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/String::append_char" = fn(ref null String, char);
+type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
+type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
-type "functype/Formatter::pad" = fn(ref null Formatter, ref null String);
+type "functype/Formatter::pad" = fn(ref Formatter, ref String);
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -93,20 +93,20 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let buf: ref null String;
-    let f_1: ref null Formatter;
-    let s: ref null String;
-    let empty: ref null String;
-    let __local_4: ref null String;
-    let __local_5: ref null Array<u64>;
+    let buf: ref String;
+    let f_1: ref Formatter;
+    let s: ref String;
+    let empty: ref String;
+    let __local_4: ref String;
+    let __local_5: ref Array<u64>;
     let __local_6: i32;
-    let __local_7: ref null String;
-    let self_8: ref null String;
-    let f_9: ref null Formatter;
+    let __local_7: ref String;
+    let self_8: ref String;
+    let f_9: ref Formatter;
     let __local_10: i32;
-    let __local_11: ref null String;
-    let self_12: ref null String;
-    let f_13: ref null Formatter;
+    let __local_11: ref String;
+    let self_12: ref String;
+    let f_13: ref Formatter;
     let __local_14: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -115,7 +115,7 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     buf = String { repr: builtin::array_new<u8>(64), used: 0 };
-    f_1 = __inline_Formatter__new_3: block -> ref null Formatter {
+    f_1 = __inline_Formatter__new_3: block -> ref Formatter {
         __local_7 = buf;
         break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_7) };
     };
@@ -125,7 +125,7 @@ fn run() with Stdout {
     Formatter::pad(f_9, self_8);
     "core:cli/println"(buf);
     buf = String { repr: builtin::array_new<u8>(64), used: 0 };
-    f_1 = __inline_Formatter__new_6: block -> ref null Formatter {
+    f_1 = __inline_Formatter__new_6: block -> ref Formatter {
         __local_11 = buf;
         break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_11) };
     };
@@ -133,7 +133,7 @@ fn run() with Stdout {
     self_12 = empty;
     f_13 = f_1;
     Formatter::pad(f_13, self_12);
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(18), used: 0 };
         String::append_char(__local_4, 91);
         String::append(__local_4, buf);
@@ -186,13 +186,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -253,7 +253,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -277,8 +277,8 @@ fn String::grow(self, min_capacity) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -320,7 +320,7 @@ fn String::append_char(self, c) {
 
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
-    let _licm_buf_4: ref null String;
+    let _licm_buf_4: ref String;
     __for_0: block {
         i = 0;
         _licm_buf_4 = self.buf;
@@ -343,7 +343,7 @@ fn Formatter::pad(self, content) {
     let align: enum:Alignment;
     let left_pad: i32;
     let right_pad: i32;
-    let __local_7: ref null String;
+    let __local_7: ref String;
     content_len = content.used;
     if if self.width <= 0 -> i32 {
         1;

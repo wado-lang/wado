@@ -57,21 +57,21 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/String^Eq::eq" = fn(ref null String, ref null String) -> bool;
+type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
-type "functype/String^Ord::cmp" = fn(ref null String, ref null String) -> enum:Ordering;
+type "functype/String^Ord::cmp" = fn(ref String, ref String) -> enum:Ordering;
 
-type "functype/Array<i32>^Eq::eq" = fn(ref null Array<i32>, ref null Array<i32>) -> bool;
+type "functype/Array<i32>^Eq::eq" = fn(ref Array<i32>, ref Array<i32>) -> bool;
 
-type "functype/Array<i32>^Ord::cmp" = fn(ref null Array<i32>, ref null Array<i32>) -> enum:Ordering;
+type "functype/Array<i32>^Ord::cmp" = fn(ref Array<i32>, ref Array<i32>) -> enum:Ordering;
 
-type "functype/Array<i32>::append" = fn(ref null Array<i32>, i32);
+type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -92,43 +92,43 @@ fn run() with Stdout {
     let less: enum:Ordering;
     let equal: enum:Ordering;
     let greater: enum:Ordering;
-    let __local_3: ref null Array<i32>;
-    let arr1: ref null Array<i32>;
-    let __local_5: ref null Array<i32>;
-    let arr2: ref null Array<i32>;
-    let __local_7: ref null Array<i32>;
-    let arr3: ref null Array<i32>;
-    let s1: ref null String;
-    let s2: ref null String;
-    let s3: ref null String;
-    let __local_12: ref null Array<u64>;
+    let __local_3: ref Array<i32>;
+    let arr1: ref Array<i32>;
+    let __local_5: ref Array<i32>;
+    let arr2: ref Array<i32>;
+    let __local_7: ref Array<i32>;
+    let arr3: ref Array<i32>;
+    let s1: ref String;
+    let s2: ref String;
+    let s3: ref String;
+    let __local_12: ref Array<u64>;
     let __local_13: i32;
     let __local_14: i32;
-    let __local_15: ref null Array<i32>;
+    let __local_15: ref Array<i32>;
     let __local_16: i32;
-    let __local_17: ref null Array<i32>;
+    let __local_17: ref Array<i32>;
     let __local_18: i32;
-    let __local_19: ref null Array<i32>;
+    let __local_19: ref Array<i32>;
     let __local_20: i32;
-    let __local_21: ref null Array<i32>;
+    let __local_21: ref Array<i32>;
     let __local_22: i32;
     let __local_23: i32;
-    let __local_24: ref null Array<i32>;
+    let __local_24: ref Array<i32>;
     let __local_25: i32;
-    let __local_26: ref null Array<i32>;
+    let __local_26: ref Array<i32>;
     let __local_27: i32;
-    let __local_28: ref null Array<i32>;
+    let __local_28: ref Array<i32>;
     let __local_29: i32;
-    let __local_30: ref null Array<i32>;
+    let __local_30: ref Array<i32>;
     let __local_31: i32;
     let __local_32: i32;
-    let __local_33: ref null Array<i32>;
+    let __local_33: ref Array<i32>;
     let __local_34: i32;
-    let __local_35: ref null Array<i32>;
+    let __local_35: ref Array<i32>;
     let __local_36: i32;
-    let __local_37: ref null Array<i32>;
+    let __local_37: ref Array<i32>;
     let __local_38: i32;
-    let __local_39: ref null Array<i32>;
+    let __local_39: ref Array<i32>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -147,15 +147,15 @@ fn run() with Stdout {
     if greater == 2 {
         "core:cli/println"(String { repr: array.new_data<u8>("Greater matches Greater"), used: 23 });
     };
-    arr1 = __seq_lit: block -> ref null Array<i32> {
+    arr1 = __seq_lit: block -> ref Array<i32> {
         __local_3 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_3;
     };
-    arr2 = __seq_lit: block -> ref null Array<i32> {
+    arr2 = __seq_lit: block -> ref Array<i32> {
         __local_5 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 4), used: 3 };
         break __seq_lit: __local_5;
     };
-    arr3 = __seq_lit: block -> ref null Array<i32> {
+    arr3 = __seq_lit: block -> ref Array<i32> {
         __local_7 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_7;
     };
@@ -235,13 +235,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -302,13 +302,13 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
 fn String^Eq::eq(self, other) {
     let len_a: i32;
     let len_b: i32;
-    let a_repr: ref null array<u8>;
-    let b_repr: ref null array<u8>;
+    let a_repr: ref array<u8>;
+    let b_repr: ref array<u8>;
     let i: i32;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_7: ref String;
+    let __local_8: ref String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len_a = self.used;
     len_b = other.used;
     if len_a != len_b {
@@ -338,17 +338,17 @@ fn String^Ord::cmp(self, other) {
     let len_a: i32;
     let len_b: i32;
     let min_len: i32;
-    let a_repr: ref null array<u8>;
-    let b_repr: ref null array<u8>;
+    let a_repr: ref array<u8>;
+    let b_repr: ref array<u8>;
     let i: i32;
     let a_byte: u8;
     let b_byte: u8;
-    let __local_10: ref null String;
-    let __local_11: ref null String;
+    let __local_10: ref String;
+    let __local_11: ref String;
     let __local_12: i32;
     let __local_13: i32;
-    let __local_14: ref null String;
-    let __local_15: ref null String;
+    let __local_14: ref String;
+    let __local_15: ref String;
     len_a = self.used;
     len_b = other.used;
     min_len = select i32(len_a < len_b, len_a, len_b);
@@ -386,8 +386,8 @@ fn String^Ord::cmp(self, other) {
 fn Array<i32>^Eq::eq(self, other) {
     let i: i32;
     let _licm_used_3: i32;
-    let _licm_repr_4: ref null array<i32>;
-    let _licm_repr_5: ref null array<i32>;
+    let _licm_repr_4: ref array<i32>;
+    let _licm_repr_5: ref array<i32>;
     if self.used != other.used {
         return 0;
     };
@@ -419,8 +419,8 @@ fn Array<i32>^Ord::cmp(self, other) {
     let b: i32;
     let __local_6: i32;
     let __local_7: i32;
-    let _licm_repr_8: ref null array<i32>;
-    let _licm_repr_9: ref null array<i32>;
+    let _licm_repr_8: ref array<i32>;
+    let _licm_repr_9: ref array<i32>;
     min_len = __inline_i32_min_0: block -> i32 {
         __local_6 = self.used;
         __local_7 = other.used;
@@ -461,7 +461,7 @@ fn Array<i32>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<i32>;
+    let new_repr: ref array<i32>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;

@@ -13,7 +13,7 @@ struct String {
     mut used: i32,
 }
 
-array array<Array<i32>> (mut ref null Array<i32>);
+array array<Array<i32>> (mut ref Array<i32>);
 
 array array<i32> (mut i32);
 
@@ -62,19 +62,19 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/Array<Array<i32>>^Eq::eq" = fn(ref null Array<Array<i32>>, ref null Array<Array<i32>>) -> bool;
+type "functype/Array<Array<i32>>^Eq::eq" = fn(ref Array<Array<i32>>, ref Array<Array<i32>>) -> bool;
 
-type "functype/Array<i32>^Eq::eq" = fn(ref null Array<i32>, ref null Array<i32>) -> bool;
+type "functype/Array<i32>^Eq::eq" = fn(ref Array<i32>, ref Array<i32>) -> bool;
 
-type "functype/Array<i32>::append" = fn(ref null Array<i32>, i32);
+type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
-type "functype/Array<Array<i32>>::append" = fn(ref null Array<Array<i32>>, ref null Array<i32>);
+type "functype/Array<Array<i32>>::append" = fn(ref Array<Array<i32>>, ref Array<i32>);
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -92,78 +92,78 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let __local_0: ref null Array<Array<i32>>;
-    let __local_1: ref null Array<i32>;
-    let __local_2: ref null Array<i32>;
-    let a: ref null Array<Array<i32>>;
-    let __local_4: ref null Array<Array<i32>>;
-    let __local_5: ref null Array<i32>;
-    let __local_6: ref null Array<i32>;
-    let b: ref null Array<Array<i32>>;
-    let __local_8: ref null Array<u64>;
+    let __local_0: ref Array<Array<i32>>;
+    let __local_1: ref Array<i32>;
+    let __local_2: ref Array<i32>;
+    let a: ref Array<Array<i32>>;
+    let __local_4: ref Array<Array<i32>>;
+    let __local_5: ref Array<i32>;
+    let __local_6: ref Array<i32>;
+    let b: ref Array<Array<i32>>;
+    let __local_8: ref Array<u64>;
     let __local_9: i32;
     let __local_10: i32;
-    let __local_11: ref null Array<Array<i32>>;
-    let __local_12: ref null Array<i32>;
+    let __local_11: ref Array<Array<i32>>;
+    let __local_12: ref Array<i32>;
     let __local_13: i32;
     let __local_14: i32;
-    let __local_15: ref null Array<i32>;
+    let __local_15: ref Array<i32>;
     let __local_16: i32;
-    let __local_17: ref null Array<i32>;
+    let __local_17: ref Array<i32>;
     let __local_18: i32;
-    let __local_19: ref null Array<i32>;
-    let __local_20: ref null Array<Array<i32>>;
-    let __local_21: ref null Array<i32>;
+    let __local_19: ref Array<i32>;
+    let __local_20: ref Array<Array<i32>>;
+    let __local_21: ref Array<i32>;
     let __local_22: i32;
     let __local_23: i32;
-    let __local_24: ref null Array<i32>;
+    let __local_24: ref Array<i32>;
     let __local_25: i32;
-    let __local_26: ref null Array<i32>;
+    let __local_26: ref Array<i32>;
     let __local_27: i32;
-    let __local_28: ref null Array<i32>;
-    let __local_29: ref null Array<Array<i32>>;
+    let __local_28: ref Array<i32>;
+    let __local_29: ref Array<Array<i32>>;
     let __local_30: i32;
     let __local_31: i32;
-    let __local_32: ref null Array<Array<i32>>;
-    let __local_33: ref null Array<i32>;
+    let __local_32: ref Array<Array<i32>>;
+    let __local_33: ref Array<i32>;
     let __local_34: i32;
     let __local_35: i32;
-    let __local_36: ref null Array<i32>;
+    let __local_36: ref Array<i32>;
     let __local_37: i32;
-    let __local_38: ref null Array<i32>;
+    let __local_38: ref Array<i32>;
     let __local_39: i32;
-    let __local_40: ref null Array<i32>;
-    let __local_41: ref null Array<Array<i32>>;
-    let __local_42: ref null Array<i32>;
+    let __local_40: ref Array<i32>;
+    let __local_41: ref Array<Array<i32>>;
+    let __local_42: ref Array<i32>;
     let __local_43: i32;
     let __local_44: i32;
-    let __local_45: ref null Array<i32>;
+    let __local_45: ref Array<i32>;
     let __local_46: i32;
-    let __local_47: ref null Array<i32>;
+    let __local_47: ref Array<i32>;
     let __local_48: i32;
-    let __local_49: ref null Array<i32>;
-    let __local_50: ref null Array<Array<i32>>;
+    let __local_49: ref Array<i32>;
+    let __local_50: ref Array<Array<i32>>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
         };
         __modules_initialized = 1;
     };
-    a = __seq_lit: block -> ref null Array<Array<i32>> {
-        __local_0 = Array<Array<i32>> { repr: array.new_fixed<ref null Array<i32>>(__seq_lit: block -> ref null Array<i32> {
+    a = __seq_lit: block -> ref Array<Array<i32>> {
+        __local_0 = Array<Array<i32>> { repr: array.new_fixed<ref Array<i32>>(__seq_lit: block -> ref Array<i32> {
             __local_1 = Array<i32> { repr: array.new_fixed<i32>(1, 2), used: 2 };
             break __seq_lit: __local_1;
-        }, __seq_lit: block -> ref null Array<i32> {
+        }, __seq_lit: block -> ref Array<i32> {
             __local_2 = Array<i32> { repr: array.new_fixed<i32>(3, 4), used: 2 };
             break __seq_lit: __local_2;
         }), used: 2 };
         break __seq_lit: __local_0;
     };
-    b = __seq_lit: block -> ref null Array<Array<i32>> {
-        __local_4 = Array<Array<i32>> { repr: array.new_fixed<ref null Array<i32>>(__seq_lit: block -> ref null Array<i32> {
+    b = __seq_lit: block -> ref Array<Array<i32>> {
+        __local_4 = Array<Array<i32>> { repr: array.new_fixed<ref Array<i32>>(__seq_lit: block -> ref Array<i32> {
             __local_5 = Array<i32> { repr: array.new_fixed<i32>(1, 2), used: 2 };
             break __seq_lit: __local_5;
-        }, __seq_lit: block -> ref null Array<i32> {
+        }, __seq_lit: block -> ref Array<i32> {
             __local_6 = Array<i32> { repr: array.new_fixed<i32>(3, 4), used: 2 };
             break __seq_lit: __local_6;
         }), used: 2 };
@@ -220,13 +220,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -287,8 +287,8 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
 fn Array<Array<i32>>^Eq::eq(self, other) {
     let i: i32;
     let _licm_used_3: i32;
-    let _licm_repr_4: ref null array<Array<i32>>;
-    let _licm_repr_5: ref null array<Array<i32>>;
+    let _licm_repr_4: ref array<Array<i32>>;
+    let _licm_repr_5: ref array<Array<i32>>;
     if self.used != other.used {
         return 0;
     };
@@ -302,7 +302,7 @@ fn Array<Array<i32>>^Eq::eq(self, other) {
                 if (i < _licm_used_3) == 0 {
                     break __for_0;
                 };
-                if Array<i32>^Eq::eq(builtin::array_get<ref null Array<i32>>(_licm_repr_4, i), builtin::array_get<ref null Array<i32>>(_licm_repr_5, i)) == 0 {
+                if Array<i32>^Eq::eq(builtin::array_get<ref Array<i32>>(_licm_repr_4, i), builtin::array_get<ref Array<i32>>(_licm_repr_5, i)) == 0 {
                     return 0;
                 };
                 i = i + 1;
@@ -316,8 +316,8 @@ fn Array<Array<i32>>^Eq::eq(self, other) {
 fn Array<i32>^Eq::eq(self, other) {
     let i: i32;
     let _licm_used_3: i32;
-    let _licm_repr_4: ref null array<i32>;
-    let _licm_repr_5: ref null array<i32>;
+    let _licm_repr_4: ref array<i32>;
+    let _licm_repr_5: ref array<i32>;
     if self.used != other.used {
         return 0;
     };
@@ -346,7 +346,7 @@ fn Array<i32>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<i32>;
+    let new_repr: ref array<i32>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;
@@ -368,7 +368,7 @@ fn Array<Array<i32>>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<Array<i32>>;
+    let new_repr: ref array<Array<i32>>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;
@@ -378,11 +378,11 @@ fn Array<Array<i32>>::append(self, value) {
             __local_6 = capacity * 2;
             break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
         };
-        new_repr = builtin::array_new<ref null Array<i32>>(new_capacity);
-        builtin::array_copy<ref null Array<i32>>(new_repr, 0, self.repr, 0, used);
+        new_repr = builtin::array_new<ref Array<i32>>(new_capacity);
+        builtin::array_copy<ref Array<i32>>(new_repr, 0, self.repr, 0, used);
         self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<ref null Array<i32>>(self.repr, used, value);
+    builtin::array_set<ref Array<i32>>(self.repr, used, value);
     self.used = used + 1;
 }
 

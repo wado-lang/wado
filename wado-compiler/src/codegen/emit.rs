@@ -47,6 +47,8 @@ struct WirEmitter<'a> {
     global_name_map: IndexMap<String, u32>,
     /// Local name map for current function.
     current_locals: IndexMap<String, u32>,
+    /// Locals declared with ref types (need `ref.as_non_null` on `local.get`).
+    ref_locals: IndexSet<String>,
     /// Next local index for current function.
     next_local: u32,
     /// Wasm type section counter.
@@ -72,6 +74,7 @@ impl<'a> WirEmitter<'a> {
             func_index_map: IndexMap::new(),
             global_name_map: IndexMap::new(),
             current_locals: IndexMap::new(),
+            ref_locals: IndexSet::new(),
             next_local: 0,
             next_type_idx: 0,
             variant_pre_assigned: IndexMap::new(),
@@ -480,7 +483,9 @@ impl<'a> WirEmitter<'a> {
     fn build_array_subtype(&mut self, a: &WirArrayType, wir_idx: u32, subtypes: &mut Vec<SubType>) {
         debug_assert!(self.type_index_map.contains_key(&wir_idx));
 
-        let storage_type = self.wir_type_to_storage_type(&a.element_type);
+        // Array element types must be nullable for `array.new_default` (defaultability).
+        // We add `ref.as_non_null` after `array.get` for ref-type elements.
+        let storage_type = self.wir_type_to_storage_type(&a.element_type.clone().as_nullable());
         subtypes.push(SubType {
             is_final: true,
             supertype_idx: None,
@@ -653,6 +658,14 @@ impl<'a> WirEmitter<'a> {
         })
     }
 
+    fn is_nullable_global(&self, name: &str) -> bool {
+        self.wir
+            .globals
+            .iter()
+            .find(|g| g.name.fq == name)
+            .is_some_and(|g| matches!(g.ty, WirType::Ref { nullable: true, .. }))
+    }
+
     // === Global Section ===
 
     fn emit_global_section(&self) -> GlobalSection {
@@ -739,6 +752,7 @@ impl<'a> WirEmitter<'a> {
     fn emit_function(&mut self, func: &WirFunction) -> Function {
         // Reset local tracking
         self.current_locals.clear();
+        self.ref_locals.clear();
         self.next_local = 0;
 
         // Get function type info — check if it has a non-void return type
@@ -792,17 +806,32 @@ impl<'a> WirEmitter<'a> {
 
     /// Collect `DeclareLocal` instructions from a body to pre-allocate.
     /// Recursively walks the entire instruction tree to find all `DeclareLocal` nodes.
-    fn collect_declared_locals(&self, body: &[WirInstr], locals: &mut Vec<(String, ValType)>) {
+    fn collect_declared_locals(&mut self, body: &[WirInstr], locals: &mut Vec<(String, ValType)>) {
         for instr in body {
             self.collect_declared_locals_instr(instr, locals);
         }
     }
 
     /// Recursively collect `DeclareLocal` from a single instruction and all its children.
-    fn collect_declared_locals_instr(&self, instr: &WirInstr, locals: &mut Vec<(String, ValType)>) {
+    /// Ref-type locals are made nullable (Wasm requires defaultable locals for patterns
+    /// that initialize on branches). Tracked in `ref_locals` for `ref.as_non_null` on get.
+    fn collect_declared_locals_instr(
+        &mut self,
+        instr: &WirInstr,
+        locals: &mut Vec<(String, ValType)>,
+    ) {
         match instr {
             WirInstr::DeclareLocal { name, ty } => {
-                locals.push((name.clone(), self.wir_type_to_val_type(ty)));
+                let mut val_type = self.wir_type_to_val_type(ty);
+                // Non-null ref locals must be made nullable for Wasm defaultability.
+                // We track them and add ref.as_non_null on local.get.
+                if let ValType::Ref(rt) = &mut val_type
+                    && !rt.nullable
+                {
+                    rt.nullable = true;
+                    self.ref_locals.insert(name.clone());
+                }
+                locals.push((name.clone(), val_type));
             }
             WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
                 self.collect_declared_locals(body, locals);
@@ -946,7 +975,7 @@ impl<'a> WirEmitter<'a> {
                 // Declare temp local for the struct copy source
                 let wasm_type_idx = self.resolve_type_index(type_id.index());
                 let ref_type = RefType {
-                    nullable: true,
+                    nullable: false,
                     heap_type: HeapType::Concrete(wasm_type_idx),
                 };
                 let temp_name = format!("__copy_source_{}", type_id.index());
@@ -957,7 +986,7 @@ impl<'a> WirEmitter<'a> {
                     for (field_idx, arr_type_idx) in array_field_infos {
                         let arr_wasm_idx = self.resolve_type_index(arr_type_idx);
                         let arr_ref = RefType {
-                            nullable: true,
+                            nullable: false,
                             heap_type: HeapType::Concrete(arr_wasm_idx),
                         };
                         let src_name = format!("__copy_arr_src_{}_{}", type_id.index(), field_idx);
@@ -987,6 +1016,11 @@ impl<'a> WirEmitter<'a> {
             WirInstr::LocalGet { name } => {
                 let idx = self.resolve_local(name);
                 f.instruction(&Instruction::LocalGet(idx));
+                // Ref-type locals are nullable in Wasm (for defaultability).
+                // Narrow to non-null since Wado values are always non-null.
+                if self.ref_locals.contains(name.as_str()) {
+                    f.instruction(&Instruction::RefAsNonNull);
+                }
             }
             WirInstr::LocalSet { name, value } => {
                 self.emit_instr(f, value);
@@ -997,10 +1031,18 @@ impl<'a> WirEmitter<'a> {
                 self.emit_instr(f, value);
                 let idx = self.resolve_local(name);
                 f.instruction(&Instruction::LocalTee(idx));
+                if self.ref_locals.contains(name.as_str()) {
+                    f.instruction(&Instruction::RefAsNonNull);
+                }
             }
             WirInstr::GlobalGet { name } => {
                 let idx = self.resolve_global(&name.fq);
                 f.instruction(&Instruction::GlobalGet(idx));
+                // Nullable globals (lazy-init) produce (ref null $T) from global.get.
+                // Narrow to (ref $T) since Wado values are non-null after initialization.
+                if self.is_nullable_global(&name.fq) {
+                    f.instruction(&Instruction::RefAsNonNull);
+                }
             }
             WirInstr::GlobalSet { name, value } => {
                 self.emit_instr(f, value);
@@ -1258,6 +1300,11 @@ impl<'a> WirEmitter<'a> {
                     Some(false) => f.instruction(&Instruction::ArrayGetU(wasm_idx)),
                     None => f.instruction(&Instruction::ArrayGet(wasm_idx)),
                 };
+                // Array elements are nullable in Wasm (for array.new_default).
+                // Narrow to non-null since Wado values are always non-null.
+                if self.is_array_element_ref(type_id.index()) {
+                    f.instruction(&Instruction::RefAsNonNull);
+                }
             }
             WirInstr::ArraySet {
                 type_id,
@@ -1873,11 +1920,6 @@ impl<'a> WirEmitter<'a> {
                         });
                         // Push the new array on stack (for struct.new)
                         f.instruction(&Instruction::LocalGet(dst_local));
-                        // Non-nullable ref fields need ref.as_non_null since
-                        // the local is nullable
-                        if self.is_field_nonnull_ref(type_id.index(), field.index as usize) {
-                            f.instruction(&Instruction::RefAsNonNull);
-                        }
                     } else {
                         f.instruction(&Instruction::LocalGet(temp_idx));
                         match self.is_field_packed_by_index(type_id.index(), field.index) {
@@ -2023,6 +2065,16 @@ impl<'a> WirEmitter<'a> {
     /// Check if an array type has packed elements (i8/i16 storage).
     /// Returns `Some(true)` for signed packed (I8/I16), `Some(false)` for unsigned packed (U8/U16/Bool),
     /// or `None` if the array element is not packed.
+    fn is_array_element_ref(&self, wir_type_idx: u32) -> bool {
+        let idx = wir_type_idx as usize;
+        idx < self.wir.types.len()
+            && matches!(
+                &self.wir.types[idx],
+                WirTypeDef::Array(arr)
+                    if matches!(arr.element_type, WirType::Ref { .. } | WirType::AbstractRef { .. })
+            )
+    }
+
     fn is_array_packed(&self, wir_type_idx: u32) -> Option<bool> {
         let idx = wir_type_idx as usize;
         if idx < self.wir.types.len()
@@ -2051,18 +2103,6 @@ impl<'a> WirEmitter<'a> {
             };
         }
         None
-    }
-
-    /// Check if the i-th field of a struct type is a non-nullable reference.
-    fn is_field_nonnull_ref(&self, wir_type_idx: u32, field_index: usize) -> bool {
-        let idx = wir_type_idx as usize;
-        if idx < self.wir.types.len()
-            && let WirTypeDef::Struct(ref st) = self.wir.types[idx]
-            && let Some(field) = st.fields.get(field_index)
-        {
-            return field.ty.is_nonnull_ref();
-        }
-        false
     }
 
     fn is_field_packed(&self, wir_type_idx: u32, field_name: &str) -> Option<bool> {

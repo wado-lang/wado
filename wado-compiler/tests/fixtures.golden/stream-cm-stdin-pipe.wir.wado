@@ -50,9 +50,9 @@ type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/run" = fn();
 
-type "functype/__cm_adapter__Stdin_read_via_stream" = fn() -> ref null "tuple/[Stream<u8>, Future<Result<unit,ErrorCode>>]";
+type "functype/__cm_adapter__Stdin_read_via_stream" = fn() -> ref "tuple/[Stream<u8>, Future<Result<unit,ErrorCode>>]";
 
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> ref null Result<unit,ErrorCode>;
+type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> ref Result<unit,ErrorCode>;
 
 type "functype/__cm_export__run" = fn();
 
@@ -80,8 +80,8 @@ global mut __modules_initialized: bool = 0;
 fn run() with Stdout, Stdin {
     let stdin_stream: i32;
     let _done: i32;
-    let __pattern_temp_0: ref null "tuple/[Stream<u8>, Future<Result<unit,ErrorCode>>]";
-    let __local_3: ref null Array<u64>;
+    let __pattern_temp_0: ref "tuple/[Stream<u8>, Future<Result<unit,ErrorCode>>]";
+    let __local_3: ref Array<u64>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -108,7 +108,7 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
     let __async_outptr: i32;
     let __subtask: i32;
     let __disc: i32;
-    let __result_val: ref null Result<unit,ErrorCode>;
+    let __result_val: ref Result<unit,ErrorCode>;
     __async_outptr = "mem/realloc"(0, 0, 4, 8);
     __subtask = "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
     "core:internal/wait_for_subtask"(__subtask);

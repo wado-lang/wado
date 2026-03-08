@@ -48,9 +48,9 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
@@ -73,35 +73,35 @@ fn run() with Stdout {
     let __local_0: char;
     let __local_1: char;
     let __local_2: char;
-    let r1: ref null String;
-    let r2: ref null String;
-    let r3: ref null String;
-    let __local_6: ref null Array<u64>;
+    let r1: ref String;
+    let r2: ref String;
+    let r3: ref String;
+    let __local_6: ref Array<u64>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
         };
         __modules_initialized = 1;
     };
-    r1 = value_copy String(let __match_scrut_0: char; __match_scrut_0 = 97; if __match_scrut_0 == 97 -> ref null String {
+    r1 = value_copy String(let __match_scrut_0: char; __match_scrut_0 = 97; if __match_scrut_0 == 97 -> ref String {
         String { repr: array.new_data<u8>("letter a"), used: 8 };
-    } else if __match_scrut_0 == 98 -> ref null String {
+    } else if __match_scrut_0 == 98 -> ref String {
         String { repr: array.new_data<u8>("letter b"), used: 8 };
     } else {
         String { repr: array.new_data<u8>("other"), used: 5 };
     });
     "core:cli/println"(r1);
-    r2 = value_copy String(let __match_scrut_1: char; __match_scrut_1 = 122; if __match_scrut_1 == 97 -> ref null String {
+    r2 = value_copy String(let __match_scrut_1: char; __match_scrut_1 = 122; if __match_scrut_1 == 97 -> ref String {
         String { repr: array.new_data<u8>("letter a"), used: 8 };
-    } else if __match_scrut_1 == 122 -> ref null String {
+    } else if __match_scrut_1 == 122 -> ref String {
         String { repr: array.new_data<u8>("letter z"), used: 8 };
     } else {
         String { repr: array.new_data<u8>("other"), used: 5 };
     });
     "core:cli/println"(r2);
-    r3 = value_copy String(let __match_scrut_2: char; __match_scrut_2 = 10; if __match_scrut_2 == 10 -> ref null String {
+    r3 = value_copy String(let __match_scrut_2: char; __match_scrut_2 = 10; if __match_scrut_2 == 10 -> ref String {
         String { repr: array.new_data<u8>("newline"), used: 7 };
-    } else if __match_scrut_2 == 9 -> ref null String {
+    } else if __match_scrut_2 == 9 -> ref String {
         String { repr: array.new_data<u8>("tab"), used: 3 };
     } else {
         String { repr: array.new_data<u8>("other"), used: 5 };
@@ -153,13 +153,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {

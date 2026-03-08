@@ -65,7 +65,7 @@ type "functype/wasi/wasi:sockets/TcpSocket::create" = fn(i32, i32);
 
 type "functype/run" = fn();
 
-type "functype/__cm_adapter__TcpSocket_create" = fn(i32) -> ref null Result<TcpSocket,ErrorCode>;
+type "functype/__cm_adapter__TcpSocket_create" = fn(i32) -> ref Result<TcpSocket,ErrorCode>;
 
 type "functype/__cm_export__run" = fn();
 
@@ -73,9 +73,9 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
@@ -97,8 +97,8 @@ global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let family: "wasi:sockets/enum:IpAddressFamily";
-    let result: ref null Result<TcpSocket,ErrorCode>;
-    let __local_2: ref null Array<u64>;
+    let result: ref Result<TcpSocket,ErrorCode>;
+    let __local_2: ref Array<u64>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -113,7 +113,7 @@ fn run() with Stdout {
 fn __cm_adapter__TcpSocket_create(address_family) {
     let __outptr: i32;
     let __disc: i32;
-    let __result_val: ref null Result<TcpSocket,ErrorCode>;
+    let __result_val: ref Result<TcpSocket,ErrorCode>;
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:sockets/TcpSocket::create"(address_family, __outptr);
     __disc = builtin::load_i32(__outptr);
@@ -171,13 +171,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {

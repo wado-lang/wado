@@ -19,7 +19,7 @@ struct String {
 
 variant Result<i32,String> {
     Ok(i32),
-    Err(ref null String),
+    Err(ref String),
 }
 
 struct Result<i32,String>::Ok {
@@ -29,7 +29,7 @@ struct Result<i32,String>::Ok {
 
 struct Result<i32,String>::Err {
     discriminant: i32,
-    payload_0: ref null String,
+    payload_0: ref String,
 }
 
 array array<u64> (mut u64);
@@ -67,17 +67,17 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/String^Eq::eq" = fn(ref null String, ref null String) -> bool;
+type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
-type "functype/Result<i32,String>^Eq::eq" = fn(ref null "core:internal/Box<Result<i32,String>>", ref null "core:internal/Box<Result<i32,String>>") -> bool;
+type "functype/Result<i32,String>^Eq::eq" = fn(ref "core:internal/Box<Result<i32,String>>", ref "core:internal/Box<Result<i32,String>>") -> bool;
 
-type "functype/Result<i32,String>^Eq::eq" = fn(ref Result<i32,String>, ref null "core:internal/Box<Result<i32,String>>") -> bool;
+type "functype/Result<i32,String>^Eq::eq" = fn(ref Result<i32,String>, ref "core:internal/Box<Result<i32,String>>") -> bool;
 
 type "functype/Result<i32,String>^Eq::eq" = fn(ref Result<i32,String>, ref Result<i32,String>) -> bool;
 
@@ -97,11 +97,11 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let a: ref null Result<i32,String>;
-    let b: ref null Result<i32,String>;
-    let c: ref null Result<i32,String>;
-    let d: ref null Result<i32,String>;
-    let __local_4: ref null Array<u64>;
+    let a: ref Result<i32,String>;
+    let b: ref Result<i32,String>;
+    let c: ref Result<i32,String>;
+    let d: ref Result<i32,String>;
+    let __local_4: ref Array<u64>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -167,13 +167,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -234,13 +234,13 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
 fn String^Eq::eq(self, other) {
     let len_a: i32;
     let len_b: i32;
-    let a_repr: ref null array<u8>;
-    let b_repr: ref null array<u8>;
+    let a_repr: ref array<u8>;
+    let b_repr: ref array<u8>;
     let i: i32;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_7: ref String;
+    let __local_8: ref String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len_a = self.used;
     len_b = other.used;
     if len_a != len_b {
@@ -269,13 +269,13 @@ fn String^Eq::eq(self, other) {
 fn Result<i32,String>^Eq::eq(self, other) {
     let __local_2: i32;
     let __local_3: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
-    return let __match_scrut_0: ref null Result<i32,String>; __match_scrut_0 = self; if ref.test Result<i32,String>::Ok(__match_scrut_0) -> bool {
+    let __local_4: ref String;
+    let __local_5: ref String;
+    return let __match_scrut_0: ref Result<i32,String>; __match_scrut_0 = self; if ref.test Result<i32,String>::Ok(__match_scrut_0) -> bool {
         let __cast_4: ref Result<i32,String>::Ok;
         __cast_4 = ref.cast Result<i32,String>::Ok(__match_scrut_0);
         __local_2 = __cast_4.payload_0;
-        let __match_scrut_2: ref null Result<i32,String>;
+        let __match_scrut_2: ref Result<i32,String>;
         __match_scrut_2 = other;
         if ref.test Result<i32,String>::Ok(__match_scrut_2) -> bool {
             let __cast_6: ref Result<i32,String>::Ok;
@@ -293,7 +293,7 @@ fn Result<i32,String>^Eq::eq(self, other) {
         let __cast_1: ref Result<i32,String>::Err;
         __cast_1 = ref.cast Result<i32,String>::Err(__match_scrut_0);
         __local_4 = __cast_1.payload_0;
-        let __match_scrut_1: ref null Result<i32,String>;
+        let __match_scrut_1: ref Result<i32,String>;
         __match_scrut_1 = other;
         if ref.test Result<i32,String>::Ok(__match_scrut_1) -> bool {
             let __cast_3: ref Result<i32,String>::Ok;

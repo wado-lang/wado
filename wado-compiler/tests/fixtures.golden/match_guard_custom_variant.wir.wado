@@ -20,7 +20,7 @@ struct [f64, f64] {
 
 variant Shape {
     Circle(f64),
-    Rectangle(ref null "tuple/[f64, f64]"),
+    Rectangle(ref "tuple/[f64, f64]"),
     Point,
 }
 
@@ -31,7 +31,7 @@ struct Shape::Circle {
 
 struct Shape::Rectangle {
     discriminant: i32,
-    payload_0: ref null "tuple/[f64, f64]",
+    payload_0: ref "tuple/[f64, f64]",
 }
 
 array array<u64> (mut u64);
@@ -69,9 +69,9 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
@@ -91,16 +91,16 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let s1: ref null Shape;
-    let s2: ref null Shape;
-    let s3: ref null Shape;
+    let s1: ref Shape;
+    let s2: ref Shape;
+    let s3: ref Shape;
     let __local_3: f64;
-    let desc1: ref null String;
+    let desc1: ref String;
     let __local_5: f64;
-    let desc2: ref null String;
+    let desc2: ref String;
     let __local_7: f64;
-    let desc3: ref null String;
-    let __local_9: ref null Array<u64>;
+    let desc3: ref String;
+    let __local_9: ref Array<u64>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -110,109 +110,109 @@ fn run() with Stdout {
     s1 = Shape::Circle { discriminant: 0, payload_0: 5 };
     s2 = Shape::Circle { discriminant: 0, payload_0: 0.5 };
     s3 = Shape { 2 };
-    desc1 = value_copy String(let __match_scrut_0: ref null Shape; __match_scrut_0 = s1; if ref.test Shape::Circle(__match_scrut_0) -> ref null String {
+    desc1 = value_copy String(let __match_scrut_0: ref Shape; __match_scrut_0 = s1; if ref.test Shape::Circle(__match_scrut_0) -> ref String {
         let __cast_4: ref Shape::Circle;
         __cast_4 = ref.cast Shape::Circle(__match_scrut_0);
         __local_3 = __cast_4.payload_0;
-        if __local_3 > 1 -> ref null String {
+        if __local_3 > 1 -> ref String {
             let __cast_3: ref Shape::Circle;
             __cast_3 = ref.cast Shape::Circle(__match_scrut_0);
             __local_3 = __cast_3.payload_0;
             String { repr: array.new_data<u8>("big circle"), used: 10 };
-        } else if ref.test Shape::Circle(__match_scrut_0) -> ref null String {
+        } else if ref.test Shape::Circle(__match_scrut_0) -> ref String {
             let __cast_2: ref Shape::Circle;
             __cast_2 = ref.cast Shape::Circle(__match_scrut_0);
             String { repr: array.new_data<u8>("small circle"), used: 12 };
-        } else if ref.test Shape::Rectangle(__match_scrut_0) -> ref null String {
+        } else if ref.test Shape::Rectangle(__match_scrut_0) -> ref String {
             let __cast_1: ref Shape::Rectangle;
             __cast_1 = ref.cast Shape::Rectangle(__match_scrut_0);
             String { repr: array.new_data<u8>("rectangle"), used: 9 };
-        } else if __match_scrut_0.discriminant == 2 -> ref null String {
+        } else if __match_scrut_0.discriminant == 2 -> ref String {
             String { repr: array.new_data<u8>("point"), used: 5 };
         } else {
             unreachable;
         };
-    } else if ref.test Shape::Circle(__match_scrut_0) -> ref null String {
+    } else if ref.test Shape::Circle(__match_scrut_0) -> ref String {
         let __cast_2: ref Shape::Circle;
         __cast_2 = ref.cast Shape::Circle(__match_scrut_0);
         String { repr: array.new_data<u8>("small circle"), used: 12 };
-    } else if ref.test Shape::Rectangle(__match_scrut_0) -> ref null String {
+    } else if ref.test Shape::Rectangle(__match_scrut_0) -> ref String {
         let __cast_1: ref Shape::Rectangle;
         __cast_1 = ref.cast Shape::Rectangle(__match_scrut_0);
         String { repr: array.new_data<u8>("rectangle"), used: 9 };
-    } else if __match_scrut_0.discriminant == 2 -> ref null String {
+    } else if __match_scrut_0.discriminant == 2 -> ref String {
         String { repr: array.new_data<u8>("point"), used: 5 };
     } else {
         unreachable;
     });
     "core:cli/println"(desc1);
-    desc2 = value_copy String(let __match_scrut_1: ref null Shape; __match_scrut_1 = s2; if ref.test Shape::Circle(__match_scrut_1) -> ref null String {
+    desc2 = value_copy String(let __match_scrut_1: ref Shape; __match_scrut_1 = s2; if ref.test Shape::Circle(__match_scrut_1) -> ref String {
         let __cast_8: ref Shape::Circle;
         __cast_8 = ref.cast Shape::Circle(__match_scrut_1);
         __local_5 = __cast_8.payload_0;
-        if __local_5 > 1 -> ref null String {
+        if __local_5 > 1 -> ref String {
             let __cast_7: ref Shape::Circle;
             __cast_7 = ref.cast Shape::Circle(__match_scrut_1);
             __local_5 = __cast_7.payload_0;
             String { repr: array.new_data<u8>("big circle"), used: 10 };
-        } else if ref.test Shape::Circle(__match_scrut_1) -> ref null String {
+        } else if ref.test Shape::Circle(__match_scrut_1) -> ref String {
             let __cast_6: ref Shape::Circle;
             __cast_6 = ref.cast Shape::Circle(__match_scrut_1);
             String { repr: array.new_data<u8>("small circle"), used: 12 };
-        } else if ref.test Shape::Rectangle(__match_scrut_1) -> ref null String {
+        } else if ref.test Shape::Rectangle(__match_scrut_1) -> ref String {
             let __cast_5: ref Shape::Rectangle;
             __cast_5 = ref.cast Shape::Rectangle(__match_scrut_1);
             String { repr: array.new_data<u8>("rectangle"), used: 9 };
-        } else if __match_scrut_1.discriminant == 2 -> ref null String {
+        } else if __match_scrut_1.discriminant == 2 -> ref String {
             String { repr: array.new_data<u8>("point"), used: 5 };
         } else {
             unreachable;
         };
-    } else if ref.test Shape::Circle(__match_scrut_1) -> ref null String {
+    } else if ref.test Shape::Circle(__match_scrut_1) -> ref String {
         let __cast_6: ref Shape::Circle;
         __cast_6 = ref.cast Shape::Circle(__match_scrut_1);
         String { repr: array.new_data<u8>("small circle"), used: 12 };
-    } else if ref.test Shape::Rectangle(__match_scrut_1) -> ref null String {
+    } else if ref.test Shape::Rectangle(__match_scrut_1) -> ref String {
         let __cast_5: ref Shape::Rectangle;
         __cast_5 = ref.cast Shape::Rectangle(__match_scrut_1);
         String { repr: array.new_data<u8>("rectangle"), used: 9 };
-    } else if __match_scrut_1.discriminant == 2 -> ref null String {
+    } else if __match_scrut_1.discriminant == 2 -> ref String {
         String { repr: array.new_data<u8>("point"), used: 5 };
     } else {
         unreachable;
     });
     "core:cli/println"(desc2);
-    desc3 = value_copy String(let __match_scrut_2: ref null Shape; __match_scrut_2 = s3; if ref.test Shape::Circle(__match_scrut_2) -> ref null String {
+    desc3 = value_copy String(let __match_scrut_2: ref Shape; __match_scrut_2 = s3; if ref.test Shape::Circle(__match_scrut_2) -> ref String {
         let __cast_12: ref Shape::Circle;
         __cast_12 = ref.cast Shape::Circle(__match_scrut_2);
         __local_7 = __cast_12.payload_0;
-        if __local_7 > 1 -> ref null String {
+        if __local_7 > 1 -> ref String {
             let __cast_11: ref Shape::Circle;
             __cast_11 = ref.cast Shape::Circle(__match_scrut_2);
             __local_7 = __cast_11.payload_0;
             String { repr: array.new_data<u8>("big circle"), used: 10 };
-        } else if ref.test Shape::Circle(__match_scrut_2) -> ref null String {
+        } else if ref.test Shape::Circle(__match_scrut_2) -> ref String {
             let __cast_10: ref Shape::Circle;
             __cast_10 = ref.cast Shape::Circle(__match_scrut_2);
             String { repr: array.new_data<u8>("small circle"), used: 12 };
-        } else if ref.test Shape::Rectangle(__match_scrut_2) -> ref null String {
+        } else if ref.test Shape::Rectangle(__match_scrut_2) -> ref String {
             let __cast_9: ref Shape::Rectangle;
             __cast_9 = ref.cast Shape::Rectangle(__match_scrut_2);
             String { repr: array.new_data<u8>("rectangle"), used: 9 };
-        } else if __match_scrut_2.discriminant == 2 -> ref null String {
+        } else if __match_scrut_2.discriminant == 2 -> ref String {
             String { repr: array.new_data<u8>("point"), used: 5 };
         } else {
             unreachable;
         };
-    } else if ref.test Shape::Circle(__match_scrut_2) -> ref null String {
+    } else if ref.test Shape::Circle(__match_scrut_2) -> ref String {
         let __cast_10: ref Shape::Circle;
         __cast_10 = ref.cast Shape::Circle(__match_scrut_2);
         String { repr: array.new_data<u8>("small circle"), used: 12 };
-    } else if ref.test Shape::Rectangle(__match_scrut_2) -> ref null String {
+    } else if ref.test Shape::Rectangle(__match_scrut_2) -> ref String {
         let __cast_9: ref Shape::Rectangle;
         __cast_9 = ref.cast Shape::Rectangle(__match_scrut_2);
         String { repr: array.new_data<u8>("rectangle"), used: 9 };
-    } else if __match_scrut_2.discriminant == 2 -> ref null String {
+    } else if __match_scrut_2.discriminant == 2 -> ref String {
         String { repr: array.new_data<u8>("point"), used: 5 };
     } else {
         unreachable;
@@ -264,13 +264,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {

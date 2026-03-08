@@ -8,7 +8,7 @@ use crate::tir::{
     TirFunction, TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
     TypeId, TypeTable,
 };
-use crate::wir::{WirAbstractHeapType, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
+use crate::wir::{WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 use indexmap::{IndexMap, IndexSet};
 
 use super::context::WirContext;
@@ -147,14 +147,14 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                     name: typed_env_local.clone(),
                     ty: WirType::Ref {
                         type_id: functor_struct_type_id.clone(),
-                        nullable: true,
+                        nullable: false,
                     },
                 },
                 WirInstr::LocalSet {
                     name: typed_env_local.clone(),
                     value: Box::new(WirInstr::RefCast {
                         type_id: functor_struct_type_id,
-                        nullable: true,
+                        nullable: false,
                         expr: Box::new(WirInstr::LocalGet {
                             name: env_local.clone(),
                         }),
@@ -1154,16 +1154,13 @@ impl FunctionTranslator<'_, '_> {
             }
             TirExprKind::Null => {
                 // For Option types, construct a None variant struct (SubtypeHierarchy)
-                // For other types, use null ref as before
                 // TODO: Future NullableRef optimization would use RefNull for Option too
                 if let Some(inner) = self.type_table.as_option(expr.type_id) {
-                    // If the inner type is unresolved (UNKNOWN), fall back to ref.null
-                    // because we can't construct a concrete variant struct without
-                    // knowing the type. ref.null none is assignable to any nullable ref.
+                    // If the inner type is unresolved (UNKNOWN), use unreachable
+                    // since we can't construct a concrete variant struct without
+                    // knowing the type. This only happens in error recovery paths.
                     if matches!(self.type_table.get(inner), ResolvedType::Unknown) {
-                        WirInstr::RefNull {
-                            heap_type: WirAbstractHeapType::None,
-                        }
+                        WirInstr::Unreachable
                     } else {
                         self.translate_variant_construct(
                             expr.type_id, // variant_type
@@ -1174,8 +1171,10 @@ impl FunctionTranslator<'_, '_> {
                         )
                     }
                 } else {
+                    // Non-Option null: emit ref.null as a placeholder value.
+                    // Used by CM adapters for local initialization before conditional assignment.
                     WirInstr::RefNull {
-                        heap_type: WirAbstractHeapType::None,
+                        heap_type: crate::wir::WirAbstractHeapType::None,
                     }
                 }
             }
@@ -4436,7 +4435,7 @@ impl FunctionTranslator<'_, '_> {
                                     name: tuple_local.clone(),
                                     ty: WirType::Ref {
                                         type_id: tuple_type_id.clone(),
-                                        nullable: true,
+                                        nullable: false,
                                     },
                                 });
                                 instrs.push(WirInstr::LocalSet {
@@ -4893,7 +4892,7 @@ impl FunctionTranslator<'_, '_> {
         self.local_counter += 1;
         let callee_ref_type = WirType::Ref {
             type_id: closure_struct_type_id.clone(),
-            nullable: true,
+            nullable: false,
         };
 
         // Build: declare temp, cast callee from abstract structref to canonical closure,
@@ -4907,7 +4906,7 @@ impl FunctionTranslator<'_, '_> {
                 name: temp_name.clone(),
                 value: Box::new(WirInstr::RefCast {
                     type_id: closure_struct_type_id.clone(),
-                    nullable: true,
+                    nullable: false,
                     expr: Box::new(callee_wir),
                 }),
             },

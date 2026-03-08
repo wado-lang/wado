@@ -57,9 +57,9 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
@@ -79,11 +79,11 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let __local_0: ref null "./variant_in_struct_match_module.wado/Opts";
-    let __local_1: ref null Array<u64>;
-    let __local_2: ref null "./variant_in_struct_match_module.wado/Opts";
-    let __local_3: ref null "./variant_in_struct_match_module.wado/Opts";
-    let __sroa_opts_align: ref null "./variant_in_struct_match_module.wado/Align";
+    let __local_0: ref "./variant_in_struct_match_module.wado/Opts";
+    let __local_1: ref Array<u64>;
+    let __local_2: ref "./variant_in_struct_match_module.wado/Opts";
+    let __local_3: ref "./variant_in_struct_match_module.wado/Opts";
+    let __sroa_opts_align: ref "./variant_in_struct_match_module.wado/Align";
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -91,17 +91,17 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     __sroa_opts_align = "./variant_in_struct_match_module.wado/Align" { 1 };
-    "core:cli/println"(let __match_scrut_0: ref null "./variant_in_struct_match_module.wado/Align"; __match_scrut_0 = __sroa_opts_align; if __match_scrut_0.discriminant == 0 -> ref null String {
+    "core:cli/println"(let __match_scrut_0: ref "./variant_in_struct_match_module.wado/Align"; __match_scrut_0 = __sroa_opts_align; if __match_scrut_0.discriminant == 0 -> ref String {
         String { repr: array.new_data<u8>("left"), used: 4 };
-    } else if __match_scrut_0.discriminant == 1 -> ref null String {
+    } else if __match_scrut_0.discriminant == 1 -> ref String {
         String { repr: array.new_data<u8>("right"), used: 5 };
     } else {
         unreachable;
     });
     __sroa_opts_align = "./variant_in_struct_match_module.wado/Align" { 0 };
-    "core:cli/println"(let __match_scrut_1: ref null "./variant_in_struct_match_module.wado/Align"; __match_scrut_1 = __sroa_opts_align; if __match_scrut_1.discriminant == 0 -> ref null String {
+    "core:cli/println"(let __match_scrut_1: ref "./variant_in_struct_match_module.wado/Align"; __match_scrut_1 = __sroa_opts_align; if __match_scrut_1.discriminant == 0 -> ref String {
         String { repr: array.new_data<u8>("left"), used: 4 };
-    } else if __match_scrut_1.discriminant == 1 -> ref null String {
+    } else if __match_scrut_1.discriminant == 1 -> ref String {
         String { repr: array.new_data<u8>("right"), used: 5 };
     } else {
         unreachable;
@@ -152,13 +152,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {

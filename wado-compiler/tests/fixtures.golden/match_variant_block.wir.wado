@@ -46,7 +46,7 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/apply_align" = fn(ref null Align) -> ref null String;
+type "functype/apply_align" = fn(ref Align) -> ref String;
 
 type "functype/run" = fn();
 
@@ -56,9 +56,9 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
@@ -78,15 +78,15 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn apply_align(align) {
-    let result: ref null String;
+    let result: ref String;
     result = String { repr: builtin::array_new<u8>(0), used: 0 };
-    return let __match_scrut_0: ref null Align; __match_scrut_0 = align; if __match_scrut_0.discriminant == 0 -> ref null String {
+    return let __match_scrut_0: ref Align; __match_scrut_0 = align; if __match_scrut_0.discriminant == 0 -> ref String {
         result = String { repr: array.new_data<u8>("left"), used: 4 };
         result;
-    } else if __match_scrut_0.discriminant == 1 -> ref null String {
+    } else if __match_scrut_0.discriminant == 1 -> ref String {
         result = String { repr: array.new_data<u8>("center"), used: 6 };
         result;
-    } else if __match_scrut_0.discriminant == 2 -> ref null String {
+    } else if __match_scrut_0.discriminant == 2 -> ref String {
         result = String { repr: array.new_data<u8>("right"), used: 5 };
         result;
     } else {
@@ -95,7 +95,7 @@ fn apply_align(align) {
 }
 
 fn run() with Stdout {
-    let __local_0: ref null Array<u64>;
+    let __local_0: ref Array<u64>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -151,13 +151,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {

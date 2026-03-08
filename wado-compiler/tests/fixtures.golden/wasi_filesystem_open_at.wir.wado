@@ -18,7 +18,7 @@ struct [Descriptor, String] {
     mut 1: ref String,
 }
 
-array array<Tuple<Descriptor,String>> (mut ref null "tuple/[Descriptor, String]");
+array array<Tuple<Descriptor,String>> (mut ref "tuple/[Descriptor, String]");
 
 variant Result<Descriptor,ErrorCode> {
     Ok(i32),
@@ -79,9 +79,9 @@ type "functype/wasi/wasi:filesystem/Descriptor::open_at" = fn(i32, i32) -> i32;
 
 type "functype/run" = fn();
 
-type "functype/__cm_adapter__Preopens_get_directories" = fn() -> ref null Array<Tuple<Descriptor,String>>;
+type "functype/__cm_adapter__Preopens_get_directories" = fn() -> ref Array<Tuple<Descriptor,String>>;
 
-type "functype/__cm_adapter__Descriptor_open_at" = fn(i32, u32, ref null String, u32, u32) -> ref null Result<Descriptor,ErrorCode>;
+type "functype/__cm_adapter__Descriptor_open_at" = fn(i32, u32, ref String, u32, u32) -> ref Result<Descriptor,ErrorCode>;
 
 type "functype/__cm_export__run" = fn();
 
@@ -89,31 +89,31 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
-type "functype/core:cli/eprintln" = fn(ref null String);
+type "functype/core:cli/eprintln" = fn(ref String);
 
-type "functype/core:internal/memory_to_gc_array" = fn(i32, i32) -> ref null array<u8>;
+type "functype/core:internal/memory_to_gc_array" = fn(i32, i32) -> ref array<u8>;
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref null array<u8>, i32, i32);
+type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
-type "functype/core:internal/write_string_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/core:internal/log_stderr" = fn(ref null String);
+type "functype/core:internal/log_stderr" = fn(ref String);
 
-type "functype/core:internal/panic" = fn(ref null String);
+type "functype/core:internal/panic" = fn(ref String);
 
-type "functype/core:internal/cm_lower_string" = fn(ref null String) -> i64;
+type "functype/core:internal/cm_lower_string" = fn(ref String) -> i64;
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/Array<Tuple<Descriptor,String>>::append" = fn(ref null Array<Tuple<Descriptor,String>>, ref null "tuple/[Descriptor, String]");
+type "functype/Array<Tuple<Descriptor,String>>::append" = fn(ref Array<Tuple<Descriptor,String>>, ref "tuple/[Descriptor, String]");
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -134,21 +134,21 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout, Stderr, Preopens {
-    let dirs: ref null Array<Tuple<Descriptor,String>>;
+    let dirs: ref Array<Tuple<Descriptor,String>>;
     let dir: i32;
-    let preopen_path: ref null String;
-    let open_result: ref null Result<Descriptor,ErrorCode>;
+    let preopen_path: ref String;
+    let open_result: ref Result<Descriptor,ErrorCode>;
     let _file: i32;
-    let missing_result: ref null Result<Descriptor,ErrorCode>;
+    let missing_result: ref Result<Descriptor,ErrorCode>;
     let _err: "wasi:filesystem/enum:ErrorCode";
-    let __local_7: ref null String;
-    let __local_8: ref null Result<Descriptor,ErrorCode>;
-    let __local_9: ref null Result<Descriptor,ErrorCode>;
-    let __local_10: ref null Array<u64>;
-    let __local_11: ref null Array<Tuple<Descriptor,String>>;
-    let __local_12: ref null Array<Tuple<Descriptor,String>>;
+    let __local_7: ref String;
+    let __local_8: ref Result<Descriptor,ErrorCode>;
+    let __local_9: ref Result<Descriptor,ErrorCode>;
+    let __local_10: ref Array<u64>;
+    let __local_11: ref Array<Tuple<Descriptor,String>>;
+    let __local_12: ref Array<Tuple<Descriptor,String>>;
     let __local_13: i32;
-    let __local_14: ref null Array<Tuple<Descriptor,String>>;
+    let __local_14: ref Array<Tuple<Descriptor,String>>;
     let __local_15: i32;
     let __local_16: i32;
     __inline___initialize_modules_0: block {
@@ -162,21 +162,21 @@ fn run() with Stdout, Stderr, Preopens {
         "core:cli/eprintln"(String { repr: array.new_data<u8>("open_at: no preopened directories available"), used: 43 });
         return;
     };
-    dir = __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_3: block -> ref null "tuple/[Descriptor, String]" {
+    dir = __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_3: block -> ref "tuple/[Descriptor, String]" {
         if 0 >= dirs.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_3: builtin::array_get<ref null "tuple/[Descriptor, String]">(dirs.repr, 0);
+        break __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_3: builtin::array_get<ref "tuple/[Descriptor, String]">(dirs.repr, 0);
     }.0;
-    preopen_path = value_copy String(__inline_Array_Tuple_Descriptor_String___IndexValue__index_value_4: block -> ref null "tuple/[Descriptor, String]" {
+    preopen_path = value_copy String(__inline_Array_Tuple_Descriptor_String___IndexValue__index_value_4: block -> ref "tuple/[Descriptor, String]" {
         if 0 >= dirs.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_4: builtin::array_get<ref null "tuple/[Descriptor, String]">(dirs.repr, 0);
+        break __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_4: builtin::array_get<ref "tuple/[Descriptor, String]">(dirs.repr, 0);
     }.1);
-    "core:cli/println"(__tmpl: block -> ref null String {
+    "core:cli/println"(__tmpl: block -> ref String {
         __local_7 = String { repr: builtin::array_new<u8>(43), used: 0 };
         String::append(__local_7, String { repr: array.new_data<u8>("open_at: preopened dir = \""), used: 26 });
         String::append(__local_7, preopen_path);
@@ -205,20 +205,20 @@ fn __cm_adapter__Preopens_get_directories() {
     let __outptr: i32;
     let __base: i32;
     let __count: i32;
-    let __result: ref null Array<Tuple<Descriptor,String>>;
+    let __result: ref Array<Tuple<Descriptor,String>>;
     let __i: i32;
     let __elem_addr: i32;
     let __local_6: i32;
     let __local_7: i32;
     let __local_8: i32;
-    let __local_9: ref null array<u8>;
-    let __local_10: ref null array<u8>;
+    let __local_9: ref array<u8>;
+    let __local_10: ref array<u8>;
     let __local_11: i32;
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:filesystem/Preopens::get_directories"(__outptr);
     __base = builtin::load_i32(__outptr);
     __count = builtin::load_i32(__outptr + 4);
-    __result = Array<Tuple<Descriptor,String>> { repr: builtin::array_new<ref null "tuple/[Descriptor, String]">(__count), used: 0 };
+    __result = Array<Tuple<Descriptor,String>> { repr: builtin::array_new<ref "tuple/[Descriptor, String]">(__count), used: 0 };
     __i = 0;
     b6: block {
         l7: loop {
@@ -226,7 +226,7 @@ fn __cm_adapter__Preopens_get_directories() {
                 break b6;
             };
             __elem_addr = __base + (__i * 12);
-            Array<Tuple<Descriptor,String>>::append(__result, "tuple/[Descriptor, String]" { 0: builtin::load_i32(__elem_addr + 0), 1: ref.as_non_null(__inline_memory_to_gc_string_1: block -> ref null String {
+            Array<Tuple<Descriptor,String>>::append(__result, "tuple/[Descriptor, String]" { 0: builtin::load_i32(__elem_addr + 0), 1: ref.as_non_null(__inline_memory_to_gc_string_1: block -> ref String {
                 __local_7 = builtin::load_i32(__elem_addr + 4);
                 __local_8 = builtin::load_i32((__elem_addr + 4) + 4);
                 __local_9 = "core:internal/memory_to_gc_array"(__local_7, __local_8);
@@ -250,7 +250,7 @@ fn __cm_adapter__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
     let __params_buf: i32;
     let __subtask: i32;
     let __disc: i32;
-    let __result_val: ref null Result<Descriptor,ErrorCode>;
+    let __result_val: ref Result<Descriptor,ErrorCode>;
     __path_packed = "core:internal/cm_lower_string"(path);
     __async_outptr = "mem/realloc"(0, 0, 4, 8);
     __params_buf = "mem/realloc"(0, 0, 4, 24);
@@ -317,13 +317,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -380,7 +380,7 @@ fn "core:cli/eprintln"(message) with Stderr {  // from core:cli
 }
 
 fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal
-    let arr: ref null array<u8>;
+    let arr: ref array<u8>;
     let i: i32;
     arr = builtin::array_new<u8>(len);
     __for_0: block {
@@ -418,11 +418,11 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
 
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from core:internal
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
+    let __local_7: ref String;
+    let __local_8: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -475,10 +475,10 @@ fn "core:internal/panic"(message) {  // from core:internal
 
 fn "core:internal/cm_lower_string"(s) {  // from core:internal
     let len: i32;
-    let bytes: ref null array<u8>;
+    let bytes: ref array<u8>;
     let ptr: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     len = s.used;
     bytes = s.repr;
     ptr = "mem/realloc"(0, 0, 1, len);
@@ -489,7 +489,7 @@ fn "core:internal/cm_lower_string"(s) {  // from core:internal
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -513,8 +513,8 @@ fn String::grow(self, min_capacity) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -531,7 +531,7 @@ fn Array<Tuple<Descriptor,String>>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<Tuple<Descriptor,String>>;
+    let new_repr: ref array<Tuple<Descriptor,String>>;
     let __local_6: i32;
     let __local_7: i32;
     used = self.used;
@@ -541,11 +541,11 @@ fn Array<Tuple<Descriptor,String>>::append(self, value) {
             __local_6 = capacity * 2;
             break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
         };
-        new_repr = builtin::array_new<ref null "tuple/[Descriptor, String]">(new_capacity);
-        builtin::array_copy<ref null "tuple/[Descriptor, String]">(new_repr, 0, self.repr, 0, used);
+        new_repr = builtin::array_new<ref "tuple/[Descriptor, String]">(new_capacity);
+        builtin::array_copy<ref "tuple/[Descriptor, String]">(new_repr, 0, self.repr, 0, used);
         self.repr = ref.as_non_null(new_repr);
     };
-    builtin::array_set<ref null "tuple/[Descriptor, String]">(self.repr, used, value);
+    builtin::array_set<ref "tuple/[Descriptor, String]">(self.repr, used, value);
     self.used = used + 1;
 }
 

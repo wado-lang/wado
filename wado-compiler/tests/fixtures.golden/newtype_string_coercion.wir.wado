@@ -69,7 +69,7 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/greet" = fn(ref null String) -> ref null String;
+type "functype/greet" = fn(ref String) -> ref String;
 
 type "functype/run" = fn();
 
@@ -79,27 +79,27 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
+type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
-type "functype/core:cli/println" = fn(ref null String);
+type "functype/core:cli/println" = fn(ref String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
-type "functype/String::grow" = fn(ref null String, i32);
+type "functype/String::grow" = fn(ref String, i32);
 
-type "functype/String::append" = fn(ref null String, ref null String);
+type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/StrCharIter^Iterator::next" = fn(ref null StrCharIter) -> ref null Option<char>;
+type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<char>;
 
-type "functype/String::append_char" = fn(ref null String, char);
+type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/Formatter::write_char_n" = fn(ref null Formatter, char, i32);
+type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
-type "functype/Formatter::pad" = fn(ref null Formatter, ref null String);
+type "functype/Formatter::pad" = fn(ref Formatter, ref String);
 
-type "functype/String^Inspect::inspect" = fn(ref null String, ref null Formatter);
+type "functype/String^Inspect::inspect" = fn(ref String, ref Formatter);
 
-type "functype/StrCharIter^Iterator::next" = fn(ref null StrCharIter) -> [i32, char];
+type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
@@ -117,17 +117,17 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn greet(name) {
-    let __local_1: ref null String;
-    let __local_2: ref null Formatter;
+    let __local_1: ref String;
+    let __local_2: ref Formatter;
     let __local_3: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
-    let __local_6: ref null Formatter;
-    let __local_7: ref null String;
-    let __local_8: ref null Formatter;
-    let __local_9: ref null Formatter;
-    let __local_10: ref null String;
-    return __tmpl: block -> ref null String {
+    let __local_4: ref String;
+    let __local_5: ref String;
+    let __local_6: ref Formatter;
+    let __local_7: ref String;
+    let __local_8: ref Formatter;
+    let __local_9: ref Formatter;
+    let __local_10: ref String;
+    return __tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(24), used: 0 };
         String::append_char(__local_1, 72);
         String::append_char(__local_1, 101);
@@ -136,7 +136,7 @@ fn greet(name) {
         String::append_char(__local_1, 111);
         String::append_char(__local_1, 44);
         String::append_char(__local_1, 32);
-        __local_2 = __inline_Formatter__new_1: block -> ref null Formatter {
+        __local_2 = __inline_Formatter__new_1: block -> ref Formatter {
             __local_4 = __local_1;
             break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_4) };
         };
@@ -151,17 +151,17 @@ fn greet(name) {
 }
 
 fn run() with Stdout {
-    let label: ref null String;
-    let greeting: ref null String;
-    let x: ref null String;
-    let label2: ref null String;
-    let __local_4: ref null String;
-    let __local_5: ref null Formatter;
-    let __local_6: ref null Array<u64>;
+    let label: ref String;
+    let greeting: ref String;
+    let x: ref String;
+    let label2: ref String;
+    let __local_4: ref String;
+    let __local_5: ref Formatter;
+    let __local_6: ref Array<u64>;
     let __local_7: i32;
-    let __local_8: ref null String;
-    let __local_9: ref null String;
-    let __local_10: ref null Formatter;
+    let __local_8: ref String;
+    let __local_9: ref String;
+    let __local_10: ref Formatter;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -171,7 +171,7 @@ fn run() with Stdout {
     label = String { repr: array.new_data<u8>("hello"), used: 5 };
     greeting = greet(String { repr: array.new_data<u8>("Alice"), used: 5 });
     x = String { repr: array.new_data<u8>("world"), used: 5 };
-    label2 = __tmpl: block -> ref null String {
+    label2 = __tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(22), used: 0 };
         String::append_char(__local_4, 104);
         String::append_char(__local_4, 101);
@@ -179,7 +179,7 @@ fn run() with Stdout {
         String::append_char(__local_4, 108);
         String::append_char(__local_4, 111);
         String::append_char(__local_4, 32);
-        __local_5 = __inline_Formatter__new_3: block -> ref null Formatter {
+        __local_5 = __inline_Formatter__new_3: block -> ref Formatter {
             __local_8 = __local_4;
             break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_8) };
         };
@@ -237,13 +237,13 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
-    let msg_bytes: ref null array<u8>;
+    let msg_bytes: ref array<u8>;
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
     let byte: u8;
-    let __local_9: ref null String;
-    let __local_10: ref null String;
+    let __local_9: ref String;
+    let __local_10: ref String;
     len = message.used;
     msg_bytes = message.repr;
     alloc_size = if add_newline -> i32 {
@@ -304,7 +304,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref null array<u8>;
+    let new_repr: ref array<u8>;
     let __local_5: i32;
     let __local_6: i32;
     let __local_7: i32;
@@ -328,8 +328,8 @@ fn String::grow(self, min_capacity) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref null String;
-    let __local_5: ref null String;
+    let __local_4: ref String;
+    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -427,7 +427,7 @@ fn String::append_char(self, c) {
 
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
-    let _licm_buf_4: ref null String;
+    let _licm_buf_4: ref String;
     __for_0: block {
         i = 0;
         _licm_buf_4 = self.buf;
@@ -450,7 +450,7 @@ fn Formatter::pad(self, content) {
     let align: enum:Alignment;
     let left_pad: i32;
     let right_pad: i32;
-    let __local_7: ref null String;
+    let __local_7: ref String;
     content_len = content.used;
     if if self.width <= 0 -> i32 {
         1;
@@ -478,41 +478,41 @@ fn Formatter::pad(self, content) {
 }
 
 fn String^Inspect::inspect(self, f) {
-    let __iter_4: ref null StrCharIter;
+    let __iter_4: ref StrCharIter;
     let c: char;
-    let __pattern_temp_0: ref null Option<char>;
-    let __local_5: ref null Formatter;
+    let __pattern_temp_0: ref Option<char>;
+    let __local_5: ref Formatter;
     let __local_6: char;
-    let __local_7: ref null StrCharIter;
-    let __local_8: ref null String;
-    let __local_9: ref null Formatter;
+    let __local_7: ref StrCharIter;
+    let __local_8: ref String;
+    let __local_9: ref Formatter;
     let __local_10: char;
-    let __local_11: ref null Formatter;
+    let __local_11: ref Formatter;
     let __local_12: char;
-    let __local_13: ref null Formatter;
+    let __local_13: ref Formatter;
     let __local_14: char;
-    let __local_15: ref null Formatter;
+    let __local_15: ref Formatter;
     let __local_16: char;
-    let __local_17: ref null Formatter;
+    let __local_17: ref Formatter;
     let __local_18: char;
-    let __local_19: ref null Formatter;
+    let __local_19: ref Formatter;
     let __local_20: char;
-    let __local_21: ref null Formatter;
+    let __local_21: ref Formatter;
     let __local_22: char;
-    let __local_23: ref null Formatter;
+    let __local_23: ref Formatter;
     let __local_24: char;
-    let __local_25: ref null Formatter;
+    let __local_25: ref Formatter;
     let __local_26: char;
-    let __local_27: ref null Formatter;
+    let __local_27: ref Formatter;
     let __local_28: char;
-    let __local_29: ref null Formatter;
+    let __local_29: ref Formatter;
     let __local_30: char;
-    let __local_31: ref null Formatter;
+    let __local_31: ref Formatter;
     let __local_32: char;
-    let _licm_buf_33: ref null String;
+    let _licm_buf_33: ref String;
     String::append_char(f.buf, 34);
-    __iter_4 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref null StrCharIter {
-        __local_7 = __inline_String__chars_2: block -> ref null StrCharIter {
+    __iter_4 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
+        __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
             break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
         };
