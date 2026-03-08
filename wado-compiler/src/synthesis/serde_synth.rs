@@ -418,7 +418,7 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
     // (primitives and stdlib types). User-defined structs fall back to null.
     let (base_name, module_source, type_args) = match type_table.get(type_id) {
         crate::tir::ResolvedType::Primitive(p) => {
-            (p.as_str().to_string(), ModuleSource::primitives(), vec![])
+            (p.as_str().to_string(), ModuleSource::primitive(), vec![])
         }
         crate::tir::ResolvedType::Struct {
             name,

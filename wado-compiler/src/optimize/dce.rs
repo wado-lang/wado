@@ -769,7 +769,7 @@ fn analyze_expr(
                         // (e.g., i32^Ord::cmp, char::is_ascii_space)
                         let prim_name = prim.as_str().to_string();
                         let method_id = FunctionId::Method(MethodName::new(
-                            ModuleSource::primitives(),
+                            ModuleSource::primitive(),
                             prim_name,
                             trait_name.clone(),
                             method_name.clone(),
@@ -1049,12 +1049,12 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
     let base_type_id = type_table.get_ultimate_base_type(type_id);
     match type_table.get(base_type_id) {
         ResolvedType::Primitive(prim) => {
-            // Primitive to_string methods are defined in core:prelude/primitives as impl blocks
+            // Primitive to_string methods are defined in core:prelude/primitive as impl blocks
             // e.g., impl i32 { fn to_string(&self) -> String { ... } }
             let prim_name = prim.as_str();
             // Method format: module_source/StructName::method_name
             let method_id = FunctionId::Method(MethodName::new(
-                ModuleSource::primitives(),
+                ModuleSource::primitive(),
                 prim_name.to_string(),
                 None,
                 "to_string".to_string(),

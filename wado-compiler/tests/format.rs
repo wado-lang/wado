@@ -342,7 +342,7 @@ let y = 2;
 
 #[test]
 fn test_format_wildcard_import() {
-    let source = r#"use _ from "core:prelude/primitives.wado";
+    let source = r#"use _ from "core:prelude/primitive.wado";
 
 fn run() {
     let x = 1;
@@ -350,7 +350,7 @@ fn run() {
 "#;
     let formatted = wado_compiler::format(source).expect("format failed");
     assert!(
-        formatted.contains(r#"use _ from "core:prelude/primitives.wado";"#),
+        formatted.contains(r#"use _ from "core:prelude/primitive.wado";"#),
         "wildcard import should be preserved: {}",
         formatted
     );

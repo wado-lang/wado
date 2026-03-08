@@ -259,33 +259,31 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
 
 fn u64::fmt_decimal(self, f) {
     let val_i64: i64;
-    let __local_3: i64;
-    let __local_4: i64;
-    let offset_5: i32;
+    let offset_3: i32;
     let digit_count: i32;
-    let __local_7: i64;
+    let __local_5: i64;
     let temp: i64;
-    let signed_rem_9: i64;
-    let rem_adjusted_10: i64;
-    let signed_quot_11: i64;
-    let carry_12: i64;
-    let offset_13: i32;
+    let signed_rem_7: i64;
+    let rem_adjusted_8: i64;
+    let signed_quot_9: i64;
+    let carry_10: i64;
+    let offset_11: i32;
     let repr: ref array<u8>;
     let pos: i32;
     let digit: i32;
-    let signed_rem_17: i64;
-    let rem_adjusted_18: i64;
-    let signed_quot_19: i64;
-    let carry_20: i64;
-    let __local_21: ref String;
-    let __local_22: ref String;
+    let signed_rem_15: i64;
+    let rem_adjusted_16: i64;
+    let signed_quot_17: i64;
+    let carry_18: i64;
+    let __local_19: ref String;
+    let __local_20: ref String;
     val_i64 = self;
     if val_i64 == 0_i64 {
-        offset_5 = Formatter::prepare_int_write(f, 0, String { repr: builtin::array_new<u8>(0), used: 0 }, 1);
+        offset_3 = Formatter::prepare_int_write(f, 0, String { repr: builtin::array_new<u8>(0), used: 0 }, 1);
         builtin::array_set_u8(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
-            __local_21 = f.buf;
-            break __inline_String__internal_raw_bytes_0: __local_21.repr;
-        }, offset_5, 48);
+            __local_19 = f.buf;
+            break __inline_String__internal_raw_bytes_0: __local_19.repr;
+        }, offset_3, 48);
         return;
     };
     digit_count = 0;
@@ -299,24 +297,24 @@ fn u64::fmt_decimal(self, f) {
             if temp >= 0_i64 {
                 temp = temp / 10_i64;
             } else {
-                signed_rem_9 = temp % 10_i64;
-                rem_adjusted_10 = signed_rem_9 + 6_i64;
-                signed_quot_11 = temp / 10_i64;
-                carry_12 = 0_i64;
-                if rem_adjusted_10 < 0_i64 {
-                    carry_12 = -1_i64;
+                signed_rem_7 = temp % 10_i64;
+                rem_adjusted_8 = signed_rem_7 + 6_i64;
+                signed_quot_9 = temp / 10_i64;
+                carry_10 = 0_i64;
+                if rem_adjusted_8 < 0_i64 {
+                    carry_10 = -1_i64;
                 };
-                temp = (signed_quot_11 + 1844674407370955161_i64) + carry_12;
+                temp = (signed_quot_9 + 1844674407370955161_i64) + carry_10;
             };
             continue l13;
         };
     };
-    offset_13 = Formatter::prepare_int_write(f, 0, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    offset_11 = Formatter::prepare_int_write(f, 0, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     repr = __inline_String__internal_raw_bytes_1: block -> ref array<u8> {
-        __local_22 = f.buf;
-        break __inline_String__internal_raw_bytes_1: __local_22.repr;
+        __local_20 = f.buf;
+        break __inline_String__internal_raw_bytes_1: __local_20.repr;
     };
-    pos = offset_13 + digit_count;
+    pos = offset_11 + digit_count;
     temp = val_i64;
     b17: block {
         l18: loop {
@@ -329,19 +327,19 @@ fn u64::fmt_decimal(self, f) {
                 digit = builtin::i32_wrap_i64(temp % 10_i64);
                 temp = temp / 10_i64;
             } else {
-                signed_rem_17 = temp % 10_i64;
-                rem_adjusted_18 = signed_rem_17 + 6_i64;
-                if rem_adjusted_18 >= 0_i64 {
-                    digit = builtin::i32_wrap_i64(rem_adjusted_18);
+                signed_rem_15 = temp % 10_i64;
+                rem_adjusted_16 = signed_rem_15 + 6_i64;
+                if rem_adjusted_16 >= 0_i64 {
+                    digit = builtin::i32_wrap_i64(rem_adjusted_16);
                 } else {
-                    digit = builtin::i32_wrap_i64(rem_adjusted_18 + 10_i64);
+                    digit = builtin::i32_wrap_i64(rem_adjusted_16 + 10_i64);
                 };
-                signed_quot_19 = temp / 10_i64;
-                carry_20 = 0_i64;
-                if rem_adjusted_18 < 0_i64 {
-                    carry_20 = -1_i64;
+                signed_quot_17 = temp / 10_i64;
+                carry_18 = 0_i64;
+                if rem_adjusted_16 < 0_i64 {
+                    carry_18 = -1_i64;
                 };
-                temp = (signed_quot_19 + 1844674407370955161_i64) + carry_20;
+                temp = (signed_quot_17 + 1844674407370955161_i64) + carry_18;
             };
             builtin::array_set_u8(repr, pos, (48 + digit) & 255);
             continue l18;
