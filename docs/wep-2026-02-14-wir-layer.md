@@ -36,7 +36,7 @@ WIR is a tree-structured IR that maps almost 1:1 to Wasm instructions, but with 
 4. **Structured control flow**: Blocks, loops, if/else are tree nodes (not flat instruction sequences with labels).
 5. **Explicit value copy**: Copy operations are explicit `ValueCopy` nodes rather than inline instruction sequences.
 6. **TIR metadata preserved**: Module source, source spans, attributes, generic instantiation info, and newtype origin are carried through for debugging and unparse.
-7. **Unparse support**: WIR can be rendered as pseudo-Wado for inspection via `wado dump --wir --unparse`.
+7. **Unparse support**: WIR can be rendered as pseudo-Wado for inspection via `wado dump --wir`.
 
 ### What WIR Is Not
 
@@ -51,7 +51,7 @@ WIR is a tree-structured IR that maps almost 1:1 to Wasm instructions, but with 
 | File                      | Description                                                                                                         |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `wir.rs`                  | WIR data structures: `WirModule`, `WirTypeDef`, `WirType`, `WirInstr`, `WirTypeId`, `WirFuncId`, `WirName`, etc.    |
-| `wir_unparse.rs`          | WIR → pseudo-Wado rendering for `wado dump --wir --unparse`                                                         |
+| `wir_unparse.rs`          | WIR → pseudo-Wado rendering for `wado dump --wir`                                                                    |
 | `tir_to_wir/mod.rs`       | Pipeline entry: `compile_with_wir(&Project) -> Vec<u8>` — orchestrates build → emit → validate → component wrapping |
 | `tir_to_wir/context.rs`   | `WirContext` — builder that accumulates types, functions, and module-level entries during translation               |
 | `tir_to_wir/types.rs`     | Type registration: translates TIR type definitions to `Vec<WirTypeDef>` with multi-phase topological sorting        |
@@ -80,7 +80,7 @@ WIR uses trees where operands are children (not stack values). `I32Add(StructGet
 
 ## Unparse Format
 
-`wado dump --wir --unparse` outputs pseudo-Wado:
+`wado dump --wir` outputs pseudo-Wado:
 
 ```
 struct Point { mut x: i32, mut y: i32 }
@@ -125,7 +125,7 @@ Benefits of this approach:
 - `codegen.rs` is never modified — all existing tests always pass
 - `codegen.rs` serves as the living reference throughout development
 - Each feature added to `tir_to_wir` makes more WIR E2E tests pass
-- `wado dump --wir --unparse` provides visibility at all times
+- `wado dump --wir` provides visibility at all times
 
 ### Phase 1: Scaffolding and Inspection (complete)
 
@@ -189,7 +189,7 @@ WADO_WIR_TEST=1 cargo test -p wado-compiler --test wir_e2e -- hello_world
 ### Debugging with WIR Unparse
 
 ```sh
-cargo run --bin wado -- dump --wir --unparse file.wado
+cargo run --bin wado -- dump --wir file.wado
 ```
 
 This shows the full `WirModule` as pseudo-Wado, allowing inspection of the planned Wasm output before binary emission. Use this to diagnose type registration issues, incorrect instruction translation, or missing functions — rather than relying solely on E2E test pass/fail.
@@ -198,7 +198,7 @@ This shows the full `WirModule` as pseudo-Wado, allowing inspection of the plann
 
 ### Benefits
 
-- **Debuggability**: `wado dump --wir --unparse` shows exactly what Wasm will be generated, with readable names
+- **Debuggability**: `wado dump --wir` shows exactly what Wasm will be generated, with readable names
 - **Testability**: WIR generation and WIR emission can be tested independently
 - **Maintainability**: codegen.rs (14k lines) splits into focused modules
 - **Extensibility**: New Wasm features (SIMD, stack switching) are added as WIR nodes, not interleaved with encoding logic

@@ -79,7 +79,7 @@ format-wado:
 update-golden-fixtures:
 	@mkdir -p wado-compiler/tests/fixtures.golden
 	@rm -rf wado-compiler/tests/fixtures.golden/*.*
-	@cargo run --bin wado -- dump --wir --unparse -O2 \
+	@cargo run --bin wado -- dump --wir -O2 \
 		-o 'wado-compiler/tests/fixtures.golden/{name}.wir.wado' \
 		wado-compiler/tests/fixtures/*.wado
 

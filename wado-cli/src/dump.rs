@@ -14,15 +14,15 @@ pub struct DumpOptions {
     pub inputs: Vec<String>,
     pub show_tokens: bool,
     pub show_ast: bool,
-    pub show_desugar: bool,
+    pub show_desugared: bool,
     pub show_symbols: bool,
     pub show_modules: bool,
     pub show_tir: bool,
-    pub show_monomorphize: bool,
-    pub show_lower: bool,
-    pub show_optimize: bool,
+    pub show_tir_resolved: bool,
+    pub show_tir_monomorphized: bool,
+    pub show_tir_lowered: bool,
     pub show_wir: bool,
-    pub unparse: bool,
+    pub inspect: bool,
     pub opt_level: OptLevel,
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
@@ -32,20 +32,18 @@ pub struct DumpOptions {
 }
 
 #[derive(Clone, Copy)]
-#[allow(clippy::enum_variant_names)]
 enum Opt {
     Tokens,
     Ast,
-    Desugar,
+    Desugared,
     Modules,
     Symbols,
     Tir,
-    Monomorphize,
-    Lower,
-    Optimize,
+    TirResolved,
+    TirMonomorphized,
+    TirLowered,
     Wir,
-    All,
-    Unparse,
+    Inspect,
     OptLevel,
     InlineThreshold,
     OptIterations,
@@ -57,16 +55,15 @@ impl Opt {
     const ALL: &[Self] = &[
         Self::Tokens,
         Self::Ast,
-        Self::Desugar,
+        Self::Desugared,
         Self::Modules,
         Self::Symbols,
         Self::Tir,
-        Self::Monomorphize,
-        Self::Lower,
-        Self::Optimize,
+        Self::TirResolved,
+        Self::TirMonomorphized,
+        Self::TirLowered,
         Self::Wir,
-        Self::All,
-        Self::Unparse,
+        Self::Inspect,
         Self::OptLevel,
         Self::InlineThreshold,
         Self::OptIterations,
@@ -80,79 +77,73 @@ impl Opt {
                 long: Some("tokens"),
                 short: None,
                 value: None,
-                desc: "(Phase 1: Lexer) Show tokens",
+                desc: "Show lexer tokens",
             },
             Self::Ast => args::OptSpec {
                 long: Some("ast"),
                 short: None,
                 value: None,
-                desc: "(Phase 2: Parser) Show AST structure",
+                desc: "Show parsed AST",
             },
-            Self::Desugar => args::OptSpec {
-                long: Some("desugar"),
+            Self::Desugared => args::OptSpec {
+                long: Some("desugared"),
                 short: None,
                 value: None,
-                desc: "(Phase 3: Desugar) Show desugared AST",
+                desc: "Show desugared AST",
             },
             Self::Modules => args::OptSpec {
                 long: Some("modules"),
                 short: None,
                 value: None,
-                desc: "(Phase 4: Load) Show loaded modules",
+                desc: "Show loaded modules",
             },
             Self::Symbols => args::OptSpec {
                 long: Some("symbols"),
                 short: None,
                 value: None,
-                desc: "(Phase 5: Analyze) Show symbol table",
+                desc: "Show symbol table",
             },
             Self::Tir => args::OptSpec {
                 long: Some("tir"),
                 short: None,
                 value: None,
-                desc: "(Phase 6: Resolve) Show TIR (Typed IR)",
+                desc: "Show final TIR (after optimization, affected by -Ox)",
             },
-            Self::Monomorphize => args::OptSpec {
-                long: Some("monomorphize"),
+            Self::TirResolved => args::OptSpec {
+                long: Some("tir-resolved"),
                 short: None,
                 value: None,
-                desc: "(Phase 7: Monomorphize) Show monomorphized TIR",
+                desc: "Show TIR after type resolution (before lowering)",
             },
-            Self::Lower => args::OptSpec {
-                long: Some("lower"),
+            Self::TirMonomorphized => args::OptSpec {
+                long: Some("tir-monomorphized"),
                 short: None,
                 value: None,
-                desc: "(Phase 8: Lower) Show lowered TIR",
+                desc: "Show TIR after monomorphization",
             },
-            Self::Optimize => args::OptSpec {
-                long: Some("optimize"),
+            Self::TirLowered => args::OptSpec {
+                long: Some("tir-lowered"),
                 short: None,
                 value: None,
-                desc: "(Phase 9: Optimize) Show optimization hints",
+                desc: "Show TIR after lowering (before optimization)",
             },
             Self::Wir => args::OptSpec {
                 long: Some("wir"),
                 short: None,
                 value: None,
-                desc: "(Phase 10: WIR) Show Wasm IR",
+                desc: "Show final WIR (after optimization, affected by -Ox) [default]",
             },
-            Self::All => args::OptSpec {
-                long: Some("all"),
+            Self::Inspect => args::OptSpec {
+                long: Some("inspect"),
                 short: None,
                 value: None,
-                desc: "Show all phases (default if no phase specified)",
-            },
-            Self::Unparse => args::OptSpec {
-                long: Some("unparse"),
-                short: None,
-                value: None,
-                desc: "Unparse to Wado source code (for ast/desugar/tir/lower/optimize)\nDefault: Debug/tree format",
+                desc: "Show internal Debug format instead of unparsed source",
             },
             Self::OptLevel => args::OptSpec {
                 long: None,
                 short: Some('O'),
                 value: Some("<n>"),
-                desc: "Optimization level (for --optimize phase)",
+                desc: "Optimization level (affects --tir and --wir output)",
             },
             Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
@@ -160,7 +151,7 @@ impl Opt {
                 long: Some("output"),
                 short: Some('o'),
                 value: Some("<template>"),
-                desc: "Output template for bulk file generation\n{name} is replaced with input filename (without extension)\nExample: -o 'out/{name}.lowered.wado'",
+                desc: "Output template for bulk file generation\n{name} is replaced with input filename (without extension)\nExample: -o 'out/{name}.wir.wado'",
             },
             Self::Help => args::HELP_SPEC,
         }
@@ -176,9 +167,13 @@ fn format_usage() -> String {
     .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Dump compiler internal state for debugging.").unwrap();
-    writeln!(buf, "Supports multiple input files for batch processing.").unwrap();
+    writeln!(
+        buf,
+        "Default: shows final WIR as unparsed source (equivalent to --wir)."
+    )
+    .unwrap();
     writeln!(buf).unwrap();
-    writeln!(buf, "Compilation Phases:").unwrap();
+    writeln!(buf, "Phases:").unwrap();
     write!(
         buf,
         "{}",
@@ -186,15 +181,14 @@ fn format_usage() -> String {
             &[
                 Opt::Tokens,
                 Opt::Ast,
-                Opt::Desugar,
+                Opt::Desugared,
                 Opt::Modules,
                 Opt::Symbols,
+                Opt::TirResolved,
+                Opt::TirMonomorphized,
+                Opt::TirLowered,
                 Opt::Tir,
-                Opt::Monomorphize,
-                Opt::Lower,
-                Opt::Optimize,
                 Opt::Wir,
-                Opt::All,
             ],
             |o| o.spec(),
         )
@@ -205,11 +199,11 @@ fn format_usage() -> String {
     write!(
         buf,
         "{}",
-        args::format_opts_help(&[Opt::Unparse], |o| o.spec())
+        args::format_opts_help(&[Opt::Inspect], |o| o.spec())
     )
     .unwrap();
     writeln!(buf).unwrap();
-    writeln!(buf, "Optimization Level (for --optimize phase):").unwrap();
+    writeln!(buf, "Optimization Level:").unwrap();
     writeln!(buf, "  -O0          No optimizations").unwrap();
     writeln!(
         buf,
@@ -253,46 +247,65 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let mut inputs: Vec<String> = Vec::new();
     let mut show_tokens = false;
     let mut show_ast = false;
-    let mut show_desugar = false;
+    let mut show_desugared = false;
     let mut show_symbols = false;
     let mut show_modules = false;
     let mut show_tir = false;
-    let mut show_monomorphize = false;
-    let mut show_lower = false;
-    let mut show_optimize = false;
+    let mut show_tir_resolved = false;
+    let mut show_tir_monomorphized = false;
+    let mut show_tir_lowered = false;
     let mut show_wir = false;
-    let mut unparse = false;
+    let mut inspect = false;
     let mut opt_level = OptLevel::O2;
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;
     let mut output_template: Option<String> = None;
+    let mut any_phase = false;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
-                Opt::Tokens => show_tokens = true,
-                Opt::Ast => show_ast = true,
-                Opt::Desugar => show_desugar = true,
-                Opt::Symbols => show_symbols = true,
-                Opt::Modules => show_modules = true,
-                Opt::Tir => show_tir = true,
-                Opt::Monomorphize => show_monomorphize = true,
-                Opt::Lower => show_lower = true,
-                Opt::Optimize => show_optimize = true,
-                Opt::Wir => show_wir = true,
-                Opt::All => {
+                Opt::Tokens => {
                     show_tokens = true;
-                    show_ast = true;
-                    show_desugar = true;
-                    show_symbols = true;
-                    show_modules = true;
-                    show_tir = true;
-                    show_monomorphize = true;
-                    show_lower = true;
-                    show_optimize = true;
-                    show_wir = true;
+                    any_phase = true;
                 }
-                Opt::Unparse => unparse = true,
+                Opt::Ast => {
+                    show_ast = true;
+                    any_phase = true;
+                }
+                Opt::Desugared => {
+                    show_desugared = true;
+                    any_phase = true;
+                }
+                Opt::Symbols => {
+                    show_symbols = true;
+                    any_phase = true;
+                }
+                Opt::Modules => {
+                    show_modules = true;
+                    any_phase = true;
+                }
+                Opt::Tir => {
+                    show_tir = true;
+                    any_phase = true;
+                }
+                Opt::TirResolved => {
+                    show_tir_resolved = true;
+                    any_phase = true;
+                }
+                Opt::TirMonomorphized => {
+                    show_tir_monomorphized = true;
+                    any_phase = true;
+                }
+                Opt::TirLowered => {
+                    show_tir_lowered = true;
+                    any_phase = true;
+                }
+                Opt::Wir => {
+                    show_wir = true;
+                    any_phase = true;
+                }
+                Opt::Inspect => inspect = true,
                 Opt::OptLevel => {
                     let level = args::require_value(&mut parser)
                         .map_err(|_| CliExit::error("-O requires a level (0, 1, 2, 3, or s)"))?;
@@ -338,27 +351,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
 
     let inputs = args::require_inputs(inputs, &usage)?;
 
-    // Default: show all
-    if !show_tokens
-        && !show_ast
-        && !show_desugar
-        && !show_symbols
-        && !show_modules
-        && !show_tir
-        && !show_monomorphize
-        && !show_lower
-        && !show_optimize
-        && !show_wir
-    {
-        show_tokens = true;
-        show_ast = true;
-        show_desugar = true;
-        show_symbols = true;
-        show_modules = true;
-        show_tir = true;
-        show_monomorphize = true;
-        show_lower = true;
-        show_optimize = true;
+    // Default: show WIR
+    if !any_phase {
         show_wir = true;
     }
 
@@ -366,15 +360,15 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
         inputs,
         show_tokens,
         show_ast,
-        show_desugar,
+        show_desugared,
         show_symbols,
         show_modules,
         show_tir,
-        show_monomorphize,
-        show_lower,
-        show_optimize,
+        show_tir_resolved,
+        show_tir_monomorphized,
+        show_tir_lowered,
         show_wir,
-        unparse,
+        inspect,
         opt_level,
         inline_threshold,
         opt_iterations,
@@ -462,9 +456,8 @@ async fn run_bulk(opts: &DumpOptions, template: &str) {
 
         let input = input.clone();
         let template = template.to_owned();
-        let show_optimize = opts.show_optimize;
+        let show_tir = opts.show_tir;
         let show_wir = opts.show_wir;
-        let unparse = opts.unparse;
         let opt_level = opts.opt_level;
         let inline_threshold = opts.inline_threshold;
         let opt_iterations = opts.opt_iterations;
@@ -498,9 +491,8 @@ async fn run_bulk(opts: &DumpOptions, template: &str) {
 
                 // Use block_on to run async dump_with_host on this thread
                 match handle.block_on(generate_output_params(
-                    show_optimize,
+                    show_tir,
                     show_wir,
-                    unparse,
                     opt_level,
                     inline_threshold,
                     opt_iterations,
@@ -559,9 +551,8 @@ async fn run_bulk(opts: &DumpOptions, template: &str) {
 /// Takes individual parameters instead of `&DumpOptions` so it can be called
 /// from `tokio::spawn` (which requires `'static` futures).
 async fn generate_output_params(
-    show_optimize: bool,
+    show_tir: bool,
     show_wir: bool,
-    unparse: bool,
     opt_level: OptLevel,
     inline_threshold: Option<usize>,
     opt_iterations: Option<u32>,
@@ -598,8 +589,7 @@ async fn generate_output_params(
 
     let mut output = Vec::new();
 
-    if show_wir && unparse {
-        // For golden fixtures (--wir --unparse), generate WIR output
+    if show_wir {
         if let Some(ref wir_module) = result.wir_module {
             let source_path = path.to_string_lossy();
 
@@ -611,14 +601,14 @@ async fn generate_output_params(
             let unparsed = wado_compiler::wir_unparse::unparse_wir(wir_module, Some(input));
             write!(output, "{unparsed}").unwrap();
         }
-    } else if show_optimize && unparse {
-        // For golden fixtures (--optimize --unparse), extract only the entry module
+    } else if show_tir {
         if let Some(ref project) = result.optimized_project {
             for (module_source, module) in &project.tir_modules {
                 if module_source.is_entry_point() {
                     let source_path = path.to_string_lossy();
 
-                    writeln!(output, "// Golden file: Lowered TIR with -O2 optimization").unwrap();
+                    writeln!(output, "// Golden file: Optimized TIR with -O2 optimization")
+                        .unwrap();
                     writeln!(output, "// Source: {source_path}").unwrap();
                     writeln!(output, "// Generated by: make update-golden-fixtures").unwrap();
                     writeln!(output).unwrap();
@@ -638,7 +628,7 @@ async fn generate_output_params(
             }
         }
     } else {
-        return Err("Bulk output only supports --wir/--optimize --unparse mode".to_string());
+        return Err("Bulk output only supports --wir or --tir mode".to_string());
     }
 
     Ok(String::from_utf8(output).unwrap())
@@ -687,7 +677,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
 
     // Tokens section (Lexer phase)
     if opts.show_tokens {
-        println!("=== Tokens (Lexer) ===");
+        println!("=== Tokens ===");
         for (i, token) in result.tokens.iter().enumerate() {
             println!("  [{i}] {token:?}");
         }
@@ -696,13 +686,8 @@ async fn run_single(opts: &DumpOptions, input: &str) {
 
     // AST section (Parser phase)
     if opts.show_ast {
-        if opts.unparse {
-            println!("=== AST (Parser, unparsed) ===");
-            let unparser = wado_compiler::unparse::Unparser::new(&result.comments);
-            let unparsed = unparser.unparse(&result.ast);
-            println!("{unparsed}");
-        } else {
-            println!("=== AST (Parser) ===");
+        if opts.inspect {
+            println!("=== AST (inspect) ===");
             for (i, item) in result.ast.items.iter().enumerate() {
                 println!("  [{i}] {item:#?}");
             }
@@ -711,19 +696,19 @@ async fn run_single(opts: &DumpOptions, input: &str) {
                 println!("--- Data Section ---");
                 println!("{data}");
             }
+        } else {
+            println!("=== AST ===");
+            let unparser = wado_compiler::unparse::Unparser::new(&result.comments);
+            let unparsed = unparser.unparse(&result.ast);
+            println!("{unparsed}");
         }
         println!();
     }
 
-    // Desugared AST section (Desugar phase)
-    if opts.show_desugar {
-        if opts.unparse {
-            println!("=== Desugared AST (Desugar, unparsed) ===");
-            let unparser = wado_compiler::unparse::Unparser::new(&result.comments);
-            let unparsed = unparser.unparse(&result.desugared_ast);
-            println!("{unparsed}");
-        } else {
-            println!("=== Desugared AST (Desugar) ===");
+    // Desugared AST section
+    if opts.show_desugared {
+        if opts.inspect {
+            println!("=== Desugared AST (inspect) ===");
             for (i, item) in result.desugared_ast.items.iter().enumerate() {
                 println!("  [{i}] {item:#?}");
             }
@@ -732,13 +717,18 @@ async fn run_single(opts: &DumpOptions, input: &str) {
                 println!("--- Data Section ---");
                 println!("{data}");
             }
+        } else {
+            println!("=== Desugared AST ===");
+            let unparser = wado_compiler::unparse::Unparser::new(&result.comments);
+            let unparsed = unparser.unparse(&result.desugared_ast);
+            println!("{unparsed}");
         }
         println!();
     }
 
-    // Modules section (Load phase)
+    // Modules section
     if opts.show_modules {
-        println!("=== Loaded Modules (Load) ===");
+        println!("=== Loaded Modules ===");
         for module_source in &result.loaded_modules {
             let path_str = module_source.to_string();
             let is_implicit = result.implicit_modules.contains(module_source);
@@ -758,9 +748,9 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         println!();
     }
 
-    // Symbols section (Analyze phase)
+    // Symbols section
     if opts.show_symbols {
-        println!("=== Symbol Table (Analyze) ===");
+        println!("=== Symbol Table ===");
         for symbol in result.symbols.all_symbols() {
             let module_path = symbol.module_source.to_string();
             let kind_str = match &symbol.kind {
@@ -855,128 +845,127 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         println!();
     }
 
-    // TIR section (Resolve phase)
-    if opts.show_tir {
+    // TIR resolved section (after type resolution, before lowering)
+    if opts.show_tir_resolved {
         if let Some(ref tir_modules) = result.tir_modules {
-            if opts.unparse {
-                println!("=== TIR (Resolve, unparsed) ===");
-                for (module_source, module) in tir_modules {
-                    let path_str = module_source.to_string();
-                    println!("// --- Module: {path_str} ---");
-                    let unparsed = wado_compiler::unparse::unparse_tir(module);
-                    println!("{unparsed}");
-                }
-            } else {
-                println!("=== TIR (Resolve) ===");
+            if opts.inspect {
+                println!("=== TIR Resolved (inspect) ===");
                 for (module_source, module) in tir_modules {
                     let path_str = module_source.to_string();
                     println!("--- Module: {path_str} ---");
                     println!("{module:#?}");
                     println!();
                 }
+            } else {
+                println!("=== TIR Resolved ===");
+                for (module_source, module) in tir_modules {
+                    let path_str = module_source.to_string();
+                    println!("// --- Module: {path_str} ---");
+                    let unparsed = wado_compiler::unparse::unparse_tir(module);
+                    println!("{unparsed}");
+                }
             }
         } else {
-            println!("=== TIR (Resolve) ===");
+            println!("=== TIR Resolved ===");
             println!("(TIR resolution failed or not available)");
             println!();
         }
     }
 
-    // Monomorphized TIR section (Monomorphize phase)
-    if opts.show_monomorphize {
+    // TIR monomorphized section
+    if opts.show_tir_monomorphized {
         if let Some(ref monomorphized_modules) = result.monomorphized_tir_modules {
-            if opts.unparse {
-                println!("=== Monomorphized TIR (Monomorphize, unparsed) ===");
-                for (module_source, module) in monomorphized_modules {
-                    let path_str = module_source.to_string();
-                    println!("// --- Module: {path_str} ---");
-                    let unparsed = wado_compiler::unparse::unparse_tir(module);
-                    println!("{unparsed}");
-                }
-            } else {
-                println!("=== Monomorphized TIR (Monomorphize) ===");
+            if opts.inspect {
+                println!("=== TIR Monomorphized (inspect) ===");
                 for (module_source, module) in monomorphized_modules {
                     let path_str = module_source.to_string();
                     println!("--- Module: {path_str} ---");
                     println!("{module:#?}");
                     println!();
                 }
+            } else {
+                println!("=== TIR Monomorphized ===");
+                for (module_source, module) in monomorphized_modules {
+                    let path_str = module_source.to_string();
+                    println!("// --- Module: {path_str} ---");
+                    let unparsed = wado_compiler::unparse::unparse_tir(module);
+                    println!("{unparsed}");
+                }
             }
         } else {
-            println!("=== Monomorphized TIR (Monomorphize) ===");
+            println!("=== TIR Monomorphized ===");
             println!("(Monomorphization failed or not available)");
             println!();
         }
     }
 
-    // Lowered TIR section (Lower phase)
-    if opts.show_lower {
+    // TIR lowered section (after lowering, before optimization)
+    if opts.show_tir_lowered {
         if let Some(ref lowered_modules) = result.lowered_tir_modules {
-            if opts.unparse {
-                println!("=== Lowered TIR (Lower, unparsed) ===");
-                for (module_source, module) in lowered_modules {
-                    let path_str = module_source.to_string();
-                    println!("// --- Module: {path_str} ---");
-                    let unparsed = wado_compiler::unparse::unparse_tir(module);
-                    println!("{unparsed}");
-                }
-            } else {
-                println!("=== Lowered TIR (Lower) ===");
+            if opts.inspect {
+                println!("=== TIR Lowered (inspect) ===");
                 for (module_source, module) in lowered_modules {
                     let path_str = module_source.to_string();
                     println!("--- Module: {path_str} ---");
                     println!("{module:#?}");
                     println!();
                 }
+            } else {
+                println!("=== TIR Lowered ===");
+                for (module_source, module) in lowered_modules {
+                    let path_str = module_source.to_string();
+                    println!("// --- Module: {path_str} ---");
+                    let unparsed = wado_compiler::unparse::unparse_tir(module);
+                    println!("{unparsed}");
+                }
             }
         } else {
-            println!("=== Lowered TIR (Lower) ===");
+            println!("=== TIR Lowered ===");
             println!("(TIR lowering failed or not available)");
             println!();
         }
     }
 
-    // Optimized project section (Optimize phase)
-    if opts.show_optimize {
+    // Final TIR section (after optimization)
+    if opts.show_tir {
         if let Some(ref project) = result.optimized_project {
-            if opts.unparse {
-                println!("=== Optimized TIR (Optimize, unparsed) ===");
+            if opts.inspect {
+                println!("=== TIR (inspect) ===");
+                println!("{project:#?}");
+            } else {
+                println!("=== TIR ===");
                 for (module_source, module) in &project.tir_modules {
                     let path_str = module_source.to_string();
                     println!("// --- Module: {path_str} ---");
                     let unparsed = wado_compiler::unparse::unparse_tir(module);
                     println!("{unparsed}");
                 }
-            } else {
-                println!("=== Optimized Project (Optimize) ===");
-                println!("{project:#?}");
             }
             println!();
         } else {
-            println!("=== Optimized Project (Optimize) ===");
+            println!("=== TIR ===");
             println!("(Optimization failed or not available)");
             println!();
         }
     }
 
-    // WIR section (Wasm IR phase)
+    // Final WIR section (after optimization)
     if opts.show_wir {
         if let Some(ref wir_module) = result.wir_module {
-            if opts.unparse {
-                println!("=== WIR (Wasm IR, unparsed) ===");
+            if opts.inspect {
+                println!("=== WIR (inspect) ===");
+                println!("{wir_module:#?}");
+            } else {
                 let unparsed = wado_compiler::wir_unparse::unparse_wir(wir_module, None);
                 if unparsed.is_empty() {
                     println!("(empty module)");
                 } else {
                     print!("{unparsed}");
                 }
-            } else {
-                println!("=== WIR (Wasm IR) ===");
-                println!("{wir_module:#?}");
             }
             println!();
         } else {
-            println!("=== WIR (Wasm IR) ===");
+            println!("=== WIR ===");
             println!("(WIR generation failed or not available)");
             println!();
         }

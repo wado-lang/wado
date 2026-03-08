@@ -272,7 +272,7 @@ Parameter count is validated, but parameter types and return type compatibility 
 
 - **Extensibility**: Any Canonical ABI type is supported by the recursive synthesizer — no per-type hand-coding.
 - **Optimization**: Adapter functions go through lower → optimize → wir_optimize, so the optimizer can inline small adapters, eliminate dead branches, and propagate constants.
-- **Debuggability**: `wado dump --tir --unparse` and `wado dump --lower --unparse` show the full CM glue as Wado code.
+- **Debuggability**: `wado dump --tir-resolved` and `wado dump --tir-lowered` show the full CM glue as Wado code.
 - **Simpler codegen**: Codegen no longer needs to know about CM lifting/lowering. It compiles adapter functions like any other function.
 - **WIR-compatible**: CM adapters are ordinary TIR functions that translate to WIR without special handling in `wir_build`.
 
