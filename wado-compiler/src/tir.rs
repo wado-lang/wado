@@ -533,6 +533,20 @@ impl TypeTable {
         self.types.keys().copied()
     }
 
+    /// Remove all type entries whose `TypeId` is not in `keep`.
+    ///
+    /// This physically removes entries from the backing `IndexMap`s so that
+    /// subsequent iterations (e.g. WIR type registration) no longer see them.
+    /// The intern map is rebuilt to stay consistent.
+    pub fn retain(&mut self, keep: &IndexSet<TypeId>) {
+        self.types.retain(|id, _| keep.contains(id));
+        // Rebuild intern map from the surviving entries.
+        self.intern_map.clear();
+        for (&id, ty) in &self.types {
+            self.intern_map.insert(ty.clone(), id);
+        }
+    }
+
     /// Create a raw GC array type (`builtin::array<T>`)
     pub fn make_builtin_array(&mut self, element: TypeId) -> TypeId {
         self.intern(ResolvedType::BuiltinArray(element))
