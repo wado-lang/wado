@@ -36,12 +36,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    /// Get the struct name from a type ID, if it's a struct or generic instance.
+    /// Get the struct name from a type ID, if it's a struct, generic instance, or newtype.
     pub(super) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
         match self.type_table.borrow().get(type_id) {
-            ResolvedType::Struct { name, .. } | ResolvedType::GenericInstance { name, .. } => {
-                Some(name.clone())
-            }
+            ResolvedType::Struct { name, .. }
+            | ResolvedType::GenericInstance { name, .. }
+            | ResolvedType::Newtype { name, .. } => Some(name.clone()),
             _ => None,
         }
     }
