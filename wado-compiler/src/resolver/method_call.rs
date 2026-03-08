@@ -55,10 +55,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 module_source,
                 ..
             } => (name.clone(), module_source.clone()),
-            // Primitive types have impl blocks in core:prelude/primitives
+            // Primitive types have impl blocks in core:prelude/primitive
             ResolvedType::Primitive(_) => (
                 self.type_table.borrow().mangle_type_name(base_type_id),
-                ModuleSource::primitives(),
+                ModuleSource::primitive(),
             ),
             // Enum types - use enum name and its defining module
             ResolvedType::Enum {
@@ -707,7 +707,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             ResolvedType::Primitive(prim) => {
                 let name = prim.as_str().to_string();
-                (name.clone(), ModuleSource::primitives(), name, vec![])
+                (name.clone(), ModuleSource::primitive(), name, vec![])
             }
             ResolvedType::Enum {
                 name,

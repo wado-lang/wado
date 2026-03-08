@@ -1027,13 +1027,13 @@ fn trait_impl_module(
     tt: &Rc<RefCell<TypeTable>>,
 ) -> ModuleSource {
     match tt.borrow().get(type_id).clone() {
-        ResolvedType::Primitive(_) => ModuleSource::primitives(),
+        ResolvedType::Primitive(_) => ModuleSource::primitive(),
         ResolvedType::Struct { name, .. } if name == "String" => ModuleSource::format(),
         ResolvedType::Struct { module_source, .. }
         | ResolvedType::Enum { module_source, .. }
         | ResolvedType::Variant { module_source, .. }
         | ResolvedType::Newtype { module_source, .. } => module_source,
-        _ => ModuleSource::primitives(),
+        _ => ModuleSource::primitive(),
     }
 }
 

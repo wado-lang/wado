@@ -72,6 +72,14 @@ fn register_imports(ctx: &mut WirContext<'_>) {
             name,
         );
 
+        // Track "wasi" namespace imports as needed canonical intrinsics.
+        // This ensures they appear in WirModule::needed_canonicals, which is
+        // the single source of truth for component codegen.
+        if import.namespace == "wasi" {
+            ctx.needed_canonicals
+                .insert(import.canonical_name.clone(), func_id.clone());
+        }
+
         // Also register under the TIR builtin function name so call sites can resolve.
         // e.g., "builtin/realloc" → same WirFuncId as "mem/realloc"
         if !import.func_name.is_empty() {

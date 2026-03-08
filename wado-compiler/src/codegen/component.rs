@@ -84,17 +84,10 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
 
     embed_bundled_modules(&mut builder, &mut ctx, bundled_functions);
 
-    // Merge canonical intrinsics from both sources (deduplicated):
-    //   1. component_plan.canonical_intrinsics — from TIR imports (task-return, realloc, etc.)
-    //   2. wir_module.needed_canonicals — lazily registered by ensure_canonical during WIR translation
-    let mut all_canonical_intrinsics: IndexSet<String> = IndexSet::new();
-    for name in &component_plan.canonical_intrinsics {
-        all_canonical_intrinsics.insert(name.clone());
-    }
-    for name in &wir_module.needed_canonicals {
-        all_canonical_intrinsics.insert(name.clone());
-    }
-    let all_canonical_intrinsics: Vec<String> = all_canonical_intrinsics.into_iter().collect();
+    // Canonical intrinsics are discovered lazily during WIR translation via ensure_canonical().
+    // They are stored in wir_module.needed_canonicals — the single source of truth.
+    let all_canonical_intrinsics: Vec<String> =
+        wir_module.needed_canonicals.iter().cloned().collect();
 
     // HTTP response types for future<T> canonical intrinsics
     let needs_future = all_canonical_intrinsics.iter().any(|n| {

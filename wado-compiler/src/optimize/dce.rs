@@ -243,10 +243,6 @@ pub fn analyze_project(project: &mut Project) {
             .world_registry
             .get(&project.target_world)
             .is_some_and(crate::world_registry::WorldInfo::has_async_export);
-    let has_http_handler_export = project
-        .world_registry
-        .get(&project.target_world)
-        .is_some_and(crate::world_registry::WorldInfo::has_http_handler_export);
     if has_async_export {
         // TaskReturn is always needed for async exports.
         // For Result-returning exports (e.g., HTTP handler), synthesis::cm_adapter computes
@@ -270,14 +266,10 @@ pub fn analyze_project(project: &mut Project) {
 
         // Waitable-set builtins (waitable_set_new, waitable_join, waitable_set_wait, subtask_drop)
         // are added automatically via reachability from internal::wait_for_subtask
-
-        // HTTP handler exports need future intrinsics for response creation
-        // (trailers parameter to response.new is a future)
-        if has_http_handler_export {
-            add_import_by_name(&mut imports, "future_new");
-            add_import_by_name(&mut imports, "future_write");
-            add_import_by_name(&mut imports, "future_drop_writable");
-        }
+        //
+        // HTTP handler exports need future intrinsics (future-new, future-write,
+        // future-drop-writable) for response creation, but these are now registered
+        // lazily by WIR synthesis via ensure_canonical() — no DCE injection needed.
     }
 
     // Store imports in the entry module
@@ -777,7 +769,7 @@ fn analyze_expr(
                         // (e.g., i32^Ord::cmp, char::is_ascii_space)
                         let prim_name = prim.as_str().to_string();
                         let method_id = FunctionId::Method(MethodName::new(
-                            ModuleSource::primitives(),
+                            ModuleSource::primitive(),
                             prim_name,
                             trait_name.clone(),
                             method_name.clone(),
@@ -1057,12 +1049,12 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
     let base_type_id = type_table.get_ultimate_base_type(type_id);
     match type_table.get(base_type_id) {
         ResolvedType::Primitive(prim) => {
-            // Primitive to_string methods are defined in core:prelude/primitives as impl blocks
+            // Primitive to_string methods are defined in core:prelude/primitive as impl blocks
             // e.g., impl i32 { fn to_string(&self) -> String { ... } }
             let prim_name = prim.as_str();
             // Method format: module_source/StructName::method_name
             let method_id = FunctionId::Method(MethodName::new(
-                ModuleSource::primitives(),
+                ModuleSource::primitive(),
                 prim_name.to_string(),
                 None,
                 "to_string".to_string(),

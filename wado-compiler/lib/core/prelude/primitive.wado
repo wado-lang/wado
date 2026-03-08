@@ -39,13 +39,11 @@ fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
 
 /// Count decimal digits of a non-negative i64 value.
 fn count_digits_i64(val: i64) -> i32 {
-    let zero: i64 = 0;
-    if val == zero {
+    if val == 0 {
         return 1;
     }
-    let ten: i64 = 10;
     let mut n: i32 = 0;
-    for let mut t: i64 = val; t > zero; t = t / ten {
+    for let mut t = val; t > 0; t = t / 10 {
         n += 1;
     }
     return n;
@@ -53,28 +51,25 @@ fn count_digits_i64(val: i64) -> i32 {
 
 /// Write `digit_count` decimal digits of `abs_val` backwards into `arr` starting at `offset`.
 fn write_decimal_digits(arr: builtin::array<u8>, offset: i32, abs_val: i64, digit_count: i32) {
-    let zero: i64 = 0;
-    let ten: i64 = 10;
     let mut pos = offset + digit_count;
-    if abs_val == zero {
+    if abs_val == 0 {
         builtin::array_set_u8(arr, offset, '0' as u8);
     } else {
-        for let mut temp: i64 = abs_val; temp > zero; temp = temp / ten {
+        for let mut temp = abs_val; temp > 0; temp = temp / 10 {
             pos -= 1;
-            builtin::array_set_u8(arr, pos, ('0' as i32 + (temp % ten) as i32) as u8);
+            builtin::array_set_u8(arr, pos, ('0' as i32 + (temp % 10) as i32) as u8);
         }
     }
 }
 
 /// Write `digit_count` digits of `abs_val` in given base backwards into `arr` at `offset`.
 fn write_base_digits(arr: builtin::array<u8>, offset: i32, abs_val: i64, digit_count: i32, base: i32, upper: bool) {
-    let zero: i64 = 0;
-    let base64: i64 = base as i64;
+    let base64 = base as i64;
     let mut pos = offset + digit_count;
-    if abs_val == zero {
+    if abs_val == 0 {
         builtin::array_set_u8(arr, offset, '0' as u8);
     } else {
-        for let mut temp: i64 = abs_val; temp > zero; temp = temp / base64 {
+        for let mut temp = abs_val; temp > 0; temp = temp / base64 {
             pos -= 1;
             let digit: i32 = (temp % base64) as i32;
             let ch = if digit < 10 {
@@ -91,13 +86,12 @@ fn write_base_digits(arr: builtin::array<u8>, offset: i32, abs_val: i64, digit_c
 
 /// Count digits of a non-negative i64 value in the given base.
 fn count_digits_base(val: i64, base: i32) -> i32 {
-    let zero: i64 = 0;
-    if val == zero {
+    if val == 0 {
         return 1;
     }
-    let base64: i64 = base as i64;
+    let base64 = base as i64;
     let mut n: i32 = 0;
-    for let mut t: i64 = val; t > zero; t = t / base64 {
+    for let mut t = val; t > 0; t = t / base64 {
         n += 1;
     }
     return n;
@@ -106,20 +100,18 @@ fn count_digits_base(val: i64, base: i32) -> i32 {
 /// Count digits of a u64 value (as raw i64 bits) in the given power-of-2 base.
 /// `bits_per_digit` is log2(base): 1 for binary, 3 for octal, 4 for hex.
 fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
-    let zero: i64 = 0;
-    if val_i64 == zero {
+    if val_i64 == 0 {
         return 1;
     }
     // Count leading zeros manually: find highest set bit
     let mut highest_bit: i32 = 0;
     // Check high 32 bits
     let high32: i64 = val_i64 >> 32 & 0xFFFFFFFF;
-    if high32 != zero {
+    if high32 != 0 {
         // Bit is somewhere in bits 32..63
         let mut b: i32 = 63;
         while b >= 32 {
-            let one: i64 = 1;
-            if val_i64 >> b as i64 & one != zero {
+            if val_i64 >> b as i64 & 1 != 0 {
                 highest_bit = b;
                 break;
             }
@@ -129,8 +121,7 @@ fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
         // Bit is somewhere in bits 0..31
         let mut b: i32 = 31;
         while b >= 0 {
-            let one: i64 = 1;
-            if val_i64 >> b as i64 & one != zero {
+            if val_i64 >> b as i64 & 1 != 0 {
                 highest_bit = b;
                 break;
             }
@@ -142,14 +133,13 @@ fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
 
 /// Write digits of a u64 value (as raw i64 bits) in a power-of-2 base.
 fn write_u64_base_digits(arr: builtin::array<u8>, offset: i32, val_i64: i64, digit_count: i32, bits_per_digit: i32, mask: i32, upper: bool) {
-    let zero: i64 = 0;
-    let mask64: i64 = mask as i64;
+    let mask64 = mask as i64;
     let mut pos = offset + digit_count;
-    if val_i64 == zero {
+    if val_i64 == 0 {
         builtin::array_set_u8(arr, offset, '0' as u8);
     } else {
         let mut temp: i64 = val_i64;
-        while temp != zero {
+        while temp != 0 {
             pos -= 1;
             let digit: i32 = (temp & mask64) as i32;
             let ch = if digit < 10 {
@@ -444,13 +434,9 @@ impl i64 {
 
     fn fmt_decimal(&self, f: &mut Formatter) {
         let value = *self;
-        let zero_i64: i64 = 0;
-        let is_negative = value < zero_i64;
-        let i64_max: i64 = 9223372036854775807;
-        let one_i64: i64 = 1;
-        let i64_min: i64 = zero_i64 - i64_max - one_i64;
+        let is_negative = value < 0;
 
-        if value == i64_min {
+        if value == i64::MIN {
             // i64::MIN = -9223372036854775808: last digit '8', remaining 922337203685477580
             let remaining: i64 = 922337203685477580;
             let remaining_digits = count_digits_i64(remaining);
@@ -460,7 +446,7 @@ impl i64 {
             write_decimal_digits(repr, offset, remaining, remaining_digits);
             builtin::array_set_u8(repr, offset + remaining_digits, '8' as u8);
         } else {
-            let abs_val: i64 = if is_negative { zero_i64 - value } else { value };
+            let abs_val = if is_negative { 0 - value } else { value };
             let digit_count = count_digits_i64(abs_val);
             let offset = f.prepare_int_write(is_negative, "", digit_count);
             write_decimal_digits(f.buf.internal_raw_bytes(), offset, abs_val, digit_count);
@@ -513,10 +499,8 @@ impl u64 {
 
     fn fmt_decimal(&self, f: &mut Formatter) {
         let val_i64 = *self as i64;
-        let zero: i64 = 0;
-        let ten: i64 = 10;
 
-        if val_i64 == zero {
+        if val_i64 == 0 {
             let offset = f.prepare_int_write(false, "", 1);
             builtin::array_set_u8(f.buf.internal_raw_bytes(), offset, '0' as u8);
             return;
@@ -525,18 +509,18 @@ impl u64 {
         // Count digits using unsigned division
         let mut digit_count: i32 = 0;
         let offset_div: i64 = 1844674407370955161;
-        let mut temp: i64 = val_i64;
-        while temp != zero {
+        let mut temp = val_i64;
+        while temp != 0 {
             digit_count += 1;
-            if temp >= zero {
-                temp = temp / ten;
+            if temp >= 0 {
+                temp = temp / 10;
             } else {
-                let signed_rem: i64 = temp % ten;
-                let rem_adjusted: i64 = signed_rem + 6;
-                let signed_quot: i64 = temp / ten;
+                let signed_rem = temp % 10;
+                let rem_adjusted = signed_rem + 6;
+                let signed_quot = temp / 10;
                 let mut carry: i64 = 0;
-                if rem_adjusted < zero {
-                    carry = 0 - 1;
+                if rem_adjusted < 0 {
+                    carry = -1;
                 }
                 temp = signed_quot + offset_div + carry;
             }
@@ -548,24 +532,24 @@ impl u64 {
         // Write digits using unsigned division (backwards)
         let mut pos = offset + digit_count;
         temp = val_i64;
-        while temp != zero {
+        while temp != 0 {
             pos -= 1;
             let mut digit: i32 = 0;
-            if temp >= zero {
-                digit = (temp % ten) as i32;
-                temp = temp / ten;
+            if temp >= 0 {
+                digit = (temp % 10) as i32;
+                temp = temp / 10;
             } else {
-                let signed_rem: i64 = temp % ten;
-                let rem_adjusted: i64 = signed_rem + 6;
-                if rem_adjusted >= zero {
+                let signed_rem = temp % 10;
+                let rem_adjusted = signed_rem + 6;
+                if rem_adjusted >= 0 {
                     digit = rem_adjusted as i32;
                 } else {
-                    digit = (rem_adjusted + ten) as i32;
+                    digit = (rem_adjusted + 10) as i32;
                 }
-                let signed_quot: i64 = temp / ten;
+                let signed_quot = temp / 10;
                 let mut carry: i64 = 0;
-                if rem_adjusted < zero {
-                    carry = 0 - 1;
+                if rem_adjusted < 0 {
+                    carry = -1;
                 }
                 temp = signed_quot + offset_div + carry;
             }
@@ -889,7 +873,7 @@ impl f32 {
     }
 
     pub fn is_finite(&self) -> bool {
-        return *self - *self == 0.0 as f32;
+        return *self - *self == 0.0;
     }
 
     pub fn parse(s: String) -> Option<f32> {
@@ -1475,16 +1459,12 @@ impl Binary for u32 {
 impl Binary for i64 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self;
-        let zero_i64: i64 = 0;
-        let is_neg = v < zero_i64;
-        let i64_max: i64 = 9223372036854775807;
-        let one_i64: i64 = 1;
-        let i64_min: i64 = zero_i64 - i64_max - one_i64;
-        if v == i64_min {
+        let is_neg = v < 0;
+        if v == i64::MIN {
             let half: i64 = 4611686018427387904;
             half.fmt_base(true, f, 2, false);
         } else {
-            let abs_val: i64 = if is_neg { zero_i64 - v } else { v };
+            let abs_val = if is_neg { 0 - v } else { v };
             abs_val.fmt_base(is_neg, f, 2, false);
         }
     }
@@ -1541,16 +1521,12 @@ impl Octal for u32 {
 impl Octal for i64 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self;
-        let zero_i64: i64 = 0;
-        let is_neg = v < zero_i64;
-        let i64_max: i64 = 9223372036854775807;
-        let one_i64: i64 = 1;
-        let i64_min: i64 = zero_i64 - i64_max - one_i64;
-        if v == i64_min {
+        let is_neg = v < 0;
+        if v == i64::MIN {
             let half: i64 = 4611686018427387904;
             half.fmt_base(true, f, 8, false);
         } else {
-            let abs_val: i64 = if is_neg { zero_i64 - v } else { v };
+            let abs_val = if is_neg { 0 - v } else { v };
             abs_val.fmt_base(is_neg, f, 8, false);
         }
     }
@@ -1607,16 +1583,12 @@ impl LowerHex for u32 {
 impl LowerHex for i64 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self;
-        let zero_i64: i64 = 0;
-        let is_neg = v < zero_i64;
-        let i64_max: i64 = 9223372036854775807;
-        let one_i64: i64 = 1;
-        let i64_min: i64 = zero_i64 - i64_max - one_i64;
-        if v == i64_min {
+        let is_neg = v < 0;
+        if v == i64::MIN {
             let half: i64 = 4611686018427387904;
             half.fmt_base(true, f, 16, false);
         } else {
-            let abs_val: i64 = if is_neg { zero_i64 - v } else { v };
+            let abs_val = if is_neg { 0 - v } else { v };
             abs_val.fmt_base(is_neg, f, 16, false);
         }
     }
@@ -1673,16 +1645,12 @@ impl UpperHex for u32 {
 impl UpperHex for i64 {
     pub fn fmt(&self, f: &mut Formatter) {
         let v = *self;
-        let zero_i64: i64 = 0;
-        let is_neg = v < zero_i64;
-        let i64_max: i64 = 9223372036854775807;
-        let one_i64: i64 = 1;
-        let i64_min: i64 = zero_i64 - i64_max - one_i64;
-        if v == i64_min {
+        let is_neg = v < 0;
+        if v == i64::MIN {
             let half: i64 = 4611686018427387904;
             half.fmt_base(true, f, 16, true);
         } else {
-            let abs_val: i64 = if is_neg { zero_i64 - v } else { v };
+            let abs_val = if is_neg { 0 - v } else { v };
             abs_val.fmt_base(is_neg, f, 16, true);
         }
     }

@@ -1633,15 +1633,30 @@ impl FunctionTranslator<'_, '_> {
             } => {
                 let translated_args: Vec<WirInstr> =
                     args.iter().map(|a| self.translate_expr(a)).collect();
-                // Look up in WASI imports
-                if let Some(func_id) = self.ctx.func_map.get(&format!("wasi/{local_name}")) {
-                    WirInstr::Call {
-                        func_id: func_id.clone(),
-                        args: translated_args,
-                    }
+                // Look up in WASI imports (registered by register_imports from TIR imports)
+                let func_id = if let Some(func_id) =
+                    self.ctx.func_map.get(&format!("wasi/{local_name}"))
+                {
+                    func_id.clone()
                 } else {
-                    eprintln!("[WIR] unresolved CmRawCall: local_name={local_name}");
-                    WirInstr::Unreachable
+                    // Not pre-registered — lazily register as a canonical intrinsic.
+                    // This handles canonical imports (e.g., "task-return") that may not
+                    // be in TIR imports but are needed by CM adapter synthesis.
+                    let params: Vec<WirType> = args
+                        .iter()
+                        .map(|a| self.ctx.type_id_to_wir_type(self.type_table, a.type_id))
+                        .collect();
+                    let results =
+                        if expr.type_id == TypeTable::UNIT || expr.type_id == TypeTable::NEVER {
+                            vec![]
+                        } else {
+                            vec![self.ctx.type_id_to_wir_type(self.type_table, expr.type_id)]
+                        };
+                    self.ctx.ensure_canonical(local_name, params, results)
+                };
+                WirInstr::Call {
+                    func_id,
+                    args: translated_args,
                 }
             }
 

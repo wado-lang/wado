@@ -173,10 +173,10 @@ impl ModuleSource {
         Self::core("prelude/int128.wado")
     }
 
-    /// `core:prelude/primitives.wado` — primitive type methods.
+    /// `core:prelude/primitive.wado` — primitive type methods.
     #[must_use]
-    pub fn primitives() -> Self {
-        Self::core("prelude/primitives.wado")
+    pub fn primitive() -> Self {
+        Self::core("prelude/primitive.wado")
     }
 
     /// `core:prelude/types.wado` — core type definitions.

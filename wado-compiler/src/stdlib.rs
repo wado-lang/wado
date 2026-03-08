@@ -29,7 +29,7 @@ pub const CORE_BUILTIN: &str = include_str!("../lib/core/builtin.wado");
 pub const CORE_PRELUDE_TRAITS: &str = include_str!("../lib/core/prelude/traits.wado");
 pub const CORE_PRELUDE_INT128: &str = include_str!("../lib/core/prelude/int128.wado");
 pub const CORE_PRELUDE_TYPES: &str = include_str!("../lib/core/prelude/types.wado");
-pub const CORE_PRELUDE_PRIMITIVES: &str = include_str!("../lib/core/prelude/primitives.wado");
+pub const CORE_PRELUDE_PRIMITIVE: &str = include_str!("../lib/core/prelude/primitive.wado");
 pub const CORE_PRELUDE_FORMAT: &str = include_str!("../lib/core/prelude/format.wado");
 pub const CORE_PRELUDE_ARRAY: &str = include_str!("../lib/core/prelude/array.wado");
 pub const CORE_PRELUDE_FPFMT: &str = include_str!("../lib/core/prelude/fpfmt.wado");
@@ -60,7 +60,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:prelude/traits.wado" => Some(CORE_PRELUDE_TRAITS),
         "core:prelude/int128.wado" => Some(CORE_PRELUDE_INT128),
         "core:prelude/types.wado" => Some(CORE_PRELUDE_TYPES),
-        "core:prelude/primitives.wado" => Some(CORE_PRELUDE_PRIMITIVES),
+        "core:prelude/primitive.wado" => Some(CORE_PRELUDE_PRIMITIVE),
         "core:prelude/string.wado" => Some(CORE_PRELUDE_STRING),
         "core:prelude/format.wado" => Some(CORE_PRELUDE_FORMAT),
         "core:prelude/array.wado" => Some(CORE_PRELUDE_ARRAY),
@@ -149,8 +149,8 @@ mod tests {
 
     #[test]
     fn test_get_prelude_primitives() {
-        let source = get_stdlib_module("core:prelude/primitives.wado");
-        assert!(source.is_some(), "primitives module should exist");
+        let source = get_stdlib_module("core:prelude/primitive.wado");
+        assert!(source.is_some(), "primitive module should exist");
         assert!(
             source.unwrap().contains("impl i32"),
             "should contain impl i32"
