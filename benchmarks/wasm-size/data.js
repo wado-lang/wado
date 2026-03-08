@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772919558919,
+  "lastUpdate": 1772940417486,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1505,6 +1505,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/71c6a63c5b57882978a155ebcb54174f0658d27b"
         },
         "date": 1772919558729,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1571,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9220,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18450,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f592b402212c32e637ca41557d116249e1881b33",
+          "message": "Merge pull request #536 from wado-lang/claude/refactor-call-nodes-Af7vw\n\nRefactor CallArg import and optimize local variable ordering",
+          "timestamp": "2026-03-08T12:24:31+09:00",
+          "tree_id": "2a163312e63784879d4a9cf0f31139a4f234a5c9",
+          "url": "https://github.com/wado-lang/wado/commit/f592b402212c32e637ca41557d116249e1881b33"
+        },
+        "date": 1772940417305,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
