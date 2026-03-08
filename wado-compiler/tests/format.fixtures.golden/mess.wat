@@ -157,7 +157,7 @@
     (func $__closure_wrapper_0 (;4;) (type 6) (param structref i32) (result i32)
       (local (ref null 2))
       (local.set 2
-        (ref.cast (ref null 2)
+        (ref.cast (ref 2)
           (local.get 0)))
       (unreachable)
       (unreachable)
@@ -165,7 +165,7 @@
     (func $__closure_wrapper_1 (;5;) (type 6) (param structref i32) (result i32)
       (local (ref null 1))
       (local.set 2
-        (ref.cast (ref null 1)
+        (ref.cast (ref 1)
           (local.get 0)))
       (unreachable)
       (unreachable)
