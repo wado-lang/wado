@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772957627515,
+  "lastUpdate": 1772964365625,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1661,6 +1661,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6312b6766118c4353509899b7b4d744e8e08ff41"
         },
         "date": 1772957627318,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1572,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9269,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19063,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f75dbe8e2e8823744314ba322b3f31cfdeeaa139",
+          "message": "Merge pull request #541 from wado-lang/claude/review-cm-resource-wep-OFbDD\n\nImplement waitable-set-wait/poll and future-read synthesis",
+          "timestamp": "2026-03-08T19:03:39+09:00",
+          "tree_id": "db8e7d87fc262d2737b8ce8352e26f5d79294d75",
+          "url": "https://github.com/wado-lang/wado/commit/f75dbe8e2e8823744314ba322b3f31cfdeeaa139"
+        },
+        "date": 1772964365437,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
