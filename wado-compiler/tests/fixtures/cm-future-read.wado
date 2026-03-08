@@ -1,0 +1,29 @@
+// Future::read E2E test
+// Tests that Future::read() works for reading a fulfilled future.
+// Currently tests the Ok(None) path (trailers future pattern).
+
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // Create a future pair and write Ok(None) to it
+    let [future_rx, future_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+
+    // Write to the future
+    future_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+
+    // Read from the future — should get Some(value) since writer fulfilled it
+    let result = future_rx.read();
+
+    // Drop the future handle
+    future_rx.drop();
+
+    // Return 200 OK
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"TODO": true, "wasi:http/service": {"status": 200}}

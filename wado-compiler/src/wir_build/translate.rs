@@ -2884,8 +2884,14 @@ impl FunctionTranslator<'_, '_> {
             // === Future instance methods ===
             "future-read" => Some(self.emit_future_read(handle, result_type_id)),
             "future-write" => Some(self.emit_future_write_ok_none(handle)),
+            "future-cancel-read" => Some(self.emit_drop_handle("future-cancel-read", handle)),
+            "future-cancel-write" => Some(self.emit_drop_handle("future-cancel-write", handle)),
             "future-drop-readable" => Some(self.emit_drop_handle("future-drop-readable", handle)),
             "future-drop-writable" => Some(self.emit_drop_handle("future-drop-writable", handle)),
+
+            // === Stream instance methods ===
+            "stream-cancel-read" => Some(self.emit_drop_handle("stream-cancel-read", handle)),
+            "stream-cancel-write" => Some(self.emit_drop_handle("stream-cancel-write", handle)),
 
             // === WaitableSet instance methods ===
             "waitable-set-wait" => Some(self.emit_waitable_set_wait(handle, result_type_id)),
@@ -2894,6 +2900,7 @@ impl FunctionTranslator<'_, '_> {
 
             // === Subtask instance methods ===
             "subtask-drop" => Some(self.emit_drop_handle("subtask-drop", handle)),
+            "subtask-cancel" => Some(self.emit_drop_handle("subtask-cancel", handle)),
             "waitable-join" => {
                 let set_arg = self.translate_expr(&args[0].expr);
                 Some(self.emit_waitable_join(handle, set_arg))
@@ -3041,18 +3048,494 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Emit `waitable-set-wait(ws_handle)` → `WaitEvent` struct.
-    fn emit_waitable_set_wait(&mut self, _handle: WirInstr, _result_type_id: TypeId) -> WirInstr {
-        panic!("not yet implemented: waitable-set-wait synthesis (WaitEvent struct lowering)")
+    ///
+    /// 1. Allocate 8 bytes via realloc
+    /// 2. Call `waitable-set-wait(ws, outptr)` → event code (i32)
+    /// 3. Load handle (i32) and payload (i32) from outptr
+    /// 4. Free outptr
+    /// 5. Construct `WaitEvent { code, handle: Waitable(handle), payload }`
+    fn emit_waitable_set_wait(&mut self, handle: WirInstr, result_type_id: TypeId) -> WirInstr {
+        let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
+            return WirInstr::Unreachable;
+        };
+        let ws_wait_id = self.ctx.ensure_canonical(
+            "waitable-set-wait",
+            vec![WirType::I32, WirType::I32],
+            vec![WirType::I32],
+        );
+
+        // Resolve the WaitEvent struct type
+        let wir_type = self
+            .ctx
+            .type_id_to_wir_type(self.type_table, result_type_id);
+        let struct_type_id = match wir_type {
+            WirType::Ref { type_id, .. } => type_id,
+            _ => return WirInstr::Unreachable,
+        };
+
+        self.local_counter += 1;
+        let suffix = self.local_counter;
+        let ws_name = format!("__wsw_ws_{suffix}");
+        let outptr_name = format!("__wsw_outptr_{suffix}");
+        let code_name = format!("__wsw_code_{suffix}");
+
+        let mut instrs = vec![];
+
+        // Declare locals
+        for (name, ty) in [
+            (&ws_name, WirType::I32),
+            (&outptr_name, WirType::I32),
+            (&code_name, WirType::I32),
+        ] {
+            instrs.push(WirInstr::DeclareLocal {
+                name: name.clone(),
+                ty,
+            });
+        }
+
+        // Save ws handle
+        instrs.push(WirInstr::LocalSet {
+            name: ws_name.clone(),
+            value: Box::new(handle),
+        });
+
+        // outptr = realloc(0, 0, 4, 8)
+        instrs.push(WirInstr::LocalSet {
+            name: outptr_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: realloc_id.clone(),
+                args: vec![
+                    WirInstr::I32Const(0),
+                    WirInstr::I32Const(0),
+                    WirInstr::I32Const(4),
+                    WirInstr::I32Const(8),
+                ],
+            }),
+        });
+
+        // code = waitable-set-wait(ws, outptr)
+        instrs.push(WirInstr::LocalSet {
+            name: code_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: ws_wait_id,
+                args: vec![
+                    WirInstr::LocalGet {
+                        name: ws_name.clone(),
+                    },
+                    WirInstr::LocalGet {
+                        name: outptr_name.clone(),
+                    },
+                ],
+            }),
+        });
+
+        // Construct WaitEvent { code, handle: i32_load(outptr), payload: i32_load(outptr+4) }
+        let wait_event = self.struct_new(
+            struct_type_id,
+            vec![
+                WirInstr::LocalGet {
+                    name: code_name.clone(),
+                },
+                WirInstr::I32Load {
+                    offset: 0,
+                    align: 2,
+                    addr: Box::new(WirInstr::LocalGet {
+                        name: outptr_name.clone(),
+                    }),
+                },
+                WirInstr::I32Load {
+                    offset: 4,
+                    align: 2,
+                    addr: Box::new(WirInstr::LocalGet {
+                        name: outptr_name.clone(),
+                    }),
+                },
+            ],
+        );
+
+        // Free outptr: realloc(outptr, 8, 4, 0)
+        instrs.push(WirInstr::Drop(Box::new(WirInstr::Call {
+            func_id: realloc_id,
+            args: vec![
+                WirInstr::LocalGet {
+                    name: outptr_name.clone(),
+                },
+                WirInstr::I32Const(8),
+                WirInstr::I32Const(4),
+                WirInstr::I32Const(0),
+            ],
+        })));
+
+        instrs.push(wait_event);
+
+        WirInstr::Seq(instrs)
     }
 
-    /// Emit `waitable-set-poll(ws_handle)` → Option<WaitEvent>.
-    fn emit_waitable_set_poll(&mut self, _handle: WirInstr, _result_type_id: TypeId) -> WirInstr {
-        panic!("not yet implemented: waitable-set-poll synthesis (Option<WaitEvent> lowering)")
+    /// Emit `waitable-set-poll(ws_handle)` → `Option<WaitEvent>`.
+    ///
+    /// 1. Allocate 8 bytes via realloc
+    /// 2. Call `waitable-set-poll(ws, outptr)` → event code (i32)
+    /// 3. If code == `EVENT_NONE` (0): return `Option::None`
+    /// 4. Otherwise: load handle/payload, construct `Option::Some(WaitEvent { ... })`
+    /// 5. Free outptr
+    fn emit_waitable_set_poll(&mut self, handle: WirInstr, result_type_id: TypeId) -> WirInstr {
+        let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
+            return WirInstr::Unreachable;
+        };
+        let ws_poll_id = self.ctx.ensure_canonical(
+            "waitable-set-poll",
+            vec![WirType::I32, WirType::I32],
+            vec![WirType::I32],
+        );
+
+        self.local_counter += 1;
+        let suffix = self.local_counter;
+        let ws_name = format!("__wsp_ws_{suffix}");
+        let outptr_name = format!("__wsp_outptr_{suffix}");
+        let code_name = format!("__wsp_code_{suffix}");
+
+        let mut instrs = vec![];
+
+        for (name, ty) in [
+            (&ws_name, WirType::I32),
+            (&outptr_name, WirType::I32),
+            (&code_name, WirType::I32),
+        ] {
+            instrs.push(WirInstr::DeclareLocal {
+                name: name.clone(),
+                ty,
+            });
+        }
+
+        // Save ws handle
+        instrs.push(WirInstr::LocalSet {
+            name: ws_name.clone(),
+            value: Box::new(handle),
+        });
+
+        // outptr = realloc(0, 0, 4, 8)
+        instrs.push(WirInstr::LocalSet {
+            name: outptr_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: realloc_id.clone(),
+                args: vec![
+                    WirInstr::I32Const(0),
+                    WirInstr::I32Const(0),
+                    WirInstr::I32Const(4),
+                    WirInstr::I32Const(8),
+                ],
+            }),
+        });
+
+        // code = waitable-set-poll(ws, outptr)
+        instrs.push(WirInstr::LocalSet {
+            name: code_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: ws_poll_id,
+                args: vec![
+                    WirInstr::LocalGet {
+                        name: ws_name.clone(),
+                    },
+                    WirInstr::LocalGet {
+                        name: outptr_name.clone(),
+                    },
+                ],
+            }),
+        });
+
+        // Get the Option's inner type (WaitEvent) TypeId
+        let inner_type_id = match self.type_table.as_option(result_type_id) {
+            Some(inner) => inner,
+            None => return WirInstr::Unreachable,
+        };
+
+        // Resolve WaitEvent struct type
+        let inner_wir_type = self.ctx.type_id_to_wir_type(self.type_table, inner_type_id);
+        let wait_event_struct_id = match inner_wir_type {
+            WirType::Ref { type_id, .. } => type_id,
+            _ => return WirInstr::Unreachable,
+        };
+
+        // Build WaitEvent struct from memory
+        let wait_event = self.struct_new(
+            wait_event_struct_id,
+            vec![
+                WirInstr::LocalGet {
+                    name: code_name.clone(),
+                },
+                WirInstr::I32Load {
+                    offset: 0,
+                    align: 2,
+                    addr: Box::new(WirInstr::LocalGet {
+                        name: outptr_name.clone(),
+                    }),
+                },
+                WirInstr::I32Load {
+                    offset: 4,
+                    align: 2,
+                    addr: Box::new(WirInstr::LocalGet {
+                        name: outptr_name.clone(),
+                    }),
+                },
+            ],
+        );
+
+        // Free outptr
+        let free_outptr = WirInstr::Drop(Box::new(WirInstr::Call {
+            func_id: realloc_id,
+            args: vec![
+                WirInstr::LocalGet {
+                    name: outptr_name.clone(),
+                },
+                WirInstr::I32Const(8),
+                WirInstr::I32Const(4),
+                WirInstr::I32Const(0),
+            ],
+        }));
+
+        // Build Option::Some(wait_event) or Option::None based on code
+        let some_variant = self.build_variant_case_wir(result_type_id, 0, "Some", Some(wait_event));
+        let none_variant = self.build_variant_case_wir(result_type_id, 1, "None", None);
+
+        // Resolve Option type for the If result
+        let option_wir_type = self
+            .ctx
+            .type_id_to_wir_type(self.type_table, result_type_id);
+
+        instrs.push(free_outptr);
+
+        // if code == 0 (EVENT_NONE) { None } else { Some(WaitEvent { ... }) }
+        instrs.push(WirInstr::If {
+            condition: Box::new(WirInstr::I32Eqz(Box::new(WirInstr::LocalGet {
+                name: code_name.clone(),
+            }))),
+            result: Some(option_wir_type),
+            then_body: vec![none_variant],
+            else_body: Some(vec![some_variant]),
+        });
+
+        WirInstr::Seq(instrs)
     }
 
-    /// Emit `future-read(handle)` → Option<T>.
-    fn emit_future_read(&mut self, _handle: WirInstr, _result_type_id: TypeId) -> WirInstr {
-        panic!("not yet implemented: future-read synthesis (Option<T> lowering)")
+    /// Emit `future-read(handle)` → `Option<T>`.
+    ///
+    /// Currently only supports `T` = `Result<Option<Trailers>, ErrorCode>` (8-byte CM payload).
+    /// The synthesis:
+    /// 1. Allocate 8 bytes via realloc
+    /// 2. Call `future-read(handle, ptr)` → `raw_result`
+    /// 3. If BLOCKED (`0xFFFF_FFFF`), wait via waitable-set, re-read result
+    /// 4. Extract status = result & 0xF
+    /// 5. If COMPLETED (status 0): return `Option::Some(value)` — value read from ptr
+    /// 6. If DROPPED (status 1): return `Option::None`
+    /// 7. Free linear memory
+    ///
+    /// TODO: implement general CM lifting for arbitrary T values.
+    /// Currently hardcoded for the `Ok(None)` pattern (all-zeros payload = 8 bytes).
+    fn emit_future_read(&mut self, handle: WirInstr, result_type_id: TypeId) -> WirInstr {
+        let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
+            return WirInstr::Unreachable;
+        };
+        // future-read: (handle: i32, ptr: i32) -> i32
+        let future_read_id = self.ctx.ensure_canonical(
+            "future-read",
+            vec![WirType::I32, WirType::I32],
+            vec![WirType::I32],
+        );
+        let ws_new_id = self
+            .ctx
+            .ensure_canonical("waitable-set-new", vec![], vec![WirType::I32]);
+        let w_join_id =
+            self.ctx
+                .ensure_canonical("waitable-join", vec![WirType::I32, WirType::I32], vec![]);
+        let ws_wait_id = self.ctx.ensure_canonical(
+            "waitable-set-wait",
+            vec![WirType::I32, WirType::I32],
+            vec![WirType::I32],
+        );
+
+        self.local_counter += 1;
+        let suffix = self.local_counter;
+        let handle_name = format!("__fr_handle_{suffix}");
+        let ptr_name = format!("__fr_ptr_{suffix}");
+        let result_name = format!("__fr_result_{suffix}");
+        let evt_ptr_name = format!("__fr_evtptr_{suffix}");
+
+        let mut instrs = vec![];
+
+        // Declare locals
+        for (name, ty) in [
+            (&handle_name, WirType::I32),
+            (&ptr_name, WirType::I32),
+            (&result_name, WirType::I32),
+        ] {
+            instrs.push(WirInstr::DeclareLocal {
+                name: name.clone(),
+                ty,
+            });
+        }
+
+        // Save handle
+        instrs.push(WirInstr::LocalSet {
+            name: handle_name.clone(),
+            value: Box::new(handle),
+        });
+
+        // Allocate buffer for the CM payload.
+        // Use 40 bytes (same as future-write) to cover the worst-case CM layout.
+        const BUF_SIZE: i32 = 40;
+        const BUF_ALIGN: i32 = 8;
+
+        instrs.push(WirInstr::LocalSet {
+            name: ptr_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: realloc_id.clone(),
+                args: vec![
+                    WirInstr::I32Const(0),
+                    WirInstr::I32Const(0),
+                    WirInstr::I32Const(BUF_ALIGN),
+                    WirInstr::I32Const(BUF_SIZE),
+                ],
+            }),
+        });
+
+        // result = future-read(handle, ptr)
+        instrs.push(WirInstr::LocalSet {
+            name: result_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: future_read_id,
+                args: vec![
+                    WirInstr::LocalGet {
+                        name: handle_name.clone(),
+                    },
+                    WirInstr::LocalGet {
+                        name: ptr_name.clone(),
+                    },
+                ],
+            }),
+        });
+
+        // If BLOCKED (0xFFFF_FFFF), wait via waitable-set
+        instrs.push(WirInstr::If {
+            condition: Box::new(WirInstr::I32Eq(
+                Box::new(WirInstr::LocalGet {
+                    name: result_name.clone(),
+                }),
+                Box::new(WirInstr::I32Const(-1)),
+            )),
+            result: None,
+            then_body: {
+                let evt = evt_ptr_name.clone();
+                vec![
+                    WirInstr::DeclareLocal {
+                        name: evt.clone(),
+                        ty: WirType::I32,
+                    },
+                    // ws = waitable_set_new()
+                    WirInstr::LocalSet {
+                        name: result_name.clone(),
+                        value: Box::new(WirInstr::Call {
+                            func_id: ws_new_id,
+                            args: vec![],
+                        }),
+                    },
+                    // waitable_join(handle, ws)
+                    WirInstr::Call {
+                        func_id: w_join_id,
+                        args: vec![
+                            WirInstr::LocalGet {
+                                name: handle_name.clone(),
+                            },
+                            WirInstr::LocalGet {
+                                name: result_name.clone(),
+                            },
+                        ],
+                    },
+                    // evt_ptr = realloc(0, 0, 4, 8)
+                    WirInstr::LocalSet {
+                        name: evt.clone(),
+                        value: Box::new(WirInstr::Call {
+                            func_id: realloc_id.clone(),
+                            args: vec![
+                                WirInstr::I32Const(0),
+                                WirInstr::I32Const(0),
+                                WirInstr::I32Const(4),
+                                WirInstr::I32Const(8),
+                            ],
+                        }),
+                    },
+                    // waitable_set_wait(ws, evt_ptr)
+                    WirInstr::Drop(Box::new(WirInstr::Call {
+                        func_id: ws_wait_id,
+                        args: vec![
+                            WirInstr::LocalGet {
+                                name: result_name.clone(),
+                            },
+                            WirInstr::LocalGet { name: evt.clone() },
+                        ],
+                    })),
+                    // result = i32.load(evt_ptr + 4) — the payload contains the ReturnCode
+                    WirInstr::LocalSet {
+                        name: result_name.clone(),
+                        value: Box::new(WirInstr::I32Load {
+                            offset: 4,
+                            align: 2,
+                            addr: Box::new(WirInstr::LocalGet { name: evt.clone() }),
+                        }),
+                    },
+                    // Free event buffer
+                    WirInstr::Drop(Box::new(WirInstr::Call {
+                        func_id: realloc_id.clone(),
+                        args: vec![
+                            WirInstr::LocalGet { name: evt },
+                            WirInstr::I32Const(8),
+                            WirInstr::I32Const(4),
+                            WirInstr::I32Const(0),
+                        ],
+                    })),
+                ]
+            },
+            else_body: None,
+        });
+
+        // Free payload buffer
+        instrs.push(WirInstr::Drop(Box::new(WirInstr::Call {
+            func_id: realloc_id,
+            args: vec![
+                WirInstr::LocalGet {
+                    name: ptr_name.clone(),
+                },
+                WirInstr::I32Const(BUF_SIZE),
+                WirInstr::I32Const(BUF_ALIGN),
+                WirInstr::I32Const(0),
+            ],
+        })));
+
+        // status = result & 0xF
+        // COMPLETED (0) → Some(value), DROPPED (1) → None
+        // For now, we return None for both since we can't yet lift arbitrary T from memory.
+        // TODO: implement T lifting from CM linear memory payload.
+        let option_wir_type = self
+            .ctx
+            .type_id_to_wir_type(self.type_table, result_type_id);
+
+        let some_variant =
+            self.build_variant_case_wir(result_type_id, 0, "Some", Some(WirInstr::Nop));
+        let none_variant = self.build_variant_case_wir(result_type_id, 1, "None", None);
+
+        // if (result & 0xF) == 0 { Some(unit) } else { None }
+        instrs.push(WirInstr::If {
+            condition: Box::new(WirInstr::I32Eqz(Box::new(WirInstr::I32And(
+                Box::new(WirInstr::LocalGet {
+                    name: result_name.clone(),
+                }),
+                Box::new(WirInstr::I32Const(0xF)),
+            )))),
+            result: Some(option_wir_type),
+            then_body: vec![some_variant],
+            else_body: Some(vec![none_variant]),
+        });
+
+        WirInstr::Seq(instrs)
     }
 
     /// Emit WIR to write `Ok(None)` (8 zero bytes) into a `FutureWritable` handle,
@@ -4705,6 +5188,66 @@ impl FunctionTranslator<'_, '_> {
                 let mut fields = vec![WirInstr::I32Const(case_index as i32)];
                 if let Some(payload_expr) = payload {
                     fields.push(self.translate_expr(payload_expr));
+                }
+                self.struct_new(type_id, fields)
+            } else {
+                WirInstr::Unreachable
+            }
+        }
+    }
+
+    /// Build a variant case value directly from WIR instructions (no TIR needed).
+    ///
+    /// Used by canonical method synthesis to construct `Option::Some/None` and similar
+    /// variant values without going through TIR expression translation.
+    fn build_variant_case_wir(
+        &self,
+        variant_type_id: TypeId,
+        case_index: u32,
+        case_name: &str,
+        payload: Option<WirInstr>,
+    ) -> WirInstr {
+        let (variant_name, variant_module_source) = match self.type_table.get(variant_type_id) {
+            ResolvedType::Variant {
+                name,
+                module_source,
+                ..
+            } => (name.clone(), module_source.clone()),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+                ..
+            } => {
+                let type_arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.type_table.mangle_type_name(*t))
+                    .collect();
+                (
+                    crate::name::mangle_generic_name(name, &type_arg_names),
+                    module_source.clone(),
+                )
+            }
+            _ => return WirInstr::Unreachable,
+        };
+
+        let fq = format!("{variant_module_source}//{variant_name}");
+        let case_fq = format!("{fq}::{case_name}");
+
+        if let Some(case_type_id) = self.ctx.type_map.get(&case_fq).cloned() {
+            let mut fields = vec![WirInstr::I32Const(case_index as i32)];
+            if let Some(payload_instr) = payload {
+                fields.push(payload_instr);
+            }
+            self.struct_new(case_type_id, fields)
+        } else {
+            let wir_type = self
+                .ctx
+                .type_id_to_wir_type(self.type_table, variant_type_id);
+            if let WirType::Ref { type_id, .. } = wir_type {
+                let mut fields = vec![WirInstr::I32Const(case_index as i32)];
+                if let Some(payload_instr) = payload {
+                    fields.push(payload_instr);
                 }
                 self.struct_new(type_id, fields)
             } else {

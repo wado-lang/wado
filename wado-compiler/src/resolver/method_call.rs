@@ -1471,17 +1471,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         let param_is_mut = self.lookup_static_method_param_is_mut(&actual_struct_name, method_name);
 
+        // Propagate #[canonical("...")] from resource static methods
+        let canonical_name =
+            self.lookup_resource_static_canonical(&actual_struct_name, &struct_module, method_name);
+
         TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef {
                     module_source: struct_module,
                     name: final_mangled_name,
                     monomorph_info,
-                    method_info: Some(LocalMethodName::new(
-                        actual_struct_name,
-                        trait_name_opt,
-                        method_name.to_string(),
-                    )),
+                    method_info: Some({
+                        let mut m = LocalMethodName::new(
+                            actual_struct_name,
+                            trait_name_opt,
+                            method_name.to_string(),
+                        );
+                        m.canonical_name = canonical_name;
+                        m
+                    }),
                     is_cm_adapter: false,
                 },
                 type_args: vec![],

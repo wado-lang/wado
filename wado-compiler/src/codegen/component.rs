@@ -663,11 +663,32 @@ fn emit_canonical_intrinsics(
                     ],
                 );
             }
+            "future-read" => {
+                builder.future_read(
+                    trailers_future_type,
+                    [
+                        CanonicalOption::Memory(ctx.memory_idx()),
+                        CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                    ],
+                );
+            }
+            "future-cancel-read" => {
+                builder.future_cancel_read(trailers_future_type, false);
+            }
+            "future-cancel-write" => {
+                builder.future_cancel_write(trailers_future_type, false);
+            }
             "future-drop-writable" => {
                 builder.future_drop_writable(trailers_future_type);
             }
             "future-drop-readable" => {
                 builder.future_drop_readable(trailers_future_type);
+            }
+            "stream-cancel-read" => {
+                builder.stream_cancel_read(stream_u8_type, false);
+            }
+            "stream-cancel-write" => {
+                builder.stream_cancel_write(stream_u8_type, false);
             }
             "task-return" => {
                 let task_return_type = if ctx.has_type("http-handler-result") {
@@ -697,6 +718,9 @@ fn emit_canonical_intrinsics(
             }
             "subtask-drop" => {
                 builder.subtask_drop();
+            }
+            "subtask-cancel" => {
+                builder.subtask_cancel(false);
             }
             "error-context-new" => {
                 builder.error_context_new([
