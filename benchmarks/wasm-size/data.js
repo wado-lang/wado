@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772967336064,
+  "lastUpdate": 1773012544452,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1754,6 +1754,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 19100,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b7aa0f500d2e34337c13b4ed29a4ab95f1f5ff6c",
+          "message": "Merge pull request #542 from wado-lang/claude/refactor-cm-resource-9BJx7\n\nFix enum discriminant size calculation for Component Model ABI",
+          "timestamp": "2026-03-09T08:26:44+09:00",
+          "tree_id": "a12a95db2320ffa41676994fe0310410f0229627",
+          "url": "https://github.com/wado-lang/wado/commit/b7aa0f500d2e34337c13b4ed29a4ab95f1f5ff6c"
+        },
+        "date": 1773012544284,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2302,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10221,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19738,
             "unit": "bytes"
           }
         ]
