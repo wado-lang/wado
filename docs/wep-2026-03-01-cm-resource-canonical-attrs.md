@@ -595,7 +595,7 @@ __DATA__
           `stream-cancel-read`, `stream-cancel-write`, `subtask-cancel`)
 -
   25. [x] Migrate `cli.wado` and `internal.wado` from `builtin::stream_*` to resource API
-      (performance regression accepted; to be recovered by optimizer improvements later)
+          (performance regression accepted; to be recovered by optimizer improvements later)
 -
   26. [x] Move DCE `cm_lower_array_u8` injection to call graph edge in `dce.rs`
           (stream-write callee → cm_lower_array_u8 dependency registered during TIR analysis)

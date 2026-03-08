@@ -536,20 +536,20 @@ mod tests {
 
     #[test]
     fn test_result_unit_unit() {
-        // result<(), ()>: disc(4 bytes) + max(0, 0) = 4 bytes, align 4
+        // result<(), ()>: disc(u8, 1 byte) + max(0, 0) = 1 byte, align 1
         let result = generic_type("Result", vec![named_type("()"), named_type("()")]);
-        assert_eq!(cm_size(&result), 4);
-        assert_eq!(cm_align(&result), 4);
+        assert_eq!(cm_size(&result), 1);
+        assert_eq!(cm_align(&result), 1);
 
         let layout = layout_result(&named_type("()"), &named_type("()"));
-        assert_eq!(layout.size, 4);
-        assert_eq!(layout.align, 4);
-        assert_eq!(layout.offsets, vec![0, 4]); // disc at 0, payload at 4
+        assert_eq!(layout.size, 1);
+        assert_eq!(layout.align, 1);
+        assert_eq!(layout.offsets, vec![0, 1]); // disc at 0, payload at 1
     }
 
     #[test]
     fn test_result_i32_i32() {
-        // result<i32, i32>: disc(4 bytes) + max(4, 4) = 8 bytes, align 4
+        // result<i32, i32>: disc(u8, 1 byte) + 3 pad + max(4, 4) = 8 bytes, align 4
         let result = generic_type("Result", vec![named_type("i32"), named_type("i32")]);
         assert_eq!(cm_size(&result), 8);
         assert_eq!(cm_align(&result), 4);
@@ -562,7 +562,7 @@ mod tests {
 
     #[test]
     fn test_result_resource_enum() {
-        // result<Resource, ErrorCode>: disc(4) + max(4, 4) = 8 bytes, align 4
+        // result<Resource, ErrorCode>: disc(u8) + 3 pad + max(4, 4) = 8 bytes, align 4
         // Resource and ErrorCode are both i32 handles/discriminants
         let result = generic_type(
             "Result",
@@ -574,7 +574,7 @@ mod tests {
 
     #[test]
     fn test_result_string_i32() {
-        // result<string, i32>: disc(4) + max(string=8, i32=4) = 12 bytes, align 4
+        // result<string, i32>: disc(u8) + 3 pad + max(string=8, i32=4) = 12 bytes, align 4
         let result = generic_type("Result", vec![named_type("String"), named_type("i32")]);
         assert_eq!(cm_size(&result), 12);
         assert_eq!(cm_align(&result), 4);

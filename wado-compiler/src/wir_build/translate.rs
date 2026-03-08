@@ -3179,12 +3179,8 @@ impl FunctionTranslator<'_, '_> {
                 WirInstr::LocalGet {
                     name: code_name.clone(),
                 },
-                WirInstr::LocalGet {
-                    name: handle_name,
-                },
-                WirInstr::LocalGet {
-                    name: payload_name,
-                },
+                WirInstr::LocalGet { name: handle_name },
+                WirInstr::LocalGet { name: payload_name },
             ],
         );
         instrs.push(wait_event);
@@ -3327,12 +3323,8 @@ impl FunctionTranslator<'_, '_> {
                 WirInstr::LocalGet {
                     name: code_name.clone(),
                 },
-                WirInstr::LocalGet {
-                    name: handle_name,
-                },
-                WirInstr::LocalGet {
-                    name: payload_name,
-                },
+                WirInstr::LocalGet { name: handle_name },
+                WirInstr::LocalGet { name: payload_name },
             ],
         );
 

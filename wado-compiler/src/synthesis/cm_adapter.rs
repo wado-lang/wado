@@ -1090,7 +1090,7 @@ fn cm_flags_byte_size(count: usize) -> u32 {
     } else if count <= 16 {
         2
     } else {
-        4 * ((count as u32 + 31) / 32)
+        4 * (count as u32).div_ceil(32)
     }
 }
 
@@ -1108,7 +1108,7 @@ fn cm_flags_byte_align(count: usize) -> u32 {
 }
 
 /// Compute the CM Canonical ABI byte size for an enum type given its variant count.
-/// Per the CM spec discriminant_type: ≤256 → 1 byte, ≤65536 → 2 bytes, else 4 bytes.
+/// Per the CM spec `discriminant_type`: ≤256 → 1 byte, ≤65536 → 2 bytes, else 4 bytes.
 fn cm_enum_byte_size(count: usize) -> u32 {
     if count <= 256 {
         1
@@ -1120,10 +1120,7 @@ fn cm_enum_byte_size(count: usize) -> u32 {
 }
 
 /// Compute the CM Canonical ABI size for a param type, resolving WASI flags/enum sizes.
-fn cm_param_size(
-    ty: &Type,
-    wasi_registry: &crate::component_model::WasiRegistry,
-) -> u32 {
+fn cm_param_size(ty: &Type, wasi_registry: &crate::component_model::WasiRegistry) -> u32 {
     if let Type::Named(named) = ty {
         if let Some(members) = wasi_registry.get_flags_members(&named.name) {
             return cm_flags_byte_size(members.len());
@@ -1136,10 +1133,7 @@ fn cm_param_size(
 }
 
 /// Compute the CM Canonical ABI alignment for a param type, resolving WASI flags/enum alignments.
-fn cm_param_align(
-    ty: &Type,
-    wasi_registry: &crate::component_model::WasiRegistry,
-) -> u32 {
+fn cm_param_align(ty: &Type, wasi_registry: &crate::component_model::WasiRegistry) -> u32 {
     if let Type::Named(named) = ty {
         if let Some(members) = wasi_registry.get_flags_members(&named.name) {
             return cm_flags_byte_align(members.len());
@@ -1152,8 +1146,8 @@ fn cm_param_align(
     cm_abi::cm_align(ty)
 }
 
-/// Produce a store plan for writing a param type to memory: list of (sub_offset, store_instruction).
-/// Each entry consumes one flat arg from the flat_args vector.
+/// Produce a store plan for writing a param type to memory: list of (`sub_offset`, `store_instruction`).
+/// Each entry consumes one flat arg from the `flat_args` vector.
 fn cm_param_store_plan(
     ty: &Type,
     wasi_registry: &crate::component_model::WasiRegistry,
@@ -4729,9 +4723,7 @@ fn rewrite_calls_in_stmt(
     wasi_registry: &WasiRegistry,
 ) {
     match &mut stmt.kind {
-        TirStmtKind::Let {
-            value, type_id, ..
-        } => {
+        TirStmtKind::Let { value, type_id, .. } => {
             let old_type = value.type_id;
             rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry);
             // If the expression type changed (e.g., streaming adapter returns i32
