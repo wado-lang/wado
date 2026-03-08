@@ -49,7 +49,7 @@ struct FunctionAnalysis {
 /// fields, and the entry module's `imports` list.
 pub fn analyze_project(project: &mut Project) {
     // Build call graph and effect usage from all modules
-    let (call_graph, effect_usage, canonical_method_usage) =
+    let (call_graph, effect_usage, _canonical_method_usage) =
         build_analysis_graph(&project.tir_modules);
 
     // Determine entry functions from world exports.
@@ -124,15 +124,6 @@ pub fn analyze_project(project: &mut Project) {
             }
         }
     }
-
-    // Collect canonical resource method usage from reachable functions.
-    // Used only for ensuring cm_lower_array_u8 is reachable when stream-write is used.
-    let used_canonical_methods: IndexSet<String> = reachable
-        .iter()
-        .filter_map(|f| canonical_method_usage.get(f))
-        .flatten()
-        .cloned()
-        .collect();
 
     // Helper to check if a core/internal function is reachable
     let core_internal = |name: &str| -> FunctionId {
@@ -226,15 +217,6 @@ pub fn analyze_project(project: &mut Project) {
 
     // realloc is always needed for memory management
     add_import_by_name(&mut imports, "realloc");
-
-    // When stream-write canonical is used via resource methods, cm_lower_array_u8 must be
-    // reachable (called at WIR level by emit_stream_write, not visible in the TIR call graph).
-    if used_canonical_methods.contains("stream-write") {
-        reachable.extend(compute_reachable(
-            &call_graph,
-            &core_internal("cm_lower_array_u8"),
-        ));
-    }
 
     // Async exports require task-return and potentially other canonical intrinsics.
     // The test world always has async exports (each test is an async component export).
@@ -614,6 +596,18 @@ fn analyze_expr(
                 && let Some(canonical_name) = &info.canonical_name
             {
                 analysis.canonical_methods.insert(canonical_name.clone());
+
+                // WIR synthesis for stream-write calls cm_lower_array_u8 at WIR level,
+                // which is not visible in the TIR call graph. Add the dependency edge
+                // here so DCE discovers it through normal reachability analysis.
+                if canonical_name == "stream-write" {
+                    analysis
+                        .callees
+                        .insert(FunctionId::Free(FreeFunctionName::from_strs(
+                            &["core", "internal"],
+                            "cm_lower_array_u8",
+                        )));
+                }
             }
 
             // Use the func reference directly - it already has the correct mangled name
