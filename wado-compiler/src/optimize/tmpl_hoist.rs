@@ -234,18 +234,18 @@ fn collect_escaping_in_stmt(stmt: &TirStmt, escaping: &mut IndexSet<u32>) {
 fn collect_escaping_in_expr(expr: &TirExpr, escaping: &mut IndexSet<u32>) {
     match &expr.kind {
         // Function call: args (not receiver) escape
-        TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
             for arg in args {
-                collect_local_refs(arg, escaping);
-                collect_escaping_in_expr(arg, escaping);
+                collect_local_refs(&arg.expr, escaping);
+                collect_escaping_in_expr(&arg.expr, escaping);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
             // Receiver (self) doesn't escape — only non-self args escape
             collect_escaping_in_expr(receiver, escaping);
             for arg in args {
-                collect_local_refs(arg, escaping);
-                collect_escaping_in_expr(arg, escaping);
+                collect_local_refs(&arg.expr, escaping);
+                collect_escaping_in_expr(&arg.expr, escaping);
             }
         }
         TirExprKind::IndirectCall { callee, args } => {
@@ -523,10 +523,10 @@ fn transform_expr(
         // Recurse into sub-expressions
         // Note: __tmpl in non-Let contexts (e.g. directly as function arguments like
         // `map[\`key{i}\`] = v`) are NOT hoisted because we can't track if the result escapes.
-        TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
             for arg in args {
                 transform_expr(
-                    arg,
+                    &mut arg.expr,
                     escaping_locals,
                     hoist_stmts,
                     local_count,
@@ -546,7 +546,7 @@ fn transform_expr(
             );
             for arg in args {
                 transform_expr(
-                    arg,
+                    &mut arg.expr,
                     escaping_locals,
                     hoist_stmts,
                     local_count,
@@ -689,7 +689,8 @@ fn extract_tmpl_candidate(block: &TirBlock) -> Option<TmplCandidate> {
             ..
         } if name == "__r" => {
             // Try pre-lowered form: String::with_capacity(N)
-            if let TirExprKind::StaticCall { func, .. } = &value.kind
+            if let TirExprKind::Call { func, .. } = &value.kind
+                && func.method_info.is_some()
                 && func.name.clone() == "String::with_capacity"
             {
                 return Some(TmplCandidate {
@@ -753,10 +754,10 @@ fn extract_tmpl_candidate(block: &TirBlock) -> Option<TmplCandidate> {
 /// Extract the capacity argument from an `array_new<u8>(N)` call.
 fn extract_array_new_capacity(expr: &TirExpr) -> Option<TirExpr> {
     match &expr.kind {
-        TirExprKind::StaticCall { func, args, .. } | TirExprKind::Call { func, args, .. } => {
+         TirExprKind::Call { func, args, .. } => {
             let name = func.name.clone();
             if name.contains("array_new") {
-                args.first().cloned()
+                args.first().map(|a| a.expr.clone())
             } else {
                 None
             }
@@ -909,15 +910,15 @@ fn rename_local_in_expr(expr: &mut TirExpr, old_index: u32, new_index: u32, new_
             *index = new_index;
             *name = new_name.to_string();
         }
-        TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
             for arg in args {
-                rename_local_in_expr(arg, old_index, new_index, new_name);
+                rename_local_in_expr(&mut arg.expr, old_index, new_index, new_name);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
             rename_local_in_expr(receiver, old_index, new_index, new_name);
             for arg in args {
-                rename_local_in_expr(arg, old_index, new_index, new_name);
+                rename_local_in_expr(&mut arg.expr, old_index, new_index, new_name);
             }
         }
         TirExprKind::IndirectCall { callee, args } => {

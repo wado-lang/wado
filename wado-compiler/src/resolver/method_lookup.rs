@@ -6,7 +6,8 @@ use crate::ast::{self, BinaryOp, Expr, Function, Item, Literal, Type, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
-    FunctionRef, PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
+    CallArg, FunctionRef, PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirUnaryOp, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 
@@ -2859,8 +2860,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     is_cm_adapter: false,
                 },
                 type_args: vec![],
-                args: vec![index_resolved],
-                param_is_mut: vec![false],
+                args: vec![CallArg::new(index_resolved, false)],
             },
             mut_ref_output_type,
             index_expr.span,
@@ -2914,8 +2914,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     is_cm_adapter: false,
                 },
                 type_args,
-                args,
-                param_is_mut: method_param_is_mut,
+                args: args
+                    .into_iter()
+                    .zip(method_param_is_mut.into_iter().chain(std::iter::repeat(false)))
+                    .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
+                    .collect(),
             },
             return_type,
             method_call.span,

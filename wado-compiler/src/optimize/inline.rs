@@ -6,7 +6,7 @@
 use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{
-    FunctionRef, InlineHint, PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind,
+    CallArg, FunctionRef, InlineHint, PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind,
     TirFunction, TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use indexmap::IndexMap;
@@ -23,11 +23,9 @@ fn count_expr(expr: &TirExpr) -> usize {
     1 + match &expr.kind {
         TirExprKind::Binary { left, right, .. } => count_expr(left) + count_expr(right),
         TirExprKind::Unary { expr, .. } => count_expr(expr),
-        TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
-            args.iter().map(count_expr).sum()
-        }
+        TirExprKind::Call { args, .. } => args.iter().map(|a| count_expr(&a.expr)).sum(),
         TirExprKind::MethodCall { receiver, args, .. } => {
-            count_expr(receiver) + args.iter().map(count_expr).sum::<usize>()
+            count_expr(receiver) + args.iter().map(|a| count_expr(&a.expr)).sum::<usize>()
         }
         TirExprKind::FieldAccess { expr, .. } => count_expr(expr),
         TirExprKind::Index { expr, index, .. } => count_expr(expr) + count_expr(index),
@@ -289,9 +287,9 @@ fn collect_callees_from_stmt(stmt: &TirStmt, callees: &mut IndexSet<String>) {
 fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
     match &expr.kind {
         TirExprKind::Call { func, args, .. } => {
-            callees.insert(func.name.clone());
+            callees.insert(func.full_name());
             for arg in args {
-                collect_callees_from_expr(arg, callees);
+                collect_callees_from_expr(&arg.expr, callees);
             }
         }
         TirExprKind::MethodCall {
@@ -300,19 +298,10 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
             args,
             ..
         } => {
-            // Method calls need to mark the method function as used
-            // Use full_name() to get the qualified name including module path
             callees.insert(func.full_name());
             collect_callees_from_expr(receiver, callees);
             for arg in args {
-                collect_callees_from_expr(arg, callees);
-            }
-        }
-        TirExprKind::StaticCall { func, args, .. } => {
-            // Use full_name() to get the qualified name including module path
-            callees.insert(func.full_name());
-            for arg in args {
-                collect_callees_from_expr(arg, callees);
+                collect_callees_from_expr(&arg.expr, callees);
             }
         }
         TirExprKind::Binary { left, right, .. } => {
@@ -1094,7 +1083,7 @@ fn try_inline_call_expr(
 
         // Extend local_types for parameter - use argument's type_id to match
         // the actual value being assigned (handles monomorphization type variance)
-        local_types.push(arg.type_id);
+        local_types.push(arg.expr.type_id);
         *local_count += 1;
 
         // Use original parameter name (not _inline_ prefix)
@@ -1104,8 +1093,8 @@ fn try_inline_call_expr(
                 local_index: new_local_index,
                 is_mut: param.is_mut, // Preserve mutability from the original parameter
                 is_reactive: false,
-                type_id: arg.type_id,
-                value: arg.clone(),
+                type_id: arg.expr.type_id,
+                value: arg.expr.clone(),
                 skip_value_copy: false,
             },
             expr.span,
@@ -1259,7 +1248,7 @@ fn try_inline_method_call_expr(
     for (i, (param, arg)) in candidate.params.iter().skip(1).zip(args.iter()).enumerate() {
         let new_local_index = local_offset + 1 + i as u32;
         param_to_local.insert(param.local_index, new_local_index);
-        local_types.push(arg.type_id);
+        local_types.push(arg.expr.type_id);
         *local_count += 1;
 
         // Use original parameter name (not _inline_ prefix)
@@ -1269,8 +1258,8 @@ fn try_inline_method_call_expr(
                 local_index: new_local_index,
                 is_mut: false,
                 is_reactive: false,
-                type_id: arg.type_id,
-                value: arg.clone(),
+                type_id: arg.expr.type_id,
+                value: arg.expr.clone(),
                 skip_value_copy: false,
             },
             expr.span,
@@ -1314,119 +1303,6 @@ fn try_inline_method_call_expr(
     Some((inlined_expr, inlined_key))
 }
 
-/// Try to inline a static call expression.
-/// Returns `Some((inlined_expr`, `function_key`)) if successful.
-#[allow(clippy::too_many_arguments)]
-fn try_inline_static_call_expr(
-    expr: &TirExpr,
-    candidates: &IndexMap<(ModuleSource, String), TirFunction>,
-    current_module: &ModuleSource,
-    local_count: &mut u32,
-    local_types: &mut Vec<TypeId>,
-    _type_table: &TypeTable,
-    inline_counter: &mut u32,
-) -> Option<(TirExpr, (ModuleSource, String))> {
-    let TirExprKind::StaticCall { func, args, .. } = &expr.kind else {
-        return None;
-    };
-
-    let call_module_source = func.module_source.clone();
-    let func_name = func.name.clone();
-
-    // Look up the candidate function.
-    let (candidate, inlined_key) =
-        find_inline_candidate(candidates, &call_module_source, current_module, &func_name)?;
-
-    // Get the function body
-    let body = candidate.body.as_ref()?;
-
-    // Generate unique label for this inline site
-    // Sanitize function name for use as label (replace non-alphanumeric with _)
-    let sanitized_name: String = func_name
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    let label = format!("__inline_{}_{}", sanitized_name, *inline_counter);
-    *inline_counter += 1;
-
-    // Calculate local index offset for remapping
-    let local_offset = *local_count;
-
-    let callee_param_count = candidate.params.len() as u32;
-    let callee_local_count = candidate.local_count;
-    let new_locals_needed = callee_local_count.saturating_sub(callee_param_count);
-
-    // Create argument bindings as let statements inside a labeled block
-    // IMPORTANT: Push param types first to match index assignment order
-    // For static calls, all args map directly to params
-    let mut block_stmts = Vec::new();
-    let mut param_to_local: IndexMap<u32, u32> = IndexMap::new();
-
-    // Bind all args to parameters
-    // Use argument's type_id to handle monomorphization type variance
-    for (i, (param, arg)) in candidate.params.iter().zip(args.iter()).enumerate() {
-        let new_local_index = local_offset + i as u32;
-        param_to_local.insert(param.local_index, new_local_index);
-        local_types.push(arg.type_id);
-        *local_count += 1;
-
-        // Use original parameter name (not _inline_ prefix)
-        block_stmts.push(TirStmt::new(
-            TirStmtKind::Let {
-                name: param.name.clone(),
-                local_index: new_local_index,
-                is_mut: false,
-                is_reactive: false,
-                type_id: arg.type_id,
-                value: arg.clone(),
-                skip_value_copy: false,
-            },
-            expr.span,
-        ));
-    }
-
-    // param_offset marks where non-param locals start (after all params)
-    let param_offset = local_offset + candidate.params.len() as u32;
-
-    // Now extend local_types for the non-parameter locals
-    for i in callee_param_count..callee_local_count {
-        if let Some(&type_id) = candidate.local_types.get(i as usize) {
-            local_types.push(type_id);
-        }
-    }
-    *local_count += new_locals_needed;
-
-    // Convert the body, transforming `return` into `break label: expr`
-    let remapped_stmts = remap_and_convert_returns(
-        body,
-        &param_to_local,
-        param_offset,
-        callee_param_count,
-        &label,
-        &inlined_key.0,
-    );
-
-    block_stmts.extend(remapped_stmts);
-
-    // Create a labeled block expression that produces the return value
-    let inlined_expr = TirExpr::new(
-        TirExprKind::LabeledBlock {
-            label: label.clone(),
-            block: TirBlock::new(block_stmts, expr.span),
-            result_type: candidate.return_type,
-        },
-        candidate.return_type,
-        expr.span,
-    );
-
-    Some((inlined_expr, inlined_key))
-}
 
 /// Remap locals and convert returns to break statements with the given label.
 ///
@@ -1946,9 +1822,7 @@ fn remap_expr(
             func,
             type_args,
             args,
-            param_is_mut,
         } => {
-            // Convert local calls to use the source module path
             let remapped_func = remap_function_ref(func, source_module);
             TirExprKind::Call {
                 func: remapped_func,
@@ -1956,10 +1830,12 @@ fn remap_expr(
                 args: args
                     .iter()
                     .map(|a| {
-                        remap_expr(a, param_to_local, local_offset, param_count, source_module)
+                        CallArg::new(
+                            remap_expr(&a.expr, param_to_local, local_offset, param_count, source_module),
+                            a.is_mut,
+                        )
                     })
                     .collect(),
-                param_is_mut: param_is_mut.clone(),
             }
         }
         TirExprKind::MethodCall {
@@ -1967,9 +1843,7 @@ fn remap_expr(
             func,
             type_args,
             args,
-            param_is_mut,
         } => {
-            // Convert local method calls to use the source module path
             let remapped_func = remap_function_ref(func, source_module);
             TirExprKind::MethodCall {
                 receiver: Box::new(remap_expr(
@@ -1984,28 +1858,12 @@ fn remap_expr(
                 args: args
                     .iter()
                     .map(|a| {
-                        remap_expr(a, param_to_local, local_offset, param_count, source_module)
+                        CallArg::new(
+                            remap_expr(&a.expr, param_to_local, local_offset, param_count, source_module),
+                            a.is_mut,
+                        )
                     })
                     .collect(),
-                param_is_mut: param_is_mut.clone(),
-            }
-        }
-        TirExprKind::StaticCall {
-            func,
-            args,
-            param_is_mut,
-        } => {
-            // Convert local static calls to use the source module path
-            let remapped_func = remap_function_ref(func, source_module);
-            TirExprKind::StaticCall {
-                func: remapped_func,
-                args: args
-                    .iter()
-                    .map(|a| {
-                        remap_expr(a, param_to_local, local_offset, param_count, source_module)
-                    })
-                    .collect(),
-                param_is_mut: param_is_mut.clone(),
             }
         }
         TirExprKind::CmRawCall { local_name, args } => TirExprKind::CmRawCall {
@@ -2605,7 +2463,7 @@ fn inline_calls_in_expr(
             // First, recursively process arguments
             for arg in args {
                 inline_calls_in_expr(
-                    arg,
+                    &mut arg.expr,
                     candidates,
                     current_module,
                     local_count,
@@ -2647,7 +2505,7 @@ fn inline_calls_in_expr(
             );
             for arg in args {
                 inline_calls_in_expr(
-                    arg,
+                    &mut arg.expr,
                     candidates,
                     current_module,
                     local_count,
@@ -2660,37 +2518,6 @@ fn inline_calls_in_expr(
             }
             // Try to inline this method call
             if let Some((inlined_expr, inlined_key)) = try_inline_method_call_expr(
-                expr,
-                candidates,
-                current_module,
-                local_count,
-                local_types,
-                type_table,
-                inline_counter,
-            ) {
-                if !inlined_funcs.contains(&inlined_key) {
-                    inlined_funcs.push(inlined_key);
-                }
-                *expr = inlined_expr;
-            }
-        }
-        TirExprKind::StaticCall { args, .. } => {
-            // First, recursively process subexpressions
-            for arg in args {
-                inline_calls_in_expr(
-                    arg,
-                    candidates,
-                    current_module,
-                    local_count,
-                    local_types,
-                    type_table,
-                    pre_stmts,
-                    inlined_funcs,
-                    inline_counter,
-                );
-            }
-            // Try to inline this static call
-            if let Some((inlined_expr, inlined_key)) = try_inline_static_call_expr(
                 expr,
                 candidates,
                 current_module,

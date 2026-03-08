@@ -208,9 +208,12 @@ fn collect_usage_in_expr(
             collect_usage_in_expr(left, usage, in_loop, in_condition);
             collect_usage_in_expr(right, usage, in_loop, in_condition);
         }
-        TirExprKind::Call { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                collect_usage_in_expr(&arg.expr, usage, in_loop, in_condition);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_usage_in_expr(arg, usage, in_loop, in_condition);
             }
@@ -218,7 +221,7 @@ fn collect_usage_in_expr(
         TirExprKind::MethodCall { receiver, args, .. } => {
             collect_usage_in_expr(receiver, usage, in_loop, in_condition);
             for arg in args {
-                collect_usage_in_expr(arg, usage, in_loop, in_condition);
+                collect_usage_in_expr(&arg.expr, usage, in_loop, in_condition);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
@@ -538,9 +541,12 @@ fn substitute_in_expr(expr: &mut TirExpr, substitutions: &IndexMap<u32, CopySour
             substitute_in_expr(target, substitutions);
             substitute_in_expr(value, substitutions);
         }
-        TirExprKind::Call { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                substitute_in_expr(&mut arg.expr, substitutions);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 substitute_in_expr(arg, substitutions);
             }
@@ -548,7 +554,7 @@ fn substitute_in_expr(expr: &mut TirExpr, substitutions: &IndexMap<u32, CopySour
         TirExprKind::MethodCall { receiver, args, .. } => {
             substitute_in_expr(receiver, substitutions);
             for arg in args {
-                substitute_in_expr(arg, substitutions);
+                substitute_in_expr(&mut arg.expr, substitutions);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
@@ -749,9 +755,12 @@ fn collect_copy_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<CopyBinding>
         TirExprKind::Unary { expr: inner, .. } => {
             collect_copy_bindings_in_expr(inner, bindings);
         }
-        TirExprKind::Call { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                collect_copy_bindings_in_expr(&arg.expr, bindings);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_copy_bindings_in_expr(arg, bindings);
             }
@@ -759,7 +768,7 @@ fn collect_copy_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<CopyBinding>
         TirExprKind::MethodCall { receiver, args, .. } => {
             collect_copy_bindings_in_expr(receiver, bindings);
             for arg in args {
-                collect_copy_bindings_in_expr(arg, bindings);
+                collect_copy_bindings_in_expr(&arg.expr, bindings);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
@@ -946,9 +955,12 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u32>)
         TirExprKind::Unary { expr: inner, .. } => {
             remove_copy_bindings_in_expr(inner, dead_locals);
         }
-        TirExprKind::Call { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                remove_copy_bindings_in_expr(&mut arg.expr, dead_locals);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 remove_copy_bindings_in_expr(arg, dead_locals);
             }
@@ -956,7 +968,7 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u32>)
         TirExprKind::MethodCall { receiver, args, .. } => {
             remove_copy_bindings_in_expr(receiver, dead_locals);
             for arg in args {
-                remove_copy_bindings_in_expr(arg, dead_locals);
+                remove_copy_bindings_in_expr(&mut arg.expr, dead_locals);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {

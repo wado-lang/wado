@@ -1308,6 +1308,24 @@ impl FunctionRef {
     }
 }
 
+/// A function argument bundled with its parameter mutability metadata.
+///
+/// `is_mut` reflects whether the callee declares this parameter as `mut`.
+/// It controls value-copy semantics at the call site in the WIR translation phase.
+/// An empty `args` list or missing metadata defaults to conservative (copy).
+#[derive(Debug, Clone)]
+pub struct CallArg {
+    pub expr: TirExpr,
+    /// Whether the callee declares this parameter as `mut`.
+    pub is_mut: bool,
+}
+
+impl CallArg {
+    pub fn new(expr: TirExpr, is_mut: bool) -> Self {
+        Self { expr, is_mut }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum TirExprKind {
     IntLiteral {
@@ -1364,14 +1382,17 @@ pub enum TirExprKind {
         target_type: TypeId,
     },
 
+    /// Free function call (`foo(args)`) or static method call (`Type::method(args)`).
+    ///
+    /// Whether this is a static method call is encoded in `func.method_info`:
+    /// `None` → free function, `Some(_)` → static method.
+    /// Both map to the same `WirInstr::Call` and share identical semantics.
     Call {
         /// Function reference (resolved TIR function or external)
         func: FunctionRef,
         /// Explicit type arguments for generic functions: `identity::<i32>(x)`
         type_args: Vec<TypeId>,
-        args: Vec<TirExpr>,
-        /// Whether each parameter is `mut` in the callee. Empty means unknown (conservative).
-        param_is_mut: Vec<bool>,
+        args: Vec<CallArg>,
     },
     /// Raw Component Model call to a lowered WASI import.
     ///
@@ -1390,18 +1411,7 @@ pub enum TirExprKind {
         func: FunctionRef,
         /// Explicit type arguments for generic methods: `obj.method::<i32>()`
         type_args: Vec<TypeId>,
-        args: Vec<TirExpr>,
-        /// Whether each non-receiver parameter is `mut` in the callee. Empty means unknown.
-        param_is_mut: Vec<bool>,
-    },
-    /// Static method call: `Array::<i32>::with_capacity(100)` or `Point::origin()`
-    StaticCall {
-        /// Function reference (resolved TIR function or external)
-        func: FunctionRef,
-        /// Arguments to the static method
-        args: Vec<TirExpr>,
-        /// Whether each parameter is `mut` in the callee. Empty means unknown (conservative).
-        param_is_mut: Vec<bool>,
+        args: Vec<CallArg>,
     },
 
     FieldAccess {

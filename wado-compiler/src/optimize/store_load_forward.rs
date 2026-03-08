@@ -191,9 +191,12 @@ fn collect_modified_in_expr(expr: &TirExpr, modified: &mut IndexSet<u32>) {
             collect_modified_in_expr(inner, modified);
             collect_modified_in_expr(index, modified);
         }
-        TirExprKind::Call { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                collect_modified_in_expr(&arg.expr, modified);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_modified_in_expr(arg, modified);
             }
@@ -201,7 +204,7 @@ fn collect_modified_in_expr(expr: &TirExpr, modified: &mut IndexSet<u32>) {
         TirExprKind::MethodCall { receiver, args, .. } => {
             collect_modified_in_expr(receiver, modified);
             for arg in args {
-                collect_modified_in_expr(arg, modified);
+                collect_modified_in_expr(&arg.expr, modified);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
@@ -367,9 +370,12 @@ fn collect_unsafe_in_expr(expr: &TirExpr, unsafe_locals: &mut IndexSet<u32>) {
             collect_unsafe_in_expr(target, unsafe_locals);
             collect_unsafe_in_expr(value, unsafe_locals);
         }
-        TirExprKind::Call { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                collect_unsafe_in_expr(&arg.expr, unsafe_locals);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_unsafe_in_expr(arg, unsafe_locals);
             }
@@ -377,7 +383,7 @@ fn collect_unsafe_in_expr(expr: &TirExpr, unsafe_locals: &mut IndexSet<u32>) {
         TirExprKind::MethodCall { receiver, args, .. } => {
             collect_unsafe_in_expr(receiver, unsafe_locals);
             for arg in args {
-                collect_unsafe_in_expr(arg, unsafe_locals);
+                collect_unsafe_in_expr(&arg.expr, unsafe_locals);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
@@ -661,9 +667,12 @@ fn forward_in_expr(
             // Update known state from this assignment
             update_known_from_target(target, value, known, unsafe_locals);
         }
-        TirExprKind::Call { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                changed |= forward_in_expr(&mut arg.expr, known, unsafe_locals, type_table);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 changed |= forward_in_expr(arg, known, unsafe_locals, type_table);
             }
@@ -671,7 +680,7 @@ fn forward_in_expr(
         TirExprKind::MethodCall { receiver, args, .. } => {
             changed |= forward_in_expr(receiver, known, unsafe_locals, type_table);
             for arg in args {
-                changed |= forward_in_expr(arg, known, unsafe_locals, type_table);
+                changed |= forward_in_expr(&mut arg.expr, known, unsafe_locals, type_table);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {

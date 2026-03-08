@@ -20,7 +20,7 @@ use indexmap::{IndexMap, IndexSet};
 
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
-    FunctionRef, InlineHint, PrimitiveType, ResolvedType, SubstitutionContext, TirBinaryOp,
+    CallArg, FunctionRef, InlineHint, PrimitiveType, ResolvedType, SubstitutionContext, TirBinaryOp,
     TirBlock, TirExpr, TirExprKind, TirFlags, TirFunction, TirModule, TirParam, TirStmt,
     TirStmtKind, TirTemplatePart, TirUnaryOp, TirVariantDecl, TypeId, TypeTable,
 };
@@ -181,8 +181,7 @@ fn call_inspect_fn(
         TirExprKind::Call {
             func: FunctionRef::from_resolved(&func_rc.borrow(), module_source.clone()),
             type_args: vec![],
-            args: vec![val, fmt],
-            param_is_mut: vec![false, false],
+            args: vec![CallArg::new(val, false), CallArg::new(fmt, false)],
         },
         TypeTable::UNIT,
         span,
@@ -378,11 +377,11 @@ fn replace_markers_in_block(
         if matches!(marker_kind, MarkerKind::Inspect | MarkerKind::Display) {
             let stmt = block.stmts.remove(i);
             if let TirStmtKind::Expr(expr) = stmt.kind
-                && let TirExprKind::StaticCall { args, .. } = expr.kind
+                && let TirExprKind::Call { args, .. } = expr.kind
             {
                 let mut args = args;
-                let fmt_ref = args.pop().unwrap();
-                let value_expr = args.pop().unwrap();
+                let fmt_ref = args.pop().unwrap().expr;
+                let value_expr = args.pop().unwrap().expr;
                 let type_id = value_expr.type_id;
                 let span = expr.span;
 
@@ -489,7 +488,7 @@ enum MarkerKind {
 }
 
 fn marker_kind(expr: &TirExpr) -> MarkerKind {
-    if let TirExprKind::StaticCall { func, .. } = &expr.kind {
+    if let TirExprKind::Call { func, .. } = &expr.kind {
         let name = func.name.clone();
         if name == "builtin::inspect" {
             MarkerKind::Inspect
@@ -602,15 +601,15 @@ fn walk_expr(
                 walk_expr(&mut arm.body, tt, mods, cs, reg, fmt_type, ms);
             }
         }
-        TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
             for a in args {
-                walk_expr(a, tt, mods, cs, reg, fmt_type, ms);
+                walk_expr(&mut a.expr, tt, mods, cs, reg, fmt_type, ms);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
             walk_expr(receiver, tt, mods, cs, reg, fmt_type, ms);
             for a in args {
-                walk_expr(a, tt, mods, cs, reg, fmt_type, ms);
+                walk_expr(&mut a.expr, tt, mods, cs, reg, fmt_type, ms);
             }
         }
         TirExprKind::Binary { left, right, .. } => {
@@ -882,12 +881,10 @@ fn ws(text: &str, fmt: TirExpr, tt: &Rc<RefCell<TypeTable>>, span: Span) -> TirS
                 is_cm_adapter: false,
             },
             type_args: vec![],
-            args: vec![TirExpr::new(
-                TirExprKind::StringLiteral(text.to_string()),
-                s,
-                span,
+            args: vec![CallArg::new(
+                TirExpr::new(TirExprKind::StringLiteral(text.to_string()), s, span),
+                false,
             )],
-            param_is_mut: vec![false],
         },
         TypeTable::UNIT,
         span,
@@ -912,12 +909,10 @@ fn wc(c: char, fmt: TirExpr, span: Span) -> TirStmt {
                 is_cm_adapter: false,
             },
             type_args: vec![],
-            args: vec![TirExpr::new(
-                TirExprKind::CharLiteral(c),
-                TypeTable::CHAR,
-                span,
+            args: vec![CallArg::new(
+                TirExpr::new(TirExprKind::CharLiteral(c), TypeTable::CHAR, span),
+                false,
             )],
-            param_is_mut: vec![false],
         },
         TypeTable::UNIT,
         span,
@@ -963,8 +958,7 @@ fn display_fmt(
                 is_cm_adapter: false,
             },
             type_args: vec![],
-            args: vec![fmt],
-            param_is_mut: vec![false],
+            args: vec![CallArg::new(fmt, false)],
         },
         TypeTable::UNIT,
         span,
@@ -1008,8 +1002,7 @@ fn lower_hex_fmt(
                 is_cm_adapter: false,
             },
             type_args: vec![],
-            args: vec![fmt],
-            param_is_mut: vec![false],
+            args: vec![CallArg::new(fmt, false)],
         },
         TypeTable::UNIT,
         span,
@@ -1048,8 +1041,7 @@ fn synth_string(
                 is_cm_adapter: false,
             },
             type_args: vec![],
-            args: vec![val, fmt.clone()],
-            param_is_mut: vec![false, false],
+            args: vec![CallArg::new(val, false), CallArg::new(fmt.clone(), false)],
         },
         TypeTable::UNIT,
         span,

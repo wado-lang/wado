@@ -177,7 +177,6 @@ fn match_to_switch(
                         },
                         args: vec![],
                         type_args: vec![],
-                        param_is_mut: vec![],
                     },
                     TypeTable::NEVER,
                     span,
@@ -1447,10 +1446,12 @@ impl<'a> PatternLowerer<'a> {
             | TirExprKind::VariantPayload { expr: inner, .. } => {
                 self.lower_expr(inner, type_table);
             }
-            TirExprKind::Call { args, .. }
-            | TirExprKind::MethodCall { args, .. }
-            | TirExprKind::StaticCall { args, .. }
-            | TirExprKind::CmRawCall { args, .. } => {
+            TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
+                for arg in args {
+                    self.lower_expr(&mut arg.expr, type_table);
+                }
+            }
+            TirExprKind::CmRawCall { args, .. } => {
                 for arg in args {
                     self.lower_expr(arg, type_table);
                 }

@@ -477,9 +477,12 @@ fn check_escape_in_expr(expr: &TirExpr, candidates: &IndexSet<u32>, escaped: &mu
             check_escape_in_expr(left, candidates, escaped);
             check_escape_in_expr(right, candidates, escaped);
         }
-        TirExprKind::Call { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                check_escape_in_expr(&arg.expr, candidates, escaped);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 check_escape_in_expr(arg, candidates, escaped);
             }
@@ -487,7 +490,7 @@ fn check_escape_in_expr(expr: &TirExpr, candidates: &IndexSet<u32>, escaped: &mu
         TirExprKind::MethodCall { receiver, args, .. } => {
             check_escape_in_expr(receiver, candidates, escaped);
             for arg in args {
-                check_escape_in_expr(arg, candidates, escaped);
+                check_escape_in_expr(&arg.expr, candidates, escaped);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
@@ -867,9 +870,12 @@ fn check_soft_escape_in_expr(
         }
 
         // Function call args are soft contexts
-        TirExprKind::Call { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                check_soft_escape_in_expr(&arg.expr, candidates, hard_escaped, true);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 check_soft_escape_in_expr(arg, candidates, hard_escaped, true);
             }
@@ -877,7 +883,7 @@ fn check_soft_escape_in_expr(
         TirExprKind::MethodCall { receiver, args, .. } => {
             check_soft_escape_in_expr(receiver, candidates, hard_escaped, true);
             for arg in args {
-                check_soft_escape_in_expr(arg, candidates, hard_escaped, true);
+                check_soft_escape_in_expr(&arg.expr, candidates, hard_escaped, true);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
@@ -1430,9 +1436,19 @@ fn rewrite_expr(
                 reconstruct_info,
             );
         }
-        TirExprKind::Call { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                rewrite_expr(
+                    &mut arg.expr,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 rewrite_expr(
                     arg,
@@ -1455,7 +1471,7 @@ fn rewrite_expr(
             );
             for arg in args {
                 rewrite_expr(
-                    arg,
+                    &mut arg.expr,
                     safe_set,
                     field_map,
                     info_map,

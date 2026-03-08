@@ -21,8 +21,8 @@ use crate::component_model::{WasiFunctionInfo, WasiRegistry};
 use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{
-    FunctionRef, InlineHint, TirBlock, TirExpr, TirExprKind, TirFunction, TirParam, TirStmt,
-    TirStmtKind, TypeId, TypeTable,
+    CallArg, FunctionRef, InlineHint, TirBlock, TirExpr, TirExprKind, TirFunction, TirParam,
+    TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 
 use super::common::{
@@ -2863,8 +2863,11 @@ fn synthesize_result_export_adapter(
         TirExprKind::Call {
             func: FunctionRef::from_resolved(&user_func.borrow(), entry_source.clone()),
             type_args: vec![],
-            args: call_args,
-            param_is_mut: call_user_param_is_mut,
+            args: call_args
+                .into_iter()
+                .zip(call_user_param_is_mut.into_iter().chain(std::iter::repeat(false)))
+                .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
+                .collect(),
         },
         user_return_type,
         synth_span(),
@@ -3238,7 +3241,6 @@ fn synthesize_void_export_adapter(
             func: FunctionRef::from_resolved(&user_func.borrow(), entry_source.clone()),
             type_args: vec![],
             args: vec![],
-            param_is_mut: vec![],
         },
         TypeTable::UNIT,
         synth_span(),
@@ -3389,8 +3391,11 @@ fn synthesize_general_export_adapter(
         TirExprKind::Call {
             func: FunctionRef::from_resolved(&user_func.borrow(), entry_source.clone()),
             type_args: vec![],
-            args: call_args,
-            param_is_mut: call_user_param_is_mut,
+            args: call_args
+                .into_iter()
+                .zip(call_user_param_is_mut.into_iter().chain(std::iter::repeat(false)))
+                .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
+                .collect(),
         },
         user_return_type,
         synth_span(),
@@ -3593,8 +3598,11 @@ fn synthesize_async_export_adapter(
         TirExprKind::Call {
             func: FunctionRef::from_resolved(&user_func.borrow(), entry_source.clone()),
             type_args: vec![],
-            args: call_args,
-            param_is_mut: call_user_param_is_mut,
+            args: call_args
+                .into_iter()
+                .zip(call_user_param_is_mut.into_iter().chain(std::iter::repeat(false)))
+                .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
+                .collect(),
         },
         TypeTable::UNIT,
         synth_span(),
@@ -4394,7 +4402,7 @@ fn fixup_adapter_let(
     local_types: &mut [TypeId],
 ) {
     match &mut expr.kind {
-        TirExprKind::StaticCall { .. } => {
+        TirExprKind::Call { func, .. } if func.method_info.is_some() => {
             if expr.type_id == TypeTable::I32 {
                 expr.type_id = return_type;
                 *let_type_id = return_type;
@@ -4603,11 +4611,11 @@ fn rewrite_calls_in_expr(
                     fixup_return_type_in_body(&mut adapter, expr.type_id);
                 }
                 for (i, arg) in args.iter().enumerate() {
-                    if i < adapter.params.len() && adapter.params[i].type_id != arg.type_id {
+                    if i < adapter.params.len() && adapter.params[i].type_id != arg.expr.type_id {
                         let local_idx = adapter.params[i].local_index as usize;
-                        adapter.params[i].type_id = arg.type_id;
+                        adapter.params[i].type_id = arg.expr.type_id;
                         if local_idx < adapter.local_types.len() {
-                            adapter.local_types[local_idx] = arg.type_id;
+                            adapter.local_types[local_idx] = arg.expr.type_id;
                         }
                     }
                 }
@@ -4619,7 +4627,7 @@ fn rewrite_calls_in_expr(
 
             // Recurse into args
             for arg in args {
-                rewrite_calls_in_expr(arg, adapters, entry_source, wasi_registry);
+                rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry);
             }
             return;
         }
@@ -4669,12 +4677,12 @@ fn rewrite_calls_in_expr(
                 for (i, arg) in taken_args.iter().enumerate() {
                     let param_idx = i + 1; // +1 to skip self
                     if param_idx < adapter.params.len()
-                        && adapter.params[param_idx].type_id != arg.type_id
+                        && adapter.params[param_idx].type_id != arg.expr.type_id
                     {
                         let local_idx = adapter.params[param_idx].local_index as usize;
-                        adapter.params[param_idx].type_id = arg.type_id;
+                        adapter.params[param_idx].type_id = arg.expr.type_id;
                         if local_idx < adapter.local_types.len() {
-                            adapter.local_types[local_idx] = arg.type_id;
+                            adapter.local_types[local_idx] = arg.expr.type_id;
                         }
                     }
                 }
@@ -4683,36 +4691,36 @@ fn rewrite_calls_in_expr(
             // Replace MethodCall with Call targeting the adapter
             // Prepend receiver to args
             let mut all_args = vec![taken_receiver];
-            all_args.extend(taken_args);
-            let all_args_len = all_args.len();
+            all_args.extend(taken_args.into_iter().map(|a| a.expr));
 
             expr.kind = TirExprKind::Call {
                 func: FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone()),
-                args: all_args,
+                args: all_args.into_iter().map(|e| CallArg::new(e, false)).collect(),
                 type_args: vec![],
-                param_is_mut: vec![false; all_args_len],
             };
 
             // Recurse into args of the new Call
             if let TirExprKind::Call { args, .. } = &mut expr.kind {
                 for arg in args {
-                    rewrite_calls_in_expr(arg, adapters, entry_source, wasi_registry);
+                    rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry);
                 }
             }
             return;
         }
     }
 
-    // Check if this is a resource StaticCall that should be rewritten to target an adapter
-    if let TirExprKind::StaticCall { func, .. } = &expr.kind {
+    // Check if this is a resource static Call (with method_info) that should be rewritten to target an adapter
+    if let TirExprKind::Call { func, .. } = &expr.kind
+        && func.method_info.is_some()
+    {
         let func_name = func.name.clone();
         if let Some(adapter_rc) = adapters.get(&func_name) {
             // Look up WASI function info to flatten args at the call site
             let wasi_func_info = wasi_registry.get_function(&func_name).cloned();
 
             // Extract args before replacing
-            let taken_args = if let TirExprKind::StaticCall { args, .. } = &mut expr.kind {
-                std::mem::take(args)
+            let taken_args = if let TirExprKind::Call { args, .. } = &mut expr.kind {
+                std::mem::take(args).into_iter().map(|a| a.expr).collect::<Vec<_>>()
             } else {
                 unreachable!()
             };
@@ -4766,19 +4774,17 @@ fn rewrite_calls_in_expr(
                 taken_args
             };
 
-            // Replace StaticCall with Call targeting the adapter
-            let flat_args_len = flat_call_args.len();
+            // Replace static Call with Call targeting the adapter
             expr.kind = TirExprKind::Call {
                 func: FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone()),
-                args: flat_call_args,
+                args: flat_call_args.into_iter().map(|e| CallArg::new(e, false)).collect(),
                 type_args: vec![],
-                param_is_mut: vec![false; flat_args_len],
             };
 
             // Recurse into args of the new Call
             if let TirExprKind::Call { args, .. } = &mut expr.kind {
                 for arg in args {
-                    rewrite_calls_in_expr(arg, adapters, entry_source, wasi_registry);
+                    rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry);
                 }
             }
             return;
@@ -4787,9 +4793,12 @@ fn rewrite_calls_in_expr(
 
     // Recurse into sub-expressions
     match &mut expr.kind {
-        TirExprKind::Call { args, .. }
-        | TirExprKind::CmRawCall { args, .. }
-        | TirExprKind::StaticCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 rewrite_calls_in_expr(arg, adapters, entry_source, wasi_registry);
             }
@@ -4797,7 +4806,7 @@ fn rewrite_calls_in_expr(
         TirExprKind::MethodCall { receiver, args, .. } => {
             rewrite_calls_in_expr(receiver, adapters, entry_source, wasi_registry);
             for arg in args {
-                rewrite_calls_in_expr(arg, adapters, entry_source, wasi_registry);
+                rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry);
             }
         }
         TirExprKind::IndirectCall { callee, args } => {
@@ -4961,21 +4970,18 @@ fn collect_effect_calls_in_expr(
                     effects.insert(qualified);
                 }
             }
+            // Also check if this is a WASI resource static method call (e.g., Response::new)
+            if func.method_info.is_some() {
+                let func_name = func.name.clone();
+                if wasi_registry.get_function(&func_name).is_some() {
+                    effects.insert(func_name);
+                }
+            }
             for arg in args {
-                collect_effect_calls_in_expr(arg, effects, wasi_registry);
+                collect_effect_calls_in_expr(&arg.expr, effects, wasi_registry);
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                collect_effect_calls_in_expr(arg, effects, wasi_registry);
-            }
-        }
-        TirExprKind::StaticCall { func, args, .. } => {
-            // Check if this is a WASI resource static method call (e.g., Response::new)
-            let func_name = func.name.clone();
-            if wasi_registry.get_function(&func_name).is_some() {
-                effects.insert(func_name);
-            }
             for arg in args {
                 collect_effect_calls_in_expr(arg, effects, wasi_registry);
             }
@@ -4998,7 +5004,7 @@ fn collect_effect_calls_in_expr(
             }
             collect_effect_calls_in_expr(receiver, effects, wasi_registry);
             for arg in args {
-                collect_effect_calls_in_expr(arg, effects, wasi_registry);
+                collect_effect_calls_in_expr(&arg.expr, effects, wasi_registry);
             }
         }
         TirExprKind::IndirectCall { callee, args } => {

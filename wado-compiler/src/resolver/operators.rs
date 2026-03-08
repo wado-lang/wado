@@ -4,7 +4,8 @@ use crate::ast::{self, BinaryOp, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
-    FunctionRef, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
+    CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp, TypeId,
+    TypeTable,
 };
 
 use super::Resolver;
@@ -147,8 +148,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     is_cm_adapter: false,
                                 },
                                 type_args: vec![],
-                                args: vec![arg_ref],
-                                param_is_mut: vec![false],
+                                args: vec![CallArg::new(arg_ref, false)],
                             },
                             TypeTable::BOOL,
                             binary.span,
@@ -243,8 +243,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     is_cm_adapter: false,
                                 },
                                 type_args: vec![],
-                                args: vec![arg_ref],
-                                param_is_mut: vec![false],
+                                args: vec![CallArg::new(arg_ref, false)],
                             },
                             ordering_type_id,
                             binary.span,
@@ -375,8 +374,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 is_cm_adapter: false,
                             },
                             type_args: vec![],
-                            args: vec![arg_ref],
-                            param_is_mut: vec![false],
+                            args: vec![CallArg::new(arg_ref, false)],
                         },
                         trait_info.output_type,
                         binary.span,
@@ -441,8 +439,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 is_cm_adapter: false,
                             },
                             type_args: vec![],
-                            args: vec![right.clone()], // Pass rhs directly (u32)
-                            param_is_mut: vec![false],
+                            args: vec![CallArg::new(right.clone(), false)], // Pass rhs directly (u32)
                         },
                         trait_info.output_type,
                         binary.span,
@@ -636,7 +633,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             },
                             type_args: vec![],
                             args: vec![],
-                            param_is_mut: vec![],
                         },
                         trait_info.output_type,
                         unary.span,
@@ -688,7 +684,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             },
                             type_args: vec![],
                             args: vec![],
-                            param_is_mut: vec![],
                         },
                         trait_info.output_type,
                         unary.span,
@@ -869,8 +864,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     is_cm_adapter: false,
                                 },
                                 type_args: vec![],
-                                args: vec![index_resolved, value],
-                                param_is_mut: vec![false, false],
+                                args: vec![CallArg::new(index_resolved, false), CallArg::new(value, false)],
                             },
                             TypeTable::UNIT,
                             assign.span,

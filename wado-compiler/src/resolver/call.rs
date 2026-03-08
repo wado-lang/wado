@@ -6,7 +6,7 @@ use crate::ast::{self, Expr, Item, Type};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
-    FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable,
+    CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -434,6 +434,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         let param_is_mut = self.lookup_function_param_is_mut(&call.callee);
+        let call_args: Vec<CallArg> = args
+            .into_iter()
+            .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))
+            .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
+            .collect();
         TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef {
@@ -444,8 +449,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     is_cm_adapter: false,
                 },
                 type_args,
-                args,
-                param_is_mut,
+                args: call_args,
             },
             return_type,
             call.span,
@@ -778,7 +782,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let mangled_func_name = method_info.to_mangled_name();
 
         TirExpr::new(
-            TirExprKind::StaticCall {
+            TirExprKind::Call {
                 func: FunctionRef {
                     module_source: ModuleSource::int128(),
                     name: mangled_func_name,
@@ -786,8 +790,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     method_info: Some(method_info),
                     is_cm_adapter: false,
                 },
-                args: vec![low_literal, high_literal],
-                param_is_mut: vec![false, false],
+                type_args: vec![],
+                args: vec![CallArg::new(low_literal, false), CallArg::new(high_literal, false)],
             },
             target_type,
             span,
@@ -1118,7 +1122,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             };
 
             return TirExpr::new(
-                TirExprKind::StaticCall {
+                TirExprKind::Call {
                     func: FunctionRef {
                         module_source: self.current_module_source.clone(),
                         name: mangled_name,
@@ -1126,8 +1130,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         method_info: Some(method_info),
                         is_cm_adapter: false,
                     },
-                    param_is_mut: vec![false; args.len()],
-                    args: args.to_vec(),
+                    type_args: vec![],
+                    args: args.iter().map(|e| CallArg::new(e.clone(), false)).collect(),
                 },
                 final_return_type,
                 call.span,

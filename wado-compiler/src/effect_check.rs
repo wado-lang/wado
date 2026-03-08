@@ -199,7 +199,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             TirExprKind::Call { func, args, .. } => {
                 self.check_call(func, expr.span)?;
                 for arg in args {
-                    self.check_expr(arg)?;
+                    self.check_expr(&arg.expr)?;
                 }
             }
             TirExprKind::MethodCall {
@@ -211,13 +211,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                 self.check_expr(receiver)?;
                 self.check_call(func, expr.span)?;
                 for arg in args {
-                    self.check_expr(arg)?;
-                }
-            }
-            TirExprKind::StaticCall { func, args, .. } => {
-                self.check_call(func, expr.span)?;
-                for arg in args {
-                    self.check_expr(arg)?;
+                    self.check_expr(&arg.expr)?;
                 }
             }
             TirExprKind::CmRawCall { args, .. } => {

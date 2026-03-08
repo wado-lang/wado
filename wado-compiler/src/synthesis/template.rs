@@ -17,8 +17,9 @@ use indexmap::IndexMap;
 
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::{
-    FunctionRef, ResolvedType, TemplateFormatSpec, TirBlock, TirExpr, TirExprKind, TirModule,
-    TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
+    CallArg, FunctionRef, ResolvedType, TemplateFormatSpec, TirBlock, TirExpr, TirExprKind,
+    TirModule, TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TirUnaryOp, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 
@@ -216,16 +217,16 @@ fn expand_expr(
             }
             return;
         }
-        TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
             for a in args {
-                expand_expr(a, tt, alloc, cs);
+                expand_expr(&mut a.expr, tt, alloc, cs);
             }
             return;
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
             expand_expr(receiver, tt, alloc, cs);
             for a in args {
-                expand_expr(a, tt, alloc, cs);
+                expand_expr(&mut a.expr, tt, alloc, cs);
             }
             return;
         }
@@ -355,7 +356,7 @@ fn build_template_block(
 
     // let mut __r = String::with_capacity(N);
     let with_capacity_call = TirExpr::new(
-        TirExprKind::StaticCall {
+        TirExprKind::Call {
             func: FunctionRef {
                 module_source: ModuleSource::string(),
                 name: "String::with_capacity".to_string(),
@@ -367,15 +368,18 @@ fn build_template_block(
                 )),
                 is_cm_adapter: false,
             },
-            args: vec![TirExpr::new(
-                TirExprKind::IntLiteral {
-                    value: capacity_estimate.cast_unsigned(),
-                    repr: capacity_estimate.to_string(),
-                },
-                TypeTable::I32,
-                span,
+            type_args: vec![],
+            args: vec![CallArg::new(
+                TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: capacity_estimate.cast_unsigned(),
+                        repr: capacity_estimate.to_string(),
+                    },
+                    TypeTable::I32,
+                    span,
+                ),
+                false,
             )],
-            param_is_mut: vec![false],
         },
         string_type,
         span,
@@ -425,12 +429,10 @@ fn build_template_block(
                             is_cm_adapter: false,
                         },
                         type_args: vec![],
-                        args: vec![TirExpr::new(
-                            TirExprKind::StringLiteral(s),
-                            string_type,
-                            span,
+                        args: vec![CallArg::new(
+                            TirExpr::new(TirExprKind::StringLiteral(s), string_type, span),
+                            false,
                         )],
-                        param_is_mut: vec![false],
                     },
                     TypeTable::UNIT,
                     span,
@@ -471,8 +473,7 @@ fn build_template_block(
                                 is_cm_adapter: false,
                             },
                             type_args: vec![],
-                            args: vec![derefed],
-                            param_is_mut: vec![false],
+                            args: vec![CallArg::new(derefed, false)],
                         },
                         TypeTable::UNIT,
                         span,
@@ -676,7 +677,7 @@ fn build_formatter_expr(
 
     if !has_custom_spec {
         return TirExpr::new(
-            TirExprKind::StaticCall {
+            TirExprKind::Call {
                 func: FunctionRef {
                     module_source: ModuleSource::format(),
                     name: "Formatter::new".to_string(),
@@ -688,8 +689,8 @@ fn build_formatter_expr(
                     )),
                     is_cm_adapter: false,
                 },
-                args: vec![buf_mut_ref],
-                param_is_mut: vec![false],
+                type_args: vec![],
+                args: vec![CallArg::new(buf_mut_ref, false)],
             },
             formatter_type,
             span,
@@ -967,8 +968,7 @@ fn trait_fmt_call(
                         is_cm_adapter: false,
                     },
                     type_args: vec![],
-                    args: vec![fmt],
-                    param_is_mut: vec![false],
+                    args: vec![CallArg::new(fmt, false)],
                 },
                 TypeTable::UNIT,
                 span,
@@ -1089,12 +1089,10 @@ fn write_str_stmt(text: &str, fmt: TirExpr, tt: &Rc<RefCell<TypeTable>>, span: S
                 is_cm_adapter: false,
             },
             type_args: vec![],
-            args: vec![TirExpr::new(
-                TirExprKind::StringLiteral(text.to_string()),
-                string_type,
-                span,
+            args: vec![CallArg::new(
+                TirExpr::new(TirExprKind::StringLiteral(text.to_string()), string_type, span),
+                false,
             )],
-            param_is_mut: vec![false],
         },
         TypeTable::UNIT,
         span,

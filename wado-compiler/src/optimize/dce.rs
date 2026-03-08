@@ -521,38 +521,93 @@ fn analyze_expr(
             let original_callee_module = func.module_source.clone();
             let func_name = func.name.clone();
 
-            // Invariant: TirExprKind::Call should never have method names (containing "::")
-            // Methods use TirExprKind::MethodCall instead. The only exception is "builtin::*".
-            debug_assert!(
-                !func_name.contains("::") || func_name.starts_with("builtin::"),
-                "TirExprKind::Call should not have method-style names: {func_name}"
-            );
+            if func.method_info.is_some() {
+                // Formerly StaticCall: static method call (e.g., Box::get, Uint128::from_u64).
+                // func_name contains "::" (e.g., "StructName::method" or "StructName^Trait::method").
+                let callee_id = if func.is_monomorphized() {
+                    let base_name = func
+                        .base_struct_name()
+                        .map(|base| {
+                            func_name
+                                .find("::")
+                                .map(|pos| format!("{}::{}", base, &func_name[pos + 2..]))
+                                .unwrap_or_else(|| base)
+                        })
+                        .unwrap_or_else(|| func_name.clone());
+                    FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                        func.module_source.clone(),
+                        func_name.clone(),
+                        base_name,
+                    ))
+                } else {
+                    let callee_module = if original_callee_module.is_entry_point() {
+                        current_module.clone()
+                    } else {
+                        original_callee_module.clone()
+                    };
+                    if let Some(sep_pos) = func_name.find("::") {
+                        let prefix = &func_name[..sep_pos];
+                        let method_name = &func_name[sep_pos + 2..];
+                        let (struct_name, trait_name): (&str, Option<&str>) =
+                            if let Some(caret_pos) = prefix.find('^') {
+                                (&prefix[..caret_pos], Some(&prefix[caret_pos + 1..]))
+                            } else {
+                                (prefix, None)
+                            };
+                        FunctionId::Method(MethodName::new(
+                            callee_module.clone(),
+                            struct_name.to_string(),
+                            trait_name.map(String::from),
+                            method_name.to_string(),
+                        ))
+                    } else {
+                        FunctionId::Free(FreeFunctionName::from_module_source(
+                            &callee_module,
+                            &func_name,
+                        ))
+                    }
+                };
+                analysis.callees.insert(callee_id);
 
-            // Build function ID for the called function
-            // If the callee has an entry point module source (local call), use current module.
-            // Exception: CM adapter functions are genuinely in the entry module
-            // and should NOT be remapped to the caller's module.
-            let callee_module = if original_callee_module.is_entry_point() && !func.is_cm_adapter {
-                current_module.clone()
+                // Detect resource method calls from WASI modules
+                let module_path = func.module_path();
+                if module_path.len() >= 2 && module_path[0] == "wasi" {
+                    if let Some(pos) = func_name.find("::") {
+                        let resource_name = &func_name[..pos];
+                        let method_name = &func_name[pos + 2..];
+                        analysis
+                            .effect_calls
+                            .insert((resource_name.to_string(), method_name.to_string()));
+                    }
+                }
             } else {
-                original_callee_module.clone()
-            };
-            let callee_id = FunctionId::Free(FreeFunctionName::from_module_source(
-                &callee_module,
-                &func_name,
-            ));
-            analysis.callees.insert(callee_id);
+                // Free function call
+                debug_assert!(
+                    !func_name.contains("::") || func_name.starts_with("builtin::"),
+                    "TirExprKind::Call should not have method-style names: {func_name}"
+                );
 
-            // Detect effect calls: Effects have a single-element path with PascalCase name
-            // (e.g., "Stdout", "Stderr", "MonotonicClock")
-            if let Some(effect_name) = original_callee_module.effect_name() {
-                analysis
-                    .effect_calls
-                    .insert((effect_name, func_name.clone()));
+                let callee_module =
+                    if original_callee_module.is_entry_point() && !func.is_cm_adapter {
+                        current_module.clone()
+                    } else {
+                        original_callee_module.clone()
+                    };
+                let callee_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                    &callee_module,
+                    &func_name,
+                ));
+                analysis.callees.insert(callee_id);
+
+                if let Some(effect_name) = original_callee_module.effect_name() {
+                    analysis
+                        .effect_calls
+                        .insert((effect_name, func_name.clone()));
+                }
             }
 
             for arg in args {
-                analyze_expr(arg, current_module, type_table, analysis);
+                analyze_expr(&arg.expr, current_module, type_table, analysis);
             }
         }
         TirExprKind::MethodCall {
@@ -850,7 +905,7 @@ fn analyze_expr(
 
             analyze_expr(receiver, current_module, type_table, analysis);
             for arg in args {
-                analyze_expr(arg, current_module, type_table, analysis);
+                analyze_expr(&arg.expr, current_module, type_table, analysis);
             }
         }
         TirExprKind::Binary { left, right, .. } => {
@@ -878,85 +933,6 @@ fn analyze_expr(
             }) {
                 analysis.effect_calls.insert((effect_name, op_name));
             }
-            for arg in args {
-                analyze_expr(arg, current_module, type_table, analysis);
-            }
-        }
-        TirExprKind::StaticCall { func, args, .. } => {
-            let func_name = func.name.clone();
-            // Static method call - func_name already contains "StructName::method_name"
-            // The function is registered as a free function with mangled name
-            let callee_id = if func.is_monomorphized() {
-                // Get base name from the function's monomorph_info
-                let base_name = func
-                    .base_struct_name()
-                    .map(|base| {
-                        // Extract method name from "Box<i32>::get" -> "get"
-                        func_name
-                            .find("::")
-                            .map(|pos| format!("{}::{}", base, &func_name[pos + 2..]))
-                            .unwrap_or_else(|| base)
-                    })
-                    .unwrap_or_else(|| func_name.clone());
-                // Use the func's actual module_source
-                FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                    func.module_source.clone(),
-                    func_name.clone(),
-                    base_name,
-                ))
-            } else {
-                let callee_module = func.module_source.clone();
-                // Use current module for local calls (entry point source)
-                let callee_module = if callee_module.is_entry_point() {
-                    current_module.clone()
-                } else {
-                    callee_module
-                };
-                // Check if this is a method call (contains "::") or a regular function
-                if let Some(sep_pos) = func_name.find("::") {
-                    // This is a static method call (e.g., "Uint128::from_u64")
-                    // Track as FunctionId::Method to match WIR registration
-                    let prefix = &func_name[..sep_pos];
-                    let method_name = &func_name[sep_pos + 2..];
-                    // Parse struct name and optional trait name from prefix
-                    // Format: "StructName" or "StructName^TraitName"
-                    let (struct_name, trait_name): (&str, Option<&str>) =
-                        if let Some(caret_pos) = prefix.find('^') {
-                            (&prefix[..caret_pos], Some(&prefix[caret_pos + 1..]))
-                        } else {
-                            (prefix, None)
-                        };
-                    FunctionId::Method(MethodName::new(
-                        callee_module.clone(),
-                        struct_name.to_string(),
-                        trait_name.map(String::from),
-                        method_name.to_string(),
-                    ))
-                } else {
-                    FunctionId::Free(FreeFunctionName::from_module_source(
-                        &callee_module,
-                        &func_name,
-                    ))
-                }
-            };
-            analysis.callees.insert(callee_id);
-
-            // Detect resource method calls from WASI modules
-            // Static methods on resources (e.g., TcpSocket::static_tcp_socket_create)
-            // need to be tracked as effect calls for proper import generation
-            let module_path = func.module_path();
-            if module_path.len() >= 2 && module_path[0] == "wasi" {
-                // This is a WASI module - check for "Type::method" pattern
-                if let Some(pos) = func_name.find("::") {
-                    let resource_name = &func_name[..pos];
-                    let method_name = &func_name[pos + 2..];
-                    // Record as effect call (effect_name = resource name, op_name = method name)
-                    analysis
-                        .effect_calls
-                        .insert((resource_name.to_string(), method_name.to_string()));
-                }
-            }
-
             for arg in args {
                 analyze_expr(arg, current_module, type_table, analysis);
             }
@@ -1496,18 +1472,13 @@ fn collect_types_from_expr(
     match &expr.kind {
         TirExprKind::Call { args, .. } => {
             for arg in args {
-                collect_types_from_expr(arg, type_table, reachable);
+                collect_types_from_expr(&arg.expr, type_table, reachable);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
             collect_types_from_expr(receiver, type_table, reachable);
             for arg in args {
-                collect_types_from_expr(arg, type_table, reachable);
-            }
-        }
-        TirExprKind::StaticCall { args, .. } => {
-            for arg in args {
-                collect_types_from_expr(arg, type_table, reachable);
+                collect_types_from_expr(&arg.expr, type_table, reachable);
             }
         }
         TirExprKind::Binary { left, right, .. } => {
@@ -2015,9 +1986,12 @@ fn collect_global_reads_expr(expr: &TirExpr, used: &mut IndexSet<(String, String
             used.insert((module_source.to_path().join("::"), name.clone()));
         }
         // Recurse into sub-expressions — mirrors analyze_expr structure
-        TirExprKind::Call { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                collect_global_reads_expr(&arg.expr, used);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_global_reads_expr(arg, used);
             }
@@ -2025,7 +1999,7 @@ fn collect_global_reads_expr(expr: &TirExpr, used: &mut IndexSet<(String, String
         TirExprKind::MethodCall { receiver, args, .. } => {
             collect_global_reads_expr(receiver, used);
             for arg in args {
-                collect_global_reads_expr(arg, used);
+                collect_global_reads_expr(&arg.expr, used);
             }
         }
         TirExprKind::Binary { left, right, .. } => {
@@ -2437,9 +2411,12 @@ fn prune_branches_in_expr(expr: &mut TirExpr) -> bool {
             changed |= prune_branches_in_expr(inner);
             changed |= prune_branches_in_expr(index);
         }
-        TirExprKind::Call { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                changed |= prune_branches_in_expr(&mut arg.expr);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 changed |= prune_branches_in_expr(arg);
             }
@@ -2447,7 +2424,7 @@ fn prune_branches_in_expr(expr: &mut TirExpr) -> bool {
         TirExprKind::MethodCall { receiver, args, .. } => {
             changed |= prune_branches_in_expr(receiver);
             for arg in args {
-                changed |= prune_branches_in_expr(arg);
+                changed |= prune_branches_in_expr(&mut arg.expr);
             }
         }
         TirExprKind::IndirectCall { callee, args } => {
