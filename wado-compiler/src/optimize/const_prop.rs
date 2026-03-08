@@ -202,9 +202,12 @@ fn propagate_constants_in_expr(
             changed |= propagate_constants_in_expr(target, constants);
             changed |= propagate_constants_in_expr(value, constants);
         }
-        TirExprKind::Call { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                changed |= propagate_constants_in_expr(&mut arg.expr, constants);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 changed |= propagate_constants_in_expr(arg, constants);
             }
@@ -212,7 +215,7 @@ fn propagate_constants_in_expr(
         TirExprKind::MethodCall { receiver, args, .. } => {
             changed |= propagate_constants_in_expr(receiver, constants);
             for arg in args {
-                changed |= propagate_constants_in_expr(arg, constants);
+                changed |= propagate_constants_in_expr(&mut arg.expr, constants);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {

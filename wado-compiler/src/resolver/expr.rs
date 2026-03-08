@@ -7,8 +7,8 @@ use crate::ast::{self, Expr, IfExpr, Item, Literal, MatchArm};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
 use crate::tir::{
-    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirMatchArm, TirStmt, TirStmtKind,
-    TirStructField, TirUnaryOp, TypeId, TypeTable,
+    CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirMatchArm, TirStmt,
+    TirStmtKind, TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -909,8 +909,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             is_cm_adapter: false,
                         },
                         type_args: vec![],
-                        args: vec![index_expr],
-                        param_is_mut: vec![false],
+                        args: vec![CallArg::new(index_expr, false)],
                     },
                     ref_output_type,
                     index.span,
@@ -960,8 +959,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             is_cm_adapter: false,
                         },
                         type_args: vec![],
-                        args: vec![index_expr],
-                        param_is_mut: vec![false],
+                        args: vec![CallArg::new(index_expr, false)],
                     },
                     trait_info.output_type,
                     index.span,
@@ -1362,7 +1360,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             let mangled_func_name = method_info.to_mangled_name();
 
                             return TirExpr::new(
-                                TirExprKind::StaticCall {
+                                TirExprKind::Call {
                                     func: FunctionRef {
                                         module_source: ModuleSource::int128(),
                                         name: mangled_func_name,
@@ -1370,8 +1368,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         method_info: Some(method_info),
                                         is_cm_adapter: false,
                                     },
-                                    args: vec![inner_literal],
-                                    param_is_mut: vec![false],
+                                    type_args: vec![],
+                                    args: vec![CallArg::new(inner_literal, false)],
                                 },
                                 target_type,
                                 cast.span,
@@ -1442,7 +1440,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let mangled_func_name = method_info.to_mangled_name();
 
                 return TirExpr::new(
-                    TirExprKind::StaticCall {
+                    TirExprKind::Call {
                         func: FunctionRef {
                             module_source: ModuleSource::int128(),
                             name: mangled_func_name,
@@ -1450,8 +1448,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             method_info: Some(method_info),
                             is_cm_adapter: false,
                         },
-                        args: vec![casted_expr],
-                        param_is_mut: vec![false],
+                        type_args: vec![],
+                        args: vec![CallArg::new(casted_expr, false)],
                     },
                     target_type,
                     cast.span,

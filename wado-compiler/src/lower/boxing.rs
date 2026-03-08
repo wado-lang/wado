@@ -643,18 +643,13 @@ impl BoxLowerer {
             }
             TirExprKind::Call { args, .. } => {
                 for arg in args {
-                    self.transform_expr(arg, address_taken, type_table);
+                    self.transform_expr(&mut arg.expr, address_taken, type_table);
                 }
             }
             TirExprKind::MethodCall { receiver, args, .. } => {
                 self.transform_expr(receiver, address_taken, type_table);
                 for arg in args {
-                    self.transform_expr(arg, address_taken, type_table);
-                }
-            }
-            TirExprKind::StaticCall { args, .. } => {
-                for arg in args {
-                    self.transform_expr(arg, address_taken, type_table);
+                    self.transform_expr(&mut arg.expr, address_taken, type_table);
                 }
             }
             TirExprKind::FieldAccess { expr: inner, .. } => {

@@ -141,9 +141,12 @@ fn fold_constants_in_expr(expr: &mut TirExpr, type_table: &TypeTable) -> bool {
             changed |= fold_constants_in_expr(target, type_table);
             changed |= fold_constants_in_expr(value, type_table);
         }
-        TirExprKind::Call { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                changed |= fold_constants_in_expr(&mut arg.expr, type_table);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 changed |= fold_constants_in_expr(arg, type_table);
             }
@@ -151,7 +154,7 @@ fn fold_constants_in_expr(expr: &mut TirExpr, type_table: &TypeTable) -> bool {
         TirExprKind::MethodCall { receiver, args, .. } => {
             changed |= fold_constants_in_expr(receiver, type_table);
             for arg in args {
-                changed |= fold_constants_in_expr(arg, type_table);
+                changed |= fold_constants_in_expr(&mut arg.expr, type_table);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {

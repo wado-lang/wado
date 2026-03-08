@@ -4,8 +4,8 @@ use crate::ast::{self, Item};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
-    FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TirExpr, TirExprKind, TypeId,
-    TypeTable,
+    CallArg, FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TirExpr, TirExprKind,
+    TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -391,8 +391,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     is_cm_adapter: false,
                 },
                 type_args: method_type_args, // Use inferred type args
-                args,
-                param_is_mut,
+                args: args
+                    .into_iter()
+                    .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))
+                    .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
+                    .collect(),
             },
             return_type,
             method_call.span,
@@ -868,7 +871,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         );
 
         TirExpr::new(
-            TirExprKind::StaticCall {
+            TirExprKind::Call {
                 func: FunctionRef {
                     module_source: struct_module,
                     name: mangled_func_name,
@@ -876,8 +879,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     method_info: Some(method_info),
                     is_cm_adapter: false,
                 },
-                args,
-                param_is_mut,
+                type_args: vec![],
+                args: args
+                    .into_iter()
+                    .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))
+                    .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
+                    .collect(),
             },
             return_type,
             static_call.span,
@@ -1465,7 +1472,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let param_is_mut = self.lookup_static_method_param_is_mut(&actual_struct_name, method_name);
 
         TirExpr::new(
-            TirExprKind::StaticCall {
+            TirExprKind::Call {
                 func: FunctionRef {
                     module_source: struct_module,
                     name: final_mangled_name,
@@ -1477,8 +1484,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     )),
                     is_cm_adapter: false,
                 },
-                args: args.to_vec(),
-                param_is_mut,
+                type_args: vec![],
+                args: args
+                    .iter()
+                    .zip(param_is_mut.iter().copied().chain(std::iter::repeat(false)))
+                    .map(|(expr, is_mut)| CallArg::new(expr.clone(), is_mut))
+                    .collect(),
             },
             return_type,
             span,

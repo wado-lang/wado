@@ -9,7 +9,7 @@ use indexmap::IndexSet;
 
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::{
-    FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
+    CallArg, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
     TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
@@ -24,7 +24,6 @@ pub fn synth_span() -> Span {
 
 /// Create a call to a builtin function (e.g., `builtin::i32_load`).
 pub fn builtin_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirExpr {
-    let n = args.len();
     TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef {
@@ -35,8 +34,7 @@ pub fn builtin_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirE
                 is_cm_adapter: false,
             },
             type_args: vec![],
-            args,
-            param_is_mut: vec![false; n],
+            args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
         },
         return_type,
         synth_span(),
@@ -45,7 +43,6 @@ pub fn builtin_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirE
 
 /// Create a call to an internal function (e.g., `internal::cm_lower_string`).
 pub fn internal_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirExpr {
-    let n = args.len();
     TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef {
@@ -56,8 +53,7 @@ pub fn internal_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> Tir
                 is_cm_adapter: false,
             },
             type_args: vec![],
-            args,
-            param_is_mut: vec![false; n],
+            args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
         },
         return_type,
         synth_span(),
@@ -297,9 +293,9 @@ pub fn generic_static_call(
             is_blanket: false,
         })
     };
-    let n = args.len();
+    let _n = args.len();
     TirExpr::new(
-        TirExprKind::StaticCall {
+        TirExprKind::Call {
             func: FunctionRef {
                 module_source,
                 name: mangled_name,
@@ -307,8 +303,8 @@ pub fn generic_static_call(
                 method_info: Some(info),
                 is_cm_adapter: false,
             },
-            args,
-            param_is_mut: vec![false; n],
+            type_args: vec![],
+            args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
         },
         return_type,
         synth_span(),
@@ -330,7 +326,7 @@ pub fn generic_method_call(
 ) -> TirExpr {
     let info = LocalMethodName::new(struct_name.to_string(), None, method_name.to_string());
     let mangled_name = info.to_mangled_name();
-    let n = args.len();
+    let _n = args.len();
     TirExpr::new(
         TirExprKind::MethodCall {
             receiver: Box::new(receiver),
@@ -342,8 +338,7 @@ pub fn generic_method_call(
                 is_cm_adapter: false,
             },
             type_args: vec![],
-            args,
-            param_is_mut: vec![false; n],
+            args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
         },
         return_type,
         synth_span(),
@@ -407,12 +402,10 @@ pub fn write_str_stmt(
                 is_cm_adapter: false,
             },
             type_args: vec![],
-            args: vec![TirExpr::new(
-                TirExprKind::StringLiteral(text.into()),
-                string_type,
-                span,
+            args: vec![CallArg::new(
+                TirExpr::new(TirExprKind::StringLiteral(text.into()), string_type, span),
+                false,
             )],
-            param_is_mut: vec![false],
         },
         TypeTable::UNIT,
         span,
@@ -429,7 +422,7 @@ pub fn trait_method_call(
     span: Span,
 ) -> TirStmt {
     let fn_name = method_info.to_mangled_name();
-    let n = args.len();
+    let _n = args.len();
     let call = TirExpr::new(
         TirExprKind::MethodCall {
             receiver: Box::new(receiver),
@@ -441,8 +434,7 @@ pub fn trait_method_call(
                 is_cm_adapter: false,
             },
             type_args: vec![],
-            args,
-            param_is_mut: vec![false; n],
+            args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
         },
         TypeTable::UNIT,
         span,

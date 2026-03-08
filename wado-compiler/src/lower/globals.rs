@@ -225,15 +225,15 @@ fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<String>) {
         TirExprKind::Unary { expr: inner, .. } => {
             collect_global_refs(inner, refs);
         }
-        TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
             for arg in args {
-                collect_global_refs(arg, refs);
+                collect_global_refs(&arg.expr, refs);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
             collect_global_refs(receiver, refs);
             for arg in args {
-                collect_global_refs(arg, refs);
+                collect_global_refs(&arg.expr, refs);
             }
         }
         TirExprKind::StructLiteral { fields, .. } => {
@@ -409,15 +409,23 @@ fn renumber_locals_in_expr(expr: &mut TirExpr, offset: u32) {
             renumber_locals_in_expr(target, offset);
             renumber_locals_in_expr(value, offset);
         }
-        TirExprKind::Call { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                renumber_locals_in_expr(&mut arg.expr, offset);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 renumber_locals_in_expr(arg, offset);
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. }
-        | TirExprKind::IndirectCall {
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            renumber_locals_in_expr(receiver, offset);
+            for arg in args {
+                renumber_locals_in_expr(&mut arg.expr, offset);
+            }
+        }
+        TirExprKind::IndirectCall {
             callee: receiver,
             args,
         } => {
@@ -656,7 +664,6 @@ pub(super) fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, T
                 },
                 type_args: Vec::new(),
                 args: Vec::new(),
-                param_is_mut: vec![],
             },
             TypeTable::UNIT,
             span,
@@ -724,7 +731,6 @@ pub(super) fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, T
             },
             type_args: Vec::new(),
             args: Vec::new(),
-            param_is_mut: vec![],
         },
         TypeTable::UNIT,
         span,

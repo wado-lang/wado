@@ -4,8 +4,8 @@ use std::rc::Rc;
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::FunctionRef;
 use crate::tir::{
-    ResolvedType, TirBlock, TirExpr, TirExprKind, TirLiteralPattern, TirModule, TirPattern,
-    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    CallArg, ResolvedType, TirBlock, TirExpr, TirExprKind, TirLiteralPattern, TirModule,
+    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -32,7 +32,7 @@ pub(super) fn create_i128_literal(value: i128, type_id: TypeId, span: Span) -> T
     );
     let method_info = LocalMethodName::new("i128".to_string(), None, "from_i64".to_string());
     TirExpr::new(
-        TirExprKind::StaticCall {
+        TirExprKind::Call {
             func: FunctionRef {
                 module_source: ModuleSource::int128(),
                 name: "i128::from_i64".to_string(),
@@ -40,8 +40,8 @@ pub(super) fn create_i128_literal(value: i128, type_id: TypeId, span: Span) -> T
                 method_info: Some(method_info),
                 is_cm_adapter: false,
             },
-            args: vec![inner_literal],
-            param_is_mut: vec![false],
+            type_args: vec![],
+            args: vec![CallArg::new(inner_literal, false)],
         },
         type_id,
         span,
@@ -63,7 +63,7 @@ pub(super) fn create_u128_literal(value: u128, type_id: TypeId, span: Span) -> T
     );
     let method_info = LocalMethodName::new("u128".to_string(), None, "from_u64".to_string());
     TirExpr::new(
-        TirExprKind::StaticCall {
+        TirExprKind::Call {
             func: FunctionRef {
                 module_source: ModuleSource::int128(),
                 name: "u128::from_u64".to_string(),
@@ -71,8 +71,8 @@ pub(super) fn create_u128_literal(value: u128, type_id: TypeId, span: Span) -> T
                 method_info: Some(method_info),
                 is_cm_adapter: false,
             },
-            args: vec![inner_literal],
-            param_is_mut: vec![false],
+            type_args: vec![],
+            args: vec![CallArg::new(inner_literal, false)],
         },
         type_id,
         span,
@@ -130,8 +130,7 @@ fn create_i128_eq_call(
                 is_cm_adapter: false,
             },
             type_args: vec![],
-            args: vec![arg_ref],
-            param_is_mut: vec![false],
+            args: vec![CallArg::new(arg_ref, false)],
         },
         TypeTable::BOOL,
         span,
@@ -189,8 +188,7 @@ fn create_u128_eq_call(
                 is_cm_adapter: false,
             },
             type_args: vec![],
-            args: vec![arg_ref],
-            param_is_mut: vec![false],
+            args: vec![CallArg::new(arg_ref, false)],
         },
         TypeTable::BOOL,
         span,
@@ -386,10 +384,12 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
         | TirExprKind::FieldAccess { expr: inner, .. } => {
             lower_wide_int_in_expr(inner, type_table);
         }
-        TirExprKind::Call { args, .. }
-        | TirExprKind::MethodCall { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
+            for arg in args {
+                lower_wide_int_in_expr(&mut arg.expr, type_table);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 lower_wide_int_in_expr(arg, type_table);
             }

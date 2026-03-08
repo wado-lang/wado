@@ -11,7 +11,7 @@ use indexmap::IndexSet;
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_local_trait_method};
 use crate::project::Project;
 use crate::tir::{
-    FunctionRef, InlineHint, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
+    CallArg, FunctionRef, InlineHint, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
     TirFunction, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
     TirStructField, TirTypeParam, TypeId, TypeTable,
 };
@@ -187,7 +187,6 @@ fn type_param_method_call(
         i
     };
     let fn_name = info.to_mangled_name();
-    let n = args.len();
     TirExpr::new(
         TirExprKind::MethodCall {
             receiver: Box::new(receiver),
@@ -199,8 +198,7 @@ fn type_param_method_call(
                 is_cm_adapter: false,
             },
             type_args,
-            args,
-            param_is_mut: vec![false; n],
+            args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
         },
         return_type,
         span,
@@ -469,7 +467,7 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
         })
     };
     TirExpr::new(
-        TirExprKind::StaticCall {
+        TirExprKind::Call {
             func: FunctionRef {
                 module_source,
                 name: mangled_name,
@@ -477,8 +475,8 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
                 method_info: Some(method_info),
                 is_cm_adapter: false,
             },
+            type_args: vec![],
             args: vec![],
-            param_is_mut: vec![], // no args
         },
         type_id,
         span,
@@ -796,11 +794,10 @@ fn generate_struct_deserialize(
                     },
                     type_args: vec![],
                     args: vec![
-                        local_ref(0, "__input", ref_string_type),
-                        local_ref(1, "__start", TypeTable::I32),
-                        local_ref(2, "__end", TypeTable::I32),
+                        CallArg::new(local_ref(0, "__input", ref_string_type), false),
+                        CallArg::new(local_ref(1, "__start", TypeTable::I32), false),
+                        CallArg::new(local_ref(2, "__end", TypeTable::I32), false),
                     ],
-                    param_is_mut: vec![false, false, false],
                 },
                 option_i32,
                 span,
@@ -1228,8 +1225,7 @@ fn key_get_byte_as_i32_expr(string_ref: TirExpr, index_expr: TirExpr, span: Span
                 is_cm_adapter: false,
             },
             type_args: vec![],
-            args: vec![index_expr],
-            param_is_mut: vec![false],
+            args: vec![CallArg::new(index_expr, false)],
         },
         TypeTable::U8,
         span,
@@ -1753,8 +1749,7 @@ fn generate_enum_deserialize(
                     is_cm_adapter: false,
                 },
                 type_args: vec![],
-                args: vec![lit_ref],
-                param_is_mut: vec![false],
+                args: vec![CallArg::new(lit_ref, false)],
             },
             TypeTable::BOOL,
             span,
@@ -2467,8 +2462,7 @@ fn generate_variant_deserialize(
                     is_cm_adapter: false,
                 },
                 type_args: vec![],
-                args: vec![lit_ref],
-                param_is_mut: vec![false],
+                args: vec![CallArg::new(lit_ref, false)],
             },
             TypeTable::BOOL,
             span,

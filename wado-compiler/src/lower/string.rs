@@ -152,9 +152,12 @@ impl StringCollector {
             TirExprKind::Unary { expr: inner, .. } => {
                 self.collect_expr(inner);
             }
-            TirExprKind::Call { args, .. }
-            | TirExprKind::CmRawCall { args, .. }
-            | TirExprKind::StaticCall { args, .. } => {
+            TirExprKind::Call { args, .. } => {
+                for arg in args {
+                    self.collect_expr(&arg.expr);
+                }
+            }
+            TirExprKind::CmRawCall { args, .. } => {
                 for arg in args {
                     self.collect_expr(arg);
                 }
@@ -162,7 +165,7 @@ impl StringCollector {
             TirExprKind::MethodCall { receiver, args, .. } => {
                 self.collect_expr(receiver);
                 for arg in args {
-                    self.collect_expr(arg);
+                    self.collect_expr(&arg.expr);
                 }
             }
             TirExprKind::Block(block) => {
