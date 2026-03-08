@@ -17,6 +17,7 @@ pub struct DumpOptions {
     pub show_desugared: bool,
     pub show_symbols: bool,
     pub show_modules: bool,
+    pub show_types: bool,
     pub show_tir: bool,
     pub show_tir_resolved: bool,
     pub show_tir_monomorphized: bool,
@@ -38,6 +39,7 @@ enum Opt {
     Desugared,
     Modules,
     Symbols,
+    Types,
     Tir,
     TirResolved,
     TirMonomorphized,
@@ -58,6 +60,7 @@ impl Opt {
         Self::Desugared,
         Self::Modules,
         Self::Symbols,
+        Self::Types,
         Self::Tir,
         Self::TirResolved,
         Self::TirMonomorphized,
@@ -102,6 +105,12 @@ impl Opt {
                 short: None,
                 value: None,
                 desc: "Show symbol table",
+            },
+            Self::Types => args::OptSpec {
+                long: Some("types"),
+                short: None,
+                value: None,
+                desc: "Show type table (all resolved types)",
             },
             Self::Tir => args::OptSpec {
                 long: Some("tir"),
@@ -184,6 +193,7 @@ fn format_usage() -> String {
                 Opt::Desugared,
                 Opt::Modules,
                 Opt::Symbols,
+                Opt::Types,
                 Opt::TirResolved,
                 Opt::TirMonomorphized,
                 Opt::TirLowered,
@@ -250,6 +260,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let mut show_desugared = false;
     let mut show_symbols = false;
     let mut show_modules = false;
+    let mut show_types = false;
     let mut show_tir = false;
     let mut show_tir_resolved = false;
     let mut show_tir_monomorphized = false;
@@ -283,6 +294,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
                 }
                 Opt::Modules => {
                     show_modules = true;
+                    any_phase = true;
+                }
+                Opt::Types => {
+                    show_types = true;
                     any_phase = true;
                 }
                 Opt::Tir => {
@@ -363,6 +378,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
         show_desugared,
         show_symbols,
         show_modules,
+        show_types,
         show_tir,
         show_tir_resolved,
         show_tir_monomorphized,
@@ -841,6 +857,60 @@ async fn run_single(opts: &DumpOptions, input: &str) {
                 "  [{}] {} :: {} = {}",
                 symbol.id.0, module_path, symbol.name, kind_str
             );
+        }
+        println!();
+    }
+
+    // Types section (after type resolution)
+    if opts.show_types {
+        if let Some(ref tir_modules) = result.tir_modules {
+            // Type table is shared across modules; grab from the first one
+            if let Some((_, first_module)) = tir_modules.iter().next() {
+                let type_table = first_module.type_table.borrow();
+                if opts.inspect {
+                    println!("=== Types (inspect) ===");
+                    for (id, ty) in type_table.all_types() {
+                        println!("  [{id}] {ty:#?}");
+                    }
+                } else {
+                    println!("=== Types ===");
+                    for (id, ty) in type_table.all_types() {
+                        let name = type_table.type_name(*id);
+                        let kind = match ty {
+                            wado_compiler::tir::ResolvedType::Primitive(_) => "primitive",
+                            wado_compiler::tir::ResolvedType::Unit => "unit",
+                            wado_compiler::tir::ResolvedType::Never => "never",
+                            wado_compiler::tir::ResolvedType::Struct { .. } => "struct",
+                            wado_compiler::tir::ResolvedType::Enum { .. } => "enum",
+                            wado_compiler::tir::ResolvedType::Variant { .. } => "variant",
+                            wado_compiler::tir::ResolvedType::Newtype { .. } => "newtype",
+                            wado_compiler::tir::ResolvedType::Resource { .. } => "resource",
+                            wado_compiler::tir::ResolvedType::GenericResource { .. } => {
+                                "resource"
+                            }
+                            wado_compiler::tir::ResolvedType::Ref(_) => "ref",
+                            wado_compiler::tir::ResolvedType::MutRef(_) => "mut_ref",
+                            wado_compiler::tir::ResolvedType::Function { .. } => "fn",
+                            wado_compiler::tir::ResolvedType::Tuple(_) => "tuple",
+                            wado_compiler::tir::ResolvedType::BuiltinArray(_) => "builtin_array",
+                            wado_compiler::tir::ResolvedType::Reactive(_) => "reactive",
+                            wado_compiler::tir::ResolvedType::TypeParam { .. } => "type_param",
+                            wado_compiler::tir::ResolvedType::GenericInstance { .. } => {
+                                "generic_instance"
+                            }
+                            wado_compiler::tir::ResolvedType::AssocTypeProjection { .. } => {
+                                "assoc_type"
+                            }
+                            wado_compiler::tir::ResolvedType::Unknown => "unknown",
+                            wado_compiler::tir::ResolvedType::Error => "error",
+                        };
+                        println!("  [{id}] {kind}: {name}");
+                    }
+                }
+            }
+        } else {
+            println!("=== Types ===");
+            println!("(Type resolution failed or not available)");
         }
         println!();
     }

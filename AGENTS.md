@@ -238,6 +238,7 @@ wado dump --ast file.wado            # show parsed AST
 wado dump --desugared file.wado      # show desugared AST
 wado dump --modules file.wado        # show loaded modules
 wado dump --symbols file.wado        # show symbol table
+wado dump --types file.wado          # show type table
 wado dump --tir-resolved file.wado   # show TIR after type resolution
 wado dump --tir-monomorphized file.wado  # show TIR after monomorphization
 wado dump --tir-lowered file.wado    # show TIR after lowering
@@ -251,11 +252,12 @@ Available phases (in compilation order):
 3. `--desugared` - Desugared AST
 4. `--modules` - Loaded modules
 5. `--symbols` - Symbol table
-6. `--tir-resolved` - TIR after type resolution
-7. `--tir-monomorphized` - TIR after monomorphization
-8. `--tir-lowered` - TIR after lowering
-9. `--tir` - Final TIR (after optimization, affected by `-Ox`)
-10. `--wir` - Final WIR (after optimization, affected by `-Ox`) [default]
+6. `--types` - Type table (all resolved types)
+7. `--tir-resolved` - TIR after type resolution
+8. `--tir-monomorphized` - TIR after monomorphization
+9. `--tir-lowered` - TIR after lowering
+10. `--tir` - Final TIR (after optimization, affected by `-Ox`)
+11. `--wir` - Final WIR (after optimization, affected by `-Ox`) [default]
 
 Optimization levels: `-O0` (none), `-O1` (development), `-O2` (production, default), `-O3` (aggressive), `-Os` (`-O2` + strip names).
 
