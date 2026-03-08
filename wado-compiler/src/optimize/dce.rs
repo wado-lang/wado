@@ -243,10 +243,6 @@ pub fn analyze_project(project: &mut Project) {
             .world_registry
             .get(&project.target_world)
             .is_some_and(crate::world_registry::WorldInfo::has_async_export);
-    let has_http_handler_export = project
-        .world_registry
-        .get(&project.target_world)
-        .is_some_and(crate::world_registry::WorldInfo::has_http_handler_export);
     if has_async_export {
         // TaskReturn is always needed for async exports.
         // For Result-returning exports (e.g., HTTP handler), synthesis::cm_adapter computes
@@ -270,14 +266,10 @@ pub fn analyze_project(project: &mut Project) {
 
         // Waitable-set builtins (waitable_set_new, waitable_join, waitable_set_wait, subtask_drop)
         // are added automatically via reachability from internal::wait_for_subtask
-
-        // HTTP handler exports need future intrinsics for response creation
-        // (trailers parameter to response.new is a future)
-        if has_http_handler_export {
-            add_import_by_name(&mut imports, "future_new");
-            add_import_by_name(&mut imports, "future_write");
-            add_import_by_name(&mut imports, "future_drop_writable");
-        }
+        //
+        // HTTP handler exports need future intrinsics (future-new, future-write,
+        // future-drop-writable) for response creation, but these are now registered
+        // lazily by WIR synthesis via ensure_canonical() — no DCE injection needed.
     }
 
     // Store imports in the entry module
