@@ -3813,7 +3813,7 @@ impl<'a> TirUnparser<'a> {
                     if i > 0 {
                         self.output.push_str(", ");
                     }
-                    self.unparse_expr(arg);
+                    self.unparse_expr(&arg.expr);
                 }
                 self.output.push(')');
             }
@@ -3873,20 +3873,7 @@ impl<'a> TirUnparser<'a> {
                     if i > 0 {
                         self.output.push_str(", ");
                     }
-                    self.unparse_expr(arg);
-                }
-                self.output.push(')');
-            }
-            TirExprKind::StaticCall { func, args, .. } => {
-                // Output the mangled function name (e.g., "Point::origin" or "Array<i32>::with_capacity")
-                self.output
-                    .push_str(&Self::quote_if_needed(&func.name.clone()));
-                self.output.push('(');
-                for (i, arg) in args.iter().enumerate() {
-                    if i > 0 {
-                        self.output.push_str(", ");
-                    }
-                    self.unparse_expr(arg);
+                    self.unparse_expr(&arg.expr);
                 }
                 self.output.push(')');
             }

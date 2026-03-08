@@ -10,8 +10,8 @@
 use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{
-    FunctionRef, MonomorphInfo, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeId,
-    TypeTable,
+    CallArg, FunctionRef, MonomorphInfo, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
+    TypeId, TypeTable,
 };
 
 /// Run all post-optimization TIR rewrites in a single pass over all functions.
@@ -102,9 +102,12 @@ fn rewrite_expr(expr: &mut TirExpr) -> bool {
             changed |= rewrite_expr(inner);
             changed |= rewrite_expr(index);
         }
-        TirExprKind::Call { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                changed |= rewrite_expr(&mut arg.expr);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 changed |= rewrite_expr(arg);
             }
@@ -112,7 +115,7 @@ fn rewrite_expr(expr: &mut TirExpr) -> bool {
         TirExprKind::MethodCall { receiver, args, .. } => {
             changed |= rewrite_expr(receiver);
             for arg in args {
-                changed |= rewrite_expr(arg);
+                changed |= rewrite_expr(&mut arg.expr);
             }
         }
         TirExprKind::IndirectCall { callee, args } => {
@@ -283,8 +286,11 @@ fn try_lower_to_select(
         TirExprKind::Call {
             func: func_ref,
             type_args: vec![result_type],
-            args: vec![condition.clone(), true_val.clone(), false_val.clone()],
-            param_is_mut: vec![false, false, false],
+            args: vec![
+                CallArg::new(condition.clone(), false),
+                CallArg::new(true_val.clone(), false),
+                CallArg::new(false_val.clone(), false),
+            ],
         },
         result_type,
         span,

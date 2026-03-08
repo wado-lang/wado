@@ -151,9 +151,12 @@ fn analyze_uses_in_expr(expr: &TirExpr, refs: &mut IndexMap<u32, RefInfo>) {
             analyze_uses_in_expr(target, refs);
             analyze_uses_in_expr(value, refs);
         }
-        TirExprKind::Call { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                analyze_uses_in_expr(&arg.expr, refs);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 analyze_uses_in_expr(arg, refs);
             }
@@ -161,7 +164,7 @@ fn analyze_uses_in_expr(expr: &TirExpr, refs: &mut IndexMap<u32, RefInfo>) {
         TirExprKind::MethodCall { receiver, args, .. } => {
             analyze_uses_in_expr(receiver, refs);
             for arg in args {
-                analyze_uses_in_expr(arg, refs);
+                analyze_uses_in_expr(&arg.expr, refs);
             }
         }
         TirExprKind::IndirectCall { callee, args } => {
@@ -348,9 +351,12 @@ fn transform_expr(expr: &mut TirExpr, eliminable: &IndexMap<u32, RefInfo>) {
             transform_expr(target, eliminable);
             transform_expr(value, eliminable);
         }
-        TirExprKind::Call { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                transform_expr(&mut arg.expr, eliminable);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 transform_expr(arg, eliminable);
             }
@@ -358,7 +364,7 @@ fn transform_expr(expr: &mut TirExpr, eliminable: &IndexMap<u32, RefInfo>) {
         TirExprKind::MethodCall { receiver, args, .. } => {
             transform_expr(receiver, eliminable);
             for arg in args {
-                transform_expr(arg, eliminable);
+                transform_expr(&mut arg.expr, eliminable);
             }
         }
         TirExprKind::IndirectCall { callee, args } => {

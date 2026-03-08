@@ -4,8 +4,8 @@ use crate::ast::{self, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
-    FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
-    TypeId, TypeTable,
+    CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt,
+    TirStmtKind, TypeId, TypeTable,
 };
 use crate::token::Span;
 use indexmap::IndexSet;
@@ -266,7 +266,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             let mangled_func_name = method_info.to_mangled_name();
 
                             return Some(TirExpr::new(
-                                TirExprKind::StaticCall {
+                                TirExprKind::Call {
                                     func: FunctionRef {
                                         module_source: ModuleSource::int128(),
                                         name: mangled_func_name,
@@ -274,8 +274,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         method_info: Some(method_info),
                                         is_cm_adapter: false,
                                     },
-                                    args: vec![inner_literal],
-                                    param_is_mut: vec![false],
+                                    type_args: vec![],
+                                    args: vec![CallArg::new(inner_literal, false)],
                                 },
                                 target_type,
                                 lit.span,
@@ -505,7 +505,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         let new_call = TirExpr::new(
-            TirExprKind::StaticCall {
+            TirExprKind::Call {
                 func: FunctionRef {
                     module_source: impl_module_source.clone(),
                     name: new_mangled_name,
@@ -521,8 +521,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     method_info: Some(new_method_info),
                     is_cm_adapter: false,
                 },
-                param_is_mut: vec![false; new_args.len()],
-                args: new_args,
+                type_args: vec![],
+                args: new_args
+                    .into_iter()
+                    .map(|e| CallArg::new(e, false))
+                    .collect(),
             },
             builder_type,
             span,
@@ -609,8 +612,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         is_cm_adapter: false,
                     },
                     type_args: vec![],
-                    args: vec![key_expr, value],
-                    param_is_mut: vec![false, false],
+                    args: vec![CallArg::new(key_expr, false), CallArg::new(value, false)],
                 },
                 TypeTable::UNIT,
                 span,
@@ -660,7 +662,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     },
                     type_args: vec![],
                     args: vec![],
-                    param_is_mut: vec![],
                 },
                 target_type,
                 span,
@@ -753,7 +754,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             MethodName::format_local(&mangled_builder_name, Some(&trait_name), "new_literal");
         let capacity = tuple_lit.elements.len() as u64;
         let new_call = TirExpr::new(
-            TirExprKind::StaticCall {
+            TirExprKind::Call {
                 func: FunctionRef {
                     module_source: impl_module_source.clone(),
                     name: new_mangled_name,
@@ -769,15 +770,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     method_info: Some(new_method_info),
                     is_cm_adapter: false,
                 },
-                args: vec![TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: capacity,
-                        repr: (capacity as i64).to_string(),
-                    },
-                    TypeTable::I32,
-                    span,
+                type_args: vec![],
+                args: vec![CallArg::new(
+                    TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: capacity,
+                            repr: (capacity as i64).to_string(),
+                        },
+                        TypeTable::I32,
+                        span,
+                    ),
+                    false,
                 )],
-                param_is_mut: vec![false],
             },
             builder_type,
             span,
@@ -856,8 +860,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         is_cm_adapter: false,
                     },
                     type_args: vec![],
-                    args: vec![elem_expr],
-                    param_is_mut: vec![false],
+                    args: vec![CallArg::new(elem_expr, false)],
                 },
                 TypeTable::UNIT,
                 span,
@@ -902,7 +905,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 },
                 type_args: vec![],
                 args: vec![],
-                param_is_mut: vec![],
             },
             output_type,
             span,
