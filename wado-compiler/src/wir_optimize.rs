@@ -160,6 +160,8 @@ struct VariantReplacement {
     case_disc_values: indexmap::IndexMap<u32, i32>,
     /// `(case_wir_type_idx, field_name_in_case_struct)` → sroa local name.
     field_to_local: indexmap::IndexMap<(u32, String), String>,
+    /// SROA locals that hold ref types (need `ref.as_non_null` when read).
+    ref_locals: indexmap::IndexSet<String>,
 }
 
 /// Returns true if a `WirType` is a valid Wasm value type for multi-value returns.
@@ -421,9 +423,10 @@ fn try_variant_sroa_candidate(
     }
 
     // Build multi-value field types: [i32 (discriminant), payload_0, payload_1, ...]
+    // Payload types are made nullable because unused positions need ref.null as padding.
     let mut field_types = Vec::with_capacity(field_count);
     field_types.push(WirType::I32);
-    field_types.extend(payload_types);
+    field_types.extend(payload_types.into_iter().map(WirType::as_nullable));
 
     // Build field names
     let mut field_names = Vec::with_capacity(field_count);
@@ -1713,7 +1716,7 @@ fn default_value_for_type(ty: &WirType) -> WirInstr {
         WirType::I64 | WirType::U64 => WirInstr::I64Const(0),
         WirType::F32 => WirInstr::F32Const(0.0),
         WirType::F64 => WirInstr::F64Const(0.0),
-        WirType::Ref { nullable: true, .. } => WirInstr::RefNull {
+        WirType::Ref { .. } | WirType::AbstractRef { .. } => WirInstr::RefNull {
             heap_type: crate::wir::WirAbstractHeapType::None,
         },
         _ => WirInstr::I32Const(0), // fallback
@@ -1818,12 +1821,23 @@ fn rewrite_call_sites(
                 }
             }
 
+            // Track which SROA locals hold ref types (need ref.as_non_null when read)
+            let mut ref_locals = indexmap::IndexSet::new();
+            for (fi, ft) in candidate.field_types.iter().enumerate() {
+                if matches!(ft, WirType::Ref { .. } | WirType::AbstractRef { .. })
+                    && let Some(local_name) = field_map.get(&candidate.field_names[fi])
+                {
+                    ref_locals.insert(local_name.clone());
+                }
+            }
+
             variant_replacements.insert(
                 temp_name,
                 VariantReplacement {
                     disc_local,
                     case_disc_values,
                     field_to_local,
+                    ref_locals,
                 },
             );
         } else {
@@ -1948,6 +1962,19 @@ fn replace_struct_gets(
     instr.for_each_boxed_child_mut(&mut |child| replace_struct_gets(child, replacements));
 }
 
+/// Produce a `LocalGet` for an SROA local, wrapping with `RefAsNonNull` if the local
+/// holds a nullable ref type (variant SROA payload locals use nullable types for padding).
+fn sroa_local_get(local_name: &str, ref_locals: &indexmap::IndexSet<String>) -> WirInstr {
+    let get = WirInstr::LocalGet {
+        name: local_name.to_string(),
+    };
+    if ref_locals.contains(local_name) {
+        WirInstr::RefAsNonNull(Box::new(get))
+    } else {
+        get
+    }
+}
+
 /// Replace variant access patterns with scalar local accesses for variant SROA'd temps.
 ///
 /// Handles three patterns:
@@ -1975,9 +2002,7 @@ fn replace_variant_accesses(
     {
         let key = (cast_type_id.index(), field_name.clone());
         if let Some(local_name) = vr.field_to_local.get(&key) {
-            *instr = WirInstr::LocalGet {
-                name: local_name.clone(),
-            };
+            *instr = sroa_local_get(local_name, &vr.ref_locals);
             return;
         }
     }
@@ -2013,9 +2038,7 @@ fn replace_variant_accesses(
     {
         let key = (cast_type_id.index(), field_name.clone());
         if let Some(local_name) = vr.field_to_local.get(&key) {
-            *instr = WirInstr::LocalGet {
-                name: local_name.clone(),
-            };
+            *instr = sroa_local_get(local_name, &vr.ref_locals);
             return;
         }
     }
@@ -2143,12 +2166,12 @@ fn take_block_result_call(
 
 /// Box<T> parameter SROA.
 ///
-/// Rewrites internal functions that take `ref null Box<T>` parameters (single-field
+/// Rewrites internal functions that take `ref Box<T>` parameters (single-field
 /// wrapper structs) to take the inner scalar `T` directly. At call sites, the
 /// `StructNew { value: expr }` allocation is replaced with just `expr`.
 ///
 /// A parameter is eligible when:
-/// - Its type is `Ref { nullable: true }` to a struct with `generic_origin.base_name == "Box"`
+/// - Its type is `Ref` to a struct with `generic_origin.base_name == "Box"`
 /// - The struct has exactly one field named "value"
 /// - Within the function body, the parameter is only used via:
 ///   a. `StructGet { field_name: "value", expr: LocalGet(param) }` — scalar read
@@ -2175,7 +2198,7 @@ fn sroa_single_field_parameters(module: &mut WirModule) {
         for (pi, param_ty) in func_type.params.iter().enumerate() {
             let WirType::Ref {
                 type_id: struct_type_id,
-                nullable: true,
+                ..
             } = param_ty
             else {
                 continue;

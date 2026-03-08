@@ -1,9 +1,9 @@
 // Test: Box<T> parameter SROA optimization
-// Verifies that functions taking `ref null Box<T>` parameters are rewritten
+// Verifies that functions taking `ref Box<T>` parameters are rewritten
 // to take the scalar `T` directly, eliminating GC struct allocation at call sites.
 //
 // Box<T> is synthesized by the lower phase to wrap primitives for reference
-// semantics (e.g., Display::fmt receives `&self` → `ref null Box<T>`).
+// semantics (e.g., Display::fmt receives `&self` → `ref Box<T>`).
 // Template string interpolation is the primary trigger for Box<T> creation.
 //
 // bool Display is fully inlined (Formatter::pad with constant string),
@@ -180,14 +180,14 @@ __DATA__
 {
     "stdout": "ok\n",
     "wir_expect:O2": [
-        "\"functype/i32::fmt_decimal\" = fn(i32, ref null Formatter)",
-        "\"functype/u32::fmt_decimal\" = fn(u32, ref null Formatter)",
-        "\"functype/i64::fmt_decimal\" = fn(i64, ref null Formatter)",
-        "\"functype/u64::fmt_decimal\" = fn(u64, ref null Formatter)",
-        "\"functype/f32::fmt_into\" = fn(f32, ref null Formatter)",
-        "\"functype/f64::fmt_into\" = fn(f64, ref null Formatter)",
-        "\"functype/f64::fmt_fixed\" = fn(f64, i32, ref null Formatter)",
-        "\"functype/char^Display::fmt\" = fn(char, ref null Formatter)",
+        "\"functype/i32::fmt_decimal\" = fn(i32, ref Formatter)",
+        "\"functype/u32::fmt_decimal\" = fn(u32, ref Formatter)",
+        "\"functype/i64::fmt_decimal\" = fn(i64, ref Formatter)",
+        "\"functype/u64::fmt_decimal\" = fn(u64, ref Formatter)",
+        "\"functype/f32::fmt_into\" = fn(f32, ref Formatter)",
+        "\"functype/f64::fmt_into\" = fn(f64, ref Formatter)",
+        "\"functype/f64::fmt_fixed\" = fn(f64, i32, ref Formatter)",
+        "\"functype/char^Display::fmt\" = fn(char, ref Formatter)",
         "f64::fmt_fixed(self, f.precision, f)"
     ]
 }
