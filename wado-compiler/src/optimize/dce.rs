@@ -1850,13 +1850,6 @@ pub fn remove_unreachable_types(project: &mut Project) {
         module.enums.retain(|e| keep_enums.contains(&e.name));
     }
 
-    // Remove unreachable types from the shared TypeTable
-    // Since all modules share the same TypeTable via Rc<RefCell<>>,
-    // we only need to modify it once through any module
-    if let Some(module) = project.tir_modules.values().next() {
-        let mut type_table = module.type_table.borrow_mut();
-        type_table.retain(|type_id, _| reachable_types.contains(&type_id));
-    }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

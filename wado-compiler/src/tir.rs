@@ -546,28 +546,6 @@ impl TypeTable {
         self.types.keys().copied()
     }
 
-    /// Retain only types that satisfy the predicate.
-    /// Used by DCE to remove unreachable types.
-    pub fn retain<F>(&mut self, mut f: F)
-    where
-        F: FnMut(TypeId, &ResolvedType) -> bool,
-    {
-        // Collect types to remove
-        let to_remove: Vec<TypeId> = self
-            .types
-            .iter()
-            .filter(|(id, ty)| !f(**id, ty))
-            .map(|(id, _)| *id)
-            .collect();
-
-        // Remove from both maps
-        for id in to_remove {
-            if let Some(ty) = self.types.shift_remove(&id) {
-                self.intern_map.shift_remove(&ty);
-            }
-        }
-    }
-
     /// Create a raw GC array type (`builtin::array<T>`)
     pub fn make_builtin_array(&mut self, element: TypeId) -> TypeId {
         self.intern(ResolvedType::BuiltinArray(element))
