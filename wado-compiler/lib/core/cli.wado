@@ -7,10 +7,10 @@
 // For raw WASI CLI interfaces, use "wasi:cli" instead.
 //
 // IMPORTANT: WASI P3 async streams require specific ordering:
-// 1. Create stream (get rx, tx)
+// 1. Create stream pair: Stream::<u8>::new() → [rx, tx]
 // 2. Start consumer (write_via_stream) with rx FIRST
-// 3. Write data to tx
-// 4. Close tx (stream_drop_writable)
+// 3. Write data to tx via StreamWritable::write()
+// 4. Drop tx via StreamWritable::drop()
 // 5. Wait for consumer to complete
 // This ordering must be followed in each output function.
 
@@ -19,67 +19,66 @@ use { wait_for_subtask } from "core:internal";
 
 // Re-export commonly used effects for convenience
 pub use { Stdout, Stderr, Environment, Exit } from "wasi:cli";
-/// Writes a string to a stream tx handle.
+/// Writes a string to a StreamWritable<u8> with an optional newline, then drops it.
 /// Called AFTER the consumer (write_via_stream) has been started.
-/// If add_newline is true, appends '\n' after the message.
-pub fn write_to_stream(tx: i32, message: String, add_newline: bool) {
+pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
     let len = message.len();
-    let msg_bytes = message.internal_raw_bytes();
     let alloc_size = if add_newline { len + 1 } else { len };
-    let ptr = builtin::realloc(0, 0, 1, alloc_size);
-    for let mut i = 0; i < len; i = i + 1 {
-        let byte = builtin::array_get_u8(msg_bytes, i);
-        builtin::i32_store8(ptr + i, byte);
+    let mut arr = Array::<u8>::with_capacity(alloc_size);
+    for let b of message.bytes() {
+        arr.append(b);
     }
     if add_newline {
-        builtin::i32_store8(ptr + len, '\n' as u8);
+        arr.append('\n' as u8);
     }
-    builtin::stream_write(tx, ptr, alloc_size);
-    builtin::stream_drop_writable(tx);
+    tx.write(arr);
+    tx.drop();
 }
 /// Prints a line to stdout (adds newline).
 pub fn println(message: String) with Stdout {
-    let handles = builtin::stream_new();
-    let rx = handles as i32;
-    let tx = (handles >> 32) as i32;
+    let [rx, tx] = Stream::<u8>::new();
 
-    let subtask = builtin::call_indirect_stdout_write_via_stream(rx);
+    let subtask = Stdout::write_via_stream(rx);
     write_to_stream(tx, message, true);
     wait_for_subtask(subtask);
 }
 
 /// Prints a line to stderr (adds newline).
 pub fn eprintln(message: String) with Stderr {
-    let handles = builtin::stream_new();
-    let rx = handles as i32;
-    let tx = (handles >> 32) as i32;
+    let [rx, tx] = Stream::<u8>::new();
 
-    let subtask = builtin::call_indirect_stderr_write_via_stream(rx);
+    let subtask = Stderr::write_via_stream(rx);
     write_to_stream(tx, message, true);
     wait_for_subtask(subtask);
 }
 
 /// Prints to stdout without a trailing newline.
 pub fn print(message: String) with Stdout {
-    let handles = builtin::stream_new();
-    let rx = handles as i32;
-    let tx = (handles >> 32) as i32;
+    let [rx, tx] = Stream::<u8>::new();
 
-    let subtask = builtin::call_indirect_stdout_write_via_stream(rx);
+    let subtask = Stdout::write_via_stream(rx);
     write_to_stream(tx, message, false);
     wait_for_subtask(subtask);
 }
 
 /// Prints to stderr without a trailing newline.
 pub fn eprint(message: String) with Stderr {
-    let handles = builtin::stream_new();
-    let rx = handles as i32;
-    let tx = (handles >> 32) as i32;
+    let [rx, tx] = Stream::<u8>::new();
 
-    let subtask = builtin::call_indirect_stderr_write_via_stream(rx);
+    let subtask = Stderr::write_via_stream(rx);
     write_to_stream(tx, message, false);
     wait_for_subtask(subtask);
 }
+/// Writes raw bytes to stdout.
+pub fn print_bytes(data: Array<u8>) with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+
+    let subtask = Stdout::write_via_stream(rx);
+    tx.write(data);
+    tx.drop();
+    wait_for_subtask(subtask);
+}
+
 /// Returns the value of an environment variable by name.
 /// TODO: Implement when for-in loops are supported.
 pub fn env(name: String) -> Option<String> with Environment;

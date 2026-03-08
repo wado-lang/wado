@@ -561,8 +561,9 @@ __DATA__
 -
   13. [x] Update `WaitableSet::wait`/`poll` to use Wado-level return types
 -
-  14. [ ] Remove legacy CM functions from `builtin.wado` (deferred: `cli.wado` and `internal.wado`
-          still use `builtin::stream_new`, `builtin::stream_write`, etc. for ambient I/O)
+  14. [x] Remove legacy CM functions from `builtin.wado` — `cli.wado`, `internal.wado`, and
+          test fixtures migrated to use `Stream::<u8>::new()`, `StreamWritable::write/drop()`,
+          `WaitableSet::new/wait/drop()`, `Subtask::join/drop()` resource APIs
 -
   15. [x] Delete `stream.wado`
 -
@@ -593,8 +594,8 @@ __DATA__
   24. [x] Implement cancel canonicals as void calls (`future-cancel-read`, `future-cancel-write`,
           `stream-cancel-read`, `stream-cancel-write`, `subtask-cancel`)
 -
-  25. [—] Migrate `cli.wado` from `builtin::stream_*` to resource API — deferred:
-      low-level builtins avoid GC→linear→GC round trips, more efficient for ambient I/O
+  25. [x] Migrate `cli.wado` and `internal.wado` from `builtin::stream_*` to resource API
+          (performance regression accepted; to be recovered by optimizer improvements later)
 -
   26. [x] Move DCE `cm_lower_array_u8` injection to call graph edge in `dce.rs`
           (stream-write callee → cm_lower_array_u8 dependency registered during TIR analysis)

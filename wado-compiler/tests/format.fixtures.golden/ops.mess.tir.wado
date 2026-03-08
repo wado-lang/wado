@@ -33,20 +33,6 @@ export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i
 
 
 // --- Module: core:builtin ---
-fn stream_new() -> i64;
-
-fn stream_write(tx: i32, ptr: i32, len: i32) -> i32;
-
-fn stream_drop_writable(tx: i32);
-
-fn waitable_set_new() -> i32;
-
-fn waitable_join(waitable: i32, set: i32);
-
-fn waitable_set_wait(set: i32, outptr: i32) -> i32;
-
-fn subtask_drop(subtask: i32);
-
 fn task_return(result: i32);
 
 fn i32_as_char(value: i32) -> char;
@@ -304,50 +290,59 @@ pub fn gc_array_to_memory(arr: builtin::array<u8>, ptr: i32, len: i32) {
     }
 }
 
-pub fn write_string_to_stream(tx: i32, message: <TypeId(23)>, add_newline: bool) {
+pub fn write_string_to_stream(tx: <TypeId(32)>, message: <TypeId(23)>, add_newline: bool) {
     let len: i32 = message.String::len();
-    let msg_bytes: builtin::array<u8> = message.String::internal_raw_bytes();
     let alloc_size: i32 = if add_newline {
         (len + 1);
     } else {
         len;
     };
-    let ptr: i32 = core::builtin::realloc(0, 0, 1, alloc_size);
-    core::internal::gc_array_to_memory(msg_bytes, ptr, len);
-    if add_newline {
-        core::builtin::i32_store8((ptr + len), '\n');
+    let mut arr: <TypeId(34)> = "core::internal::Array<u8>::with_capacity"(alloc_size);
+    __for_of_2: {
+        let mut __iter_2: <TypeId(36)> = message.String::bytes()."StrUtf8ByteIter^IntoIterator::into_iter"();
+        loop {
+            let __pattern_temp_0: <TypeId(39)> = __iter_2."StrUtf8ByteIter^Iterator::next"();
+            if __variant_test(__pattern_temp_0, case=0, name=Some) {
+                let b: u8 = __variant_payload(__pattern_temp_0, case=0);
+                arr."Array<u8>::append"(b);
+            } else {
+                break;
+            }
+        }
     }
-    core::builtin::stream_write(tx, ptr, alloc_size);
-    core::builtin::realloc(ptr, alloc_size, 1, 0);
-    core::builtin::stream_drop_writable(tx);
+    if add_newline {
+        arr."Array<u8>::append"('\n' as u8);
+    }
+    tx."StreamWritable<u8>::write"(arr);
+    tx."StreamWritable<u8>::drop"();
 }
 
 pub fn wait_for_subtask(packed: i32) {
     let handle: i32 = (packed >> 4);
     if (handle != 0) {
-        let ws: i32 = core::builtin::waitable_set_new();
-        core::builtin::waitable_join(handle, ws);
-        let ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
-        core::builtin::waitable_set_wait(ws, ptr);
-        core::builtin::realloc(ptr, 8, 4, 0);
-        core::builtin::subtask_drop(handle);
+        let subtask: <TypeId(43)> = handle as <TypeId(43)>;
+        let ws: <TypeId(44)> = "core::prelude/types.wado::WaitableSet::new"();
+        subtask.Subtask::join(&ws);
+        ws.WaitableSet::wait();
+        subtask.Subtask::drop();
+        ws.WaitableSet::drop();
     }
 }
 
 pub fn log_stdout(message: <TypeId(23)>) {
-    let handles: i64 = core::builtin::stream_new();
-    let rx: i32 = handles as i32;
-    let tx: i32 = (handles >> 32) as i32;
-    let subtask: i32 = core::builtin::call_indirect_stdout_write_via_stream(rx);
+    let __pattern_temp_0: <TypeId(52)> = "core::prelude/types.wado::Stream<u8>::new"();
+    let rx: <TypeId(48)> = __pattern_temp_0.0;
+    let tx: <TypeId(32)> = __pattern_temp_0.1;
+    let subtask: i32 = core::builtin::call_indirect_stdout_write_via_stream(rx as i32);
     core::internal::write_string_to_stream(tx, message, true);
     core::internal::wait_for_subtask(subtask);
 }
 
 pub fn log_stderr(message: <TypeId(23)>) {
-    let handles: i64 = core::builtin::stream_new();
-    let rx: i32 = handles as i32;
-    let tx: i32 = (handles >> 32) as i32;
-    let subtask: i32 = core::builtin::call_indirect_stderr_write_via_stream(rx);
+    let __pattern_temp_0: <TypeId(52)> = "core::prelude/types.wado::Stream<u8>::new"();
+    let rx: <TypeId(48)> = __pattern_temp_0.0;
+    let tx: <TypeId(32)> = __pattern_temp_0.1;
+    let subtask: i32 = core::builtin::call_indirect_stderr_write_via_stream(rx as i32);
     core::internal::write_string_to_stream(tx, message, true);
     core::internal::wait_for_subtask(subtask);
 }
@@ -375,17 +370,17 @@ pub fn cm_lower_list_u8(data: builtin::array<u8>, len: i32) -> i64 {
     return (ptr as i64 | (len as i64 << 32));
 }
 
-pub fn cm_lower_array_u8(arr: <TypeId(33)>) -> i64 {
+pub fn cm_lower_array_u8(arr: <TypeId(34)>) -> i64 {
     let data: builtin::array<u8> = arr."Array<u8>::internal_raw_data"();
     let len: i32 = arr."Array<u8>::len"();
     return core::internal::cm_lower_list_u8(data, len);
 }
 
 pub fn write_escaped_string(s: <TypeId(23)>, f: <TypeId(31)>) {
-    __for_of_2: {
-        let mut __iter_2: <TypeId(35)> = s.String::chars()."StrCharIter^IntoIterator::into_iter"();
+    __for_of_3: {
+        let mut __iter_3: <TypeId(54)> = s.String::chars()."StrCharIter^IntoIterator::into_iter"();
         loop {
-            let __pattern_temp_0: <TypeId(38)> = __iter_2."StrCharIter^Iterator::next"();
+            let __pattern_temp_0: <TypeId(57)> = __iter_3."StrCharIter^Iterator::next"();
             if __variant_test(__pattern_temp_0, case=0, name=Some) {
                 let c: char = __variant_payload(__pattern_temp_0, case=0);
                 match c {

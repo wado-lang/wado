@@ -136,6 +136,12 @@ Obtained from `Subtask::join`. Compared by handle identity (==).
 
 A set of waitable handles used for async task coordination.
 
+Lifecycle: create with `new()`, join waitables into the set, wait/poll for
+events, then drop. A WaitableSet can only be dropped when it has no joined
+children — `Subtask::drop()` automatically removes the subtask from its
+joined set (via the CM spec's `Waitable.join(None)` semantics), so always
+drop subtasks before dropping the set.
+
 ##### `fn new() -> WaitableSet`
 
 Create a new waitable set.
@@ -150,15 +156,27 @@ Non-blocking poll. Returns Some(event) if ready, None otherwise.
 
 ##### `fn drop(&self)`
 
-Drop the waitable set.
+Drop the waitable set. Traps if waitables are still joined to this set.
 
 #### `pub resource Subtask`
 
 An async subtask handle returned by CM async operations.
 
+Subtask extends Waitable in the CM spec. When dropped, it automatically
+removes itself from any joined WaitableSet (the CM runtime calls
+`Waitable.join(None)` internally), so `WaitableSet::drop()` can succeed.
+
+Correct lifecycle:
+let subtask = handle as Subtask;
+subtask.join(&ws);
+ws.wait();
+subtask.drop(); // removes from ws
+ws.drop(); // safe — no children
+
 ##### `fn drop(&self)`
 
-Drop a completed subtask handle.
+Drop a completed subtask. Automatically unjoins from its WaitableSet.
+Traps if the subtask has not yet resolved.
 
 ##### `fn cancel(&self)`
 
@@ -166,7 +184,7 @@ Cancel this in-progress subtask. Blocks until cancellation completes.
 
 ##### `fn join(&self, set: &WaitableSet) -> Waitable`
 
-Join this subtask to a waitable set.
+Join this subtask to a waitable set for monitoring.
 Returns a Waitable token identifying this subtask in wait results.
 
 #### `pub resource ErrorContext`
@@ -2091,11 +2109,10 @@ dropped and this function will return an error-code.
 
 ### Functions
 
-#### `pub fn write_to_stream(tx: i32, message: String, add_newline: bool)`
+#### `pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool)`
 
-Writes a string to a stream tx handle.
+Writes a string to a StreamWritable<u8> with an optional newline, then drops it.
 Called AFTER the consumer (write_via_stream) has been started.
-If add_newline is true, appends '\n' after the message.
 
 #### `pub fn println(message: String) with Stdout`
 
@@ -2112,6 +2129,10 @@ Prints to stdout without a trailing newline.
 #### `pub fn eprint(message: String) with Stderr`
 
 Prints to stderr without a trailing newline.
+
+#### `pub fn print_bytes(data: Array<u8>) with Stdout`
+
+Writes raw bytes to stdout.
 
 #### `pub fn env(name: String) -> Option<String> with Environment`
 
