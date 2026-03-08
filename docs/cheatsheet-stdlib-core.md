@@ -1395,14 +1395,39 @@ pub fn decode_bytes(encoded: &Array<u8>) -> Option<Array<u8>>;
 
 ## core:zlib
 
-zlib compression and decompression (RFC 1950/1951/1952).
+zlib compression and decompression.
+
+A pure Wado port of zlib 1.3.1 (https://github.com/madler/zlib).
+This code is derived from the original zlib by Jean-loup Gailly and Mark Adler,
+and is licensed under the zlib License (https://github.com/madler/zlib/blob/develop/LICENSE).
+
+Implements DEFLATE (RFC 1951) and gzip (RFC 1952) fully.
+RFC 1950 (zlib format) is supported except for preset dictionaries (FDICT);
+streams with FDICT set will return `ZlibError::PresetDictionaryNotSupported`.
+
+Features:
+  - Adler-32 and CRC-32 checksums (with combine operations)
+  - DEFLATE inflate (decompression) with dynamic/fixed Huffman and stored blocks
+  - DEFLATE deflate (compression) with fixed and dynamic Huffman codes + LZ77
+  - Compression levels 0-9 with strategy selection
+  - zlib and gzip format support
+  - Streaming deflate/inflate API
+
+Usage - Compression:
+  let input: Array<u8> = [...];
+  let compressed = zlib_compress(&input);
+  let compressed_fast = compress2(&input, Z_BEST_SPEED);
+  let compressed_best = compress2(&input, Z_BEST_COMPRESSION);
+
+Usage - Decompression:
+  let decompressed = inflate_zlib(&compressed);
+  let decompressed_gz = inflate_gzip(&gzipped_data);
 
 ### Globals
 
 ```wado
 pub global Z_OK: i32;
 pub global Z_STREAM_END: i32;
-
 pub global Z_ERRNO: i32;
 pub global Z_STREAM_ERROR: i32;
 pub global Z_DATA_ERROR: i32;

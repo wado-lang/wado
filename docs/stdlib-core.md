@@ -2331,7 +2331,34 @@ Same lenient behavior as `decode`.
 
 ## core:zlib
 
-zlib compression and decompression (RFC 1950/1951/1952).
+zlib compression and decompression.
+
+A pure Wado port of zlib 1.3.1 (https://github.com/madler/zlib).
+This code is derived from the original zlib by Jean-loup Gailly and Mark Adler,
+and is licensed under the zlib License (https://github.com/madler/zlib/blob/develop/LICENSE).
+
+Implements DEFLATE (RFC 1951) and gzip (RFC 1952) fully.
+RFC 1950 (zlib format) is supported except for preset dictionaries (FDICT);
+streams with FDICT set will return `ZlibError::PresetDictionaryNotSupported`.
+
+Features:
+
+- Adler-32 and CRC-32 checksums (with combine operations)
+- DEFLATE inflate (decompression) with dynamic/fixed Huffman and stored blocks
+- DEFLATE deflate (compression) with fixed and dynamic Huffman codes + LZ77
+- Compression levels 0-9 with strategy selection
+- zlib and gzip format support
+- Streaming deflate/inflate API
+
+Usage - Compression:
+let input: Array<u8> = [...];
+let compressed = zlib_compress(&input);
+let compressed_fast = compress2(&input, Z_BEST_SPEED);
+let compressed_best = compress2(&input, Z_BEST_COMPRESSION);
+
+Usage - Decompression:
+let decompressed = inflate_zlib(&compressed);
+let decompressed_gz = inflate_gzip(&gzipped_data);
 
 ### Globals
 
@@ -2400,6 +2427,36 @@ zlib compression and decompression (RFC 1950/1951/1952).
 #### `pub global GZIP_FORMAT: i32`
 
 #### `pub global AUTO_FORMAT: i32`
+
+### Enums
+
+#### `pub enum ZlibError`
+
+Error type for zlib/gzip decompression operations.
+
+##### `DataTooShort`
+
+##### `InvalidHeader`
+
+##### `InvalidMagicNumber`
+
+##### `UnsupportedCompressionMethod`
+
+##### `PresetDictionaryNotSupported`
+
+##### `Adler32Mismatch`
+
+##### `Crc32Mismatch`
+
+##### `TruncatedExtraField`
+
+##### `HeaderExtendsPastEnd`
+
+##### `TruncatedTrailer`
+
+##### `IsizeMismatch`
+
+##### `OutputExceedsMax`
 
 ### Structs
 
@@ -2527,11 +2584,11 @@ Creates a copy of this stream.
 
 Adds a compressed data chunk to the stream buffer.
 
-##### `pub fn finish(&mut self) -> Result<Array<u8>, String>`
+##### `pub fn finish(&mut self) -> Result<Array<u8>, ZlibError>`
 
 Decompresses all buffered data and returns the result.
 
-##### `pub fn decompress(&self, input: &Array<u8>) -> Result<Array<u8>, String>`
+##### `pub fn decompress(&self, input: &Array<u8>) -> Result<Array<u8>, ZlibError>`
 
 Decompresses data in one shot and returns the result.
 
@@ -2573,7 +2630,7 @@ Returns the maximum compressed size for a given source length.
 
 Decompresses raw DEFLATE data (no header/checksum).
 
-#### `pub fn inflate_zlib(input: &Array<u8>) -> Result<Array<u8>, String>`
+#### `pub fn inflate_zlib(input: &Array<u8>) -> Result<Array<u8>, ZlibError>`
 
 Decompresses zlib-wrapped data (RFC 1950).
 
@@ -2605,7 +2662,7 @@ Compresses data in zlib format with the specified compression level.
 
 Compresses data in zlib format with the specified compression level and strategy.
 
-#### `pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, String>`
+#### `pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, ZlibError>`
 
 Decompresses gzip-wrapped data (RFC 1952).
 
@@ -2617,7 +2674,7 @@ Compresses data in gzip format with default compression level.
 
 Compresses data in gzip format with the specified compression level.
 
-#### `pub fn uncompress(input: &Array<u8>) -> Result<Array<u8>, String>`
+#### `pub fn uncompress(input: &Array<u8>) -> Result<Array<u8>, ZlibError>`
 
 Decompresses zlib-wrapped data (alias for `inflate_zlib`).
 
@@ -2629,7 +2686,7 @@ Compresses data as raw DEFLATE (no header/checksum) with default level.
 
 Compresses data as raw DEFLATE (no header/checksum) with the specified level.
 
-#### `pub fn uncompress2(input: &Array<u8>, max_output: i32) -> Result<Array<u8>, String>`
+#### `pub fn uncompress2(input: &Array<u8>, max_output: i32) -> Result<Array<u8>, ZlibError>`
 
 Decompresses zlib-wrapped data with a maximum output size limit.
 
@@ -2637,7 +2694,7 @@ Decompresses zlib-wrapped data with a maximum output size limit.
 
 Compresses data in gzip format with a custom header and compression level.
 
-#### `pub fn inflate_get_gzip_header(input: &Array<u8>) -> Result<GzipHeader, String>`
+#### `pub fn inflate_get_gzip_header(input: &Array<u8>) -> Result<GzipHeader, ZlibError>`
 
 Extracts the gzip header from compressed data without decompressing.
 
