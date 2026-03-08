@@ -178,6 +178,26 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
+        // Check newtypes — the impl block may live in the module that defines the newtype
+        if let Some(&type_id) = self.newtypes.get(struct_name) {
+            if let ResolvedType::Newtype { module_source, .. } =
+                self.type_table.borrow().get(type_id).clone()
+            {
+                return module_source;
+            }
+        }
+
+        // Check loaded modules for newtype definitions
+        for (module_source, module) in self.loaded_modules {
+            for item in &module.items {
+                if let Item::Type(alias) = item
+                    && alias.name == struct_name
+                {
+                    return module_source.clone();
+                }
+            }
+        }
+
         // Default to current module source
         self.current_module_source.clone()
     }

@@ -137,6 +137,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             "f64" => TypeTable::F64,
             "bool" => TypeTable::BOOL,
             "char" => TypeTable::CHAR,
+            "v128" => TypeTable::V128,
             "()" => TypeTable::UNIT,
             "!" => TypeTable::NEVER,
 

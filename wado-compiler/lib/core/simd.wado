@@ -1,0 +1,1310 @@
+pub type i8x16 = v128;
+pub type i16x8 = v128;
+pub type i32x4 = v128;
+pub type i64x2 = v128;
+
+pub type u8x16 = v128;
+pub type u16x8 = v128;
+pub type u32x4 = v128;
+pub type u64x2 = v128;
+
+pub type f32x4 = v128;
+pub type f64x2 = v128;
+
+impl i8x16 {
+    pub fn splat(a: i32) -> i8x16 {
+        return builtin::i8x16_splat(a) as i8x16;
+    }
+
+    pub fn extract_lane_s(&self, lane: i32) -> i32 {
+        if lane == 0 { return builtin::i8x16_extract_lane_s(0, *self as v128); }
+        if lane == 1 { return builtin::i8x16_extract_lane_s(1, *self as v128); }
+        if lane == 2 { return builtin::i8x16_extract_lane_s(2, *self as v128); }
+        if lane == 3 { return builtin::i8x16_extract_lane_s(3, *self as v128); }
+        if lane == 4 { return builtin::i8x16_extract_lane_s(4, *self as v128); }
+        if lane == 5 { return builtin::i8x16_extract_lane_s(5, *self as v128); }
+        if lane == 6 { return builtin::i8x16_extract_lane_s(6, *self as v128); }
+        if lane == 7 { return builtin::i8x16_extract_lane_s(7, *self as v128); }
+        if lane == 8 { return builtin::i8x16_extract_lane_s(8, *self as v128); }
+        if lane == 9 { return builtin::i8x16_extract_lane_s(9, *self as v128); }
+        if lane == 10 { return builtin::i8x16_extract_lane_s(10, *self as v128); }
+        if lane == 11 { return builtin::i8x16_extract_lane_s(11, *self as v128); }
+        if lane == 12 { return builtin::i8x16_extract_lane_s(12, *self as v128); }
+        if lane == 13 { return builtin::i8x16_extract_lane_s(13, *self as v128); }
+        if lane == 14 { return builtin::i8x16_extract_lane_s(14, *self as v128); }
+        return builtin::i8x16_extract_lane_s(15, *self as v128);
+    }
+
+    pub fn extract_lane_u(&self, lane: i32) -> i32 {
+        if lane == 0 { return builtin::i8x16_extract_lane_u(0, *self as v128); }
+        if lane == 1 { return builtin::i8x16_extract_lane_u(1, *self as v128); }
+        if lane == 2 { return builtin::i8x16_extract_lane_u(2, *self as v128); }
+        if lane == 3 { return builtin::i8x16_extract_lane_u(3, *self as v128); }
+        if lane == 4 { return builtin::i8x16_extract_lane_u(4, *self as v128); }
+        if lane == 5 { return builtin::i8x16_extract_lane_u(5, *self as v128); }
+        if lane == 6 { return builtin::i8x16_extract_lane_u(6, *self as v128); }
+        if lane == 7 { return builtin::i8x16_extract_lane_u(7, *self as v128); }
+        if lane == 8 { return builtin::i8x16_extract_lane_u(8, *self as v128); }
+        if lane == 9 { return builtin::i8x16_extract_lane_u(9, *self as v128); }
+        if lane == 10 { return builtin::i8x16_extract_lane_u(10, *self as v128); }
+        if lane == 11 { return builtin::i8x16_extract_lane_u(11, *self as v128); }
+        if lane == 12 { return builtin::i8x16_extract_lane_u(12, *self as v128); }
+        if lane == 13 { return builtin::i8x16_extract_lane_u(13, *self as v128); }
+        if lane == 14 { return builtin::i8x16_extract_lane_u(14, *self as v128); }
+        return builtin::i8x16_extract_lane_u(15, *self as v128);
+    }
+
+    pub fn eq(&self, other: &i8x16) -> i8x16 {
+        return builtin::i8x16_eq(*self as v128, *other as v128) as i8x16;
+    }
+
+    pub fn ne(&self, other: &i8x16) -> i8x16 {
+        return builtin::i8x16_ne(*self as v128, *other as v128) as i8x16;
+    }
+
+    pub fn lt(&self, other: &i8x16) -> i8x16 {
+        return builtin::i8x16_lt_s(*self as v128, *other as v128) as i8x16;
+    }
+
+    pub fn gt(&self, other: &i8x16) -> i8x16 {
+        return builtin::i8x16_gt_s(*self as v128, *other as v128) as i8x16;
+    }
+
+    pub fn le(&self, other: &i8x16) -> i8x16 {
+        return builtin::i8x16_le_s(*self as v128, *other as v128) as i8x16;
+    }
+
+    pub fn ge(&self, other: &i8x16) -> i8x16 {
+        return builtin::i8x16_ge_s(*self as v128, *other as v128) as i8x16;
+    }
+
+    pub fn swizzle(&self, indices: &i8x16) -> i8x16 {
+        return builtin::i8x16_swizzle(*self as v128, *indices as v128) as i8x16;
+    }
+
+    pub fn select(&self, mask: &i8x16, other: &i8x16) -> i8x16 {
+        return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as i8x16;
+    }
+}
+
+impl Add for i8x16 {
+    type Output = i8x16;
+    fn add(&self, rhs: &i8x16) -> i8x16 {
+        return builtin::i8x16_add(*self as v128, *rhs as v128) as i8x16;
+    }
+}
+
+impl Sub for i8x16 {
+    type Output = i8x16;
+    fn sub(&self, rhs: &i8x16) -> i8x16 {
+        return builtin::i8x16_sub(*self as v128, *rhs as v128) as i8x16;
+    }
+}
+
+impl Neg for i8x16 {
+    type Output = i8x16;
+    fn neg(&self) -> i8x16 {
+        return builtin::i8x16_neg(*self as v128) as i8x16;
+    }
+}
+
+impl BitAnd for i8x16 {
+    type Output = i8x16;
+    fn bitand(&self, rhs: &i8x16) -> i8x16 {
+        return builtin::v128_and(*self as v128, *rhs as v128) as i8x16;
+    }
+}
+
+impl BitOr for i8x16 {
+    type Output = i8x16;
+    fn bitor(&self, rhs: &i8x16) -> i8x16 {
+        return builtin::v128_or(*self as v128, *rhs as v128) as i8x16;
+    }
+}
+
+impl BitXor for i8x16 {
+    type Output = i8x16;
+    fn bitxor(&self, rhs: &i8x16) -> i8x16 {
+        return builtin::v128_xor(*self as v128, *rhs as v128) as i8x16;
+    }
+}
+
+impl BitNot for i8x16 {
+    type Output = i8x16;
+    fn bitnot(&self) -> i8x16 {
+        return builtin::v128_not(*self as v128) as i8x16;
+    }
+}
+
+impl Shl for i8x16 {
+    type Output = i8x16;
+    fn shl(&self, rhs: u32) -> i8x16 {
+        return builtin::i8x16_shl(*self as v128, rhs as i32) as i8x16;
+    }
+}
+
+impl Shr for i8x16 {
+    type Output = i8x16;
+    fn shr(&self, rhs: u32) -> i8x16 {
+        return builtin::i8x16_shr_s(*self as v128, rhs as i32) as i8x16;
+    }
+}
+
+pub struct I8x16Builder {
+    vec: v128,
+    index: i32,
+}
+
+impl SequenceLiteralBuilder for I8x16Builder {
+    type Element = i32;
+    type Output = i8x16;
+
+    fn new_literal(capacity: i32) -> I8x16Builder {
+        return I8x16Builder { vec: builtin::i8x16_splat(0), index: 0 };
+    }
+
+    fn push_literal(&mut self, value: i32) {
+        let i = self.index;
+        if i == 0 { self.vec = builtin::i8x16_replace_lane(0, self.vec, value); }
+        else if i == 1 { self.vec = builtin::i8x16_replace_lane(1, self.vec, value); }
+        else if i == 2 { self.vec = builtin::i8x16_replace_lane(2, self.vec, value); }
+        else if i == 3 { self.vec = builtin::i8x16_replace_lane(3, self.vec, value); }
+        else if i == 4 { self.vec = builtin::i8x16_replace_lane(4, self.vec, value); }
+        else if i == 5 { self.vec = builtin::i8x16_replace_lane(5, self.vec, value); }
+        else if i == 6 { self.vec = builtin::i8x16_replace_lane(6, self.vec, value); }
+        else if i == 7 { self.vec = builtin::i8x16_replace_lane(7, self.vec, value); }
+        else if i == 8 { self.vec = builtin::i8x16_replace_lane(8, self.vec, value); }
+        else if i == 9 { self.vec = builtin::i8x16_replace_lane(9, self.vec, value); }
+        else if i == 10 { self.vec = builtin::i8x16_replace_lane(10, self.vec, value); }
+        else if i == 11 { self.vec = builtin::i8x16_replace_lane(11, self.vec, value); }
+        else if i == 12 { self.vec = builtin::i8x16_replace_lane(12, self.vec, value); }
+        else if i == 13 { self.vec = builtin::i8x16_replace_lane(13, self.vec, value); }
+        else if i == 14 { self.vec = builtin::i8x16_replace_lane(14, self.vec, value); }
+        else { self.vec = builtin::i8x16_replace_lane(15, self.vec, value); }
+        self.index = i + 1;
+    }
+
+    fn build(&self) -> i8x16 {
+        return self.vec as i8x16;
+    }
+}
+
+impl SequenceLiteral for i8x16 {
+    type Element = i32;
+    type Builder = I8x16Builder;
+}
+
+impl i16x8 {
+    pub fn splat(a: i32) -> i16x8 {
+        return builtin::i16x8_splat(a) as i16x8;
+    }
+
+    pub fn extract_lane_s(&self, lane: i32) -> i32 {
+        if lane == 0 { return builtin::i16x8_extract_lane_s(0, *self as v128); }
+        if lane == 1 { return builtin::i16x8_extract_lane_s(1, *self as v128); }
+        if lane == 2 { return builtin::i16x8_extract_lane_s(2, *self as v128); }
+        if lane == 3 { return builtin::i16x8_extract_lane_s(3, *self as v128); }
+        if lane == 4 { return builtin::i16x8_extract_lane_s(4, *self as v128); }
+        if lane == 5 { return builtin::i16x8_extract_lane_s(5, *self as v128); }
+        if lane == 6 { return builtin::i16x8_extract_lane_s(6, *self as v128); }
+        return builtin::i16x8_extract_lane_s(7, *self as v128);
+    }
+
+    pub fn extract_lane_u(&self, lane: i32) -> i32 {
+        if lane == 0 { return builtin::i16x8_extract_lane_u(0, *self as v128); }
+        if lane == 1 { return builtin::i16x8_extract_lane_u(1, *self as v128); }
+        if lane == 2 { return builtin::i16x8_extract_lane_u(2, *self as v128); }
+        if lane == 3 { return builtin::i16x8_extract_lane_u(3, *self as v128); }
+        if lane == 4 { return builtin::i16x8_extract_lane_u(4, *self as v128); }
+        if lane == 5 { return builtin::i16x8_extract_lane_u(5, *self as v128); }
+        if lane == 6 { return builtin::i16x8_extract_lane_u(6, *self as v128); }
+        return builtin::i16x8_extract_lane_u(7, *self as v128);
+    }
+
+    pub fn eq(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_eq(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn ne(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_ne(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn lt(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_lt_s(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn gt(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_gt_s(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn le(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_le_s(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn ge(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_ge_s(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn select(&self, mask: &i16x8, other: &i16x8) -> i16x8 {
+        return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as i16x8;
+    }
+}
+
+impl Add for i16x8 {
+    type Output = i16x8;
+    fn add(&self, rhs: &i16x8) -> i16x8 {
+        return builtin::i16x8_add(*self as v128, *rhs as v128) as i16x8;
+    }
+}
+
+impl Sub for i16x8 {
+    type Output = i16x8;
+    fn sub(&self, rhs: &i16x8) -> i16x8 {
+        return builtin::i16x8_sub(*self as v128, *rhs as v128) as i16x8;
+    }
+}
+
+impl Mul for i16x8 {
+    type Output = i16x8;
+    fn mul(&self, rhs: &i16x8) -> i16x8 {
+        return builtin::i16x8_mul(*self as v128, *rhs as v128) as i16x8;
+    }
+}
+
+impl Neg for i16x8 {
+    type Output = i16x8;
+    fn neg(&self) -> i16x8 {
+        return builtin::i16x8_neg(*self as v128) as i16x8;
+    }
+}
+
+impl BitAnd for i16x8 {
+    type Output = i16x8;
+    fn bitand(&self, rhs: &i16x8) -> i16x8 {
+        return builtin::v128_and(*self as v128, *rhs as v128) as i16x8;
+    }
+}
+
+impl BitOr for i16x8 {
+    type Output = i16x8;
+    fn bitor(&self, rhs: &i16x8) -> i16x8 {
+        return builtin::v128_or(*self as v128, *rhs as v128) as i16x8;
+    }
+}
+
+impl BitXor for i16x8 {
+    type Output = i16x8;
+    fn bitxor(&self, rhs: &i16x8) -> i16x8 {
+        return builtin::v128_xor(*self as v128, *rhs as v128) as i16x8;
+    }
+}
+
+impl BitNot for i16x8 {
+    type Output = i16x8;
+    fn bitnot(&self) -> i16x8 {
+        return builtin::v128_not(*self as v128) as i16x8;
+    }
+}
+
+impl Shl for i16x8 {
+    type Output = i16x8;
+    fn shl(&self, rhs: u32) -> i16x8 {
+        return builtin::i16x8_shl(*self as v128, rhs as i32) as i16x8;
+    }
+}
+
+impl Shr for i16x8 {
+    type Output = i16x8;
+    fn shr(&self, rhs: u32) -> i16x8 {
+        return builtin::i16x8_shr_s(*self as v128, rhs as i32) as i16x8;
+    }
+}
+
+pub struct I16x8Builder {
+    vec: v128,
+    index: i32,
+}
+
+impl SequenceLiteralBuilder for I16x8Builder {
+    type Element = i32;
+    type Output = i16x8;
+
+    fn new_literal(capacity: i32) -> I16x8Builder {
+        return I16x8Builder { vec: builtin::i16x8_splat(0), index: 0 };
+    }
+
+    fn push_literal(&mut self, value: i32) {
+        let i = self.index;
+        if i == 0 { self.vec = builtin::i16x8_replace_lane(0, self.vec, value); }
+        else if i == 1 { self.vec = builtin::i16x8_replace_lane(1, self.vec, value); }
+        else if i == 2 { self.vec = builtin::i16x8_replace_lane(2, self.vec, value); }
+        else if i == 3 { self.vec = builtin::i16x8_replace_lane(3, self.vec, value); }
+        else if i == 4 { self.vec = builtin::i16x8_replace_lane(4, self.vec, value); }
+        else if i == 5 { self.vec = builtin::i16x8_replace_lane(5, self.vec, value); }
+        else if i == 6 { self.vec = builtin::i16x8_replace_lane(6, self.vec, value); }
+        else { self.vec = builtin::i16x8_replace_lane(7, self.vec, value); }
+        self.index = i + 1;
+    }
+
+    fn build(&self) -> i16x8 {
+        return self.vec as i16x8;
+    }
+}
+
+impl SequenceLiteral for i16x8 {
+    type Element = i32;
+    type Builder = I16x8Builder;
+}
+
+impl i32x4 {
+    pub fn splat(a: i32) -> i32x4 {
+        return builtin::i32x4_splat(a) as i32x4;
+    }
+
+    pub fn extract_lane(&self, lane: i32) -> i32 {
+        if lane == 0 { return builtin::i32x4_extract_lane(0, *self as v128); }
+        if lane == 1 { return builtin::i32x4_extract_lane(1, *self as v128); }
+        if lane == 2 { return builtin::i32x4_extract_lane(2, *self as v128); }
+        return builtin::i32x4_extract_lane(3, *self as v128);
+    }
+
+    pub fn eq(&self, other: &i32x4) -> i32x4 {
+        return builtin::i32x4_eq(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn ne(&self, other: &i32x4) -> i32x4 {
+        return builtin::i32x4_ne(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn lt(&self, other: &i32x4) -> i32x4 {
+        return builtin::i32x4_lt_s(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn gt(&self, other: &i32x4) -> i32x4 {
+        return builtin::i32x4_gt_s(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn le(&self, other: &i32x4) -> i32x4 {
+        return builtin::i32x4_le_s(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn ge(&self, other: &i32x4) -> i32x4 {
+        return builtin::i32x4_ge_s(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn select(&self, mask: &i32x4, other: &i32x4) -> i32x4 {
+        return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as i32x4;
+    }
+}
+
+impl Add for i32x4 {
+    type Output = i32x4;
+    fn add(&self, rhs: &i32x4) -> i32x4 {
+        return builtin::i32x4_add(*self as v128, *rhs as v128) as i32x4;
+    }
+}
+
+impl Sub for i32x4 {
+    type Output = i32x4;
+    fn sub(&self, rhs: &i32x4) -> i32x4 {
+        return builtin::i32x4_sub(*self as v128, *rhs as v128) as i32x4;
+    }
+}
+
+impl Mul for i32x4 {
+    type Output = i32x4;
+    fn mul(&self, rhs: &i32x4) -> i32x4 {
+        return builtin::i32x4_mul(*self as v128, *rhs as v128) as i32x4;
+    }
+}
+
+impl Neg for i32x4 {
+    type Output = i32x4;
+    fn neg(&self) -> i32x4 {
+        return builtin::i32x4_neg(*self as v128) as i32x4;
+    }
+}
+
+impl BitAnd for i32x4 {
+    type Output = i32x4;
+    fn bitand(&self, rhs: &i32x4) -> i32x4 {
+        return builtin::v128_and(*self as v128, *rhs as v128) as i32x4;
+    }
+}
+
+impl BitOr for i32x4 {
+    type Output = i32x4;
+    fn bitor(&self, rhs: &i32x4) -> i32x4 {
+        return builtin::v128_or(*self as v128, *rhs as v128) as i32x4;
+    }
+}
+
+impl BitXor for i32x4 {
+    type Output = i32x4;
+    fn bitxor(&self, rhs: &i32x4) -> i32x4 {
+        return builtin::v128_xor(*self as v128, *rhs as v128) as i32x4;
+    }
+}
+
+impl BitNot for i32x4 {
+    type Output = i32x4;
+    fn bitnot(&self) -> i32x4 {
+        return builtin::v128_not(*self as v128) as i32x4;
+    }
+}
+
+impl Shl for i32x4 {
+    type Output = i32x4;
+    fn shl(&self, rhs: u32) -> i32x4 {
+        return builtin::i32x4_shl(*self as v128, rhs as i32) as i32x4;
+    }
+}
+
+impl Shr for i32x4 {
+    type Output = i32x4;
+    fn shr(&self, rhs: u32) -> i32x4 {
+        return builtin::i32x4_shr_s(*self as v128, rhs as i32) as i32x4;
+    }
+}
+
+pub struct I32x4Builder {
+    vec: v128,
+    index: i32,
+}
+
+impl SequenceLiteralBuilder for I32x4Builder {
+    type Element = i32;
+    type Output = i32x4;
+
+    fn new_literal(capacity: i32) -> I32x4Builder {
+        return I32x4Builder { vec: builtin::i32x4_splat(0), index: 0 };
+    }
+
+    fn push_literal(&mut self, value: i32) {
+        let i = self.index;
+        if i == 0 { self.vec = builtin::i32x4_replace_lane(0, self.vec, value); }
+        else if i == 1 { self.vec = builtin::i32x4_replace_lane(1, self.vec, value); }
+        else if i == 2 { self.vec = builtin::i32x4_replace_lane(2, self.vec, value); }
+        else { self.vec = builtin::i32x4_replace_lane(3, self.vec, value); }
+        self.index = i + 1;
+    }
+
+    fn build(&self) -> i32x4 {
+        return self.vec as i32x4;
+    }
+}
+
+impl SequenceLiteral for i32x4 {
+    type Element = i32;
+    type Builder = I32x4Builder;
+}
+
+impl i64x2 {
+    pub fn splat(a: i64) -> i64x2 {
+        return builtin::i64x2_splat(a) as i64x2;
+    }
+
+    pub fn extract_lane(&self, lane: i32) -> i64 {
+        if lane == 0 { return builtin::i64x2_extract_lane(0, *self as v128); }
+        return builtin::i64x2_extract_lane(1, *self as v128);
+    }
+
+    pub fn eq(&self, other: &i64x2) -> i64x2 {
+        return builtin::i64x2_eq(*self as v128, *other as v128) as i64x2;
+    }
+
+    pub fn ne(&self, other: &i64x2) -> i64x2 {
+        return builtin::i64x2_ne(*self as v128, *other as v128) as i64x2;
+    }
+
+    pub fn lt(&self, other: &i64x2) -> i64x2 {
+        return builtin::i64x2_lt_s(*self as v128, *other as v128) as i64x2;
+    }
+
+    pub fn gt(&self, other: &i64x2) -> i64x2 {
+        return builtin::i64x2_gt_s(*self as v128, *other as v128) as i64x2;
+    }
+
+    pub fn le(&self, other: &i64x2) -> i64x2 {
+        return builtin::i64x2_le_s(*self as v128, *other as v128) as i64x2;
+    }
+
+    pub fn ge(&self, other: &i64x2) -> i64x2 {
+        return builtin::i64x2_ge_s(*self as v128, *other as v128) as i64x2;
+    }
+
+    pub fn select(&self, mask: &i64x2, other: &i64x2) -> i64x2 {
+        return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as i64x2;
+    }
+}
+
+impl Add for i64x2 {
+    type Output = i64x2;
+    fn add(&self, rhs: &i64x2) -> i64x2 {
+        return builtin::i64x2_add(*self as v128, *rhs as v128) as i64x2;
+    }
+}
+
+impl Sub for i64x2 {
+    type Output = i64x2;
+    fn sub(&self, rhs: &i64x2) -> i64x2 {
+        return builtin::i64x2_sub(*self as v128, *rhs as v128) as i64x2;
+    }
+}
+
+impl Mul for i64x2 {
+    type Output = i64x2;
+    fn mul(&self, rhs: &i64x2) -> i64x2 {
+        return builtin::i64x2_mul(*self as v128, *rhs as v128) as i64x2;
+    }
+}
+
+impl Neg for i64x2 {
+    type Output = i64x2;
+    fn neg(&self) -> i64x2 {
+        return builtin::i64x2_neg(*self as v128) as i64x2;
+    }
+}
+
+impl BitAnd for i64x2 {
+    type Output = i64x2;
+    fn bitand(&self, rhs: &i64x2) -> i64x2 {
+        return builtin::v128_and(*self as v128, *rhs as v128) as i64x2;
+    }
+}
+
+impl BitOr for i64x2 {
+    type Output = i64x2;
+    fn bitor(&self, rhs: &i64x2) -> i64x2 {
+        return builtin::v128_or(*self as v128, *rhs as v128) as i64x2;
+    }
+}
+
+impl BitXor for i64x2 {
+    type Output = i64x2;
+    fn bitxor(&self, rhs: &i64x2) -> i64x2 {
+        return builtin::v128_xor(*self as v128, *rhs as v128) as i64x2;
+    }
+}
+
+impl BitNot for i64x2 {
+    type Output = i64x2;
+    fn bitnot(&self) -> i64x2 {
+        return builtin::v128_not(*self as v128) as i64x2;
+    }
+}
+
+impl Shl for i64x2 {
+    type Output = i64x2;
+    fn shl(&self, rhs: u32) -> i64x2 {
+        return builtin::i64x2_shl(*self as v128, rhs as i32) as i64x2;
+    }
+}
+
+impl Shr for i64x2 {
+    type Output = i64x2;
+    fn shr(&self, rhs: u32) -> i64x2 {
+        return builtin::i64x2_shr_s(*self as v128, rhs as i32) as i64x2;
+    }
+}
+
+pub struct I64x2Builder {
+    vec: v128,
+    index: i32,
+}
+
+impl SequenceLiteralBuilder for I64x2Builder {
+    type Element = i64;
+    type Output = i64x2;
+
+    fn new_literal(capacity: i32) -> I64x2Builder {
+        return I64x2Builder { vec: builtin::i64x2_splat(0 as i64), index: 0 };
+    }
+
+    fn push_literal(&mut self, value: i64) {
+        let i = self.index;
+        if i == 0 { self.vec = builtin::i64x2_replace_lane(0, self.vec, value); }
+        else { self.vec = builtin::i64x2_replace_lane(1, self.vec, value); }
+        self.index = i + 1;
+    }
+
+    fn build(&self) -> i64x2 {
+        return self.vec as i64x2;
+    }
+}
+
+impl SequenceLiteral for i64x2 {
+    type Element = i64;
+    type Builder = I64x2Builder;
+}
+
+impl u8x16 {
+    pub fn splat(a: i32) -> u8x16 {
+        return builtin::i8x16_splat(a) as u8x16;
+    }
+
+    pub fn extract_lane(&self, lane: i32) -> i32 {
+        if lane == 0 { return builtin::i8x16_extract_lane_u(0, *self as v128); }
+        if lane == 1 { return builtin::i8x16_extract_lane_u(1, *self as v128); }
+        if lane == 2 { return builtin::i8x16_extract_lane_u(2, *self as v128); }
+        if lane == 3 { return builtin::i8x16_extract_lane_u(3, *self as v128); }
+        if lane == 4 { return builtin::i8x16_extract_lane_u(4, *self as v128); }
+        if lane == 5 { return builtin::i8x16_extract_lane_u(5, *self as v128); }
+        if lane == 6 { return builtin::i8x16_extract_lane_u(6, *self as v128); }
+        if lane == 7 { return builtin::i8x16_extract_lane_u(7, *self as v128); }
+        if lane == 8 { return builtin::i8x16_extract_lane_u(8, *self as v128); }
+        if lane == 9 { return builtin::i8x16_extract_lane_u(9, *self as v128); }
+        if lane == 10 { return builtin::i8x16_extract_lane_u(10, *self as v128); }
+        if lane == 11 { return builtin::i8x16_extract_lane_u(11, *self as v128); }
+        if lane == 12 { return builtin::i8x16_extract_lane_u(12, *self as v128); }
+        if lane == 13 { return builtin::i8x16_extract_lane_u(13, *self as v128); }
+        if lane == 14 { return builtin::i8x16_extract_lane_u(14, *self as v128); }
+        return builtin::i8x16_extract_lane_u(15, *self as v128);
+    }
+
+    pub fn eq(&self, other: &u8x16) -> u8x16 {
+        return builtin::i8x16_eq(*self as v128, *other as v128) as u8x16;
+    }
+
+    pub fn ne(&self, other: &u8x16) -> u8x16 {
+        return builtin::i8x16_ne(*self as v128, *other as v128) as u8x16;
+    }
+
+    pub fn lt(&self, other: &u8x16) -> u8x16 {
+        return builtin::i8x16_lt_u(*self as v128, *other as v128) as u8x16;
+    }
+
+    pub fn gt(&self, other: &u8x16) -> u8x16 {
+        return builtin::i8x16_gt_u(*self as v128, *other as v128) as u8x16;
+    }
+
+    pub fn le(&self, other: &u8x16) -> u8x16 {
+        return builtin::i8x16_le_u(*self as v128, *other as v128) as u8x16;
+    }
+
+    pub fn ge(&self, other: &u8x16) -> u8x16 {
+        return builtin::i8x16_ge_u(*self as v128, *other as v128) as u8x16;
+    }
+
+    pub fn select(&self, mask: &u8x16, other: &u8x16) -> u8x16 {
+        return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as u8x16;
+    }
+}
+
+impl Add for u8x16 {
+    type Output = u8x16;
+    fn add(&self, rhs: &u8x16) -> u8x16 {
+        return builtin::i8x16_add(*self as v128, *rhs as v128) as u8x16;
+    }
+}
+
+impl Sub for u8x16 {
+    type Output = u8x16;
+    fn sub(&self, rhs: &u8x16) -> u8x16 {
+        return builtin::i8x16_sub(*self as v128, *rhs as v128) as u8x16;
+    }
+}
+
+impl BitAnd for u8x16 {
+    type Output = u8x16;
+    fn bitand(&self, rhs: &u8x16) -> u8x16 {
+        return builtin::v128_and(*self as v128, *rhs as v128) as u8x16;
+    }
+}
+
+impl BitOr for u8x16 {
+    type Output = u8x16;
+    fn bitor(&self, rhs: &u8x16) -> u8x16 {
+        return builtin::v128_or(*self as v128, *rhs as v128) as u8x16;
+    }
+}
+
+impl BitXor for u8x16 {
+    type Output = u8x16;
+    fn bitxor(&self, rhs: &u8x16) -> u8x16 {
+        return builtin::v128_xor(*self as v128, *rhs as v128) as u8x16;
+    }
+}
+
+impl BitNot for u8x16 {
+    type Output = u8x16;
+    fn bitnot(&self) -> u8x16 {
+        return builtin::v128_not(*self as v128) as u8x16;
+    }
+}
+
+impl Shl for u8x16 {
+    type Output = u8x16;
+    fn shl(&self, rhs: u32) -> u8x16 {
+        return builtin::i8x16_shl(*self as v128, rhs as i32) as u8x16;
+    }
+}
+
+impl Shr for u8x16 {
+    type Output = u8x16;
+    fn shr(&self, rhs: u32) -> u8x16 {
+        return builtin::i8x16_shr_u(*self as v128, rhs as i32) as u8x16;
+    }
+}
+
+impl SequenceLiteral for u8x16 {
+    type Element = i32;
+    type Builder = I8x16Builder;
+}
+
+impl u16x8 {
+    pub fn splat(a: i32) -> u16x8 {
+        return builtin::i16x8_splat(a) as u16x8;
+    }
+
+    pub fn extract_lane(&self, lane: i32) -> i32 {
+        if lane == 0 { return builtin::i16x8_extract_lane_u(0, *self as v128); }
+        if lane == 1 { return builtin::i16x8_extract_lane_u(1, *self as v128); }
+        if lane == 2 { return builtin::i16x8_extract_lane_u(2, *self as v128); }
+        if lane == 3 { return builtin::i16x8_extract_lane_u(3, *self as v128); }
+        if lane == 4 { return builtin::i16x8_extract_lane_u(4, *self as v128); }
+        if lane == 5 { return builtin::i16x8_extract_lane_u(5, *self as v128); }
+        if lane == 6 { return builtin::i16x8_extract_lane_u(6, *self as v128); }
+        return builtin::i16x8_extract_lane_u(7, *self as v128);
+    }
+
+    pub fn eq(&self, other: &u16x8) -> u16x8 {
+        return builtin::i16x8_eq(*self as v128, *other as v128) as u16x8;
+    }
+
+    pub fn ne(&self, other: &u16x8) -> u16x8 {
+        return builtin::i16x8_ne(*self as v128, *other as v128) as u16x8;
+    }
+
+    pub fn lt(&self, other: &u16x8) -> u16x8 {
+        return builtin::i16x8_lt_u(*self as v128, *other as v128) as u16x8;
+    }
+
+    pub fn gt(&self, other: &u16x8) -> u16x8 {
+        return builtin::i16x8_gt_u(*self as v128, *other as v128) as u16x8;
+    }
+
+    pub fn le(&self, other: &u16x8) -> u16x8 {
+        return builtin::i16x8_le_u(*self as v128, *other as v128) as u16x8;
+    }
+
+    pub fn ge(&self, other: &u16x8) -> u16x8 {
+        return builtin::i16x8_ge_u(*self as v128, *other as v128) as u16x8;
+    }
+
+    pub fn select(&self, mask: &u16x8, other: &u16x8) -> u16x8 {
+        return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as u16x8;
+    }
+}
+
+impl Add for u16x8 {
+    type Output = u16x8;
+    fn add(&self, rhs: &u16x8) -> u16x8 {
+        return builtin::i16x8_add(*self as v128, *rhs as v128) as u16x8;
+    }
+}
+
+impl Sub for u16x8 {
+    type Output = u16x8;
+    fn sub(&self, rhs: &u16x8) -> u16x8 {
+        return builtin::i16x8_sub(*self as v128, *rhs as v128) as u16x8;
+    }
+}
+
+impl Mul for u16x8 {
+    type Output = u16x8;
+    fn mul(&self, rhs: &u16x8) -> u16x8 {
+        return builtin::i16x8_mul(*self as v128, *rhs as v128) as u16x8;
+    }
+}
+
+impl BitAnd for u16x8 {
+    type Output = u16x8;
+    fn bitand(&self, rhs: &u16x8) -> u16x8 {
+        return builtin::v128_and(*self as v128, *rhs as v128) as u16x8;
+    }
+}
+
+impl BitOr for u16x8 {
+    type Output = u16x8;
+    fn bitor(&self, rhs: &u16x8) -> u16x8 {
+        return builtin::v128_or(*self as v128, *rhs as v128) as u16x8;
+    }
+}
+
+impl BitXor for u16x8 {
+    type Output = u16x8;
+    fn bitxor(&self, rhs: &u16x8) -> u16x8 {
+        return builtin::v128_xor(*self as v128, *rhs as v128) as u16x8;
+    }
+}
+
+impl BitNot for u16x8 {
+    type Output = u16x8;
+    fn bitnot(&self) -> u16x8 {
+        return builtin::v128_not(*self as v128) as u16x8;
+    }
+}
+
+impl Shl for u16x8 {
+    type Output = u16x8;
+    fn shl(&self, rhs: u32) -> u16x8 {
+        return builtin::i16x8_shl(*self as v128, rhs as i32) as u16x8;
+    }
+}
+
+impl Shr for u16x8 {
+    type Output = u16x8;
+    fn shr(&self, rhs: u32) -> u16x8 {
+        return builtin::i16x8_shr_u(*self as v128, rhs as i32) as u16x8;
+    }
+}
+
+impl SequenceLiteral for u16x8 {
+    type Element = i32;
+    type Builder = I16x8Builder;
+}
+
+impl u32x4 {
+    pub fn splat(a: i32) -> u32x4 {
+        return builtin::i32x4_splat(a) as u32x4;
+    }
+
+    pub fn extract_lane(&self, lane: i32) -> i32 {
+        if lane == 0 { return builtin::i32x4_extract_lane(0, *self as v128); }
+        if lane == 1 { return builtin::i32x4_extract_lane(1, *self as v128); }
+        if lane == 2 { return builtin::i32x4_extract_lane(2, *self as v128); }
+        return builtin::i32x4_extract_lane(3, *self as v128);
+    }
+
+    pub fn eq(&self, other: &u32x4) -> u32x4 {
+        return builtin::i32x4_eq(*self as v128, *other as v128) as u32x4;
+    }
+
+    pub fn ne(&self, other: &u32x4) -> u32x4 {
+        return builtin::i32x4_ne(*self as v128, *other as v128) as u32x4;
+    }
+
+    pub fn lt(&self, other: &u32x4) -> u32x4 {
+        return builtin::i32x4_lt_u(*self as v128, *other as v128) as u32x4;
+    }
+
+    pub fn gt(&self, other: &u32x4) -> u32x4 {
+        return builtin::i32x4_gt_u(*self as v128, *other as v128) as u32x4;
+    }
+
+    pub fn le(&self, other: &u32x4) -> u32x4 {
+        return builtin::i32x4_le_u(*self as v128, *other as v128) as u32x4;
+    }
+
+    pub fn ge(&self, other: &u32x4) -> u32x4 {
+        return builtin::i32x4_ge_u(*self as v128, *other as v128) as u32x4;
+    }
+
+    pub fn select(&self, mask: &u32x4, other: &u32x4) -> u32x4 {
+        return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as u32x4;
+    }
+}
+
+impl Add for u32x4 {
+    type Output = u32x4;
+    fn add(&self, rhs: &u32x4) -> u32x4 {
+        return builtin::i32x4_add(*self as v128, *rhs as v128) as u32x4;
+    }
+}
+
+impl Sub for u32x4 {
+    type Output = u32x4;
+    fn sub(&self, rhs: &u32x4) -> u32x4 {
+        return builtin::i32x4_sub(*self as v128, *rhs as v128) as u32x4;
+    }
+}
+
+impl Mul for u32x4 {
+    type Output = u32x4;
+    fn mul(&self, rhs: &u32x4) -> u32x4 {
+        return builtin::i32x4_mul(*self as v128, *rhs as v128) as u32x4;
+    }
+}
+
+impl BitAnd for u32x4 {
+    type Output = u32x4;
+    fn bitand(&self, rhs: &u32x4) -> u32x4 {
+        return builtin::v128_and(*self as v128, *rhs as v128) as u32x4;
+    }
+}
+
+impl BitOr for u32x4 {
+    type Output = u32x4;
+    fn bitor(&self, rhs: &u32x4) -> u32x4 {
+        return builtin::v128_or(*self as v128, *rhs as v128) as u32x4;
+    }
+}
+
+impl BitXor for u32x4 {
+    type Output = u32x4;
+    fn bitxor(&self, rhs: &u32x4) -> u32x4 {
+        return builtin::v128_xor(*self as v128, *rhs as v128) as u32x4;
+    }
+}
+
+impl BitNot for u32x4 {
+    type Output = u32x4;
+    fn bitnot(&self) -> u32x4 {
+        return builtin::v128_not(*self as v128) as u32x4;
+    }
+}
+
+impl Shl for u32x4 {
+    type Output = u32x4;
+    fn shl(&self, rhs: u32) -> u32x4 {
+        return builtin::i32x4_shl(*self as v128, rhs as i32) as u32x4;
+    }
+}
+
+impl Shr for u32x4 {
+    type Output = u32x4;
+    fn shr(&self, rhs: u32) -> u32x4 {
+        return builtin::i32x4_shr_u(*self as v128, rhs as i32) as u32x4;
+    }
+}
+
+impl SequenceLiteral for u32x4 {
+    type Element = i32;
+    type Builder = I32x4Builder;
+}
+
+impl u64x2 {
+    pub fn splat(a: i64) -> u64x2 {
+        return builtin::i64x2_splat(a) as u64x2;
+    }
+
+    pub fn extract_lane(&self, lane: i32) -> i64 {
+        if lane == 0 { return builtin::i64x2_extract_lane(0, *self as v128); }
+        return builtin::i64x2_extract_lane(1, *self as v128);
+    }
+
+    pub fn eq(&self, other: &u64x2) -> u64x2 {
+        return builtin::i64x2_eq(*self as v128, *other as v128) as u64x2;
+    }
+
+    pub fn ne(&self, other: &u64x2) -> u64x2 {
+        return builtin::i64x2_ne(*self as v128, *other as v128) as u64x2;
+    }
+
+    pub fn select(&self, mask: &u64x2, other: &u64x2) -> u64x2 {
+        return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as u64x2;
+    }
+}
+
+impl Add for u64x2 {
+    type Output = u64x2;
+    fn add(&self, rhs: &u64x2) -> u64x2 {
+        return builtin::i64x2_add(*self as v128, *rhs as v128) as u64x2;
+    }
+}
+
+impl Sub for u64x2 {
+    type Output = u64x2;
+    fn sub(&self, rhs: &u64x2) -> u64x2 {
+        return builtin::i64x2_sub(*self as v128, *rhs as v128) as u64x2;
+    }
+}
+
+impl Mul for u64x2 {
+    type Output = u64x2;
+    fn mul(&self, rhs: &u64x2) -> u64x2 {
+        return builtin::i64x2_mul(*self as v128, *rhs as v128) as u64x2;
+    }
+}
+
+impl BitAnd for u64x2 {
+    type Output = u64x2;
+    fn bitand(&self, rhs: &u64x2) -> u64x2 {
+        return builtin::v128_and(*self as v128, *rhs as v128) as u64x2;
+    }
+}
+
+impl BitOr for u64x2 {
+    type Output = u64x2;
+    fn bitor(&self, rhs: &u64x2) -> u64x2 {
+        return builtin::v128_or(*self as v128, *rhs as v128) as u64x2;
+    }
+}
+
+impl BitXor for u64x2 {
+    type Output = u64x2;
+    fn bitxor(&self, rhs: &u64x2) -> u64x2 {
+        return builtin::v128_xor(*self as v128, *rhs as v128) as u64x2;
+    }
+}
+
+impl BitNot for u64x2 {
+    type Output = u64x2;
+    fn bitnot(&self) -> u64x2 {
+        return builtin::v128_not(*self as v128) as u64x2;
+    }
+}
+
+impl Shl for u64x2 {
+    type Output = u64x2;
+    fn shl(&self, rhs: u32) -> u64x2 {
+        return builtin::i64x2_shl(*self as v128, rhs as i32) as u64x2;
+    }
+}
+
+impl Shr for u64x2 {
+    type Output = u64x2;
+    fn shr(&self, rhs: u32) -> u64x2 {
+        return builtin::i64x2_shr_u(*self as v128, rhs as i32) as u64x2;
+    }
+}
+
+impl SequenceLiteral for u64x2 {
+    type Element = i64;
+    type Builder = I64x2Builder;
+}
+
+impl f32x4 {
+    pub fn splat(a: f32) -> f32x4 {
+        return builtin::f32x4_splat(a) as f32x4;
+    }
+
+    pub fn extract_lane(&self, lane: i32) -> f32 {
+        if lane == 0 { return builtin::f32x4_extract_lane(0, *self as v128); }
+        if lane == 1 { return builtin::f32x4_extract_lane(1, *self as v128); }
+        if lane == 2 { return builtin::f32x4_extract_lane(2, *self as v128); }
+        return builtin::f32x4_extract_lane(3, *self as v128);
+    }
+
+    pub fn sqrt(&self) -> f32x4 {
+        return builtin::f32x4_sqrt(*self as v128) as f32x4;
+    }
+
+    pub fn abs(&self) -> f32x4 {
+        return builtin::f32x4_abs(*self as v128) as f32x4;
+    }
+
+    pub fn min(&self, other: &f32x4) -> f32x4 {
+        return builtin::f32x4_min(*self as v128, *other as v128) as f32x4;
+    }
+
+    pub fn max(&self, other: &f32x4) -> f32x4 {
+        return builtin::f32x4_max(*self as v128, *other as v128) as f32x4;
+    }
+
+    pub fn eq(&self, other: &f32x4) -> i32x4 {
+        return builtin::f32x4_eq(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn ne(&self, other: &f32x4) -> i32x4 {
+        return builtin::f32x4_ne(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn lt(&self, other: &f32x4) -> i32x4 {
+        return builtin::f32x4_lt(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn gt(&self, other: &f32x4) -> i32x4 {
+        return builtin::f32x4_gt(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn le(&self, other: &f32x4) -> i32x4 {
+        return builtin::f32x4_le(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn ge(&self, other: &f32x4) -> i32x4 {
+        return builtin::f32x4_ge(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn select(&self, mask: &i32x4, other: &f32x4) -> f32x4 {
+        return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as f32x4;
+    }
+}
+
+impl Add for f32x4 {
+    type Output = f32x4;
+    fn add(&self, rhs: &f32x4) -> f32x4 {
+        return builtin::f32x4_add(*self as v128, *rhs as v128) as f32x4;
+    }
+}
+
+impl Sub for f32x4 {
+    type Output = f32x4;
+    fn sub(&self, rhs: &f32x4) -> f32x4 {
+        return builtin::f32x4_sub(*self as v128, *rhs as v128) as f32x4;
+    }
+}
+
+impl Mul for f32x4 {
+    type Output = f32x4;
+    fn mul(&self, rhs: &f32x4) -> f32x4 {
+        return builtin::f32x4_mul(*self as v128, *rhs as v128) as f32x4;
+    }
+}
+
+impl Div for f32x4 {
+    type Output = f32x4;
+    fn div(&self, rhs: &f32x4) -> f32x4 {
+        return builtin::f32x4_div(*self as v128, *rhs as v128) as f32x4;
+    }
+}
+
+impl Neg for f32x4 {
+    type Output = f32x4;
+    fn neg(&self) -> f32x4 {
+        return builtin::f32x4_neg(*self as v128) as f32x4;
+    }
+}
+
+pub struct F32x4Builder {
+    vec: v128,
+    index: i32,
+}
+
+impl SequenceLiteralBuilder for F32x4Builder {
+    type Element = f32;
+    type Output = f32x4;
+
+    fn new_literal(capacity: i32) -> F32x4Builder {
+        return F32x4Builder { vec: builtin::f32x4_splat(0.0 as f32), index: 0 };
+    }
+
+    fn push_literal(&mut self, value: f32) {
+        let i = self.index;
+        if i == 0 { self.vec = builtin::f32x4_replace_lane(0, self.vec, value); }
+        else if i == 1 { self.vec = builtin::f32x4_replace_lane(1, self.vec, value); }
+        else if i == 2 { self.vec = builtin::f32x4_replace_lane(2, self.vec, value); }
+        else { self.vec = builtin::f32x4_replace_lane(3, self.vec, value); }
+        self.index = i + 1;
+    }
+
+    fn build(&self) -> f32x4 {
+        return self.vec as f32x4;
+    }
+}
+
+impl SequenceLiteral for f32x4 {
+    type Element = f32;
+    type Builder = F32x4Builder;
+}
+
+impl f64x2 {
+    pub fn splat(a: f64) -> f64x2 {
+        return builtin::f64x2_splat(a) as f64x2;
+    }
+
+    pub fn extract_lane(&self, lane: i32) -> f64 {
+        if lane == 0 { return builtin::f64x2_extract_lane(0, *self as v128); }
+        return builtin::f64x2_extract_lane(1, *self as v128);
+    }
+
+    pub fn sqrt(&self) -> f64x2 {
+        return builtin::f64x2_sqrt(*self as v128) as f64x2;
+    }
+
+    pub fn abs(&self) -> f64x2 {
+        return builtin::f64x2_abs(*self as v128) as f64x2;
+    }
+
+    pub fn min(&self, other: &f64x2) -> f64x2 {
+        return builtin::f64x2_min(*self as v128, *other as v128) as f64x2;
+    }
+
+    pub fn max(&self, other: &f64x2) -> f64x2 {
+        return builtin::f64x2_max(*self as v128, *other as v128) as f64x2;
+    }
+
+    pub fn eq(&self, other: &f64x2) -> i64x2 {
+        return builtin::f64x2_eq(*self as v128, *other as v128) as i64x2;
+    }
+
+    pub fn ne(&self, other: &f64x2) -> i64x2 {
+        return builtin::f64x2_ne(*self as v128, *other as v128) as i64x2;
+    }
+
+    pub fn lt(&self, other: &f64x2) -> i64x2 {
+        return builtin::f64x2_lt(*self as v128, *other as v128) as i64x2;
+    }
+
+    pub fn gt(&self, other: &f64x2) -> i64x2 {
+        return builtin::f64x2_gt(*self as v128, *other as v128) as i64x2;
+    }
+
+    pub fn le(&self, other: &f64x2) -> i64x2 {
+        return builtin::f64x2_le(*self as v128, *other as v128) as i64x2;
+    }
+
+    pub fn ge(&self, other: &f64x2) -> i64x2 {
+        return builtin::f64x2_ge(*self as v128, *other as v128) as i64x2;
+    }
+
+    pub fn select(&self, mask: &i64x2, other: &f64x2) -> f64x2 {
+        return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as f64x2;
+    }
+}
+
+impl Add for f64x2 {
+    type Output = f64x2;
+    fn add(&self, rhs: &f64x2) -> f64x2 {
+        return builtin::f64x2_add(*self as v128, *rhs as v128) as f64x2;
+    }
+}
+
+impl Sub for f64x2 {
+    type Output = f64x2;
+    fn sub(&self, rhs: &f64x2) -> f64x2 {
+        return builtin::f64x2_sub(*self as v128, *rhs as v128) as f64x2;
+    }
+}
+
+impl Mul for f64x2 {
+    type Output = f64x2;
+    fn mul(&self, rhs: &f64x2) -> f64x2 {
+        return builtin::f64x2_mul(*self as v128, *rhs as v128) as f64x2;
+    }
+}
+
+impl Div for f64x2 {
+    type Output = f64x2;
+    fn div(&self, rhs: &f64x2) -> f64x2 {
+        return builtin::f64x2_div(*self as v128, *rhs as v128) as f64x2;
+    }
+}
+
+impl Neg for f64x2 {
+    type Output = f64x2;
+    fn neg(&self) -> f64x2 {
+        return builtin::f64x2_neg(*self as v128) as f64x2;
+    }
+}
+
+pub struct F64x2Builder {
+    vec: v128,
+    index: i32,
+}
+
+impl SequenceLiteralBuilder for F64x2Builder {
+    type Element = f64;
+    type Output = f64x2;
+
+    fn new_literal(capacity: i32) -> F64x2Builder {
+        return F64x2Builder { vec: builtin::f64x2_splat(0.0), index: 0 };
+    }
+
+    fn push_literal(&mut self, value: f64) {
+        let i = self.index;
+        if i == 0 { self.vec = builtin::f64x2_replace_lane(0, self.vec, value); }
+        else { self.vec = builtin::f64x2_replace_lane(1, self.vec, value); }
+        self.index = i + 1;
+    }
+
+    fn build(&self) -> f64x2 {
+        return self.vec as f64x2;
+    }
+}
+
+impl SequenceLiteral for f64x2 {
+    type Element = f64;
+    type Builder = F64x2Builder;
+}

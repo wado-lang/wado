@@ -437,6 +437,7 @@ impl<'a> WirContext<'a> {
                 }
                 PrimitiveType::F32 => WirType::F32,
                 PrimitiveType::F64 => WirType::F64,
+                PrimitiveType::V128 => WirType::V128,
                 PrimitiveType::Bool => WirType::Bool,
                 PrimitiveType::Char => WirType::Char,
             },

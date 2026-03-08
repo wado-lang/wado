@@ -81,6 +81,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         if is_comparison {
             // Get struct name for trait lookup
+            // Note: Newtypes are NOT included here because newtypes wrapping primitives
+            // (e.g. type Radians = f64) inherit primitive comparison instructions.
+            // The comparison blocks error if no Eq/Ord trait is found, so we must not
+            // enter them for newtypes that rely on primitive fallthrough.
             let struct_name = match &left_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
@@ -137,7 +141,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             TirExprKind::MethodCall {
                                 receiver: Box::new(receiver),
                                 func: FunctionRef {
-                                    module_source: ModuleSource::prelude(),
+                                    module_source: self.find_struct_module_source(&struct_name),
                                     name: mangled_method_name,
                                     monomorph_info: None,
                                     method_info: Some(LocalMethodName::new(
@@ -232,7 +236,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             TirExprKind::MethodCall {
                                 receiver: Box::new(receiver),
                                 func: FunctionRef {
-                                    module_source: ModuleSource::prelude(),
+                                    module_source: self.find_struct_module_source(&struct_name),
                                     name: mangled_method_name,
                                     monomorph_info: None,
                                     method_info: Some(LocalMethodName::new(
@@ -307,6 +311,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let struct_name = match &left_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                ResolvedType::Newtype { name, .. } => Some(name.clone()),
                 _ => None,
             };
 
@@ -363,7 +368,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef {
-                                module_source: ModuleSource::prelude(),
+                                module_source: self.find_struct_module_source(&struct_name),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
@@ -392,6 +397,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let struct_name = match &left_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                ResolvedType::Newtype { name, .. } => Some(name.clone()),
                 _ => None,
             };
 
@@ -428,7 +434,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef {
-                                module_source: ModuleSource::prelude(),
+                                module_source: self.find_struct_module_source(&struct_name),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
@@ -599,6 +605,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let struct_name = match &expr_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                ResolvedType::Newtype { name, .. } => Some(name.clone()),
                 _ => None,
             };
 
@@ -621,7 +628,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef {
-                                module_source: ModuleSource::prelude(),
+                                module_source: self.find_struct_module_source(&struct_name),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
@@ -647,6 +654,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let struct_name = match &expr_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                ResolvedType::Newtype { name, .. } => Some(name.clone()),
                 _ => None,
             };
 
@@ -672,7 +680,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef {
-                                module_source: ModuleSource::prelude(),
+                                module_source: self.find_struct_module_source(&struct_name),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(

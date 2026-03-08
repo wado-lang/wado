@@ -591,6 +591,8 @@ pub enum WirType {
     // Floats
     F32,
     F64,
+    // SIMD
+    V128,
     // Other primitives
     Bool,
     Char,
@@ -911,6 +913,129 @@ pub enum WirInstr {
     F64ConvertI64U(Box<WirInstr>),
     F64PromoteF32(Box<WirInstr>),
     F64ReinterpretI64(Box<WirInstr>),
+
+    // === SIMD v128 ===
+    V128Const(i128),
+    V128Not(Box<WirInstr>),
+    V128And(Box<WirInstr>, Box<WirInstr>),
+    V128Or(Box<WirInstr>, Box<WirInstr>),
+    V128Xor(Box<WirInstr>, Box<WirInstr>),
+    V128Bitselect(Box<WirInstr>, Box<WirInstr>, Box<WirInstr>),
+    I8x16Splat(Box<WirInstr>),
+    I8x16ExtractLaneS(u8, Box<WirInstr>),
+    I8x16ExtractLaneU(u8, Box<WirInstr>),
+    I8x16ReplaceLane(u8, Box<WirInstr>, Box<WirInstr>),
+    I8x16Add(Box<WirInstr>, Box<WirInstr>),
+    I8x16Sub(Box<WirInstr>, Box<WirInstr>),
+    I8x16Neg(Box<WirInstr>),
+    I8x16Eq(Box<WirInstr>, Box<WirInstr>),
+    I8x16Ne(Box<WirInstr>, Box<WirInstr>),
+    I8x16LtS(Box<WirInstr>, Box<WirInstr>),
+    I8x16GtS(Box<WirInstr>, Box<WirInstr>),
+    I8x16LeS(Box<WirInstr>, Box<WirInstr>),
+    I8x16GeS(Box<WirInstr>, Box<WirInstr>),
+    I8x16LtU(Box<WirInstr>, Box<WirInstr>),
+    I8x16GtU(Box<WirInstr>, Box<WirInstr>),
+    I8x16LeU(Box<WirInstr>, Box<WirInstr>),
+    I8x16GeU(Box<WirInstr>, Box<WirInstr>),
+    I8x16Shl(Box<WirInstr>, Box<WirInstr>),
+    I8x16ShrS(Box<WirInstr>, Box<WirInstr>),
+    I8x16ShrU(Box<WirInstr>, Box<WirInstr>),
+    I8x16Swizzle(Box<WirInstr>, Box<WirInstr>),
+    I8x16Shuffle([u8; 16], Box<WirInstr>, Box<WirInstr>),
+    I16x8Splat(Box<WirInstr>),
+    I16x8ExtractLaneS(u8, Box<WirInstr>),
+    I16x8ExtractLaneU(u8, Box<WirInstr>),
+    I16x8ReplaceLane(u8, Box<WirInstr>, Box<WirInstr>),
+    I16x8Add(Box<WirInstr>, Box<WirInstr>),
+    I16x8Sub(Box<WirInstr>, Box<WirInstr>),
+    I16x8Mul(Box<WirInstr>, Box<WirInstr>),
+    I16x8Neg(Box<WirInstr>),
+    I16x8Eq(Box<WirInstr>, Box<WirInstr>),
+    I16x8Ne(Box<WirInstr>, Box<WirInstr>),
+    I16x8LtS(Box<WirInstr>, Box<WirInstr>),
+    I16x8GtS(Box<WirInstr>, Box<WirInstr>),
+    I16x8LeS(Box<WirInstr>, Box<WirInstr>),
+    I16x8GeS(Box<WirInstr>, Box<WirInstr>),
+    I16x8LtU(Box<WirInstr>, Box<WirInstr>),
+    I16x8GtU(Box<WirInstr>, Box<WirInstr>),
+    I16x8LeU(Box<WirInstr>, Box<WirInstr>),
+    I16x8GeU(Box<WirInstr>, Box<WirInstr>),
+    I16x8Shl(Box<WirInstr>, Box<WirInstr>),
+    I16x8ShrS(Box<WirInstr>, Box<WirInstr>),
+    I16x8ShrU(Box<WirInstr>, Box<WirInstr>),
+    I32x4Splat(Box<WirInstr>),
+    I32x4ExtractLane(u8, Box<WirInstr>),
+    I32x4ReplaceLane(u8, Box<WirInstr>, Box<WirInstr>),
+    I32x4Add(Box<WirInstr>, Box<WirInstr>),
+    I32x4Sub(Box<WirInstr>, Box<WirInstr>),
+    I32x4Mul(Box<WirInstr>, Box<WirInstr>),
+    I32x4Neg(Box<WirInstr>),
+    I32x4Eq(Box<WirInstr>, Box<WirInstr>),
+    I32x4Ne(Box<WirInstr>, Box<WirInstr>),
+    I32x4LtS(Box<WirInstr>, Box<WirInstr>),
+    I32x4GtS(Box<WirInstr>, Box<WirInstr>),
+    I32x4LeS(Box<WirInstr>, Box<WirInstr>),
+    I32x4GeS(Box<WirInstr>, Box<WirInstr>),
+    I32x4LtU(Box<WirInstr>, Box<WirInstr>),
+    I32x4GtU(Box<WirInstr>, Box<WirInstr>),
+    I32x4LeU(Box<WirInstr>, Box<WirInstr>),
+    I32x4GeU(Box<WirInstr>, Box<WirInstr>),
+    I32x4Shl(Box<WirInstr>, Box<WirInstr>),
+    I32x4ShrS(Box<WirInstr>, Box<WirInstr>),
+    I32x4ShrU(Box<WirInstr>, Box<WirInstr>),
+    I64x2Splat(Box<WirInstr>),
+    I64x2ExtractLane(u8, Box<WirInstr>),
+    I64x2ReplaceLane(u8, Box<WirInstr>, Box<WirInstr>),
+    I64x2Add(Box<WirInstr>, Box<WirInstr>),
+    I64x2Sub(Box<WirInstr>, Box<WirInstr>),
+    I64x2Mul(Box<WirInstr>, Box<WirInstr>),
+    I64x2Neg(Box<WirInstr>),
+    I64x2Eq(Box<WirInstr>, Box<WirInstr>),
+    I64x2Ne(Box<WirInstr>, Box<WirInstr>),
+    I64x2LtS(Box<WirInstr>, Box<WirInstr>),
+    I64x2GtS(Box<WirInstr>, Box<WirInstr>),
+    I64x2LeS(Box<WirInstr>, Box<WirInstr>),
+    I64x2GeS(Box<WirInstr>, Box<WirInstr>),
+    I64x2Shl(Box<WirInstr>, Box<WirInstr>),
+    I64x2ShrS(Box<WirInstr>, Box<WirInstr>),
+    I64x2ShrU(Box<WirInstr>, Box<WirInstr>),
+    F32x4Splat(Box<WirInstr>),
+    F32x4ExtractLane(u8, Box<WirInstr>),
+    F32x4ReplaceLane(u8, Box<WirInstr>, Box<WirInstr>),
+    F32x4Add(Box<WirInstr>, Box<WirInstr>),
+    F32x4Sub(Box<WirInstr>, Box<WirInstr>),
+    F32x4Mul(Box<WirInstr>, Box<WirInstr>),
+    F32x4Div(Box<WirInstr>, Box<WirInstr>),
+    F32x4Neg(Box<WirInstr>),
+    F32x4Sqrt(Box<WirInstr>),
+    F32x4Abs(Box<WirInstr>),
+    F32x4Eq(Box<WirInstr>, Box<WirInstr>),
+    F32x4Ne(Box<WirInstr>, Box<WirInstr>),
+    F32x4Lt(Box<WirInstr>, Box<WirInstr>),
+    F32x4Gt(Box<WirInstr>, Box<WirInstr>),
+    F32x4Le(Box<WirInstr>, Box<WirInstr>),
+    F32x4Ge(Box<WirInstr>, Box<WirInstr>),
+    F32x4Min(Box<WirInstr>, Box<WirInstr>),
+    F32x4Max(Box<WirInstr>, Box<WirInstr>),
+    F64x2Splat(Box<WirInstr>),
+    F64x2ExtractLane(u8, Box<WirInstr>),
+    F64x2ReplaceLane(u8, Box<WirInstr>, Box<WirInstr>),
+    F64x2Add(Box<WirInstr>, Box<WirInstr>),
+    F64x2Sub(Box<WirInstr>, Box<WirInstr>),
+    F64x2Mul(Box<WirInstr>, Box<WirInstr>),
+    F64x2Div(Box<WirInstr>, Box<WirInstr>),
+    F64x2Neg(Box<WirInstr>),
+    F64x2Sqrt(Box<WirInstr>),
+    F64x2Abs(Box<WirInstr>),
+    F64x2Eq(Box<WirInstr>, Box<WirInstr>),
+    F64x2Ne(Box<WirInstr>, Box<WirInstr>),
+    F64x2Lt(Box<WirInstr>, Box<WirInstr>),
+    F64x2Gt(Box<WirInstr>, Box<WirInstr>),
+    F64x2Le(Box<WirInstr>, Box<WirInstr>),
+    F64x2Ge(Box<WirInstr>, Box<WirInstr>),
+    F64x2Min(Box<WirInstr>, Box<WirInstr>),
+    F64x2Max(Box<WirInstr>, Box<WirInstr>),
 
     // === GC: Struct ===
     /// `struct.new` with type ID.
@@ -1238,6 +1363,7 @@ impl WirInstr {
             | Self::I64Const(_)
             | Self::F32Const(_)
             | Self::F64Const(_)
+            | Self::V128Const(_)
             | Self::LocalGet { .. }
             | Self::GlobalGet { .. }
             | Self::RefNull { .. }
@@ -1327,7 +1453,32 @@ impl WirInstr {
             | Self::I31GetU(o)
             | Self::ExternInternalize(o)
             | Self::ExternExternalize(o)
-            | Self::ArrayLen(o) => f(o),
+            | Self::ArrayLen(o)
+            | Self::V128Not(o)
+            | Self::I8x16Splat(o)
+            | Self::I8x16Neg(o)
+            | Self::I16x8Splat(o)
+            | Self::I16x8Neg(o)
+            | Self::I32x4Splat(o)
+            | Self::I32x4Neg(o)
+            | Self::I64x2Splat(o)
+            | Self::I64x2Neg(o)
+            | Self::F32x4Splat(o)
+            | Self::F32x4Neg(o)
+            | Self::F32x4Sqrt(o)
+            | Self::F32x4Abs(o)
+            | Self::F64x2Splat(o)
+            | Self::F64x2Neg(o)
+            | Self::F64x2Sqrt(o)
+            | Self::F64x2Abs(o) => f(o),
+            Self::I8x16ExtractLaneS(_, o)
+            | Self::I8x16ExtractLaneU(_, o)
+            | Self::I16x8ExtractLaneS(_, o)
+            | Self::I16x8ExtractLaneU(_, o)
+            | Self::I32x4ExtractLane(_, o)
+            | Self::I64x2ExtractLane(_, o)
+            | Self::F32x4ExtractLane(_, o)
+            | Self::F64x2ExtractLane(_, o) => f(o),
             // Binary Box<WirInstr>
             Self::I32Add(l, r)
             | Self::I32Sub(l, r)
@@ -1403,9 +1554,114 @@ impl WirInstr {
             | Self::F64Gt(l, r)
             | Self::F64Le(l, r)
             | Self::F64Ge(l, r)
-            | Self::RefEq(l, r) => {
+            | Self::RefEq(l, r)
+            | Self::V128And(l, r)
+            | Self::V128Or(l, r)
+            | Self::V128Xor(l, r)
+            | Self::I8x16Add(l, r)
+            | Self::I8x16Sub(l, r)
+            | Self::I8x16Eq(l, r)
+            | Self::I8x16Ne(l, r)
+            | Self::I8x16LtS(l, r)
+            | Self::I8x16GtS(l, r)
+            | Self::I8x16LeS(l, r)
+            | Self::I8x16GeS(l, r)
+            | Self::I8x16LtU(l, r)
+            | Self::I8x16GtU(l, r)
+            | Self::I8x16LeU(l, r)
+            | Self::I8x16GeU(l, r)
+            | Self::I8x16Shl(l, r)
+            | Self::I8x16ShrS(l, r)
+            | Self::I8x16ShrU(l, r)
+            | Self::I8x16Swizzle(l, r)
+            | Self::I16x8Add(l, r)
+            | Self::I16x8Sub(l, r)
+            | Self::I16x8Mul(l, r)
+            | Self::I16x8Eq(l, r)
+            | Self::I16x8Ne(l, r)
+            | Self::I16x8LtS(l, r)
+            | Self::I16x8GtS(l, r)
+            | Self::I16x8LeS(l, r)
+            | Self::I16x8GeS(l, r)
+            | Self::I16x8LtU(l, r)
+            | Self::I16x8GtU(l, r)
+            | Self::I16x8LeU(l, r)
+            | Self::I16x8GeU(l, r)
+            | Self::I16x8Shl(l, r)
+            | Self::I16x8ShrS(l, r)
+            | Self::I16x8ShrU(l, r)
+            | Self::I32x4Add(l, r)
+            | Self::I32x4Sub(l, r)
+            | Self::I32x4Mul(l, r)
+            | Self::I32x4Eq(l, r)
+            | Self::I32x4Ne(l, r)
+            | Self::I32x4LtS(l, r)
+            | Self::I32x4GtS(l, r)
+            | Self::I32x4LeS(l, r)
+            | Self::I32x4GeS(l, r)
+            | Self::I32x4LtU(l, r)
+            | Self::I32x4GtU(l, r)
+            | Self::I32x4LeU(l, r)
+            | Self::I32x4GeU(l, r)
+            | Self::I32x4Shl(l, r)
+            | Self::I32x4ShrS(l, r)
+            | Self::I32x4ShrU(l, r)
+            | Self::I64x2Add(l, r)
+            | Self::I64x2Sub(l, r)
+            | Self::I64x2Mul(l, r)
+            | Self::I64x2Eq(l, r)
+            | Self::I64x2Ne(l, r)
+            | Self::I64x2LtS(l, r)
+            | Self::I64x2GtS(l, r)
+            | Self::I64x2LeS(l, r)
+            | Self::I64x2GeS(l, r)
+            | Self::I64x2Shl(l, r)
+            | Self::I64x2ShrS(l, r)
+            | Self::I64x2ShrU(l, r)
+            | Self::F32x4Add(l, r)
+            | Self::F32x4Sub(l, r)
+            | Self::F32x4Mul(l, r)
+            | Self::F32x4Div(l, r)
+            | Self::F32x4Eq(l, r)
+            | Self::F32x4Ne(l, r)
+            | Self::F32x4Lt(l, r)
+            | Self::F32x4Gt(l, r)
+            | Self::F32x4Le(l, r)
+            | Self::F32x4Ge(l, r)
+            | Self::F32x4Min(l, r)
+            | Self::F32x4Max(l, r)
+            | Self::F64x2Add(l, r)
+            | Self::F64x2Sub(l, r)
+            | Self::F64x2Mul(l, r)
+            | Self::F64x2Div(l, r)
+            | Self::F64x2Eq(l, r)
+            | Self::F64x2Ne(l, r)
+            | Self::F64x2Lt(l, r)
+            | Self::F64x2Gt(l, r)
+            | Self::F64x2Le(l, r)
+            | Self::F64x2Ge(l, r)
+            | Self::F64x2Min(l, r)
+            | Self::F64x2Max(l, r) => {
                 f(l);
                 f(r);
+            }
+            Self::I8x16ReplaceLane(_, v, val)
+            | Self::I16x8ReplaceLane(_, v, val)
+            | Self::I32x4ReplaceLane(_, v, val)
+            | Self::I64x2ReplaceLane(_, v, val)
+            | Self::F32x4ReplaceLane(_, v, val)
+            | Self::F64x2ReplaceLane(_, v, val) => {
+                f(v);
+                f(val);
+            }
+            Self::V128Bitselect(a, b, c) => {
+                f(a);
+                f(b);
+                f(c);
+            }
+            Self::I8x16Shuffle(_, a, b) => {
+                f(a);
+                f(b);
             }
             Self::StructSet { expr, value, .. } => {
                 f(expr);
@@ -1564,6 +1820,7 @@ impl WirInstr {
             | Self::I64Const(_)
             | Self::F32Const(_)
             | Self::F64Const(_)
+            | Self::V128Const(_)
             | Self::LocalGet { .. }
             | Self::GlobalGet { .. }
             | Self::RefNull { .. }
@@ -1653,7 +1910,32 @@ impl WirInstr {
             | Self::I31GetU(o)
             | Self::ExternInternalize(o)
             | Self::ExternExternalize(o)
-            | Self::ArrayLen(o) => f(o),
+            | Self::ArrayLen(o)
+            | Self::V128Not(o)
+            | Self::I8x16Splat(o)
+            | Self::I8x16Neg(o)
+            | Self::I16x8Splat(o)
+            | Self::I16x8Neg(o)
+            | Self::I32x4Splat(o)
+            | Self::I32x4Neg(o)
+            | Self::I64x2Splat(o)
+            | Self::I64x2Neg(o)
+            | Self::F32x4Splat(o)
+            | Self::F32x4Neg(o)
+            | Self::F32x4Sqrt(o)
+            | Self::F32x4Abs(o)
+            | Self::F64x2Splat(o)
+            | Self::F64x2Neg(o)
+            | Self::F64x2Sqrt(o)
+            | Self::F64x2Abs(o) => f(o),
+            Self::I8x16ExtractLaneS(_, o)
+            | Self::I8x16ExtractLaneU(_, o)
+            | Self::I16x8ExtractLaneS(_, o)
+            | Self::I16x8ExtractLaneU(_, o)
+            | Self::I32x4ExtractLane(_, o)
+            | Self::I64x2ExtractLane(_, o)
+            | Self::F32x4ExtractLane(_, o)
+            | Self::F64x2ExtractLane(_, o) => f(o),
             // Binary Box<WirInstr>
             Self::I32Add(l, r)
             | Self::I32Sub(l, r)
@@ -1729,9 +2011,114 @@ impl WirInstr {
             | Self::F64Gt(l, r)
             | Self::F64Le(l, r)
             | Self::F64Ge(l, r)
-            | Self::RefEq(l, r) => {
+            | Self::RefEq(l, r)
+            | Self::V128And(l, r)
+            | Self::V128Or(l, r)
+            | Self::V128Xor(l, r)
+            | Self::I8x16Add(l, r)
+            | Self::I8x16Sub(l, r)
+            | Self::I8x16Eq(l, r)
+            | Self::I8x16Ne(l, r)
+            | Self::I8x16LtS(l, r)
+            | Self::I8x16GtS(l, r)
+            | Self::I8x16LeS(l, r)
+            | Self::I8x16GeS(l, r)
+            | Self::I8x16LtU(l, r)
+            | Self::I8x16GtU(l, r)
+            | Self::I8x16LeU(l, r)
+            | Self::I8x16GeU(l, r)
+            | Self::I8x16Shl(l, r)
+            | Self::I8x16ShrS(l, r)
+            | Self::I8x16ShrU(l, r)
+            | Self::I8x16Swizzle(l, r)
+            | Self::I16x8Add(l, r)
+            | Self::I16x8Sub(l, r)
+            | Self::I16x8Mul(l, r)
+            | Self::I16x8Eq(l, r)
+            | Self::I16x8Ne(l, r)
+            | Self::I16x8LtS(l, r)
+            | Self::I16x8GtS(l, r)
+            | Self::I16x8LeS(l, r)
+            | Self::I16x8GeS(l, r)
+            | Self::I16x8LtU(l, r)
+            | Self::I16x8GtU(l, r)
+            | Self::I16x8LeU(l, r)
+            | Self::I16x8GeU(l, r)
+            | Self::I16x8Shl(l, r)
+            | Self::I16x8ShrS(l, r)
+            | Self::I16x8ShrU(l, r)
+            | Self::I32x4Add(l, r)
+            | Self::I32x4Sub(l, r)
+            | Self::I32x4Mul(l, r)
+            | Self::I32x4Eq(l, r)
+            | Self::I32x4Ne(l, r)
+            | Self::I32x4LtS(l, r)
+            | Self::I32x4GtS(l, r)
+            | Self::I32x4LeS(l, r)
+            | Self::I32x4GeS(l, r)
+            | Self::I32x4LtU(l, r)
+            | Self::I32x4GtU(l, r)
+            | Self::I32x4LeU(l, r)
+            | Self::I32x4GeU(l, r)
+            | Self::I32x4Shl(l, r)
+            | Self::I32x4ShrS(l, r)
+            | Self::I32x4ShrU(l, r)
+            | Self::I64x2Add(l, r)
+            | Self::I64x2Sub(l, r)
+            | Self::I64x2Mul(l, r)
+            | Self::I64x2Eq(l, r)
+            | Self::I64x2Ne(l, r)
+            | Self::I64x2LtS(l, r)
+            | Self::I64x2GtS(l, r)
+            | Self::I64x2LeS(l, r)
+            | Self::I64x2GeS(l, r)
+            | Self::I64x2Shl(l, r)
+            | Self::I64x2ShrS(l, r)
+            | Self::I64x2ShrU(l, r)
+            | Self::F32x4Add(l, r)
+            | Self::F32x4Sub(l, r)
+            | Self::F32x4Mul(l, r)
+            | Self::F32x4Div(l, r)
+            | Self::F32x4Eq(l, r)
+            | Self::F32x4Ne(l, r)
+            | Self::F32x4Lt(l, r)
+            | Self::F32x4Gt(l, r)
+            | Self::F32x4Le(l, r)
+            | Self::F32x4Ge(l, r)
+            | Self::F32x4Min(l, r)
+            | Self::F32x4Max(l, r)
+            | Self::F64x2Add(l, r)
+            | Self::F64x2Sub(l, r)
+            | Self::F64x2Mul(l, r)
+            | Self::F64x2Div(l, r)
+            | Self::F64x2Eq(l, r)
+            | Self::F64x2Ne(l, r)
+            | Self::F64x2Lt(l, r)
+            | Self::F64x2Gt(l, r)
+            | Self::F64x2Le(l, r)
+            | Self::F64x2Ge(l, r)
+            | Self::F64x2Min(l, r)
+            | Self::F64x2Max(l, r) => {
                 f(l);
                 f(r);
+            }
+            Self::I8x16ReplaceLane(_, v, val)
+            | Self::I16x8ReplaceLane(_, v, val)
+            | Self::I32x4ReplaceLane(_, v, val)
+            | Self::I64x2ReplaceLane(_, v, val)
+            | Self::F32x4ReplaceLane(_, v, val)
+            | Self::F64x2ReplaceLane(_, v, val) => {
+                f(v);
+                f(val);
+            }
+            Self::V128Bitselect(a, b, c) => {
+                f(a);
+                f(b);
+                f(c);
+            }
+            Self::I8x16Shuffle(_, a, b) => {
+                f(a);
+                f(b);
             }
             Self::StructSet { expr, value, .. } => {
                 f(expr);

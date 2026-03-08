@@ -1,0 +1,39 @@
+use { println, Stdout } from "core:cli";
+use { i32x4 } from "core:simd";
+
+export fn run() with Stdout {
+    let a = i32x4::splat(10);
+    let b = i32x4::splat(20);
+    assert a.extract_lane(0) == 10;
+    assert b.extract_lane(1) == 20;
+
+    let c = a + b;
+    assert c.extract_lane(0) == 30;
+    assert c.extract_lane(3) == 30;
+
+    let d = b - a;
+    assert d.extract_lane(0) == 10;
+
+    let e = a * b;
+    assert e.extract_lane(0) == 200;
+
+    let f = a & b;
+    assert f.extract_lane(0) == (10 & 20);
+
+    let g = a | b;
+    assert g.extract_lane(0) == (10 | 20);
+
+    let h = a ^ b;
+    assert h.extract_lane(0) == (10 ^ 20);
+
+    let neg = -a;
+    assert neg.extract_lane(0) == -10;
+
+    let not = ~a;
+    assert not.extract_lane(0) == ~10;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

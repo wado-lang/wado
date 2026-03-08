@@ -1,0 +1,40 @@
+use { println, Stdout } from "core:cli";
+use { i32x4, f64x2, i64x2, u8x16 } from "core:simd";
+
+export fn run() with Stdout {
+    // i32x4 shift operations
+    let a = i32x4::splat(8);
+    let shl = a << 2;
+    assert shl.extract_lane(0) == 32;
+    let shr = a >> 1;
+    assert shr.extract_lane(0) == 4;
+
+    // f64x2 arithmetic
+    let x = f64x2::splat(3.0);
+    let y = f64x2::splat(2.0);
+    let sum = x + y;
+    assert sum.extract_lane(0) == 5.0;
+    let diff = x - y;
+    assert diff.extract_lane(0) == 1.0;
+    let prod = x * y;
+    assert prod.extract_lane(0) == 6.0;
+    let quot = x / y;
+    assert quot.extract_lane(0) == 1.5;
+    let neg_x = -x;
+    assert neg_x.extract_lane(0) == -3.0;
+
+    // i64x2 arithmetic
+    let p = i64x2::splat(100 as i64);
+    let q = i64x2::splat(30 as i64);
+    let pq = p + q;
+    assert pq.extract_lane(0) == 130 as i64;
+
+    // u8x16 basics (extract_lane returns i32)
+    let v = u8x16::splat(42);
+    assert v.extract_lane(0) == 42;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

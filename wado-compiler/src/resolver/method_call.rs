@@ -71,6 +71,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 module_source,
                 ..
             } => (name.clone(), module_source.clone()),
+            // Newtype - use the newtype's own name and defining module
+            ResolvedType::Newtype {
+                name,
+                module_source,
+                ..
+            } => (name.clone(), module_source.clone()),
             _ => (
                 self.type_table.borrow().mangle_type_name(base_type_id),
                 self.current_module_source.clone(),
@@ -731,67 +737,96 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     type_args.clone(),
                 )
             }
-            ResolvedType::Newtype { base_type, .. } => {
-                // For newtypes, look through to the base type for static method lookup
-                match self.type_table.borrow().get(*base_type).clone() {
-                    ResolvedType::Struct {
-                        name,
-                        module_source,
-                        ..
-                    } => (name.clone(), module_source.clone(), name.clone(), vec![]),
-                    ResolvedType::GenericInstance {
-                        name,
-                        module_source,
-                        type_args,
-                    } => {
-                        let type_arg_names: Vec<String> = type_args
-                            .iter()
-                            .map(|t| self.type_table.borrow().mangle_type_name(*t))
-                            .collect();
-                        let mangled = format!("{}<{}>", name, type_arg_names.join(","));
-                        (
-                            name.clone(),
-                            module_source.clone(),
-                            mangled,
-                            type_args.clone(),
-                        )
-                    }
-                    // Handle chained newtypes recursively
-                    ResolvedType::Newtype {
-                        base_type: inner_base,
-                        ..
-                    } => {
-                        // Follow the chain to find the ultimate struct
-                        let mut current = inner_base;
-                        loop {
-                            match self.type_table.borrow().get(current).clone() {
-                                ResolvedType::Struct {
-                                    name,
-                                    module_source,
-                                    ..
-                                } => {
-                                    break (
-                                        name.clone(),
-                                        module_source.clone(),
-                                        name.clone(),
-                                        vec![],
-                                    );
-                                }
-                                ResolvedType::Newtype {
-                                    base_type: next, ..
-                                } => current = next,
-                                _ => {
-                                    return TirExpr::new(
-                                        TirExprKind::Unit,
-                                        TypeTable::ERROR,
-                                        static_call.span,
-                                    );
+            ResolvedType::Newtype {
+                name,
+                module_source,
+                base_type,
+            } => {
+                // First try the newtype's own name (for methods defined via `impl NewtypeName`)
+                let newtype_name = name.clone();
+                let newtype_module = module_source.clone();
+
+                // Check if the newtype itself has the static method
+                if self.has_static_method_direct(&newtype_name, &static_call.method) {
+                    (
+                        newtype_name.clone(),
+                        newtype_module,
+                        newtype_name,
+                        vec![],
+                    )
+                } else {
+                    // Fall back to the base type for inherited methods
+                    match self.type_table.borrow().get(*base_type).clone() {
+                        ResolvedType::Struct {
+                            name,
+                            module_source,
+                            ..
+                        } => (name.clone(), module_source.clone(), name.clone(), vec![]),
+                        ResolvedType::GenericInstance {
+                            name,
+                            module_source,
+                            type_args,
+                        } => {
+                            let type_arg_names: Vec<String> = type_args
+                                .iter()
+                                .map(|t| self.type_table.borrow().mangle_type_name(*t))
+                                .collect();
+                            let mangled = format!("{}<{}>", name, type_arg_names.join(","));
+                            (
+                                name.clone(),
+                                module_source.clone(),
+                                mangled,
+                                type_args.clone(),
+                            )
+                        }
+                        ResolvedType::Newtype {
+                            base_type: inner_base,
+                            ..
+                        } => {
+                            let mut current = inner_base;
+                            loop {
+                                match self.type_table.borrow().get(current).clone() {
+                                    ResolvedType::Struct {
+                                        name,
+                                        module_source,
+                                        ..
+                                    } => {
+                                        break (
+                                            name.clone(),
+                                            module_source.clone(),
+                                            name.clone(),
+                                            vec![],
+                                        );
+                                    }
+                                    ResolvedType::Newtype {
+                                        base_type: next, ..
+                                    } => current = next,
+                                    _ => {
+                                        break (
+                                            newtype_name.clone(),
+                                            newtype_module.clone(),
+                                            newtype_name,
+                                            vec![],
+                                        );
+                                    }
                                 }
                             }
                         }
-                    }
-                    _ => {
-                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+                        ResolvedType::Primitive(prim) => {
+                            let prim_name = prim.as_str().to_string();
+                            (
+                                prim_name.clone(),
+                                ModuleSource::primitive(),
+                                prim_name,
+                                vec![],
+                            )
+                        }
+                        _ => (
+                            newtype_name.clone(),
+                            newtype_module,
+                            newtype_name,
+                            vec![],
+                        ),
                     }
                 }
             }
@@ -920,6 +955,58 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
         None
+    }
+
+    /// Check if a static method exists directly for a given type name (no newtype fallback).
+    fn has_static_method_direct(&self, struct_name: &str, method_name: &str) -> bool {
+        let mangled = MethodName::format_local(struct_name, None, method_name);
+        if self.function_return_types.contains_key(&mangled) {
+            return true;
+        }
+        // Also check with trait-qualified name
+        if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name) {
+            let trait_mangled = MethodName::format_local(struct_name, Some(&trait_name), method_name);
+            if self.function_return_types.contains_key(&trait_mangled) {
+                return true;
+            }
+        }
+        // Check current module's impl blocks
+        for item in &self.current_module_items {
+            if let Item::Impl(impl_block) = item {
+                let impl_struct_name = self.get_type_name(&impl_block.ty);
+                if impl_struct_name == struct_name {
+                    for method in &impl_block.methods {
+                        let has_self = method
+                            .params
+                            .iter()
+                            .any(|p| p.self_kind != ast::SelfKind::None);
+                        if method.name == method_name && !has_self {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        // Check loaded modules' impl blocks
+        for module in self.loaded_modules.values() {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item {
+                    let impl_struct_name = Self::get_type_name_static(&impl_block.ty);
+                    if impl_struct_name == struct_name {
+                        for method in &impl_block.methods {
+                            let has_self = method
+                                .params
+                                .iter()
+                                .any(|p| p.self_kind != ast::SelfKind::None);
+                            if method.name == method_name && !has_self {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        false
     }
 
     /// Look up static method return type based on struct name and method name
@@ -1415,10 +1502,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         span: Span,
         _ctx: &mut FunctionContext,
     ) -> TirExpr {
-        // For newtypes, resolve to the base type's static method
+        // For newtypes, check if the newtype itself has the method first,
+        // then fall back to the base type's static method
         let (actual_struct_name, actual_mangled_name) =
             if let Some(&newtype_id) = self.newtypes.get(struct_name) {
-                if let ResolvedType::Newtype { base_type, .. } =
+                // First check if the newtype itself has this static method
+                if self.has_static_method_direct(struct_name, method_name) {
+                    (struct_name.to_string(), mangled_func_name.to_string())
+                } else if let ResolvedType::Newtype { base_type, .. } =
                     self.type_table.borrow().get(newtype_id).clone()
                 {
                     // Follow the chain to find the ultimate struct
