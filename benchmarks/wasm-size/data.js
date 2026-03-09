@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773016341748,
+  "lastUpdate": 1773028912232,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1817,6 +1817,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/41ace60c89d999cc4c9686ceb496ebe9ec1bbcb1"
         },
         "date": 1773016341538,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2302,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10221,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19738,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7d5544e33b8b5b440c3a70dbb21351c9695f52ec",
+          "message": "Merge pull request #545 from wado-lang/claude/add-simd-support-5lSmg\n\nAdd SIMD v128 support and fix newtype trait resolution",
+          "timestamp": "2026-03-09T12:59:32+09:00",
+          "tree_id": "e7bdd3791e8982f9fcdae4bd5fa0d1d66d218202",
+          "url": "https://github.com/wado-lang/wado/commit/7d5544e33b8b5b440c3a70dbb21351c9695f52ec"
+        },
+        "date": 1773028912153,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
