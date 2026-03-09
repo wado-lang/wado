@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773028912232,
+  "lastUpdate": 1773047114312,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1871,6 +1871,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 19738,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6dc474b2c4f4dbcfdace365d8f4451eb3b2c2e2c",
+          "message": "Merge pull request #544 from wado-lang/claude/add-debug-allocator-ZQpcF\n\nAdd debug_realloc allocator function for memory poisoning",
+          "timestamp": "2026-03-09T18:02:53+09:00",
+          "tree_id": "ac4d64c39e8bc68cbebe0c4e3e9d6a2ba4c341ec",
+          "url": "https://github.com/wado-lang/wado/commit/6dc474b2c4f4dbcfdace365d8f4451eb3b2c2e2c"
+        },
+        "date": 1773047114206,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2400,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10319,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19848,
             "unit": "bytes"
           }
         ]
