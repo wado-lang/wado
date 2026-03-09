@@ -224,6 +224,7 @@ pub enum PrimitiveType {
     F64,
     Bool,
     Char,
+    V128,
 }
 
 impl PrimitiveType {
@@ -245,6 +246,7 @@ impl PrimitiveType {
             Self::F64 => "f64",
             Self::Bool => "bool",
             Self::Char => "char",
+            Self::V128 => "v128",
         }
     }
 
@@ -266,6 +268,7 @@ impl PrimitiveType {
                 | "f64"
                 | "bool"
                 | "char"
+                | "v128"
         )
     }
 }
@@ -424,11 +427,12 @@ impl TypeTable {
     pub const F64: TypeId = TypeId(11);
     pub const BOOL: TypeId = TypeId(12);
     pub const CHAR: TypeId = TypeId(13);
-    pub const UNIT: TypeId = TypeId(14);
-    pub const NEVER: TypeId = TypeId(15);
+    pub const V128: TypeId = TypeId(14);
+    pub const UNIT: TypeId = TypeId(15);
+    pub const NEVER: TypeId = TypeId(16);
     // STRING removed - String is now a user-defined struct in core:prelude/string.wado
-    pub const UNKNOWN: TypeId = TypeId(16);
-    pub const ERROR: TypeId = TypeId(17);
+    pub const UNKNOWN: TypeId = TypeId(17);
+    pub const ERROR: TypeId = TypeId(18);
 
     pub fn new() -> Self {
         let mut table = Self {
@@ -456,6 +460,7 @@ impl TypeTable {
         table.intern(ResolvedType::Primitive(PrimitiveType::F64));
         table.intern(ResolvedType::Primitive(PrimitiveType::Bool));
         table.intern(ResolvedType::Primitive(PrimitiveType::Char));
+        table.intern(ResolvedType::Primitive(PrimitiveType::V128));
         table.intern(ResolvedType::Unit);
         table.intern(ResolvedType::Never);
         // ResolvedType::String removed - String is now a user-defined struct

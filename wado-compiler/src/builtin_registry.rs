@@ -165,6 +165,7 @@ impl BuiltinRegistry {
                     "f64" => TypeTable::F64,
                     "bool" => TypeTable::BOOL,
                     "char" => TypeTable::CHAR,
+                    "v128" => TypeTable::V128,
                     "!" => TypeTable::NEVER,
                     _ => TypeTable::UNIT, // Unknown type defaults to UNIT
                 }

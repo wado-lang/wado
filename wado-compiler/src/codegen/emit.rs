@@ -1195,6 +1195,188 @@ impl<'a> WirEmitter<'a> {
             WirInstr::F64ReinterpretI64(o) => self.emit_unary(f, o, Instruction::F64ReinterpretI64),
             WirInstr::I64ReinterpretF64(o) => self.emit_unary(f, o, Instruction::I64ReinterpretF64),
 
+            // SIMD v128
+            WirInstr::V128Const(v) => {
+                f.instruction(&Instruction::V128Const(*v));
+            }
+            WirInstr::V128Not(a) => self.emit_unary(f, a, Instruction::V128Not),
+            WirInstr::V128And(l, r) => self.emit_binary(f, l, r, Instruction::V128And),
+            WirInstr::V128Or(l, r) => self.emit_binary(f, l, r, Instruction::V128Or),
+            WirInstr::V128Xor(l, r) => self.emit_binary(f, l, r, Instruction::V128Xor),
+            WirInstr::V128Bitselect(a, b, c) => {
+                self.emit_instr(f, a);
+                self.emit_instr(f, b);
+                self.emit_instr(f, c);
+                f.instruction(&Instruction::V128Bitselect);
+            }
+            WirInstr::I8x16Splat(a) => self.emit_unary(f, a, Instruction::I8x16Splat),
+            WirInstr::I8x16ExtractLaneS(lane, a) => {
+                self.emit_instr(f, a);
+                f.instruction(&Instruction::I8x16ExtractLaneS(*lane));
+            }
+            WirInstr::I8x16ExtractLaneU(lane, a) => {
+                self.emit_instr(f, a);
+                f.instruction(&Instruction::I8x16ExtractLaneU(*lane));
+            }
+            WirInstr::I8x16ReplaceLane(lane, v, val) => {
+                self.emit_instr(f, v);
+                self.emit_instr(f, val);
+                f.instruction(&Instruction::I8x16ReplaceLane(*lane));
+            }
+            WirInstr::I8x16Add(l, r) => self.emit_binary(f, l, r, Instruction::I8x16Add),
+            WirInstr::I8x16Sub(l, r) => self.emit_binary(f, l, r, Instruction::I8x16Sub),
+            WirInstr::I8x16Neg(a) => self.emit_unary(f, a, Instruction::I8x16Neg),
+            WirInstr::I8x16Eq(l, r) => self.emit_binary(f, l, r, Instruction::I8x16Eq),
+            WirInstr::I8x16Ne(l, r) => self.emit_binary(f, l, r, Instruction::I8x16Ne),
+            WirInstr::I8x16LtS(l, r) => self.emit_binary(f, l, r, Instruction::I8x16LtS),
+            WirInstr::I8x16GtS(l, r) => self.emit_binary(f, l, r, Instruction::I8x16GtS),
+            WirInstr::I8x16LeS(l, r) => self.emit_binary(f, l, r, Instruction::I8x16LeS),
+            WirInstr::I8x16GeS(l, r) => self.emit_binary(f, l, r, Instruction::I8x16GeS),
+            WirInstr::I8x16LtU(l, r) => self.emit_binary(f, l, r, Instruction::I8x16LtU),
+            WirInstr::I8x16GtU(l, r) => self.emit_binary(f, l, r, Instruction::I8x16GtU),
+            WirInstr::I8x16LeU(l, r) => self.emit_binary(f, l, r, Instruction::I8x16LeU),
+            WirInstr::I8x16GeU(l, r) => self.emit_binary(f, l, r, Instruction::I8x16GeU),
+            WirInstr::I8x16Shl(l, r) => self.emit_binary(f, l, r, Instruction::I8x16Shl),
+            WirInstr::I8x16ShrS(l, r) => self.emit_binary(f, l, r, Instruction::I8x16ShrS),
+            WirInstr::I8x16ShrU(l, r) => self.emit_binary(f, l, r, Instruction::I8x16ShrU),
+            WirInstr::I8x16Swizzle(l, r) => self.emit_binary(f, l, r, Instruction::I8x16Swizzle),
+            WirInstr::I8x16Shuffle(lanes, a, b) => {
+                self.emit_instr(f, a);
+                self.emit_instr(f, b);
+                f.instruction(&Instruction::I8x16Shuffle(*lanes));
+            }
+            WirInstr::I16x8Splat(a) => self.emit_unary(f, a, Instruction::I16x8Splat),
+            WirInstr::I16x8ExtractLaneS(lane, a) => {
+                self.emit_instr(f, a);
+                f.instruction(&Instruction::I16x8ExtractLaneS(*lane));
+            }
+            WirInstr::I16x8ExtractLaneU(lane, a) => {
+                self.emit_instr(f, a);
+                f.instruction(&Instruction::I16x8ExtractLaneU(*lane));
+            }
+            WirInstr::I16x8ReplaceLane(lane, v, val) => {
+                self.emit_instr(f, v);
+                self.emit_instr(f, val);
+                f.instruction(&Instruction::I16x8ReplaceLane(*lane));
+            }
+            WirInstr::I16x8Add(l, r) => self.emit_binary(f, l, r, Instruction::I16x8Add),
+            WirInstr::I16x8Sub(l, r) => self.emit_binary(f, l, r, Instruction::I16x8Sub),
+            WirInstr::I16x8Mul(l, r) => self.emit_binary(f, l, r, Instruction::I16x8Mul),
+            WirInstr::I16x8Neg(a) => self.emit_unary(f, a, Instruction::I16x8Neg),
+            WirInstr::I16x8Eq(l, r) => self.emit_binary(f, l, r, Instruction::I16x8Eq),
+            WirInstr::I16x8Ne(l, r) => self.emit_binary(f, l, r, Instruction::I16x8Ne),
+            WirInstr::I16x8LtS(l, r) => self.emit_binary(f, l, r, Instruction::I16x8LtS),
+            WirInstr::I16x8GtS(l, r) => self.emit_binary(f, l, r, Instruction::I16x8GtS),
+            WirInstr::I16x8LeS(l, r) => self.emit_binary(f, l, r, Instruction::I16x8LeS),
+            WirInstr::I16x8GeS(l, r) => self.emit_binary(f, l, r, Instruction::I16x8GeS),
+            WirInstr::I16x8LtU(l, r) => self.emit_binary(f, l, r, Instruction::I16x8LtU),
+            WirInstr::I16x8GtU(l, r) => self.emit_binary(f, l, r, Instruction::I16x8GtU),
+            WirInstr::I16x8LeU(l, r) => self.emit_binary(f, l, r, Instruction::I16x8LeU),
+            WirInstr::I16x8GeU(l, r) => self.emit_binary(f, l, r, Instruction::I16x8GeU),
+            WirInstr::I16x8Shl(l, r) => self.emit_binary(f, l, r, Instruction::I16x8Shl),
+            WirInstr::I16x8ShrS(l, r) => self.emit_binary(f, l, r, Instruction::I16x8ShrS),
+            WirInstr::I16x8ShrU(l, r) => self.emit_binary(f, l, r, Instruction::I16x8ShrU),
+            WirInstr::I32x4Splat(a) => self.emit_unary(f, a, Instruction::I32x4Splat),
+            WirInstr::I32x4ExtractLane(lane, a) => {
+                self.emit_instr(f, a);
+                f.instruction(&Instruction::I32x4ExtractLane(*lane));
+            }
+            WirInstr::I32x4ReplaceLane(lane, v, val) => {
+                self.emit_instr(f, v);
+                self.emit_instr(f, val);
+                f.instruction(&Instruction::I32x4ReplaceLane(*lane));
+            }
+            WirInstr::I32x4Add(l, r) => self.emit_binary(f, l, r, Instruction::I32x4Add),
+            WirInstr::I32x4Sub(l, r) => self.emit_binary(f, l, r, Instruction::I32x4Sub),
+            WirInstr::I32x4Mul(l, r) => self.emit_binary(f, l, r, Instruction::I32x4Mul),
+            WirInstr::I32x4Neg(a) => self.emit_unary(f, a, Instruction::I32x4Neg),
+            WirInstr::I32x4Eq(l, r) => self.emit_binary(f, l, r, Instruction::I32x4Eq),
+            WirInstr::I32x4Ne(l, r) => self.emit_binary(f, l, r, Instruction::I32x4Ne),
+            WirInstr::I32x4LtS(l, r) => self.emit_binary(f, l, r, Instruction::I32x4LtS),
+            WirInstr::I32x4GtS(l, r) => self.emit_binary(f, l, r, Instruction::I32x4GtS),
+            WirInstr::I32x4LeS(l, r) => self.emit_binary(f, l, r, Instruction::I32x4LeS),
+            WirInstr::I32x4GeS(l, r) => self.emit_binary(f, l, r, Instruction::I32x4GeS),
+            WirInstr::I32x4LtU(l, r) => self.emit_binary(f, l, r, Instruction::I32x4LtU),
+            WirInstr::I32x4GtU(l, r) => self.emit_binary(f, l, r, Instruction::I32x4GtU),
+            WirInstr::I32x4LeU(l, r) => self.emit_binary(f, l, r, Instruction::I32x4LeU),
+            WirInstr::I32x4GeU(l, r) => self.emit_binary(f, l, r, Instruction::I32x4GeU),
+            WirInstr::I32x4Shl(l, r) => self.emit_binary(f, l, r, Instruction::I32x4Shl),
+            WirInstr::I32x4ShrS(l, r) => self.emit_binary(f, l, r, Instruction::I32x4ShrS),
+            WirInstr::I32x4ShrU(l, r) => self.emit_binary(f, l, r, Instruction::I32x4ShrU),
+            WirInstr::I64x2Splat(a) => self.emit_unary(f, a, Instruction::I64x2Splat),
+            WirInstr::I64x2ExtractLane(lane, a) => {
+                self.emit_instr(f, a);
+                f.instruction(&Instruction::I64x2ExtractLane(*lane));
+            }
+            WirInstr::I64x2ReplaceLane(lane, v, val) => {
+                self.emit_instr(f, v);
+                self.emit_instr(f, val);
+                f.instruction(&Instruction::I64x2ReplaceLane(*lane));
+            }
+            WirInstr::I64x2Add(l, r) => self.emit_binary(f, l, r, Instruction::I64x2Add),
+            WirInstr::I64x2Sub(l, r) => self.emit_binary(f, l, r, Instruction::I64x2Sub),
+            WirInstr::I64x2Mul(l, r) => self.emit_binary(f, l, r, Instruction::I64x2Mul),
+            WirInstr::I64x2Neg(a) => self.emit_unary(f, a, Instruction::I64x2Neg),
+            WirInstr::I64x2Eq(l, r) => self.emit_binary(f, l, r, Instruction::I64x2Eq),
+            WirInstr::I64x2Ne(l, r) => self.emit_binary(f, l, r, Instruction::I64x2Ne),
+            WirInstr::I64x2LtS(l, r) => self.emit_binary(f, l, r, Instruction::I64x2LtS),
+            WirInstr::I64x2GtS(l, r) => self.emit_binary(f, l, r, Instruction::I64x2GtS),
+            WirInstr::I64x2LeS(l, r) => self.emit_binary(f, l, r, Instruction::I64x2LeS),
+            WirInstr::I64x2GeS(l, r) => self.emit_binary(f, l, r, Instruction::I64x2GeS),
+            WirInstr::I64x2Shl(l, r) => self.emit_binary(f, l, r, Instruction::I64x2Shl),
+            WirInstr::I64x2ShrS(l, r) => self.emit_binary(f, l, r, Instruction::I64x2ShrS),
+            WirInstr::I64x2ShrU(l, r) => self.emit_binary(f, l, r, Instruction::I64x2ShrU),
+            WirInstr::F32x4Splat(a) => self.emit_unary(f, a, Instruction::F32x4Splat),
+            WirInstr::F32x4ExtractLane(lane, a) => {
+                self.emit_instr(f, a);
+                f.instruction(&Instruction::F32x4ExtractLane(*lane));
+            }
+            WirInstr::F32x4ReplaceLane(lane, v, val) => {
+                self.emit_instr(f, v);
+                self.emit_instr(f, val);
+                f.instruction(&Instruction::F32x4ReplaceLane(*lane));
+            }
+            WirInstr::F32x4Add(l, r) => self.emit_binary(f, l, r, Instruction::F32x4Add),
+            WirInstr::F32x4Sub(l, r) => self.emit_binary(f, l, r, Instruction::F32x4Sub),
+            WirInstr::F32x4Mul(l, r) => self.emit_binary(f, l, r, Instruction::F32x4Mul),
+            WirInstr::F32x4Div(l, r) => self.emit_binary(f, l, r, Instruction::F32x4Div),
+            WirInstr::F32x4Neg(a) => self.emit_unary(f, a, Instruction::F32x4Neg),
+            WirInstr::F32x4Sqrt(a) => self.emit_unary(f, a, Instruction::F32x4Sqrt),
+            WirInstr::F32x4Abs(a) => self.emit_unary(f, a, Instruction::F32x4Abs),
+            WirInstr::F32x4Eq(l, r) => self.emit_binary(f, l, r, Instruction::F32x4Eq),
+            WirInstr::F32x4Ne(l, r) => self.emit_binary(f, l, r, Instruction::F32x4Ne),
+            WirInstr::F32x4Lt(l, r) => self.emit_binary(f, l, r, Instruction::F32x4Lt),
+            WirInstr::F32x4Gt(l, r) => self.emit_binary(f, l, r, Instruction::F32x4Gt),
+            WirInstr::F32x4Le(l, r) => self.emit_binary(f, l, r, Instruction::F32x4Le),
+            WirInstr::F32x4Ge(l, r) => self.emit_binary(f, l, r, Instruction::F32x4Ge),
+            WirInstr::F32x4Min(l, r) => self.emit_binary(f, l, r, Instruction::F32x4Min),
+            WirInstr::F32x4Max(l, r) => self.emit_binary(f, l, r, Instruction::F32x4Max),
+            WirInstr::F64x2Splat(a) => self.emit_unary(f, a, Instruction::F64x2Splat),
+            WirInstr::F64x2ExtractLane(lane, a) => {
+                self.emit_instr(f, a);
+                f.instruction(&Instruction::F64x2ExtractLane(*lane));
+            }
+            WirInstr::F64x2ReplaceLane(lane, v, val) => {
+                self.emit_instr(f, v);
+                self.emit_instr(f, val);
+                f.instruction(&Instruction::F64x2ReplaceLane(*lane));
+            }
+            WirInstr::F64x2Add(l, r) => self.emit_binary(f, l, r, Instruction::F64x2Add),
+            WirInstr::F64x2Sub(l, r) => self.emit_binary(f, l, r, Instruction::F64x2Sub),
+            WirInstr::F64x2Mul(l, r) => self.emit_binary(f, l, r, Instruction::F64x2Mul),
+            WirInstr::F64x2Div(l, r) => self.emit_binary(f, l, r, Instruction::F64x2Div),
+            WirInstr::F64x2Neg(a) => self.emit_unary(f, a, Instruction::F64x2Neg),
+            WirInstr::F64x2Sqrt(a) => self.emit_unary(f, a, Instruction::F64x2Sqrt),
+            WirInstr::F64x2Abs(a) => self.emit_unary(f, a, Instruction::F64x2Abs),
+            WirInstr::F64x2Eq(l, r) => self.emit_binary(f, l, r, Instruction::F64x2Eq),
+            WirInstr::F64x2Ne(l, r) => self.emit_binary(f, l, r, Instruction::F64x2Ne),
+            WirInstr::F64x2Lt(l, r) => self.emit_binary(f, l, r, Instruction::F64x2Lt),
+            WirInstr::F64x2Gt(l, r) => self.emit_binary(f, l, r, Instruction::F64x2Gt),
+            WirInstr::F64x2Le(l, r) => self.emit_binary(f, l, r, Instruction::F64x2Le),
+            WirInstr::F64x2Ge(l, r) => self.emit_binary(f, l, r, Instruction::F64x2Ge),
+            WirInstr::F64x2Min(l, r) => self.emit_binary(f, l, r, Instruction::F64x2Min),
+            WirInstr::F64x2Max(l, r) => self.emit_binary(f, l, r, Instruction::F64x2Max),
+
             // GC: Struct
             WirInstr::StructNew { type_id, fields } => {
                 for field in fields {
@@ -2155,6 +2337,7 @@ impl<'a> WirEmitter<'a> {
             WirType::I64 | WirType::U64 => ValType::I64,
             WirType::F32 => ValType::F32,
             WirType::F64 => ValType::F64,
+            WirType::V128 => ValType::V128,
             WirType::Enum { .. } | WirType::Flags { .. } => ValType::I32,
             WirType::Ref { type_id, nullable } => {
                 let wasm_idx = self.resolve_type_index(type_id.index());

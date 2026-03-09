@@ -2122,9 +2122,10 @@ fn flat_types_from_type_id_into(
             PrimitiveType::F32 => out.push(cm_abi::CmValType::F32),
             PrimitiveType::F64 => out.push(cm_abi::CmValType::F64),
             PrimitiveType::I128 | PrimitiveType::U128 => {
-                // 128-bit types are not standard CM flat types; treat as two i64
-                out.push(cm_abi::CmValType::I64);
-                out.push(cm_abi::CmValType::I64);
+                panic!("i128/u128 cannot appear at CM boundary")
+            }
+            PrimitiveType::V128 => {
+                panic!("v128 cannot appear at CM boundary")
             }
         },
         ResolvedType::Unit => {} // no flat values
@@ -2346,8 +2347,10 @@ fn lower_to_flat_inner(
                 PrimitiveType::F32 => (TypeTable::F32, cm_abi::CmValType::F32),
                 PrimitiveType::F64 => (TypeTable::F64, cm_abi::CmValType::F64),
                 PrimitiveType::I128 | PrimitiveType::U128 => {
-                    // Not standard; skip for now
-                    return vec![];
+                    panic!("i128/u128 cannot appear at CM boundary")
+                }
+                PrimitiveType::V128 => {
+                    panic!("v128 cannot appear at CM boundary")
                 }
             };
             let cast_value = if flat_type_id == type_id {

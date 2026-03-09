@@ -1,0 +1,57 @@
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // i32x4 splat and extract
+    let a = builtin::i32x4_splat(10);
+    let b = builtin::i32x4_splat(20);
+    assert builtin::i32x4_extract_lane(0, a) == 10;
+    assert builtin::i32x4_extract_lane(3, b) == 20;
+
+    // i32x4 arithmetic
+    let sum = builtin::i32x4_add(a, b);
+    assert builtin::i32x4_extract_lane(0, sum) == 30;
+    assert builtin::i32x4_extract_lane(3, sum) == 30;
+
+    let diff = builtin::i32x4_sub(b, a);
+    assert builtin::i32x4_extract_lane(0, diff) == 10;
+
+    let prod = builtin::i32x4_mul(a, b);
+    assert builtin::i32x4_extract_lane(0, prod) == 200;
+
+    // replace lane
+    let c = builtin::i32x4_replace_lane(2, a, 99);
+    assert builtin::i32x4_extract_lane(0, c) == 10;
+    assert builtin::i32x4_extract_lane(2, c) == 99;
+
+    // bitwise
+    let all_ones = builtin::i32x4_splat(-1);
+    let zeros = builtin::i32x4_splat(0);
+    let and_result = builtin::v128_and(all_ones, a);
+    assert builtin::i32x4_extract_lane(0, and_result) == 10;
+    let or_result = builtin::v128_or(zeros, a);
+    assert builtin::i32x4_extract_lane(0, or_result) == 10;
+    let not_result = builtin::v128_not(zeros);
+    assert builtin::i32x4_extract_lane(0, not_result) == -1;
+
+    // negation
+    let neg = builtin::i32x4_neg(a);
+    assert builtin::i32x4_extract_lane(0, neg) == -10;
+
+    // f64x2
+    let fa = builtin::f64x2_splat(3.14);
+    let fb = builtin::f64x2_splat(2.0);
+    let fsum = builtin::f64x2_add(fa, fb);
+    let fprod = builtin::f64x2_mul(fa, fb);
+    let fdiv = builtin::f64x2_div(fa, fb);
+    let fsum_val = builtin::f64x2_extract_lane(0, fsum);
+    assert fsum_val > 5.13 && fsum_val < 5.15;
+    let fprod_val = builtin::f64x2_extract_lane(0, fprod);
+    assert fprod_val > 6.27 && fprod_val < 6.29;
+    let fdiv_val = builtin::f64x2_extract_lane(0, fdiv);
+    assert fdiv_val > 1.56 && fdiv_val < 1.58;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

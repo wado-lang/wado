@@ -36,14 +36,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    /// Get the struct name from a type ID, if it's a struct or generic instance.
+    /// Get the struct name from a type ID, if it's a struct, generic instance, or newtype.
     pub(super) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
         match self.type_table.borrow().get(type_id) {
-            ResolvedType::Struct { name, .. } | ResolvedType::GenericInstance { name, .. } => {
-                Some(name.clone())
-            }
+            ResolvedType::Struct { name, .. }
+            | ResolvedType::GenericInstance { name, .. }
+            | ResolvedType::Newtype { name, .. } => Some(name.clone()),
             _ => None,
         }
+    }
+
+    /// For newtypes, get the base type name and ID for trait impl lookup fallback.
+    /// Returns (`base_name`, `base_type_id`) if the type is a newtype; otherwise returns the same name/id.
+    pub(super) fn newtype_base_lookup(&self, name: &str, type_id: TypeId) -> (String, TypeId) {
+        let tt = self.type_table.borrow();
+        if let Some(base_id) = tt.get_newtype_base(type_id) {
+            drop(tt);
+            if let Some(base_name) = self.struct_name_for_type(base_id) {
+                return (base_name, base_id);
+            }
+        }
+        (name.to_string(), type_id)
     }
 
     /// Check if a name refers to a known type (struct, variant, enum, flags, newtype, or primitive).
@@ -174,6 +187,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         return module_source.clone();
                     }
                     _ => {}
+                }
+            }
+        }
+
+        // Check newtypes — the impl block may live in the module that defines the newtype
+        if let Some(&type_id) = self.newtypes.get(struct_name)
+            && let ResolvedType::Newtype { module_source, .. } =
+                self.type_table.borrow().get(type_id).clone()
+        {
+            return module_source;
+        }
+
+        // Check loaded modules for newtype definitions
+        for (module_source, module) in self.loaded_modules {
+            for item in &module.items {
+                if let Item::Type(alias) = item
+                    && alias.name == struct_name
+                {
+                    return module_source.clone();
                 }
             }
         }
