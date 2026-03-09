@@ -314,17 +314,19 @@ fn __cm_adapter__Environment_get_environment() {
     let __result: ref Array<Tuple<String,String>>;
     let __i: i32;
     let __elem_addr: i32;
-    let __local_6: i32;
-    let __local_7: i32;
+    let __lifted_result_6: ref String;
+    let __lifted_result_7: ref String;
     let __local_8: i32;
-    let __local_9: ref array<u8>;
+    let __local_9: i32;
     let __local_10: i32;
-    let __local_11: i32;
+    let __local_11: ref array<u8>;
     let __local_12: ref array<u8>;
-    let __local_13: ref array<u8>;
+    let __local_13: i32;
     let __local_14: i32;
-    let __local_15: ref array<u8>;
-    let __local_16: i32;
+    let __local_15: i32;
+    let __local_16: ref array<u8>;
+    let __local_17: ref array<u8>;
+    let __local_18: i32;
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:cli/Environment::get_environment"(__outptr);
     __base = builtin::load_i32(__outptr);
@@ -337,17 +339,19 @@ fn __cm_adapter__Environment_get_environment() {
                 break b5;
             };
             __elem_addr = __base + (__i * 16);
-            Array<Tuple<String,String>>::append(__result, "tuple/[String, String]" { 0: ref.as_non_null(__inline_memory_to_gc_string_1: block -> ref String {
-                __local_7 = builtin::load_i32(__elem_addr + 0);
-                __local_8 = builtin::load_i32((__elem_addr + 0) + 4);
-                __local_9 = "core:internal/memory_to_gc_array"(__local_7, __local_8);
-                break __inline_memory_to_gc_string_1: String { repr: ref.as_non_null(__local_9), used: __local_8 };
-            }), 1: ref.as_non_null(__inline_memory_to_gc_string_2: block -> ref String {
-                __local_10 = builtin::load_i32(__elem_addr + 8);
-                __local_11 = builtin::load_i32((__elem_addr + 8) + 4);
-                __local_12 = "core:internal/memory_to_gc_array"(__local_10, __local_11);
-                break __inline_memory_to_gc_string_2: String { repr: ref.as_non_null(__local_12), used: __local_11 };
-            }) });
+            __lifted_result_6 = __inline_memory_to_gc_string_1: block -> ref String {
+                __local_9 = builtin::load_i32(__elem_addr + 0);
+                __local_10 = builtin::load_i32((__elem_addr + 0) + 4);
+                __local_11 = "core:internal/memory_to_gc_array"(__local_9, __local_10);
+                break __inline_memory_to_gc_string_1: String { repr: ref.as_non_null(__local_11), used: __local_10 };
+            };
+            __lifted_result_7 = __inline_memory_to_gc_string_3: block -> ref String {
+                __local_14 = builtin::load_i32(__elem_addr + 8);
+                __local_15 = builtin::load_i32((__elem_addr + 8) + 4);
+                __local_16 = "core:internal/memory_to_gc_array"(__local_14, __local_15);
+                break __inline_memory_to_gc_string_3: String { repr: ref.as_non_null(__local_16), used: __local_15 };
+            };
+            Array<Tuple<String,String>>::append(__result, "tuple/[String, String]" { 0: ref.as_non_null(__lifted_result_6), 1: ref.as_non_null(__lifted_result_7) });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 0), builtin::load_i32((__elem_addr + 0) + 4), 1, 0));
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 8), builtin::load_i32((__elem_addr + 8) + 4), 1, 0));
             __i = __i + 1;

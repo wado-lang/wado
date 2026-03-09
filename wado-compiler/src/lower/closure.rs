@@ -804,7 +804,8 @@ impl ClosureLowerer {
                 is_cm_adapter: false,
                 inline_hint: InlineHint::Auto,
                 comp_features: 0,
-                export_name: None, allocator_tag: None,
+                export_name: None,
+                allocator_tag: None,
             };
 
             let call_method_rc = Rc::new(RefCell::new(call_method));

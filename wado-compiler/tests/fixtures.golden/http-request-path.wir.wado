@@ -1017,10 +1017,14 @@ fn __cm_adapter__Fields_new() {
 
 fn __cm_adapter__Response_new(headers, contents_flat0, contents_flat1, trailers) {
     let __outptr: i32;
+    let __lifted_result_5: i32;
+    let __lifted_result_6: i32;
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:http/Response::new"(headers, contents_flat0, contents_flat1, trailers, __outptr);
+    __lifted_result_5 = builtin::load_i32(__outptr + 0);
+    __lifted_result_6 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return builtin::load_i32(__outptr + 0); builtin::load_i32(__outptr + 4);
+    return __lifted_result_5; __lifted_result_6;
 }
 
 fn __cm_export__handle(request) {

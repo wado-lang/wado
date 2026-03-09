@@ -641,7 +641,13 @@ fn run_normal_test(
 
     // Use CompilerOptions to pass the target world through
     let has_wir = spec.has_wir_expectations(opt_level);
-    let allocator = spec.allocator.clone();
+    // Default to debug allocator in e2e tests to catch use-after-free bugs,
+    // unless the fixture explicitly overrides it.
+    let allocator = Some(
+        spec.allocator
+            .clone()
+            .unwrap_or_else(|| "debug".to_string()),
+    );
     let options = CompilerOptions {
         opt_level,
         target_world,

@@ -143,7 +143,8 @@ fn ensure_inspect_fn(
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
-        export_name: None, allocator_tag: None,
+        export_name: None,
+        allocator_tag: None,
     };
     let rc = Rc::new(RefCell::new(func));
     reg.functions.insert(type_id, Rc::clone(&rc));

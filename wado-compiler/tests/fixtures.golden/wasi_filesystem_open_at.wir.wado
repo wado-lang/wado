@@ -273,12 +273,14 @@ fn __cm_adapter__Preopens_get_directories() {
     let __result: ref Array<Tuple<Descriptor,String>>;
     let __i: i32;
     let __elem_addr: i32;
-    let __local_6: i32;
-    let __local_7: i32;
+    let __lifted_result_6: i32;
+    let __lifted_result_7: ref String;
     let __local_8: i32;
-    let __local_9: ref array<u8>;
-    let __local_10: ref array<u8>;
-    let __local_11: i32;
+    let __local_9: i32;
+    let __local_10: i32;
+    let __local_11: ref array<u8>;
+    let __local_12: ref array<u8>;
+    let __local_13: i32;
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:filesystem/Preopens::get_directories"(__outptr);
     __base = builtin::load_i32(__outptr);
@@ -291,12 +293,14 @@ fn __cm_adapter__Preopens_get_directories() {
                 break b6;
             };
             __elem_addr = __base + (__i * 12);
-            Array<Tuple<Descriptor,String>>::append(__result, "tuple/[Descriptor, String]" { 0: builtin::load_i32(__elem_addr + 0), 1: ref.as_non_null(__inline_memory_to_gc_string_1: block -> ref String {
-                __local_7 = builtin::load_i32(__elem_addr + 4);
-                __local_8 = builtin::load_i32((__elem_addr + 4) + 4);
-                __local_9 = "core:internal/memory_to_gc_array"(__local_7, __local_8);
-                break __inline_memory_to_gc_string_1: String { repr: ref.as_non_null(__local_9), used: __local_8 };
-            }) });
+            __lifted_result_6 = builtin::load_i32(__elem_addr + 0);
+            __lifted_result_7 = __inline_memory_to_gc_string_1: block -> ref String {
+                __local_9 = builtin::load_i32(__elem_addr + 4);
+                __local_10 = builtin::load_i32((__elem_addr + 4) + 4);
+                __local_11 = "core:internal/memory_to_gc_array"(__local_9, __local_10);
+                break __inline_memory_to_gc_string_1: String { repr: ref.as_non_null(__local_11), used: __local_10 };
+            };
+            Array<Tuple<Descriptor,String>>::append(__result, "tuple/[Descriptor, String]" { 0: __lifted_result_6, 1: ref.as_non_null(__lifted_result_7) });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
             __i = __i + 1;
             continue l7;

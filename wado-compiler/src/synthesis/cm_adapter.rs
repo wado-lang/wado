@@ -139,6 +139,41 @@ pub fn synthesize_lift_with_context(
     synthesize_lift_inner(ty, addr, next_local, stmts, local_types, Some(ctx))
 }
 
+/// Ensure a lifted expression is evaluated before subsequent memory operations.
+///
+/// If the expression is already a local reference or unit value, it is returned as-is.
+/// Otherwise, it is materialized into a local variable. This prevents use-after-free
+/// when the outptr buffer is freed after lifting but the lifted expression still
+/// contains a bare memory load (e.g., `i32.load(outptr)`).
+///
+/// For complex types (structs, arrays, variants), `synthesize_lift` already materializes
+/// intermediate results into locals, so those expressions are already safe.
+fn materialize_if_needed(
+    expr: TirExpr,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    local_types: &mut Vec<TypeId>,
+) -> TirExpr {
+    if matches!(
+        expr.kind,
+        TirExprKind::Local { .. } | TirExprKind::Unit | TirExprKind::TupleLiteral { .. }
+    ) {
+        // Local and Unit are already evaluated. TupleLiteral elements are
+        // individually materialized in synthesize_lift_tuple, so the whole
+        // expression is safe to evaluate after freeing.
+        return expr;
+    }
+    // For non-local expressions, check if they reference memory by looking at
+    // the expression tree. Builtins like i32_load, i32_load8_u, etc. read from
+    // linear memory and must be materialized before any free.
+    // Use the expression's own type_id for the local, which is correct for
+    // primitive types and handles (i32, i64, f32, f64, u8, u16, bool, char).
+    let type_id = expr.type_id;
+    let local = alloc_local(next_local, local_types, type_id);
+    stmts.push(let_stmt("__lifted_result", local, type_id, expr));
+    local_ref(local, "__lifted_result", type_id)
+}
+
 fn synthesize_lift_inner(
     ty: &Type,
     addr: TirExpr,
@@ -853,6 +888,9 @@ fn synthesize_lift_tuple(
     for (i, elem_ty) in elems.iter().enumerate() {
         let elem_addr = binary_add(addr.clone(), i32_const(layout.offsets[i] as i32));
         let lifted = synthesize_lift_inner(elem_ty, elem_addr, next_local, stmts, local_types, ctx);
+        // Materialize each element to ensure memory loads are evaluated before
+        // the outptr buffer is freed (prevents use-after-free with debug allocator).
+        let lifted = materialize_if_needed(lifted, next_local, stmts, local_types);
         elem_exprs.push(lifted);
     }
     // Resolve the tuple TypeId if we have a type table context.
@@ -1372,7 +1410,8 @@ fn make_adapter_function(
         is_cm_adapter: true,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
-        export_name: None, allocator_tag: None,
+        export_name: None,
+        allocator_tag: None,
     }))
 }
 
@@ -1851,7 +1890,12 @@ fn synthesize_adapter(
                 &mut local_types,
                 &lift_ctx,
             );
-            // Free the async results buffer after lifting.
+            // Materialize the lifted value into a local before freeing if it
+            // contains a bare memory load (e.g., i32.load from the outptr buffer).
+            // Complex types are already materialized into locals by synthesize_lift.
+            let lifted =
+                materialize_if_needed(lifted, &mut next_local, &mut body_stmts, &mut local_types);
+            // Free the async results buffer after materializing the lifted value.
             body_stmts.push(expr_stmt(builtin_call(
                 "realloc",
                 vec![
@@ -1899,6 +1943,12 @@ fn synthesize_adapter(
             &mut local_types,
             &lift_ctx,
         );
+
+        // Materialize the lifted value into a local before freeing if it
+        // contains a bare memory load (e.g., i32.load from the outptr buffer).
+        // Complex types are already materialized into locals by synthesize_lift.
+        let lifted =
+            materialize_if_needed(lifted, &mut next_local, &mut body_stmts, &mut local_types);
 
         // Free the outptr
         body_stmts.push(expr_stmt(builtin_call(

@@ -419,7 +419,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             is_cm_adapter: false,
             inline_hint: crate::tir::InlineHint::Auto,
             comp_features: 0,
-            export_name: None, allocator_tag: None,
+            export_name: None,
+            allocator_tag: None,
         };
 
         let tir_test = TirTest {
@@ -634,7 +635,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             is_cm_adapter: false,
             inline_hint: Self::extract_inline_hint(&func.attrs),
             comp_features: extract_comp_features(&func.attrs),
-            export_name: None, allocator_tag: None,
+            export_name: None,
+            allocator_tag: None,
         })
     }
 }
