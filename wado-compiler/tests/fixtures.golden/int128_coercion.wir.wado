@@ -147,6 +147,10 @@ type "functype/u128^BitOr::bitor" = fn(ref u128, ref u128) -> ref u128;
 
 type "functype/u128^Shl::shl" = fn(ref u128, u32) -> ref u128;
 
+type "functype/u128^Div::div" = fn(ref u128, ref u128) -> ref u128;
+
+type "functype/u128^Rem::rem" = fn(ref u128, ref u128) -> ref u128;
+
 type "functype/i128::sub" = fn(ref i128, ref i128) -> ref i128;
 
 type "functype/i128::abs_u128" = fn(ref i128) -> ref u128;
@@ -167,11 +171,6 @@ type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
 
-<<<<<<< HEAD
-||||||| 8873767
-type "functype/u128::div_rem" = fn(ref u128, ref u128) -> [ref u128, ref u128];
-
-=======
 type "functype/wasi/stream-write" = fn(i32, i32, i32) -> i32;
 
 type "functype/wasi/waitable-set-new" = fn() -> i32;
@@ -190,7 +189,6 @@ type "functype/wasi/waitable-set-drop" = fn(i32);
 
 type "functype/u128::div_rem" = fn(ref u128, ref u128) -> [ref u128, ref u128];
 
->>>>>>> origin/main
 type "functype/i128::sub" = fn(ref i128, ref i128) -> [u64, i64];
 
 type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> [i32, u8];
@@ -728,10 +726,10 @@ fn u128::div_rem(self, divisor) {
         unreachable;
     };
     if u128^Ord::cmp(self, divisor) == 0 {
-        return "tuple/[u128, u128]" { 0: u128 { low: 0_i64, high: 0_i64 }, 1: ref.as_non_null(self) };
+        return u128 { low: 0_i64, high: 0_i64 }; ref.as_non_null(self);
     };
     if u128^Eq::eq(self, divisor) {
-        return "tuple/[u128, u128]" { 0: u128 { low: 1_i64, high: 0_i64 }, 1: u128 { low: 0_i64, high: 0_i64 } };
+        return u128 { low: 1_i64, high: 0_i64 }; u128 { low: 0_i64, high: 0_i64 };
     };
     quotient = u128 { low: 0_i64, high: 0_i64 };
     remainder = u128 { low: 0_i64, high: 0_i64 };
@@ -755,7 +753,7 @@ fn u128::div_rem(self, divisor) {
             continue l28;
         };
     };
-    return "tuple/[u128, u128]" { 0: ref.as_non_null(quotient), 1: ref.as_non_null(remainder) };
+    return ref.as_non_null(quotient); ref.as_non_null(remainder);
 }
 
 fn u128::get_bit(self, i) {
@@ -798,18 +796,9 @@ fn u128::fmt_decimal(self, f) {
     let __local_14: ref String;
     let __local_15: u64;
     let __local_16: u64;
-    let __local_17: ref u128;
-    let __local_18: ref u128;
-    let __local_19: ref "tuple/[u128, u128]";
-    let __local_20: ref String;
-    let __local_21: u64;
-    let __local_22: ref u128;
-    let __local_23: ref u128;
-    let __local_24: ref "tuple/[u128, u128]";
-    let __local_25: ref u128;
-    let __local_26: ref u128;
-    let __local_27: ref u128;
-    let __local_28: ref "tuple/[u128, u128]";
+    let __local_17: ref String;
+    let __local_18: u64;
+    let __local_19: ref u128;
     if u128^Eq::eq(self, u128 { low: 0_i64, high: 0_i64 }) {
         offset_2 = Formatter::prepare_int_write(f, 0, String { repr: builtin::array_new<u8>(0), used: 0 }, 1);
         arr_3 = __inline_String__internal_raw_bytes_1: block -> ref array<u8> {
@@ -830,28 +819,15 @@ fn u128::fmt_decimal(self, f) {
                     break __for_0;
                 };
                 digit_count = digit_count + 1;
-<<<<<<< HEAD
-                temp_7 = __inline_u128_Div__div_4: block -> ref u128 {
-                    __local_17 = temp_7;
-                    __local_18 = ten;
-                    __local_19 = u128::div_rem(__local_17, __local_18);
-                    break __inline_u128_Div__div_4: __local_19.0;
-                };
-                continue l29;
-||||||| 8873767
-                temp_7 = u128^Div::div(temp_7, ten);
-                continue l29;
-=======
                 temp_7 = u128^Div::div(temp_7, ten);
                 continue l36;
->>>>>>> origin/main
             };
         };
     };
     offset_8 = Formatter::prepare_int_write(f, 0, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    arr_9 = __inline_String__internal_raw_bytes_5: block -> ref array<u8> {
-        __local_20 = f.buf;
-        break __inline_String__internal_raw_bytes_5: __local_20.repr;
+    arr_9 = __inline_String__internal_raw_bytes_4: block -> ref array<u8> {
+        __local_17 = f.buf;
+        break __inline_String__internal_raw_bytes_4: __local_17.repr;
     };
     pos = offset_8 + digit_count;
     __for_1: block {
@@ -862,31 +838,13 @@ fn u128::fmt_decimal(self, f) {
                     break __for_1;
                 };
                 pos = pos - 1;
-                digit = builtin::i32_wrap_i64(__inline_u128__low_8: block -> u64 {
-                    __local_25 = __inline_u128_Rem__rem_7: block -> ref u128 {
-                        __local_22 = temp_11;
-                        __local_23 = ten;
-                        __local_24 = u128::div_rem(__local_22, __local_23);
-                        break __inline_u128_Rem__rem_7: __local_24.1;
-                    };
-                    break __inline_u128__low_8: __local_25.low;
+                digit = builtin::i32_wrap_i64(__inline_u128__low_6: block -> u64 {
+                    __local_19 = u128^Rem::rem(temp_11, ten);
+                    break __inline_u128__low_6: __local_19.low;
                 });
                 builtin::array_set_u8(arr_9, pos, (48 + digit) & 255);
-<<<<<<< HEAD
-                temp_11 = __inline_u128_Div__div_9: block -> ref u128 {
-                    __local_26 = temp_11;
-                    __local_27 = ten;
-                    __local_28 = u128::div_rem(__local_26, __local_27);
-                    break __inline_u128_Div__div_9: __local_28.0;
-                };
-                continue l32;
-||||||| 8873767
-                temp_11 = u128^Div::div(temp_11, ten);
-                continue l32;
-=======
                 temp_11 = u128^Div::div(temp_11, ten);
                 continue l39;
->>>>>>> origin/main
             };
         };
     };
@@ -955,6 +913,20 @@ fn u128^Shl::shl(self, rhs) {
     return u128 { low: self.low << s_4, high: (self.high << s_4) | (self.low >>u inv_s) };
 }
 
+fn u128^Div::div(self, other) {
+    let __sroa_result_0: ref u128;
+    let __sroa_result_1: ref u128;
+    multivalue_bind [__sroa_result_0, __sroa_result_1] = u128::div_rem(self, other);
+    return __sroa_result_0;
+}
+
+fn u128^Rem::rem(self, other) {
+    let __sroa_result_0: ref u128;
+    let __sroa_result_1: ref u128;
+    multivalue_bind [__sroa_result_0, __sroa_result_1] = u128::div_rem(self, other);
+    return __sroa_result_1;
+}
+
 fn i128::sub(self, other) {
     let __local_2: i64;
     let __local_3: i64;
@@ -993,18 +965,9 @@ fn i128::fmt_decimal(self, f) {
     let __local_16: ref String;
     let __local_17: u64;
     let __local_18: u64;
-    let __local_19: ref u128;
-    let __local_20: ref u128;
-    let __local_21: ref "tuple/[u128, u128]";
-    let __local_22: ref String;
-    let __local_23: u64;
-    let __local_24: ref u128;
-    let __local_25: ref u128;
-    let __local_26: ref "tuple/[u128, u128]";
-    let __local_27: ref u128;
-    let __local_28: ref u128;
-    let __local_29: ref u128;
-    let __local_30: ref "tuple/[u128, u128]";
+    let __local_19: ref String;
+    let __local_20: u64;
+    let __local_21: ref u128;
     is_neg = self.high < 0_i64;
     abs_val = i128::abs_u128(self);
     if if abs_val.low == 0_i64 -> i32 {
@@ -1031,28 +994,15 @@ fn i128::fmt_decimal(self, f) {
                     break __for_2;
                 };
                 digit_count = digit_count + 1;
-<<<<<<< HEAD
-                temp_9 = __inline_u128_Div__div_4: block -> ref u128 {
-                    __local_19 = temp_9;
-                    __local_20 = ten;
-                    __local_21 = u128::div_rem(__local_19, __local_20);
-                    break __inline_u128_Div__div_4: __local_21.0;
-                };
-                continue l46;
-||||||| 8873767
-                temp_9 = u128^Div::div(temp_9, ten);
-                continue l46;
-=======
                 temp_9 = u128^Div::div(temp_9, ten);
                 continue l53;
->>>>>>> origin/main
             };
         };
     };
     offset_10 = Formatter::prepare_int_write(f, is_neg, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    arr_11 = __inline_String__internal_raw_bytes_5: block -> ref array<u8> {
-        __local_22 = f.buf;
-        break __inline_String__internal_raw_bytes_5: __local_22.repr;
+    arr_11 = __inline_String__internal_raw_bytes_4: block -> ref array<u8> {
+        __local_19 = f.buf;
+        break __inline_String__internal_raw_bytes_4: __local_19.repr;
     };
     pos = offset_10 + digit_count;
     temp_7 = value_copy u128(abs_val);
@@ -1064,31 +1014,13 @@ fn i128::fmt_decimal(self, f) {
                     break __for_3;
                 };
                 pos = pos - 1;
-                digit = builtin::i32_wrap_i64(__inline_u128__low_8: block -> u64 {
-                    __local_27 = __inline_u128_Rem__rem_7: block -> ref u128 {
-                        __local_24 = temp_13;
-                        __local_25 = ten;
-                        __local_26 = u128::div_rem(__local_24, __local_25);
-                        break __inline_u128_Rem__rem_7: __local_26.1;
-                    };
-                    break __inline_u128__low_8: __local_27.low;
+                digit = builtin::i32_wrap_i64(__inline_u128__low_6: block -> u64 {
+                    __local_21 = u128^Rem::rem(temp_13, ten);
+                    break __inline_u128__low_6: __local_21.low;
                 });
                 builtin::array_set_u8(arr_11, pos, (48 + digit) & 255);
-<<<<<<< HEAD
-                temp_13 = __inline_u128_Div__div_9: block -> ref u128 {
-                    __local_28 = temp_13;
-                    __local_29 = ten;
-                    __local_30 = u128::div_rem(__local_28, __local_29);
-                    break __inline_u128_Div__div_9: __local_30.0;
-                };
-                continue l49;
-||||||| 8873767
-                temp_13 = u128^Div::div(temp_13, ten);
-                continue l49;
-=======
                 temp_13 = u128^Div::div(temp_13, ten);
                 continue l56;
->>>>>>> origin/main
             };
         };
     };
