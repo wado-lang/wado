@@ -293,9 +293,19 @@ impl fmt::Display for CmScalarType {
 
 /// The element type of a CM `future<T>` canonical intrinsic.
 ///
-/// `None` represents the trailers pattern (`Result<Option<Trailers>, ErrorCode>`),
-/// `Some(scalar)` represents a scalar value type like `future<s32>`.
-pub type CmFuturePayload = Option<CmScalarType>;
+/// Distinguishes between distinct future types at the Component Model level:
+/// - `Trailers` = `future<result<option<trailers>, error-code>>` (HTTP body trailers)
+/// - `Transmission` = `future<result<_, error-code>>` (HTTP transmission result)
+/// - `Scalar(s)` = `future<T>` where T is a primitive scalar type
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CmFuturePayload {
+    /// The HTTP trailers pattern: `future<result<option<trailers>, error-code>>`
+    Trailers,
+    /// The HTTP transmission result: `future<result<_, error-code>>`
+    Transmission,
+    /// A scalar value type like `future<s32>`
+    Scalar(CmScalarType),
+}
 
 /// A canonical intrinsic needed by the compiled module.
 ///
@@ -381,13 +391,13 @@ impl CanonicalIntrinsic {
             "stream-drop-writable" => Self::StreamDropWritable,
             "stream-cancel-read" => Self::StreamCancelRead,
             "stream-cancel-write" => Self::StreamCancelWrite,
-            "future-new" => Self::FutureNew(None),
-            "future-read" => Self::FutureRead(None),
-            "future-write" => Self::FutureWrite(None),
-            "future-drop-readable" => Self::FutureDropReadable(None),
-            "future-drop-writable" => Self::FutureDropWritable(None),
-            "future-cancel-read" => Self::FutureCancelRead(None),
-            "future-cancel-write" => Self::FutureCancelWrite(None),
+            "future-new" => Self::FutureNew(CmFuturePayload::Trailers),
+            "future-read" => Self::FutureRead(CmFuturePayload::Trailers),
+            "future-write" => Self::FutureWrite(CmFuturePayload::Trailers),
+            "future-drop-readable" => Self::FutureDropReadable(CmFuturePayload::Trailers),
+            "future-drop-writable" => Self::FutureDropWritable(CmFuturePayload::Trailers),
+            "future-cancel-read" => Self::FutureCancelRead(CmFuturePayload::Trailers),
+            "future-cancel-write" => Self::FutureCancelWrite(CmFuturePayload::Trailers),
             "waitable-set-new" => Self::WaitableSetNew,
             "waitable-set-wait" => Self::WaitableSetWait,
             "waitable-set-poll" => Self::WaitableSetPoll,
@@ -420,8 +430,9 @@ impl CanonicalIntrinsic {
 
 fn format_future_name(base: &str, payload: CmFuturePayload) -> String {
     match payload {
-        Some(scalar) => format!("{base}:{scalar}"),
-        None => base.to_string(),
+        CmFuturePayload::Trailers => base.to_string(),
+        CmFuturePayload::Transmission => format!("{base}:transmission"),
+        CmFuturePayload::Scalar(scalar) => format!("{base}:{scalar}"),
     }
 }
 
