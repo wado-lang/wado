@@ -221,10 +221,17 @@ HTTP test fixtures are in `wado-compiler/tests/fixtures/http-*.wado`. Each has a
 | `http-response-headers.wado`   | Response headers visible to caller via `headers_contain` |
 | `http-response-ops.wado`       | `Response::new`, `get_status_code`, `set_status_code`    |
 
+Stream body fixtures are in `wado-compiler/tests/fixtures/stream-http-*.wado`:
+
+| Fixture                              | Description                                                        |
+| ------------------------------------ | ------------------------------------------------------------------ |
+| `stream-http-response-body.wado`     | Response body via `Stream<u8>` with `StreamWritable::write()`      |
+| `stream-http-response-body-multi.wado` | Multi-chunk response body                                        |
+| `stream-http-read-request-body.wado` | Read request body via `Request::consume_body` and `Stream::read()` |
+| `stream-http-echo.wado`             | Echo handler: read request body, write it back as response body    |
+
 ## Not Yet Implemented
 
-- **Response body**: Sending body content via `Stream<u8>` as the second argument to `Response::new`.
-- **Reading request body**: `Request::consume_body` to obtain a `Stream<u8>` of the incoming body.
 - **Outbound requests**: The CM import adapter for `async fn` imports is not yet synthesized; calling `Client::send` will fail to compile.
 - **Middleware world**: `wasi:http/middleware` is not yet supported as a target world.
 - **Request construction**: Building a `Request` for outbound use requires `Request::new`.
