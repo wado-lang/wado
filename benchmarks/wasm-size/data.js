@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773050573329,
+  "lastUpdate": 1773053002199,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1934,6 +1934,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f020ee0f686fc310cd6e4a047fdcb193f77fa25e"
         },
         "date": 1773050573114,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2400,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10319,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19848,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e1ed8a71c423c3c8aaa29d4755d50c08f2426d88",
+          "message": "Merge pull request #547 from wado-lang/claude/review-cm-resource-web-ULyDb\n\nImplement error-context-new and error-context-debug-message synthesis",
+          "timestamp": "2026-03-09T19:40:52+09:00",
+          "tree_id": "ad2375222a56290dc09206dcf9ec07c803cb541e",
+          "url": "https://github.com/wado-lang/wado/commit/e1ed8a71c423c3c8aaa29d4755d50c08f2426d88"
+        },
+        "date": 1773053001987,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
