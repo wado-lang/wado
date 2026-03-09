@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773053002199,
+  "lastUpdate": 1773080997326,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1973,6 +1973,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e1ed8a71c423c3c8aaa29d4755d50c08f2426d88"
         },
         "date": 1773053001987,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2400,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10319,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19848,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8d0385dbdc3dbf635a509d066801d5b5d23cefac",
+          "message": "Merge pull request #548 from wado-lang/claude/relaxed-simd-implementation-OuTvp\n\nImplement comprehensive WebAssembly SIMD v128 operations",
+          "timestamp": "2026-03-10T03:27:37+09:00",
+          "tree_id": "816e907133b9c80064f3a3577cec8da54a65a953",
+          "url": "https://github.com/wado-lang/wado/commit/8d0385dbdc3dbf635a509d066801d5b5d23cefac"
+        },
+        "date": 1773080997214,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
