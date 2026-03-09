@@ -832,6 +832,22 @@ let sum = v + w;                   // [11, 12, 13, 14]
 let mask = v.lt(&w);              // per-lane comparison mask
 ```
 
+Beyond basic arithmetic and comparison, types provide specialized operations: saturating arithmetic (`add_sat_s/u`, `sub_sat_s/u`), lane narrowing/extension, extended multiplication, pairwise addition, type conversion between integer and float, and bit selection. See the `core:simd` module documentation for the full API.
+
+#### Relaxed SIMD
+
+Relaxed SIMD operations trade strict determinism for performance. Edge-case behavior (NaN, out-of-range values) is implementation-defined but consistent within a single runtime. Methods use the `relaxed_` prefix on existing newtypes:
+
+- **Fused multiply-add**: `f32x4/f64x2.relaxed_madd(b, c)`, `relaxed_nmadd(b, c)`
+- **Min/Max**: `f32x4/f64x2.relaxed_min/max` (faster than strict `min`/`max`)
+- **Truncation**: `i32x4::relaxed_trunc_f32x4_s/u`, `relaxed_trunc_f64x2_s/u_zero`
+- **Lane select**: `relaxed_laneselect` on `i8x16`, `i16x8`, `i32x4`, `i64x2`
+- **Swizzle**: `i8x16.relaxed_swizzle`
+- **Dot product**: `i16x8.relaxed_dot_i8x16_i7x16_s`, `i32x4.relaxed_dot_i8x16_i7x16_add_s`
+- **Q15 multiply**: `i16x8.relaxed_q15mulr_s`
+
+Relaxed SIMD is not modeled as an effect because: (1) results are deterministic within an environment, (2) hardware behavior cannot be intercepted, and (3) standard floats already have similar NaN non-determinism.
+
 ### Reference Types
 
 References in Wado provide indirect access to values. Unlike Rust, Wado uses a GC-based memory model with no borrow checker, enabling simpler semantics at the cost of runtime overhead.

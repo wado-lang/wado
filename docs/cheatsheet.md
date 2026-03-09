@@ -1004,7 +1004,7 @@ Wado intentionally does not support macros.
 
 ## SIMD
 
-See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md) for full design.
+See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md) for full design. See [Core Standard Library Reference](./cheatsheet-stdlib-core.md) for the complete API.
 
 ```wado
 use { i32x4, f64x2, i8x16 } from "core:simd";
@@ -1028,23 +1028,16 @@ Available types: `i8x16`, `i16x8`, `i32x4`, `i64x2`, `u8x16`, `u16x8`, `u32x4`, 
 
 ### Relaxed SIMD
 
-Relaxed SIMD operations have implementation-defined behavior for edge cases (NaN, out-of-range) but are faster. Methods use the `relaxed_` prefix.
+Relaxed SIMD operations trade determinism for performance. Methods use the `relaxed_` prefix. See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md) for design rationale.
 
 ```wado
-use { i32x4, f32x4, f64x2, i8x16 } from "core:simd";
+use { f32x4, i32x4, i8x16 } from "core:simd";
 
 // Fused multiply-add: a * b + c
 let a: f32x4 = [1.0 as f32, 2.0 as f32, 3.0 as f32, 4.0 as f32];
-let b: f32x4 = [2.0 as f32, 2.0 as f32, 2.0 as f32, 2.0 as f32];
-let c: f32x4 = [10.0 as f32, 10.0 as f32, 10.0 as f32, 10.0 as f32];
+let b = f32x4::splat(2.0 as f32);
+let c = f32x4::splat(10.0 as f32);
 let fma = a.relaxed_madd(&b, &c);     // [12, 14, 16, 18]
-
-// Relaxed min/max (faster, NaN handling varies)
-let rmin = a.relaxed_min(&b);
-let rmax = a.relaxed_max(&b);
-
-// Relaxed truncation (out-of-range is implementation-defined)
-let trunc = i32x4::relaxed_trunc_f32x4_s(a);
 
 // Relaxed lane select
 let v1: i32x4 = [100, 200, 300, 400];
