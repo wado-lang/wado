@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773080997326,
+  "lastUpdate": 1773083297969,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2012,6 +2012,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8d0385dbdc3dbf635a509d066801d5b5d23cefac"
         },
         "date": 1773080997214,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2400,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10319,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19848,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4fe42743b7f279299cfb74dfd9a345143ea2fced",
+          "message": "Merge pull request #549 from wado-lang/claude/fix-cm-future-read-wado-UFDZf\n\nSupport scalar types in future<T> canonical intrinsics",
+          "timestamp": "2026-03-10T04:05:44+09:00",
+          "tree_id": "58a18f599216853c0092420d159ae969d64c2533",
+          "url": "https://github.com/wado-lang/wado/commit/4fe42743b7f279299cfb74dfd9a345143ea2fced"
+        },
+        "date": 1773083297756,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
