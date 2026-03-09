@@ -805,6 +805,7 @@ impl ClosureLowerer {
                 inline_hint: InlineHint::Auto,
                 comp_features: 0,
                 export_name: None,
+                allocator_tag: None,
             };
 
             let call_method_rc = Rc::new(RefCell::new(call_method));
@@ -2394,6 +2395,7 @@ impl ClosureLowerer {
             inline_hint: callee.inline_hint,
             comp_features: callee.comp_features,
             export_name: callee.export_name.clone(),
+            allocator_tag: callee.allocator_tag.clone(),
         };
 
         self.generated_functions

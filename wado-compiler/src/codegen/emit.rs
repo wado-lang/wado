@@ -1782,6 +1782,12 @@ impl<'a> WirEmitter<'a> {
                 self.emit_instr(f, o);
                 f.instruction(&Instruction::MemoryGrow(0));
             }
+            WirInstr::MemoryFill { dst, value, len } => {
+                self.emit_instr(f, dst);
+                self.emit_instr(f, value);
+                self.emit_instr(f, len);
+                f.instruction(&Instruction::MemoryFill(0));
+            }
 
             // GC: Array (packed access)
             WirInstr::ArrayGetS {

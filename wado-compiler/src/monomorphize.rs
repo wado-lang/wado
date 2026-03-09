@@ -2338,6 +2338,7 @@ impl Monomorphizer {
             inline_hint: generic.inline_hint,
             comp_features: generic.comp_features,
             export_name: generic.export_name.clone(),
+            allocator_tag: generic.allocator_tag.clone(),
         })
     }
 

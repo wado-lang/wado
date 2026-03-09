@@ -867,6 +867,7 @@ fn generate_generic_struct_inspect_fn(
         inline_hint: InlineHint::Auto,
         comp_features: 0,
         export_name: None,
+        allocator_tag: None,
     }
 }
 
@@ -1178,6 +1179,7 @@ fn generate_generic_variant_inspect_fn(
         inline_hint: InlineHint::Auto,
         comp_features: 0,
         export_name: None,
+        allocator_tag: None,
     }
 }
 
@@ -2025,6 +2027,7 @@ fn generate_display_fallback(
         inline_hint: InlineHint::Auto,
         comp_features: 0,
         export_name: None,
+        allocator_tag: None,
     }
 }
 

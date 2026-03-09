@@ -214,6 +214,7 @@ pub(super) fn lower_global_initializers(module: &mut TirModule) {
         inline_hint: InlineHint::Auto,
         comp_features: 0,
         export_name: None,
+        allocator_tag: None,
     };
 
     module.functions.push(Rc::new(RefCell::new(init_func)));
@@ -721,6 +722,7 @@ pub(super) fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, T
         inline_hint: InlineHint::Auto,
         comp_features: 0,
         export_name: None,
+        allocator_tag: None,
     };
 
     entry_module

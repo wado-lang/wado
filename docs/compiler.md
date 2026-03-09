@@ -1620,7 +1620,23 @@ The compiler extracts `#![wasm_module("mem")]` items during WIR construction and
 
 The main core module accesses `realloc` and linear memory through imports, declared via `#[canonical("mem", "realloc")]` in `core:builtin`. Internal functions like `memory_to_gc_array` and `gc_array_to_memory` in `core:internal` use these builtins to copy data between GC arrays and linear memory.
 
-**TODO**: The current bump allocator never frees memory and has a fixed 64-page (4 MB) backing memory. Implement a proper allocator that supports freeing and growing. In the future, the compiler will support switching allocators via a compile option like `--allocator <name>`. Each allocator module will declare its identity with an `#[allocator]` attribute, and the compiler will select the appropriate one at build time.
+#### Allocator Selection
+
+The compiler supports multiple allocator implementations, each tagged with `#[allocator("name")]` in `lib/core/allocator.wado`. The compiler selects one by setting its `export_name` to `"realloc"` and clearing the others.
+
+Available allocators:
+
+- **`bump`** (default): Simple bump allocator. Never frees memory. Used for production builds.
+- **`debug`**: Never reuses freed memory and poisons freed regions with `0xFF` bytes. Useful for detecting use-after-free bugs.
+
+Selection rules:
+
+1. CLI `--allocator <name>` overrides everything.
+2. Test world (`--world test` / `wado test`) defaults to `"debug"`.
+3. E2E tests (`cargo test`) default to `"debug"` unless the fixture specifies `"allocator"` in its `__DATA__` JSON.
+4. Otherwise, defaults to `"bump"`.
+
+**TODO**: The bump allocator never frees memory and has a fixed 64-page (4 MB) backing memory. Implement a proper allocator that supports freeing and growing.
 
 ---
 

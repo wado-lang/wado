@@ -31,6 +31,22 @@ export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i
     return aligned;
 }
 
+export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
+    if (newsize == 0) {
+        if (oldsize > 0) {
+            core::builtin::memory_fill(oldptr, 255, oldsize);
+        }
+        return 0;
+    }
+    let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
+    let new_offset: i32 = (aligned + newsize);
+    if core::builtin::unlikely((new_offset > (core::builtin::memory_size() * 65536))) {
+        core::allocator::grow_memory(new_offset);
+    }
+    core::allocator::heap_offset = new_offset;
+    return aligned;
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -278,6 +294,8 @@ fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
 fn memory_grow(delta: i32) -> i32;
 
 fn memory_size() -> i32;
+
+fn memory_fill(dst: i32, value: u8, len: i32);
 
 fn f64_sin(x: f64) -> f64;
 

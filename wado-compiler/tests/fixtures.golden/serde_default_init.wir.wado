@@ -334,6 +334,8 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
+type "functype/core:allocator/debug_realloc" = fn(i32, i32, i32, i32) -> i32;
+
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
 type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
@@ -862,18 +864,36 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
     return aligned;
 }
 
+fn "core:allocator/debug_realloc"(oldptr, oldsize, align, newsize) {  // from core:allocator
+    let aligned: i32;
+    let new_offset: i32;
+    if newsize == 0 {
+        if oldsize > 0 {
+            builtin::memory_fill(oldptr, 255, oldsize);
+        };
+        return 0;
+    };
+    aligned = ((heap_offset + align) - 1) & (0 - align);
+    new_offset = aligned + newsize;
+    if builtin::unlikely(new_offset > (builtin::memory_size() * 65536)) {
+        "core:allocator/grow_memory"(new_offset);
+    };
+    heap_offset = new_offset;
+    return aligned;
+}
+
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     let i: i32;
     __for_1: block {
         i = 0;
         block {
-            l32: loop {
+            l35: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l32;
+                continue l35;
             };
         };
     };
@@ -901,8 +921,8 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         __local_11 = StrUtf8ByteIter { repr: ref.as_non_null(message.repr), used: message.used, index: 0 };
         break __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: __local_11;
     };
-    b35: block {
-        l36: loop {
+    b38: block {
+        l39: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: u8;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(__iter_2);
@@ -910,9 +930,9 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
                 b = __sroa___pattern_temp_0_payload_0;
                 "core:internal/Array<u8>::append"(arr, b);
             } else {
-                break b35;
+                break b38;
             };
-            continue l36;
+            continue l39;
         };
     };
     if add_newline {
@@ -1001,39 +1021,39 @@ fn unrounded_round(u) {
 }
 
 fn pow10_coarse(i) {
-    b41: block {
-        b42: block {
-            b43: block {
-                b44: block {
-                    b45: block {
-                        b46: block {
-                            b47: block {
-                                b48: block {
-                                    b49: block {
-                                        b50: block {
-                                            b51: block {
-                                                b52: block {
-                                                    b53: block {
-                                                        b54: block {
-                                                            b55: block {
-                                                                b56: block {
-                                                                    b57: block {
-                                                                        b58: block {
-                                                                            b59: block {
-                                                                                b60: block {
-                                                                                    b61: block {
-                                                                                        b62: block {
-                                                                                            b63: block {
-                                                                                                b64: block {
-                                                                                                    b65: block {
-                                                                                                        b66: block {
-                                                                                                            b67: block {
-                                                                                                                b68: block {
+    b44: block {
+        b45: block {
+            b46: block {
+                b47: block {
+                    b48: block {
+                        b49: block {
+                            b50: block {
+                                b51: block {
+                                    b52: block {
+                                        b53: block {
+                                            b54: block {
+                                                b55: block {
+                                                    b56: block {
+                                                        b57: block {
+                                                            b58: block {
+                                                                b59: block {
+                                                                    b60: block {
+                                                                        b61: block {
+                                                                            b62: block {
+                                                                                b63: block {
+                                                                                    b64: block {
+                                                                                        b65: block {
+                                                                                            b66: block {
+                                                                                                b67: block {
+                                                                                                    b68: block {
+                                                                                                        b69: block {
+                                                                                                            b70: block {
+                                                                                                                b71: block {
                                                                                                                     br_table i [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26] default=0;
                                                                                                                 };
                                                                                                                 "core:internal/unreachable"();
                                                                                                                 unreachable;
-                                                                                                                break b41;
+                                                                                                                break b44;
                                                                                                             };
                                                                                                             return -9202643304706469457_i64; -2331608335343510137_i64;
                                                                                                         };
@@ -1090,118 +1110,118 @@ fn pow10_coarse(i) {
 }
 
 fn pow10_fine(i) {
-    return b69: block -> u64 {
-        b70: block {
-            b71: block {
-                b72: block {
-                    b73: block {
-                        b74: block {
-                            b75: block {
-                                b76: block {
-                                    b77: block {
-                                        b78: block {
-                                            b79: block {
-                                                b80: block {
-                                                    b81: block {
-                                                        b82: block {
-                                                            b83: block {
-                                                                b84: block {
-                                                                    b85: block {
-                                                                        b86: block {
-                                                                            b87: block {
-                                                                                b88: block {
-                                                                                    b89: block {
-                                                                                        b90: block {
-                                                                                            b91: block {
-                                                                                                b92: block {
-                                                                                                    b93: block {
-                                                                                                        b94: block {
-                                                                                                            b95: block {
-                                                                                                                b96: block {
-                                                                                                                    b97: block {
+    return b72: block -> u64 {
+        b73: block {
+            b74: block {
+                b75: block {
+                    b76: block {
+                        b77: block {
+                            b78: block {
+                                b79: block {
+                                    b80: block {
+                                        b81: block {
+                                            b82: block {
+                                                b83: block {
+                                                    b84: block {
+                                                        b85: block {
+                                                            b86: block {
+                                                                b87: block {
+                                                                    b88: block {
+                                                                        b89: block {
+                                                                            b90: block {
+                                                                                b91: block {
+                                                                                    b92: block {
+                                                                                        b93: block {
+                                                                                            b94: block {
+                                                                                                b95: block {
+                                                                                                    b96: block {
+                                                                                                        b97: block {
+                                                                                                            b98: block {
+                                                                                                                b99: block {
+                                                                                                                    b100: block {
                                                                                                                         br_table i [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27] default=0;
                                                                                                                     };
                                                                                                                     "core:internal/unreachable"();
                                                                                                                     unreachable;
-                                                                                                                    break b69;
+                                                                                                                    break b72;
                                                                                                                 };
                                                                                                                 -9223372036854775808_i64;
-                                                                                                                break b69;
+                                                                                                                break b72;
                                                                                                             };
                                                                                                             -6917529027641081856_i64;
-                                                                                                            break b69;
+                                                                                                            break b72;
                                                                                                         };
                                                                                                         -4035225266123964416_i64;
-                                                                                                        break b69;
+                                                                                                        break b72;
                                                                                                     };
                                                                                                     -432345564227567616_i64;
-                                                                                                    break b69;
+                                                                                                    break b72;
                                                                                                 };
                                                                                                 -7187745005283311616_i64;
-                                                                                                break b69;
+                                                                                                break b72;
                                                                                             };
                                                                                             -4372995238176751616_i64;
-                                                                                            break b69;
+                                                                                            break b72;
                                                                                         };
                                                                                         -854558029293551616_i64;
-                                                                                        break b69;
+                                                                                        break b72;
                                                                                     };
                                                                                     -7451627795949551616_i64;
-                                                                                    break b69;
+                                                                                    break b72;
                                                                                 };
                                                                                 -4702848726509551616_i64;
-                                                                                break b69;
+                                                                                break b72;
                                                                             };
                                                                             -1266874889709551616_i64;
-                                                                            break b69;
+                                                                            break b72;
                                                                         };
                                                                         -7709325833709551616_i64;
-                                                                        break b69;
+                                                                        break b72;
                                                                     };
                                                                     -5024971273709551616_i64;
-                                                                    break b69;
+                                                                    break b72;
                                                                 };
                                                                 -1669528073709551616_i64;
-                                                                break b69;
+                                                                break b72;
                                                             };
                                                             -7960984073709551616_i64;
-                                                            break b69;
+                                                            break b72;
                                                         };
                                                         -5339544073709551616_i64;
-                                                        break b69;
+                                                        break b72;
                                                     };
                                                     -2062744073709551616_i64;
-                                                    break b69;
+                                                    break b72;
                                                 };
                                                 -8206744073709551616_i64;
-                                                break b69;
+                                                break b72;
                                             };
                                             -5646744073709551616_i64;
-                                            break b69;
+                                            break b72;
                                         };
                                         -2446744073709551616_i64;
-                                        break b69;
+                                        break b72;
                                     };
                                     -8446744073709551616_i64;
-                                    break b69;
+                                    break b72;
                                 };
                                 -5946744073709551616_i64;
-                                break b69;
+                                break b72;
                             };
                             -2821744073709551616_i64;
-                            break b69;
+                            break b72;
                         };
                         -8681119073709551616_i64;
-                        break b69;
+                        break b72;
                     };
                     -6239712823709551616_i64;
-                    break b69;
+                    break b72;
                 };
                 -3187955011209551616_i64;
-                break b69;
+                break b72;
             };
             -8910000909647051616_i64;
-            break b69;
+            break b72;
         };
         -6525815118631426616_i64;
     };
@@ -1348,13 +1368,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l107: loop {
+            l110: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l107;
+                continue l110;
             };
         };
     };
@@ -1371,14 +1391,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l111: loop {
+                l114: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l111;
+                    continue l114;
                 };
             };
         };
@@ -1419,8 +1439,8 @@ fn "core:json/write_escaped_string"(buf, s) {  // from core:json
         __local_8 = StrCharIter { repr: ref.as_non_null(s.repr), used: s.used, byte_index: 0 };
         break __inline_StrCharIter_IntoIterator__into_iter_0: __local_8;
     };
-    b117: block {
-        l118: loop {
+    b120: block {
+        l121: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_0);
@@ -1455,9 +1475,9 @@ fn "core:json/write_escaped_string"(buf, s) {  // from core:json
                     String::append_char(buf, c);
                 };
             } else {
-                break b117;
+                break b120;
             };
-            continue l118;
+            continue l121;
         };
     };
     String::append_char(buf, 34);
@@ -1612,7 +1632,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l138: loop {
+            l141: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -1620,7 +1640,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l138;
+                continue l141;
             };
         };
     };
@@ -1759,8 +1779,8 @@ fn Config^Deserialize::deserialize<JsonDeserializer>(d) {
         host = String { repr: builtin::array_new<u8>(0), used: 0 };
         port = 0;
         debug = 0;
-        b151: block {
-            l152: loop {
+        b154: block {
+            l155: loop {
                 __next = "core:json/JsonStructAccess^DeserializeStruct::next_field"(sd);
                 __pattern_temp_1 = value_copy Result<Option<i32>,DeserializeError>(__next);
                 if ref.test Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1) {
@@ -1812,12 +1832,12 @@ fn Config^Deserialize::deserialize<JsonDeserializer>(d) {
                             drop("core:json/JsonDeserializer::skip_value"(sd.de));
                         };
                     } else {
-                        break b151;
+                        break b154;
                     };
                 } else {
                     return Result<Config,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<Option<i32>,DeserializeError>::Err(__next).payload_0) };
                 };
-                continue l152;
+                continue l155;
             };
         };
         if (seen & 7) != 7 {
@@ -1973,10 +1993,10 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {  // from core:json
     _licm_input_5 = self.input;
     _licm_used_6 = _licm_input_5.used;
     _licm_repr_7 = _licm_input_5.repr;
-    b167: block {
-        l168: loop {
+    b170: block {
+        l171: loop {
             if (self.pos < _licm_used_6) == 0 {
-                break b167;
+                break b170;
             };
             b = __inline_String__get_byte_1: block -> u8 {
                 __local_4 = self.pos;
@@ -1999,7 +2019,7 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {  // from core:json
             } else {
                 return;
             };
-            continue l168;
+            continue l171;
         };
     };
 }
@@ -2085,8 +2105,8 @@ fn "core:json/JsonDeserializer::expect_literal"(self, lit) {  // from core:json
     _licm_input_16 = self.input;
     _licm_used_17 = _licm_input_16.used;
     _licm_repr_18 = _licm_input_16.repr;
-    b176: block {
-        l177: loop {
+    b179: block {
+        l180: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: u8;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(__iter_1);
@@ -2116,9 +2136,9 @@ fn "core:json/JsonDeserializer::expect_literal"(self, lit) {  // from core:json
                 };
                 self.pos = self.pos + 1;
             } else {
-                break b176;
+                break b179;
             };
-            continue l177;
+            continue l180;
         };
     };
     return Result<unit,DeserializeError> { 0, nop };
@@ -2210,13 +2230,13 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
     };
     self.pos = self.pos + 1;
     result = String { repr: builtin::array_new<u8>(32), used: 0 };
-    b183: block {
-        l184: loop {
+    b186: block {
+        l187: loop {
             if (self.pos < __inline_String__len_5: block -> i32 {
                 __local_37 = self.input;
                 break __inline_String__len_5: __local_37.used;
             }) == 0 {
-                break b183;
+                break b186;
             };
             b = __inline_String__get_byte_6: block -> u8 {
                 __local_38 = self.input;
@@ -2365,7 +2385,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                 };
                 self.pos = self.pos + seq_len;
             };
-            continue l184;
+            continue l187;
         };
     };
     return Result<String,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_21: block -> ref "core:serde/DeserializeError" {
@@ -2410,7 +2430,7 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
         _licm_pos_16 = self.pos;
         _licm_repr_17 = _licm_input_15.repr;
         block {
-            l209: loop {
+            l212: loop {
                 if (i < 4) == 0 {
                     break __for_2;
                 };
@@ -2445,7 +2465,7 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
                     }) };
                 };
                 i = i + 1;
-                continue l209;
+                continue l212;
             };
         };
     };
@@ -2517,10 +2537,10 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
     _licm_input_27 = self.input;
     _licm_used_28 = _licm_input_27.used;
     _licm_repr_29 = _licm_input_27.repr;
-    b220: block {
-        l221: loop {
+    b223: block {
+        l224: loop {
             if (self.pos < _licm_used_28) == 0 {
-                break b220;
+                break b223;
             };
             b_1 = __inline_String__get_byte_3: block -> u8 {
                 __local_11 = self.pos;
@@ -2533,9 +2553,9 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
             } {
                 self.pos = self.pos + 1;
             } else {
-                break b220;
+                break b223;
             };
-            continue l221;
+            continue l224;
         };
     };
     if if self.pos < __inline_String__len_4: block -> i32 {
@@ -2554,10 +2574,10 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
         _licm_input_30 = self.input;
         _licm_used_31 = _licm_input_30.used;
         _licm_repr_32 = _licm_input_30.repr;
-        b227: block {
-            l228: loop {
+        b230: block {
+            l231: loop {
                 if (self.pos < _licm_used_31) == 0 {
-                    break b227;
+                    break b230;
                 };
                 b_2 = __inline_String__get_byte_7: block -> u8 {
                     __local_17 = self.pos;
@@ -2570,9 +2590,9 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
                 } {
                     self.pos = self.pos + 1;
                 } else {
-                    break b227;
+                    break b230;
                 };
-                continue l228;
+                continue l231;
             };
         };
     };
@@ -2611,10 +2631,10 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
             _licm_input_33 = self.input;
             _licm_used_34 = _licm_input_33.used;
             _licm_repr_35 = _licm_input_33.repr;
-            b238: block {
-                l239: loop {
+            b241: block {
+                l242: loop {
                     if (self.pos < _licm_used_34) == 0 {
-                        break b238;
+                        break b241;
                     };
                     b2 = __inline_String__get_byte_13: block -> u8 {
                         __local_26 = self.pos;
@@ -2627,9 +2647,9 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
                     } {
                         self.pos = self.pos + 1;
                     } else {
-                        break b238;
+                        break b241;
                     };
-                    continue l239;
+                    continue l242;
                 };
             };
         };
@@ -2732,10 +2752,10 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
     _licm_input_46 = self.input;
     _licm_used_47 = _licm_input_46.used;
     _licm_repr_48 = _licm_input_46.repr;
-    b248: block {
-        l249: loop {
+    b251: block {
+        l252: loop {
             if (self.pos < _licm_used_47) == 0 {
-                break b248;
+                break b251;
             };
             b = __inline_String__get_byte_8: block -> u8 {
                 __local_28 = self.pos;
@@ -2761,10 +2781,10 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                 frac = 0;
                 if b == 46 {
                     self.pos = self.pos + 1;
-                    b257: block {
-                        l258: loop {
+                    b260: block {
+                        l261: loop {
                             if (self.pos < _licm_used_47) == 0 {
-                                break b257;
+                                break b260;
                             };
                             b2 = __inline_String__get_byte_10: block -> u8 {
                                 __local_31 = self.pos;
@@ -2779,9 +2799,9 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                                 frac = frac + 1;
                                 self.pos = self.pos + 1;
                             } else {
-                                break b257;
+                                break b260;
                             };
-                            continue l258;
+                            continue l261;
                         };
                     };
                 };
@@ -2810,10 +2830,10 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                                 self.pos = self.pos + 1;
                             };
                         };
-                        b268: block {
-                            l269: loop {
+                        b271: block {
+                            l272: loop {
                                 if (self.pos < _licm_used_47) == 0 {
-                                    break b268;
+                                    break b271;
                                 };
                                 b3 = __inline_String__get_byte_16: block -> u8 {
                                     __local_40 = self.pos;
@@ -2827,9 +2847,9 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                                     exp = (exp * 10) + (b3 - 48);
                                     self.pos = self.pos + 1;
                                 } else {
-                                    break b268;
+                                    break b271;
                                 };
-                                continue l269;
+                                continue l272;
                             };
                         };
                         if exp_neg {
@@ -2861,9 +2881,9 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                 };
                 return Result<i32,DeserializeError>::Ok { discriminant: 0, payload_0: builtin::i32_trunc_f64_s(v_signed) };
             } else {
-                break b248;
+                break b251;
             };
-            continue l249;
+            continue l252;
         };
     };
     if neg {
@@ -2890,10 +2910,10 @@ fn "core:json/JsonDeserializer::skip_string"(self) {  // from core:json
     _licm_input_11 = self.input;
     _licm_used_12 = _licm_input_11.used;
     _licm_repr_13 = _licm_input_11.repr;
-    b279: block {
-        l280: loop {
+    b282: block {
+        l283: loop {
             if (self.pos < _licm_used_12) == 0 {
-                break b279;
+                break b282;
             };
             b = __inline_String__get_byte_1: block -> u8 {
                 __local_5 = self.pos;
@@ -2920,7 +2940,7 @@ fn "core:json/JsonDeserializer::skip_string"(self) {  // from core:json
                 };
             };
             self.pos = self.pos + 1;
-            continue l280;
+            continue l283;
         };
     };
     return Result<unit,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_5: block -> ref "core:serde/DeserializeError" {
@@ -3024,7 +3044,7 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
             return Result<unit,DeserializeError> { 0, nop };
         };
         block {
-            l295: loop {
+            l298: loop {
                 r = "core:json/JsonDeserializer::skip_value"(self);
                 if ref.test Result<unit,DeserializeError>::Err(r) {
                     e_3 = value_copy "core:serde/DeserializeError"(ref.cast Result<unit,DeserializeError>::Err(r).payload_0);
@@ -3058,7 +3078,7 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
                         break __inline_DeserializeError__malformed_8: "core:serde/DeserializeError" { kind: 6, message: ref.as_non_null(__local_29), offset: __local_30 };
                     }) };
                 };
-                continue l295;
+                continue l298;
             };
         };
     };
@@ -3081,7 +3101,7 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
             return Result<unit,DeserializeError> { 0, nop };
         };
         block {
-            l304: loop {
+            l307: loop {
                 "core:json/JsonDeserializer::skip_whitespace"(self);
                 if if self.pos >= __inline_String__len_11: block -> i32 {
                     __local_34 = self.input;
@@ -3144,7 +3164,7 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
                         break __inline_DeserializeError__malformed_17: "core:serde/DeserializeError" { kind: 6, message: ref.as_non_null(__local_43), offset: __local_44 };
                     }) };
                 };
-                continue l304;
+                continue l307;
             };
         };
     };
@@ -3260,13 +3280,13 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field"(self) {  // from c
     self.de.pos = self.de.pos + 1;
     key_start = self.de.pos;
     has_escape = 0;
-    b322: block {
-        l323: loop {
+    b325: block {
+        l326: loop {
             if (self.de.pos < __inline_String__len_6: block -> i32 {
                 __local_34 = self.de.input;
                 break __inline_String__len_6: __local_34.used;
             }) == 0 {
-                break b322;
+                break b325;
             };
             b = __inline_String__get_byte_7: block -> u8 {
                 __local_35 = self.de.input;
@@ -3274,14 +3294,14 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field"(self) {  // from c
                 break __inline_String__get_byte_7: builtin::array_get_u8(__local_35.repr, __local_36);
             };
             if b == 34 {
-                break b322;
+                break b325;
             };
             if b == 92 {
                 has_escape = 1;
-                break b322;
+                break b325;
             };
             self.de.pos = self.de.pos + 1;
-            continue l323;
+            continue l326;
         };
     };
     if has_escape == 0 {
@@ -3404,13 +3424,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l343: loop {
+            l346: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l343;
+                continue l346;
             };
         };
     };
@@ -3573,8 +3593,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b366: block {
-        l367: loop {
+    b369: block {
+        l370: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_4);
@@ -3599,9 +3619,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b366;
+                break b369;
             };
-            continue l367;
+            continue l370;
         };
     };
     String::append_char(f.buf, 34);

@@ -1559,6 +1559,15 @@ impl<'a> WirUnparser<'a> {
             // Memory
             WirInstr::MemorySize => self.write("builtin::memory_size()"),
             WirInstr::MemoryGrow(a) => self.write_unop("builtin::memory_grow", a),
+            WirInstr::MemoryFill { dst, value, len } => {
+                self.write("builtin::memory_fill(");
+                self.unparse_instr_inline(dst);
+                self.write(", ");
+                self.unparse_instr_inline(value);
+                self.write(", ");
+                self.unparse_instr_inline(len);
+                self.write(")");
+            }
             WirInstr::I32Load { offset, addr, .. } => {
                 self.write_mem_load("builtin::load_i32", *offset, addr);
             }

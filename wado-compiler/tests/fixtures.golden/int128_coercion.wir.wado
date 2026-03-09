@@ -105,6 +105,8 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
+type "functype/core:allocator/debug_realloc" = fn(i32, i32, i32, i32) -> i32;
+
 type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:cli/println" = fn(ref String);
@@ -455,6 +457,24 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
     return aligned;
 }
 
+fn "core:allocator/debug_realloc"(oldptr, oldsize, align, newsize) {  // from core:allocator
+    let aligned: i32;
+    let new_offset: i32;
+    if newsize == 0 {
+        if oldsize > 0 {
+            builtin::memory_fill(oldptr, 255, oldsize);
+        };
+        return 0;
+    };
+    aligned = ((heap_offset + align) - 1) & (0 - align);
+    new_offset = aligned + newsize;
+    if builtin::unlikely(new_offset > (builtin::memory_size() * 65536)) {
+        "core:allocator/grow_memory"(new_offset);
+    };
+    heap_offset = new_offset;
+    return aligned;
+}
+
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
     let alloc_size: i32;
@@ -477,8 +497,8 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         __local_11 = StrUtf8ByteIter { repr: ref.as_non_null(message.repr), used: message.used, index: 0 };
         break __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: __local_11;
     };
-    b6: block {
-        l7: loop {
+    b9: block {
+        l10: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: u8;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(__iter_0);
@@ -486,9 +506,9 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
                 b = __sroa___pattern_temp_0_payload_0;
                 "core:cli/Array<u8>::append"(arr, b);
             } else {
-                break b6;
+                break b9;
             };
-            continue l7;
+            continue l10;
         };
     };
     if add_newline {
@@ -536,13 +556,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l12: loop {
+            l15: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l12;
+                continue l15;
             };
         };
     };
@@ -570,8 +590,8 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         __local_11 = StrUtf8ByteIter { repr: ref.as_non_null(message.repr), used: message.used, index: 0 };
         break __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: __local_11;
     };
-    b15: block {
-        l16: loop {
+    b18: block {
+        l19: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: u8;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(__iter_2);
@@ -579,9 +599,9 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
                 b = __sroa___pattern_temp_0_payload_0;
                 "core:internal/Array<u8>::append"(arr, b);
             } else {
-                break b15;
+                break b18;
             };
-            continue l16;
+            continue l19;
         };
     };
     if add_newline {
@@ -729,10 +749,10 @@ fn u128::div_rem(self, divisor) {
     remainder = u128 { low: 0_i64, high: 0_i64 };
     one = u128 { low: 1_i64, high: 0_i64 };
     i = 127;
-    b27: block {
-        l28: loop {
+    b30: block {
+        l31: loop {
             if (i >= 0) == 0 {
-                break b27;
+                break b30;
             };
             remainder = u128^Shl::shl(remainder, 1);
             bit = u128::get_bit(self, i);
@@ -744,7 +764,7 @@ fn u128::div_rem(self, divisor) {
                 quotient = u128::set_bit(quotient, i);
             };
             i = i - 1;
-            continue l28;
+            continue l31;
         };
     };
     return "tuple/[u128, u128]" { 0: ref.as_non_null(quotient), 1: ref.as_non_null(remainder) };
@@ -817,7 +837,7 @@ fn u128::fmt_decimal(self, f) {
     __for_0: block {
         temp_7 = value_copy u128(self);
         block {
-            l36: loop {
+            l39: loop {
                 if (u128^Ord::cmp(temp_7, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_0;
                 };
@@ -828,7 +848,7 @@ fn u128::fmt_decimal(self, f) {
                     __local_19 = u128::div_rem(__local_17, __local_18);
                     break __inline_u128_Div__div_4: __local_19.0;
                 };
-                continue l36;
+                continue l39;
             };
         };
     };
@@ -841,7 +861,7 @@ fn u128::fmt_decimal(self, f) {
     __for_1: block {
         temp_11 = value_copy u128(self);
         block {
-            l39: loop {
+            l42: loop {
                 if (u128^Ord::cmp(temp_11, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_1;
                 };
@@ -862,7 +882,7 @@ fn u128::fmt_decimal(self, f) {
                     __local_28 = u128::div_rem(__local_26, __local_27);
                     break __inline_u128_Div__div_9: __local_28.0;
                 };
-                continue l39;
+                continue l42;
             };
         };
     };
@@ -1002,7 +1022,7 @@ fn i128::fmt_decimal(self, f) {
     __for_2: block {
         temp_9 = value_copy u128(abs_val);
         block {
-            l53: loop {
+            l56: loop {
                 if (u128^Ord::cmp(temp_9, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_2;
                 };
@@ -1013,7 +1033,7 @@ fn i128::fmt_decimal(self, f) {
                     __local_21 = u128::div_rem(__local_19, __local_20);
                     break __inline_u128_Div__div_4: __local_21.0;
                 };
-                continue l53;
+                continue l56;
             };
         };
     };
@@ -1027,7 +1047,7 @@ fn i128::fmt_decimal(self, f) {
     __for_3: block {
         temp_13 = value_copy u128(abs_val);
         block {
-            l56: loop {
+            l59: loop {
                 if (u128^Ord::cmp(temp_13, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_3;
                 };
@@ -1048,7 +1068,7 @@ fn i128::fmt_decimal(self, f) {
                     __local_30 = u128::div_rem(__local_28, __local_29);
                     break __inline_u128_Div__div_9: __local_30.0;
                 };
-                continue l56;
+                continue l59;
             };
         };
     };
@@ -1151,13 +1171,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l68: loop {
+            l71: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l68;
+                continue l71;
             };
         };
     };

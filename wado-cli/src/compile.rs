@@ -66,6 +66,7 @@ pub struct CompileOptions {
     pub skip_validation: bool,
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
+    pub allocator: Option<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -80,6 +81,7 @@ enum Opt {
     OptIterations,
     LogLevel,
     NoValidate,
+    Allocator,
     Help,
 }
 
@@ -94,6 +96,7 @@ impl Opt {
         Self::OptIterations,
         Self::LogLevel,
         Self::NoValidate,
+        Self::Allocator,
         Self::Help,
     ];
 
@@ -133,6 +136,12 @@ impl Opt {
                 value: None,
                 desc: "Skip Wasm validation (output raw bytes even if invalid)",
             },
+            Self::Allocator => args::OptSpec {
+                long: Some("allocator"),
+                short: None,
+                value: Some("<mode>"),
+                desc: "Allocator mode: bump (default), debug (no-reuse + 0xFF poison)",
+            },
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -170,6 +179,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut skip_validation = false;
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;
+    let mut allocator: Option<String> = None;
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
@@ -215,6 +225,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                 }
                 Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
                 Opt::NoValidate => skip_validation = true,
+                Opt::Allocator => {
+                    allocator = Some(args::require_string(&mut parser)?);
+                }
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -236,6 +249,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         skip_validation,
         inline_threshold,
         opt_iterations,
+        allocator,
     })
 }
 
@@ -256,7 +270,10 @@ pub async fn compile_with_opts(
     opt_level: OptLevel,
     log_level: LogLevel,
 ) -> Vec<u8> {
-    compile_with_full_opts(filename, opt_level, log_level, None, false, None, None).await
+    compile_with_full_opts(
+        filename, opt_level, log_level, None, false, None, None, None,
+    )
+    .await
 }
 
 /// Compile a Wado source file with full options including target world
@@ -268,6 +285,7 @@ pub async fn compile_with_full_opts(
     skip_validation: bool,
     inline_threshold: Option<usize>,
     opt_iterations: Option<u32>,
+    allocator: Option<String>,
 ) -> Vec<u8> {
     let path = Path::new(filename);
 
@@ -294,6 +312,7 @@ pub async fn compile_with_full_opts(
         skip_validation,
         inline_threshold,
         opt_iterations,
+        allocator,
         ..Default::default()
     };
 
@@ -332,6 +351,7 @@ pub async fn run(opts: CompileOptions) {
         opts.skip_validation,
         opts.inline_threshold,
         opts.opt_iterations,
+        opts.allocator,
     )
     .await;
 

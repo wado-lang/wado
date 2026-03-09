@@ -377,6 +377,7 @@ pub fn make_synthetic_method(
         inline_hint: InlineHint::Auto,
         comp_features: 0,
         export_name: None,
+        allocator_tag: None,
     }
 }
 

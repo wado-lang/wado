@@ -347,6 +347,7 @@ pub async fn run(opts: RunOptions) {
         false,
         opts.inline_threshold,
         opts.opt_iterations,
+        None,
     )
     .await;
 

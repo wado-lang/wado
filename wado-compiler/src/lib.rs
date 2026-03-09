@@ -195,6 +195,10 @@ pub struct CompilerOptions {
     /// Override the number of fixed-point optimization iterations.
     /// When `None`, the default for the `opt_level` is used.
     pub opt_iterations: Option<u32>,
+    /// Which allocator to use (e.g., `"bump"`, `"debug"`).
+    /// Matches `#[allocator("...")]` attributes in `core:allocator`.
+    /// When `None`, the compiler auto-selects: `"debug"` for test world, `"bump"` otherwise.
+    pub allocator: Option<String>,
 }
 
 /// Compile Wado source code with a `CompilerHost` for I/O operations.
@@ -303,6 +307,39 @@ pub async fn compile_with_options<H: CompilerHost>(
         project.target_world = world;
     }
     project.skip_validation = options.skip_validation;
+
+    // Select allocator: find the function tagged with #[allocator("...")] matching the
+    // chosen mode, set its export_name to "realloc", and clear export_name from all others.
+    {
+        let allocator_tag = options.allocator.unwrap_or_else(|| {
+            if project.is_test_world() {
+                "debug".to_string()
+            } else {
+                "bump".to_string()
+            }
+        });
+        if let Some(alloc_module) = project.tir_modules.get_mut(&ModuleSource::allocator()) {
+            let mut found = false;
+            for func_rc in &alloc_module.functions {
+                let mut func = func_rc.borrow_mut();
+                if func.allocator_tag.as_deref() == Some(&*allocator_tag) {
+                    func.export_name = Some("realloc".to_string());
+                    found = true;
+                } else if func.allocator_tag.is_some() {
+                    func.export_name = None;
+                }
+            }
+            if !found {
+                let _ = logger.error(compiler_host::Diagnostic {
+                    severity: compiler_host::Severity::Error,
+                    code: compiler_host::Code::UnsupportedFeature,
+                    message: format!("unknown allocator: `{allocator_tag}`"),
+                    span: None,
+                });
+                return Err(Bail);
+            }
+        }
+    }
 
     // Validate target world (test world is handled specially, not in registry)
     if !project.is_test_world() && project.world_registry.get(&project.target_world).is_none() {

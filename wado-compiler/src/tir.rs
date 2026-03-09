@@ -1865,6 +1865,9 @@ pub struct TirFunction {
 
     /// Custom wasm export name from `#[export_name("...")]` attribute.
     pub export_name: Option<String>,
+
+    /// Allocator tag from `#[allocator("...")]` attribute (e.g., `"bump"`, `"debug"`).
+    pub allocator_tag: Option<String>,
 }
 
 /// Inline hint for a function, extracted from `#[inline(...)]` attributes.

@@ -3364,6 +3364,16 @@ impl FunctionTranslator<'_, '_> {
                 Some(WirInstr::MemoryGrow(Box::new(o)))
             }
             "builtin::memory_size" => Some(WirInstr::MemorySize),
+            "builtin::memory_fill" => {
+                let dst = self.translate_expr(&args[0].expr);
+                let value = self.translate_expr(&args[1].expr);
+                let len = self.translate_expr(&args[2].expr);
+                Some(WirInstr::MemoryFill {
+                    dst: Box::new(dst),
+                    value: Box::new(value),
+                    len: Box::new(len),
+                })
+            }
 
             // === Control ===
             "builtin::unreachable" => Some(WirInstr::Unreachable),
