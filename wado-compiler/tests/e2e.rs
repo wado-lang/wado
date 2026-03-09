@@ -394,13 +394,13 @@ async fn run_http_request_async(
                         Ok(pair) => pair,
                         Err(err) => return anyhow::Ok(Err(Some(err))),
                     };
-                    let _ =
-                        tx.send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
+                    let _ = tx.send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
                     task.block(store).await;
                     Ok(Ok(()))
                 });
                 let io = pin!(async {
-                    io.await.map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
+                    io.await
+                        .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
                 });
                 // Drive both; when handler completes, drop io
                 tokio::select! {

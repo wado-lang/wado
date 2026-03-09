@@ -223,12 +223,12 @@ HTTP test fixtures are in `wado-compiler/tests/fixtures/http-*.wado`. Each has a
 
 Stream body fixtures are in `wado-compiler/tests/fixtures/stream-http-*.wado`:
 
-| Fixture                              | Description                                                        |
-| ------------------------------------ | ------------------------------------------------------------------ |
-| `stream-http-response-body.wado`     | Response body via `Stream<u8>` with `StreamWritable::write()`      |
-| `stream-http-response-body-multi.wado` | Multi-chunk response body                                        |
-| `stream-http-read-request-body.wado` | Read request body via `Request::consume_body` and `Stream::read()` |
-| `stream-http-echo.wado`             | Echo handler: read request body, write it back as response body    |
+| Fixture                                | Description                                                        |
+| -------------------------------------- | ------------------------------------------------------------------ |
+| `stream-http-response-body.wado`       | Response body via `Stream<u8>` with `StreamWritable::write()`      |
+| `stream-http-response-body-multi.wado` | Multi-chunk response body                                          |
+| `stream-http-read-request-body.wado`   | Read request body via `Request::consume_body` and `Stream::read()` |
+| `stream-http-echo.wado`                | Echo handler: read request body, write it back as response body    |
 
 ## Not Yet Implemented
 

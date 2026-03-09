@@ -214,7 +214,9 @@ async fn handle_http_request(
 
     // Convert hyper request to http::Request, preserving the body
     let (parts, body) = req.into_parts();
-    let body = body.map_err(wasmtime_wasi_http::p3::bindings::http::types::ErrorCode::from_hyper_request_error);
+    let body = body.map_err(
+        wasmtime_wasi_http::p3::bindings::http::types::ErrorCode::from_hyper_request_error,
+    );
     let http_req = http::Request::from_parts(parts, body);
 
     let (wasi_req, io) = WasiRequest::from_http(http_req);
@@ -235,9 +237,8 @@ async fn handle_http_request(
                             Ok(pair) => pair,
                             Err(err) => return Ok(Err(Some(err))),
                         };
-                        let _ = tx.send(
-                            store.with(|store| res.into_http(store, async { Ok(()) }))?,
-                        );
+                        let _ =
+                            tx.send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
                         task.block(store).await;
                         Ok(Ok(()))
                     });

@@ -4233,7 +4233,11 @@ impl FunctionTranslator<'_, '_> {
         result_type_id: TypeId,
     ) -> Option<WirInstr> {
         match canonical {
-            "stream-new" => Some(self.emit_stream_or_future_new(false, CmFuturePayload::Trailers, result_type_id)),
+            "stream-new" => Some(self.emit_stream_or_future_new(
+                false,
+                CmFuturePayload::Trailers,
+                result_type_id,
+            )),
             "future-new" => {
                 let payload = self.cm_future_payload_from_monomorph(func);
                 Some(self.emit_stream_or_future_new(true, payload, result_type_id))
