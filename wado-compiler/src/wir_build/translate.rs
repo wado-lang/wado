@@ -4591,6 +4591,9 @@ impl FunctionTranslator<'_, '_> {
     ///   - 4 bytes at offset 0: Ok discriminant (0)
     ///   - 4 bytes at offset 4: None discriminant (0)
     ///
+    /// If `future-write` returns BLOCKED (`0xFFFF_FFFF`), waits via waitable-set
+    /// for the reader to consume the value before continuing.
+    ///
     /// TODO: implement general CM lowering for arbitrary T values.
     fn emit_future_write_ok_none(&mut self, handle: WirInstr) -> WirInstr {
         let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
@@ -4601,9 +4604,24 @@ impl FunctionTranslator<'_, '_> {
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
+        let ws_new_id = self
+            .ctx
+            .ensure_canonical("waitable-set-new", vec![], vec![WirType::I32]);
+        let w_join_id =
+            self.ctx
+                .ensure_canonical("waitable-join", vec![WirType::I32, WirType::I32], vec![]);
+        let ws_wait_id = self.ctx.ensure_canonical(
+            "waitable-set-wait",
+            vec![WirType::I32, WirType::I32],
+            vec![WirType::I32],
+        );
 
         self.local_counter += 1;
-        let ptr_name = format!("__fw_write_ptr_{}", self.local_counter);
+        let suffix = self.local_counter;
+        let ptr_name = format!("__fw_write_ptr_{suffix}");
+        let handle_name = format!("__fw_handle_{suffix}");
+        let result_name = format!("__fw_result_{suffix}");
+        let evt_name = format!("__fw_evt_{suffix}");
 
         // The buffer must be large enough for the full CM layout of
         // result<option<own<trailers>>, error-code>. ErrorCode is a large variant
@@ -4614,11 +4632,28 @@ impl FunctionTranslator<'_, '_> {
         const BUF_SIZE: i32 = 40;
         const BUF_ALIGN: i32 = 8;
 
-        let declare_ptr = WirInstr::DeclareLocal {
-            name: ptr_name.clone(),
-            ty: WirType::I32,
-        };
-        let alloc_ptr = WirInstr::LocalSet {
+        let mut seq = vec![];
+
+        // Declare locals
+        for (name, ty) in [
+            (&ptr_name, WirType::I32),
+            (&handle_name, WirType::I32),
+            (&result_name, WirType::I32),
+        ] {
+            seq.push(WirInstr::DeclareLocal {
+                name: name.clone(),
+                ty,
+            });
+        }
+
+        // Save handle
+        seq.push(WirInstr::LocalSet {
+            name: handle_name.clone(),
+            value: Box::new(handle),
+        });
+
+        // Allocate buffer
+        seq.push(WirInstr::LocalSet {
             name: ptr_name.clone(),
             value: Box::new(WirInstr::Call {
                 func_id: realloc_id.clone(),
@@ -4629,10 +4664,9 @@ impl FunctionTranslator<'_, '_> {
                     WirInstr::I32Const(BUF_SIZE),
                 ],
             }),
-        };
+        });
 
         // Zero-initialize the entire buffer using i64 stores (8 bytes each).
-        let mut seq = vec![declare_ptr, alloc_ptr];
         for i in 0..(BUF_SIZE / 8) {
             seq.push(WirInstr::I64Store {
                 offset: u64::from((i * 8).cast_unsigned()),
@@ -4644,17 +4678,98 @@ impl FunctionTranslator<'_, '_> {
             });
         }
 
-        // Drop result of future_write(handle, ptr)
-        seq.push(WirInstr::Drop(Box::new(WirInstr::Call {
-            func_id: future_write_id,
-            args: vec![
-                handle,
-                WirInstr::LocalGet {
-                    name: ptr_name.clone(),
+        // result = future_write(handle, ptr)
+        seq.push(WirInstr::LocalSet {
+            name: result_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: future_write_id,
+                args: vec![
+                    WirInstr::LocalGet {
+                        name: handle_name.clone(),
+                    },
+                    WirInstr::LocalGet {
+                        name: ptr_name.clone(),
+                    },
+                ],
+            }),
+        });
+
+        // If BLOCKED (0xFFFF_FFFF), wait via waitable-set for the reader to consume
+        seq.push(WirInstr::If {
+            condition: Box::new(WirInstr::I32Eq(
+                Box::new(WirInstr::LocalGet {
+                    name: result_name.clone(),
+                }),
+                Box::new(WirInstr::I32Const(-1)),
+            )),
+            result: None,
+            then_body: vec![
+                WirInstr::DeclareLocal {
+                    name: evt_name.clone(),
+                    ty: WirType::I32,
                 },
+                // ws = waitable_set_new()
+                WirInstr::LocalSet {
+                    name: result_name.clone(),
+                    value: Box::new(WirInstr::Call {
+                        func_id: ws_new_id,
+                        args: vec![],
+                    }),
+                },
+                // waitable_join(handle, ws)
+                WirInstr::Call {
+                    func_id: w_join_id,
+                    args: vec![
+                        WirInstr::LocalGet {
+                            name: handle_name.clone(),
+                        },
+                        WirInstr::LocalGet {
+                            name: result_name.clone(),
+                        },
+                    ],
+                },
+                // evt_ptr = realloc(0, 0, 4, 8)
+                WirInstr::LocalSet {
+                    name: evt_name.clone(),
+                    value: Box::new(WirInstr::Call {
+                        func_id: realloc_id.clone(),
+                        args: vec![
+                            WirInstr::I32Const(0),
+                            WirInstr::I32Const(0),
+                            WirInstr::I32Const(4),
+                            WirInstr::I32Const(8),
+                        ],
+                    }),
+                },
+                // waitable_set_wait(ws, evt_ptr)
+                WirInstr::Drop(Box::new(WirInstr::Call {
+                    func_id: ws_wait_id,
+                    args: vec![
+                        WirInstr::LocalGet {
+                            name: result_name.clone(),
+                        },
+                        WirInstr::LocalGet {
+                            name: evt_name.clone(),
+                        },
+                    ],
+                })),
+                // Free event buffer
+                WirInstr::Drop(Box::new(WirInstr::Call {
+                    func_id: realloc_id.clone(),
+                    args: vec![
+                        WirInstr::LocalGet {
+                            name: evt_name.clone(),
+                        },
+                        WirInstr::I32Const(8),
+                        WirInstr::I32Const(4),
+                        WirInstr::I32Const(0),
+                    ],
+                })),
             ],
-        })));
-        // Free the buffer after future_write.
+            else_body: None,
+        });
+
+        // Free the payload buffer after future_write completes.
         seq.push(WirInstr::Drop(Box::new(WirInstr::Call {
             func_id: realloc_id,
             args: vec![

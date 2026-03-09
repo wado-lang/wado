@@ -1,6 +1,11 @@
 // Future::read E2E test
-// Tests that Future::read() works for reading a fulfilled future.
-// Currently tests the Ok(None) path (trailers future pattern).
+// Tests that Future::read() compiles and runs correctly.
+//
+// TODO: This test creates a future pair and reads/writes within the same
+// component instance. The CM spec's "temporary" restriction
+// (none_or_number_type guard) traps for non-number types in same-instance
+// read/write, causing a timeout. Once Request::consume_body is wired up,
+// this test should read from the request's trailers future instead.
 
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 
