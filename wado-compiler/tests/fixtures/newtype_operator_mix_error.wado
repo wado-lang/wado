@@ -1,0 +1,12 @@
+// Test that different newtypes of the same base type cannot be mixed in operators
+type Meters = f64;
+type Seconds = f64;
+
+export fn run() {
+    let m: Meters = 10.0;
+    let s: Seconds = 5.0;
+    let bad = m + s; // should fail: cannot add Meters + Seconds
+}
+
+__DATA__
+{"compile_error": "type mismatch"}

@@ -1,0 +1,287 @@
+use { i8x16, i16x8, i32x4, i64x2, u8x16, u16x8, u32x4, u64x2, f32x4, f64x2 } from "core:simd";
+
+// Literal coercion
+
+test "i32x4 literal coercion" {
+    let v: i32x4 = [1, 2, 3, 4];
+    assert v.extract_lane(0) == 1;
+    assert v.extract_lane(1) == 2;
+    assert v.extract_lane(2) == 3;
+    assert v.extract_lane(3) == 4;
+}
+
+test "f64x2 literal coercion" {
+    let v: f64x2 = [1.5, 2.5];
+    assert v.extract_lane(0) == 1.5;
+    assert v.extract_lane(1) == 2.5;
+}
+
+test "f32x4 literal coercion" {
+    let v: f32x4 = [1.0 as f32, 2.0 as f32, 3.0 as f32, 4.0 as f32];
+    assert v.extract_lane(0) == 1.0 as f32;
+    assert v.extract_lane(3) == 4.0 as f32;
+}
+
+test "i64x2 literal coercion" {
+    let v: i64x2 = [100 as i64, 200 as i64];
+    assert v.extract_lane(0) == 100 as i64;
+    assert v.extract_lane(1) == 200 as i64;
+}
+
+test "i8x16 literal coercion" {
+    let v: i8x16 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+    assert v.extract_lane_s(0) == 0;
+    assert v.extract_lane_s(15) == 15;
+}
+
+test "i16x8 literal coercion" {
+    let v: i16x8 = [10, 20, 30, 40, 50, 60, 70, 80];
+    assert v.extract_lane_s(0) == 10;
+    assert v.extract_lane_s(7) == 80;
+}
+
+// Splat
+
+test "i32x4 splat" {
+    let v = i32x4::splat(42);
+    assert v.extract_lane(0) == 42;
+    assert v.extract_lane(1) == 42;
+    assert v.extract_lane(2) == 42;
+    assert v.extract_lane(3) == 42;
+}
+
+test "f64x2 splat" {
+    let v = f64x2::splat(3.14);
+    assert v.extract_lane(0) == 3.14;
+    assert v.extract_lane(1) == 3.14;
+}
+
+test "u8x16 splat" {
+    let v = u8x16::splat(255);
+    assert v.extract_lane(0) == 255;
+    assert v.extract_lane(15) == 255;
+}
+
+// Arithmetic operators
+
+test "i32x4 add" {
+    let a: i32x4 = [10, 20, 30, 40];
+    let b: i32x4 = [1, 2, 3, 4];
+    let c = a + b;
+    assert c.extract_lane(0) == 11;
+    assert c.extract_lane(1) == 22;
+    assert c.extract_lane(2) == 33;
+    assert c.extract_lane(3) == 44;
+}
+
+test "i32x4 sub" {
+    let a: i32x4 = [10, 20, 30, 40];
+    let b: i32x4 = [1, 2, 3, 4];
+    let c = a - b;
+    assert c.extract_lane(0) == 9;
+    assert c.extract_lane(3) == 36;
+}
+
+test "i32x4 mul" {
+    let a: i32x4 = [2, 3, 4, 5];
+    let b: i32x4 = [10, 20, 30, 40];
+    let c = a * b;
+    assert c.extract_lane(0) == 20;
+    assert c.extract_lane(3) == 200;
+}
+
+test "i32x4 neg" {
+    let a: i32x4 = [1, -2, 3, -4];
+    let b = -a;
+    assert b.extract_lane(0) == -1;
+    assert b.extract_lane(1) == 2;
+    assert b.extract_lane(2) == -3;
+    assert b.extract_lane(3) == 4;
+}
+
+test "f64x2 add" {
+    let a: f64x2 = [1.5, 2.5];
+    let b: f64x2 = [0.5, 0.5];
+    let c = a + b;
+    assert c.extract_lane(0) == 2.0;
+    assert c.extract_lane(1) == 3.0;
+}
+
+test "f64x2 div" {
+    let a: f64x2 = [10.0, 20.0];
+    let b: f64x2 = [2.0, 5.0];
+    let c = a / b;
+    assert c.extract_lane(0) == 5.0;
+    assert c.extract_lane(1) == 4.0;
+}
+
+test "f32x4 mul" {
+    let a: f32x4 = [2.0 as f32, 3.0 as f32, 4.0 as f32, 5.0 as f32];
+    let b: f32x4 = [0.5 as f32, 0.5 as f32, 0.5 as f32, 0.5 as f32];
+    let c = a * b;
+    assert c.extract_lane(0) == 1.0 as f32;
+    assert c.extract_lane(3) == 2.5 as f32;
+}
+
+// Bitwise operators
+
+test "i32x4 bitwise and" {
+    let a: i32x4 = [0xFF, 0x0F, 0xF0, 0x00];
+    let b = i32x4::splat(0x0F);
+    let c = a & b;
+    assert c.extract_lane(0) == 0x0F;
+    assert c.extract_lane(1) == 0x0F;
+    assert c.extract_lane(2) == 0x00;
+    assert c.extract_lane(3) == 0x00;
+}
+
+test "i32x4 bitwise or" {
+    let a: i32x4 = [0xF0, 0x00, 0x0F, 0xFF];
+    let b = i32x4::splat(0x0F);
+    let c = a | b;
+    assert c.extract_lane(0) == 0xFF;
+    assert c.extract_lane(1) == 0x0F;
+}
+
+test "i32x4 bitwise xor" {
+    let a = i32x4::splat(0xFF);
+    let b = i32x4::splat(0x0F);
+    let c = a ^ b;
+    assert c.extract_lane(0) == 0xF0;
+}
+
+test "i32x4 bitwise not" {
+    let a = i32x4::splat(0);
+    let b = ~a;
+    assert b.extract_lane(0) == -1;
+}
+
+// Shift operators
+
+test "i32x4 shift left" {
+    let a: i32x4 = [1, 2, 3, 4];
+    let b = a << 2;
+    assert b.extract_lane(0) == 4;
+    assert b.extract_lane(1) == 8;
+    assert b.extract_lane(3) == 16;
+}
+
+test "i32x4 shift right" {
+    let a: i32x4 = [16, 32, 64, 128];
+    let b = a >> 2;
+    assert b.extract_lane(0) == 4;
+    assert b.extract_lane(1) == 8;
+    assert b.extract_lane(3) == 32;
+}
+
+// Comparison
+
+test "i32x4 eq" {
+    let a: i32x4 = [1, 5, 3, 8];
+    let b: i32x4 = [2, 3, 3, 7];
+    let mask = a.eq(&b);
+    assert mask.extract_lane(2) == -1; // 3 == 3
+    assert mask.extract_lane(0) == 0;  // 1 != 2
+}
+
+test "i32x4 lt" {
+    let a: i32x4 = [1, 5, 3, 8];
+    let b: i32x4 = [2, 3, 3, 7];
+    let mask = a.lt(&b);
+    assert mask.extract_lane(0) == -1; // 1 < 2
+    assert mask.extract_lane(1) == 0;  // 5 < 3 is false
+}
+
+test "i32x4 gt" {
+    let a: i32x4 = [1, 5, 3, 8];
+    let b: i32x4 = [2, 3, 3, 7];
+    let mask = a.gt(&b);
+    assert mask.extract_lane(1) == -1; // 5 > 3
+    assert mask.extract_lane(3) == -1; // 8 > 7
+    assert mask.extract_lane(0) == 0;  // 1 > 2 is false
+}
+
+// Type conversion (as cast)
+
+test "i32x4 to f32x4 reinterpret" {
+    let a = i32x4::splat(0);
+    let b: f32x4 = a as f32x4;
+    assert b.extract_lane(0) == 0.0 as f32;
+}
+
+test "i32x4 to u32x4 reinterpret" {
+    let a: i32x4 = [1, 2, 3, 4];
+    let b: u32x4 = a as u32x4;
+    assert b.extract_lane(0) == 1;
+    assert b.extract_lane(3) == 4;
+}
+
+// Float math methods
+
+test "f64x2 sqrt" {
+    let a: f64x2 = [4.0, 9.0];
+    let b = a.sqrt();
+    assert b.extract_lane(0) == 2.0;
+    assert b.extract_lane(1) == 3.0;
+}
+
+test "f64x2 abs" {
+    let a: f64x2 = [-3.0, 5.0];
+    let b = a.abs();
+    assert b.extract_lane(0) == 3.0;
+    assert b.extract_lane(1) == 5.0;
+}
+
+test "f64x2 min max" {
+    let a: f64x2 = [1.0, 5.0];
+    let b: f64x2 = [3.0, 2.0];
+    let mn = a.min(&b);
+    let mx = a.max(&b);
+    assert mn.extract_lane(0) == 1.0;
+    assert mn.extract_lane(1) == 2.0;
+    assert mx.extract_lane(0) == 3.0;
+    assert mx.extract_lane(1) == 5.0;
+}
+
+// Select
+
+test "i32x4 select" {
+    let a: i32x4 = [10, 20, 30, 40];
+    let b: i32x4 = [50, 60, 70, 80];
+    let mask: i32x4 = [-1, 0, -1, 0]; // select a for lanes 0,2; b for lanes 1,3
+    let result = a.select(&mask, &b);
+    assert result.extract_lane(0) == 10;
+    assert result.extract_lane(1) == 60;
+    assert result.extract_lane(2) == 30;
+    assert result.extract_lane(3) == 80;
+}
+
+// Swizzle
+
+test "i8x16 swizzle" {
+    let v: i8x16 = [10, 20, 30, 40, 50, 60, 70, 80, 0, 0, 0, 0, 0, 0, 0, 0];
+    let indices: i8x16 = [3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let result = v.swizzle(&indices);
+    assert result.extract_lane_s(0) == 40;
+    assert result.extract_lane_s(1) == 30;
+    assert result.extract_lane_s(2) == 20;
+    assert result.extract_lane_s(3) == 10;
+}
+
+// i64x2 arithmetic
+
+test "i64x2 add" {
+    let a: i64x2 = [100 as i64, 200 as i64];
+    let b: i64x2 = [10 as i64, 20 as i64];
+    let c = a + b;
+    assert c.extract_lane(0) == 110 as i64;
+    assert c.extract_lane(1) == 220 as i64;
+}
+
+test "i64x2 mul" {
+    let a: i64x2 = [3 as i64, 7 as i64];
+    let b: i64x2 = [10 as i64, 20 as i64];
+    let c = a * b;
+    assert c.extract_lane(0) == 30 as i64;
+    assert c.extract_lane(1) == 140 as i64;
+}

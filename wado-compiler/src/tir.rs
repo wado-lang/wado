@@ -224,6 +224,7 @@ pub enum PrimitiveType {
     F64,
     Bool,
     Char,
+    V128,
 }
 
 impl PrimitiveType {
@@ -245,6 +246,7 @@ impl PrimitiveType {
             Self::F64 => "f64",
             Self::Bool => "bool",
             Self::Char => "char",
+            Self::V128 => "v128",
         }
     }
 
@@ -266,6 +268,7 @@ impl PrimitiveType {
                 | "f64"
                 | "bool"
                 | "char"
+                | "v128"
         )
     }
 }
@@ -424,11 +427,12 @@ impl TypeTable {
     pub const F64: TypeId = TypeId(11);
     pub const BOOL: TypeId = TypeId(12);
     pub const CHAR: TypeId = TypeId(13);
-    pub const UNIT: TypeId = TypeId(14);
-    pub const NEVER: TypeId = TypeId(15);
+    pub const V128: TypeId = TypeId(14);
+    pub const UNIT: TypeId = TypeId(15);
+    pub const NEVER: TypeId = TypeId(16);
     // STRING removed - String is now a user-defined struct in core:prelude/string.wado
-    pub const UNKNOWN: TypeId = TypeId(16);
-    pub const ERROR: TypeId = TypeId(17);
+    pub const UNKNOWN: TypeId = TypeId(17);
+    pub const ERROR: TypeId = TypeId(18);
 
     pub fn new() -> Self {
         let mut table = Self {
@@ -456,6 +460,7 @@ impl TypeTable {
         table.intern(ResolvedType::Primitive(PrimitiveType::F64));
         table.intern(ResolvedType::Primitive(PrimitiveType::Bool));
         table.intern(ResolvedType::Primitive(PrimitiveType::Char));
+        table.intern(ResolvedType::Primitive(PrimitiveType::V128));
         table.intern(ResolvedType::Unit);
         table.intern(ResolvedType::Never);
         // ResolvedType::String removed - String is now a user-defined struct
@@ -485,19 +490,6 @@ impl TypeTable {
     /// Iterate over all types in the type table.
     pub fn all_types(&self) -> impl Iterator<Item = (&TypeId, &ResolvedType)> {
         self.types.iter()
-    }
-
-    /// Try to get a type by ID, returning `None` if the type doesn't exist.
-    /// Useful when types may have been removed by DCE.
-    pub fn try_get(&self, id: TypeId) -> Option<&ResolvedType> {
-        self.types.get(&id)
-    }
-
-    /// Try to mangle a type name, returning `None` if the type doesn't exist.
-    /// Useful when types may have been removed by DCE.
-    pub fn try_mangle_type_name(&self, id: TypeId) -> Option<String> {
-        self.try_get(id)?;
-        Some(self.mangle_type_name(id))
     }
 
     pub fn is_integer(&self, id: TypeId) -> bool {
@@ -546,25 +538,17 @@ impl TypeTable {
         self.types.keys().copied()
     }
 
-    /// Retain only types that satisfy the predicate.
-    /// Used by DCE to remove unreachable types.
-    pub fn retain<F>(&mut self, mut f: F)
-    where
-        F: FnMut(TypeId, &ResolvedType) -> bool,
-    {
-        // Collect types to remove
-        let to_remove: Vec<TypeId> = self
-            .types
-            .iter()
-            .filter(|(id, ty)| !f(**id, ty))
-            .map(|(id, _)| *id)
-            .collect();
-
-        // Remove from both maps
-        for id in to_remove {
-            if let Some(ty) = self.types.shift_remove(&id) {
-                self.intern_map.shift_remove(&ty);
-            }
+    /// Remove all type entries whose `TypeId` is not in `keep`.
+    ///
+    /// This physically removes entries from the backing `IndexMap`s so that
+    /// subsequent iterations (e.g. WIR type registration) no longer see them.
+    /// The intern map is rebuilt to stay consistent.
+    pub fn retain(&mut self, keep: &IndexSet<TypeId>) {
+        self.types.retain(|id, _| keep.contains(id));
+        // Rebuild intern map from the surviving entries.
+        self.intern_map.clear();
+        for (&id, ty) in &self.types {
+            self.intern_map.insert(ty.clone(), id);
         }
     }
 
@@ -1023,16 +1007,6 @@ impl TypeTable {
                 format!("{}<{}>", name, arg_names.join(", "))
             }
             ResolvedType::Newtype { name, .. } => name.clone(),
-        }
-    }
-
-    /// Get a human-readable name for a type, returning a fallback for missing `TypeIds`.
-    /// Useful in diagnostic/unparse contexts where types may not be in the local `TypeTable`.
-    pub fn try_type_name(&self, id: TypeId) -> String {
-        if self.try_get(id).is_some() {
-            self.type_name(id)
-        } else {
-            format!("<TypeId({})>", id.0)
         }
     }
 

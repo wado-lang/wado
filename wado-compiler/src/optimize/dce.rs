@@ -1309,6 +1309,12 @@ fn compute_reachable_types(project: &Project) -> IndexSet<TypeId> {
                     for field in &tir_struct.fields {
                         collect_type_transitive(field.type_id, &type_table, &mut reachable_types);
                     }
+                    // Monomorphization type args are used by WIR for name mangling
+                    if let Some(info) = &tir_struct.monomorph_info {
+                        for &ta in &info.type_args {
+                            collect_type_transitive(ta, &type_table, &mut reachable_types);
+                        }
+                    }
                 }
             }
 
@@ -1369,6 +1375,13 @@ fn collect_types_from_function(
     // Collect local variable types (includes types from inlined functions)
     for &local_type_id in &func.local_types {
         collect_type_transitive(local_type_id, type_table, reachable);
+    }
+
+    // Collect monomorphization type args (used by WIR for name mangling)
+    if let Some(info) = &func.monomorph_info {
+        for &ta in &info.type_args {
+            collect_type_transitive(ta, type_table, reachable);
+        }
     }
 
     // Collect types from body
@@ -1847,12 +1860,11 @@ pub fn remove_unreachable_types(project: &mut Project) {
         module.enums.retain(|e| keep_enums.contains(&e.name));
     }
 
-    // Remove unreachable types from the shared TypeTable
-    // Since all modules share the same TypeTable via Rc<RefCell<>>,
-    // we only need to modify it once through any module
+    // Remove unreachable entries from the shared TypeTable.
+    // This ensures that subsequent phases (WIR type registration, codegen) do not
+    // emit types that are no longer referenced by any surviving function.
     if let Some(module) = project.tir_modules.values().next() {
-        let mut type_table = module.type_table.borrow_mut();
-        type_table.retain(|type_id, _| reachable_types.contains(&type_id));
+        module.type_table.borrow_mut().retain(&reachable_types);
     }
 }
 

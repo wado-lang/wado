@@ -47,6 +47,14 @@ macro_rules! binary_f32 {
     }};
 }
 
+/// Extract a compile-time constant i32 from a TIR expression (for SIMD lane indices).
+fn extract_i32_const(expr: &TirExpr) -> u8 {
+    match &expr.kind {
+        TirExprKind::IntLiteral { value, .. } => *value as u8,
+        _ => panic!("SIMD lane index must be a constant integer literal"),
+    }
+}
+
 /// Recursively collect variable names from Let statements.
 fn collect_let_names(names: &mut IndexMap<u32, String>, stmts: &[TirStmt]) {
     for stmt in stmts {
@@ -2746,6 +2754,608 @@ impl FunctionTranslator<'_, '_> {
             "builtin::f32_reinterpret_i32" => {
                 let o = self.translate_expr(&args[0].expr);
                 Some(WirInstr::F32ReinterpretI32(Box::new(o)))
+            }
+
+            "builtin::v128_const" => {
+                // The argument is an i128 literal interpreted as v128 bit pattern
+                let o = self.translate_expr(&args[0].expr);
+                // Extract the constant value - it should be an IntLiteral
+                if let WirInstr::I32Const(v) = &o {
+                    Some(WirInstr::V128Const(i128::from(*v)))
+                } else if let WirInstr::I64Const(v) = &o {
+                    Some(WirInstr::V128Const(i128::from(*v)))
+                } else {
+                    Some(WirInstr::V128Const(0))
+                }
+            }
+            "builtin::v128_not" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::V128Not(Box::new(a)))
+            }
+            "builtin::v128_and" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::V128And(Box::new(a), Box::new(b)))
+            }
+            "builtin::v128_or" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::V128Or(Box::new(a), Box::new(b)))
+            }
+            "builtin::v128_xor" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::V128Xor(Box::new(a), Box::new(b)))
+            }
+            "builtin::v128_bitselect" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                let c = self.translate_expr(&args[2].expr);
+                Some(WirInstr::V128Bitselect(
+                    Box::new(a),
+                    Box::new(b),
+                    Box::new(c),
+                ))
+            }
+            "builtin::i8x16_splat" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I8x16Splat(Box::new(a)))
+            }
+            "builtin::i8x16_extract_lane_s" => {
+                let lane = extract_i32_const(&args[0].expr);
+                let a = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16ExtractLaneS(lane, Box::new(a)))
+            }
+            "builtin::i8x16_extract_lane_u" => {
+                let lane = extract_i32_const(&args[0].expr);
+                let a = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16ExtractLaneU(lane, Box::new(a)))
+            }
+            "builtin::i8x16_replace_lane" => {
+                let lane = extract_i32_const(&args[0].expr);
+                let a = self.translate_expr(&args[1].expr);
+                let v = self.translate_expr(&args[2].expr);
+                Some(WirInstr::I8x16ReplaceLane(lane, Box::new(a), Box::new(v)))
+            }
+            "builtin::i8x16_add" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16Add(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_sub" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16Sub(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_neg" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I8x16Neg(Box::new(a)))
+            }
+            "builtin::i8x16_eq" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16Eq(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_ne" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16Ne(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_lt_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16LtS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_gt_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16GtS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_le_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16LeS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_ge_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16GeS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_lt_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16LtU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_gt_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16GtU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_le_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16LeU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_ge_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16GeU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_shl" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16Shl(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_shr_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16ShrS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_shr_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16ShrU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_swizzle" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16Swizzle(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_splat" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I16x8Splat(Box::new(a)))
+            }
+            "builtin::i16x8_extract_lane_s" => {
+                let lane = extract_i32_const(&args[0].expr);
+                let a = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8ExtractLaneS(lane, Box::new(a)))
+            }
+            "builtin::i16x8_extract_lane_u" => {
+                let lane = extract_i32_const(&args[0].expr);
+                let a = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8ExtractLaneU(lane, Box::new(a)))
+            }
+            "builtin::i16x8_replace_lane" => {
+                let lane = extract_i32_const(&args[0].expr);
+                let a = self.translate_expr(&args[1].expr);
+                let v = self.translate_expr(&args[2].expr);
+                Some(WirInstr::I16x8ReplaceLane(lane, Box::new(a), Box::new(v)))
+            }
+            "builtin::i16x8_add" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8Add(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_sub" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8Sub(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_mul" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8Mul(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_neg" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I16x8Neg(Box::new(a)))
+            }
+            "builtin::i16x8_eq" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8Eq(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_ne" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8Ne(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_lt_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8LtS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_gt_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8GtS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_le_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8LeS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_ge_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8GeS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_lt_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8LtU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_gt_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8GtU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_le_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8LeU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_ge_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8GeU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_shl" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8Shl(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_shr_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8ShrS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_shr_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8ShrU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_splat" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32x4Splat(Box::new(a)))
+            }
+            "builtin::i32x4_extract_lane" => {
+                let lane = extract_i32_const(&args[0].expr);
+                let a = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4ExtractLane(lane, Box::new(a)))
+            }
+            "builtin::i32x4_replace_lane" => {
+                let lane = extract_i32_const(&args[0].expr);
+                let a = self.translate_expr(&args[1].expr);
+                let v = self.translate_expr(&args[2].expr);
+                Some(WirInstr::I32x4ReplaceLane(lane, Box::new(a), Box::new(v)))
+            }
+            "builtin::i32x4_add" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4Add(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_sub" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4Sub(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_mul" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4Mul(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_neg" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32x4Neg(Box::new(a)))
+            }
+            "builtin::i32x4_eq" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4Eq(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_ne" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4Ne(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_lt_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4LtS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_gt_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4GtS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_le_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4LeS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_ge_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4GeS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_lt_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4LtU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_gt_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4GtU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_le_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4LeU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_ge_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4GeU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_shl" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4Shl(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_shr_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4ShrS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_shr_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4ShrU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i64x2_splat" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I64x2Splat(Box::new(a)))
+            }
+            "builtin::i64x2_extract_lane" => {
+                let lane = extract_i32_const(&args[0].expr);
+                let a = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I64x2ExtractLane(lane, Box::new(a)))
+            }
+            "builtin::i64x2_replace_lane" => {
+                let lane = extract_i32_const(&args[0].expr);
+                let a = self.translate_expr(&args[1].expr);
+                let v = self.translate_expr(&args[2].expr);
+                Some(WirInstr::I64x2ReplaceLane(lane, Box::new(a), Box::new(v)))
+            }
+            "builtin::i64x2_add" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I64x2Add(Box::new(a), Box::new(b)))
+            }
+            "builtin::i64x2_sub" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I64x2Sub(Box::new(a), Box::new(b)))
+            }
+            "builtin::i64x2_mul" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I64x2Mul(Box::new(a), Box::new(b)))
+            }
+            "builtin::i64x2_neg" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I64x2Neg(Box::new(a)))
+            }
+            "builtin::i64x2_eq" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I64x2Eq(Box::new(a), Box::new(b)))
+            }
+            "builtin::i64x2_ne" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I64x2Ne(Box::new(a), Box::new(b)))
+            }
+            "builtin::i64x2_lt_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I64x2LtS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i64x2_gt_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I64x2GtS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i64x2_le_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I64x2LeS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i64x2_ge_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I64x2GeS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i64x2_shl" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I64x2Shl(Box::new(a), Box::new(b)))
+            }
+            "builtin::i64x2_shr_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I64x2ShrS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i64x2_shr_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I64x2ShrU(Box::new(a), Box::new(b)))
+            }
+            "builtin::f32x4_splat" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F32x4Splat(Box::new(a)))
+            }
+            "builtin::f32x4_extract_lane" => {
+                let lane = extract_i32_const(&args[0].expr);
+                let a = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F32x4ExtractLane(lane, Box::new(a)))
+            }
+            "builtin::f32x4_replace_lane" => {
+                let lane = extract_i32_const(&args[0].expr);
+                let a = self.translate_expr(&args[1].expr);
+                let v = self.translate_expr(&args[2].expr);
+                Some(WirInstr::F32x4ReplaceLane(lane, Box::new(a), Box::new(v)))
+            }
+            "builtin::f32x4_add" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F32x4Add(Box::new(a), Box::new(b)))
+            }
+            "builtin::f32x4_sub" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F32x4Sub(Box::new(a), Box::new(b)))
+            }
+            "builtin::f32x4_mul" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F32x4Mul(Box::new(a), Box::new(b)))
+            }
+            "builtin::f32x4_div" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F32x4Div(Box::new(a), Box::new(b)))
+            }
+            "builtin::f32x4_neg" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F32x4Neg(Box::new(a)))
+            }
+            "builtin::f32x4_sqrt" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F32x4Sqrt(Box::new(a)))
+            }
+            "builtin::f32x4_abs" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F32x4Abs(Box::new(a)))
+            }
+            "builtin::f32x4_eq" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F32x4Eq(Box::new(a), Box::new(b)))
+            }
+            "builtin::f32x4_ne" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F32x4Ne(Box::new(a), Box::new(b)))
+            }
+            "builtin::f32x4_lt" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F32x4Lt(Box::new(a), Box::new(b)))
+            }
+            "builtin::f32x4_gt" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F32x4Gt(Box::new(a), Box::new(b)))
+            }
+            "builtin::f32x4_le" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F32x4Le(Box::new(a), Box::new(b)))
+            }
+            "builtin::f32x4_ge" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F32x4Ge(Box::new(a), Box::new(b)))
+            }
+            "builtin::f32x4_min" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F32x4Min(Box::new(a), Box::new(b)))
+            }
+            "builtin::f32x4_max" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F32x4Max(Box::new(a), Box::new(b)))
+            }
+            "builtin::f64x2_splat" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F64x2Splat(Box::new(a)))
+            }
+            "builtin::f64x2_extract_lane" => {
+                let lane = extract_i32_const(&args[0].expr);
+                let a = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F64x2ExtractLane(lane, Box::new(a)))
+            }
+            "builtin::f64x2_replace_lane" => {
+                let lane = extract_i32_const(&args[0].expr);
+                let a = self.translate_expr(&args[1].expr);
+                let v = self.translate_expr(&args[2].expr);
+                Some(WirInstr::F64x2ReplaceLane(lane, Box::new(a), Box::new(v)))
+            }
+            "builtin::f64x2_add" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F64x2Add(Box::new(a), Box::new(b)))
+            }
+            "builtin::f64x2_sub" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F64x2Sub(Box::new(a), Box::new(b)))
+            }
+            "builtin::f64x2_mul" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F64x2Mul(Box::new(a), Box::new(b)))
+            }
+            "builtin::f64x2_div" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F64x2Div(Box::new(a), Box::new(b)))
+            }
+            "builtin::f64x2_neg" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F64x2Neg(Box::new(a)))
+            }
+            "builtin::f64x2_sqrt" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F64x2Sqrt(Box::new(a)))
+            }
+            "builtin::f64x2_abs" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F64x2Abs(Box::new(a)))
+            }
+            "builtin::f64x2_eq" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F64x2Eq(Box::new(a), Box::new(b)))
+            }
+            "builtin::f64x2_ne" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F64x2Ne(Box::new(a), Box::new(b)))
+            }
+            "builtin::f64x2_lt" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F64x2Lt(Box::new(a), Box::new(b)))
+            }
+            "builtin::f64x2_gt" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F64x2Gt(Box::new(a), Box::new(b)))
+            }
+            "builtin::f64x2_le" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F64x2Le(Box::new(a), Box::new(b)))
+            }
+            "builtin::f64x2_ge" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F64x2Ge(Box::new(a), Box::new(b)))
+            }
+            "builtin::f64x2_min" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F64x2Min(Box::new(a), Box::new(b)))
+            }
+            "builtin::f64x2_max" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F64x2Max(Box::new(a), Box::new(b)))
             }
 
             // === Memory ===

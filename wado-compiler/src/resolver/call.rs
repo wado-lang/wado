@@ -626,6 +626,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 "f32" => TypeTable::F32,
                 "f64" => TypeTable::F64,
                 "bool" => TypeTable::BOOL,
+                "v128" => TypeTable::V128,
                 "()" => TypeTable::UNIT,
                 // Type aliases from WASI (e.g., Mark, Instant, Duration)
                 _ => {

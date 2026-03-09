@@ -854,6 +854,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 match named.name.as_str() {
                     "bool" => TypeTable::BOOL,
                     "char" => TypeTable::CHAR,
+                    "v128" => TypeTable::V128,
                     "i8" => TypeTable::I8,
                     "i16" => TypeTable::I16,
                     "i32" => TypeTable::I32,
@@ -1010,6 +1011,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 match named.name.as_str() {
                     "bool" => TypeTable::BOOL,
                     "char" => TypeTable::CHAR,
+                    "v128" => TypeTable::V128,
                     "i8" => TypeTable::I8,
                     "i16" => TypeTable::I16,
                     "i32" => TypeTable::I32,

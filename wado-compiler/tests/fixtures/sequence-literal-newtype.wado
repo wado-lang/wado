@@ -1,0 +1,53 @@
+use { println, Stdout } from "core:cli";
+
+struct Vec3 {
+    x: f64,
+    y: f64,
+    z: f64,
+}
+
+pub struct Vec3Builder {
+    values: Array<f64>,
+}
+
+impl SequenceLiteralBuilder for Vec3Builder {
+    type Element = f64;
+    type Output = Vec3;
+
+    fn new_literal(capacity: i32) -> Vec3Builder {
+        return Vec3Builder { values: Array::<f64>::with_capacity(capacity) };
+    }
+
+    fn push_literal(&mut self, value: f64) {
+        self.values.append(value);
+    }
+
+    fn build(&self) -> Vec3 {
+        return Vec3 { x: self.values[0], y: self.values[1], z: self.values[2] };
+    }
+}
+
+impl SequenceLiteral for Vec3 {
+    type Element = f64;
+    type Builder = Vec3Builder;
+}
+
+// Newtype of Vec3 — should also support tuple literal coercion
+type Position = Vec3;
+
+export fn run() with Stdout {
+    // Newtype coercion via type annotation
+    let p: Position = [1.0, 2.0, 3.0];
+    assert p.x == 1.0;
+    assert p.y == 2.0;
+    assert p.z == 3.0;
+
+    // Base type still works
+    let v: Vec3 = [4.0, 5.0, 6.0];
+    assert v.x == 4.0;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

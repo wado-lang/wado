@@ -80,17 +80,36 @@ impl<H: CompilerHost> Resolver<'_, H> {
         );
 
         if is_comparison {
-            // Get struct name for trait lookup
+            // Get struct name for trait lookup.
+            // Newtypes of primitives (e.g. type Radians = f64) use primitive comparison.
+            // Newtypes of structs need trait-based comparison via the base type's impl.
             let struct_name = match &left_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                ResolvedType::Newtype { base_type, .. } => {
+                    let tt = self.type_table.borrow();
+                    let ultimate = tt.get_ultimate_base_type(*base_type);
+                    match tt.get(ultimate) {
+                        ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => {
+                            drop(tt);
+                            self.struct_name_for_type(*base_type)
+                        }
+                        _ => None,
+                    }
+                }
                 _ => None,
             };
 
             if let Some(struct_name) = struct_name {
+                // For newtypes, use the base type ID for trait lookup
+                let lookup_type_id = {
+                    let tt = self.type_table.borrow();
+                    tt.get_newtype_base(left.type_id).unwrap_or(left.type_id)
+                };
+
                 // Handle Eq trait (== and !=)
                 if matches!(binary.op, BinaryOp::Eq | BinaryOp::NotEq) {
-                    let Some(trait_info) = self.find_eq_trait_impl(&struct_name, left.type_id)
+                    let Some(trait_info) = self.find_eq_trait_impl(&struct_name, lookup_type_id)
                     else {
                         let type_name = self.type_table.borrow().type_name(left.type_id);
                         let op_str = if binary.op == BinaryOp::Eq {
@@ -137,7 +156,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             TirExprKind::MethodCall {
                                 receiver: Box::new(receiver),
                                 func: FunctionRef {
-                                    module_source: ModuleSource::prelude(),
+                                    module_source: self.find_struct_module_source(&struct_name),
                                     name: mangled_method_name,
                                     monomorph_info: None,
                                     method_info: Some(LocalMethodName::new(
@@ -176,7 +195,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     binary.op,
                     BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
                 ) {
-                    let Some(trait_info) = self.find_ord_trait_impl(&struct_name, left.type_id)
+                    let Some(trait_info) = self.find_ord_trait_impl(&struct_name, lookup_type_id)
                     else {
                         let type_name = self.type_table.borrow().type_name(left.type_id);
                         let op_str = match binary.op {
@@ -232,7 +251,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             TirExprKind::MethodCall {
                                 receiver: Box::new(receiver),
                                 func: FunctionRef {
-                                    module_source: ModuleSource::prelude(),
+                                    module_source: self.find_struct_module_source(&struct_name),
                                     name: mangled_method_name,
                                     monomorph_info: None,
                                     method_info: Some(LocalMethodName::new(
@@ -307,6 +326,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let struct_name = match &left_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                ResolvedType::Newtype { name, .. } => Some(name.clone()),
                 _ => None,
             };
 
@@ -324,13 +344,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     _ => unreachable!(),
                 };
 
+                // For newtypes, resolve base type for trait impl fallback
+                let (lookup_name, lookup_type_id) =
+                    self.newtype_base_lookup(&struct_name, left.type_id);
+
                 // Find the arithmetic trait implementation
-                if let Some(trait_info) = self.find_arithmetic_trait_impl(
-                    &struct_name,
-                    left.type_id,
-                    trait_name,
-                    method_name,
-                ) {
+                let (trait_info_opt, impl_name) = self
+                    .find_arithmetic_trait_impl(&struct_name, left.type_id, trait_name, method_name)
+                    .map(|info| (Some(info), struct_name.clone()))
+                    .unwrap_or_else(|| {
+                        let info = self.find_arithmetic_trait_impl(
+                            &lookup_name,
+                            lookup_type_id,
+                            trait_name,
+                            method_name,
+                        );
+                        (info, lookup_name.clone())
+                    });
+                if let Some(trait_info) = trait_info_opt {
                     // Adjust receiver for self kind (&self)
                     let receiver = self.adjust_receiver_for_self_kind(
                         left.clone(),
@@ -354,7 +385,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     );
 
                     let mangled_method_name = MethodName::format_local(
-                        &struct_name,
+                        &impl_name,
                         Some(&trait_info.trait_name),
                         method_name,
                     );
@@ -363,11 +394,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef {
-                                module_source: ModuleSource::prelude(),
+                                module_source: self.find_struct_module_source(&impl_name),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
-                                    struct_name.clone(),
+                                    impl_name.clone(),
                                     Some(trait_info.trait_name.clone()),
                                     method_name.to_string(),
                                 )),
@@ -392,6 +423,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let struct_name = match &left_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                ResolvedType::Newtype { name, .. } => Some(name.clone()),
                 _ => None,
             };
 
@@ -403,13 +435,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     _ => unreachable!(),
                 };
 
+                // For newtypes, resolve base type for trait impl fallback
+                let (lookup_name, lookup_type_id) =
+                    self.newtype_base_lookup(&struct_name, left.type_id);
+
                 // Find the shift trait implementation
-                if let Some(trait_info) = self.find_arithmetic_trait_impl(
-                    &struct_name,
-                    left.type_id,
-                    trait_name,
-                    method_name,
-                ) {
+                let (trait_info_opt, impl_name) = self
+                    .find_arithmetic_trait_impl(&struct_name, left.type_id, trait_name, method_name)
+                    .map(|info| (Some(info), struct_name.clone()))
+                    .unwrap_or_else(|| {
+                        let info = self.find_arithmetic_trait_impl(
+                            &lookup_name,
+                            lookup_type_id,
+                            trait_name,
+                            method_name,
+                        );
+                        (info, lookup_name.clone())
+                    });
+                if let Some(trait_info) = trait_info_opt {
                     // Adjust receiver for self kind (&self)
                     let receiver = self.adjust_receiver_for_self_kind(
                         left.clone(),
@@ -419,7 +462,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                     // For shift operations, rhs is u32 (not &Self), so pass directly
                     let mangled_method_name = MethodName::format_local(
-                        &struct_name,
+                        &impl_name,
                         Some(&trait_info.trait_name),
                         method_name,
                     );
@@ -428,11 +471,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef {
-                                module_source: ModuleSource::prelude(),
+                                module_source: self.find_struct_module_source(&impl_name),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
-                                    struct_name.clone(),
+                                    impl_name.clone(),
                                     Some(trait_info.trait_name.clone()),
                                     method_name.to_string(),
                                 )),
@@ -599,14 +642,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let struct_name = match &expr_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                ResolvedType::Newtype { name, .. } => Some(name.clone()),
                 _ => None,
             };
 
             if let Some(struct_name) = struct_name {
+                let (lookup_name, lookup_type_id) =
+                    self.newtype_base_lookup(&struct_name, expr.type_id);
+
                 // Find the Neg trait implementation
-                if let Some(trait_info) =
-                    self.find_arithmetic_trait_impl(&struct_name, expr.type_id, "Neg", "neg")
-                {
+                let neg_info = self
+                    .find_arithmetic_trait_impl(&struct_name, expr.type_id, "Neg", "neg")
+                    .map(|info| (info, struct_name.clone()))
+                    .or_else(|| {
+                        self.find_arithmetic_trait_impl(&lookup_name, lookup_type_id, "Neg", "neg")
+                            .map(|info| (info, lookup_name.clone()))
+                    });
+                if let Some((trait_info, impl_name)) = neg_info {
                     // Adjust receiver for self kind (&self)
                     let receiver = self.adjust_receiver_for_self_kind(
                         expr.clone(),
@@ -615,17 +667,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     );
 
                     let mangled_method_name =
-                        MethodName::format_local(&struct_name, Some(&trait_info.trait_name), "neg");
+                        MethodName::format_local(&impl_name, Some(&trait_info.trait_name), "neg");
 
                     return TirExpr::new(
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef {
-                                module_source: ModuleSource::prelude(),
+                                module_source: self.find_struct_module_source(&impl_name),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
-                                    struct_name.clone(),
+                                    impl_name.clone(),
                                     Some(trait_info.trait_name.clone()),
                                     "neg".to_string(),
                                 )),
@@ -647,14 +699,28 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let struct_name = match &expr_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                ResolvedType::Newtype { name, .. } => Some(name.clone()),
                 _ => None,
             };
 
             if let Some(struct_name) = struct_name {
+                let (lookup_name, lookup_type_id) =
+                    self.newtype_base_lookup(&struct_name, expr.type_id);
+
                 // Find the BitNot trait implementation
-                if let Some(trait_info) =
-                    self.find_arithmetic_trait_impl(&struct_name, expr.type_id, "BitNot", "bitnot")
-                {
+                let bitnot_info = self
+                    .find_arithmetic_trait_impl(&struct_name, expr.type_id, "BitNot", "bitnot")
+                    .map(|info| (info, struct_name.clone()))
+                    .or_else(|| {
+                        self.find_arithmetic_trait_impl(
+                            &lookup_name,
+                            lookup_type_id,
+                            "BitNot",
+                            "bitnot",
+                        )
+                        .map(|info| (info, lookup_name.clone()))
+                    });
+                if let Some((trait_info, impl_name)) = bitnot_info {
                     // Adjust receiver for self kind (&self)
                     let receiver = self.adjust_receiver_for_self_kind(
                         expr.clone(),
@@ -663,7 +729,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     );
 
                     let mangled_method_name = MethodName::format_local(
-                        &struct_name,
+                        &impl_name,
                         Some(&trait_info.trait_name),
                         "bitnot",
                     );
@@ -672,11 +738,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef {
-                                module_source: ModuleSource::prelude(),
+                                module_source: self.find_struct_module_source(&impl_name),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
-                                    struct_name.clone(),
+                                    impl_name.clone(),
                                     Some(trait_info.trait_name.clone()),
                                     "bitnot".to_string(),
                                 )),
@@ -806,8 +872,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let struct_name = match self.type_table.borrow().get(base_type_id).clone() {
                     ResolvedType::Struct { name, .. } => name,
                     ResolvedType::GenericInstance { name, .. } => name,
+                    ResolvedType::Newtype { name, .. } => name,
                     _ => String::new(),
                 };
+
+                // For newtypes, resolve the base type name for trait impl lookup
+                let (lookup_name, lookup_type_id) =
+                    self.newtype_base_lookup(&struct_name, base_type_id);
 
                 if !struct_name.is_empty() {
                     let index_resolved = self.resolve_expr(&index_expr.index, ctx, None);
@@ -822,9 +893,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         self.check_ref_type_mismatch(index_type, expected, index_expr.index.span());
                     }
 
-                    if let Some(trait_info) =
-                        self.find_index_assign_trait_impl(&struct_name, base_type_id, index_type)
-                    {
+                    let assign_info = self
+                        .find_index_assign_trait_impl(&struct_name, base_type_id, index_type)
+                        .or_else(|| {
+                            self.find_index_assign_trait_impl(
+                                &lookup_name,
+                                lookup_type_id,
+                                index_type,
+                            )
+                        });
+                    if let Some(trait_info) = assign_info {
                         // Generate: expr.index_assign(index, value)
                         let value =
                             self.resolve_expr(&assign.value, ctx, Some(trait_info.input_type));
@@ -844,7 +922,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                         // Get the mangled method name: StructName^IndexAssign<IndexType>::index_assign
                         let mangled_method_name = MethodName::format_local(
-                            &struct_name,
+                            &lookup_name,
                             Some(&trait_info.trait_name),
                             "index_assign",
                         );
@@ -857,7 +935,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     name: mangled_method_name,
                                     monomorph_info: None,
                                     method_info: Some(LocalMethodName::new(
-                                        struct_name.clone(),
+                                        lookup_name.clone(),
                                         Some(trait_info.trait_name.clone()),
                                         "index_assign".to_string(),
                                     )),

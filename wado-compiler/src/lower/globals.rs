@@ -88,6 +88,14 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
             crate::tir::PrimitiveType::Char => {
                 TirExpr::new(TirExprKind::CharLiteral('\0'), type_id, span)
             }
+            crate::tir::PrimitiveType::V128 => TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: 0,
+                    repr: "0".to_string(),
+                },
+                type_id,
+                span,
+            ),
         },
         ResolvedType::Unit => TirExpr::new(TirExprKind::Unit, type_id, span),
         // For reference types (String, Array, struct, etc.), use null

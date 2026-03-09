@@ -126,6 +126,9 @@ pub use project::Project;
 pub use resolver::{Resolver, TypeError, resolve_to_project};
 pub use token::Span;
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use indexmap::IndexMap;
 
 /// Result of compiling a Wado source file
@@ -418,6 +421,33 @@ pub async fn compile_with_options<H: CompilerHost>(
     })
 }
 
+/// Deep-clone TIR modules so that each snapshot has its own independent `TypeTable`.
+///
+/// TIR modules share a single `TypeTable` via `Rc<RefCell<…>>`.  Later
+/// optimization passes (notably DCE's `TypeTable::retain`) mutate that shared
+/// table.  Snapshots taken for dump output must be immune to those mutations,
+/// so we clone the `TypeTable` once and give every module in the snapshot its
+/// own `Rc` pointing to the clone.
+fn snapshot_tir_modules(
+    modules: &IndexMap<ModuleSource, tir::TirModule>,
+) -> IndexMap<ModuleSource, tir::TirModule> {
+    let cloned_tt = modules
+        .values()
+        .next()
+        .map(|m| Rc::new(RefCell::new(m.type_table.borrow().clone())));
+
+    modules
+        .iter()
+        .map(|(k, m)| {
+            let mut m = m.clone();
+            if let Some(ref tt) = cloned_tt {
+                m.type_table = Rc::clone(tt);
+            }
+            (k.clone(), m)
+        })
+        .collect()
+}
+
 /// Dump compiler internal state (async version).
 ///
 /// This runs the compilation pipeline up through optimization (without code generation)
@@ -528,8 +558,10 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         .ok()
     };
 
-    // TIR modules already use ModuleSource keys
-    let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> = tir_modules.clone();
+    // Snapshot resolved TIR with an independent TypeTable clone so that
+    // later optimization passes (which call TypeTable::retain) cannot mutate it.
+    let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
+        tir_modules.as_ref().map(snapshot_tir_modules);
 
     // === Phase 7b+8+9+10: Build Project and run remaining phases ===
     // Create Project early so CM adapter synthesis runs before monomorphize,
@@ -596,14 +628,14 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             monomorphize_project(project)
         };
 
-        let mono_snapshot = Some(project.tir_modules.clone());
+        let mono_snapshot = Some(snapshot_tir_modules(&project.tir_modules));
 
         // Lower
         let project = {
             let _span = logger.span("lower");
             lower_project(project)
         };
-        let lower_snapshot = Some(project.tir_modules.clone());
+        let lower_snapshot = Some(snapshot_tir_modules(&project.tir_modules));
 
         // Optimize
         let project = {

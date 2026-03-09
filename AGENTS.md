@@ -141,7 +141,7 @@ __DATA__
 
 ```wado
 // WIR pattern test - verify optimization effects at a specific -Ox level
-// Use `wado dump --wir --unparse -O2 file.wado` to discover WIR patterns
+// Use `wado dump --wir -O2 file.wado` to discover WIR patterns
 export fn run() {
     let a: Array<i32> = [10, 20, 30];
     assert a.len() == 3;
@@ -239,37 +239,39 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
 ### Dump Command
 
-Use `wado dump` to inspect compiler internal state for debugging:
+Use `wado dump` to inspect compiler internal state for debugging.
+Output defaults to unparsed Wado source code; use `--inspect` for internal Debug format.
 
 ```sh
-wado dump file.wado                  # show all phases (Debug format)
-wado dump --ast file.wado            # show AST structure (Debug format)
-wado dump --ast --unparse file.wado  # show AST as Wado source code
-wado dump --desugar file.wado        # show desugared AST (Debug format)
-wado dump --desugar --unparse file.wado  # show desugared AST as source
-wado dump --modules file.wado        # show loaded modules only
-wado dump --symbols file.wado        # show symbol table only
-wado dump --tir file.wado            # show TIR (Typed IR)
-wado dump --tir --unparse file.wado  # show TIR as pseudo-Wado source
-wado dump --lower file.wado          # show lowered TIR
-wado dump --lower --unparse file.wado  # show lowered TIR as pseudo-Wado source
-wado dump --optimize file.wado       # show optimization hints
-wado dump --optimize --unparse -O2 file.wado  # show optimized TIR as pseudo-Wado
+wado dump file.wado                  # show final WIR (default)
+wado dump --tir file.wado            # show final TIR (after optimization)
+wado dump --tir -O0 file.wado        # show TIR without optimization
+wado dump --ast file.wado            # show parsed AST
+wado dump --desugared file.wado      # show desugared AST
+wado dump --modules file.wado        # show loaded modules
+wado dump --symbols file.wado        # show symbol table
+wado dump --types file.wado          # show type table
+wado dump --tir-resolved file.wado   # show TIR after type resolution
+wado dump --tir-monomorphized file.wado  # show TIR after monomorphization
+wado dump --tir-lowered file.wado    # show TIR after lowering
+wado dump --wir --inspect file.wado  # show WIR in Debug format
 ```
 
 Available phases (in compilation order):
 
-1. `--tokens` - Lexer output
-2. `--ast` - Parser output (supports `--unparse`)
-3. `--desugar` - Desugared AST (supports `--unparse`)
+1. `--tokens` - Lexer output (always Debug format)
+2. `--ast` - Parser output
+3. `--desugared` - Desugared AST
 4. `--modules` - Loaded modules
 5. `--symbols` - Symbol table
-6. `--tir` - Typed IR (supports `--unparse`)
-7. `--lower` - Lowered TIR (supports `--unparse`)
-8. `--optimize` - Optimized TIR (supports `--unparse`)
-9. `--wir` - Wasm IR (supports `--unparse`)
+6. `--types` - Type table (all resolved types)
+7. `--tir-resolved` - TIR after type resolution
+8. `--tir-monomorphized` - TIR after monomorphization
+9. `--tir-lowered` - TIR after lowering
+10. `--tir` - Final TIR (after optimization, affected by `-Ox`)
+11. `--wir` - Final WIR (after optimization, affected by `-Ox`) [default]
 
-Optimization levels for `--optimize` phase: `-O0` (none), `-O1` (development), `-O2` (production, default), `-O3` (aggressive), `-Os` (`-O2` + strip names).
+Optimization levels: `-O0` (none), `-O1` (development), `-O2` (production, default), `-O3` (aggressive), `-Os` (`-O2` + strip names).
 
 ## The Formatter
 

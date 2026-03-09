@@ -999,6 +999,10 @@ fn create_default_value(type_id: TypeId, type_table: &TypeTable, span: crate::Sp
             },
             PrimitiveType::Bool => TirExprKind::BoolLiteral(false),
             PrimitiveType::Char => TirExprKind::CharLiteral('\0'),
+            PrimitiveType::V128 => TirExprKind::IntLiteral {
+                value: 0,
+                repr: "0".to_string(),
+            },
         },
         // For all reference types (structs, arrays, options, etc.), use Null
         // The value will be immediately overwritten, so this is just a placeholder

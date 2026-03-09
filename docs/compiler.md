@@ -121,14 +121,15 @@ The `unparse.rs` module also provides a TIR unparser that converts Typed IR back
 **Usage:**
 
 ```sh
-wado dump --tir --unparse file.wado    # Show TIR before monomorphization
-wado dump --lower --unparse file.wado  # Show TIR after monomorphization and lowering
+wado dump --tir-resolved file.wado   # Show TIR before monomorphization
+wado dump --tir-lowered file.wado    # Show TIR after monomorphization and lowering
+wado dump --tir file.wado            # Show final TIR (after optimization)
 ```
 
 **Output Characteristics:**
 
-- `--tir`: Shows generic types as-is (e.g., `Box<T>`)
-- `--lower`: Shows monomorphized type names (e.g., `Box$i32` instead of `Box<T>`)
+- `--tir-resolved`: Shows generic types as-is (e.g., `Box<T>`)
+- `--tir-lowered`: Shows monomorphized type names (e.g., `Box$i32` instead of `Box<T>`)
 - Includes fully qualified function calls (e.g., `core::cli::println`)
 - Preserves the `__DATA__` section if present
 - Output is pseudo-Wado (not compilable due to mangled names)

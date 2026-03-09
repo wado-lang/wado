@@ -857,8 +857,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let struct_name = match &base_type {
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance { name, .. } => name.clone(),
+            ResolvedType::Newtype { name, .. } => name.clone(),
             _ => String::new(),
         };
+
+        // For newtypes, also resolve the base type name for trait impl lookup
+        let (lookup_name, lookup_type_id) = self.newtype_base_lookup(&struct_name, base_type_id);
 
         if !struct_name.is_empty() {
             let index_expr = self.resolve_expr(&index.index, ctx, None);
@@ -874,9 +878,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
 
             // First, try Index trait (returns reference)
-            if let Some(trait_info) =
-                self.find_index_trait_impl(&struct_name, base_type_id, index_type)
-            {
+            // Try the direct name first, then fall back to base type name for newtypes
+            let index_trait_info = self
+                .find_index_trait_impl(&struct_name, base_type_id, index_type)
+                .or_else(|| self.find_index_trait_impl(&lookup_name, lookup_type_id, index_type));
+            if let Some(trait_info) = index_trait_info {
                 // Generate: *expr.index(index_expr)
                 // First, create the method call to .index(index_expr)
                 let receiver = self.adjust_receiver_for_self_kind(
@@ -886,7 +892,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 );
 
                 let mangled_method_name =
-                    MethodName::format_local(&struct_name, Some(&trait_info.trait_name), "index");
+                    MethodName::format_local(&lookup_name, Some(&trait_info.trait_name), "index");
 
                 // The method returns &Output, so the type is Ref(output_type)
                 let ref_output_type = self
@@ -902,7 +908,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             name: mangled_method_name,
                             monomorph_info: None,
                             method_info: Some(LocalMethodName::new(
-                                struct_name.clone(),
+                                lookup_name.clone(),
                                 Some(trait_info.trait_name.clone()),
                                 "index".to_string(),
                             )),
@@ -927,9 +933,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
 
             // Fallback: try IndexValue trait (returns value by copy)
-            if let Some(trait_info) =
-                self.find_index_value_trait_impl(&struct_name, base_type_id, index_type)
-            {
+            let index_value_info = self
+                .find_index_value_trait_impl(&struct_name, base_type_id, index_type)
+                .or_else(|| {
+                    self.find_index_value_trait_impl(&lookup_name, lookup_type_id, index_type)
+                });
+            if let Some(trait_info) = index_value_info {
                 // Generate: expr.index_value(index_expr)
                 let receiver = self.adjust_receiver_for_self_kind(
                     expr.clone(),
@@ -938,7 +947,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 );
 
                 let mangled_method_name = MethodName::format_local(
-                    &struct_name,
+                    &lookup_name,
                     Some(&trait_info.trait_name),
                     "index_value",
                 );
@@ -952,7 +961,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             name: mangled_method_name,
                             monomorph_info: None,
                             method_info: Some(LocalMethodName::new(
-                                struct_name.clone(),
+                                lookup_name.clone(),
                                 Some(trait_info.trait_name.clone()),
                                 "index_value".to_string(),
                             )),

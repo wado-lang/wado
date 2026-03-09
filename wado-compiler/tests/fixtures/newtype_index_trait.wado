@@ -1,0 +1,61 @@
+// Test IndexValue and IndexAssign trait lookup on newtypes
+use { println, Stdout } from "core:cli";
+
+struct IntStore {
+    a: i32,
+    b: i32,
+    c: i32,
+}
+
+impl<i32> IndexValue<i32> for IntStore {
+    type Output = i32;
+    fn index_value(&self, index: i32) -> Self::Output {
+        if index == 0 {
+            return self.a;
+        } else if index == 1 {
+            return self.b;
+        } else {
+            return self.c;
+        }
+    }
+}
+
+impl<i32> IndexAssign<i32> for IntStore {
+    type Input = i32;
+    fn index_assign(&mut self, index: i32, value: i32) {
+        if index == 0 {
+            self.a = value;
+        } else if index == 1 {
+            self.b = value;
+        } else {
+            self.c = value;
+        }
+    }
+}
+
+// Newtype wrapping a struct with IndexValue/IndexAssign
+type MyStore = IntStore;
+
+export fn run() with Stdout {
+    // IndexValue on newtype
+    let store = IntStore { a: 10, b: 20, c: 30 } as MyStore;
+    let first = store[0];
+    let second = store[1];
+    assert first == 10;
+    assert second == 20;
+    println(`index_value: {first}, {second}`);
+
+    // IndexAssign on newtype
+    let mut ms = IntStore { a: 1, b: 2, c: 3 } as MyStore;
+    ms[0] = 100;
+    ms[2] = 300;
+    assert ms[0] == 100;
+    assert ms[1] == 2;
+    assert ms[2] == 300;
+    println(`index_assign: {ms[0]}, {ms[1]}, {ms[2]}`);
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "index_value: 10, 20\nindex_assign: 100, 2, 300\nok\n"}
