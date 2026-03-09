@@ -1152,12 +1152,24 @@ impl<'a> WirUnparser<'a> {
             WirInstr::I16x8ExtendHighI8x16S(a) => self.write_unop("i16x8.extend_high_i8x16_s", a),
             WirInstr::I16x8ExtendLowI8x16U(a) => self.write_unop("i16x8.extend_low_i8x16_u", a),
             WirInstr::I16x8ExtendHighI8x16U(a) => self.write_unop("i16x8.extend_high_i8x16_u", a),
-            WirInstr::I16x8ExtMulLowI8x16S(a, b) => self.write_binop_op("i16x8.extmul_low_i8x16_s", a, b),
-            WirInstr::I16x8ExtMulHighI8x16S(a, b) => self.write_binop_op("i16x8.extmul_high_i8x16_s", a, b),
-            WirInstr::I16x8ExtMulLowI8x16U(a, b) => self.write_binop_op("i16x8.extmul_low_i8x16_u", a, b),
-            WirInstr::I16x8ExtMulHighI8x16U(a, b) => self.write_binop_op("i16x8.extmul_high_i8x16_u", a, b),
-            WirInstr::I16x8ExtAddPairwiseI8x16S(a) => self.write_unop("i16x8.extadd_pairwise_i8x16_s", a),
-            WirInstr::I16x8ExtAddPairwiseI8x16U(a) => self.write_unop("i16x8.extadd_pairwise_i8x16_u", a),
+            WirInstr::I16x8ExtMulLowI8x16S(a, b) => {
+                self.write_binop_op("i16x8.extmul_low_i8x16_s", a, b)
+            }
+            WirInstr::I16x8ExtMulHighI8x16S(a, b) => {
+                self.write_binop_op("i16x8.extmul_high_i8x16_s", a, b)
+            }
+            WirInstr::I16x8ExtMulLowI8x16U(a, b) => {
+                self.write_binop_op("i16x8.extmul_low_i8x16_u", a, b)
+            }
+            WirInstr::I16x8ExtMulHighI8x16U(a, b) => {
+                self.write_binop_op("i16x8.extmul_high_i8x16_u", a, b)
+            }
+            WirInstr::I16x8ExtAddPairwiseI8x16S(a) => {
+                self.write_unop("i16x8.extadd_pairwise_i8x16_s", a)
+            }
+            WirInstr::I16x8ExtAddPairwiseI8x16U(a) => {
+                self.write_unop("i16x8.extadd_pairwise_i8x16_u", a)
+            }
             WirInstr::I16x8Q15MulrSatS(a, b) => self.write_binop_op("i16x8.q15mulr_sat_s", a, b),
             WirInstr::I32x4Abs(a) => self.write_unop("i32x4.abs", a),
             WirInstr::I32x4AllTrue(a) => self.write_unop("i32x4.all_true", a),
@@ -1171,16 +1183,32 @@ impl<'a> WirUnparser<'a> {
             WirInstr::I32x4ExtendHighI16x8S(a) => self.write_unop("i32x4.extend_high_i16x8_s", a),
             WirInstr::I32x4ExtendLowI16x8U(a) => self.write_unop("i32x4.extend_low_i16x8_u", a),
             WirInstr::I32x4ExtendHighI16x8U(a) => self.write_unop("i32x4.extend_high_i16x8_u", a),
-            WirInstr::I32x4ExtMulLowI16x8S(a, b) => self.write_binop_op("i32x4.extmul_low_i16x8_s", a, b),
-            WirInstr::I32x4ExtMulHighI16x8S(a, b) => self.write_binop_op("i32x4.extmul_high_i16x8_s", a, b),
-            WirInstr::I32x4ExtMulLowI16x8U(a, b) => self.write_binop_op("i32x4.extmul_low_i16x8_u", a, b),
-            WirInstr::I32x4ExtMulHighI16x8U(a, b) => self.write_binop_op("i32x4.extmul_high_i16x8_u", a, b),
-            WirInstr::I32x4ExtAddPairwiseI16x8S(a) => self.write_unop("i32x4.extadd_pairwise_i16x8_s", a),
-            WirInstr::I32x4ExtAddPairwiseI16x8U(a) => self.write_unop("i32x4.extadd_pairwise_i16x8_u", a),
+            WirInstr::I32x4ExtMulLowI16x8S(a, b) => {
+                self.write_binop_op("i32x4.extmul_low_i16x8_s", a, b)
+            }
+            WirInstr::I32x4ExtMulHighI16x8S(a, b) => {
+                self.write_binop_op("i32x4.extmul_high_i16x8_s", a, b)
+            }
+            WirInstr::I32x4ExtMulLowI16x8U(a, b) => {
+                self.write_binop_op("i32x4.extmul_low_i16x8_u", a, b)
+            }
+            WirInstr::I32x4ExtMulHighI16x8U(a, b) => {
+                self.write_binop_op("i32x4.extmul_high_i16x8_u", a, b)
+            }
+            WirInstr::I32x4ExtAddPairwiseI16x8S(a) => {
+                self.write_unop("i32x4.extadd_pairwise_i16x8_s", a)
+            }
+            WirInstr::I32x4ExtAddPairwiseI16x8U(a) => {
+                self.write_unop("i32x4.extadd_pairwise_i16x8_u", a)
+            }
             WirInstr::I32x4TruncSatF32x4S(a) => self.write_unop("i32x4.trunc_sat_f32x4_s", a),
             WirInstr::I32x4TruncSatF32x4U(a) => self.write_unop("i32x4.trunc_sat_f32x4_u", a),
-            WirInstr::I32x4TruncSatF64x2SZero(a) => self.write_unop("i32x4.trunc_sat_f64x2_s_zero", a),
-            WirInstr::I32x4TruncSatF64x2UZero(a) => self.write_unop("i32x4.trunc_sat_f64x2_u_zero", a),
+            WirInstr::I32x4TruncSatF64x2SZero(a) => {
+                self.write_unop("i32x4.trunc_sat_f64x2_s_zero", a)
+            }
+            WirInstr::I32x4TruncSatF64x2UZero(a) => {
+                self.write_unop("i32x4.trunc_sat_f64x2_u_zero", a)
+            }
             WirInstr::I64x2Abs(a) => self.write_unop("i64x2.abs", a),
             WirInstr::I64x2AllTrue(a) => self.write_unop("i64x2.all_true", a),
             WirInstr::I64x2Bitmask(a) => self.write_unop("i64x2.bitmask", a),
@@ -1188,10 +1216,18 @@ impl<'a> WirUnparser<'a> {
             WirInstr::I64x2ExtendHighI32x4S(a) => self.write_unop("i64x2.extend_high_i32x4_s", a),
             WirInstr::I64x2ExtendLowI32x4U(a) => self.write_unop("i64x2.extend_low_i32x4_u", a),
             WirInstr::I64x2ExtendHighI32x4U(a) => self.write_unop("i64x2.extend_high_i32x4_u", a),
-            WirInstr::I64x2ExtMulLowI32x4S(a, b) => self.write_binop_op("i64x2.extmul_low_i32x4_s", a, b),
-            WirInstr::I64x2ExtMulHighI32x4S(a, b) => self.write_binop_op("i64x2.extmul_high_i32x4_s", a, b),
-            WirInstr::I64x2ExtMulLowI32x4U(a, b) => self.write_binop_op("i64x2.extmul_low_i32x4_u", a, b),
-            WirInstr::I64x2ExtMulHighI32x4U(a, b) => self.write_binop_op("i64x2.extmul_high_i32x4_u", a, b),
+            WirInstr::I64x2ExtMulLowI32x4S(a, b) => {
+                self.write_binop_op("i64x2.extmul_low_i32x4_s", a, b)
+            }
+            WirInstr::I64x2ExtMulHighI32x4S(a, b) => {
+                self.write_binop_op("i64x2.extmul_high_i32x4_s", a, b)
+            }
+            WirInstr::I64x2ExtMulLowI32x4U(a, b) => {
+                self.write_binop_op("i64x2.extmul_low_i32x4_u", a, b)
+            }
+            WirInstr::I64x2ExtMulHighI32x4U(a, b) => {
+                self.write_binop_op("i64x2.extmul_high_i32x4_u", a, b)
+            }
             WirInstr::F32x4Ceil(a) => self.write_unop("f32x4.ceil", a),
             WirInstr::F32x4Floor(a) => self.write_unop("f32x4.floor", a),
             WirInstr::F32x4Trunc(a) => self.write_unop("f32x4.trunc", a),
