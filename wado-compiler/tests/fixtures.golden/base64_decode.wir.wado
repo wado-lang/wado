@@ -93,6 +93,8 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
+type "functype/core:allocator/debug_realloc" = fn(i32, i32, i32, i32) -> i32;
+
 type "functype/core:base64/build_decode_table" = fn() -> ref Array<u8>;
 
 type "functype/core:base64/encode_impl" = fn(ref Array<u8>, ref Array<u8>, bool) -> ref String;
@@ -706,6 +708,24 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
     return aligned;
 }
 
+fn "core:allocator/debug_realloc"(oldptr, oldsize, align, newsize) {  // from core:allocator
+    let aligned: i32;
+    let new_offset: i32;
+    if newsize == 0 {
+        if oldsize > 0 {
+            builtin::memory_fill(oldptr, 255, oldsize);
+        };
+        return 0;
+    };
+    aligned = ((heap_offset + align) - 1) & (0 - align);
+    new_offset = aligned + newsize;
+    if builtin::unlikely(new_offset > (builtin::memory_size() * 65536)) {
+        "core:allocator/grow_memory"(new_offset);
+    };
+    heap_offset = new_offset;
+    return aligned;
+}
+
 fn "core:base64/build_decode_table"() {  // from core:base64
     let table: ref Array<u8>;
     let i_1: i32;
@@ -722,39 +742,39 @@ fn "core:base64/build_decode_table"() {  // from core:base64
     __for_0: block {
         i_1 = 0;
         block {
-            l24: loop {
+            l27: loop {
                 if (i_1 < 26) == 0 {
                     break __for_0;
                 };
                 "core:base64/Array<u8>^IndexAssign::index_assign"(table, 65 + i_1, i_1 & 255);
                 i_1 = i_1 + 1;
-                continue l24;
+                continue l27;
             };
         };
     };
     __for_1: block {
         i_2 = 0;
         block {
-            l27: loop {
+            l30: loop {
                 if (i_2 < 26) == 0 {
                     break __for_1;
                 };
                 "core:base64/Array<u8>^IndexAssign::index_assign"(table, 97 + i_2, (26 + i_2) & 255);
                 i_2 = i_2 + 1;
-                continue l27;
+                continue l30;
             };
         };
     };
     __for_2: block {
         i_3 = 0;
         block {
-            l30: loop {
+            l33: loop {
                 if (i_3 < 10) == 0 {
                     break __for_2;
                 };
                 "core:base64/Array<u8>^IndexAssign::index_assign"(table, 48 + i_3, (52 + i_3) & 255);
                 i_3 = i_3 + 1;
-                continue l30;
+                continue l33;
             };
         };
     };
@@ -827,10 +847,10 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
     _licm_repr_46 = data.repr;
     _licm_used_47 = table.used;
     _licm_repr_48 = table.repr;
-    b33: block {
-        l34: loop {
+    b36: block {
+        l37: loop {
             if ((i + 2) < len) == 0 {
-                break b33;
+                break b36;
             };
             b0_7 = __inline_Array_u8__IndexValue__index_value_2: block -> u8 {
                 __local_16 = i;
@@ -889,7 +909,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                 break __inline_Array_u8__IndexValue__index_value_8: builtin::array_get<u8>(_licm_repr_48, __local_28);
             });
             i = i + 3;
-            continue l34;
+            continue l37;
         };
     };
     if remainder == 1 {
@@ -1034,8 +1054,8 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
     end = input_len;
     _licm_used_57 = input.used;
     _licm_repr_58 = input.repr;
-    b55: block {
-        l56: loop {
+    b58: block {
+        l59: loop {
             if if end > 0 -> i32 {
                 __inline_Array_u8__IndexValue__index_value_0: block -> u8 {
                     __local_19 = end - 1;
@@ -1048,10 +1068,10 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
             } else {
                 0;
             } == 0 {
-                break b55;
+                break b58;
             };
             end = end - 1;
-            continue l56;
+            continue l59;
         };
     };
     if (end % 4) == 1 {
@@ -1075,10 +1095,10 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
     _licm_repr_60 = input.repr;
     _licm_used_61 = table.used;
     _licm_repr_62 = table.repr;
-    b63: block {
-        l64: loop {
+    b66: block {
+        l67: loop {
             if ((i + 3) < end) == 0 {
-                break b63;
+                break b66;
             };
             v0_9 = __inline_Array_u8__IndexValue__index_value_3: block -> u8 {
                 __local_24 = __inline_Array_u8__IndexValue__index_value_2: block -> u8 {
@@ -1159,7 +1179,7 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
             "core:base64/Array<u8>::append"(out, (((v1_10 & 15) << 4) | (v2_11 >> 2)) & 255);
             "core:base64/Array<u8>::append"(out, (((v2_11 & 3) << 6) | v3) & 255);
             i = i + 4;
-            continue l64;
+            continue l67;
         };
     };
     if remainder == 2 {
@@ -1570,8 +1590,8 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         __local_11 = StrUtf8ByteIter { repr: ref.as_non_null(message.repr), used: message.used, index: 0 };
         break __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: __local_11;
     };
-    b96: block {
-        l97: loop {
+    b99: block {
+        l100: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: u8;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(__iter_0);
@@ -1579,9 +1599,9 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
                 b = __sroa___pattern_temp_0_payload_0;
                 "core:cli/Array<u8>::append"(arr, b);
             } else {
-                break b96;
+                break b99;
             };
-            continue l97;
+            continue l100;
         };
     };
     if add_newline {
@@ -1629,13 +1649,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l102: loop {
+            l105: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l102;
+                continue l105;
             };
         };
     };
@@ -1663,8 +1683,8 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         __local_11 = StrUtf8ByteIter { repr: ref.as_non_null(message.repr), used: message.used, index: 0 };
         break __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: __local_11;
     };
-    b105: block {
-        l106: loop {
+    b108: block {
+        l109: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: u8;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(__iter_2);
@@ -1672,9 +1692,9 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
                 b = __sroa___pattern_temp_0_payload_0;
                 "core:internal/Array<u8>::append"(arr, b);
             } else {
-                break b105;
+                break b108;
             };
-            continue l106;
+            continue l109;
         };
     };
     if add_newline {
@@ -1764,13 +1784,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l113: loop {
+            l116: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l113;
+                continue l116;
             };
         };
     };
@@ -1787,14 +1807,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l117: loop {
+                l120: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l117;
+                    continue l120;
                 };
             };
         };
@@ -1970,8 +1990,8 @@ fn StrUtf8ByteIter^Iterator::collect(self) {
         __local_1 = Array<u8> { repr: builtin::array_new<u8>(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    b129: block {
-        l130: loop {
+    b132: block {
+        l133: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: u8;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(self);
@@ -1979,9 +1999,9 @@ fn StrUtf8ByteIter^Iterator::collect(self) {
                 item = __sroa___pattern_temp_0_payload_0;
                 Array<u8>::append(result, item);
             } else {
-                break b129;
+                break b132;
             };
-            continue l130;
+            continue l133;
         };
     };
     return result;
@@ -2072,7 +2092,7 @@ fn Array<u8>^Eq::eq(self, other) {
         _licm_repr_4 = self.repr;
         _licm_repr_5 = other.repr;
         block {
-            l140: loop {
+            l143: loop {
                 if (i < _licm_used_3) == 0 {
                     break __for_0;
                 };
@@ -2080,7 +2100,7 @@ fn Array<u8>^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l140;
+                continue l143;
             };
         };
     };
@@ -2094,13 +2114,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l144: loop {
+            l147: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l144;
+                continue l147;
             };
         };
     };

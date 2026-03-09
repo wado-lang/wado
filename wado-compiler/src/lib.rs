@@ -324,15 +324,15 @@ pub async fn compile_with_options<H: CompilerHost>(
                 AllocatorMode::Bump
             }
         });
-        if allocator_mode == AllocatorMode::Debug {
-            if let Some(alloc_module) = project.tir_modules.get_mut(&ModuleSource::allocator()) {
-                for func_rc in &alloc_module.functions {
-                    let mut func = func_rc.borrow_mut();
-                    if func.name.ends_with("bump_realloc") {
-                        func.export_name = None;
-                    } else if func.name.ends_with("debug_realloc") {
-                        func.export_name = Some("realloc".to_string());
-                    }
+        if allocator_mode == AllocatorMode::Debug
+            && let Some(alloc_module) = project.tir_modules.get_mut(&ModuleSource::allocator())
+        {
+            for func_rc in &alloc_module.functions {
+                let mut func = func_rc.borrow_mut();
+                if func.name.ends_with("bump_realloc") {
+                    func.export_name = None;
+                } else if func.name.ends_with("debug_realloc") {
+                    func.export_name = Some("realloc".to_string());
                 }
             }
         }

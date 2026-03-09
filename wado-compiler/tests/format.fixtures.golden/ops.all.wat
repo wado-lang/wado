@@ -12,6 +12,7 @@
   (core module $mem-mod (;0;)
     (type (;0;) (func (param i32)))
     (type (;1;) (func (param i32 i32 i32 i32) (result i32)))
+    (type (;2;) (func (param i32 i32 i32 i32) (result i32)))
     (memory (;0;) 1)
     (global (;0;) (mut i32) (i32.const 8))
     (export "realloc" (func $realloc))
@@ -75,6 +76,54 @@
             (then
               (global.set 0
                 (local.get 0))))
+          (return
+            (i32.const 0))))
+      (local.set 4
+        (i32.and
+          (i32.sub
+            (i32.add
+              (global.get 0)
+              (local.get 2))
+            (i32.const 1))
+          (i32.sub
+            (i32.const 0)
+            (local.get 2))))
+      (local.set 5
+        (i32.add
+          (local.get 4)
+          (local.get 3)))
+      (if ;; label = @1
+        (i32.gt_s
+          (local.get 5)
+          (i32.mul
+            (memory.size)
+            (i32.const 65536)))
+        (@metadata.code.branch_hint "\00")
+        (then
+          (call $grow_memory
+            (local.get 5))))
+      (global.set 0
+        (local.get 5))
+      (return
+        (local.get 4))
+      (unreachable)
+    )
+    (func $debug_realloc (;2;) (type 2) (param i32 i32 i32 i32) (result i32)
+      (local i32 i32)
+      (if ;; label = @1
+        (i32.eq
+          (local.get 3)
+          (i32.const 0))
+        (then
+          (if ;; label = @2
+            (i32.gt_s
+              (local.get 1)
+              (i32.const 0))
+            (then
+              (memory.fill
+                (local.get 0)
+                (i32.const 255)
+                (local.get 1))))
           (return
             (i32.const 0))))
       (local.set 4

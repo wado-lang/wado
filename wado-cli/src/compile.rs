@@ -279,7 +279,10 @@ pub async fn compile_with_opts(
     opt_level: OptLevel,
     log_level: LogLevel,
 ) -> Vec<u8> {
-    compile_with_full_opts(filename, opt_level, log_level, None, false, None, None, None).await
+    compile_with_full_opts(
+        filename, opt_level, log_level, None, false, None, None, None,
+    )
+    .await
 }
 
 /// Compile a Wado source file with full options including target world

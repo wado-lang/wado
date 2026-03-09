@@ -342,6 +342,8 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
+type "functype/core:allocator/debug_realloc" = fn(i32, i32, i32, i32) -> i32;
+
 type "functype/core:internal/memory_to_gc_array" = fn(i32, i32) -> ref array<u8>;
 
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
@@ -1062,6 +1064,24 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
     return aligned;
 }
 
+fn "core:allocator/debug_realloc"(oldptr, oldsize, align, newsize) {  // from core:allocator
+    let aligned: i32;
+    let new_offset: i32;
+    if newsize == 0 {
+        if oldsize > 0 {
+            builtin::memory_fill(oldptr, 255, oldsize);
+        };
+        return 0;
+    };
+    aligned = ((heap_offset + align) - 1) & (0 - align);
+    new_offset = aligned + newsize;
+    if builtin::unlikely(new_offset > (builtin::memory_size() * 65536)) {
+        "core:allocator/grow_memory"(new_offset);
+    };
+    heap_offset = new_offset;
+    return aligned;
+}
+
 fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal
     let arr: ref array<u8>;
     let i: i32;
@@ -1069,13 +1089,13 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal
     __for_0: block {
         i = 0;
         block {
-            l46: loop {
+            l49: loop {
                 if (i < len) == 0 {
                     break __for_0;
                 };
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
                 i = i + 1;
-                continue l46;
+                continue l49;
             };
         };
     };
@@ -1087,13 +1107,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l49: loop {
+            l52: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l49;
+                continue l52;
             };
         };
     };
@@ -1121,8 +1141,8 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         __local_11 = StrUtf8ByteIter { repr: ref.as_non_null(message.repr), used: message.used, index: 0 };
         break __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: __local_11;
     };
-    b52: block {
-        l53: loop {
+    b55: block {
+        l56: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: u8;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(__iter_2);
@@ -1130,9 +1150,9 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
                 b = __sroa___pattern_temp_0_payload_0;
                 "core:internal/Array<u8>::append"(arr, b);
             } else {
-                break b52;
+                break b55;
             };
-            continue l53;
+            continue l56;
         };
     };
     if add_newline {
@@ -1235,13 +1255,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l60: loop {
+            l63: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l60;
+                continue l63;
             };
         };
     };
@@ -1258,14 +1278,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l64: loop {
+                l67: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l64;
+                    continue l67;
                 };
             };
         };
@@ -1387,7 +1407,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l74: loop {
+            l77: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -1395,7 +1415,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l74;
+                continue l77;
             };
         };
     };
@@ -1502,13 +1522,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l87: loop {
+            l90: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l87;
+                continue l90;
             };
         };
     };
@@ -1638,8 +1658,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b106: block {
-        l107: loop {
+    b109: block {
+        l110: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_4);
@@ -1664,9 +1684,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b106;
+                break b109;
             };
-            continue l107;
+            continue l110;
         };
     };
     String::append_char(f.buf, 34);

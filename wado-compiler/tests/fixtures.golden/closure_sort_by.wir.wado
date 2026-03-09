@@ -119,6 +119,8 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
+type "functype/core:allocator/debug_realloc" = fn(i32, i32, i32, i32) -> i32;
+
 type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:cli/println" = fn(ref String);
@@ -451,6 +453,24 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
     return aligned;
 }
 
+fn "core:allocator/debug_realloc"(oldptr, oldsize, align, newsize) {  // from core:allocator
+    let aligned: i32;
+    let new_offset: i32;
+    if newsize == 0 {
+        if oldsize > 0 {
+            builtin::memory_fill(oldptr, 255, oldsize);
+        };
+        return 0;
+    };
+    aligned = ((heap_offset + align) - 1) & (0 - align);
+    new_offset = aligned + newsize;
+    if builtin::unlikely(new_offset > (builtin::memory_size() * 65536)) {
+        "core:allocator/grow_memory"(new_offset);
+    };
+    heap_offset = new_offset;
+    return aligned;
+}
+
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
     let alloc_size: i32;
@@ -473,8 +493,8 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         __local_11 = StrUtf8ByteIter { repr: ref.as_non_null(message.repr), used: message.used, index: 0 };
         break __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: __local_11;
     };
-    b15: block {
-        l16: loop {
+    b18: block {
+        l19: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: u8;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(__iter_0);
@@ -482,9 +502,9 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
                 b = __sroa___pattern_temp_0_payload_0;
                 "core:cli/Array<u8>::append"(arr, b);
             } else {
-                break b15;
+                break b18;
             };
-            continue l16;
+            continue l19;
         };
     };
     if add_newline {
@@ -532,13 +552,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l21: loop {
+            l24: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l21;
+                continue l24;
             };
         };
     };
@@ -586,13 +606,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l26: loop {
+            l29: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l26;
+                continue l29;
             };
         };
     };
@@ -609,14 +629,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l30: loop {
+                l33: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l30;
+                    continue l33;
                 };
             };
         };
@@ -790,14 +810,14 @@ fn Array<i32>::sort_by(self, cmp) {
     width = 1;
     __for_2: block {
         block {
-            l46: loop {
+            l49: loop {
                 if (width < n) == 0 {
                     break __for_2;
                 };
                 __for_3: block {
                     start = 0;
                     block {
-                        l49: loop {
+                        l52: loop {
                             if (start < n) == 0 {
                                 break __for_3;
                             };
@@ -812,7 +832,7 @@ fn Array<i32>::sort_by(self, cmp) {
                                 __for_4: block {
                                     k = start;
                                     block {
-                                        l53: loop {
+                                        l56: loop {
                                             if (k < end) == 0 {
                                                 break __for_4;
                                             };
@@ -841,19 +861,19 @@ fn Array<i32>::sort_by(self, cmp) {
                                                 j = j + 1;
                                             };
                                             k = k + 1;
-                                            continue l53;
+                                            continue l56;
                                         };
                                     };
                                 };
                                 builtin::array_copy<i32>(src, start, buf, start, end - start);
                             };
                             start = start + (width * 2);
-                            continue l49;
+                            continue l52;
                         };
                     };
                 };
                 width = width * 2;
-                continue l46;
+                continue l49;
             };
         };
     };
@@ -936,14 +956,14 @@ fn Array<i32>::sort_by$__Closure_0(self, cmp) {
     width = 1;
     __for_2: block {
         block {
-            l68: loop {
+            l71: loop {
                 if (width < n) == 0 {
                     break __for_2;
                 };
                 __for_3: block {
                     start = 0;
                     block {
-                        l71: loop {
+                        l74: loop {
                             if (start < n) == 0 {
                                 break __for_3;
                             };
@@ -958,7 +978,7 @@ fn Array<i32>::sort_by$__Closure_0(self, cmp) {
                                 __for_4: block {
                                     k = start;
                                     block {
-                                        l75: loop {
+                                        l78: loop {
                                             if (k < end) == 0 {
                                                 break __for_4;
                                             };
@@ -983,19 +1003,19 @@ fn Array<i32>::sort_by$__Closure_0(self, cmp) {
                                                 j = j + 1;
                                             };
                                             k = k + 1;
-                                            continue l75;
+                                            continue l78;
                                         };
                                     };
                                 };
                                 builtin::array_copy<i32>(src, start, buf, start, end - start);
                             };
                             start = start + (width * 2);
-                            continue l71;
+                            continue l74;
                         };
                     };
                 };
                 width = width * 2;
-                continue l68;
+                continue l71;
             };
         };
     };
@@ -1026,14 +1046,14 @@ fn Array<i32>::sort_by$__Closure_1(self, cmp) {
     width = 1;
     __for_2: block {
         block {
-            l82: loop {
+            l85: loop {
                 if (width < n) == 0 {
                     break __for_2;
                 };
                 __for_3: block {
                     start = 0;
                     block {
-                        l85: loop {
+                        l88: loop {
                             if (start < n) == 0 {
                                 break __for_3;
                             };
@@ -1048,7 +1068,7 @@ fn Array<i32>::sort_by$__Closure_1(self, cmp) {
                                 __for_4: block {
                                     k = start;
                                     block {
-                                        l89: loop {
+                                        l92: loop {
                                             if (k < end) == 0 {
                                                 break __for_4;
                                             };
@@ -1073,19 +1093,19 @@ fn Array<i32>::sort_by$__Closure_1(self, cmp) {
                                                 j = j + 1;
                                             };
                                             k = k + 1;
-                                            continue l89;
+                                            continue l92;
                                         };
                                     };
                                 };
                                 builtin::array_copy<i32>(src, start, buf, start, end - start);
                             };
                             start = start + (width * 2);
-                            continue l85;
+                            continue l88;
                         };
                     };
                 };
                 width = width * 2;
-                continue l82;
+                continue l85;
             };
         };
     };
@@ -1110,13 +1130,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l95: loop {
+            l98: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l95;
+                continue l98;
             };
         };
     };

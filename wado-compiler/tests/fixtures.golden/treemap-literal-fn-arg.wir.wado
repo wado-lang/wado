@@ -169,6 +169,8 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
+type "functype/core:allocator/debug_realloc" = fn(i32, i32, i32, i32) -> i32;
+
 type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:cli/println" = fn(ref String);
@@ -452,6 +454,24 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
     return aligned;
 }
 
+fn "core:allocator/debug_realloc"(oldptr, oldsize, align, newsize) {  // from core:allocator
+    let aligned: i32;
+    let new_offset: i32;
+    if newsize == 0 {
+        if oldsize > 0 {
+            builtin::memory_fill(oldptr, 255, oldsize);
+        };
+        return 0;
+    };
+    aligned = ((heap_offset + align) - 1) & (0 - align);
+    new_offset = aligned + newsize;
+    if builtin::unlikely(new_offset > (builtin::memory_size() * 65536)) {
+        "core:allocator/grow_memory"(new_offset);
+    };
+    heap_offset = new_offset;
+    return aligned;
+}
+
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
     let alloc_size: i32;
@@ -474,8 +494,8 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         __local_11 = StrUtf8ByteIter { repr: ref.as_non_null(message.repr), used: message.used, index: 0 };
         break __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: __local_11;
     };
-    b10: block {
-        l11: loop {
+    b13: block {
+        l14: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: u8;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(__iter_0);
@@ -483,9 +503,9 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
                 b = __sroa___pattern_temp_0_payload_0;
                 "core:cli/Array<u8>::append"(arr, b);
             } else {
-                break b10;
+                break b13;
             };
-            continue l11;
+            continue l14;
         };
     };
     if add_newline {
@@ -533,13 +553,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l16: loop {
+            l19: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l16;
+                continue l19;
             };
         };
     };
@@ -567,8 +587,8 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         __local_11 = StrUtf8ByteIter { repr: ref.as_non_null(message.repr), used: message.used, index: 0 };
         break __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: __local_11;
     };
-    b19: block {
-        l20: loop {
+    b22: block {
+        l23: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: u8;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(__iter_2);
@@ -576,9 +596,9 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
                 b = __sroa___pattern_temp_0_payload_0;
                 "core:internal/Array<u8>::append"(arr, b);
             } else {
-                break b19;
+                break b22;
             };
-            continue l20;
+            continue l23;
         };
     };
     if add_newline {
@@ -668,13 +688,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l27: loop {
+            l30: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l27;
+                continue l30;
             };
         };
     };
@@ -691,14 +711,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l31: loop {
+                l34: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l31;
+                    continue l34;
                 };
             };
         };
@@ -842,7 +862,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l42: loop {
+            l45: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -850,7 +870,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l42;
+                continue l45;
             };
         };
     };
@@ -880,7 +900,7 @@ fn String^Ord::cmp(self, other) {
     __for_2: block {
         i = 0;
         block {
-            l46: loop {
+            l49: loop {
                 if (i < min_len) == 0 {
                     break __for_2;
                 };
@@ -893,7 +913,7 @@ fn String^Ord::cmp(self, other) {
                     return 2;
                 };
                 i = i + 1;
-                continue l46;
+                continue l49;
             };
         };
     };
@@ -1080,8 +1100,8 @@ fn TreeMap<String,i32>::find_index(self, key) {
     _licm_entries_8 = self.entries;
     _licm_used_9 = _licm_entries_8.used;
     _licm_repr_10 = _licm_entries_8.repr;
-    b70: block {
-        l71: loop {
+    b73: block {
+        l74: loop {
             __pattern_temp_0 = value_copy Option<TreeMapNode<String>>(current);
             if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_0) {
                 n = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_0).payload_0;
@@ -1105,9 +1125,9 @@ fn TreeMap<String,i32>::find_index(self, key) {
                     current = value_copy Option<TreeMapNode<String>>(n.right);
                 };
             } else {
-                break b70;
+                break b73;
             };
-            continue l71;
+            continue l74;
         };
     };
     return -1;
@@ -1141,8 +1161,8 @@ fn TreeMap<String,i32>::entries(self) {
         __local_9 = self.entries;
         break __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: ArrayIter<TreeMapEntry<String,i32>> { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
     };
-    b78: block {
-        l79: loop {
+    b81: block {
+        l82: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: ref null "core:collections/TreeMapEntry<String,i32>";
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<TreeMapEntry<String,i32>>^Iterator::next(__iter_3);
@@ -1152,9 +1172,9 @@ fn TreeMap<String,i32>::entries(self) {
                     Array<Tuple<String,i32>>::append(result, "tuple/[String, i32]" { 0: ref.as_non_null(entry.key), 1: entry.value });
                 };
             } else {
-                break b78;
+                break b81;
             };
-            continue l79;
+            continue l82;
         };
     };
     return result;
@@ -1199,13 +1219,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l85: loop {
+            l88: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l85;
+                continue l88;
             };
         };
     };

@@ -77,6 +77,8 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
+type "functype/core:allocator/debug_realloc" = fn(i32, i32, i32, i32) -> i32;
+
 type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:cli/println" = fn(ref String);
@@ -288,6 +290,24 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
     return aligned;
 }
 
+fn "core:allocator/debug_realloc"(oldptr, oldsize, align, newsize) {  // from core:allocator
+    let aligned: i32;
+    let new_offset: i32;
+    if newsize == 0 {
+        if oldsize > 0 {
+            builtin::memory_fill(oldptr, 255, oldsize);
+        };
+        return 0;
+    };
+    aligned = ((heap_offset + align) - 1) & (0 - align);
+    new_offset = aligned + newsize;
+    if builtin::unlikely(new_offset > (builtin::memory_size() * 65536)) {
+        "core:allocator/grow_memory"(new_offset);
+    };
+    heap_offset = new_offset;
+    return aligned;
+}
+
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
     let alloc_size: i32;
@@ -310,8 +330,8 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         __local_11 = StrUtf8ByteIter { repr: ref.as_non_null(message.repr), used: message.used, index: 0 };
         break __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: __local_11;
     };
-    b18: block {
-        l19: loop {
+    b21: block {
+        l22: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: u8;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(__iter_0);
@@ -319,9 +339,9 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
                 b = __sroa___pattern_temp_0_payload_0;
                 "core:cli/Array<u8>::append"(arr, b);
             } else {
-                break b18;
+                break b21;
             };
-            continue l19;
+            continue l22;
         };
     };
     if add_newline {
@@ -369,13 +389,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l24: loop {
+            l27: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l24;
+                continue l27;
             };
         };
     };
@@ -455,7 +475,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l30: loop {
+            l33: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -463,7 +483,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l30;
+                continue l33;
             };
         };
     };
@@ -493,7 +513,7 @@ fn String^Ord::cmp(self, other) {
     __for_2: block {
         i = 0;
         block {
-            l34: loop {
+            l37: loop {
                 if (i < min_len) == 0 {
                     break __for_2;
                 };
@@ -506,7 +526,7 @@ fn String^Ord::cmp(self, other) {
                     return 2;
                 };
                 i = i + 1;
-                continue l34;
+                continue l37;
             };
         };
     };
@@ -543,7 +563,7 @@ fn Array<i32>^Eq::eq(self, other) {
         _licm_repr_4 = self.repr;
         _licm_repr_5 = other.repr;
         block {
-            l43: loop {
+            l46: loop {
                 if (i < _licm_used_3) == 0 {
                     break __for_0;
                 };
@@ -551,7 +571,7 @@ fn Array<i32>^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l43;
+                continue l46;
             };
         };
     };
@@ -577,7 +597,7 @@ fn Array<i32>^Ord::cmp(self, other) {
         _licm_repr_8 = self.repr;
         _licm_repr_9 = other.repr;
         block {
-            l47: loop {
+            l50: loop {
                 if (i < min_len) == 0 {
                     break __for_1;
                 };
@@ -590,7 +610,7 @@ fn Array<i32>^Ord::cmp(self, other) {
                     return 2;
                 };
                 i = i + 1;
-                continue l47;
+                continue l50;
             };
         };
     };

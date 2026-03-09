@@ -85,6 +85,8 @@ type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
 
+type "functype/core:allocator/debug_realloc" = fn(i32, i32, i32, i32) -> i32;
+
 type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:cli/println" = fn(ref String);
@@ -323,6 +325,24 @@ fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from cor
     return aligned;
 }
 
+fn "core:allocator/debug_realloc"(oldptr, oldsize, align, newsize) {  // from core:allocator
+    let aligned: i32;
+    let new_offset: i32;
+    if newsize == 0 {
+        if oldsize > 0 {
+            builtin::memory_fill(oldptr, 255, oldsize);
+        };
+        return 0;
+    };
+    aligned = ((heap_offset + align) - 1) & (0 - align);
+    new_offset = aligned + newsize;
+    if builtin::unlikely(new_offset > (builtin::memory_size() * 65536)) {
+        "core:allocator/grow_memory"(new_offset);
+    };
+    heap_offset = new_offset;
+    return aligned;
+}
+
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let len: i32;
     let alloc_size: i32;
@@ -345,8 +365,8 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         __local_11 = StrUtf8ByteIter { repr: ref.as_non_null(message.repr), used: message.used, index: 0 };
         break __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: __local_11;
     };
-    b6: block {
-        l7: loop {
+    b9: block {
+        l10: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: u8;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(__iter_0);
@@ -354,9 +374,9 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
                 b = __sroa___pattern_temp_0_payload_0;
                 "core:cli/Array<u8>::append"(arr, b);
             } else {
-                break b6;
+                break b9;
             };
-            continue l7;
+            continue l10;
         };
     };
     if add_newline {
@@ -404,13 +424,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l12: loop {
+            l15: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l12;
+                continue l15;
             };
         };
     };
@@ -501,10 +521,10 @@ fn u64::fmt_decimal(self, f) {
     };
     digit_count = 0;
     temp = val_i64;
-    b17: block {
-        l18: loop {
+    b20: block {
+        l21: loop {
             if (temp != 0_i64) == 0 {
-                break b17;
+                break b20;
             };
             digit_count = digit_count + 1;
             if temp >= 0_i64 {
@@ -519,7 +539,7 @@ fn u64::fmt_decimal(self, f) {
                 };
                 temp = (signed_quot_9 + 1844674407370955161_i64) + carry_10;
             };
-            continue l18;
+            continue l21;
         };
     };
     offset_11 = Formatter::prepare_int_write(f, 0, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
@@ -529,10 +549,10 @@ fn u64::fmt_decimal(self, f) {
     };
     pos = offset_11 + digit_count;
     temp = val_i64;
-    b22: block {
-        l23: loop {
+    b25: block {
+        l26: loop {
             if (temp != 0_i64) == 0 {
-                break b22;
+                break b25;
             };
             pos = pos - 1;
             digit = 0;
@@ -555,7 +575,7 @@ fn u64::fmt_decimal(self, f) {
                 temp = (signed_quot_17 + 1844674407370955161_i64) + carry_18;
             };
             builtin::array_set_u8(repr, pos, (48 + digit) & 255);
-            continue l23;
+            continue l26;
         };
     };
 }
@@ -657,13 +677,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l38: loop {
+            l41: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l38;
+                continue l41;
             };
         };
     };
