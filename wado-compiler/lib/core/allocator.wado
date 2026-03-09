@@ -38,8 +38,8 @@ fn grow_memory(new_offset: i32) {
 
 /// Bump allocator — advances a pointer with alignment.
 /// When newsize is 0 and the allocation was the most recent one, rewinds the heap pointer.
-/// Exported as "realloc" from the "mem" Wasm module for Component Model compatibility.
-#[export_name("realloc")]
+/// Selected by `--allocator bump` (default for CLI/HTTP worlds).
+#[allocator("bump")]
 export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     // Free: rewind if this was the most recent allocation
     if newsize == 0 {
@@ -64,6 +64,7 @@ export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i
 /// Debug allocator — advances a pointer with alignment, never reuses freed memory.
 /// When newsize is 0, poisons the freed region with 0xFF bytes.
 /// Selected by `--allocator debug` or automatically for the test world.
+#[allocator("debug")]
 export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     // Free: poison freed memory with 0xFF, never reuse
     if newsize == 0 {

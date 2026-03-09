@@ -641,11 +641,7 @@ fn run_normal_test(
 
     // Use CompilerOptions to pass the target world through
     let has_wir = spec.has_wir_expectations(opt_level);
-    let allocator = spec.allocator.as_deref().map(|s| match s {
-        "bump" => wado_compiler::AllocatorMode::Bump,
-        "debug" => wado_compiler::AllocatorMode::Debug,
-        other => panic!("unknown allocator mode in test spec: {other}"),
-    });
+    let allocator = spec.allocator.clone();
     let options = CompilerOptions {
         opt_level,
         target_world,

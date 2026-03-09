@@ -66,7 +66,7 @@ pub struct CompileOptions {
     pub skip_validation: bool,
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
-    pub allocator: Option<wado_compiler::AllocatorMode>,
+    pub allocator: Option<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -179,7 +179,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut skip_validation = false;
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;
-    let mut allocator: Option<wado_compiler::AllocatorMode> = None;
+    let mut allocator: Option<String> = None;
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
@@ -226,16 +226,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                 Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
                 Opt::NoValidate => skip_validation = true,
                 Opt::Allocator => {
-                    let val = args::require_string(&mut parser)?;
-                    allocator = Some(match val.as_str() {
-                        "bump" => wado_compiler::AllocatorMode::Bump,
-                        "debug" => wado_compiler::AllocatorMode::Debug,
-                        _ => {
-                            return Err(CliExit::error(format!(
-                                "unknown allocator mode '{val}'. Use 'bump' or 'debug'"
-                            )));
-                        }
-                    });
+                    allocator = Some(args::require_string(&mut parser)?);
                 }
                 Opt::Help => return Err(CliExit::help(usage)),
             }
@@ -294,7 +285,7 @@ pub async fn compile_with_full_opts(
     skip_validation: bool,
     inline_threshold: Option<usize>,
     opt_iterations: Option<u32>,
-    allocator: Option<wado_compiler::AllocatorMode>,
+    allocator: Option<String>,
 ) -> Vec<u8> {
     let path = Path::new(filename);
 

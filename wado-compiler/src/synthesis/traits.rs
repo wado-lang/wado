@@ -866,7 +866,7 @@ fn generate_generic_struct_inspect_fn(
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
-        export_name: None,
+        export_name: None, allocator_tag: None,
     }
 }
 
@@ -1177,7 +1177,7 @@ fn generate_generic_variant_inspect_fn(
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
-        export_name: None,
+        export_name: None, allocator_tag: None,
     }
 }
 
@@ -2024,7 +2024,7 @@ fn generate_display_fallback(
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
-        export_name: None,
+        export_name: None, allocator_tag: None,
     }
 }
 
