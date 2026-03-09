@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773095860828,
+  "lastUpdate": 1773097378234,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2090,6 +2090,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a77b1257e2f5ddf7dc00fed7bfa39c08c20012a3"
         },
         "date": 1773095860596,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2400,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10319,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19848,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "63d7d114e83676746963721c4e268f5983de8300",
+          "message": "Merge pull request #551 from wado-lang/claude/review-cm-resource-web-B2AJR\n\nSupport HTTP transmission futures in component model codegen",
+          "timestamp": "2026-03-10T08:00:39+09:00",
+          "tree_id": "dd5d7e88e2add2d7446837500af1a2e1e938d592",
+          "url": "https://github.com/wado-lang/wado/commit/63d7d114e83676746963721c4e268f5983de8300"
+        },
+        "date": 1773097378153,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
