@@ -1551,14 +1551,15 @@ fn import_http_types_for_service(
                     f.effect_name == "Fields" && f.wasi_func_name.starts_with("[method]");
                 let is_response_method =
                     f.effect_name == "Response" && f.wasi_func_name.starts_with("[method]");
-                // Only include Request methods that are actually used to avoid
+                // Only include Request methods/statics that are actually used to avoid
                 // referencing unsupported resource types (e.g. RequestOptions).
-                let is_used_request_method = f.effect_name == "Request"
-                    && f.wasi_func_name.starts_with("[method]")
+                let is_used_request_func = f.effect_name == "Request"
+                    && (f.wasi_func_name.starts_with("[method]")
+                        || f.wasi_func_name.starts_with("[static]"))
                     && project
                         .used_wasi_functions
                         .contains(&format!("{}::{}", f.effect_name, f.method_name));
-                is_fields_method || is_response_method || is_used_request_method
+                is_fields_method || is_response_method || is_used_request_func
             })
             .cloned()
             .collect();
@@ -1657,7 +1658,7 @@ fn import_http_types_for_service(
     );
     ctx.alias_comp_func("http-fields-constructor", "wasi:http/Fields::new");
 
-    // Alias Fields, Response, and used Request resource methods
+    // Alias Fields, Response, and used Request resource functions
     {
         let resource_funcs: Vec<(String, String)> = project
             .wasi_registry
@@ -1671,12 +1672,13 @@ fn import_http_types_for_service(
                             f.effect_name == "Fields" && f.wasi_func_name.starts_with("[method]");
                         let is_response_method =
                             f.effect_name == "Response" && f.wasi_func_name.starts_with("[method]");
-                        let is_used_request_method = f.effect_name == "Request"
-                            && f.wasi_func_name.starts_with("[method]")
+                        let is_used_request_func = f.effect_name == "Request"
+                            && (f.wasi_func_name.starts_with("[method]")
+                                || f.wasi_func_name.starts_with("[static]"))
                             && project
                                 .used_wasi_functions
                                 .contains(&format!("{}::{}", f.effect_name, f.method_name));
-                        is_fields_method || is_response_method || is_used_request_method
+                        is_fields_method || is_response_method || is_used_request_func
                     })
                     .map(|f| (f.wasi_func_name.clone(), f.local_alias_name()))
                     .collect()
