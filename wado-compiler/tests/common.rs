@@ -197,6 +197,7 @@ pub fn cli_engine() -> &'static Engine {
         config.wasm_component_model_async(true);
         config.wasm_component_model_async_builtins(true);
         config.wasm_component_model_async_stackful(true);
+        config.wasm_component_model_error_context(true);
         config.wasm_simd(true);
         config.wasm_wide_arithmetic(true);
         config.wasm_threads(true);
@@ -220,6 +221,7 @@ pub fn http_engine() -> &'static Engine {
         config.wasm_component_model_async(true);
         config.wasm_component_model_async_stackful(true);
         config.wasm_component_model_gc(true);
+        config.wasm_component_model_error_context(true);
         config.wasm_gc(true);
         config.wasm_function_references(true);
         config.wasm_wide_arithmetic(true);

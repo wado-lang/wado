@@ -1,0 +1,22 @@
+// ErrorContext creation and drop E2E test
+// Tests ErrorContext::new() and drop().
+
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // Create an error context with a message
+    let ec = ErrorContext::new("test error message");
+
+    // Drop the error context
+    ec.drop();
+
+    // Return 200 OK
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}
