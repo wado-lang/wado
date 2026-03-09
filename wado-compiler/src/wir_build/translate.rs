@@ -3538,9 +3538,7 @@ impl FunctionTranslator<'_, '_> {
             }
 
             // === ErrorContext instance methods ===
-            "error-context-debug-message" => {
-                panic!("not yet implemented: error-context-debug-message synthesis")
-            }
+            "error-context-debug-message" => Some(self.emit_error_context_debug_message(handle)),
             "error-context-drop" => Some(self.emit_drop_handle("error-context-drop", handle)),
 
             other => {
@@ -3563,8 +3561,8 @@ impl FunctionTranslator<'_, '_> {
             "future-new" => Some(self.emit_stream_or_future_new(true, result_type_id)),
             "waitable-set-new" => Some(self.emit_waitable_set_new()),
             "error-context-new" => {
-                let _ = args; // suppress unused warning
-                panic!("not yet implemented: error-context-new synthesis")
+                let msg_arg = self.translate_expr(&args[0].expr);
+                Some(self.emit_error_context_new(msg_arg))
             }
             _ => None,
         }
@@ -3676,6 +3674,258 @@ impl FunctionTranslator<'_, '_> {
             },
             WirInstr::LocalGet { name: handle_name },
         ])
+    }
+
+    /// Emit `error-context.new(message: String) -> i32` (handle).
+    ///
+    /// 1. Lower String to linear memory via `cm_lower_string` → packed i64 (ptr | len << 32)
+    /// 2. Call `error-context-new(ptr, len)` → handle (i32)
+    /// 3. Free linear memory
+    fn emit_error_context_new(&mut self, msg_arg: WirInstr) -> WirInstr {
+        let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
+            return WirInstr::Unreachable;
+        };
+        let Some(cm_lower_string_id) = self
+            .ctx
+            .func_map
+            .get("core:internal/cm_lower_string")
+            .cloned()
+        else {
+            return WirInstr::Unreachable;
+        };
+        let ec_new_id = self.ctx.ensure_canonical(
+            "error-context-new",
+            vec![WirType::I32, WirType::I32],
+            vec![WirType::I32],
+        );
+
+        self.local_counter += 1;
+        let suffix = self.local_counter;
+        let packed_name = format!("__ecn_packed_{suffix}");
+        let ptr_name = format!("__ecn_ptr_{suffix}");
+        let len_name = format!("__ecn_len_{suffix}");
+        let result_name = format!("__ecn_result_{suffix}");
+
+        let mut instrs = vec![];
+
+        // Declare locals
+        instrs.push(WirInstr::DeclareLocal {
+            name: packed_name.clone(),
+            ty: WirType::I64,
+        });
+        for name in [&ptr_name, &len_name, &result_name] {
+            instrs.push(WirInstr::DeclareLocal {
+                name: name.clone(),
+                ty: WirType::I32,
+            });
+        }
+
+        // packed = cm_lower_string(msg) → i64
+        instrs.push(WirInstr::LocalSet {
+            name: packed_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: cm_lower_string_id,
+                args: vec![msg_arg],
+            }),
+        });
+
+        // ptr = packed as i32
+        instrs.push(WirInstr::LocalSet {
+            name: ptr_name.clone(),
+            value: Box::new(WirInstr::I32WrapI64(Box::new(WirInstr::LocalGet {
+                name: packed_name.clone(),
+            }))),
+        });
+        // len = (packed >> 32) as i32
+        instrs.push(WirInstr::LocalSet {
+            name: len_name.clone(),
+            value: Box::new(WirInstr::I32WrapI64(Box::new(WirInstr::I64ShrU(
+                Box::new(WirInstr::LocalGet { name: packed_name }),
+                Box::new(WirInstr::I64Const(32)),
+            )))),
+        });
+
+        // result = error-context-new(ptr, len)
+        instrs.push(WirInstr::LocalSet {
+            name: result_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: ec_new_id,
+                args: vec![
+                    WirInstr::LocalGet {
+                        name: ptr_name.clone(),
+                    },
+                    WirInstr::LocalGet {
+                        name: len_name.clone(),
+                    },
+                ],
+            }),
+        });
+
+        // Free the lowered string buffer: realloc(ptr, len, 1, 0)
+        instrs.push(WirInstr::Drop(Box::new(WirInstr::Call {
+            func_id: realloc_id,
+            args: vec![
+                WirInstr::LocalGet { name: ptr_name },
+                WirInstr::LocalGet { name: len_name },
+                WirInstr::I32Const(1),
+                WirInstr::I32Const(0),
+            ],
+        })));
+
+        // Return the handle
+        instrs.push(WirInstr::LocalGet { name: result_name });
+
+        WirInstr::Seq(instrs)
+    }
+
+    /// Emit `error-context.debug-message(handle) -> String`.
+    ///
+    /// 1. Allocate 8 bytes for the output (ptr, len pair)
+    /// 2. Call `error-context-debug-message(handle, out_ptr)` → void
+    /// 3. Load ptr (i32) and len (i32) from `out_ptr`
+    /// 4. Call `memory_to_gc_string(ptr, len)` → String
+    /// 5. Free the string buffer and output buffer
+    fn emit_error_context_debug_message(&mut self, handle: WirInstr) -> WirInstr {
+        let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
+            return WirInstr::Unreachable;
+        };
+        let Some(memory_to_gc_string_id) = self
+            .ctx
+            .func_map
+            .get("core:internal/memory_to_gc_string")
+            .cloned()
+        else {
+            return WirInstr::Unreachable;
+        };
+        let ec_debug_msg_id = self.ctx.ensure_canonical(
+            "error-context-debug-message",
+            vec![WirType::I32, WirType::I32],
+            vec![],
+        );
+
+        self.local_counter += 1;
+        let suffix = self.local_counter;
+        let out_ptr_name = format!("__ecdm_outptr_{suffix}");
+        let str_ptr_name = format!("__ecdm_strptr_{suffix}");
+        let str_len_name = format!("__ecdm_strlen_{suffix}");
+
+        let mut instrs = vec![];
+
+        // Declare locals
+        for name in [&out_ptr_name, &str_ptr_name, &str_len_name] {
+            instrs.push(WirInstr::DeclareLocal {
+                name: name.clone(),
+                ty: WirType::I32,
+            });
+        }
+
+        // Allocate 8 bytes for the (ptr, len) output pair
+        instrs.push(WirInstr::LocalSet {
+            name: out_ptr_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: realloc_id.clone(),
+                args: vec![
+                    WirInstr::I32Const(0),
+                    WirInstr::I32Const(0),
+                    WirInstr::I32Const(4),
+                    WirInstr::I32Const(8),
+                ],
+            }),
+        });
+
+        // error-context-debug-message(handle, out_ptr) → void
+        instrs.push(WirInstr::Call {
+            func_id: ec_debug_msg_id,
+            args: vec![
+                handle,
+                WirInstr::LocalGet {
+                    name: out_ptr_name.clone(),
+                },
+            ],
+        });
+
+        // Load ptr = i32.load(out_ptr)
+        instrs.push(WirInstr::LocalSet {
+            name: str_ptr_name.clone(),
+            value: Box::new(WirInstr::I32Load {
+                offset: 0,
+                align: 2,
+                addr: Box::new(WirInstr::LocalGet {
+                    name: out_ptr_name.clone(),
+                }),
+            }),
+        });
+        // Load len = i32.load(out_ptr + 4)
+        instrs.push(WirInstr::LocalSet {
+            name: str_len_name.clone(),
+            value: Box::new(WirInstr::I32Load {
+                offset: 4,
+                align: 2,
+                addr: Box::new(WirInstr::LocalGet {
+                    name: out_ptr_name.clone(),
+                }),
+            }),
+        });
+
+        // Free output buffer: realloc(out_ptr, 8, 4, 0)
+        instrs.push(WirInstr::Drop(Box::new(WirInstr::Call {
+            func_id: realloc_id.clone(),
+            args: vec![
+                WirInstr::LocalGet { name: out_ptr_name },
+                WirInstr::I32Const(8),
+                WirInstr::I32Const(4),
+                WirInstr::I32Const(0),
+            ],
+        })));
+
+        // Resolve String WIR type for the result local
+        let string_struct_name =
+            crate::name::StructName::new(crate::name::ModuleSource::string(), "String".to_string());
+        let Some(string_wir_type_id) = self.ctx.struct_type_map.get(&string_struct_name).cloned()
+        else {
+            return WirInstr::Unreachable;
+        };
+
+        // result = memory_to_gc_string(str_ptr, str_len)
+        // Must call BEFORE freeing the string buffer.
+        self.local_counter += 1;
+        let result_name = format!("__ecdm_result_{}", self.local_counter);
+        instrs.push(WirInstr::DeclareLocal {
+            name: result_name.clone(),
+            ty: WirType::Ref {
+                type_id: string_wir_type_id,
+                nullable: false,
+            },
+        });
+        instrs.push(WirInstr::LocalSet {
+            name: result_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: memory_to_gc_string_id,
+                args: vec![
+                    WirInstr::LocalGet {
+                        name: str_ptr_name.clone(),
+                    },
+                    WirInstr::LocalGet {
+                        name: str_len_name.clone(),
+                    },
+                ],
+            }),
+        });
+
+        // Free string buffer: realloc(str_ptr, str_len, 1, 0)
+        instrs.push(WirInstr::Drop(Box::new(WirInstr::Call {
+            func_id: realloc_id,
+            args: vec![
+                WirInstr::LocalGet { name: str_ptr_name },
+                WirInstr::LocalGet { name: str_len_name },
+                WirInstr::I32Const(1),
+                WirInstr::I32Const(0),
+            ],
+        })));
+
+        instrs.push(WirInstr::LocalGet { name: result_name });
+
+        WirInstr::Seq(instrs)
     }
 
     /// Emit `waitable-set-wait(ws_handle)` → `WaitEvent` struct.
@@ -4161,7 +4411,47 @@ impl FunctionTranslator<'_, '_> {
             else_body: None,
         });
 
-        // Free payload buffer
+        // status = result & 0xF
+        // COMPLETED (0) → Some(lifted_value), DROPPED (1) → None
+        //
+        // For COMPLETED, lift T from the CM payload buffer at ptr before freeing.
+        // Currently supports: T = Result<Option<Trailers>, ErrorCode>
+        // (the only type used with Future::read in practice).
+        let option_wir_type = self
+            .ctx
+            .type_id_to_wir_type(self.type_table, result_type_id);
+
+        // Build the Some payload by lifting T from linear memory.
+        let some_payload = self.lift_future_read_payload(result_type_id, &ptr_name);
+        let some_variant =
+            self.build_variant_case_wir(result_type_id, 0, "Some", Some(some_payload));
+        let none_variant = self.build_variant_case_wir(result_type_id, 1, "None", None);
+
+        // Save result to a local so we can free the buffer afterward.
+        self.local_counter += 1;
+        let option_result_name = format!("__fr_opt_{}", self.local_counter);
+        instrs.push(WirInstr::DeclareLocal {
+            name: option_result_name.clone(),
+            ty: option_wir_type.clone(),
+        });
+
+        // option_result = if (result & 0xF) == 0 { Some(lifted_value) } else { None }
+        instrs.push(WirInstr::LocalSet {
+            name: option_result_name.clone(),
+            value: Box::new(WirInstr::If {
+                condition: Box::new(WirInstr::I32Eqz(Box::new(WirInstr::I32And(
+                    Box::new(WirInstr::LocalGet {
+                        name: result_name.clone(),
+                    }),
+                    Box::new(WirInstr::I32Const(0xF)),
+                )))),
+                result: Some(option_wir_type),
+                then_body: vec![some_variant],
+                else_body: Some(vec![none_variant]),
+            }),
+        });
+
+        // Free payload buffer (after reading from it in the if-then branch)
         instrs.push(WirInstr::Drop(Box::new(WirInstr::Call {
             func_id: realloc_id,
             args: vec![
@@ -4174,32 +4464,124 @@ impl FunctionTranslator<'_, '_> {
             ],
         })));
 
-        // status = result & 0xF
-        // COMPLETED (0) → Some(value), DROPPED (1) → None
-        // For now, we return None for both since we can't yet lift arbitrary T from memory.
-        // TODO: implement T lifting from CM linear memory payload.
-        let option_wir_type = self
-            .ctx
-            .type_id_to_wir_type(self.type_table, result_type_id);
-
-        let some_variant =
-            self.build_variant_case_wir(result_type_id, 0, "Some", Some(WirInstr::Nop));
-        let none_variant = self.build_variant_case_wir(result_type_id, 1, "None", None);
-
-        // if (result & 0xF) == 0 { Some(unit) } else { None }
-        instrs.push(WirInstr::If {
-            condition: Box::new(WirInstr::I32Eqz(Box::new(WirInstr::I32And(
-                Box::new(WirInstr::LocalGet {
-                    name: result_name.clone(),
-                }),
-                Box::new(WirInstr::I32Const(0xF)),
-            )))),
-            result: Some(option_wir_type),
-            then_body: vec![some_variant],
-            else_body: Some(vec![none_variant]),
+        instrs.push(WirInstr::LocalGet {
+            name: option_result_name,
         });
 
         WirInstr::Seq(instrs)
+    }
+
+    /// Lift the T value from the CM payload buffer for `Future::read`.
+    ///
+    /// `option_type_id` is `Option<T>`. We extract T and lift it from memory at `ptr_name`.
+    ///
+    /// Currently supports:
+    /// - `T = Result<Option<own<resource>>, ErrorCode>` — the trailers pattern
+    ///   CM layout: [`result_disc:i32`, `option_disc:i32`, handle:i32]
+    ///   Ok(None) = [0, 0, 0], Ok(Some(h)) = [0, 1, h]
+    ///   Err(...) → trap (not yet implemented)
+    fn lift_future_read_payload(&mut self, option_type_id: TypeId, ptr_name: &str) -> WirInstr {
+        // option_type_id = Option<T>; extract T
+        let Some(inner_t) = self.type_table.as_option(option_type_id) else {
+            return WirInstr::Unreachable;
+        };
+
+        // Check if T is Result<Ok, Err>
+        if let ResolvedType::GenericInstance {
+            name, type_args, ..
+        } = self.type_table.get(inner_t)
+            && name == "Result"
+            && type_args.len() == 2
+        {
+            let ok_type_id = type_args[0];
+
+            // Check if Ok type is Option<R> (the trailers pattern)
+            if let Some(inner_resource_type_id) = self.type_table.as_option(ok_type_id) {
+                return self.lift_result_option_resource(
+                    inner_t,
+                    ok_type_id,
+                    inner_resource_type_id,
+                    ptr_name,
+                );
+            }
+        }
+
+        // Fallback: unsupported T type — emit unreachable
+        // (will trap at runtime if this code path is reached)
+        WirInstr::Unreachable
+    }
+
+    /// Lift `Result<Option<R>, E>` from CM linear memory.
+    ///
+    /// CM layout at ptr:
+    /// - offset 0: result discriminant (i32) — 0=Ok, 1=Err
+    /// - offset 4: option discriminant (i32) — 0=None, 1=Some (when Ok)
+    /// - offset 8: resource handle (i32) (when Ok+Some)
+    ///
+    /// Returns the constructed `Result` variant value.
+    fn lift_result_option_resource(
+        &mut self,
+        result_type_id: TypeId,
+        option_type_id: TypeId,
+        _resource_type_id: TypeId,
+        ptr_name: &str,
+    ) -> WirInstr {
+        let ptr = || WirInstr::LocalGet {
+            name: ptr_name.to_string(),
+        };
+
+        // Read result discriminant at offset 0
+        let result_disc = WirInstr::I32Load {
+            offset: 0,
+            align: 2,
+            addr: Box::new(ptr()),
+        };
+
+        // Build Ok branch: lift Option<R> from offset 4
+        let option_disc = WirInstr::I32Load {
+            offset: 4,
+            align: 2,
+            addr: Box::new(ptr()),
+        };
+
+        // Build Option::None (for the resource)
+        let inner_none = self.build_variant_case_wir(option_type_id, 1, "None", None);
+
+        // Build Option::Some(handle) — read handle at offset 8
+        let handle_val = WirInstr::I32Load {
+            offset: 8,
+            align: 2,
+            addr: Box::new(ptr()),
+        };
+        let inner_some = self.build_variant_case_wir(option_type_id, 0, "Some", Some(handle_val));
+
+        // Option<R> = if option_disc == 0 { None } else { Some(handle) }
+        let option_wir_type = self
+            .ctx
+            .type_id_to_wir_type(self.type_table, option_type_id);
+        let lifted_option = WirInstr::If {
+            condition: Box::new(WirInstr::I32Eqz(Box::new(option_disc))),
+            result: Some(option_wir_type),
+            then_body: vec![inner_none],
+            else_body: Some(vec![inner_some]),
+        };
+
+        // Result::Ok(lifted_option)
+        let result_ok = self.build_variant_case_wir(result_type_id, 0, "Ok", Some(lifted_option));
+
+        // Result::Err — trap for now (ErrorCode lifting not yet implemented)
+        let result_err = WirInstr::Unreachable;
+
+        // Result = if result_disc == 0 { Ok(...) } else { Err (trap) }
+        let result_wir_type = self
+            .ctx
+            .type_id_to_wir_type(self.type_table, result_type_id);
+        WirInstr::If {
+            condition: Box::new(WirInstr::I32Eqz(Box::new(result_disc))),
+            result: Some(result_wir_type),
+            then_body: vec![result_ok],
+            else_body: Some(vec![result_err]),
+        }
     }
 
     /// Emit WIR to write `Ok(None)` (8 zero bytes) into a `FutureWritable` handle,

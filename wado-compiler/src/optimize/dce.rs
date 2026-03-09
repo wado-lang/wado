@@ -594,16 +594,36 @@ fn analyze_expr(
             {
                 analysis.canonical_methods.insert(canonical_name.clone());
 
-                // WIR synthesis for stream-write calls cm_lower_array_u8 at WIR level,
-                // which is not visible in the TIR call graph. Add the dependency edge
-                // here so DCE discovers it through normal reachability analysis.
-                if canonical_name == "stream-write" {
-                    analysis
-                        .callees
-                        .insert(FunctionId::Free(FreeFunctionName::from_strs(
-                            &["core", "internal"],
-                            "cm_lower_array_u8",
-                        )));
+                // WIR synthesis for certain canonical methods calls internal functions
+                // at WIR level, which are not visible in the TIR call graph. Add
+                // dependency edges here so DCE discovers them through normal
+                // reachability analysis.
+                match canonical_name.as_str() {
+                    "stream-write" => {
+                        analysis
+                            .callees
+                            .insert(FunctionId::Free(FreeFunctionName::from_strs(
+                                &["core", "internal"],
+                                "cm_lower_array_u8",
+                            )));
+                    }
+                    "error-context-new" => {
+                        analysis
+                            .callees
+                            .insert(FunctionId::Free(FreeFunctionName::from_strs(
+                                &["core", "internal"],
+                                "cm_lower_string",
+                            )));
+                    }
+                    "error-context-debug-message" => {
+                        analysis
+                            .callees
+                            .insert(FunctionId::Free(FreeFunctionName::from_strs(
+                                &["core", "internal"],
+                                "memory_to_gc_string",
+                            )));
+                    }
+                    _ => {}
                 }
             }
 

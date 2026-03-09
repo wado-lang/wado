@@ -569,7 +569,9 @@ __DATA__
 -
   16. [x] Update prelude exports (WaitableSet/Subtask/ErrorContext)
 -
-  17. [ ] Add e2e tests for WaitableSet/Subtask
+  17. [x] Add e2e tests for WaitableSet/Subtask/ErrorContext
+          — `cm-waitable-set-poll.wado`, `cm-error-context.wado` pass;
+          `cm-future-read.wado` remains TODO (blocked by TaskReturn synthesis)
 -
   18. [x] Implement `emit_future_read`, `emit_waitable_set_wait`, `emit_waitable_set_poll`,
           `emit_error_context_*` synthesis functions (stubs — panic as "not yet implemented")
@@ -588,8 +590,9 @@ __DATA__
 -
   22. [x] Implement `emit_waitable_set_poll` synthesis (Option\<WaitEvent\> lowering)
 -
-  23. [~] Implement `emit_future_read` synthesis (waitable-set wait loop + Option\<T\> lifting)
-      — wait loop + status check done; full CM payload lifting from linear memory TODO
+  23. [x] Implement `emit_future_read` synthesis (waitable-set wait loop + Option\<T\> lifting)
+          — wait loop + status check + payload lifting for `Result<Option<R>, E>` pattern done;
+          e2e test blocked by `TaskReturn` synthesis issue (TODO test remains)
 -
   24. [x] Implement cancel canonicals as void calls (`future-cancel-read`, `future-cancel-write`,
           `stream-cancel-read`, `stream-cancel-write`, `subtask-cancel`)
