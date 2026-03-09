@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773012544452,
+  "lastUpdate": 1773016341748,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1778,6 +1778,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b7aa0f500d2e34337c13b4ed29a4ab95f1f5ff6c"
         },
         "date": 1773012544284,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2302,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10221,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19738,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "41ace60c89d999cc4c9686ceb496ebe9ec1bbcb1",
+          "message": "Merge pull request #543 from wado-lang/claude/organize-wado-dump-TcF5E\n\nRefactor dump command options and remove golden fixture files",
+          "timestamp": "2026-03-09T09:29:50+09:00",
+          "tree_id": "c4958c7d509263ce817bf46f3faf7aa63e686397",
+          "url": "https://github.com/wado-lang/wado/commit/41ace60c89d999cc4c9686ceb496ebe9ec1bbcb1"
+        },
+        "date": 1773016341538,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
