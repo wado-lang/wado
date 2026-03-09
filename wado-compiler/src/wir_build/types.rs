@@ -281,12 +281,7 @@ fn register_struct(
             type_args: info
                 .type_args
                 .iter()
-                .map(|&ta| {
-                    // TypeIds may have been removed by DCE; use fallback
-                    type_table
-                        .try_mangle_type_name(ta)
-                        .unwrap_or_else(|| format!("?{}", ta.0))
-                })
+                .map(|&ta| type_table.mangle_type_name(ta))
                 .collect(),
         });
 

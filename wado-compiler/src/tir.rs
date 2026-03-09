@@ -487,19 +487,6 @@ impl TypeTable {
         self.types.iter()
     }
 
-    /// Try to get a type by ID, returning `None` if the type doesn't exist.
-    /// Useful when types may have been removed by DCE.
-    pub fn try_get(&self, id: TypeId) -> Option<&ResolvedType> {
-        self.types.get(&id)
-    }
-
-    /// Try to mangle a type name, returning `None` if the type doesn't exist.
-    /// Useful when types may have been removed by DCE.
-    pub fn try_mangle_type_name(&self, id: TypeId) -> Option<String> {
-        self.try_get(id)?;
-        Some(self.mangle_type_name(id))
-    }
-
     pub fn is_integer(&self, id: TypeId) -> bool {
         // Follow newtype chain to get ultimate base type
         let base_id = self.get_ultimate_base_type(id);
@@ -546,25 +533,17 @@ impl TypeTable {
         self.types.keys().copied()
     }
 
-    /// Retain only types that satisfy the predicate.
-    /// Used by DCE to remove unreachable types.
-    pub fn retain<F>(&mut self, mut f: F)
-    where
-        F: FnMut(TypeId, &ResolvedType) -> bool,
-    {
-        // Collect types to remove
-        let to_remove: Vec<TypeId> = self
-            .types
-            .iter()
-            .filter(|(id, ty)| !f(**id, ty))
-            .map(|(id, _)| *id)
-            .collect();
-
-        // Remove from both maps
-        for id in to_remove {
-            if let Some(ty) = self.types.shift_remove(&id) {
-                self.intern_map.shift_remove(&ty);
-            }
+    /// Remove all type entries whose `TypeId` is not in `keep`.
+    ///
+    /// This physically removes entries from the backing `IndexMap`s so that
+    /// subsequent iterations (e.g. WIR type registration) no longer see them.
+    /// The intern map is rebuilt to stay consistent.
+    pub fn retain(&mut self, keep: &IndexSet<TypeId>) {
+        self.types.retain(|id, _| keep.contains(id));
+        // Rebuild intern map from the surviving entries.
+        self.intern_map.clear();
+        for (&id, ty) in &self.types {
+            self.intern_map.insert(ty.clone(), id);
         }
     }
 
@@ -1023,16 +1002,6 @@ impl TypeTable {
                 format!("{}<{}>", name, arg_names.join(", "))
             }
             ResolvedType::Newtype { name, .. } => name.clone(),
-        }
-    }
-
-    /// Get a human-readable name for a type, returning a fallback for missing `TypeIds`.
-    /// Useful in diagnostic/unparse contexts where types may not be in the local `TypeTable`.
-    pub fn try_type_name(&self, id: TypeId) -> String {
-        if self.try_get(id).is_some() {
-            self.type_name(id)
-        } else {
-            format!("<TypeId({})>", id.0)
         }
     }
 

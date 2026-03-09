@@ -1,4 +1,4 @@
-=== TIR (Resolve, unparsed) ===
+=== TIR ===
 // --- Module: core:allocator ---
 global mut heap_offset: i32 = 8;
 
@@ -33,470 +33,76 @@ export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i
 
 
 // --- Module: core:builtin ---
-fn task_return(result: i32);
-
-fn i32_as_char(value: i32) -> char;
-
 fn i32_and(a: i32, b: i32) -> i32;
-
-fn i32_eqz(a: i32) -> i32;
-
-fn select<T>(cond: bool, if_true: <TypeId(20)>, if_false: <TypeId(20)>) -> <TypeId(20)>;
-
-fn array_len(arr: builtin::array<u8>) -> i32;
-
-fn array_get_u8(arr: builtin::array<u8>, idx: i32) -> u8;
-
-fn array_set_u8(arr: builtin::array<u8>, idx: i32, value: u8);
-
-fn array_new<T>(len: i32) -> <TypeId(27)>;
-
-fn array_get<T>(arr: <TypeId(27)>, idx: i32) -> <TypeId(20)>;
-
-fn array_set<T>(arr: <TypeId(27)>, idx: i32, value: <TypeId(20)>);
-
-fn array_copy<T>(dst: <TypeId(27)>, dst_offset: i32, src: <TypeId(27)>, src_offset: i32, len: i32);
-
-fn array_fill<T>(arr: <TypeId(27)>, offset: i32, value: <TypeId(20)>, len: i32);
-
-fn i32_load(addr: i32) -> i32;
-
-fn i32_store(addr: i32, value: i32);
-
-fn i64_load(addr: i32) -> i64;
-
-fn i64_store(addr: i32, value: i64);
-
-fn f32_load(addr: i32) -> f32;
-
-fn f32_store(addr: i32, value: f32);
-
-fn f64_load(addr: i32) -> f64;
-
-fn f64_store(addr: i32, value: f64);
-
-fn i32_load8_u(addr: i32) -> u8;
-
-fn i32_load16_u(addr: i32) -> u16;
-
-fn i32_store8(addr: i32, value: u8);
-
-fn i32_store16(addr: i32, value: u16);
-
-fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
 
 fn memory_grow(delta: i32) -> i32;
 
 fn memory_size() -> i32;
 
-fn f64_sin(x: f64) -> f64;
-
-fn f64_cos(x: f64) -> f64;
-
-fn f64_tan(x: f64) -> f64;
-
-fn f64_asin(x: f64) -> f64;
-
-fn f64_acos(x: f64) -> f64;
-
-fn f64_atan(x: f64) -> f64;
-
-fn f64_atan2(y: f64, x: f64) -> f64;
-
-fn f64_sinh(x: f64) -> f64;
-
-fn f64_cosh(x: f64) -> f64;
-
-fn f64_tanh(x: f64) -> f64;
-
-fn f64_asinh(x: f64) -> f64;
-
-fn f64_acosh(x: f64) -> f64;
-
-fn f64_atanh(x: f64) -> f64;
-
-fn f64_exp(x: f64) -> f64;
-
-fn f64_exp2(x: f64) -> f64;
-
-fn f64_expm1(x: f64) -> f64;
-
-fn f64_ln(x: f64) -> f64;
-
-fn f64_log2(x: f64) -> f64;
-
-fn f64_log10(x: f64) -> f64;
-
-fn f64_ln1p(x: f64) -> f64;
-
-fn f64_pow(x: f64, y: f64) -> f64;
-
-fn f64_cbrt(x: f64) -> f64;
-
-fn f64_hypot(x: f64, y: f64) -> f64;
-
-fn f64_fmod(x: f64, y: f64) -> f64;
-
-fn f32_sin(x: f32) -> f32;
-
-fn f32_cos(x: f32) -> f32;
-
-fn f32_tan(x: f32) -> f32;
-
-fn f32_asin(x: f32) -> f32;
-
-fn f32_acos(x: f32) -> f32;
-
-fn f32_atan(x: f32) -> f32;
-
-fn f32_atan2(y: f32, x: f32) -> f32;
-
-fn f32_sinh(x: f32) -> f32;
-
-fn f32_cosh(x: f32) -> f32;
-
-fn f32_tanh(x: f32) -> f32;
-
-fn f32_asinh(x: f32) -> f32;
-
-fn f32_acosh(x: f32) -> f32;
-
-fn f32_atanh(x: f32) -> f32;
-
-fn f32_exp(x: f32) -> f32;
-
-fn f32_exp2(x: f32) -> f32;
-
-fn f32_expm1(x: f32) -> f32;
-
-fn f32_ln(x: f32) -> f32;
-
-fn f32_log2(x: f32) -> f32;
-
-fn f32_log10(x: f32) -> f32;
-
-fn f32_ln1p(x: f32) -> f32;
-
-fn f32_pow(x: f32, y: f32) -> f32;
-
-fn f32_cbrt(x: f32) -> f32;
-
-fn f32_hypot(x: f32, y: f32) -> f32;
-
-fn f32_fmod(x: f32, y: f32) -> f32;
-
-fn i64_add128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> <TypeId(30)>;
-
-fn i64_sub128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> <TypeId(30)>;
-
-fn i64_mul_wide_u(a: i64, b: i64) -> <TypeId(30)>;
-
-fn i64_mul_wide_s(a: i64, b: i64) -> <TypeId(30)>;
-
 fn i32_clz(x: i32) -> i32;
-
-fn i64_clz(x: i64) -> i64;
-
-fn i64_reinterpret_f64(f: f64) -> i64;
-
-fn f64_reinterpret_i64(i: i64) -> f64;
-
-fn i32_reinterpret_f32(f: f32) -> i32;
-
-fn f32_reinterpret_i32(i: i32) -> f32;
-
-fn unreachable() -> !;
-
-fn call_indirect_stdout_write_via_stream(rx: i32) -> i32;
-
-fn call_indirect_stderr_write_via_stream(rx: i32) -> i32;
-
-fn f32_abs(x: f32) -> f32;
-
-fn f64_abs(x: f64) -> f64;
-
-fn f32_ceil(x: f32) -> f32;
-
-fn f64_ceil(x: f64) -> f64;
-
-fn f32_floor(x: f32) -> f32;
-
-fn f64_floor(x: f64) -> f64;
-
-fn f32_trunc(x: f32) -> f32;
-
-fn f64_trunc(x: f64) -> f64;
-
-fn f32_nearest(x: f32) -> f32;
-
-fn f64_nearest(x: f64) -> f64;
-
-fn f32_sqrt(x: f32) -> f32;
-
-fn f64_sqrt(x: f64) -> f64;
-
-fn f32_min(a: f32, b: f32) -> f32;
-
-fn f64_min(a: f64, b: f64) -> f64;
-
-fn f32_max(a: f32, b: f32) -> f32;
-
-fn f64_max(a: f64, b: f64) -> f64;
-
-fn f32_copysign(magnitude: f32, sign: f32) -> f32;
-
-fn f64_copysign(magnitude: f64, sign: f64) -> f64;
-
-fn inspect<T>(value: <TypeId(20)>, fmt: <TypeId(33)>);
-
-fn display<T>(value: <TypeId(20)>, fmt: <TypeId(33)>);
 
 
 // --- Module: core:cli ---
-pub fn write_to_stream(tx: <TypeId(36)>, message: <TypeId(19)>, add_newline: bool) {
-    let len: i32 = message.String::len();
-    let alloc_size: i32 = if add_newline {
-        (len + 1);
-    } else {
-        len;
-    };
-    let mut arr: <TypeId(38)> = "core::cli::Array<u8>::with_capacity"(alloc_size);
-    __for_of_0: {
-        let mut __iter_0: <TypeId(39)> = message.String::bytes()."StrUtf8ByteIter^IntoIterator::into_iter"();
-        loop {
-            let __pattern_temp_0: <TypeId(42)> = __iter_0."StrUtf8ByteIter^Iterator::next"();
-            if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                let b: u8 = __variant_payload(__pattern_temp_0, case=0);
-                arr."Array<u8>::append"(b);
-            } else {
-                break;
-            }
-        }
-    }
-    if add_newline {
-        arr."Array<u8>::append"('\n' as u8);
-    }
-    tx."StreamWritable<u8>::write"(arr);
-    tx."StreamWritable<u8>::drop"();
-}
-
-pub fn println(message: <TypeId(19)>) with Stdout {
-    let __pattern_temp_0: <TypeId(50)> = "core::prelude/types.wado::Stream<u8>::new"();
-    let rx: <TypeId(46)> = __pattern_temp_0.0;
-    let tx: <TypeId(36)> = __pattern_temp_0.1;
-    let subtask: i32 = __cm_adapter__Stdout_write_via_stream(rx as i32);
-    core::cli::write_to_stream(tx, message, true);
-    core::internal::wait_for_subtask(subtask);
-}
-
-pub fn eprintln(message: <TypeId(19)>) with Stderr {
-    let __pattern_temp_0: <TypeId(50)> = "core::prelude/types.wado::Stream<u8>::new"();
-    let rx: <TypeId(46)> = __pattern_temp_0.0;
-    let tx: <TypeId(36)> = __pattern_temp_0.1;
-    let subtask: i32 = __cm_adapter__Stderr_write_via_stream(rx as i32);
-    core::cli::write_to_stream(tx, message, true);
-    core::internal::wait_for_subtask(subtask);
-}
-
-pub fn print(message: <TypeId(19)>) with Stdout {
-    let __pattern_temp_0: <TypeId(50)> = "core::prelude/types.wado::Stream<u8>::new"();
-    let rx: <TypeId(46)> = __pattern_temp_0.0;
-    let tx: <TypeId(36)> = __pattern_temp_0.1;
-    let subtask: i32 = __cm_adapter__Stdout_write_via_stream(rx as i32);
-    core::cli::write_to_stream(tx, message, false);
-    core::internal::wait_for_subtask(subtask);
-}
-
-pub fn eprint(message: <TypeId(19)>) with Stderr {
-    let __pattern_temp_0: <TypeId(50)> = "core::prelude/types.wado::Stream<u8>::new"();
-    let rx: <TypeId(46)> = __pattern_temp_0.0;
-    let tx: <TypeId(36)> = __pattern_temp_0.1;
-    let subtask: i32 = __cm_adapter__Stderr_write_via_stream(rx as i32);
-    core::cli::write_to_stream(tx, message, false);
-    core::internal::wait_for_subtask(subtask);
-}
-
-pub fn print_bytes(data: <TypeId(38)>) with Stdout {
-    let __pattern_temp_0: <TypeId(50)> = "core::prelude/types.wado::Stream<u8>::new"();
-    let rx: <TypeId(46)> = __pattern_temp_0.0;
-    let tx: <TypeId(36)> = __pattern_temp_0.1;
-    let subtask: i32 = __cm_adapter__Stdout_write_via_stream(rx as i32);
-    tx."StreamWritable<u8>::write"(data);
-    tx."StreamWritable<u8>::drop"();
-    core::internal::wait_for_subtask(subtask);
-}
-
-pub fn env(name: <TypeId(19)>) -> <TypeId(34)> with Environment;
-
-pub fn args() -> <TypeId(35)> with Environment {
-    return __cm_adapter__Environment_get_arguments();
-}
-
-pub fn cwd() -> <TypeId(34)> with Environment {
-    return __cm_adapter__Environment_get_initial_cwd();
-}
-
-pub fn exit_success() -> ! with Exit {
-    __cm_adapter__Exit_exit(core::cli::Ok(()));
-}
-
-pub fn exit_error() -> ! with Exit {
-    __cm_adapter__Exit_exit(core::cli::Err(()));
-}
-
-pub fn exit(code: u8) -> ! with Exit {
-    __cm_adapter__Exit_exit_with_code(code);
-}
-
 
 // --- Module: core:internal ---
-pub fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
-    let arr: builtin::array<u8> = "core::internal::array_new<u8>"(len);
-    __for_0: {
-        let mut i: i32 = 0;
-        loop {
-            if !(i < len) {
-                break __for_0;
-            }
-            __for_0_body: {
-                core::builtin::array_set_u8(arr, i, core::builtin::i32_load8_u((ptr + i)) as u8);
-            }
-            i = (i + 1);
-        }
-    }
-    return arr;
-}
-
-pub fn memory_to_gc_string(ptr: i32, len: i32) -> <TypeId(19)> {
-    let arr: builtin::array<u8> = core::internal::memory_to_gc_array(ptr, len);
-    return "core::prelude/string.wado::String::internal_from_utf8_raw"(arr, len);
-}
-
-pub fn gc_array_to_memory(arr: builtin::array<u8>, ptr: i32, len: i32) {
-    __for_1: {
-        let mut i: i32 = 0;
-        loop {
-            if !(i < len) {
-                break __for_1;
-            }
-            __for_1_body: {
-                core::builtin::i32_store8((ptr + i), core::builtin::array_get_u8(arr, i));
-            }
-            i = (i + 1);
-        }
-    }
-}
-
-pub fn write_string_to_stream(tx: <TypeId(36)>, message: <TypeId(19)>, add_newline: bool) {
-    let len: i32 = message.String::len();
-    let alloc_size: i32 = if add_newline {
-        (len + 1);
-    } else {
-        len;
-    };
-    let mut arr: <TypeId(38)> = "core::internal::Array<u8>::with_capacity"(alloc_size);
-    __for_of_2: {
-        let mut __iter_2: <TypeId(39)> = message.String::bytes()."StrUtf8ByteIter^IntoIterator::into_iter"();
-        loop {
-            let __pattern_temp_0: <TypeId(42)> = __iter_2."StrUtf8ByteIter^Iterator::next"();
-            if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                let b: u8 = __variant_payload(__pattern_temp_0, case=0);
-                arr."Array<u8>::append"(b);
-            } else {
-                break;
-            }
-        }
-    }
-    if add_newline {
-        arr."Array<u8>::append"('\n' as u8);
-    }
-    tx."StreamWritable<u8>::write"(arr);
-    tx."StreamWritable<u8>::drop"();
-}
-
-pub fn wait_for_subtask(packed: i32) {
-    let handle: i32 = (packed >> 4);
-    if (handle != 0) {
-        let subtask: <TypeId(53)> = handle as <TypeId(53)>;
-        let ws: <TypeId(54)> = "core::prelude/types.wado::WaitableSet::new"();
-        subtask.Subtask::join(&ws);
-        ws.WaitableSet::wait();
-        subtask.Subtask::drop();
-        ws.WaitableSet::drop();
-    }
-}
-
-pub fn log_stdout(message: <TypeId(19)>) {
-    let __pattern_temp_0: <TypeId(50)> = "core::prelude/types.wado::Stream<u8>::new"();
-    let rx: <TypeId(46)> = __pattern_temp_0.0;
-    let tx: <TypeId(36)> = __pattern_temp_0.1;
-    let subtask: i32 = core::builtin::call_indirect_stdout_write_via_stream(rx as i32);
-    core::internal::write_string_to_stream(tx, message, true);
-    core::internal::wait_for_subtask(subtask);
-}
-
-pub fn log_stderr(message: <TypeId(19)>) {
-    let __pattern_temp_0: <TypeId(50)> = "core::prelude/types.wado::Stream<u8>::new"();
-    let rx: <TypeId(46)> = __pattern_temp_0.0;
-    let tx: <TypeId(36)> = __pattern_temp_0.1;
-    let subtask: i32 = core::builtin::call_indirect_stderr_write_via_stream(rx as i32);
-    core::internal::write_string_to_stream(tx, message, true);
-    core::internal::wait_for_subtask(subtask);
-}
-
-pub fn panic(message: <TypeId(19)>) -> ! {
-    core::internal::log_stderr(message);
-    core::builtin::unreachable();
-}
-
-pub fn unreachable() -> ! {
-    core::builtin::unreachable();
-}
-
-pub fn cm_lower_string(s: <TypeId(19)>) -> i64 {
-    let len: i32 = s.String::len();
-    let bytes: builtin::array<u8> = s.String::internal_raw_bytes();
-    let ptr: i32 = core::builtin::realloc(0, 0, 1, len);
-    core::internal::gc_array_to_memory(bytes, ptr, len);
-    return (ptr as i64 | (len as i64 << 32));
-}
-
-pub fn cm_lower_list_u8(data: builtin::array<u8>, len: i32) -> i64 {
-    let ptr: i32 = core::builtin::realloc(0, 0, 1, len);
-    core::internal::gc_array_to_memory(data, ptr, len);
-    return (ptr as i64 | (len as i64 << 32));
-}
-
-pub fn cm_lower_array_u8(arr: <TypeId(38)>) -> i64 {
-    let data: builtin::array<u8> = arr."Array<u8>::internal_raw_data"();
-    let len: i32 = arr."Array<u8>::len"();
-    return core::internal::cm_lower_list_u8(data, len);
-}
-
-pub fn write_escaped_string(s: <TypeId(19)>, f: <TypeId(33)>) {
-    __for_of_3: {
-        let mut __iter_3: <TypeId(59)> = s.String::chars()."StrCharIter^IntoIterator::into_iter"();
-        loop {
-            let __pattern_temp_0: <TypeId(62)> = __iter_3."StrCharIter^Iterator::next"();
-            if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                let c: char = __variant_payload(__pattern_temp_0, case=0);
-                match c {
-                    '"' => f.Formatter::write_str("\\\""),
-                    '\' => f.Formatter::write_str("\\\\"),
-                    '
-' => f.Formatter::write_str("\\n"),
-                    '	' => f.Formatter::write_str("\\t"),
-                    '' => f.Formatter::write_str("\\r"),
-                    _ => f.Formatter::write_char(c),
-                };
-            } else {
-                break;
-            }
-        }
-    }
-}
-
 
 // --- Module: core:prelude ---
 
 // --- Module: core:prelude/array.wado ---
+
+// --- Module: core:prelude/fpfmt.wado ---
+
+// --- Module: core:prelude/int128.wado ---
+
+// --- Module: core:prelude/primitive.wado ---
+
+// --- Module: core:prelude/string.wado ---
+
+// --- Module: core:prelude/traits.wado ---
+
+// --- Module: core:prelude/types.wado ---
+
+// --- Module: wasi:cli ---
+
+// --- Module: wado-compiler/tests/format.fixtures/mess.dirty.wado ---
+// Imports
+// mem::realloc
+// wasi::task-return
+
+global mut __modules_initialized: bool = false;
+
+struct __Closure_0 {
+}
+
+struct __Closure_1 {
+}
+
+flags Access {
+    Read,  // 0x1
+    Write,  // 0x2
+    Execute,  // 0x4
+}
+
+export fn run() {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        __modules_initialized = true;
+    };
+}
+
+export fn __cm_export__run() {
+    __inline___initialize_modules_1: {
+        if __modules_initialized {
+            break __inline___initialize_modules_1;
+        }
+        __modules_initialized = true;
+    };
+    cm_raw_call task-return(0);
+}
+
+
+// --- Module: core:prelude/format.wado ---
+
+

@@ -441,10 +441,10 @@ fn dump_basic() {
     let parser = Parser::from_args(&["input.wado"]);
     let opts = wado_cli::dump::parse_args(parser).unwrap();
     assert_eq!(opts.inputs, vec!["input.wado"]);
-    // Default: show all phases
-    assert!(opts.show_tokens);
-    assert!(opts.show_ast);
-    assert!(opts.show_tir);
+    // Default: show WIR only
+    assert!(!opts.show_tokens);
+    assert!(!opts.show_ast);
+    assert!(!opts.show_tir);
     assert!(opts.show_wir);
 }
 
@@ -458,24 +458,24 @@ fn dump_single_phase() {
 }
 
 #[test]
-fn dump_unparse() {
-    let parser = Parser::from_args(&["--ast", "--unparse", "input.wado"]);
+fn dump_inspect() {
+    let parser = Parser::from_args(&["--ast", "--inspect", "input.wado"]);
     let opts = wado_cli::dump::parse_args(parser).unwrap();
     assert!(opts.show_ast);
-    assert!(opts.unparse);
+    assert!(opts.inspect);
 }
 
 #[test]
 fn dump_opt_level() {
-    let parser = Parser::from_args(&["--optimize", "-O3", "input.wado"]);
+    let parser = Parser::from_args(&["--tir", "-O3", "input.wado"]);
     let opts = wado_cli::dump::parse_args(parser).unwrap();
-    assert!(opts.show_optimize);
+    assert!(opts.show_tir);
     assert_eq!(opts.opt_level, wado_compiler::OptLevel::O3);
 }
 
 #[test]
 fn dump_output_template() {
-    let parser = Parser::from_args(&["--optimize", "-o", "out/{name}.wado", "input.wado"]);
+    let parser = Parser::from_args(&["--tir", "-o", "out/{name}.wado", "input.wado"]);
     let opts = wado_cli::dump::parse_args(parser).unwrap();
     assert_eq!(opts.output_template, Some("out/{name}.wado".to_string()));
 }
@@ -490,10 +490,10 @@ fn dump_tokens() {
 }
 
 #[test]
-fn dump_desugar() {
-    let parser = Parser::from_args(&["--desugar", "input.wado"]);
+fn dump_desugared() {
+    let parser = Parser::from_args(&["--desugared", "input.wado"]);
     let opts = wado_cli::dump::parse_args(parser).unwrap();
-    assert!(opts.show_desugar);
+    assert!(opts.show_desugared);
     assert!(!opts.show_ast);
 }
 
@@ -522,19 +522,19 @@ fn dump_tir() {
 }
 
 #[test]
-fn dump_monomorphize() {
-    let parser = Parser::from_args(&["--monomorphize", "input.wado"]);
+fn dump_tir_resolved() {
+    let parser = Parser::from_args(&["--tir-resolved", "input.wado"]);
     let opts = wado_cli::dump::parse_args(parser).unwrap();
-    assert!(opts.show_monomorphize);
-    assert!(!opts.show_lower);
+    assert!(opts.show_tir_resolved);
+    assert!(!opts.show_tir_lowered);
 }
 
 #[test]
-fn dump_lower() {
-    let parser = Parser::from_args(&["--lower", "input.wado"]);
+fn dump_tir_lowered() {
+    let parser = Parser::from_args(&["--tir-lowered", "input.wado"]);
     let opts = wado_cli::dump::parse_args(parser).unwrap();
-    assert!(opts.show_lower);
-    assert!(!opts.show_monomorphize);
+    assert!(opts.show_tir_lowered);
+    assert!(!opts.show_tir_monomorphized);
 }
 
 #[test]
@@ -543,22 +543,6 @@ fn dump_wir() {
     let opts = wado_cli::dump::parse_args(parser).unwrap();
     assert!(opts.show_wir);
     assert!(!opts.show_tir);
-}
-
-#[test]
-fn dump_all() {
-    let parser = Parser::from_args(&["--all", "input.wado"]);
-    let opts = wado_cli::dump::parse_args(parser).unwrap();
-    assert!(opts.show_tokens);
-    assert!(opts.show_ast);
-    assert!(opts.show_desugar);
-    assert!(opts.show_modules);
-    assert!(opts.show_symbols);
-    assert!(opts.show_tir);
-    assert!(opts.show_monomorphize);
-    assert!(opts.show_lower);
-    assert!(opts.show_optimize);
-    assert!(opts.show_wir);
 }
 
 #[test]
