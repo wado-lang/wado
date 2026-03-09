@@ -304,6 +304,12 @@ type "functype/wasi/future-new" = fn() -> i64;
 
 type "functype/wasi/future-write" = fn(i32, i32) -> i32;
 
+type "functype/wasi/waitable-set-new" = fn() -> i32;
+
+type "functype/wasi/waitable-join" = fn(i32, i32);
+
+type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
+
 type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
 
 import fn realloc from "mem/realloc";
@@ -314,6 +320,9 @@ import fn wasi:http/Response::set_status_code from "wasi/wasi:http/Response::set
 import memory (1) from "mem/memory";
 import fn future-new from "wasi/future-new";
 import fn future-write from "wasi/future-write";
+import fn waitable-set-new from "wasi/waitable-set-new";
+import fn waitable-join from "wasi/waitable-join";
+import fn waitable-set-wait from "wasi/waitable-set-wait";
 
 global mut heap_offset: i32 = 8;  // from core:allocator
 
@@ -794,13 +803,24 @@ fn handle(request) {
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     };
     let __fw_write_ptr_2: i32;
+    let __fw_handle_2: i32;
+    let __fw_result_2: i32;
+    __fw_handle_2 = trailers_tx;
     __fw_write_ptr_2 = "mem/realloc"(0, 0, 8, 40);
     builtin::store_i64(__fw_write_ptr_2, 0_i64);
     builtin::store_i64[8](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[16](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[24](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[32](__fw_write_ptr_2, 0_i64);
-    drop("wasi/future-write"(trailers_tx, __fw_write_ptr_2));
+    __fw_result_2 = "wasi/future-write"(__fw_handle_2, __fw_write_ptr_2);
+    if __fw_result_2 == -1 {
+        let __fw_evt_2: i32;
+        __fw_result_2 = "wasi/waitable-set-new"();
+        "wasi/waitable-join"(__fw_handle_2, __fw_result_2);
+        __fw_evt_2 = "mem/realloc"(0, 0, 4, 8);
+        drop("wasi/waitable-set-wait"(__fw_result_2, __fw_evt_2));
+        drop("mem/realloc"(__fw_evt_2, 8, 4, 0));
+    };
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
 }
 
@@ -897,13 +917,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l47: loop {
+            l48: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l47;
+                continue l48;
             };
         };
     };

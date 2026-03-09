@@ -3621,9 +3621,7 @@ impl FunctionTranslator<'_, '_> {
             }
 
             // === Subtask instance methods ===
-            "subtask-drop" => {
-                Some(self.emit_drop_handle(CanonicalIntrinsic::SubtaskDrop, handle))
-            }
+            "subtask-drop" => Some(self.emit_drop_handle(CanonicalIntrinsic::SubtaskDrop, handle)),
             "subtask-cancel" => {
                 Some(self.emit_drop_handle(CanonicalIntrinsic::SubtaskCancel, handle))
             }

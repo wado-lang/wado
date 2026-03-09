@@ -414,10 +414,8 @@ impl<'a> WirContext<'a> {
             display: name.clone(),
             fq: key.clone(),
         };
-        let func_id =
-            self.register_import_func("wasi".to_string(), name, type_id, wir_name);
-        self.needed_canonicals
-            .insert(intrinsic, func_id.clone());
+        let func_id = self.register_import_func("wasi".to_string(), name, type_id, wir_name);
+        self.needed_canonicals.insert(intrinsic, func_id.clone());
         func_id
     }
 

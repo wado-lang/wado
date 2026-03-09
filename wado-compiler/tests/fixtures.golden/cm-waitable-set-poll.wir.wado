@@ -317,6 +317,10 @@ type "functype/wasi/future-new" = fn() -> i64;
 
 type "functype/wasi/future-write" = fn(i32, i32) -> i32;
 
+type "functype/wasi/waitable-join" = fn(i32, i32);
+
+type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
+
 type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
 
 import fn realloc from "mem/realloc";
@@ -329,6 +333,8 @@ import fn waitable-set-poll from "wasi/waitable-set-poll";
 import fn waitable-set-drop from "wasi/waitable-set-drop";
 import fn future-new from "wasi/future-new";
 import fn future-write from "wasi/future-write";
+import fn waitable-join from "wasi/waitable-join";
+import fn waitable-set-wait from "wasi/waitable-set-wait";
 
 global mut heap_offset: i32 = 8;  // from core:allocator
 
@@ -989,13 +995,24 @@ fn handle(request) {
             "wasi/task-return"(1, __tv_1_15, __tv_2_16, __tv_3_17, __tv_4_18, __tv_5_19, __tv_6_20, __tv_7_21);
         };
         let __fw_write_ptr_3: i32;
+        let __fw_handle_3: i32;
+        let __fw_result_3: i32;
+        __fw_handle_3 = trailers_tx_4;
         __fw_write_ptr_3 = "mem/realloc"(0, 0, 8, 40);
         builtin::store_i64(__fw_write_ptr_3, 0_i64);
         builtin::store_i64[8](__fw_write_ptr_3, 0_i64);
         builtin::store_i64[16](__fw_write_ptr_3, 0_i64);
         builtin::store_i64[24](__fw_write_ptr_3, 0_i64);
         builtin::store_i64[32](__fw_write_ptr_3, 0_i64);
-        drop("wasi/future-write"(trailers_tx_4, __fw_write_ptr_3));
+        __fw_result_3 = "wasi/future-write"(__fw_handle_3, __fw_write_ptr_3);
+        if __fw_result_3 == -1 {
+            let __fw_evt_3: i32;
+            __fw_result_3 = "wasi/waitable-set-new"();
+            "wasi/waitable-join"(__fw_handle_3, __fw_result_3);
+            __fw_evt_3 = "mem/realloc"(0, 0, 4, 8);
+            drop("wasi/waitable-set-wait"(__fw_result_3, __fw_evt_3));
+            drop("mem/realloc"(__fw_evt_3, 8, 4, 0));
+        };
         drop("mem/realloc"(__fw_write_ptr_3, 40, 8, 0));
     };
     "wasi/waitable-set-drop"(ws);
@@ -1316,13 +1333,24 @@ fn handle(request) {
         "wasi/task-return"(1, __tv_1_166, __tv_2_167, __tv_3_168, __tv_4_169, __tv_5_170, __tv_6_171, __tv_7_172);
     };
     let __fw_write_ptr_5: i32;
+    let __fw_handle_5: i32;
+    let __fw_result_5: i32;
+    __fw_handle_5 = trailers_tx_9;
     __fw_write_ptr_5 = "mem/realloc"(0, 0, 8, 40);
     builtin::store_i64(__fw_write_ptr_5, 0_i64);
     builtin::store_i64[8](__fw_write_ptr_5, 0_i64);
     builtin::store_i64[16](__fw_write_ptr_5, 0_i64);
     builtin::store_i64[24](__fw_write_ptr_5, 0_i64);
     builtin::store_i64[32](__fw_write_ptr_5, 0_i64);
-    drop("wasi/future-write"(trailers_tx_9, __fw_write_ptr_5));
+    __fw_result_5 = "wasi/future-write"(__fw_handle_5, __fw_write_ptr_5);
+    if __fw_result_5 == -1 {
+        let __fw_evt_5: i32;
+        __fw_result_5 = "wasi/waitable-set-new"();
+        "wasi/waitable-join"(__fw_handle_5, __fw_result_5);
+        __fw_evt_5 = "mem/realloc"(0, 0, 4, 8);
+        drop("wasi/waitable-set-wait"(__fw_result_5, __fw_evt_5));
+        drop("mem/realloc"(__fw_evt_5, 8, 4, 0));
+    };
     drop("mem/realloc"(__fw_write_ptr_5, 40, 8, 0));
 }
 
@@ -1406,13 +1434,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l86: loop {
+            l88: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l86;
+                continue l88;
             };
         };
     };
