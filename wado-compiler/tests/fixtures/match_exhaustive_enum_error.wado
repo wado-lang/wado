@@ -1,0 +1,21 @@
+// Test: Non-exhaustive match on enum should produce a compile error
+use { println, Stdout } from "core:cli";
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+export fn run() with Stdout {
+    let c = Color::Red;
+    let name = match c {
+        Red => "red",
+        Green => "green",
+        // Missing Blue arm
+    };
+    println(name);
+}
+
+__DATA__
+{"compile_error": "missing case `Blue`"}
