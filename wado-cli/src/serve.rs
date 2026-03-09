@@ -6,7 +6,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use bytes::Bytes;
 use futures::try_join;
-use http_body_util::{BodyExt, Empty, Full};
+use http_body_util::{BodyExt, Full};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Request as HyperRequest, Response as HyperResponse};
@@ -212,27 +212,44 @@ async fn handle_http_request(
 
     let service = Service::instantiate_async(&mut store, component, linker).await?;
 
-    // Convert hyper request to http::Request with Empty body
-    let (parts, _body) = req.into_parts();
-    let http_req = http::Request::from_parts(parts, Empty::<Bytes>::new());
+    // Convert hyper request to http::Request, preserving the body
+    let (parts, body) = req.into_parts();
+    let body = body.map_err(
+        wasmtime_wasi_http::p3::bindings::http::types::ErrorCode::from_hyper_request_error,
+    );
+    let http_req = http::Request::from_parts(parts, body);
 
     let (wasi_req, io) = WasiRequest::from_http(http_req);
 
     // Channel to receive the response
     let (tx, rx) = tokio::sync::oneshot::channel();
 
-    // Run handler and response receiver in parallel
+    // Run handler and request body I/O concurrently, then collect the response.
+    // Use select! so that when the handler completes, io is dropped (the handler
+    // may not consume the request body).
     let result = try_join!(
         async {
             store
                 .run_concurrent(async |store| {
-                    let (res, task) = match service.handle(store, wasi_req).await? {
-                        Ok(pair) => pair,
-                        Err(err) => return Ok(Err(Some(err))),
-                    };
-                    let _ = tx.send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
-                    task.block(store).await;
-                    Ok(Ok(()))
+                    use std::pin::pin;
+                    let handler = pin!(async {
+                        let (res, task) = match service.handle(store, wasi_req).await? {
+                            Ok(pair) => pair,
+                            Err(err) => return Ok(Err(Some(err))),
+                        };
+                        let _ =
+                            tx.send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
+                        task.block(store).await;
+                        Ok(Ok(()))
+                    });
+                    let io = pin!(async {
+                        io.await
+                            .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
+                    });
+                    tokio::select! {
+                        result = handler => result,
+                        result = io => result.map(|()| Ok(())),
+                    }
                 })
                 .await?
         },
@@ -243,9 +260,6 @@ async fn handle_http_request(
             anyhow::Ok(http::Response::from_parts(parts, body))
         }
     );
-
-    // Drop io - we don't consume request body in simple cases
-    drop(io);
 
     match result {
         Ok((Ok(()), res)) => {

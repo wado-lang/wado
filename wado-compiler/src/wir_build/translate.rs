@@ -4084,17 +4084,13 @@ impl FunctionTranslator<'_, '_> {
     fn cm_future_payload_from_monomorph(&self, func: &FunctionRef) -> CmFuturePayload {
         if let Some(ref info) = func.monomorph_info
             && !info.type_args.is_empty()
-            && let ResolvedType::Primitive(prim) = self.type_table.get(info.type_args[0])
         {
-            return Self::primitive_to_cm_scalar(prim);
+            return self.classify_future_payload(info.type_args[0]);
         }
-        None
+        CmFuturePayload::Trailers
     }
 
     /// Get the CM future payload type for a Future/FutureWritable receiver.
-    ///
-    /// Returns `Some(CmScalarType::S32)` for `Future<i32>`, `Some(CmScalarType::U8)` for `Future<u8>`,
-    /// or `None` for non-scalar future types (trailers pattern).
     fn cm_future_payload(&self, receiver_type_id: TypeId) -> CmFuturePayload {
         // Receiver is &Future<T> or &FutureWritable<T> — unwrap the reference
         let inner_type_id = match self.type_table.get(receiver_type_id) {
@@ -4103,11 +4099,34 @@ impl FunctionTranslator<'_, '_> {
         };
         if let ResolvedType::GenericResource { type_args, .. } = self.type_table.get(inner_type_id)
             && !type_args.is_empty()
-            && let ResolvedType::Primitive(prim) = self.type_table.get(type_args[0])
         {
-            return Self::primitive_to_cm_scalar(prim);
+            return self.classify_future_payload(type_args[0]);
         }
-        None
+        CmFuturePayload::Trailers
+    }
+
+    /// Classify a future's type argument into the CM future payload category.
+    ///
+    /// - Primitive scalar → `Scalar(s)`
+    /// - `Result<(), E>` (unit Ok type) → `Transmission` (HTTP transmission result)
+    /// - Anything else → `Trailers` (HTTP trailers pattern)
+    fn classify_future_payload(&self, type_arg: TypeId) -> CmFuturePayload {
+        match self.type_table.get(type_arg) {
+            ResolvedType::Primitive(prim) => {
+                if let Some(scalar) = Self::primitive_to_cm_scalar(prim) {
+                    return CmFuturePayload::Scalar(scalar);
+                }
+            }
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } if name == "Result" && !type_args.is_empty() => {
+                if matches!(self.type_table.get(type_args[0]), ResolvedType::Unit) {
+                    return CmFuturePayload::Transmission;
+                }
+            }
+            _ => {}
+        }
+        CmFuturePayload::Trailers
     }
 
     /// Dispatch canonical resource methods based on `#[canonical("...")]` attribute.
@@ -4214,7 +4233,11 @@ impl FunctionTranslator<'_, '_> {
         result_type_id: TypeId,
     ) -> Option<WirInstr> {
         match canonical {
-            "stream-new" => Some(self.emit_stream_or_future_new(false, None, result_type_id)),
+            "stream-new" => Some(self.emit_stream_or_future_new(
+                false,
+                CmFuturePayload::Trailers,
+                result_type_id,
+            )),
             "future-new" => {
                 let payload = self.cm_future_payload_from_monomorph(func);
                 Some(self.emit_stream_or_future_new(true, payload, result_type_id))
@@ -5549,7 +5572,7 @@ impl FunctionTranslator<'_, '_> {
             return WirInstr::Unreachable;
         };
         let future_write_id = self.ctx.ensure_canonical(
-            CanonicalIntrinsic::FutureWrite(None),
+            CanonicalIntrinsic::FutureWrite(CmFuturePayload::Trailers),
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );

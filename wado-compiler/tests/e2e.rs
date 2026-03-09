@@ -380,23 +380,38 @@ async fn run_http_request_async(
 
     let timeout_duration = Duration::from_secs(1);
 
+    // Run handler and request body I/O concurrently inside run_concurrent.
+    // The io future must be driven alongside the handler so that the guest
+    // can read the request body stream via Request::consume_body().
+    // Use select! so that when the handler finishes, io is dropped (the guest
+    // may not consume the body at all).
     let handler_result = tokio::time::timeout(timeout_duration, async {
         store
             .run_concurrent(async |store| {
-                let (res, task) = match service.handle(store, req).await? {
-                    Ok(pair) => pair,
-                    Err(err) => return anyhow::Ok(Err(Some(err))),
-                };
-                let _ = tx.send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
-                task.block(store).await;
-                Ok(Ok(()))
+                use std::pin::pin;
+                let handler = pin!(async {
+                    let (res, task) = match service.handle(store, req).await? {
+                        Ok(pair) => pair,
+                        Err(err) => return anyhow::Ok(Err(Some(err))),
+                    };
+                    let _ = tx.send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
+                    task.block(store).await;
+                    Ok(Ok(()))
+                });
+                let io = pin!(async {
+                    io.await
+                        .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
+                });
+                // Drive both; when handler completes, drop io
+                tokio::select! {
+                    result = handler => result,
+                    result = io => result.map(|()| Ok(())),
+                }
             })
             .await?
     })
     .await
     .map_err(|_| anyhow::anyhow!("HTTP handler timed out after {timeout_duration:?}"))??;
-
-    drop(io);
 
     match handler_result {
         Ok(()) => {

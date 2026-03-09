@@ -89,14 +89,17 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
     let all_canonical_intrinsics: Vec<CanonicalIntrinsic> =
         wir_module.needed_canonicals.iter().cloned().collect();
 
-    // HTTP response types for future<T> canonical intrinsics (trailers pattern: payload = None)
-    let needs_trailers_future = all_canonical_intrinsics
-        .iter()
-        .any(|i| i.future_payload() == Some(None));
-    let trailers_future_type = if needs_trailers_future {
+    // HTTP response types for future<T> canonical intrinsics
+    let needs_http_future_types = all_canonical_intrinsics.iter().any(|i| {
+        matches!(
+            i.future_payload(),
+            Some(CmFuturePayload::Trailers | CmFuturePayload::Transmission)
+        )
+    });
+    let (trailers_future_type, transmission_future_type) = if needs_http_future_types {
         build_future_intrinsic_types(&mut builder, &mut ctx, stream_u8_type)
     } else {
-        0
+        (0, 0)
     };
 
     // Build scalar future types (e.g., future<s32>) from structured metadata
@@ -111,6 +114,7 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
         stream_u8_type,
         result_unit_type,
         trailers_future_type,
+        transmission_future_type,
         &scalar_future_types,
     );
 
@@ -549,7 +553,7 @@ fn build_future_intrinsic_types(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     stream_u8_type: u32,
-) -> u32 {
+) -> (u32, u32) {
     ctx.register_type("http-fields");
     {
         let fields_resource_idx = ctx.type_idx("http-fields-resource");
@@ -607,7 +611,8 @@ fn build_future_intrinsic_types(
             .future(Some(ComponentValType::Type(transmission_result_idx)));
     }
 
-    trailers_future_type
+    let transmission_future_type = ctx.type_idx("http-transmission-future");
+    (trailers_future_type, transmission_future_type)
 }
 
 /// Build component-level `future<T>` types for scalar CM types (e.g., `future<s32>`).
@@ -621,7 +626,7 @@ fn build_scalar_future_types(
 ) -> IndexSet<(CmScalarType, u32)> {
     let mut scalars: IndexSet<CmScalarType> = IndexSet::new();
     for intrinsic in canonical_intrinsics {
-        if let Some(Some(scalar)) = intrinsic.future_payload() {
+        if let Some(CmFuturePayload::Scalar(scalar)) = intrinsic.future_payload() {
             scalars.insert(scalar);
         }
     }
@@ -667,6 +672,7 @@ fn emit_canonical_intrinsics(
     stream_u8_type: u32,
     result_unit_type: u32,
     trailers_future_type: u32,
+    transmission_future_type: u32,
     scalar_future_types: &IndexSet<(CmScalarType, u32)>,
 ) {
     for intrinsic in canonical_intrinsics {
@@ -707,11 +713,21 @@ fn emit_canonical_intrinsics(
                 builder.stream_cancel_write(stream_u8_type, false);
             }
             CanonicalIntrinsic::FutureNew(payload) => {
-                let ft = resolve_future_type(*payload, trailers_future_type, scalar_future_types);
+                let ft = resolve_future_type(
+                    *payload,
+                    trailers_future_type,
+                    transmission_future_type,
+                    scalar_future_types,
+                );
                 builder.future_new(ft);
             }
             CanonicalIntrinsic::FutureWrite(payload) => {
-                let ft = resolve_future_type(*payload, trailers_future_type, scalar_future_types);
+                let ft = resolve_future_type(
+                    *payload,
+                    trailers_future_type,
+                    transmission_future_type,
+                    scalar_future_types,
+                );
                 builder.future_write(
                     ft,
                     [
@@ -722,7 +738,12 @@ fn emit_canonical_intrinsics(
                 );
             }
             CanonicalIntrinsic::FutureRead(payload) => {
-                let ft = resolve_future_type(*payload, trailers_future_type, scalar_future_types);
+                let ft = resolve_future_type(
+                    *payload,
+                    trailers_future_type,
+                    transmission_future_type,
+                    scalar_future_types,
+                );
                 builder.future_read(
                     ft,
                     [
@@ -733,19 +754,39 @@ fn emit_canonical_intrinsics(
                 );
             }
             CanonicalIntrinsic::FutureCancelRead(payload) => {
-                let ft = resolve_future_type(*payload, trailers_future_type, scalar_future_types);
+                let ft = resolve_future_type(
+                    *payload,
+                    trailers_future_type,
+                    transmission_future_type,
+                    scalar_future_types,
+                );
                 builder.future_cancel_read(ft, false);
             }
             CanonicalIntrinsic::FutureCancelWrite(payload) => {
-                let ft = resolve_future_type(*payload, trailers_future_type, scalar_future_types);
+                let ft = resolve_future_type(
+                    *payload,
+                    trailers_future_type,
+                    transmission_future_type,
+                    scalar_future_types,
+                );
                 builder.future_cancel_write(ft, false);
             }
             CanonicalIntrinsic::FutureDropWritable(payload) => {
-                let ft = resolve_future_type(*payload, trailers_future_type, scalar_future_types);
+                let ft = resolve_future_type(
+                    *payload,
+                    trailers_future_type,
+                    transmission_future_type,
+                    scalar_future_types,
+                );
                 builder.future_drop_writable(ft);
             }
             CanonicalIntrinsic::FutureDropReadable(payload) => {
-                let ft = resolve_future_type(*payload, trailers_future_type, scalar_future_types);
+                let ft = resolve_future_type(
+                    *payload,
+                    trailers_future_type,
+                    transmission_future_type,
+                    scalar_future_types,
+                );
                 builder.future_drop_readable(ft);
             }
             CanonicalIntrinsic::TaskReturn => {
@@ -802,17 +843,16 @@ fn emit_canonical_intrinsics(
 }
 
 /// Resolve the component-level type index for a future canonical intrinsic.
-///
-/// `None` payload → trailers future type (for HTTP response pattern).
-/// `Some(scalar)` → scalar future type (e.g., `future<s32>`).
 fn resolve_future_type(
     payload: CmFuturePayload,
     trailers_future_type: u32,
+    transmission_future_type: u32,
     scalar_future_types: &IndexSet<(CmScalarType, u32)>,
 ) -> u32 {
     match payload {
-        None => trailers_future_type,
-        Some(scalar) => scalar_future_types
+        CmFuturePayload::Trailers => trailers_future_type,
+        CmFuturePayload::Transmission => transmission_future_type,
+        CmFuturePayload::Scalar(scalar) => scalar_future_types
             .iter()
             .find(|(s, _)| *s == scalar)
             .map(|(_, idx)| *idx)
@@ -1551,14 +1591,15 @@ fn import_http_types_for_service(
                     f.effect_name == "Fields" && f.wasi_func_name.starts_with("[method]");
                 let is_response_method =
                     f.effect_name == "Response" && f.wasi_func_name.starts_with("[method]");
-                // Only include Request methods that are actually used to avoid
+                // Only include Request methods/statics that are actually used to avoid
                 // referencing unsupported resource types (e.g. RequestOptions).
-                let is_used_request_method = f.effect_name == "Request"
-                    && f.wasi_func_name.starts_with("[method]")
+                let is_used_request_func = f.effect_name == "Request"
+                    && (f.wasi_func_name.starts_with("[method]")
+                        || f.wasi_func_name.starts_with("[static]"))
                     && project
                         .used_wasi_functions
                         .contains(&format!("{}::{}", f.effect_name, f.method_name));
-                is_fields_method || is_response_method || is_used_request_method
+                is_fields_method || is_response_method || is_used_request_func
             })
             .cloned()
             .collect();
@@ -1657,7 +1698,7 @@ fn import_http_types_for_service(
     );
     ctx.alias_comp_func("http-fields-constructor", "wasi:http/Fields::new");
 
-    // Alias Fields, Response, and used Request resource methods
+    // Alias Fields, Response, and used Request resource functions
     {
         let resource_funcs: Vec<(String, String)> = project
             .wasi_registry
@@ -1671,12 +1712,13 @@ fn import_http_types_for_service(
                             f.effect_name == "Fields" && f.wasi_func_name.starts_with("[method]");
                         let is_response_method =
                             f.effect_name == "Response" && f.wasi_func_name.starts_with("[method]");
-                        let is_used_request_method = f.effect_name == "Request"
-                            && f.wasi_func_name.starts_with("[method]")
+                        let is_used_request_func = f.effect_name == "Request"
+                            && (f.wasi_func_name.starts_with("[method]")
+                                || f.wasi_func_name.starts_with("[static]"))
                             && project
                                 .used_wasi_functions
                                 .contains(&format!("{}::{}", f.effect_name, f.method_name));
-                        is_fields_method || is_response_method || is_used_request_method
+                        is_fields_method || is_response_method || is_used_request_func
                     })
                     .map(|f| (f.wasi_func_name.clone(), f.local_alias_name()))
                     .collect()
