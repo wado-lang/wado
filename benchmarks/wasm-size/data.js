@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773047114312,
+  "lastUpdate": 1773050573329,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -1895,6 +1895,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6dc474b2c4f4dbcfdace365d8f4451eb3b2c2e2c"
         },
         "date": 1773047114206,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2400,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10319,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19848,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f020ee0f686fc310cd6e4a047fdcb193f77fa25e",
+          "message": "Merge pull request #546 from wado-lang/claude/add-simd-examples-wUv4k\n\nAdd SIMD examples and fix unsigned vector literal builders",
+          "timestamp": "2026-03-09T19:00:24+09:00",
+          "tree_id": "497705612eee0d53d03274021c4574b601bbc534",
+          "url": "https://github.com/wado-lang/wado/commit/f020ee0f686fc310cd6e4a047fdcb193f77fa25e"
+        },
+        "date": 1773050573114,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
