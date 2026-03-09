@@ -1389,10 +1389,10 @@ impl<'a> WirEmitter<'a> {
             WirInstr::I8x16AllTrue(a) => self.emit_unary(f, a, Instruction::I8x16AllTrue),
             WirInstr::I8x16Bitmask(a) => self.emit_unary(f, a, Instruction::I8x16Bitmask),
             WirInstr::I8x16NarrowI16x8S(l, r) => {
-                self.emit_binary(f, l, r, Instruction::I8x16NarrowI16x8S)
+                self.emit_binary(f, l, r, Instruction::I8x16NarrowI16x8S);
             }
             WirInstr::I8x16NarrowI16x8U(l, r) => {
-                self.emit_binary(f, l, r, Instruction::I8x16NarrowI16x8U)
+                self.emit_binary(f, l, r, Instruction::I8x16NarrowI16x8U);
             }
             WirInstr::I8x16Popcnt(a) => self.emit_unary(f, a, Instruction::I8x16Popcnt),
             WirInstr::I16x8Abs(a) => self.emit_unary(f, a, Instruction::I16x8Abs),
@@ -1408,43 +1408,43 @@ impl<'a> WirEmitter<'a> {
             WirInstr::I16x8AllTrue(a) => self.emit_unary(f, a, Instruction::I16x8AllTrue),
             WirInstr::I16x8Bitmask(a) => self.emit_unary(f, a, Instruction::I16x8Bitmask),
             WirInstr::I16x8NarrowI32x4S(l, r) => {
-                self.emit_binary(f, l, r, Instruction::I16x8NarrowI32x4S)
+                self.emit_binary(f, l, r, Instruction::I16x8NarrowI32x4S);
             }
             WirInstr::I16x8NarrowI32x4U(l, r) => {
-                self.emit_binary(f, l, r, Instruction::I16x8NarrowI32x4U)
+                self.emit_binary(f, l, r, Instruction::I16x8NarrowI32x4U);
             }
             WirInstr::I16x8ExtendLowI8x16S(a) => {
-                self.emit_unary(f, a, Instruction::I16x8ExtendLowI8x16S)
+                self.emit_unary(f, a, Instruction::I16x8ExtendLowI8x16S);
             }
             WirInstr::I16x8ExtendHighI8x16S(a) => {
-                self.emit_unary(f, a, Instruction::I16x8ExtendHighI8x16S)
+                self.emit_unary(f, a, Instruction::I16x8ExtendHighI8x16S);
             }
             WirInstr::I16x8ExtendLowI8x16U(a) => {
-                self.emit_unary(f, a, Instruction::I16x8ExtendLowI8x16U)
+                self.emit_unary(f, a, Instruction::I16x8ExtendLowI8x16U);
             }
             WirInstr::I16x8ExtendHighI8x16U(a) => {
-                self.emit_unary(f, a, Instruction::I16x8ExtendHighI8x16U)
+                self.emit_unary(f, a, Instruction::I16x8ExtendHighI8x16U);
             }
             WirInstr::I16x8ExtMulLowI8x16S(l, r) => {
-                self.emit_binary(f, l, r, Instruction::I16x8ExtMulLowI8x16S)
+                self.emit_binary(f, l, r, Instruction::I16x8ExtMulLowI8x16S);
             }
             WirInstr::I16x8ExtMulHighI8x16S(l, r) => {
-                self.emit_binary(f, l, r, Instruction::I16x8ExtMulHighI8x16S)
+                self.emit_binary(f, l, r, Instruction::I16x8ExtMulHighI8x16S);
             }
             WirInstr::I16x8ExtMulLowI8x16U(l, r) => {
-                self.emit_binary(f, l, r, Instruction::I16x8ExtMulLowI8x16U)
+                self.emit_binary(f, l, r, Instruction::I16x8ExtMulLowI8x16U);
             }
             WirInstr::I16x8ExtMulHighI8x16U(l, r) => {
-                self.emit_binary(f, l, r, Instruction::I16x8ExtMulHighI8x16U)
+                self.emit_binary(f, l, r, Instruction::I16x8ExtMulHighI8x16U);
             }
             WirInstr::I16x8ExtAddPairwiseI8x16S(a) => {
-                self.emit_unary(f, a, Instruction::I16x8ExtAddPairwiseI8x16S)
+                self.emit_unary(f, a, Instruction::I16x8ExtAddPairwiseI8x16S);
             }
             WirInstr::I16x8ExtAddPairwiseI8x16U(a) => {
-                self.emit_unary(f, a, Instruction::I16x8ExtAddPairwiseI8x16U)
+                self.emit_unary(f, a, Instruction::I16x8ExtAddPairwiseI8x16U);
             }
             WirInstr::I16x8Q15MulrSatS(l, r) => {
-                self.emit_binary(f, l, r, Instruction::I16x8Q15MulrSatS)
+                self.emit_binary(f, l, r, Instruction::I16x8Q15MulrSatS);
             }
             WirInstr::I32x4Abs(a) => self.emit_unary(f, a, Instruction::I32x4Abs),
             WirInstr::I32x4AllTrue(a) => self.emit_unary(f, a, Instruction::I32x4AllTrue),
@@ -1454,76 +1454,76 @@ impl<'a> WirEmitter<'a> {
             WirInstr::I32x4MaxS(l, r) => self.emit_binary(f, l, r, Instruction::I32x4MaxS),
             WirInstr::I32x4MaxU(l, r) => self.emit_binary(f, l, r, Instruction::I32x4MaxU),
             WirInstr::I32x4DotI16x8S(l, r) => {
-                self.emit_binary(f, l, r, Instruction::I32x4DotI16x8S)
+                self.emit_binary(f, l, r, Instruction::I32x4DotI16x8S);
             }
             WirInstr::I32x4ExtendLowI16x8S(a) => {
-                self.emit_unary(f, a, Instruction::I32x4ExtendLowI16x8S)
+                self.emit_unary(f, a, Instruction::I32x4ExtendLowI16x8S);
             }
             WirInstr::I32x4ExtendHighI16x8S(a) => {
-                self.emit_unary(f, a, Instruction::I32x4ExtendHighI16x8S)
+                self.emit_unary(f, a, Instruction::I32x4ExtendHighI16x8S);
             }
             WirInstr::I32x4ExtendLowI16x8U(a) => {
-                self.emit_unary(f, a, Instruction::I32x4ExtendLowI16x8U)
+                self.emit_unary(f, a, Instruction::I32x4ExtendLowI16x8U);
             }
             WirInstr::I32x4ExtendHighI16x8U(a) => {
-                self.emit_unary(f, a, Instruction::I32x4ExtendHighI16x8U)
+                self.emit_unary(f, a, Instruction::I32x4ExtendHighI16x8U);
             }
             WirInstr::I32x4ExtMulLowI16x8S(l, r) => {
-                self.emit_binary(f, l, r, Instruction::I32x4ExtMulLowI16x8S)
+                self.emit_binary(f, l, r, Instruction::I32x4ExtMulLowI16x8S);
             }
             WirInstr::I32x4ExtMulHighI16x8S(l, r) => {
-                self.emit_binary(f, l, r, Instruction::I32x4ExtMulHighI16x8S)
+                self.emit_binary(f, l, r, Instruction::I32x4ExtMulHighI16x8S);
             }
             WirInstr::I32x4ExtMulLowI16x8U(l, r) => {
-                self.emit_binary(f, l, r, Instruction::I32x4ExtMulLowI16x8U)
+                self.emit_binary(f, l, r, Instruction::I32x4ExtMulLowI16x8U);
             }
             WirInstr::I32x4ExtMulHighI16x8U(l, r) => {
-                self.emit_binary(f, l, r, Instruction::I32x4ExtMulHighI16x8U)
+                self.emit_binary(f, l, r, Instruction::I32x4ExtMulHighI16x8U);
             }
             WirInstr::I32x4ExtAddPairwiseI16x8S(a) => {
-                self.emit_unary(f, a, Instruction::I32x4ExtAddPairwiseI16x8S)
+                self.emit_unary(f, a, Instruction::I32x4ExtAddPairwiseI16x8S);
             }
             WirInstr::I32x4ExtAddPairwiseI16x8U(a) => {
-                self.emit_unary(f, a, Instruction::I32x4ExtAddPairwiseI16x8U)
+                self.emit_unary(f, a, Instruction::I32x4ExtAddPairwiseI16x8U);
             }
             WirInstr::I32x4TruncSatF32x4S(a) => {
-                self.emit_unary(f, a, Instruction::I32x4TruncSatF32x4S)
+                self.emit_unary(f, a, Instruction::I32x4TruncSatF32x4S);
             }
             WirInstr::I32x4TruncSatF32x4U(a) => {
-                self.emit_unary(f, a, Instruction::I32x4TruncSatF32x4U)
+                self.emit_unary(f, a, Instruction::I32x4TruncSatF32x4U);
             }
             WirInstr::I32x4TruncSatF64x2SZero(a) => {
-                self.emit_unary(f, a, Instruction::I32x4TruncSatF64x2SZero)
+                self.emit_unary(f, a, Instruction::I32x4TruncSatF64x2SZero);
             }
             WirInstr::I32x4TruncSatF64x2UZero(a) => {
-                self.emit_unary(f, a, Instruction::I32x4TruncSatF64x2UZero)
+                self.emit_unary(f, a, Instruction::I32x4TruncSatF64x2UZero);
             }
             WirInstr::I64x2Abs(a) => self.emit_unary(f, a, Instruction::I64x2Abs),
             WirInstr::I64x2AllTrue(a) => self.emit_unary(f, a, Instruction::I64x2AllTrue),
             WirInstr::I64x2Bitmask(a) => self.emit_unary(f, a, Instruction::I64x2Bitmask),
             WirInstr::I64x2ExtendLowI32x4S(a) => {
-                self.emit_unary(f, a, Instruction::I64x2ExtendLowI32x4S)
+                self.emit_unary(f, a, Instruction::I64x2ExtendLowI32x4S);
             }
             WirInstr::I64x2ExtendHighI32x4S(a) => {
-                self.emit_unary(f, a, Instruction::I64x2ExtendHighI32x4S)
+                self.emit_unary(f, a, Instruction::I64x2ExtendHighI32x4S);
             }
             WirInstr::I64x2ExtendLowI32x4U(a) => {
-                self.emit_unary(f, a, Instruction::I64x2ExtendLowI32x4U)
+                self.emit_unary(f, a, Instruction::I64x2ExtendLowI32x4U);
             }
             WirInstr::I64x2ExtendHighI32x4U(a) => {
-                self.emit_unary(f, a, Instruction::I64x2ExtendHighI32x4U)
+                self.emit_unary(f, a, Instruction::I64x2ExtendHighI32x4U);
             }
             WirInstr::I64x2ExtMulLowI32x4S(l, r) => {
-                self.emit_binary(f, l, r, Instruction::I64x2ExtMulLowI32x4S)
+                self.emit_binary(f, l, r, Instruction::I64x2ExtMulLowI32x4S);
             }
             WirInstr::I64x2ExtMulHighI32x4S(l, r) => {
-                self.emit_binary(f, l, r, Instruction::I64x2ExtMulHighI32x4S)
+                self.emit_binary(f, l, r, Instruction::I64x2ExtMulHighI32x4S);
             }
             WirInstr::I64x2ExtMulLowI32x4U(l, r) => {
-                self.emit_binary(f, l, r, Instruction::I64x2ExtMulLowI32x4U)
+                self.emit_binary(f, l, r, Instruction::I64x2ExtMulLowI32x4U);
             }
             WirInstr::I64x2ExtMulHighI32x4U(l, r) => {
-                self.emit_binary(f, l, r, Instruction::I64x2ExtMulHighI32x4U)
+                self.emit_binary(f, l, r, Instruction::I64x2ExtMulHighI32x4U);
             }
             WirInstr::F32x4Ceil(a) => self.emit_unary(f, a, Instruction::F32x4Ceil),
             WirInstr::F32x4Floor(a) => self.emit_unary(f, a, Instruction::F32x4Floor),
@@ -1532,13 +1532,13 @@ impl<'a> WirEmitter<'a> {
             WirInstr::F32x4PMin(l, r) => self.emit_binary(f, l, r, Instruction::F32x4PMin),
             WirInstr::F32x4PMax(l, r) => self.emit_binary(f, l, r, Instruction::F32x4PMax),
             WirInstr::F32x4ConvertI32x4S(a) => {
-                self.emit_unary(f, a, Instruction::F32x4ConvertI32x4S)
+                self.emit_unary(f, a, Instruction::F32x4ConvertI32x4S);
             }
             WirInstr::F32x4ConvertI32x4U(a) => {
-                self.emit_unary(f, a, Instruction::F32x4ConvertI32x4U)
+                self.emit_unary(f, a, Instruction::F32x4ConvertI32x4U);
             }
             WirInstr::F32x4DemoteF64x2Zero(a) => {
-                self.emit_unary(f, a, Instruction::F32x4DemoteF64x2Zero)
+                self.emit_unary(f, a, Instruction::F32x4DemoteF64x2Zero);
             }
             WirInstr::F64x2Ceil(a) => self.emit_unary(f, a, Instruction::F64x2Ceil),
             WirInstr::F64x2Floor(a) => self.emit_unary(f, a, Instruction::F64x2Floor),
@@ -1547,13 +1547,13 @@ impl<'a> WirEmitter<'a> {
             WirInstr::F64x2PMin(l, r) => self.emit_binary(f, l, r, Instruction::F64x2PMin),
             WirInstr::F64x2PMax(l, r) => self.emit_binary(f, l, r, Instruction::F64x2PMax),
             WirInstr::F64x2ConvertLowI32x4S(a) => {
-                self.emit_unary(f, a, Instruction::F64x2ConvertLowI32x4S)
+                self.emit_unary(f, a, Instruction::F64x2ConvertLowI32x4S);
             }
             WirInstr::F64x2ConvertLowI32x4U(a) => {
-                self.emit_unary(f, a, Instruction::F64x2ConvertLowI32x4U)
+                self.emit_unary(f, a, Instruction::F64x2ConvertLowI32x4U);
             }
             WirInstr::F64x2PromoteLowF32x4(a) => {
-                self.emit_unary(f, a, Instruction::F64x2PromoteLowF32x4)
+                self.emit_unary(f, a, Instruction::F64x2PromoteLowF32x4);
             }
             WirInstr::V128AndNot(l, r) => self.emit_binary(f, l, r, Instruction::V128AndNot),
             WirInstr::V128AnyTrue(a) => self.emit_unary(f, a, Instruction::V128AnyTrue),
