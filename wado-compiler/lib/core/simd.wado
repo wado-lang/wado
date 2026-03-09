@@ -86,8 +86,84 @@ impl i8x16 {
         return builtin::i8x16_swizzle(*self as v128, *indices as v128) as i8x16;
     }
 
+    pub fn abs(&self) -> i8x16 {
+        return builtin::i8x16_abs(*self as v128) as i8x16;
+    }
+
+    pub fn add_sat_s(&self, other: &i8x16) -> i8x16 {
+        return builtin::i8x16_add_sat_s(*self as v128, *other as v128) as i8x16;
+    }
+
+    pub fn add_sat_u(&self, other: &i8x16) -> i8x16 {
+        return builtin::i8x16_add_sat_u(*self as v128, *other as v128) as i8x16;
+    }
+
+    pub fn sub_sat_s(&self, other: &i8x16) -> i8x16 {
+        return builtin::i8x16_sub_sat_s(*self as v128, *other as v128) as i8x16;
+    }
+
+    pub fn sub_sat_u(&self, other: &i8x16) -> i8x16 {
+        return builtin::i8x16_sub_sat_u(*self as v128, *other as v128) as i8x16;
+    }
+
+    pub fn min_s(&self, other: &i8x16) -> i8x16 {
+        return builtin::i8x16_min_s(*self as v128, *other as v128) as i8x16;
+    }
+
+    pub fn min_u(&self, other: &i8x16) -> i8x16 {
+        return builtin::i8x16_min_u(*self as v128, *other as v128) as i8x16;
+    }
+
+    pub fn max_s(&self, other: &i8x16) -> i8x16 {
+        return builtin::i8x16_max_s(*self as v128, *other as v128) as i8x16;
+    }
+
+    pub fn max_u(&self, other: &i8x16) -> i8x16 {
+        return builtin::i8x16_max_u(*self as v128, *other as v128) as i8x16;
+    }
+
+    pub fn avgr_u(&self, other: &i8x16) -> i8x16 {
+        return builtin::i8x16_avgr_u(*self as v128, *other as v128) as i8x16;
+    }
+
+    pub fn all_true(&self) -> bool {
+        return builtin::i8x16_all_true(*self as v128) != 0;
+    }
+
+    pub fn bitmask(&self) -> i32 {
+        return builtin::i8x16_bitmask(*self as v128);
+    }
+
+    pub fn narrow_i16x8_s(&self, other: &i8x16) -> i8x16 {
+        return builtin::i8x16_narrow_i16x8_s(*self as v128, *other as v128) as i8x16;
+    }
+
+    pub fn narrow_i16x8_u(&self, other: &i8x16) -> i8x16 {
+        return builtin::i8x16_narrow_i16x8_u(*self as v128, *other as v128) as i8x16;
+    }
+
+    pub fn popcnt(&self) -> i8x16 {
+        return builtin::i8x16_popcnt(*self as v128) as i8x16;
+    }
+
+    pub fn any_true(&self) -> bool {
+        return builtin::v128_any_true(*self as v128) != 0;
+    }
+
+    pub fn andnot(&self, other: &i8x16) -> i8x16 {
+        return builtin::v128_andnot(*self as v128, *other as v128) as i8x16;
+    }
+
     pub fn select(&self, mask: &i8x16, other: &i8x16) -> i8x16 {
         return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as i8x16;
+    }
+
+    pub fn relaxed_swizzle(&self, indices: &i8x16) -> i8x16 {
+        return builtin::i8x16_relaxed_swizzle(*self as v128, *indices as v128) as i8x16;
+    }
+
+    pub fn relaxed_laneselect(&self, other: &i8x16, mask: &i8x16) -> i8x16 {
+        return builtin::i8x16_relaxed_laneselect(*self as v128, *other as v128, *mask as v128) as i8x16;
     }
 }
 
@@ -255,8 +331,120 @@ impl i16x8 {
         return builtin::i16x8_ge_s(*self as v128, *other as v128) as i16x8;
     }
 
+    pub fn abs(&self) -> i16x8 {
+        return builtin::i16x8_abs(*self as v128) as i16x8;
+    }
+
+    pub fn add_sat_s(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_add_sat_s(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn add_sat_u(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_add_sat_u(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn sub_sat_s(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_sub_sat_s(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn sub_sat_u(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_sub_sat_u(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn min_s(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_min_s(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn min_u(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_min_u(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn max_s(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_max_s(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn max_u(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_max_u(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn avgr_u(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_avgr_u(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn all_true(&self) -> bool {
+        return builtin::i16x8_all_true(*self as v128) != 0;
+    }
+
+    pub fn bitmask(&self) -> i32 {
+        return builtin::i16x8_bitmask(*self as v128);
+    }
+
+    pub fn narrow_i32x4_s(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_narrow_i32x4_s(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn narrow_i32x4_u(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_narrow_i32x4_u(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn extend_low_i8x16_s(a: i8x16) -> i16x8 {
+        return builtin::i16x8_extend_low_i8x16_s(a as v128) as i16x8;
+    }
+
+    pub fn extend_high_i8x16_s(a: i8x16) -> i16x8 {
+        return builtin::i16x8_extend_high_i8x16_s(a as v128) as i16x8;
+    }
+
+    pub fn extend_low_i8x16_u(a: i8x16) -> i16x8 {
+        return builtin::i16x8_extend_low_i8x16_u(a as v128) as i16x8;
+    }
+
+    pub fn extend_high_i8x16_u(a: i8x16) -> i16x8 {
+        return builtin::i16x8_extend_high_i8x16_u(a as v128) as i16x8;
+    }
+
+    pub fn extmul_low_i8x16_s(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_extmul_low_i8x16_s(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn extmul_high_i8x16_s(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_extmul_high_i8x16_s(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn extmul_low_i8x16_u(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_extmul_low_i8x16_u(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn extmul_high_i8x16_u(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_extmul_high_i8x16_u(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn extadd_pairwise_i8x16_s(a: i8x16) -> i16x8 {
+        return builtin::i16x8_extadd_pairwise_i8x16_s(a as v128) as i16x8;
+    }
+
+    pub fn extadd_pairwise_i8x16_u(a: i8x16) -> i16x8 {
+        return builtin::i16x8_extadd_pairwise_i8x16_u(a as v128) as i16x8;
+    }
+
+    pub fn q15mulr_sat_s(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_q15mulr_sat_s(*self as v128, *other as v128) as i16x8;
+    }
+
     pub fn select(&self, mask: &i16x8, other: &i16x8) -> i16x8 {
         return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as i16x8;
+    }
+
+    pub fn relaxed_laneselect(&self, other: &i16x8, mask: &i16x8) -> i16x8 {
+        return builtin::i16x8_relaxed_laneselect(*self as v128, *other as v128, *mask as v128) as i16x8;
+    }
+
+    pub fn relaxed_q15mulr_s(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_relaxed_q15mulr_s(*self as v128, *other as v128) as i16x8;
+    }
+
+    pub fn relaxed_dot_i8x16_i7x16_s(&self, other: &i16x8) -> i16x8 {
+        return builtin::i16x8_relaxed_dot_i8x16_i7x16_s(*self as v128, *other as v128) as i16x8;
     }
 }
 
@@ -406,8 +594,120 @@ impl i32x4 {
         return builtin::i32x4_ge_s(*self as v128, *other as v128) as i32x4;
     }
 
+    pub fn abs(&self) -> i32x4 {
+        return builtin::i32x4_abs(*self as v128) as i32x4;
+    }
+
+    pub fn all_true(&self) -> bool {
+        return builtin::i32x4_all_true(*self as v128) != 0;
+    }
+
+    pub fn bitmask(&self) -> i32 {
+        return builtin::i32x4_bitmask(*self as v128);
+    }
+
+    pub fn min_s(&self, other: &i32x4) -> i32x4 {
+        return builtin::i32x4_min_s(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn min_u(&self, other: &i32x4) -> i32x4 {
+        return builtin::i32x4_min_u(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn max_s(&self, other: &i32x4) -> i32x4 {
+        return builtin::i32x4_max_s(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn max_u(&self, other: &i32x4) -> i32x4 {
+        return builtin::i32x4_max_u(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn dot_i16x8_s(&self, other: &i32x4) -> i32x4 {
+        return builtin::i32x4_dot_i16x8_s(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn extend_low_i16x8_s(a: i16x8) -> i32x4 {
+        return builtin::i32x4_extend_low_i16x8_s(a as v128) as i32x4;
+    }
+
+    pub fn extend_high_i16x8_s(a: i16x8) -> i32x4 {
+        return builtin::i32x4_extend_high_i16x8_s(a as v128) as i32x4;
+    }
+
+    pub fn extend_low_i16x8_u(a: i16x8) -> i32x4 {
+        return builtin::i32x4_extend_low_i16x8_u(a as v128) as i32x4;
+    }
+
+    pub fn extend_high_i16x8_u(a: i16x8) -> i32x4 {
+        return builtin::i32x4_extend_high_i16x8_u(a as v128) as i32x4;
+    }
+
+    pub fn extmul_low_i16x8_s(&self, other: &i32x4) -> i32x4 {
+        return builtin::i32x4_extmul_low_i16x8_s(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn extmul_high_i16x8_s(&self, other: &i32x4) -> i32x4 {
+        return builtin::i32x4_extmul_high_i16x8_s(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn extmul_low_i16x8_u(&self, other: &i32x4) -> i32x4 {
+        return builtin::i32x4_extmul_low_i16x8_u(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn extmul_high_i16x8_u(&self, other: &i32x4) -> i32x4 {
+        return builtin::i32x4_extmul_high_i16x8_u(*self as v128, *other as v128) as i32x4;
+    }
+
+    pub fn extadd_pairwise_i16x8_s(a: i16x8) -> i32x4 {
+        return builtin::i32x4_extadd_pairwise_i16x8_s(a as v128) as i32x4;
+    }
+
+    pub fn extadd_pairwise_i16x8_u(a: i16x8) -> i32x4 {
+        return builtin::i32x4_extadd_pairwise_i16x8_u(a as v128) as i32x4;
+    }
+
+    pub fn trunc_sat_f32x4_s(a: f32x4) -> i32x4 {
+        return builtin::i32x4_trunc_sat_f32x4_s(a as v128) as i32x4;
+    }
+
+    pub fn trunc_sat_f32x4_u(a: f32x4) -> i32x4 {
+        return builtin::i32x4_trunc_sat_f32x4_u(a as v128) as i32x4;
+    }
+
+    pub fn trunc_sat_f64x2_s_zero(a: f64x2) -> i32x4 {
+        return builtin::i32x4_trunc_sat_f64x2_s_zero(a as v128) as i32x4;
+    }
+
+    pub fn trunc_sat_f64x2_u_zero(a: f64x2) -> i32x4 {
+        return builtin::i32x4_trunc_sat_f64x2_u_zero(a as v128) as i32x4;
+    }
+
     pub fn select(&self, mask: &i32x4, other: &i32x4) -> i32x4 {
         return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as i32x4;
+    }
+
+    pub fn relaxed_laneselect(&self, other: &i32x4, mask: &i32x4) -> i32x4 {
+        return builtin::i32x4_relaxed_laneselect(*self as v128, *other as v128, *mask as v128) as i32x4;
+    }
+
+    pub fn relaxed_trunc_f32x4_s(a: f32x4) -> i32x4 {
+        return builtin::i32x4_relaxed_trunc_f32x4_s(a as v128) as i32x4;
+    }
+
+    pub fn relaxed_trunc_f32x4_u(a: f32x4) -> i32x4 {
+        return builtin::i32x4_relaxed_trunc_f32x4_u(a as v128) as i32x4;
+    }
+
+    pub fn relaxed_trunc_f64x2_s_zero(a: f64x2) -> i32x4 {
+        return builtin::i32x4_relaxed_trunc_f64x2_s_zero(a as v128) as i32x4;
+    }
+
+    pub fn relaxed_trunc_f64x2_u_zero(a: f64x2) -> i32x4 {
+        return builtin::i32x4_relaxed_trunc_f64x2_u_zero(a as v128) as i32x4;
+    }
+
+    pub fn relaxed_dot_i8x16_i7x16_add_s(a: i8x16, b: i8x16, c: &i32x4) -> i32x4 {
+        return builtin::i32x4_relaxed_dot_i8x16_i7x16_add_s(a as v128, b as v128, *c as v128) as i32x4;
     }
 }
 
@@ -551,8 +851,56 @@ impl i64x2 {
         return builtin::i64x2_ge_s(*self as v128, *other as v128) as i64x2;
     }
 
+    pub fn abs(&self) -> i64x2 {
+        return builtin::i64x2_abs(*self as v128) as i64x2;
+    }
+
+    pub fn all_true(&self) -> bool {
+        return builtin::i64x2_all_true(*self as v128) != 0;
+    }
+
+    pub fn bitmask(&self) -> i32 {
+        return builtin::i64x2_bitmask(*self as v128);
+    }
+
+    pub fn extend_low_i32x4_s(a: i32x4) -> i64x2 {
+        return builtin::i64x2_extend_low_i32x4_s(a as v128) as i64x2;
+    }
+
+    pub fn extend_high_i32x4_s(a: i32x4) -> i64x2 {
+        return builtin::i64x2_extend_high_i32x4_s(a as v128) as i64x2;
+    }
+
+    pub fn extend_low_i32x4_u(a: i32x4) -> i64x2 {
+        return builtin::i64x2_extend_low_i32x4_u(a as v128) as i64x2;
+    }
+
+    pub fn extend_high_i32x4_u(a: i32x4) -> i64x2 {
+        return builtin::i64x2_extend_high_i32x4_u(a as v128) as i64x2;
+    }
+
+    pub fn extmul_low_i32x4_s(&self, other: &i64x2) -> i64x2 {
+        return builtin::i64x2_extmul_low_i32x4_s(*self as v128, *other as v128) as i64x2;
+    }
+
+    pub fn extmul_high_i32x4_s(&self, other: &i64x2) -> i64x2 {
+        return builtin::i64x2_extmul_high_i32x4_s(*self as v128, *other as v128) as i64x2;
+    }
+
+    pub fn extmul_low_i32x4_u(&self, other: &i64x2) -> i64x2 {
+        return builtin::i64x2_extmul_low_i32x4_u(*self as v128, *other as v128) as i64x2;
+    }
+
+    pub fn extmul_high_i32x4_u(&self, other: &i64x2) -> i64x2 {
+        return builtin::i64x2_extmul_high_i32x4_u(*self as v128, *other as v128) as i64x2;
+    }
+
     pub fn select(&self, mask: &i64x2, other: &i64x2) -> i64x2 {
         return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as i64x2;
+    }
+
+    pub fn relaxed_laneselect(&self, other: &i64x2, mask: &i64x2) -> i64x2 {
+        return builtin::i64x2_relaxed_laneselect(*self as v128, *other as v128, *mask as v128) as i64x2;
     }
 }
 
@@ -708,6 +1056,42 @@ impl u8x16 {
         return builtin::i8x16_ge_u(*self as v128, *other as v128) as u8x16;
     }
 
+    pub fn abs(&self) -> u8x16 {
+        return builtin::i8x16_abs(*self as v128) as u8x16;
+    }
+
+    pub fn add_sat_u(&self, other: &u8x16) -> u8x16 {
+        return builtin::i8x16_add_sat_u(*self as v128, *other as v128) as u8x16;
+    }
+
+    pub fn sub_sat_u(&self, other: &u8x16) -> u8x16 {
+        return builtin::i8x16_sub_sat_u(*self as v128, *other as v128) as u8x16;
+    }
+
+    pub fn min(&self, other: &u8x16) -> u8x16 {
+        return builtin::i8x16_min_u(*self as v128, *other as v128) as u8x16;
+    }
+
+    pub fn max(&self, other: &u8x16) -> u8x16 {
+        return builtin::i8x16_max_u(*self as v128, *other as v128) as u8x16;
+    }
+
+    pub fn avgr(&self, other: &u8x16) -> u8x16 {
+        return builtin::i8x16_avgr_u(*self as v128, *other as v128) as u8x16;
+    }
+
+    pub fn all_true(&self) -> bool {
+        return builtin::i8x16_all_true(*self as v128) != 0;
+    }
+
+    pub fn bitmask(&self) -> i32 {
+        return builtin::i8x16_bitmask(*self as v128);
+    }
+
+    pub fn popcnt(&self) -> u8x16 {
+        return builtin::i8x16_popcnt(*self as v128) as u8x16;
+    }
+
     pub fn select(&self, mask: &u8x16, other: &u8x16) -> u8x16 {
         return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as u8x16;
     }
@@ -857,6 +1241,38 @@ impl u16x8 {
         return builtin::i16x8_ge_u(*self as v128, *other as v128) as u16x8;
     }
 
+    pub fn abs(&self) -> u16x8 {
+        return builtin::i16x8_abs(*self as v128) as u16x8;
+    }
+
+    pub fn add_sat_u(&self, other: &u16x8) -> u16x8 {
+        return builtin::i16x8_add_sat_u(*self as v128, *other as v128) as u16x8;
+    }
+
+    pub fn sub_sat_u(&self, other: &u16x8) -> u16x8 {
+        return builtin::i16x8_sub_sat_u(*self as v128, *other as v128) as u16x8;
+    }
+
+    pub fn min(&self, other: &u16x8) -> u16x8 {
+        return builtin::i16x8_min_u(*self as v128, *other as v128) as u16x8;
+    }
+
+    pub fn max(&self, other: &u16x8) -> u16x8 {
+        return builtin::i16x8_max_u(*self as v128, *other as v128) as u16x8;
+    }
+
+    pub fn avgr(&self, other: &u16x8) -> u16x8 {
+        return builtin::i16x8_avgr_u(*self as v128, *other as v128) as u16x8;
+    }
+
+    pub fn all_true(&self) -> bool {
+        return builtin::i16x8_all_true(*self as v128) != 0;
+    }
+
+    pub fn bitmask(&self) -> i32 {
+        return builtin::i16x8_bitmask(*self as v128);
+    }
+
     pub fn select(&self, mask: &u16x8, other: &u16x8) -> u16x8 {
         return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as u16x8;
     }
@@ -1001,6 +1417,22 @@ impl u32x4 {
         return builtin::i32x4_ge_u(*self as v128, *other as v128) as u32x4;
     }
 
+    pub fn all_true(&self) -> bool {
+        return builtin::i32x4_all_true(*self as v128) != 0;
+    }
+
+    pub fn bitmask(&self) -> i32 {
+        return builtin::i32x4_bitmask(*self as v128);
+    }
+
+    pub fn min(&self, other: &u32x4) -> u32x4 {
+        return builtin::i32x4_min_u(*self as v128, *other as v128) as u32x4;
+    }
+
+    pub fn max(&self, other: &u32x4) -> u32x4 {
+        return builtin::i32x4_max_u(*self as v128, *other as v128) as u32x4;
+    }
+
     pub fn select(&self, mask: &u32x4, other: &u32x4) -> u32x4 {
         return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as u32x4;
     }
@@ -1121,6 +1553,14 @@ impl u64x2 {
 
     pub fn ne(&self, other: &u64x2) -> u64x2 {
         return builtin::i64x2_ne(*self as v128, *other as v128) as u64x2;
+    }
+
+    pub fn all_true(&self) -> bool {
+        return builtin::i64x2_all_true(*self as v128) != 0;
+    }
+
+    pub fn bitmask(&self) -> i32 {
+        return builtin::i64x2_bitmask(*self as v128);
     }
 
     pub fn select(&self, mask: &u64x2, other: &u64x2) -> u64x2 {
@@ -1277,8 +1717,60 @@ impl f32x4 {
         return builtin::f32x4_ge(*self as v128, *other as v128) as i32x4;
     }
 
+    pub fn ceil(&self) -> f32x4 {
+        return builtin::f32x4_ceil(*self as v128) as f32x4;
+    }
+
+    pub fn floor(&self) -> f32x4 {
+        return builtin::f32x4_floor(*self as v128) as f32x4;
+    }
+
+    pub fn trunc(&self) -> f32x4 {
+        return builtin::f32x4_trunc(*self as v128) as f32x4;
+    }
+
+    pub fn nearest(&self) -> f32x4 {
+        return builtin::f32x4_nearest(*self as v128) as f32x4;
+    }
+
+    pub fn pmin(&self, other: &f32x4) -> f32x4 {
+        return builtin::f32x4_pmin(*self as v128, *other as v128) as f32x4;
+    }
+
+    pub fn pmax(&self, other: &f32x4) -> f32x4 {
+        return builtin::f32x4_pmax(*self as v128, *other as v128) as f32x4;
+    }
+
+    pub fn convert_i32x4_s(a: i32x4) -> f32x4 {
+        return builtin::f32x4_convert_i32x4_s(a as v128) as f32x4;
+    }
+
+    pub fn convert_i32x4_u(a: i32x4) -> f32x4 {
+        return builtin::f32x4_convert_i32x4_u(a as v128) as f32x4;
+    }
+
+    pub fn demote_f64x2_zero(a: f64x2) -> f32x4 {
+        return builtin::f32x4_demote_f64x2_zero(a as v128) as f32x4;
+    }
+
     pub fn select(&self, mask: &i32x4, other: &f32x4) -> f32x4 {
         return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as f32x4;
+    }
+
+    pub fn relaxed_madd(&self, b: &f32x4, c: &f32x4) -> f32x4 {
+        return builtin::f32x4_relaxed_madd(*self as v128, *b as v128, *c as v128) as f32x4;
+    }
+
+    pub fn relaxed_nmadd(&self, b: &f32x4, c: &f32x4) -> f32x4 {
+        return builtin::f32x4_relaxed_nmadd(*self as v128, *b as v128, *c as v128) as f32x4;
+    }
+
+    pub fn relaxed_min(&self, other: &f32x4) -> f32x4 {
+        return builtin::f32x4_relaxed_min(*self as v128, *other as v128) as f32x4;
+    }
+
+    pub fn relaxed_max(&self, other: &f32x4) -> f32x4 {
+        return builtin::f32x4_relaxed_max(*self as v128, *other as v128) as f32x4;
     }
 }
 
@@ -1403,8 +1895,60 @@ impl f64x2 {
         return builtin::f64x2_ge(*self as v128, *other as v128) as i64x2;
     }
 
+    pub fn ceil(&self) -> f64x2 {
+        return builtin::f64x2_ceil(*self as v128) as f64x2;
+    }
+
+    pub fn floor(&self) -> f64x2 {
+        return builtin::f64x2_floor(*self as v128) as f64x2;
+    }
+
+    pub fn trunc(&self) -> f64x2 {
+        return builtin::f64x2_trunc(*self as v128) as f64x2;
+    }
+
+    pub fn nearest(&self) -> f64x2 {
+        return builtin::f64x2_nearest(*self as v128) as f64x2;
+    }
+
+    pub fn pmin(&self, other: &f64x2) -> f64x2 {
+        return builtin::f64x2_pmin(*self as v128, *other as v128) as f64x2;
+    }
+
+    pub fn pmax(&self, other: &f64x2) -> f64x2 {
+        return builtin::f64x2_pmax(*self as v128, *other as v128) as f64x2;
+    }
+
+    pub fn convert_low_i32x4_s(a: i32x4) -> f64x2 {
+        return builtin::f64x2_convert_low_i32x4_s(a as v128) as f64x2;
+    }
+
+    pub fn convert_low_i32x4_u(a: i32x4) -> f64x2 {
+        return builtin::f64x2_convert_low_i32x4_u(a as v128) as f64x2;
+    }
+
+    pub fn promote_low_f32x4(a: f32x4) -> f64x2 {
+        return builtin::f64x2_promote_low_f32x4(a as v128) as f64x2;
+    }
+
     pub fn select(&self, mask: &i64x2, other: &f64x2) -> f64x2 {
         return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as f64x2;
+    }
+
+    pub fn relaxed_madd(&self, b: &f64x2, c: &f64x2) -> f64x2 {
+        return builtin::f64x2_relaxed_madd(*self as v128, *b as v128, *c as v128) as f64x2;
+    }
+
+    pub fn relaxed_nmadd(&self, b: &f64x2, c: &f64x2) -> f64x2 {
+        return builtin::f64x2_relaxed_nmadd(*self as v128, *b as v128, *c as v128) as f64x2;
+    }
+
+    pub fn relaxed_min(&self, other: &f64x2) -> f64x2 {
+        return builtin::f64x2_relaxed_min(*self as v128, *other as v128) as f64x2;
+    }
+
+    pub fn relaxed_max(&self, other: &f64x2) -> f64x2 {
+        return builtin::f64x2_relaxed_max(*self as v128, *other as v128) as f64x2;
     }
 }
 

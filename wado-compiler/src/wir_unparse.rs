@@ -1119,6 +1119,213 @@ impl<'a> WirUnparser<'a> {
             WirInstr::F64x2Ge(a, b) => self.write_binop_op("f64x2.ge", a, b),
             WirInstr::F64x2Min(a, b) => self.write_binop_op("f64x2.min", a, b),
             WirInstr::F64x2Max(a, b) => self.write_binop_op("f64x2.max", a, b),
+            WirInstr::I8x16Abs(a) => self.write_unop("i8x16.abs", a),
+            WirInstr::I8x16AddSatS(a, b) => self.write_binop_op("i8x16.add_sat_s", a, b),
+            WirInstr::I8x16AddSatU(a, b) => self.write_binop_op("i8x16.add_sat_u", a, b),
+            WirInstr::I8x16SubSatS(a, b) => self.write_binop_op("i8x16.sub_sat_s", a, b),
+            WirInstr::I8x16SubSatU(a, b) => self.write_binop_op("i8x16.sub_sat_u", a, b),
+            WirInstr::I8x16MinS(a, b) => self.write_binop_op("i8x16.min_s", a, b),
+            WirInstr::I8x16MinU(a, b) => self.write_binop_op("i8x16.min_u", a, b),
+            WirInstr::I8x16MaxS(a, b) => self.write_binop_op("i8x16.max_s", a, b),
+            WirInstr::I8x16MaxU(a, b) => self.write_binop_op("i8x16.max_u", a, b),
+            WirInstr::I8x16AvgrU(a, b) => self.write_binop_op("i8x16.avgr_u", a, b),
+            WirInstr::I8x16AllTrue(a) => self.write_unop("i8x16.all_true", a),
+            WirInstr::I8x16Bitmask(a) => self.write_unop("i8x16.bitmask", a),
+            WirInstr::I8x16NarrowI16x8S(a, b) => self.write_binop_op("i8x16.narrow_i16x8_s", a, b),
+            WirInstr::I8x16NarrowI16x8U(a, b) => self.write_binop_op("i8x16.narrow_i16x8_u", a, b),
+            WirInstr::I8x16Popcnt(a) => self.write_unop("i8x16.popcnt", a),
+            WirInstr::I16x8Abs(a) => self.write_unop("i16x8.abs", a),
+            WirInstr::I16x8AddSatS(a, b) => self.write_binop_op("i16x8.add_sat_s", a, b),
+            WirInstr::I16x8AddSatU(a, b) => self.write_binop_op("i16x8.add_sat_u", a, b),
+            WirInstr::I16x8SubSatS(a, b) => self.write_binop_op("i16x8.sub_sat_s", a, b),
+            WirInstr::I16x8SubSatU(a, b) => self.write_binop_op("i16x8.sub_sat_u", a, b),
+            WirInstr::I16x8MinS(a, b) => self.write_binop_op("i16x8.min_s", a, b),
+            WirInstr::I16x8MinU(a, b) => self.write_binop_op("i16x8.min_u", a, b),
+            WirInstr::I16x8MaxS(a, b) => self.write_binop_op("i16x8.max_s", a, b),
+            WirInstr::I16x8MaxU(a, b) => self.write_binop_op("i16x8.max_u", a, b),
+            WirInstr::I16x8AvgrU(a, b) => self.write_binop_op("i16x8.avgr_u", a, b),
+            WirInstr::I16x8AllTrue(a) => self.write_unop("i16x8.all_true", a),
+            WirInstr::I16x8Bitmask(a) => self.write_unop("i16x8.bitmask", a),
+            WirInstr::I16x8NarrowI32x4S(a, b) => self.write_binop_op("i16x8.narrow_i32x4_s", a, b),
+            WirInstr::I16x8NarrowI32x4U(a, b) => self.write_binop_op("i16x8.narrow_i32x4_u", a, b),
+            WirInstr::I16x8ExtendLowI8x16S(a) => self.write_unop("i16x8.extend_low_i8x16_s", a),
+            WirInstr::I16x8ExtendHighI8x16S(a) => self.write_unop("i16x8.extend_high_i8x16_s", a),
+            WirInstr::I16x8ExtendLowI8x16U(a) => self.write_unop("i16x8.extend_low_i8x16_u", a),
+            WirInstr::I16x8ExtendHighI8x16U(a) => self.write_unop("i16x8.extend_high_i8x16_u", a),
+            WirInstr::I16x8ExtMulLowI8x16S(a, b) => self.write_binop_op("i16x8.extmul_low_i8x16_s", a, b),
+            WirInstr::I16x8ExtMulHighI8x16S(a, b) => self.write_binop_op("i16x8.extmul_high_i8x16_s", a, b),
+            WirInstr::I16x8ExtMulLowI8x16U(a, b) => self.write_binop_op("i16x8.extmul_low_i8x16_u", a, b),
+            WirInstr::I16x8ExtMulHighI8x16U(a, b) => self.write_binop_op("i16x8.extmul_high_i8x16_u", a, b),
+            WirInstr::I16x8ExtAddPairwiseI8x16S(a) => self.write_unop("i16x8.extadd_pairwise_i8x16_s", a),
+            WirInstr::I16x8ExtAddPairwiseI8x16U(a) => self.write_unop("i16x8.extadd_pairwise_i8x16_u", a),
+            WirInstr::I16x8Q15MulrSatS(a, b) => self.write_binop_op("i16x8.q15mulr_sat_s", a, b),
+            WirInstr::I32x4Abs(a) => self.write_unop("i32x4.abs", a),
+            WirInstr::I32x4AllTrue(a) => self.write_unop("i32x4.all_true", a),
+            WirInstr::I32x4Bitmask(a) => self.write_unop("i32x4.bitmask", a),
+            WirInstr::I32x4MinS(a, b) => self.write_binop_op("i32x4.min_s", a, b),
+            WirInstr::I32x4MinU(a, b) => self.write_binop_op("i32x4.min_u", a, b),
+            WirInstr::I32x4MaxS(a, b) => self.write_binop_op("i32x4.max_s", a, b),
+            WirInstr::I32x4MaxU(a, b) => self.write_binop_op("i32x4.max_u", a, b),
+            WirInstr::I32x4DotI16x8S(a, b) => self.write_binop_op("i32x4.dot_i16x8_s", a, b),
+            WirInstr::I32x4ExtendLowI16x8S(a) => self.write_unop("i32x4.extend_low_i16x8_s", a),
+            WirInstr::I32x4ExtendHighI16x8S(a) => self.write_unop("i32x4.extend_high_i16x8_s", a),
+            WirInstr::I32x4ExtendLowI16x8U(a) => self.write_unop("i32x4.extend_low_i16x8_u", a),
+            WirInstr::I32x4ExtendHighI16x8U(a) => self.write_unop("i32x4.extend_high_i16x8_u", a),
+            WirInstr::I32x4ExtMulLowI16x8S(a, b) => self.write_binop_op("i32x4.extmul_low_i16x8_s", a, b),
+            WirInstr::I32x4ExtMulHighI16x8S(a, b) => self.write_binop_op("i32x4.extmul_high_i16x8_s", a, b),
+            WirInstr::I32x4ExtMulLowI16x8U(a, b) => self.write_binop_op("i32x4.extmul_low_i16x8_u", a, b),
+            WirInstr::I32x4ExtMulHighI16x8U(a, b) => self.write_binop_op("i32x4.extmul_high_i16x8_u", a, b),
+            WirInstr::I32x4ExtAddPairwiseI16x8S(a) => self.write_unop("i32x4.extadd_pairwise_i16x8_s", a),
+            WirInstr::I32x4ExtAddPairwiseI16x8U(a) => self.write_unop("i32x4.extadd_pairwise_i16x8_u", a),
+            WirInstr::I32x4TruncSatF32x4S(a) => self.write_unop("i32x4.trunc_sat_f32x4_s", a),
+            WirInstr::I32x4TruncSatF32x4U(a) => self.write_unop("i32x4.trunc_sat_f32x4_u", a),
+            WirInstr::I32x4TruncSatF64x2SZero(a) => self.write_unop("i32x4.trunc_sat_f64x2_s_zero", a),
+            WirInstr::I32x4TruncSatF64x2UZero(a) => self.write_unop("i32x4.trunc_sat_f64x2_u_zero", a),
+            WirInstr::I64x2Abs(a) => self.write_unop("i64x2.abs", a),
+            WirInstr::I64x2AllTrue(a) => self.write_unop("i64x2.all_true", a),
+            WirInstr::I64x2Bitmask(a) => self.write_unop("i64x2.bitmask", a),
+            WirInstr::I64x2ExtendLowI32x4S(a) => self.write_unop("i64x2.extend_low_i32x4_s", a),
+            WirInstr::I64x2ExtendHighI32x4S(a) => self.write_unop("i64x2.extend_high_i32x4_s", a),
+            WirInstr::I64x2ExtendLowI32x4U(a) => self.write_unop("i64x2.extend_low_i32x4_u", a),
+            WirInstr::I64x2ExtendHighI32x4U(a) => self.write_unop("i64x2.extend_high_i32x4_u", a),
+            WirInstr::I64x2ExtMulLowI32x4S(a, b) => self.write_binop_op("i64x2.extmul_low_i32x4_s", a, b),
+            WirInstr::I64x2ExtMulHighI32x4S(a, b) => self.write_binop_op("i64x2.extmul_high_i32x4_s", a, b),
+            WirInstr::I64x2ExtMulLowI32x4U(a, b) => self.write_binop_op("i64x2.extmul_low_i32x4_u", a, b),
+            WirInstr::I64x2ExtMulHighI32x4U(a, b) => self.write_binop_op("i64x2.extmul_high_i32x4_u", a, b),
+            WirInstr::F32x4Ceil(a) => self.write_unop("f32x4.ceil", a),
+            WirInstr::F32x4Floor(a) => self.write_unop("f32x4.floor", a),
+            WirInstr::F32x4Trunc(a) => self.write_unop("f32x4.trunc", a),
+            WirInstr::F32x4Nearest(a) => self.write_unop("f32x4.nearest", a),
+            WirInstr::F32x4PMin(a, b) => self.write_binop_op("f32x4.pmin", a, b),
+            WirInstr::F32x4PMax(a, b) => self.write_binop_op("f32x4.pmax", a, b),
+            WirInstr::F32x4ConvertI32x4S(a) => self.write_unop("f32x4.convert_i32x4_s", a),
+            WirInstr::F32x4ConvertI32x4U(a) => self.write_unop("f32x4.convert_i32x4_u", a),
+            WirInstr::F32x4DemoteF64x2Zero(a) => self.write_unop("f32x4.demote_f64x2_zero", a),
+            WirInstr::F64x2Ceil(a) => self.write_unop("f64x2.ceil", a),
+            WirInstr::F64x2Floor(a) => self.write_unop("f64x2.floor", a),
+            WirInstr::F64x2Trunc(a) => self.write_unop("f64x2.trunc", a),
+            WirInstr::F64x2Nearest(a) => self.write_unop("f64x2.nearest", a),
+            WirInstr::F64x2PMin(a, b) => self.write_binop_op("f64x2.pmin", a, b),
+            WirInstr::F64x2PMax(a, b) => self.write_binop_op("f64x2.pmax", a, b),
+            WirInstr::F64x2ConvertLowI32x4S(a) => self.write_unop("f64x2.convert_low_i32x4_s", a),
+            WirInstr::F64x2ConvertLowI32x4U(a) => self.write_unop("f64x2.convert_low_i32x4_u", a),
+            WirInstr::F64x2PromoteLowF32x4(a) => self.write_unop("f64x2.promote_low_f32x4", a),
+            WirInstr::V128AndNot(a, b) => self.write_binop_op("v128.andnot", a, b),
+            WirInstr::V128AnyTrue(a) => self.write_unop("v128.any_true", a),
+            WirInstr::I8x16RelaxedSwizzle(a, b) => {
+                self.write_binop_op("i8x16.relaxed_swizzle", a, b);
+            }
+            WirInstr::I8x16RelaxedLaneselect(a, b, c) => {
+                self.write("i8x16.relaxed_laneselect(");
+                self.unparse_instr_inline(a);
+                self.write(", ");
+                self.unparse_instr_inline(b);
+                self.write(", ");
+                self.unparse_instr_inline(c);
+                self.write(")");
+            }
+            WirInstr::I16x8RelaxedLaneselect(a, b, c) => {
+                self.write("i16x8.relaxed_laneselect(");
+                self.unparse_instr_inline(a);
+                self.write(", ");
+                self.unparse_instr_inline(b);
+                self.write(", ");
+                self.unparse_instr_inline(c);
+                self.write(")");
+            }
+            WirInstr::I32x4RelaxedLaneselect(a, b, c) => {
+                self.write("i32x4.relaxed_laneselect(");
+                self.unparse_instr_inline(a);
+                self.write(", ");
+                self.unparse_instr_inline(b);
+                self.write(", ");
+                self.unparse_instr_inline(c);
+                self.write(")");
+            }
+            WirInstr::I64x2RelaxedLaneselect(a, b, c) => {
+                self.write("i64x2.relaxed_laneselect(");
+                self.unparse_instr_inline(a);
+                self.write(", ");
+                self.unparse_instr_inline(b);
+                self.write(", ");
+                self.unparse_instr_inline(c);
+                self.write(")");
+            }
+            WirInstr::F32x4RelaxedMadd(a, b, c) => {
+                self.write("f32x4.relaxed_madd(");
+                self.unparse_instr_inline(a);
+                self.write(", ");
+                self.unparse_instr_inline(b);
+                self.write(", ");
+                self.unparse_instr_inline(c);
+                self.write(")");
+            }
+            WirInstr::F32x4RelaxedNmadd(a, b, c) => {
+                self.write("f32x4.relaxed_nmadd(");
+                self.unparse_instr_inline(a);
+                self.write(", ");
+                self.unparse_instr_inline(b);
+                self.write(", ");
+                self.unparse_instr_inline(c);
+                self.write(")");
+            }
+            WirInstr::F64x2RelaxedMadd(a, b, c) => {
+                self.write("f64x2.relaxed_madd(");
+                self.unparse_instr_inline(a);
+                self.write(", ");
+                self.unparse_instr_inline(b);
+                self.write(", ");
+                self.unparse_instr_inline(c);
+                self.write(")");
+            }
+            WirInstr::F64x2RelaxedNmadd(a, b, c) => {
+                self.write("f64x2.relaxed_nmadd(");
+                self.unparse_instr_inline(a);
+                self.write(", ");
+                self.unparse_instr_inline(b);
+                self.write(", ");
+                self.unparse_instr_inline(c);
+                self.write(")");
+            }
+            WirInstr::F32x4RelaxedMin(a, b) => {
+                self.write_binop_op("f32x4.relaxed_min", a, b);
+            }
+            WirInstr::F32x4RelaxedMax(a, b) => {
+                self.write_binop_op("f32x4.relaxed_max", a, b);
+            }
+            WirInstr::F64x2RelaxedMin(a, b) => {
+                self.write_binop_op("f64x2.relaxed_min", a, b);
+            }
+            WirInstr::F64x2RelaxedMax(a, b) => {
+                self.write_binop_op("f64x2.relaxed_max", a, b);
+            }
+            WirInstr::I32x4RelaxedTruncF32x4S(a) => {
+                self.write_unop("i32x4.relaxed_trunc_f32x4_s", a);
+            }
+            WirInstr::I32x4RelaxedTruncF32x4U(a) => {
+                self.write_unop("i32x4.relaxed_trunc_f32x4_u", a);
+            }
+            WirInstr::I32x4RelaxedTruncF64x2SZero(a) => {
+                self.write_unop("i32x4.relaxed_trunc_f64x2_s_zero", a);
+            }
+            WirInstr::I32x4RelaxedTruncF64x2UZero(a) => {
+                self.write_unop("i32x4.relaxed_trunc_f64x2_u_zero", a);
+            }
+            WirInstr::I16x8RelaxedQ15mulrS(a, b) => {
+                self.write_binop_op("i16x8.relaxed_q15mulr_s", a, b);
+            }
+            WirInstr::I16x8RelaxedDotI8x16I7x16S(a, b) => {
+                self.write_binop_op("i16x8.relaxed_dot_i8x16_i7x16_s", a, b);
+            }
+            WirInstr::I32x4RelaxedDotI8x16I7x16AddS(a, b, c) => {
+                self.write("i32x4.relaxed_dot_i8x16_i7x16_add_s(");
+                self.unparse_instr_inline(a);
+                self.write(", ");
+                self.unparse_instr_inline(b);
+                self.write(", ");
+                self.unparse_instr_inline(c);
+                self.write(")");
+            }
 
             // GC: Struct
             WirInstr::StructNew { type_id, fields } => {
