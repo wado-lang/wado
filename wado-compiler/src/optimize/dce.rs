@@ -246,12 +246,9 @@ pub fn analyze_project(project: &mut Project) {
             add_import_by_name(&mut imports, "task_return");
         }
 
-        // Waitable-set builtins (waitable_set_new, waitable_join, waitable_set_wait, subtask_drop)
-        // are added automatically via reachability from internal::wait_for_subtask
-        //
-        // HTTP handler exports need future intrinsics (future-new, future-write,
-        // future-drop-writable) for response creation, but these are now registered
-        // lazily by WIR synthesis via ensure_canonical() — no DCE injection needed.
+        // CM resource canonicals (stream-new, stream-write, waitable-set-new, subtask-drop, etc.)
+        // are registered lazily by WIR synthesis via `ensure_canonical()` when resource methods
+        // are called. No DCE injection needed — they are discovered through normal reachability.
     }
 
     // Store imports in the entry module
@@ -1312,6 +1309,12 @@ fn compute_reachable_types(project: &Project) -> IndexSet<TypeId> {
                     for field in &tir_struct.fields {
                         collect_type_transitive(field.type_id, &type_table, &mut reachable_types);
                     }
+                    // Monomorphization type args are used by WIR for name mangling
+                    if let Some(info) = &tir_struct.monomorph_info {
+                        for &ta in &info.type_args {
+                            collect_type_transitive(ta, &type_table, &mut reachable_types);
+                        }
+                    }
                 }
             }
 
@@ -1372,6 +1375,13 @@ fn collect_types_from_function(
     // Collect local variable types (includes types from inlined functions)
     for &local_type_id in &func.local_types {
         collect_type_transitive(local_type_id, type_table, reachable);
+    }
+
+    // Collect monomorphization type args (used by WIR for name mangling)
+    if let Some(info) = &func.monomorph_info {
+        for &ta in &info.type_args {
+            collect_type_transitive(ta, type_table, reachable);
+        }
     }
 
     // Collect types from body
@@ -1850,12 +1860,11 @@ pub fn remove_unreachable_types(project: &mut Project) {
         module.enums.retain(|e| keep_enums.contains(&e.name));
     }
 
-    // Remove unreachable types from the shared TypeTable
-    // Since all modules share the same TypeTable via Rc<RefCell<>>,
-    // we only need to modify it once through any module
+    // Remove unreachable entries from the shared TypeTable.
+    // This ensures that subsequent phases (WIR type registration, codegen) do not
+    // emit types that are no longer referenced by any surviving function.
     if let Some(module) = project.tir_modules.values().next() {
-        let mut type_table = module.type_table.borrow_mut();
-        type_table.retain(|type_id, _| reachable_types.contains(&type_id));
+        module.type_table.borrow_mut().retain(&reachable_types);
     }
 }
 

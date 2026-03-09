@@ -407,24 +407,21 @@ mod tests {
         }
 
         // Verify key builtins are registered
-        assert!(registry.is_builtin("stream_new"), "stream_new not found");
-        assert!(
-            registry.is_builtin("stream_write"),
-            "stream_write not found"
-        );
         assert!(registry.is_builtin("array_len"), "array_len not found");
         assert!(registry.is_builtin("unreachable"), "unreachable not found");
-
-        // Verify return types (stream_new returns i64, not UNIT)
-        let stream_new = registry.get("stream_new").unwrap();
-        assert_ne!(
-            stream_new.return_type,
-            TypeTable::UNIT,
-            "stream_new should have non-unit return type"
+        assert!(registry.is_builtin("realloc"), "realloc not found");
+        assert!(
+            registry.is_builtin("call_indirect_stdout_write_via_stream"),
+            "call_indirect_stdout_write_via_stream not found"
         );
 
-        let stream_write = registry.get("stream_write").unwrap();
-        assert_eq!(stream_write.params.len(), 3);
+        // Verify return types
+        let realloc = registry.get("realloc").unwrap();
+        assert_ne!(
+            realloc.return_type,
+            TypeTable::UNIT,
+            "realloc should have non-unit return type"
+        );
 
         // Verify unreachable diverges
         assert!(registry.diverges("unreachable"));
