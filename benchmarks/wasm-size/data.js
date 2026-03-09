@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773083297969,
+  "lastUpdate": 1773095860828,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2051,6 +2051,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4fe42743b7f279299cfb74dfd9a345143ea2fced"
         },
         "date": 1773083297756,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2400,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10319,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19848,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a77b1257e2f5ddf7dc00fed7bfa39c08c20012a3",
+          "message": "Merge pull request #550 from wado-lang/claude/match-exhaustiveness-checks-dzp8S\n\nAdd exhaustiveness checking for match expressions",
+          "timestamp": "2026-03-10T07:35:10+09:00",
+          "tree_id": "22edbd7f606530dc678c96ed5b8db74ecc6a50eb",
+          "url": "https://github.com/wado-lang/wado/commit/a77b1257e2f5ddf7dc00fed7bfa39c08c20012a3"
+        },
+        "date": 1773095860596,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
