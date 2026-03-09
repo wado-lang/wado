@@ -1,0 +1,275 @@
+// SIMD 2D Vector Math
+//
+// 2D vector operations using f64x2, where each lane maps to [x, y].
+// Foundation for physics engines, game math, GIS calculations,
+// and computational geometry.
+
+use { println, Stdout } from "core:cli";
+use { f64x2 } from "core:simd";
+
+struct Vec2 {
+    v: f64x2,
+}
+
+impl Vec2 {
+    fn new(x: f64, y: f64) -> Vec2 {
+        let v: f64x2 = [x, y];
+        return Vec2 { v };
+    }
+
+    fn zero() -> Vec2 {
+        return Vec2 { v: f64x2::splat(0.0) };
+    }
+
+    fn x(&self) -> f64 { return self.v.extract_lane(0); }
+    fn y(&self) -> f64 { return self.v.extract_lane(1); }
+
+    fn add(&self, other: &Vec2) -> Vec2 {
+        return Vec2 { v: self.v + other.v };
+    }
+
+    fn sub(&self, other: &Vec2) -> Vec2 {
+        return Vec2 { v: self.v - other.v };
+    }
+
+    fn scale(&self, s: f64) -> Vec2 {
+        return Vec2 { v: self.v * f64x2::splat(s) };
+    }
+
+    // Dot product: x1*x2 + y1*y2
+    fn dot(&self, other: &Vec2) -> f64 {
+        let prod = self.v * other.v;
+        return prod.extract_lane(0) + prod.extract_lane(1);
+    }
+
+    // 2D cross product (z-component of 3D cross): x1*y2 - y1*x2
+    fn cross(&self, other: &Vec2) -> f64 {
+        // Multiply [x1, y1] * [y2, x2], then subtract lanes
+        let other_swapped: f64x2 = [other.y(), other.x()];
+        let prod = self.v * other_swapped;
+        return prod.extract_lane(0) - prod.extract_lane(1);
+    }
+
+    // Squared length (avoids sqrt)
+    fn length_sq(&self) -> f64 {
+        return self.dot(self);
+    }
+
+    // Length
+    fn length(&self) -> f64 {
+        return f64::sqrt(self.length_sq());
+    }
+
+    // Normalize to unit vector
+    fn normalize(&self) -> Vec2 {
+        let len = self.length();
+        return self.scale(1.0 / len);
+    }
+
+    // Distance between two points
+    fn distance(&self, other: &Vec2) -> f64 {
+        return self.sub(other).length();
+    }
+
+    // Perpendicular vector (90 degree rotation counterclockwise)
+    fn perp(&self) -> Vec2 {
+        return Vec2::new(-self.y(), self.x());
+    }
+
+    // Reflect vector across a normal
+    fn reflect(&self, normal: &Vec2) -> Vec2 {
+        // r = v - 2*(v.n)*n
+        let d = self.dot(normal);
+        return self.sub(&normal.scale(2.0 * d));
+    }
+
+    // Component-wise min
+    fn min(&self, other: &Vec2) -> Vec2 {
+        return Vec2 { v: self.v.min(&other.v) };
+    }
+
+    // Component-wise max
+    fn max(&self, other: &Vec2) -> Vec2 {
+        return Vec2 { v: self.v.max(&other.v) };
+    }
+
+    // Linear interpolation
+    fn lerp(&self, other: &Vec2, t: f64) -> Vec2 {
+        let t_vec = f64x2::splat(t);
+        let one_minus_t = f64x2::splat(1.0 - t);
+        return Vec2 { v: self.v * one_minus_t + other.v * t_vec };
+    }
+
+    fn to_string(&self) -> String {
+        return `({self.x():0.4f}, {self.y():0.4f})`;
+    }
+}
+
+// Axis-aligned bounding box
+struct AABB {
+    min: Vec2,
+    max: Vec2,
+}
+
+impl AABB {
+    fn new(min: Vec2, max: Vec2) -> AABB {
+        return AABB { min, max };
+    }
+
+    fn contains(&self, p: &Vec2) -> bool {
+        return p.x() >= self.min.x() && p.x() <= self.max.x()
+            && p.y() >= self.min.y() && p.y() <= self.max.y();
+    }
+
+    fn intersects(&self, other: &AABB) -> bool {
+        return self.min.x() <= other.max.x() && self.max.x() >= other.min.x()
+            && self.min.y() <= other.max.y() && self.max.y() >= other.min.y();
+    }
+
+    fn center(&self) -> Vec2 {
+        return self.min.lerp(&self.max, 0.5);
+    }
+}
+
+fn approx_eq(a: f64, b: f64) -> bool {
+    return f64::abs(a - b) < 0.0001;
+}
+
+// --- Tests ---
+
+test "vec2 construction" {
+    let v = Vec2::new(3.0, 4.0);
+    assert approx_eq(v.x(), 3.0);
+    assert approx_eq(v.y(), 4.0);
+}
+
+test "vec2 add sub" {
+    let a = Vec2::new(1.0, 2.0);
+    let b = Vec2::new(3.0, 4.0);
+    let sum = a.add(&b);
+    assert approx_eq(sum.x(), 4.0);
+    assert approx_eq(sum.y(), 6.0);
+
+    let diff = a.sub(&b);
+    assert approx_eq(diff.x(), -2.0);
+    assert approx_eq(diff.y(), -2.0);
+}
+
+test "dot product" {
+    let a = Vec2::new(1.0, 0.0);
+    let b = Vec2::new(0.0, 1.0);
+    assert approx_eq(a.dot(&b), 0.0); // perpendicular
+
+    let c = Vec2::new(3.0, 4.0);
+    assert approx_eq(a.dot(&c), 3.0); // projection on x-axis
+}
+
+test "cross product" {
+    let a = Vec2::new(1.0, 0.0);
+    let b = Vec2::new(0.0, 1.0);
+    assert approx_eq(a.cross(&b), 1.0);  // counterclockwise
+    assert approx_eq(b.cross(&a), -1.0); // clockwise
+}
+
+test "length and normalize" {
+    let v = Vec2::new(3.0, 4.0);
+    assert approx_eq(v.length(), 5.0);   // 3-4-5 triangle
+    assert approx_eq(v.length_sq(), 25.0);
+
+    let n = v.normalize();
+    assert approx_eq(n.length(), 1.0);
+    assert approx_eq(n.x(), 0.6);
+    assert approx_eq(n.y(), 0.8);
+}
+
+test "distance" {
+    let a = Vec2::new(0.0, 0.0);
+    let b = Vec2::new(3.0, 4.0);
+    assert approx_eq(a.distance(&b), 5.0);
+}
+
+test "perpendicular" {
+    let v = Vec2::new(1.0, 0.0);
+    let p = v.perp();
+    assert approx_eq(p.x(), 0.0);
+    assert approx_eq(p.y(), 1.0);
+    assert approx_eq(v.dot(&p), 0.0); // must be perpendicular
+}
+
+test "reflect" {
+    // Reflect a ray going down-right off a horizontal surface
+    let incoming = Vec2::new(1.0, -1.0).normalize();
+    let normal = Vec2::new(0.0, 1.0);
+    let reflected = incoming.reflect(&normal);
+    assert approx_eq(reflected.x(), incoming.x());
+    assert approx_eq(reflected.y(), -incoming.y());
+}
+
+test "lerp" {
+    let a = Vec2::new(0.0, 0.0);
+    let b = Vec2::new(10.0, 20.0);
+    let mid = a.lerp(&b, 0.5);
+    assert approx_eq(mid.x(), 5.0);
+    assert approx_eq(mid.y(), 10.0);
+}
+
+test "aabb contains" {
+    let box1 = AABB::new(Vec2::new(0.0, 0.0), Vec2::new(10.0, 10.0));
+    let inside = Vec2::new(5.0, 5.0);
+    let outside = Vec2::new(15.0, 5.0);
+    assert box1.contains(&inside);
+    assert !box1.contains(&outside);
+}
+
+test "aabb intersection" {
+    let a = AABB::new(Vec2::new(0.0, 0.0), Vec2::new(10.0, 10.0));
+    let b = AABB::new(Vec2::new(5.0, 5.0), Vec2::new(15.0, 15.0));
+    let c = AABB::new(Vec2::new(20.0, 20.0), Vec2::new(30.0, 30.0));
+    assert a.intersects(&b);
+    assert !a.intersects(&c);
+}
+
+// --- Demo ---
+
+export fn run() with Stdout {
+    println("=== SIMD 2D Vector Math ===");
+    println("");
+
+    // Basic vector operations
+    let velocity = Vec2::new(3.0, 4.0);
+    println(`Velocity:  {velocity.to_string()}`);
+    println(`Speed:     {velocity.length():0.4f}`);
+    println(`Direction: {velocity.normalize().to_string()}`);
+
+    // Simulate a ball bouncing off a wall
+    println("");
+    println("Ball reflection off angled wall:");
+    let ball_dir = Vec2::new(1.0, -0.5).normalize();
+    let wall_normal = Vec2::new(-0.707, 0.707).normalize(); // 45-degree wall
+    let bounce = ball_dir.reflect(&wall_normal);
+    println(`  Incoming:  {ball_dir.to_string()}`);
+    println(`  Normal:    {wall_normal.to_string()}`);
+    println(`  Reflected: {bounce.to_string()}`);
+
+    // Path interpolation
+    println("");
+    println("Path interpolation (A -> B):");
+    let a = Vec2::new(0.0, 0.0);
+    let b = Vec2::new(100.0, 50.0);
+    for let mut i = 0; i <= 4; i += 1 {
+        let t = (i as f64) / 4.0;
+        let p = a.lerp(&b, t);
+        let dist = a.distance(&p);
+        println(`  t={t:0.2f}: {p.to_string()}  dist={dist:0.2f}`);
+    }
+
+    // AABB collision detection
+    println("");
+    println("AABB collision:");
+    let player = AABB::new(Vec2::new(5.0, 5.0), Vec2::new(15.0, 15.0));
+    let enemy = AABB::new(Vec2::new(10.0, 10.0), Vec2::new(20.0, 20.0));
+    let item = AABB::new(Vec2::new(50.0, 50.0), Vec2::new(55.0, 55.0));
+    println(`  Player center: {player.center().to_string()}`);
+    println(`  Player vs Enemy: {player.intersects(&enemy)}`);
+    println(`  Player vs Item:  {player.intersects(&item)}`);
+}
