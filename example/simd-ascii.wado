@@ -1,0 +1,281 @@
+// SIMD ASCII Text Processing
+//
+// Byte-level text operations using u8x16, processing 16 characters at a time.
+// This is the technique behind fast parsers (simdjson), HTTP header parsing,
+// and high-throughput text processing engines.
+
+use { println, Stdout } from "core:cli";
+use { u8x16 } from "core:simd";
+
+// Helper: Load 16 bytes from a String into u8x16
+fn load_chunk(s: String, offset: i32) -> u8x16 {
+    let b0 = s.get_byte(offset) as i32;
+    let b1 = s.get_byte(offset + 1) as i32;
+    let b2 = s.get_byte(offset + 2) as i32;
+    let b3 = s.get_byte(offset + 3) as i32;
+    let b4 = s.get_byte(offset + 4) as i32;
+    let b5 = s.get_byte(offset + 5) as i32;
+    let b6 = s.get_byte(offset + 6) as i32;
+    let b7 = s.get_byte(offset + 7) as i32;
+    let b8 = s.get_byte(offset + 8) as i32;
+    let b9 = s.get_byte(offset + 9) as i32;
+    let b10 = s.get_byte(offset + 10) as i32;
+    let b11 = s.get_byte(offset + 11) as i32;
+    let b12 = s.get_byte(offset + 12) as i32;
+    let b13 = s.get_byte(offset + 13) as i32;
+    let b14 = s.get_byte(offset + 14) as i32;
+    let b15 = s.get_byte(offset + 15) as i32;
+    let v: u8x16 = [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15];
+    return v;
+}
+
+// Convert ASCII uppercase letters to lowercase, 16 bytes at a time.
+// Non-letter bytes pass through unchanged.
+fn to_lowercase_simd(input: String) -> String {
+    let len = input.len();
+    let mut result = String::with_capacity(len);
+
+    let upper_a = u8x16::splat('A' as i32);
+    let upper_z = u8x16::splat('Z' as i32);
+    let case_bit = u8x16::splat(0x20); // 'a' - 'A' = 32 = 0x20
+
+    let mut i = 0;
+    while i + 16 <= len {
+        let chunk = load_chunk(input, i);
+
+        // Build mask: bytes >= 'A' && bytes <= 'Z'
+        let ge_a = chunk.ge(&upper_a);
+        let le_z = chunk.le(&upper_z);
+        let is_upper = ge_a & le_z;
+
+        // Add 0x20 only to uppercase letters
+        let delta = case_bit & is_upper;
+        let lowered = chunk + delta;
+
+        // Append 16 bytes to result
+        let mut lane = 0;
+        while lane < 16 {
+            let c = char::from_i32(lowered.extract_lane(lane));
+            if let Some(ch) = c {
+                result.append_char(ch);
+            }
+            lane = lane + 1;
+        }
+        i = i + 16;
+    }
+
+    // Handle remaining bytes
+    while i < len {
+        let b = input.get_byte(i);
+        if b >= 'A' as u8 && b <= 'Z' as u8 {
+            let lower = char::from_i32((b + 0x20 as u8) as i32);
+            if let Some(ch) = lower {
+                result.append_char(ch);
+            }
+        } else {
+            let ch_opt = char::from_i32(b as i32);
+            if let Some(ch) = ch_opt {
+                result.append_char(ch);
+            }
+        }
+        i = i + 1;
+    }
+
+    return result;
+}
+
+// Count occurrences of a specific ASCII byte in a string using SIMD.
+// Useful for counting newlines, spaces, or any delimiter.
+fn count_byte_simd(input: String, target: u8) -> i32 {
+    let len = input.len();
+    let mut count = 0;
+
+    let target_vec = u8x16::splat(target as i32);
+
+    let mut i = 0;
+    while i + 16 <= len {
+        let chunk = load_chunk(input, i);
+        let mask = chunk.eq(&target_vec);
+
+        // Count matching lanes (each match byte is 0xFF)
+        let mut lane = 0;
+        while lane < 16 {
+            if mask.extract_lane(lane) != 0 {
+                count = count + 1;
+            }
+            lane = lane + 1;
+        }
+        i = i + 16;
+    }
+
+    // Remaining bytes
+    while i < len {
+        if input.get_byte(i) == target {
+            count = count + 1;
+        }
+        i = i + 1;
+    }
+
+    return count;
+}
+
+// Check if a string contains only ASCII printable characters (0x20..0x7E)
+fn is_ascii_printable_simd(input: String) -> bool {
+    let len = input.len();
+
+    let lo = u8x16::splat(0x20);
+    let hi = u8x16::splat(0x7E);
+
+    let mut i = 0;
+    while i + 16 <= len {
+        let chunk = load_chunk(input, i);
+
+        let ge_lo = chunk.ge(&lo);
+        let le_hi = chunk.le(&hi);
+        let in_range = ge_lo & le_hi;
+
+        // Check if any lane is NOT in range
+        let mut lane = 0;
+        while lane < 16 {
+            if in_range.extract_lane(lane) == 0 {
+                return false;
+            }
+            lane = lane + 1;
+        }
+        i = i + 16;
+    }
+
+    while i < len {
+        let b = input.get_byte(i);
+        if b < 0x20 as u8 || b > 0x7E as u8 {
+            return false;
+        }
+        i = i + 1;
+    }
+
+    return true;
+}
+
+// Count ASCII digits in a string using SIMD
+fn count_digits_simd(input: String) -> i32 {
+    let len = input.len();
+    let mut count = 0;
+
+    let zero = u8x16::splat('0' as i32);
+    let nine = u8x16::splat('9' as i32);
+
+    let mut i = 0;
+    while i + 16 <= len {
+        let chunk = load_chunk(input, i);
+
+        let ge_0 = chunk.ge(&zero);
+        let le_9 = chunk.le(&nine);
+        let is_digit = ge_0 & le_9;
+
+        let mut lane = 0;
+        while lane < 16 {
+            if is_digit.extract_lane(lane) != 0 {
+                count = count + 1;
+            }
+            lane = lane + 1;
+        }
+        i = i + 16;
+    }
+
+    while i < len {
+        let b = input.get_byte(i);
+        if b >= '0' as u8 && b <= '9' as u8 {
+            count = count + 1;
+        }
+        i = i + 1;
+    }
+
+    return count;
+}
+
+// --- Tests ---
+
+test "to_lowercase basic" {
+    assert to_lowercase_simd("HELLO WORLD") == "hello world";
+    assert to_lowercase_simd("Hello World") == "hello world";
+    assert to_lowercase_simd("already lower") == "already lower";
+}
+
+test "to_lowercase preserves non-letters" {
+    assert to_lowercase_simd("ABC-123_XYZ!") == "abc-123_xyz!";
+    assert to_lowercase_simd("") == "";
+}
+
+test "to_lowercase long string" {
+    // Longer than 16 bytes to exercise SIMD path
+    let input = "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG";
+    let expected = "the quick brown fox jumps over the lazy dog";
+    assert to_lowercase_simd(input) == expected;
+}
+
+test "count_byte newlines" {
+    let text = "line1\nline2\nline3\n";
+    assert count_byte_simd(text, '\n' as u8) == 3;
+}
+
+test "count_byte spaces in long text" {
+    let text = "this is a test string with many spaces in it";
+    assert count_byte_simd(text, ' ' as u8) == 9;
+}
+
+test "count_byte no matches" {
+    assert count_byte_simd("hello", 'z' as u8) == 0;
+}
+
+test "is_ascii_printable" {
+    assert is_ascii_printable_simd("Hello, World! 123");
+    assert is_ascii_printable_simd("!@#$%^&*()_+-=[]");
+    assert is_ascii_printable_simd("");
+}
+
+test "is_ascii_printable rejects control chars" {
+    // Strings with newline (0x0A) are not printable
+    assert !is_ascii_printable_simd("Hello\nWorld");
+    // Strings with tab (0x09) are not printable
+    assert !is_ascii_printable_simd("Hello\tWorld");
+}
+
+test "count_digits" {
+    assert count_digits_simd("abc123def456ghi") == 6;
+    assert count_digits_simd("no digits here") == 0;
+    assert count_digits_simd("0123456789") == 10;
+    // 32 bytes to hit SIMD path twice
+    assert count_digits_simd("xx12xx34xx56xx78xx90xxAAxxBBxxCC") == 10;
+}
+
+// --- Demo ---
+
+export fn run() with Stdout {
+    println("=== SIMD ASCII Text Processing ===");
+    println("");
+
+    // Case conversion
+    let text = "The Quick Brown Fox Jumps Over The Lazy Dog!";
+    println(`Original:  "{text}"`);
+    println(`Lowercase: "{to_lowercase_simd(text)}"`);
+
+    // Byte counting
+    println("");
+    let code = "fn main() { let x = 42; println(x); }";
+    println(`Code: "{code}"`);
+    println(`  Spaces:     {count_byte_simd(code, ' ' as u8)}`);
+    println(`  Semicolons: {count_byte_simd(code, ';' as u8)}`);
+    println(`  Digits:     {count_digits_simd(code)}`);
+
+    // Printable check
+    println("");
+    let clean = "Hello, World!";
+    let with_tab = "Hello\tWorld";
+    println(`"{clean}" is printable: {is_ascii_printable_simd(clean)}`);
+    println(`"Hello\\tWorld" is printable: {is_ascii_printable_simd(with_tab)}`);
+
+    // Newline counting (common in log/text processing)
+    println("");
+    let log = "INFO: started\nWARN: slow query\nERROR: timeout\nINFO: recovered\n";
+    println(`Log lines: {count_byte_simd(log, '\n' as u8)}`);
+}

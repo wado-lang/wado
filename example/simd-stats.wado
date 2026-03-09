@@ -1,0 +1,236 @@
+// SIMD Statistical Calculations
+//
+// Compute basic statistics (sum, mean, variance, min, max) using f64x2
+// to process two values in parallel. This pattern is used in data analysis,
+// monitoring systems, and scientific computing.
+
+use { println, Stdout } from "core:cli";
+use { f64x2, i64x2 } from "core:simd";
+
+struct Stats {
+    count: i32,
+    sum: f64,
+    mean: f64,
+    variance: f64,
+    min: f64,
+    max: f64,
+}
+
+// Compute summary statistics using SIMD-accelerated accumulation
+fn compute_stats(data: &Array<f64>) -> Stats {
+    let len = data.len();
+    if len == 0 {
+        return Stats { count: 0, sum: 0.0, mean: 0.0, variance: 0.0, min: 0.0, max: 0.0 };
+    }
+
+    // Phase 1: SIMD sum and min/max
+    let mut sum_vec = f64x2::splat(0.0);
+    let mut min_vec = f64x2::splat((*data)[0]);
+    let mut max_vec = f64x2::splat((*data)[0]);
+
+    let mut i = 0;
+    while i + 2 <= len {
+        let chunk: f64x2 = [(*data)[i], (*data)[i + 1]];
+        sum_vec = sum_vec + chunk;
+        min_vec = min_vec.min(&chunk);
+        max_vec = max_vec.max(&chunk);
+        i = i + 2;
+    }
+
+    // Reduce SIMD lanes to scalars
+    let mut sum = sum_vec.extract_lane(0) + sum_vec.extract_lane(1);
+    let mut min_val = f64::min(min_vec.extract_lane(0), min_vec.extract_lane(1));
+    let mut max_val = f64::max(max_vec.extract_lane(0), max_vec.extract_lane(1));
+
+    // Handle odd element
+    if i < len {
+        sum = sum + (*data)[i];
+        min_val = f64::min(min_val, (*data)[i]);
+        max_val = f64::max(max_val, (*data)[i]);
+    }
+
+    let mean = sum / (len as f64);
+
+    // Phase 2: SIMD variance (sum of squared deviations)
+    let mean_vec = f64x2::splat(mean);
+    let mut sq_sum_vec = f64x2::splat(0.0);
+
+    i = 0;
+    while i + 2 <= len {
+        let chunk: f64x2 = [(*data)[i], (*data)[i + 1]];
+        let diff = chunk - mean_vec;
+        sq_sum_vec = sq_sum_vec + diff * diff;
+        i = i + 2;
+    }
+
+    let mut sq_sum = sq_sum_vec.extract_lane(0) + sq_sum_vec.extract_lane(1);
+    if i < len {
+        let diff = (*data)[i] - mean;
+        sq_sum = sq_sum + diff * diff;
+    }
+
+    let variance = sq_sum / (len as f64);
+
+    return Stats { count: len, sum, mean, variance, min: min_val, max: max_val };
+}
+
+fn std_dev(s: &Stats) -> f64 {
+    return f64::sqrt(s.variance);
+}
+
+// Normalize data to zero mean, unit variance (z-score)
+fn normalize(data: &Array<f64>) -> Array<f64> {
+    let s = compute_stats(data);
+    let sd = std_dev(&s);
+    let len = data.len();
+    let mut result: Array<f64> = [];
+
+    let mean_vec = f64x2::splat(s.mean);
+    let sd_vec = f64x2::splat(sd);
+
+    let mut i = 0;
+    while i + 2 <= len {
+        let chunk: f64x2 = [(*data)[i], (*data)[i + 1]];
+        let normalized = (chunk - mean_vec) / sd_vec;
+        result.append(normalized.extract_lane(0));
+        result.append(normalized.extract_lane(1));
+        i = i + 2;
+    }
+
+    if i < len {
+        result.append(((*data)[i] - s.mean) / sd);
+    }
+
+    return result;
+}
+
+// Compute dot product of two arrays using SIMD
+fn dot_product(a: &Array<f64>, b: &Array<f64>) -> f64 {
+    let len = i32::min(a.len(), b.len());
+    let mut sum_vec = f64x2::splat(0.0);
+
+    let mut i = 0;
+    while i + 2 <= len {
+        let va: f64x2 = [(*a)[i], (*a)[i + 1]];
+        let vb: f64x2 = [(*b)[i], (*b)[i + 1]];
+        sum_vec = sum_vec + va * vb;
+        i = i + 2;
+    }
+
+    let mut sum = sum_vec.extract_lane(0) + sum_vec.extract_lane(1);
+    if i < len {
+        sum = sum + (*a)[i] * (*b)[i];
+    }
+
+    return sum;
+}
+
+fn approx_eq(a: f64, b: f64) -> bool {
+    return f64::abs(a - b) < 0.0001;
+}
+
+// --- Tests ---
+
+test "basic stats" {
+    let data: Array<f64> = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
+    let s = compute_stats(&data);
+    assert s.count == 8;
+    assert approx_eq(s.sum, 40.0);
+    assert approx_eq(s.mean, 5.0);
+    assert approx_eq(s.variance, 4.0);
+    assert approx_eq(std_dev(&s), 2.0);
+    assert approx_eq(s.min, 2.0);
+    assert approx_eq(s.max, 9.0);
+}
+
+test "stats single element" {
+    let data: Array<f64> = [42.0];
+    let s = compute_stats(&data);
+    assert s.count == 1;
+    assert approx_eq(s.mean, 42.0);
+    assert approx_eq(s.variance, 0.0);
+    assert approx_eq(s.min, 42.0);
+    assert approx_eq(s.max, 42.0);
+}
+
+test "stats odd count" {
+    let data: Array<f64> = [1.0, 2.0, 3.0, 4.0, 5.0];
+    let s = compute_stats(&data);
+    assert approx_eq(s.mean, 3.0);
+    assert approx_eq(s.min, 1.0);
+    assert approx_eq(s.max, 5.0);
+}
+
+test "stats empty" {
+    let data: Array<f64> = [];
+    let s = compute_stats(&data);
+    assert s.count == 0;
+}
+
+test "normalize" {
+    let data: Array<f64> = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
+    let norm = normalize(&data);
+    // mean=5, stddev=2, so first element: (2-5)/2 = -1.5
+    assert approx_eq(norm[0], -1.5);
+    assert approx_eq(norm[2], -0.5);
+    assert approx_eq(norm[7], 2.0);
+
+    // Normalized data should have mean ~0
+    let ns = compute_stats(&norm);
+    assert approx_eq(ns.mean, 0.0);
+}
+
+test "dot product" {
+    let a: Array<f64> = [1.0, 2.0, 3.0];
+    let b: Array<f64> = [4.0, 5.0, 6.0];
+    // 1*4 + 2*5 + 3*6 = 4 + 10 + 18 = 32
+    assert approx_eq(dot_product(&a, &b), 32.0);
+}
+
+test "dot product even" {
+    let a: Array<f64> = [1.0, 0.0, 0.0, 1.0];
+    let b: Array<f64> = [0.0, 1.0, 1.0, 0.0];
+    assert approx_eq(dot_product(&a, &b), 0.0); // orthogonal
+}
+
+// --- Demo ---
+
+export fn run() with Stdout {
+    println("=== SIMD Statistical Calculations ===");
+    println("");
+
+    // Sample data: daily temperatures (Celsius)
+    let temps: Array<f64> = [
+        22.1, 23.4, 19.8, 25.2, 24.0,
+        21.5, 26.3, 20.7, 23.9, 25.8,
+        18.4, 27.1, 22.0, 24.5, 21.2,
+    ];
+
+    let s = compute_stats(&temps);
+    println("Daily temperatures (15 days):");
+    println(`  Count:    {s.count}`);
+    println(`  Sum:      {s.sum:0.2f}`);
+    println(`  Mean:     {s.mean:0.2f}`);
+    println(`  Std Dev:  {std_dev(&s):0.4f}`);
+    println(`  Min:      {s.min:0.2f}`);
+    println(`  Max:      {s.max:0.2f}`);
+    println(`  Range:    {s.max - s.min:0.2f}`);
+
+    // Z-score normalization
+    println("");
+    println("Z-score normalization (first 5):");
+    let norm = normalize(&temps);
+    for let mut i = 0; i < 5; i += 1 {
+        println(`  {temps[i]:0.1f} -> {norm[i]:0.4f}`);
+    }
+
+    // Dot product (correlation-like computation)
+    println("");
+    let weights: Array<f64> = [
+        0.05, 0.05, 0.05, 0.10, 0.10,
+        0.10, 0.10, 0.10, 0.10, 0.10,
+        0.05, 0.02, 0.02, 0.03, 0.03,
+    ];
+    let weighted_avg = dot_product(&temps, &weights);
+    println(`Weighted average temp: {weighted_avg:0.2f}`);
+}
