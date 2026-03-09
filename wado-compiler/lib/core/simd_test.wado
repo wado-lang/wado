@@ -813,3 +813,602 @@ test "u16x8 add_sat sub_sat" {
     assert sub.extract_lane(0) == 0;
     assert sub.extract_lane(1) == 0;
 }
+
+test "i8x16 ne le ge" {
+    let a: i8x16 = [1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let b: i8x16 = [1, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let ne_r = a.ne(&b);
+    assert ne_r.extract_lane_s(0) == 0;
+    assert ne_r.extract_lane_s(1) == -1;
+    let le_r = a.le(&b);
+    assert le_r.extract_lane_s(0) == -1;
+    assert le_r.extract_lane_s(1) == -1;
+    assert le_r.extract_lane_s(2) == 0;
+    let ge_r = a.ge(&b);
+    assert ge_r.extract_lane_s(0) == -1;
+    assert ge_r.extract_lane_s(1) == 0;
+    assert ge_r.extract_lane_s(2) == -1;
+}
+
+test "i8x16 avgr_u" {
+    let a: i8x16 = [10, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let b: i8x16 = [20, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let r = a.avgr_u(&b);
+    assert r.extract_lane_u(0) == 15;
+    assert r.extract_lane_u(1) == 25;
+}
+
+test "i8x16 narrow_i16x8" {
+    let a: i16x8 = [0, 127, 128, -1, -128, -129, 256, 32767];
+    let b: i16x8 = [0, 1, 2, 3, 4, 5, 6, 7];
+    let narrow_s = (a as i8x16).narrow_i16x8_s(&(b as i8x16));
+    assert narrow_s.extract_lane_s(0) == 0;
+    assert narrow_s.extract_lane_s(1) == 127;
+    assert narrow_s.extract_lane_s(2) == 127;
+    assert narrow_s.extract_lane_s(3) == -1;
+    assert narrow_s.extract_lane_s(4) == -128;
+    assert narrow_s.extract_lane_s(5) == -128;
+    let narrow_u = (a as i8x16).narrow_i16x8_u(&(b as i8x16));
+    assert narrow_u.extract_lane_u(0) == 0;
+    assert narrow_u.extract_lane_u(1) == 127;
+    assert narrow_u.extract_lane_u(2) == 128;
+    assert narrow_u.extract_lane_u(3) == 0;
+}
+
+test "i8x16 sub_sat_s sub_sat_u" {
+    let a: i8x16 = [-100, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let b: i8x16 = [100, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let ss = a.sub_sat_s(&b);
+    assert ss.extract_lane_s(0) == -128;
+    let su = a.sub_sat_u(&b);
+    assert su.extract_lane_u(0) == 56;
+    assert su.extract_lane_u(1) == 0;
+}
+
+test "i8x16 bitselect" {
+    let a: i8x16 = [10, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let b: i8x16 = [30, 40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let mask: i8x16 = [-1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let r = a.bitselect(&mask, &b);
+    assert r.extract_lane_s(0) == 10;
+    assert r.extract_lane_s(1) == 40;
+}
+
+test "i16x8 ne le ge" {
+    let a: i16x8 = [1, 2, 3, 0, 0, 0, 0, 0];
+    let b: i16x8 = [1, 3, 2, 0, 0, 0, 0, 0];
+    let ne_r = a.ne(&b);
+    assert ne_r.extract_lane_s(0) == 0;
+    assert ne_r.extract_lane_s(1) == -1;
+    let le_r = a.le(&b);
+    assert le_r.extract_lane_s(0) == -1;
+    assert le_r.extract_lane_s(2) == 0;
+    let ge_r = a.ge(&b);
+    assert ge_r.extract_lane_s(0) == -1;
+    assert ge_r.extract_lane_s(1) == 0;
+}
+
+test "i16x8 add_sat_s sub_sat_s add_sat_u sub_sat_u" {
+    let a: i16x8 = [30000, -30000, 200 as i32, 10, 0, 0, 0, 0];
+    let b: i16x8 = [30000, -30000, 200 as i32, 20, 0, 0, 0, 0];
+    let add_s = a.add_sat_s(&b);
+    assert add_s.extract_lane_s(0) == 32767;
+    assert add_s.extract_lane_s(1) == -32768;
+    let sub_s = a.sub_sat_s(&b);
+    assert sub_s.extract_lane_s(0) == 0;
+    let add_u = a.add_sat_u(&b);
+    assert add_u.extract_lane_u(0) == 60000;
+    let sub_u = a.sub_sat_u(&b);
+    assert sub_u.extract_lane_u(3) == 0;
+}
+
+test "i16x8 min_s min_u max_s max_u" {
+    let a: i16x8 = [-1, 10, 0, 0, 0, 0, 0, 0];
+    let b: i16x8 = [1, -10, 0, 0, 0, 0, 0, 0];
+    assert a.min_s(&b).extract_lane_s(0) == -1;
+    assert a.min_u(&b).extract_lane_u(0) == 1;
+    assert a.max_s(&b).extract_lane_s(0) == 1;
+    assert a.max_u(&b).extract_lane_u(0) == 65535;
+}
+
+test "i16x8 avgr_u" {
+    let a: i16x8 = [10, 20, 0, 0, 0, 0, 0, 0];
+    let b: i16x8 = [20, 30, 0, 0, 0, 0, 0, 0];
+    let r = a.avgr_u(&b);
+    assert r.extract_lane_u(0) == 15;
+    assert r.extract_lane_u(1) == 25;
+}
+
+test "i16x8 narrow_i32x4" {
+    let a: i32x4 = [0, 32767, 32768, -32769];
+    let b: i32x4 = [1, 2, 3, 4];
+    let narrow_s = (a as i16x8).narrow_i32x4_s(&(b as i16x8));
+    assert narrow_s.extract_lane_s(0) == 0;
+    assert narrow_s.extract_lane_s(1) == 32767;
+    assert narrow_s.extract_lane_s(2) == 32767;
+    assert narrow_s.extract_lane_s(3) == -32768;
+    let narrow_u = (a as i16x8).narrow_i32x4_u(&(b as i16x8));
+    assert narrow_u.extract_lane_u(0) == 0;
+    assert narrow_u.extract_lane_u(1) == 32767;
+    assert narrow_u.extract_lane_u(2) == 32768;
+    assert narrow_u.extract_lane_u(3) == 0;
+}
+
+test "i16x8 extend_low_high_i8x16_u" {
+    let src: i8x16 = [200 as i32, 255 as i32, 0, 1, 0, 0, 0, 0, 128 as i32, 250 as i32, 0, 0, 0, 0, 0, 0];
+    let low_u = i16x8::extend_low_i8x16_u(src);
+    assert low_u.extract_lane_u(0) == 200;
+    assert low_u.extract_lane_u(1) == 255;
+    let high_u = i16x8::extend_high_i8x16_u(src);
+    assert high_u.extract_lane_u(0) == 128;
+    assert high_u.extract_lane_u(1) == 250;
+}
+
+test "i16x8 extmul_low_high_i8x16" {
+    let src_a: i8x16 = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+    let src_b: i8x16 = [10, 20, 30, 40, 50, 60, 70, 80, 1, 1, 1, 1, 1, 1, 1, 1];
+    let a = src_a as i16x8;
+    let b = src_b as i16x8;
+    let low_s = a.extmul_low_i8x16_s(&b);
+    assert low_s.extract_lane_s(0) == 20;
+    assert low_s.extract_lane_s(1) == 60;
+    let high_s = a.extmul_high_i8x16_s(&b);
+    assert high_s.extract_lane_s(0) == 10;
+    let low_u = a.extmul_low_i8x16_u(&b);
+    assert low_u.extract_lane_u(0) == 20;
+    let high_u = a.extmul_high_i8x16_u(&b);
+    assert high_u.extract_lane_u(0) == 10;
+}
+
+test "i16x8 extadd_pairwise_i8x16_u" {
+    let src: i8x16 = [200 as i32, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let r = i16x8::extadd_pairwise_i8x16_u(src);
+    assert r.extract_lane_u(0) == 300;
+}
+
+test "i16x8 bitselect" {
+    let a: i16x8 = [100, 200, 0, 0, 0, 0, 0, 0];
+    let b: i16x8 = [300, 400, 0, 0, 0, 0, 0, 0];
+    let mask: i16x8 = [-1, 0, 0, 0, 0, 0, 0, 0];
+    let r = a.bitselect(&mask, &b);
+    assert r.extract_lane_s(0) == 100;
+    assert r.extract_lane_s(1) == 400;
+}
+
+test "i32x4 ne le ge" {
+    let a: i32x4 = [1, 2, 3, 4];
+    let b: i32x4 = [1, 3, 2, 4];
+    assert a.ne(&b).extract_lane(0) == 0;
+    assert a.ne(&b).extract_lane(1) == -1;
+    assert a.le(&b).extract_lane(1) == -1;
+    assert a.le(&b).extract_lane(2) == 0;
+    assert a.ge(&b).extract_lane(2) == -1;
+    assert a.ge(&b).extract_lane(1) == 0;
+}
+
+test "i32x4 max_s max_u" {
+    let a: i32x4 = [-1, 10, 0, 0];
+    let b: i32x4 = [1, -10, 0, 0];
+    assert a.max_s(&b).extract_lane(0) == 1;
+    assert a.max_u(&b).extract_lane(0) == -1;
+}
+
+test "i32x4 dot_i16x8_s" {
+    let src_a: i16x8 = [1, 2, 3, 4, 5, 6, 7, 8];
+    let src_b: i16x8 = [1, 1, 1, 1, 1, 1, 1, 1];
+    let a = src_a as i32x4;
+    let b = src_b as i32x4;
+    let r = a.dot_i16x8_s(&b);
+    assert r.extract_lane(0) == 3;
+    assert r.extract_lane(1) == 7;
+    assert r.extract_lane(2) == 11;
+    assert r.extract_lane(3) == 15;
+}
+
+test "i32x4 extend_high_i16x8_s extend_low_u extend_high_u" {
+    let src: i16x8 = [1, -2, 3, -4, 5, -6, 7, -8];
+    let high_s = i32x4::extend_high_i16x8_s(src);
+    assert high_s.extract_lane(0) == 5;
+    assert high_s.extract_lane(1) == -6;
+    let low_u = i32x4::extend_low_i16x8_u(src);
+    assert low_u.extract_lane(0) == 1;
+    assert low_u.extract_lane(1) == 65534;
+    let high_u = i32x4::extend_high_i16x8_u(src);
+    assert high_u.extract_lane(0) == 5;
+    assert high_u.extract_lane(1) == 65530;
+}
+
+test "i32x4 extmul" {
+    let src_a: i16x8 = [2, 3, 4, 5, 6, 7, 8, 9];
+    let src_b: i16x8 = [10, 20, 30, 40, 50, 60, 70, 80];
+    let a = src_a as i32x4;
+    let b = src_b as i32x4;
+    let low_s = a.extmul_low_i16x8_s(&b);
+    assert low_s.extract_lane(0) == 20;
+    assert low_s.extract_lane(1) == 60;
+    let high_s = a.extmul_high_i16x8_s(&b);
+    assert high_s.extract_lane(0) == 300;
+    let low_u = a.extmul_low_i16x8_u(&b);
+    assert low_u.extract_lane(0) == 20;
+    let high_u = a.extmul_high_i16x8_u(&b);
+    assert high_u.extract_lane(0) == 300;
+}
+
+test "i32x4 extadd_pairwise_i16x8" {
+    let src: i16x8 = [1, 2, 3, 4, 5, 6, 7, 8];
+    let r_s = i32x4::extadd_pairwise_i16x8_s(src);
+    assert r_s.extract_lane(0) == 3;
+    assert r_s.extract_lane(1) == 7;
+    let r_u = i32x4::extadd_pairwise_i16x8_u(src);
+    assert r_u.extract_lane(0) == 3;
+    assert r_u.extract_lane(1) == 7;
+}
+
+test "i32x4 trunc_sat_f32x4_u" {
+    let src: f32x4 = [1.9 as f32, 2.7 as f32, 0.0 as f32, 100.5 as f32];
+    let r = i32x4::trunc_sat_f32x4_u(src);
+    assert r.extract_lane(0) == 1;
+    assert r.extract_lane(1) == 2;
+    assert r.extract_lane(2) == 0;
+    assert r.extract_lane(3) == 100;
+}
+
+test "i32x4 trunc_sat_f64x2_u_zero" {
+    let src: f64x2 = [1.9, 2.1];
+    let r = i32x4::trunc_sat_f64x2_u_zero(src);
+    assert r.extract_lane(0) == 1;
+    assert r.extract_lane(1) == 2;
+    assert r.extract_lane(2) == 0;
+    assert r.extract_lane(3) == 0;
+}
+
+test "i32x4 bitselect" {
+    let a: i32x4 = [100, 200, 300, 400];
+    let b: i32x4 = [1, 2, 3, 4];
+    let mask: i32x4 = [-1, 0, -1, 0];
+    let r = a.bitselect(&mask, &b);
+    assert r.extract_lane(0) == 100;
+    assert r.extract_lane(1) == 2;
+}
+
+test "i64x2 ne le ge" {
+    let a: i64x2 = [1 as i64, 2 as i64];
+    let b: i64x2 = [1 as i64, 3 as i64];
+    assert a.ne(&b).extract_lane(0) == 0 as i64;
+    assert a.ne(&b).extract_lane(1) == -1 as i64;
+    assert a.le(&b).extract_lane(0) == -1 as i64;
+    assert a.le(&b).extract_lane(1) == -1 as i64;
+    assert a.ge(&b).extract_lane(0) == -1 as i64;
+    assert a.ge(&b).extract_lane(1) == 0 as i64;
+}
+
+test "i64x2 lt gt" {
+    let a: i64x2 = [1 as i64, 5 as i64];
+    let b: i64x2 = [2 as i64, 3 as i64];
+    assert a.lt(&b).extract_lane(0) == -1 as i64;
+    assert a.lt(&b).extract_lane(1) == 0 as i64;
+    assert a.gt(&b).extract_lane(0) == 0 as i64;
+    assert a.gt(&b).extract_lane(1) == -1 as i64;
+}
+
+test "i64x2 extend_high_i32x4_s extend_low_u extend_high_u" {
+    let src: i32x4 = [1, -2, 3, -4];
+    let high_s = i64x2::extend_high_i32x4_s(src);
+    assert high_s.extract_lane(0) == 3 as i64;
+    assert high_s.extract_lane(1) == -4 as i64;
+    let low_u = i64x2::extend_low_i32x4_u(src);
+    assert low_u.extract_lane(0) == 1 as i64;
+    let high_u = i64x2::extend_high_i32x4_u(src);
+    assert high_u.extract_lane(0) == 3 as i64;
+}
+
+test "i64x2 extmul" {
+    let a: i64x2 = [3 as i64, 4 as i64];
+    let b: i64x2 = [10 as i64, 20 as i64];
+    let low_s = a.extmul_low_i32x4_s(&b);
+    assert low_s.extract_lane(0) == 30 as i64;
+    let high_s = a.extmul_high_i32x4_s(&b);
+    assert high_s.extract_lane(0) == 80 as i64;
+    let low_u = a.extmul_low_i32x4_u(&b);
+    assert low_u.extract_lane(0) == 30 as i64;
+    let high_u = a.extmul_high_i32x4_u(&b);
+    assert high_u.extract_lane(0) == 80 as i64;
+}
+
+test "i64x2 bitmask" {
+    let a: i64x2 = [-1 as i64, 1 as i64];
+    assert a.bitmask() == 1;
+}
+
+test "i64x2 bitselect" {
+    let a: i64x2 = [100 as i64, 200 as i64];
+    let b: i64x2 = [1 as i64, 2 as i64];
+    let mask: i64x2 = [-1 as i64, 0 as i64];
+    let r = a.bitselect(&mask, &b);
+    assert r.extract_lane(0) == 100 as i64;
+    assert r.extract_lane(1) == 2 as i64;
+}
+
+test "u8x16 ne le ge" {
+    let a: u8x16 = [1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let b: u8x16 = [1, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    assert a.ne(&b).extract_lane(0) == 0;
+    assert a.ne(&b).extract_lane(1) == 255;
+    assert a.le(&b).extract_lane(1) == 255;
+    assert a.le(&b).extract_lane(2) == 0;
+    assert a.ge(&b).extract_lane(2) == 255;
+}
+
+test "u8x16 eq lt gt" {
+    let a: u8x16 = [10, 200, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let b: u8x16 = [10, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    assert a.eq(&b).extract_lane(0) == 255;
+    assert a.lt(&b).extract_lane(1) == 0;
+    assert a.gt(&b).extract_lane(1) == 255;
+}
+
+test "u8x16 avgr" {
+    let a: u8x16 = [10, 200, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let b: u8x16 = [20, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let r = a.avgr(&b);
+    assert r.extract_lane(0) == 15;
+    assert r.extract_lane(1) == 150;
+}
+
+test "u8x16 popcnt" {
+    let v: u8x16 = [255, 0, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let r = v.popcnt();
+    assert r.extract_lane(0) == 8;
+    assert r.extract_lane(1) == 0;
+    assert r.extract_lane(2) == 1;
+    assert r.extract_lane(3) == 2;
+}
+
+test "u8x16 all_true bitmask" {
+    let v: u8x16 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+    assert v.all_true();
+    let _bm = v.bitmask();
+}
+
+test "u8x16 bitselect" {
+    let a: u8x16 = [100, 200, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let b: u8x16 = [1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let mask: u8x16 = [255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let r = a.bitselect(&mask, &b);
+    assert r.extract_lane(0) == 100;
+    assert r.extract_lane(1) == 2;
+}
+
+test "u16x8 ne le ge" {
+    let a: u16x8 = [1, 2, 3, 0, 0, 0, 0, 0];
+    let b: u16x8 = [1, 3, 2, 0, 0, 0, 0, 0];
+    assert a.ne(&b).extract_lane(0) == 0;
+    assert a.ne(&b).extract_lane(1) == 65535;
+    assert a.le(&b).extract_lane(1) == 65535;
+    assert a.ge(&b).extract_lane(2) == 65535;
+}
+
+test "u16x8 eq lt gt" {
+    let a: u16x8 = [10, 200, 0, 0, 0, 0, 0, 0];
+    let b: u16x8 = [10, 100, 0, 0, 0, 0, 0, 0];
+    assert a.eq(&b).extract_lane(0) == 65535;
+    assert a.lt(&b).extract_lane(1) == 0;
+    assert a.gt(&b).extract_lane(1) == 65535;
+}
+
+test "u16x8 min max" {
+    let a: u16x8 = [60000, 10, 0, 0, 0, 0, 0, 0];
+    let b: u16x8 = [100, 20, 0, 0, 0, 0, 0, 0];
+    assert a.min(&b).extract_lane(0) == 100;
+    assert a.max(&b).extract_lane(0) == 60000;
+}
+
+test "u16x8 avgr" {
+    let a: u16x8 = [10, 50000, 0, 0, 0, 0, 0, 0];
+    let b: u16x8 = [20, 60000, 0, 0, 0, 0, 0, 0];
+    let r = a.avgr(&b);
+    assert r.extract_lane(0) == 15;
+    assert r.extract_lane(1) == 55000;
+}
+
+test "u16x8 all_true bitmask" {
+    let v: u16x8 = [1, 2, 3, 4, 5, 6, 7, 8];
+    assert v.all_true();
+    let _bm = v.bitmask();
+}
+
+test "u16x8 bitselect" {
+    let a: u16x8 = [100, 200, 0, 0, 0, 0, 0, 0];
+    let b: u16x8 = [1, 2, 0, 0, 0, 0, 0, 0];
+    let mask: u16x8 = [65535, 0, 0, 0, 0, 0, 0, 0];
+    let r = a.bitselect(&mask, &b);
+    assert r.extract_lane(0) == 100;
+    assert r.extract_lane(1) == 2;
+}
+
+test "u32x4 ne le ge" {
+    let a: u32x4 = [1, 2, 3, 4];
+    let b: u32x4 = [1, 3, 2, 4];
+    assert a.ne(&b).extract_lane(0) == 0;
+    assert a.ne(&b).extract_lane(1) == -1 as i32;
+    assert a.le(&b).extract_lane(1) == -1 as i32;
+    assert a.ge(&b).extract_lane(2) == -1 as i32;
+}
+
+test "u32x4 eq lt gt" {
+    let a: u32x4 = [10, 200, 0, 0];
+    let b: u32x4 = [10, 100, 0, 0];
+    assert a.eq(&b).extract_lane(0) == -1 as i32;
+    assert a.lt(&b).extract_lane(1) == 0;
+    assert a.gt(&b).extract_lane(1) == -1 as i32;
+}
+
+test "u32x4 min max" {
+    let a: u32x4 = [100, 200, 0, 0];
+    let b: u32x4 = [200, 100, 0, 0];
+    assert a.min(&b).extract_lane(0) == 100;
+    assert a.max(&b).extract_lane(0) == 200;
+}
+
+test "u32x4 all_true bitmask" {
+    let v: u32x4 = [1, 2, 3, 4];
+    assert v.all_true();
+    let _bm = v.bitmask();
+}
+
+test "u32x4 bitselect" {
+    let a: u32x4 = [100, 200, 0, 0];
+    let b: u32x4 = [1, 2, 0, 0];
+    let mask_i: i32x4 = [-1, 0, 0, 0];
+    let r = a.bitselect(&(mask_i as u32x4), &b);
+    assert r.extract_lane(0) == 100;
+    assert r.extract_lane(1) == 2;
+}
+
+test "u64x2 ne" {
+    let a_i: i64x2 = [1 as i64, 2 as i64];
+    let b_i: i64x2 = [1 as i64, 3 as i64];
+    let a = a_i as u64x2;
+    let b = b_i as u64x2;
+    assert a.eq(&b).extract_lane(0) == -1 as i64;
+    assert a.ne(&b).extract_lane(1) == -1 as i64;
+}
+
+test "u64x2 all_true bitmask" {
+    let v_i: i64x2 = [1 as i64, 2 as i64];
+    let v = v_i as u64x2;
+    assert v.all_true();
+    let _bm = v.bitmask();
+}
+
+test "u64x2 bitselect" {
+    let a_i: i64x2 = [100 as i64, 200 as i64];
+    let b_i: i64x2 = [1 as i64, 2 as i64];
+    let mask_i: i64x2 = [-1 as i64, 0 as i64];
+    let a = a_i as u64x2;
+    let b = b_i as u64x2;
+    let r = a.bitselect(&(mask_i as u64x2), &b);
+    assert r.extract_lane(0) == 100 as i64;
+    assert r.extract_lane(1) == 2 as i64;
+}
+
+test "f32x4 splat" {
+    let v = f32x4::splat(2.5 as f32);
+    assert v.extract_lane(0) == 2.5;
+    assert v.extract_lane(3) == 2.5;
+}
+
+test "f32x4 sqrt abs" {
+    let v: f32x4 = [4.0, 9.0, -3.0, 16.0];
+    let sq = v.abs().sqrt();
+    assert sq.extract_lane(0) == 2.0;
+    assert sq.extract_lane(1) == 3.0;
+    let ab = v.abs();
+    assert ab.extract_lane(2) == 3.0;
+}
+
+test "f32x4 min max" {
+    let a: f32x4 = [1.0, 5.0, 3.0, 7.0];
+    let b: f32x4 = [4.0, 2.0, 6.0, 0.0];
+    let mn = a.min(&b);
+    assert mn.extract_lane(0) == 1.0;
+    let mx = a.max(&b);
+    assert mx.extract_lane(0) == 4.0;
+}
+
+test "f32x4 eq ne lt gt le ge" {
+    let a: f32x4 = [1.0, 2.0, 3.0, 4.0];
+    let b: f32x4 = [1.0, 3.0, 2.0, 4.0];
+    assert a.eq(&b).extract_lane(0) == -1;
+    assert a.ne(&b).extract_lane(1) == -1;
+    assert a.lt(&b).extract_lane(1) == -1;
+    assert a.gt(&b).extract_lane(2) == -1;
+    assert a.le(&b).extract_lane(0) == -1;
+    assert a.ge(&b).extract_lane(0) == -1;
+}
+
+test "f32x4 convert_i32x4_u" {
+    let src: i32x4 = [1, 2, 3, 0];
+    let r = f32x4::convert_i32x4_u(src);
+    assert r.extract_lane(0) as f64 == 1.0;
+    assert r.extract_lane(1) as f64 == 2.0;
+}
+
+test "f32x4 bitselect" {
+    let a: f32x4 = [10.0, 20.0, 30.0, 40.0];
+    let b: f32x4 = [1.0, 2.0, 3.0, 4.0];
+    let mask: i32x4 = [-1, 0, -1, 0];
+    let r = a.bitselect(&mask, &b);
+    assert r.extract_lane(0) == 10.0;
+    assert r.extract_lane(1) == 2.0;
+}
+
+test "f64x2 nearest" {
+    let v: f64x2 = [1.5, 2.5];
+    let r = v.nearest();
+    assert r.extract_lane(0) == 2.0;
+    assert r.extract_lane(1) == 2.0;
+}
+
+test "f64x2 eq ne lt gt le ge" {
+    let a: f64x2 = [1.0, 2.0];
+    let b: f64x2 = [1.0, 3.0];
+    assert a.eq(&b).extract_lane(0) == -1 as i64;
+    assert a.ne(&b).extract_lane(1) == -1 as i64;
+    assert a.lt(&b).extract_lane(1) == -1 as i64;
+    assert a.gt(&b).extract_lane(1) == 0 as i64;
+    assert a.le(&b).extract_lane(0) == -1 as i64;
+    assert a.ge(&b).extract_lane(0) == -1 as i64;
+}
+
+test "f64x2 convert_low_i32x4_u" {
+    let src: i32x4 = [1, 2, 3, 4];
+    let r = f64x2::convert_low_i32x4_u(src);
+    assert r.extract_lane(0) == 1.0;
+    assert r.extract_lane(1) == 2.0;
+}
+
+test "f64x2 bitselect" {
+    let a: f64x2 = [10.0, 20.0];
+    let b: f64x2 = [1.0, 2.0];
+    let mask: i64x2 = [-1 as i64, 0 as i64];
+    let r = a.bitselect(&mask, &b);
+    assert r.extract_lane(0) == 10.0;
+    assert r.extract_lane(1) == 2.0;
+}
+
+test "i8x16 splat" {
+    let v = i8x16::splat(42);
+    assert v.extract_lane_s(0) == 42;
+    assert v.extract_lane_s(15) == 42;
+}
+
+test "i16x8 splat" {
+    let v = i16x8::splat(1000);
+    assert v.extract_lane_s(0) == 1000;
+    assert v.extract_lane_s(7) == 1000;
+}
+
+test "i64x2 splat" {
+    let v = i64x2::splat(999 as i64);
+    assert v.extract_lane(0) == 999 as i64;
+    assert v.extract_lane(1) == 999 as i64;
+}
+
+test "u16x8 splat" {
+    let v = u16x8::splat(500);
+    assert v.extract_lane(0) == 500;
+    assert v.extract_lane(7) == 500;
+}
+
+test "u32x4 splat" {
+    let v = u32x4::splat(42);
+    assert v.extract_lane(0) == 42;
+    assert v.extract_lane(3) == 42;
+}
+
+test "u64x2 splat" {
+    let v = u64x2::splat(999 as i64);
+    assert v.extract_lane(0) == 999 as i64;
+    assert v.extract_lane(1) == 999 as i64;
+}
