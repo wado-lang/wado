@@ -697,3 +697,119 @@ test "i64x2 relaxed_laneselect" {
     assert sel.extract_lane(0) == 100 as i64;
     assert sel.extract_lane(1) == 2 as i64;
 }
+
+test "i8x16 extract_lane_s vs extract_lane_u" {
+    let v: i8x16 = [-1, 127, -128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    assert v.extract_lane_s(0) == -1;
+    assert v.extract_lane_u(0) == 255;
+    assert v.extract_lane_s(1) == 127;
+    assert v.extract_lane_u(1) == 127;
+    assert v.extract_lane_s(2) == -128;
+    assert v.extract_lane_u(2) == 128;
+}
+
+test "i16x8 extract_lane_s vs extract_lane_u" {
+    let v: i16x8 = [-1, 32767, -32768, 0, 0, 0, 0, 0];
+    assert v.extract_lane_s(0) == -1;
+    assert v.extract_lane_u(0) == 65535;
+    assert v.extract_lane_s(1) == 32767;
+    assert v.extract_lane_u(1) == 32767;
+    assert v.extract_lane_s(2) == -32768;
+    assert v.extract_lane_u(2) == 32768;
+}
+
+test "i8x16 min_s vs min_u" {
+    let a: i8x16 = [-1, 10, -128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let b: i8x16 = [1, -10, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let min_s = a.min_s(&b);
+    assert min_s.extract_lane_s(0) == -1;
+    assert min_s.extract_lane_s(1) == -10;
+    assert min_s.extract_lane_s(2) == -128;
+    let min_u = a.min_u(&b);
+    assert min_u.extract_lane_u(0) == 1;
+    assert min_u.extract_lane_u(1) == 10;
+    assert min_u.extract_lane_u(2) == 127;
+}
+
+test "i8x16 max_s vs max_u" {
+    let a: i8x16 = [-1, 10, -128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let b: i8x16 = [1, -10, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let max_s = a.max_s(&b);
+    assert max_s.extract_lane_s(0) == 1;
+    assert max_s.extract_lane_s(1) == 10;
+    assert max_s.extract_lane_s(2) == 127;
+    let max_u = a.max_u(&b);
+    assert max_u.extract_lane_u(0) == 255;
+    assert max_u.extract_lane_u(1) == 246;
+    assert max_u.extract_lane_u(2) == 128;
+}
+
+test "i8x16 add_sat_s vs add_sat_u" {
+    let a: i8x16 = [120, 200 as i32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let b: i8x16 = [120, 200 as i32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let sat_s = a.add_sat_s(&b);
+    assert sat_s.extract_lane_s(0) == 127;
+    let sat_u = a.add_sat_u(&b);
+    assert sat_u.extract_lane_u(0) == 240;
+    assert sat_u.extract_lane_u(1) == 255;
+}
+
+test "i32x4 min_s vs min_u" {
+    let a: i32x4 = [-1, 10, -100, 0];
+    let b: i32x4 = [1, -10, 100, 0];
+    let min_s = a.min_s(&b);
+    assert min_s.extract_lane(0) == -1;
+    assert min_s.extract_lane(1) == -10;
+    assert min_s.extract_lane(2) == -100;
+    let min_u = a.min_u(&b);
+    assert min_u.extract_lane(0) == 1;
+    assert min_u.extract_lane(1) == 10;
+    assert min_u.extract_lane(2) == 100;
+}
+
+test "u8x16 add_sat sub_sat" {
+    let a: u8x16 = [200, 100, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let b: u8x16 = [200, 100, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let sat = a.add_sat(&b);
+    assert sat.extract_lane(0) == 255;
+    assert sat.extract_lane(1) == 200;
+    let sub = a.sub_sat(&b);
+    assert sub.extract_lane(0) == 0;
+    assert sub.extract_lane(1) == 0;
+    assert sub.extract_lane(2) == 0;
+}
+
+test "u8x16 min max" {
+    let a: u8x16 = [200, 10, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let b: u8x16 = [100, 20, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let mn = a.min(&b);
+    assert mn.extract_lane(0) == 100;
+    assert mn.extract_lane(1) == 10;
+    assert mn.extract_lane(2) == 127;
+    let mx = a.max(&b);
+    assert mx.extract_lane(0) == 200;
+    assert mx.extract_lane(1) == 20;
+    assert mx.extract_lane(2) == 128;
+}
+
+test "i32x4 shr signed vs u32x4 shr unsigned" {
+    let s: i32x4 = [-8, 16, -16, 32];
+    let sr = s >> 2;
+    assert sr.extract_lane(0) == -2;
+    assert sr.extract_lane(2) == -4;
+    let s2: i32x4 = [-8, 16, 0, 0];
+    let u = s2 as u32x4;
+    let ur = u >> 2;
+    assert ur.extract_lane(0) == 1073741822;
+}
+
+test "u16x8 add_sat sub_sat" {
+    let a: u16x8 = [60000, 100, 0, 0, 0, 0, 0, 0];
+    let b: u16x8 = [60000, 200, 0, 0, 0, 0, 0, 0];
+    let sat = a.add_sat(&b);
+    assert sat.extract_lane(0) == 65535;
+    assert sat.extract_lane(1) == 300;
+    let sub = a.sub_sat(&b);
+    assert sub.extract_lane(0) == 0;
+    assert sub.extract_lane(1) == 0;
+}
