@@ -743,7 +743,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     Literal::String(raw) => {
                         TirLiteralPattern::String(util::unescape_string(raw).unwrap_or_default())
                     }
-                    Literal::Null => TirLiteralPattern::Null,
+                    Literal::Null => {
+                        // If the scrutinee is a variant type with a `None` case,
+                        // lower `null` to a variant pattern for `None`
+                        if let Some(none_pattern) = self.try_null_as_none_pattern(scrutinee_type) {
+                            return none_pattern;
+                        }
+                        TirLiteralPattern::Null
+                    }
                     _ => TirLiteralPattern::Null,
                 };
                 TirPattern::Literal(tir_lit)
@@ -973,6 +980,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     has_rest: *has_rest,
                 }
             }
+        }
+    }
+
+    /// If the scrutinee is a variant type that has a `None` case, return
+    /// a `TirPattern::Variant` for `None`. Otherwise return `None`.
+    fn try_null_as_none_pattern(&self, scrutinee_type: TypeId) -> Option<TirPattern> {
+        let resolved = self.type_table.borrow().get(scrutinee_type).clone();
+        let variant_name = match &resolved {
+            ResolvedType::Variant { name, .. } => Some(name.clone()),
+            ResolvedType::GenericInstance { name, .. } if self.variant_cases.contains_key(name) => {
+                Some(name.clone())
+            }
+            _ => None,
+        }?;
+        let variant_info = self.variant_cases.get(&variant_name)?;
+        if variant_info.cases.iter().any(|c| c.name == "None") {
+            Some(TirPattern::Variant {
+                enum_type: scrutinee_type,
+                variant_name: "None".to_string(),
+                bindings: vec![],
+                payload_type: TypeTable::UNIT,
+            })
+        } else {
+            None
         }
     }
 

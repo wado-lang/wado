@@ -1,0 +1,20 @@
+// Test: Match with wildcard arm is always exhaustive
+use { println, Stdout } from "core:cli";
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+export fn run() with Stdout {
+    let c = Color::Green;
+    let name = match c {
+        Red => "red",
+        _ => "other",
+    };
+    println(name);
+}
+
+__DATA__
+{"stdout": "other\n"}

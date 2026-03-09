@@ -1,0 +1,14 @@
+// Test: Non-exhaustive match on bool should produce a compile error
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let b = true;
+    let name = match b {
+        true => "yes",
+        // Missing false arm
+    };
+    println(name);
+}
+
+__DATA__
+{"compile_error": "missing case `false`"}

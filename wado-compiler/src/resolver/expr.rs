@@ -7,8 +7,8 @@ use crate::ast::{self, Expr, IfExpr, Item, Literal, MatchArm};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
 use crate::tir::{
-    CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirMatchArm, TirStmt,
-    TirStmtKind, TirStructField, TirUnaryOp, TypeId, TypeTable,
+    CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirMatchArm, TirPattern,
+    TirStmt, TirStmtKind, TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -1139,6 +1139,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .map(|arm| self.resolve_match_arm(arm, scrutinee_type, ctx, expected_type))
             .collect();
 
+        self.check_match_exhaustiveness(&arms, scrutinee_type, match_expr.span);
+
         let type_id = expected_type.unwrap_or_else(|| {
             // Skip `never`-typed arms: `never` is the bottom type and is compatible
             // with any type, so the match result type is determined by the non-never arms.
@@ -1186,6 +1188,142 @@ impl<H: CompilerHost> Resolver<'_, H> {
             guard,
             body,
             span: arm.span,
+        }
+    }
+
+    fn check_match_exhaustiveness(&self, arms: &[TirMatchArm], scrutinee_type: TypeId, span: Span) {
+        // If any arm has a wildcard or binding pattern (without a guard), the match is exhaustive
+        if arms
+            .iter()
+            .any(|arm| arm.guard.is_none() && Self::is_catch_all_pattern(&arm.pattern))
+        {
+            return;
+        }
+
+        let tt = self.type_table.borrow();
+        let resolved = tt.get(scrutinee_type).clone();
+        drop(tt);
+
+        match &resolved {
+            ResolvedType::Enum { name, .. } => {
+                if let Some(enum_info) = self.enum_cases.get(name) {
+                    let all_cases: IndexSet<&str> =
+                        enum_info.cases.iter().map(|c| c.name.as_str()).collect();
+                    let covered: IndexSet<&str> = arms
+                        .iter()
+                        .filter_map(|arm| Self::enum_case_name(&arm.pattern))
+                        .collect();
+                    let missing: Vec<&&str> = all_cases.difference(&covered).collect();
+                    if !missing.is_empty() {
+                        let missing_names: Vec<String> =
+                            missing.iter().map(|s| (*s).to_string()).collect();
+                        let _ = self.logger.error(TypeError::InvalidPattern {
+                            message: format!(
+                                "non-exhaustive match: missing {}",
+                                Self::format_missing_cases(&missing_names),
+                            ),
+                            span,
+                        });
+                    }
+                }
+            }
+            ResolvedType::Variant { name, .. } => {
+                self.check_variant_exhaustiveness(arms, name, span);
+            }
+            ResolvedType::GenericInstance { name, .. } => {
+                if self.variant_cases.contains_key(name) {
+                    self.check_variant_exhaustiveness(arms, name, span);
+                }
+            }
+            ResolvedType::Primitive(crate::tir::PrimitiveType::Bool) => {
+                let has_true = arms.iter().any(|arm| {
+                    matches!(
+                        &arm.pattern,
+                        TirPattern::Literal(crate::tir::TirLiteralPattern::Bool(true))
+                    )
+                });
+                let has_false = arms.iter().any(|arm| {
+                    matches!(
+                        &arm.pattern,
+                        TirPattern::Literal(crate::tir::TirLiteralPattern::Bool(false))
+                    )
+                });
+                if !has_true || !has_false {
+                    let mut missing = Vec::new();
+                    if !has_true {
+                        missing.push("true".to_string());
+                    }
+                    if !has_false {
+                        missing.push("false".to_string());
+                    }
+                    let _ = self.logger.error(TypeError::InvalidPattern {
+                        message: format!(
+                            "non-exhaustive match: missing {}",
+                            Self::format_missing_cases(&missing),
+                        ),
+                        span,
+                    });
+                }
+            }
+            _ => {
+                // For other types (integers, strings, etc.) we don't check exhaustiveness
+                // since they have infinite domains. A wildcard/binding arm is expected.
+            }
+        }
+    }
+
+    fn check_variant_exhaustiveness(&self, arms: &[TirMatchArm], variant_name: &str, span: Span) {
+        if let Some(variant_info) = self.variant_cases.get(variant_name) {
+            let all_cases: IndexSet<&str> =
+                variant_info.cases.iter().map(|c| c.name.as_str()).collect();
+            let covered: IndexSet<&str> = arms
+                .iter()
+                .filter_map(|arm| Self::variant_case_name(&arm.pattern))
+                .collect();
+            let missing: Vec<&&str> = all_cases.difference(&covered).collect();
+            if !missing.is_empty() {
+                let missing_names: Vec<String> = missing.iter().map(|s| (*s).to_string()).collect();
+                let _ = self.logger.error(TypeError::InvalidPattern {
+                    message: format!(
+                        "non-exhaustive match: missing {}",
+                        Self::format_missing_cases(&missing_names),
+                    ),
+                    span,
+                });
+            }
+        }
+    }
+
+    fn is_catch_all_pattern(pattern: &TirPattern) -> bool {
+        matches!(pattern, TirPattern::Wildcard | TirPattern::Binding { .. })
+    }
+
+    fn enum_case_name(pattern: &TirPattern) -> Option<&str> {
+        match pattern {
+            TirPattern::Enum { case_name, .. } => Some(case_name),
+            _ => None,
+        }
+    }
+
+    fn variant_case_name(pattern: &TirPattern) -> Option<&str> {
+        match pattern {
+            TirPattern::Variant { variant_name, .. } => Some(variant_name),
+            _ => None,
+        }
+    }
+
+    fn format_missing_cases(cases: &[String]) -> String {
+        match cases.len() {
+            1 => format!("case `{}`", cases[0]),
+            2 => format!("cases `{}` and `{}`", cases[0], cases[1]),
+            _ => {
+                let last = &cases[cases.len() - 1];
+                let rest: Vec<String> = cases[..cases.len() - 1]
+                    .iter()
+                    .map(|c| format!("`{c}`"))
+                    .collect();
+                format!("cases {}, and `{last}`", rest.join(", "))
+            }
         }
     }
 
