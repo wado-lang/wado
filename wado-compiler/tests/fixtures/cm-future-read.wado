@@ -1,22 +1,18 @@
 // Future::read E2E test
-// Tests that Future::read() compiles and runs correctly.
-//
-// TODO: This test creates a future pair and reads/writes within the same
-// component instance. The CM spec's "temporary" restriction
-// (none_or_number_type guard) traps for non-number types in same-instance
-// read/write, causing a timeout. Once Request::consume_body is wired up,
-// this test should read from the request's trailers future instead.
+// Tests Future::read() and FutureWritable::write() with scalar numeric types.
+// The CM spec allows same-instance read/write for number types via the
+// none_or_number_type guard.
 
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
-    // Create a future pair and write Ok(None) to it
-    let [future_rx, future_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    // Create a future pair for i32
+    let [future_rx, future_tx] = Future::<i32>::new();
 
-    // Write to the future
-    future_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+    // Write a value to the future
+    future_tx.write(42);
 
-    // Read from the future — should get Some(value) since writer fulfilled it
+    // Read from the future — should get Some(42)
     let result = future_rx.read();
 
     // Drop the future handle
@@ -31,4 +27,4 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 }
 
 __DATA__
-{"TODO": true, "wasi:http/service": {"status": 200}}
+{"wasi:http/service": {"status": 200}}

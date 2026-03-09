@@ -8,7 +8,7 @@ use crate::tir::{
     TirFunction, TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
     TypeId, TypeTable,
 };
-use crate::wir::{WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
+use crate::wir::{WirFuncId, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 use indexmap::{IndexMap, IndexSet};
 
 use super::context::WirContext;
@@ -1313,8 +1313,12 @@ impl FunctionTranslator<'_, '_> {
 
                 // Static method: canonical dispatch (e.g., Stream::new, WaitableSet::new)
                 if let Some(canonical) = func.method_info.clone().and_then(|m| m.canonical_name)
-                    && let Some(instr) =
-                        self.try_translate_canonical_static_method(&canonical, args, expr.type_id)
+                    && let Some(instr) = self.try_translate_canonical_static_method(
+                        &canonical,
+                        func,
+                        args,
+                        expr.type_id,
+                    )
                 {
                     return instr;
                 }
@@ -3488,6 +3492,63 @@ impl FunctionTranslator<'_, '_> {
     // Canonical resource method dispatch
     // =========================================================================
 
+    /// Map a primitive type to its CM type suffix string.
+    ///
+    /// Returns `Some(":s32")` for i32, `Some(":u8")` for u8, etc.
+    /// Returns `None` for non-CM-number types.
+    fn primitive_to_cm_suffix(prim: &crate::tir::PrimitiveType) -> Option<&'static str> {
+        use crate::tir::PrimitiveType;
+        match prim {
+            PrimitiveType::I8 => Some(":s8"),
+            PrimitiveType::I16 => Some(":s16"),
+            PrimitiveType::I32 => Some(":s32"),
+            PrimitiveType::I64 => Some(":s64"),
+            PrimitiveType::U8 => Some(":u8"),
+            PrimitiveType::U16 => Some(":u16"),
+            PrimitiveType::U32 => Some(":u32"),
+            PrimitiveType::U64 => Some(":u64"),
+            PrimitiveType::F32 => Some(":float32"),
+            PrimitiveType::F64 => Some(":float64"),
+            PrimitiveType::Bool => Some(":bool"),
+            PrimitiveType::Char => Some(":char"),
+            _ => None,
+        }
+    }
+
+    /// Get the CM future type suffix from `MonomorphInfo` (for static methods like `Future::new`).
+    fn cm_future_type_suffix_from_monomorph(&self, func: &FunctionRef) -> String {
+        use crate::tir::ResolvedType;
+        if let Some(ref info) = func.monomorph_info
+            && !info.type_args.is_empty()
+            && let ResolvedType::Primitive(prim) = self.type_table.get(info.type_args[0])
+            && let Some(suffix) = Self::primitive_to_cm_suffix(prim)
+        {
+            return suffix.to_string();
+        }
+        String::new()
+    }
+
+    /// Get the CM future type suffix for a Future/FutureWritable receiver.
+    ///
+    /// Returns a suffix like `":s32"` for `Future<i32>`, `":u8"` for `Future<u8>`,
+    /// or `""` for non-scalar future types (trailers pattern).
+    fn cm_future_type_suffix(&self, receiver_type_id: TypeId) -> String {
+        use crate::tir::ResolvedType;
+        // Receiver is &Future<T> or &FutureWritable<T> — unwrap the reference
+        let inner_type_id = match self.type_table.get(receiver_type_id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => receiver_type_id,
+        };
+        if let ResolvedType::GenericResource { type_args, .. } = self.type_table.get(inner_type_id)
+            && !type_args.is_empty()
+            && let ResolvedType::Primitive(prim) = self.type_table.get(type_args[0])
+            && let Some(suffix) = Self::primitive_to_cm_suffix(prim)
+        {
+            return suffix.to_string();
+        }
+        String::new()
+    }
+
     /// Dispatch canonical resource methods based on `#[canonical("...")]` attribute.
     /// Returns `Some(WirInstr)` if the method has a canonical name and was handled.
     fn try_translate_canonical_method(
@@ -3513,12 +3574,32 @@ impl FunctionTranslator<'_, '_> {
             "stream-drop-writable" => Some(self.emit_drop_handle("stream-drop-writable", handle)),
 
             // === Future instance methods ===
-            "future-read" => Some(self.emit_future_read(handle, result_type_id)),
-            "future-write" => Some(self.emit_future_write_ok_none(handle)),
-            "future-cancel-read" => Some(self.emit_drop_handle("future-cancel-read", handle)),
-            "future-cancel-write" => Some(self.emit_drop_handle("future-cancel-write", handle)),
-            "future-drop-readable" => Some(self.emit_drop_handle("future-drop-readable", handle)),
-            "future-drop-writable" => Some(self.emit_drop_handle("future-drop-writable", handle)),
+            "future-read" => {
+                let suffix = self.cm_future_type_suffix(receiver.type_id);
+                Some(self.emit_future_read(handle, result_type_id, &suffix))
+            }
+            "future-write" => {
+                let value_arg = self.translate_expr(&args[0].expr);
+                let value_type_id = args[0].expr.type_id;
+                let suffix = self.cm_future_type_suffix(receiver.type_id);
+                Some(self.emit_future_write(handle, value_arg, value_type_id, &suffix))
+            }
+            "future-cancel-read" => {
+                let suffix = self.cm_future_type_suffix(receiver.type_id);
+                Some(self.emit_drop_handle(&format!("future-cancel-read{suffix}"), handle))
+            }
+            "future-cancel-write" => {
+                let suffix = self.cm_future_type_suffix(receiver.type_id);
+                Some(self.emit_drop_handle(&format!("future-cancel-write{suffix}"), handle))
+            }
+            "future-drop-readable" => {
+                let suffix = self.cm_future_type_suffix(receiver.type_id);
+                Some(self.emit_drop_handle(&format!("future-drop-readable{suffix}"), handle))
+            }
+            "future-drop-writable" => {
+                let suffix = self.cm_future_type_suffix(receiver.type_id);
+                Some(self.emit_drop_handle(&format!("future-drop-writable{suffix}"), handle))
+            }
 
             // === Stream instance methods ===
             "stream-cancel-read" => Some(self.emit_drop_handle("stream-cancel-read", handle)),
@@ -3553,12 +3634,16 @@ impl FunctionTranslator<'_, '_> {
     fn try_translate_canonical_static_method(
         &mut self,
         canonical: &str,
+        func: &FunctionRef,
         args: &[CallArg],
         result_type_id: TypeId,
     ) -> Option<WirInstr> {
         match canonical {
-            "stream-new" => Some(self.emit_stream_or_future_new(false, result_type_id)),
-            "future-new" => Some(self.emit_stream_or_future_new(true, result_type_id)),
+            "stream-new" => Some(self.emit_stream_or_future_new(false, "", result_type_id)),
+            "future-new" => {
+                let suffix = self.cm_future_type_suffix_from_monomorph(func);
+                Some(self.emit_stream_or_future_new(true, &suffix, result_type_id))
+            }
             "waitable-set-new" => Some(self.emit_waitable_set_new()),
             "error-context-new" => {
                 let msg_arg = self.translate_expr(&args[0].expr);
@@ -3585,15 +3670,20 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Emit `stream-new()` or `future-new()` → split i64 into [`rx_i32`, `tx_i32`] tuple.
-    fn emit_stream_or_future_new(&mut self, is_future: bool, result_type_id: TypeId) -> WirInstr {
+    fn emit_stream_or_future_new(
+        &mut self,
+        is_future: bool,
+        type_suffix: &str,
+        result_type_id: TypeId,
+    ) -> WirInstr {
         let canonical = if is_future {
-            "future-new"
+            format!("future-new{type_suffix}")
         } else {
-            "stream-new"
+            "stream-new".to_string()
         };
         let func_id = self
             .ctx
-            .ensure_canonical(canonical, vec![], vec![WirType::I64]);
+            .ensure_canonical(&canonical, vec![], vec![WirType::I64]);
 
         // Resolve the result tuple type for StructNew
         let wir_type = self
@@ -4245,13 +4335,18 @@ impl FunctionTranslator<'_, '_> {
     ///
     /// TODO: implement general CM lifting for arbitrary T values.
     /// Currently hardcoded for the `Ok(None)` pattern (all-zeros payload = 8 bytes).
-    fn emit_future_read(&mut self, handle: WirInstr, result_type_id: TypeId) -> WirInstr {
+    fn emit_future_read(
+        &mut self,
+        handle: WirInstr,
+        result_type_id: TypeId,
+        type_suffix: &str,
+    ) -> WirInstr {
         let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
             return WirInstr::Unreachable;
         };
         // future-read: (handle: i32, ptr: i32) -> i32
         let future_read_id = self.ctx.ensure_canonical(
-            "future-read",
+            &format!("future-read{type_suffix}"),
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
@@ -4486,6 +4581,11 @@ impl FunctionTranslator<'_, '_> {
             return WirInstr::Unreachable;
         };
 
+        // Check if T is a scalar numeric type (i32, i64, f32, f64, etc.)
+        if let Some(load_instr) = self.lift_cm_scalar(inner_t, ptr_name) {
+            return load_instr;
+        }
+
         // Check if T is Result<Ok, Err>
         if let ResolvedType::GenericInstance {
             name, type_args, ..
@@ -4509,6 +4609,44 @@ impl FunctionTranslator<'_, '_> {
         // Fallback: unsupported T type — emit unreachable
         // (will trap at runtime if this code path is reached)
         WirInstr::Unreachable
+    }
+
+    /// Lift a scalar numeric value from CM linear memory at `ptr_name + 0`.
+    ///
+    /// Returns `Some(WirInstr)` for CM number types (i8–i64, u8–u64, f32, f64,
+    /// bool, char), `None` otherwise.
+    fn lift_cm_scalar(&self, type_id: TypeId, ptr_name: &str) -> Option<WirInstr> {
+        use crate::tir::{PrimitiveType, ResolvedType};
+        let ResolvedType::Primitive(prim) = self.type_table.get(type_id) else {
+            return None;
+        };
+        let ptr = || WirInstr::LocalGet {
+            name: ptr_name.to_string(),
+        };
+        let instr = match prim {
+            PrimitiveType::I8 | PrimitiveType::U8 | PrimitiveType::Bool => WirInstr::I32Load8U {
+                offset: 0,
+                align: 0,
+                addr: Box::new(ptr()),
+            },
+            PrimitiveType::I16 | PrimitiveType::U16 => WirInstr::I32Load {
+                offset: 0,
+                align: 1,
+                addr: Box::new(ptr()),
+            },
+            PrimitiveType::I32 | PrimitiveType::U32 | PrimitiveType::Char => WirInstr::I32Load {
+                offset: 0,
+                align: 2,
+                addr: Box::new(ptr()),
+            },
+            PrimitiveType::I64 | PrimitiveType::U64 => WirInstr::I64Load {
+                offset: 0,
+                align: 3,
+                addr: Box::new(ptr()),
+            },
+            _ => return None,
+        };
+        Some(instr)
     }
 
     /// Lift `Result<Option<R>, E>` from CM linear memory.
@@ -4584,6 +4722,241 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// Emit WIR for `FutureWritable<T>::write(value)`.
+    ///
+    /// Dispatches to a type-specific emitter based on `value_type_id`:
+    /// - Scalar numeric types (i8–i64, u8–u64, bool, char): `emit_future_write_scalar`
+    /// - `Result<Option<R>, E>::Ok(null)` pattern: `emit_future_write_ok_none`
+    fn emit_future_write(
+        &mut self,
+        handle: WirInstr,
+        value: WirInstr,
+        value_type_id: TypeId,
+        type_suffix: &str,
+    ) -> WirInstr {
+        use crate::tir::{PrimitiveType, ResolvedType};
+
+        // Check if the value type is a scalar numeric type
+        if let ResolvedType::Primitive(
+            PrimitiveType::I8
+            | PrimitiveType::I16
+            | PrimitiveType::I32
+            | PrimitiveType::I64
+            | PrimitiveType::U8
+            | PrimitiveType::U16
+            | PrimitiveType::U32
+            | PrimitiveType::U64
+            | PrimitiveType::Bool
+            | PrimitiveType::Char,
+        ) = self.type_table.get(value_type_id)
+        {
+            return self.emit_future_write_scalar(handle, value, value_type_id, type_suffix);
+        }
+
+        // Fallback: Result<Option<R>, E>::Ok(null) pattern (trailers)
+        self.emit_future_write_ok_none(handle)
+    }
+
+    /// Emit WIR to write a scalar numeric value into a `FutureWritable` handle.
+    ///
+    /// Allocates a CM buffer, stores the value, and calls `future-write` with
+    /// `async` canonical option. If the operation returns BLOCKED, the buffer is
+    /// intentionally kept alive — the reader will copy the data and complete
+    /// the write on the same thread. The buffer is freed only on immediate
+    /// completion (non-BLOCKED).
+    fn emit_future_write_scalar(
+        &mut self,
+        handle: WirInstr,
+        value: WirInstr,
+        value_type_id: TypeId,
+        type_suffix: &str,
+    ) -> WirInstr {
+        use crate::tir::{PrimitiveType, ResolvedType};
+
+        let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
+            return WirInstr::Unreachable;
+        };
+        let future_write_id = self.ctx.ensure_canonical(
+            &format!("future-write{type_suffix}"),
+            vec![WirType::I32, WirType::I32],
+            vec![WirType::I32],
+        );
+
+        self.local_counter += 1;
+        let suffix = self.local_counter;
+        let ptr_name = format!("__fw_write_ptr_{suffix}");
+        let result_name = format!("__fw_result_{suffix}");
+
+        // Determine buffer size/alignment from the primitive type
+        let ResolvedType::Primitive(prim) = self.type_table.get(value_type_id) else {
+            return WirInstr::Unreachable;
+        };
+        let (buf_size, buf_align): (i32, i32) = match prim {
+            PrimitiveType::I8 | PrimitiveType::U8 | PrimitiveType::Bool => (1, 1),
+            PrimitiveType::I16 | PrimitiveType::U16 => (2, 2),
+            PrimitiveType::I32 | PrimitiveType::U32 | PrimitiveType::Char => (4, 4),
+            PrimitiveType::I64 | PrimitiveType::U64 => (8, 8),
+            _ => return WirInstr::Unreachable,
+        };
+
+        let mut seq = vec![];
+
+        // Declare locals
+        for (name, ty) in [(&ptr_name, WirType::I32), (&result_name, WirType::I32)] {
+            seq.push(WirInstr::DeclareLocal {
+                name: name.clone(),
+                ty,
+            });
+        }
+
+        // Allocate buffer
+        seq.push(WirInstr::LocalSet {
+            name: ptr_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: realloc_id.clone(),
+                args: vec![
+                    WirInstr::I32Const(0),
+                    WirInstr::I32Const(0),
+                    WirInstr::I32Const(buf_align),
+                    WirInstr::I32Const(buf_size),
+                ],
+            }),
+        });
+
+        // Store value at ptr
+        let ptr = || WirInstr::LocalGet {
+            name: ptr_name.clone(),
+        };
+        let store_instr = match prim {
+            PrimitiveType::I8 | PrimitiveType::U8 | PrimitiveType::Bool => WirInstr::I32Store8 {
+                offset: 0,
+                align: 0,
+                addr: Box::new(ptr()),
+                value: Box::new(value),
+            },
+            PrimitiveType::I16 | PrimitiveType::U16 => WirInstr::I32Store16 {
+                offset: 0,
+                align: 1,
+                addr: Box::new(ptr()),
+                value: Box::new(value),
+            },
+            PrimitiveType::I32 | PrimitiveType::U32 | PrimitiveType::Char => WirInstr::I32Store {
+                offset: 0,
+                align: 2,
+                addr: Box::new(ptr()),
+                value: Box::new(value),
+            },
+            PrimitiveType::I64 | PrimitiveType::U64 => WirInstr::I64Store {
+                offset: 0,
+                align: 3,
+                addr: Box::new(ptr()),
+                value: Box::new(value),
+            },
+            _ => return WirInstr::Unreachable,
+        };
+        seq.push(store_instr);
+
+        // result = future_write(handle, ptr)
+        // With `async` canonical option, BLOCKED means the data is pending and
+        // the reader will pick it up. We drop the result — the buffer stays alive
+        // until the reader copies the data on the same thread.
+        seq.push(WirInstr::Drop(Box::new(WirInstr::Call {
+            func_id: future_write_id,
+            args: vec![handle, WirInstr::LocalGet { name: ptr_name }],
+        })));
+
+        // NOTE: We intentionally do NOT free the buffer here. When the canonical
+        // `async` option returns BLOCKED, the CM runtime holds a reference to the
+        // buffer. The reader will copy from it before this thread continues.
+        // The buffer is leaked but this is acceptable for small scalar payloads.
+
+        WirInstr::Seq(seq)
+    }
+
+    /// Emit the BLOCKED handling pattern for `future-write`.
+    ///
+    /// If `result == -1` (BLOCKED), creates a waitable-set, joins the handle,
+    /// waits for the reader to consume the value, then frees the event buffer.
+    fn emit_future_write_blocked_wait(
+        &self,
+        handle_name: &str,
+        result_name: &str,
+        evt_name: &str,
+        realloc_id: &WirFuncId,
+        ws_new_id: &WirFuncId,
+        w_join_id: &WirFuncId,
+        ws_wait_id: &WirFuncId,
+    ) -> WirInstr {
+        WirInstr::If {
+            condition: Box::new(WirInstr::I32Eq(
+                Box::new(WirInstr::LocalGet {
+                    name: result_name.to_string(),
+                }),
+                Box::new(WirInstr::I32Const(-1)),
+            )),
+            result: None,
+            then_body: vec![
+                WirInstr::DeclareLocal {
+                    name: evt_name.to_string(),
+                    ty: WirType::I32,
+                },
+                WirInstr::LocalSet {
+                    name: result_name.to_string(),
+                    value: Box::new(WirInstr::Call {
+                        func_id: ws_new_id.clone(),
+                        args: vec![],
+                    }),
+                },
+                WirInstr::Call {
+                    func_id: w_join_id.clone(),
+                    args: vec![
+                        WirInstr::LocalGet {
+                            name: handle_name.to_string(),
+                        },
+                        WirInstr::LocalGet {
+                            name: result_name.to_string(),
+                        },
+                    ],
+                },
+                WirInstr::LocalSet {
+                    name: evt_name.to_string(),
+                    value: Box::new(WirInstr::Call {
+                        func_id: realloc_id.clone(),
+                        args: vec![
+                            WirInstr::I32Const(0),
+                            WirInstr::I32Const(0),
+                            WirInstr::I32Const(4),
+                            WirInstr::I32Const(8),
+                        ],
+                    }),
+                },
+                WirInstr::Drop(Box::new(WirInstr::Call {
+                    func_id: ws_wait_id.clone(),
+                    args: vec![
+                        WirInstr::LocalGet {
+                            name: result_name.to_string(),
+                        },
+                        WirInstr::LocalGet {
+                            name: evt_name.to_string(),
+                        },
+                    ],
+                })),
+                WirInstr::Drop(Box::new(WirInstr::Call {
+                    func_id: realloc_id.clone(),
+                    args: vec![
+                        WirInstr::LocalGet {
+                            name: evt_name.to_string(),
+                        },
+                        WirInstr::I32Const(8),
+                        WirInstr::I32Const(4),
+                        WirInstr::I32Const(0),
+                    ],
+                })),
+            ],
+            else_body: None,
+        }
+    }
+
     /// Emit WIR to write `Ok(None)` (8 zero bytes) into a `FutureWritable` handle,
     /// then free the temporary buffer.
     ///
@@ -4593,8 +4966,6 @@ impl FunctionTranslator<'_, '_> {
     ///
     /// If `future-write` returns BLOCKED (`0xFFFF_FFFF`), waits via waitable-set
     /// for the reader to consume the value before continuing.
-    ///
-    /// TODO: implement general CM lowering for arbitrary T values.
     fn emit_future_write_ok_none(&mut self, handle: WirInstr) -> WirInstr {
         let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
             return WirInstr::Unreachable;
@@ -4695,79 +5066,15 @@ impl FunctionTranslator<'_, '_> {
         });
 
         // If BLOCKED (0xFFFF_FFFF), wait via waitable-set for the reader to consume
-        seq.push(WirInstr::If {
-            condition: Box::new(WirInstr::I32Eq(
-                Box::new(WirInstr::LocalGet {
-                    name: result_name.clone(),
-                }),
-                Box::new(WirInstr::I32Const(-1)),
-            )),
-            result: None,
-            then_body: vec![
-                WirInstr::DeclareLocal {
-                    name: evt_name.clone(),
-                    ty: WirType::I32,
-                },
-                // ws = waitable_set_new()
-                WirInstr::LocalSet {
-                    name: result_name.clone(),
-                    value: Box::new(WirInstr::Call {
-                        func_id: ws_new_id,
-                        args: vec![],
-                    }),
-                },
-                // waitable_join(handle, ws)
-                WirInstr::Call {
-                    func_id: w_join_id,
-                    args: vec![
-                        WirInstr::LocalGet {
-                            name: handle_name.clone(),
-                        },
-                        WirInstr::LocalGet {
-                            name: result_name.clone(),
-                        },
-                    ],
-                },
-                // evt_ptr = realloc(0, 0, 4, 8)
-                WirInstr::LocalSet {
-                    name: evt_name.clone(),
-                    value: Box::new(WirInstr::Call {
-                        func_id: realloc_id.clone(),
-                        args: vec![
-                            WirInstr::I32Const(0),
-                            WirInstr::I32Const(0),
-                            WirInstr::I32Const(4),
-                            WirInstr::I32Const(8),
-                        ],
-                    }),
-                },
-                // waitable_set_wait(ws, evt_ptr)
-                WirInstr::Drop(Box::new(WirInstr::Call {
-                    func_id: ws_wait_id,
-                    args: vec![
-                        WirInstr::LocalGet {
-                            name: result_name.clone(),
-                        },
-                        WirInstr::LocalGet {
-                            name: evt_name.clone(),
-                        },
-                    ],
-                })),
-                // Free event buffer
-                WirInstr::Drop(Box::new(WirInstr::Call {
-                    func_id: realloc_id.clone(),
-                    args: vec![
-                        WirInstr::LocalGet {
-                            name: evt_name.clone(),
-                        },
-                        WirInstr::I32Const(8),
-                        WirInstr::I32Const(4),
-                        WirInstr::I32Const(0),
-                    ],
-                })),
-            ],
-            else_body: None,
-        });
+        seq.push(self.emit_future_write_blocked_wait(
+            &handle_name,
+            &result_name,
+            &evt_name,
+            &realloc_id,
+            &ws_new_id,
+            &w_join_id,
+            &ws_wait_id,
+        ));
 
         // Free the payload buffer after future_write completes.
         seq.push(WirInstr::Drop(Box::new(WirInstr::Call {
