@@ -942,16 +942,16 @@ impl<'a> WirUnparser<'a> {
             WirInstr::I8x16Eq(a, b) => self.write_binop_op("i8x16.eq", a, b),
             WirInstr::I8x16Ne(a, b) => self.write_binop_op("i8x16.ne", a, b),
             WirInstr::I8x16LtS(a, b) | WirInstr::I8x16LtU(a, b) => {
-                self.write_binop_op("i8x16.lt", a, b)
+                self.write_binop_op("i8x16.lt", a, b);
             }
             WirInstr::I8x16GtS(a, b) | WirInstr::I8x16GtU(a, b) => {
-                self.write_binop_op("i8x16.gt", a, b)
+                self.write_binop_op("i8x16.gt", a, b);
             }
             WirInstr::I8x16LeS(a, b) | WirInstr::I8x16LeU(a, b) => {
-                self.write_binop_op("i8x16.le", a, b)
+                self.write_binop_op("i8x16.le", a, b);
             }
             WirInstr::I8x16GeS(a, b) | WirInstr::I8x16GeU(a, b) => {
-                self.write_binop_op("i8x16.ge", a, b)
+                self.write_binop_op("i8x16.ge", a, b);
             }
             WirInstr::I8x16Shl(a, b) => self.write_binop_op("i8x16.shl", a, b),
             WirInstr::I8x16ShrS(a, b) => self.write_binop_op("i8x16.shr_s", a, b),
@@ -989,16 +989,16 @@ impl<'a> WirUnparser<'a> {
             WirInstr::I16x8Eq(a, b) => self.write_binop_op("i16x8.eq", a, b),
             WirInstr::I16x8Ne(a, b) => self.write_binop_op("i16x8.ne", a, b),
             WirInstr::I16x8LtS(a, b) | WirInstr::I16x8LtU(a, b) => {
-                self.write_binop_op("i16x8.lt", a, b)
+                self.write_binop_op("i16x8.lt", a, b);
             }
             WirInstr::I16x8GtS(a, b) | WirInstr::I16x8GtU(a, b) => {
-                self.write_binop_op("i16x8.gt", a, b)
+                self.write_binop_op("i16x8.gt", a, b);
             }
             WirInstr::I16x8LeS(a, b) | WirInstr::I16x8LeU(a, b) => {
-                self.write_binop_op("i16x8.le", a, b)
+                self.write_binop_op("i16x8.le", a, b);
             }
             WirInstr::I16x8GeS(a, b) | WirInstr::I16x8GeU(a, b) => {
-                self.write_binop_op("i16x8.ge", a, b)
+                self.write_binop_op("i16x8.ge", a, b);
             }
             WirInstr::I16x8Shl(a, b) => self.write_binop_op("i16x8.shl", a, b),
             WirInstr::I16x8ShrS(a, b) => self.write_binop_op("i16x8.shr_s", a, b),
@@ -1023,16 +1023,16 @@ impl<'a> WirUnparser<'a> {
             WirInstr::I32x4Eq(a, b) => self.write_binop_op("i32x4.eq", a, b),
             WirInstr::I32x4Ne(a, b) => self.write_binop_op("i32x4.ne", a, b),
             WirInstr::I32x4LtS(a, b) | WirInstr::I32x4LtU(a, b) => {
-                self.write_binop_op("i32x4.lt", a, b)
+                self.write_binop_op("i32x4.lt", a, b);
             }
             WirInstr::I32x4GtS(a, b) | WirInstr::I32x4GtU(a, b) => {
-                self.write_binop_op("i32x4.gt", a, b)
+                self.write_binop_op("i32x4.gt", a, b);
             }
             WirInstr::I32x4LeS(a, b) | WirInstr::I32x4LeU(a, b) => {
-                self.write_binop_op("i32x4.le", a, b)
+                self.write_binop_op("i32x4.le", a, b);
             }
             WirInstr::I32x4GeS(a, b) | WirInstr::I32x4GeU(a, b) => {
-                self.write_binop_op("i32x4.ge", a, b)
+                self.write_binop_op("i32x4.ge", a, b);
             }
             WirInstr::I32x4Shl(a, b) => self.write_binop_op("i32x4.shl", a, b),
             WirInstr::I32x4ShrS(a, b) => self.write_binop_op("i32x4.shr_s", a, b),
