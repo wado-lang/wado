@@ -1004,52 +1004,7 @@ Wado intentionally does not support macros.
 
 ## SIMD
 
-See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md) for full design. See [Core Standard Library Reference](./cheatsheet-stdlib-core.md) for the complete API.
-
-```wado
-use { i32x4, f64x2, i8x16 } from "core:simd";
-
-// Construction
-let v = i32x4::splat(0);              // broadcast: [0, 0, 0, 0]
-let w: i32x4 = [1, 2, 3, 4];         // tuple literal coercion
-
-// Arithmetic (operator overloading)
-let sum = v + w;                       // i32x4.add
-let neg = -w;                          // i32x4.neg
-
-// Lane access
-let first = w.extract_lane(0);        // 1: i32
-
-// Comparison (returns mask, not bool)
-let mask = v.eq(&w);                   // per-lane all-0s or all-1s
-```
-
-Available types: `i8x16`, `i16x8`, `i32x4`, `i64x2`, `u8x16`, `u16x8`, `u32x4`, `u64x2`, `f32x4`, `f64x2`.
-
-### Relaxed SIMD
-
-Relaxed SIMD operations trade determinism for performance. Methods use the `relaxed_` prefix. See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md) for design rationale.
-
-```wado
-use { f32x4, i32x4, i8x16 } from "core:simd";
-
-// Fused multiply-add: a * b + c
-let a: f32x4 = [1.0 as f32, 2.0 as f32, 3.0 as f32, 4.0 as f32];
-let b = f32x4::splat(2.0 as f32);
-let c = f32x4::splat(10.0 as f32);
-let fma = a.relaxed_madd(&b, &c);     // [12, 14, 16, 18]
-
-// Relaxed lane select
-let v1: i32x4 = [100, 200, 300, 400];
-let v2: i32x4 = [1, 2, 3, 4];
-let mask: i32x4 = [-1, 0, -1, 0];
-let sel = v1.relaxed_laneselect(&v2, &mask);  // [100, 2, 300, 4]
-
-// Relaxed swizzle (out-of-range indices are implementation-defined)
-let v: i8x16 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-let idx: i8x16 = [3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12];
-let swizzled = v.relaxed_swizzle(&idx);
-```
+See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md) for design and rationale. Includes Relaxed SIMD.
 
 ## Not Yet Implemented
 
