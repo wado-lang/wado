@@ -8,7 +8,10 @@ use crate::tir::{
     TirFunction, TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
     TypeId, TypeTable,
 };
-use crate::wir::{WirFuncId, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
+use crate::wir::{
+    CanonicalIntrinsic, CmFuturePayload, CmScalarType, WirFuncId, WirInstr, WirName, WirType,
+    WirTypeDef, WirTypeId,
+};
 use indexmap::{IndexMap, IndexSet};
 
 use super::context::WirContext;
@@ -1675,7 +1678,9 @@ impl FunctionTranslator<'_, '_> {
                         } else {
                             vec![self.ctx.type_id_to_wir_type(self.type_table, expr.type_id)]
                         };
-                    self.ctx.ensure_canonical(local_name, params, results)
+                    let intrinsic = CanonicalIntrinsic::from_import_name(local_name)
+                        .unwrap_or_else(|| panic!("unknown canonical intrinsic: {local_name}"));
+                    self.ctx.ensure_canonical(intrinsic, params, results)
                 };
                 WirInstr::Call {
                     func_id,
@@ -3492,48 +3497,44 @@ impl FunctionTranslator<'_, '_> {
     // Canonical resource method dispatch
     // =========================================================================
 
-    /// Map a primitive type to its CM type suffix string.
+    /// Map a primitive type to its CM scalar type.
     ///
-    /// Returns `Some(":s32")` for i32, `Some(":u8")` for u8, etc.
-    /// Returns `None` for non-CM-number types.
-    fn primitive_to_cm_suffix(prim: &crate::tir::PrimitiveType) -> Option<&'static str> {
-        use crate::tir::PrimitiveType;
+    /// Returns `Some(CmScalarType::S32)` for i32, `Some(CmScalarType::U8)` for u8, etc.
+    /// Returns `None` for non-CM-scalar types (f32, f64 are included as float32/float64).
+    fn primitive_to_cm_scalar(prim: &PrimitiveType) -> Option<CmScalarType> {
         match prim {
-            PrimitiveType::I8 => Some(":s8"),
-            PrimitiveType::I16 => Some(":s16"),
-            PrimitiveType::I32 => Some(":s32"),
-            PrimitiveType::I64 => Some(":s64"),
-            PrimitiveType::U8 => Some(":u8"),
-            PrimitiveType::U16 => Some(":u16"),
-            PrimitiveType::U32 => Some(":u32"),
-            PrimitiveType::U64 => Some(":u64"),
-            PrimitiveType::F32 => Some(":float32"),
-            PrimitiveType::F64 => Some(":float64"),
-            PrimitiveType::Bool => Some(":bool"),
-            PrimitiveType::Char => Some(":char"),
+            PrimitiveType::I8 => Some(CmScalarType::S8),
+            PrimitiveType::I16 => Some(CmScalarType::S16),
+            PrimitiveType::I32 => Some(CmScalarType::S32),
+            PrimitiveType::I64 => Some(CmScalarType::S64),
+            PrimitiveType::U8 => Some(CmScalarType::U8),
+            PrimitiveType::U16 => Some(CmScalarType::U16),
+            PrimitiveType::U32 => Some(CmScalarType::U32),
+            PrimitiveType::U64 => Some(CmScalarType::U64),
+            PrimitiveType::F32 => Some(CmScalarType::F32),
+            PrimitiveType::F64 => Some(CmScalarType::F64),
+            PrimitiveType::Bool => Some(CmScalarType::Bool),
+            PrimitiveType::Char => Some(CmScalarType::Char),
             _ => None,
         }
     }
 
-    /// Get the CM future type suffix from `MonomorphInfo` (for static methods like `Future::new`).
-    fn cm_future_type_suffix_from_monomorph(&self, func: &FunctionRef) -> String {
-        use crate::tir::ResolvedType;
+    /// Get the CM future payload type from `MonomorphInfo` (for static methods like `Future::new`).
+    fn cm_future_payload_from_monomorph(&self, func: &FunctionRef) -> CmFuturePayload {
         if let Some(ref info) = func.monomorph_info
             && !info.type_args.is_empty()
             && let ResolvedType::Primitive(prim) = self.type_table.get(info.type_args[0])
-            && let Some(suffix) = Self::primitive_to_cm_suffix(prim)
         {
-            return suffix.to_string();
+            return Self::primitive_to_cm_scalar(prim);
         }
-        String::new()
+        None
     }
 
-    /// Get the CM future type suffix for a Future/FutureWritable receiver.
+    /// Get the CM future payload type for a Future/FutureWritable receiver.
     ///
-    /// Returns a suffix like `":s32"` for `Future<i32>`, `":u8"` for `Future<u8>`,
-    /// or `""` for non-scalar future types (trailers pattern).
-    fn cm_future_type_suffix(&self, receiver_type_id: TypeId) -> String {
-        use crate::tir::ResolvedType;
+    /// Returns `Some(CmScalarType::S32)` for `Future<i32>`, `Some(CmScalarType::U8)` for `Future<u8>`,
+    /// or `None` for non-scalar future types (trailers pattern).
+    fn cm_future_payload(&self, receiver_type_id: TypeId) -> CmFuturePayload {
         // Receiver is &Future<T> or &FutureWritable<T> — unwrap the reference
         let inner_type_id = match self.type_table.get(receiver_type_id) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
@@ -3542,11 +3543,10 @@ impl FunctionTranslator<'_, '_> {
         if let ResolvedType::GenericResource { type_args, .. } = self.type_table.get(inner_type_id)
             && !type_args.is_empty()
             && let ResolvedType::Primitive(prim) = self.type_table.get(type_args[0])
-            && let Some(suffix) = Self::primitive_to_cm_suffix(prim)
         {
-            return suffix.to_string();
+            return Self::primitive_to_cm_scalar(prim);
         }
-        String::new()
+        None
     }
 
     /// Dispatch canonical resource methods based on `#[canonical("...")]` attribute.
@@ -3570,49 +3570,63 @@ impl FunctionTranslator<'_, '_> {
                 let data_arg = self.translate_expr(&args[0].expr);
                 Some(self.emit_stream_write(handle, data_arg))
             }
-            "stream-drop-readable" => Some(self.emit_drop_handle("stream-drop-readable", handle)),
-            "stream-drop-writable" => Some(self.emit_drop_handle("stream-drop-writable", handle)),
+            "stream-drop-readable" => {
+                Some(self.emit_drop_handle(CanonicalIntrinsic::StreamDropReadable, handle))
+            }
+            "stream-drop-writable" => {
+                Some(self.emit_drop_handle(CanonicalIntrinsic::StreamDropWritable, handle))
+            }
 
             // === Future instance methods ===
             "future-read" => {
-                let suffix = self.cm_future_type_suffix(receiver.type_id);
-                Some(self.emit_future_read(handle, result_type_id, &suffix))
+                let payload = self.cm_future_payload(receiver.type_id);
+                Some(self.emit_future_read(handle, result_type_id, payload))
             }
             "future-write" => {
                 let value_arg = self.translate_expr(&args[0].expr);
                 let value_type_id = args[0].expr.type_id;
-                let suffix = self.cm_future_type_suffix(receiver.type_id);
-                Some(self.emit_future_write(handle, value_arg, value_type_id, &suffix))
+                let payload = self.cm_future_payload(receiver.type_id);
+                Some(self.emit_future_write(handle, value_arg, value_type_id, payload))
             }
             "future-cancel-read" => {
-                let suffix = self.cm_future_type_suffix(receiver.type_id);
-                Some(self.emit_drop_handle(&format!("future-cancel-read{suffix}"), handle))
+                let payload = self.cm_future_payload(receiver.type_id);
+                Some(self.emit_drop_handle(CanonicalIntrinsic::FutureCancelRead(payload), handle))
             }
             "future-cancel-write" => {
-                let suffix = self.cm_future_type_suffix(receiver.type_id);
-                Some(self.emit_drop_handle(&format!("future-cancel-write{suffix}"), handle))
+                let payload = self.cm_future_payload(receiver.type_id);
+                Some(self.emit_drop_handle(CanonicalIntrinsic::FutureCancelWrite(payload), handle))
             }
             "future-drop-readable" => {
-                let suffix = self.cm_future_type_suffix(receiver.type_id);
-                Some(self.emit_drop_handle(&format!("future-drop-readable{suffix}"), handle))
+                let payload = self.cm_future_payload(receiver.type_id);
+                Some(self.emit_drop_handle(CanonicalIntrinsic::FutureDropReadable(payload), handle))
             }
             "future-drop-writable" => {
-                let suffix = self.cm_future_type_suffix(receiver.type_id);
-                Some(self.emit_drop_handle(&format!("future-drop-writable{suffix}"), handle))
+                let payload = self.cm_future_payload(receiver.type_id);
+                Some(self.emit_drop_handle(CanonicalIntrinsic::FutureDropWritable(payload), handle))
             }
 
             // === Stream instance methods ===
-            "stream-cancel-read" => Some(self.emit_drop_handle("stream-cancel-read", handle)),
-            "stream-cancel-write" => Some(self.emit_drop_handle("stream-cancel-write", handle)),
+            "stream-cancel-read" => {
+                Some(self.emit_drop_handle(CanonicalIntrinsic::StreamCancelRead, handle))
+            }
+            "stream-cancel-write" => {
+                Some(self.emit_drop_handle(CanonicalIntrinsic::StreamCancelWrite, handle))
+            }
 
             // === WaitableSet instance methods ===
             "waitable-set-wait" => Some(self.emit_waitable_set_wait(handle, result_type_id)),
             "waitable-set-poll" => Some(self.emit_waitable_set_poll(handle, result_type_id)),
-            "waitable-set-drop" => Some(self.emit_drop_handle("waitable-set-drop", handle)),
+            "waitable-set-drop" => {
+                Some(self.emit_drop_handle(CanonicalIntrinsic::WaitableSetDrop, handle))
+            }
 
             // === Subtask instance methods ===
-            "subtask-drop" => Some(self.emit_drop_handle("subtask-drop", handle)),
-            "subtask-cancel" => Some(self.emit_drop_handle("subtask-cancel", handle)),
+            "subtask-drop" => {
+                Some(self.emit_drop_handle(CanonicalIntrinsic::SubtaskDrop, handle))
+            }
+            "subtask-cancel" => {
+                Some(self.emit_drop_handle(CanonicalIntrinsic::SubtaskCancel, handle))
+            }
             "waitable-join" => {
                 let set_arg = self.translate_expr(&args[0].expr);
                 Some(self.emit_waitable_join(handle, set_arg))
@@ -3620,7 +3634,9 @@ impl FunctionTranslator<'_, '_> {
 
             // === ErrorContext instance methods ===
             "error-context-debug-message" => Some(self.emit_error_context_debug_message(handle)),
-            "error-context-drop" => Some(self.emit_drop_handle("error-context-drop", handle)),
+            "error-context-drop" => {
+                Some(self.emit_drop_handle(CanonicalIntrinsic::ErrorContextDrop, handle))
+            }
 
             other => {
                 eprintln!("[WIR] unhandled canonical method: {other}");
@@ -3639,10 +3655,10 @@ impl FunctionTranslator<'_, '_> {
         result_type_id: TypeId,
     ) -> Option<WirInstr> {
         match canonical {
-            "stream-new" => Some(self.emit_stream_or_future_new(false, "", result_type_id)),
+            "stream-new" => Some(self.emit_stream_or_future_new(false, None, result_type_id)),
             "future-new" => {
-                let suffix = self.cm_future_type_suffix_from_monomorph(func);
-                Some(self.emit_stream_or_future_new(true, &suffix, result_type_id))
+                let payload = self.cm_future_payload_from_monomorph(func);
+                Some(self.emit_stream_or_future_new(true, payload, result_type_id))
             }
             "waitable-set-new" => Some(self.emit_waitable_set_new()),
             "error-context-new" => {
@@ -3659,10 +3675,10 @@ impl FunctionTranslator<'_, '_> {
     /// `stream-drop-readable`, `stream-drop-writable`,
     /// `future-drop-readable`, `future-drop-writable`,
     /// `waitable-set-drop`, `subtask-drop`, `error-context-drop`.
-    fn emit_drop_handle(&mut self, canonical: &str, handle: WirInstr) -> WirInstr {
+    fn emit_drop_handle(&mut self, intrinsic: CanonicalIntrinsic, handle: WirInstr) -> WirInstr {
         let func_id = self
             .ctx
-            .ensure_canonical(canonical, vec![WirType::I32], vec![]);
+            .ensure_canonical(intrinsic, vec![WirType::I32], vec![]);
         WirInstr::Call {
             func_id,
             args: vec![handle],
@@ -3673,17 +3689,17 @@ impl FunctionTranslator<'_, '_> {
     fn emit_stream_or_future_new(
         &mut self,
         is_future: bool,
-        type_suffix: &str,
+        payload: CmFuturePayload,
         result_type_id: TypeId,
     ) -> WirInstr {
-        let canonical = if is_future {
-            format!("future-new{type_suffix}")
+        let intrinsic = if is_future {
+            CanonicalIntrinsic::FutureNew(payload)
         } else {
-            "stream-new".to_string()
+            CanonicalIntrinsic::StreamNew
         };
         let func_id = self
             .ctx
-            .ensure_canonical(&canonical, vec![], vec![WirType::I64]);
+            .ensure_canonical(intrinsic, vec![], vec![WirType::I64]);
 
         // Resolve the result tuple type for StructNew
         let wir_type = self
@@ -3722,9 +3738,11 @@ impl FunctionTranslator<'_, '_> {
 
     /// Emit `waitable-set-new()` → i32 (waitable set handle).
     fn emit_waitable_set_new(&mut self) -> WirInstr {
-        let func_id = self
-            .ctx
-            .ensure_canonical("waitable-set-new", vec![], vec![WirType::I32]);
+        let func_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableSetNew,
+            vec![],
+            vec![WirType::I32],
+        );
         WirInstr::Call {
             func_id,
             args: vec![],
@@ -3738,9 +3756,11 @@ impl FunctionTranslator<'_, '_> {
     /// subtask handle itself (first argument). We save it before the void call
     /// and return it so callers of `Subtask::join() -> Waitable` get the token.
     fn emit_waitable_join(&mut self, handle: WirInstr, set_arg: WirInstr) -> WirInstr {
-        let func_id =
-            self.ctx
-                .ensure_canonical("waitable-join", vec![WirType::I32, WirType::I32], vec![]);
+        let func_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableJoin,
+            vec![WirType::I32, WirType::I32],
+            vec![],
+        );
         self.local_counter += 1;
         let suffix = self.local_counter;
         let handle_name = format!("__wj_handle_{suffix}");
@@ -3784,7 +3804,7 @@ impl FunctionTranslator<'_, '_> {
             return WirInstr::Unreachable;
         };
         let ec_new_id = self.ctx.ensure_canonical(
-            "error-context-new",
+            CanonicalIntrinsic::ErrorContextNew,
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
@@ -3888,7 +3908,7 @@ impl FunctionTranslator<'_, '_> {
             return WirInstr::Unreachable;
         };
         let ec_debug_msg_id = self.ctx.ensure_canonical(
-            "error-context-debug-message",
+            CanonicalIntrinsic::ErrorContextDebugMessage,
             vec![WirType::I32, WirType::I32],
             vec![],
         );
@@ -4030,7 +4050,7 @@ impl FunctionTranslator<'_, '_> {
             return WirInstr::Unreachable;
         };
         let ws_wait_id = self.ctx.ensure_canonical(
-            "waitable-set-wait",
+            CanonicalIntrinsic::WaitableSetWait,
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
@@ -4171,7 +4191,7 @@ impl FunctionTranslator<'_, '_> {
             return WirInstr::Unreachable;
         };
         let ws_poll_id = self.ctx.ensure_canonical(
-            "waitable-set-poll",
+            CanonicalIntrinsic::WaitableSetPoll,
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
@@ -4339,25 +4359,29 @@ impl FunctionTranslator<'_, '_> {
         &mut self,
         handle: WirInstr,
         result_type_id: TypeId,
-        type_suffix: &str,
+        payload: CmFuturePayload,
     ) -> WirInstr {
         let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
             return WirInstr::Unreachable;
         };
         // future-read: (handle: i32, ptr: i32) -> i32
         let future_read_id = self.ctx.ensure_canonical(
-            &format!("future-read{type_suffix}"),
+            CanonicalIntrinsic::FutureRead(payload),
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
-        let ws_new_id = self
-            .ctx
-            .ensure_canonical("waitable-set-new", vec![], vec![WirType::I32]);
-        let w_join_id =
-            self.ctx
-                .ensure_canonical("waitable-join", vec![WirType::I32, WirType::I32], vec![]);
+        let ws_new_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableSetNew,
+            vec![],
+            vec![WirType::I32],
+        );
+        let w_join_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableJoin,
+            vec![WirType::I32, WirType::I32],
+            vec![],
+        );
         let ws_wait_id = self.ctx.ensure_canonical(
-            "waitable-set-wait",
+            CanonicalIntrinsic::WaitableSetWait,
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
@@ -4616,7 +4640,6 @@ impl FunctionTranslator<'_, '_> {
     /// Returns `Some(WirInstr)` for CM number types (i8–i64, u8–u64, f32, f64,
     /// bool, char), `None` otherwise.
     fn lift_cm_scalar(&self, type_id: TypeId, ptr_name: &str) -> Option<WirInstr> {
-        use crate::tir::{PrimitiveType, ResolvedType};
         let ResolvedType::Primitive(prim) = self.type_table.get(type_id) else {
             return None;
         };
@@ -4732,10 +4755,8 @@ impl FunctionTranslator<'_, '_> {
         handle: WirInstr,
         value: WirInstr,
         value_type_id: TypeId,
-        type_suffix: &str,
+        payload: CmFuturePayload,
     ) -> WirInstr {
-        use crate::tir::{PrimitiveType, ResolvedType};
-
         // Check if the value type is a scalar numeric type
         if let ResolvedType::Primitive(
             PrimitiveType::I8
@@ -4750,7 +4771,7 @@ impl FunctionTranslator<'_, '_> {
             | PrimitiveType::Char,
         ) = self.type_table.get(value_type_id)
         {
-            return self.emit_future_write_scalar(handle, value, value_type_id, type_suffix);
+            return self.emit_future_write_scalar(handle, value, value_type_id, payload);
         }
 
         // Fallback: Result<Option<R>, E>::Ok(null) pattern (trailers)
@@ -4769,15 +4790,13 @@ impl FunctionTranslator<'_, '_> {
         handle: WirInstr,
         value: WirInstr,
         value_type_id: TypeId,
-        type_suffix: &str,
+        payload: CmFuturePayload,
     ) -> WirInstr {
-        use crate::tir::{PrimitiveType, ResolvedType};
-
         let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
             return WirInstr::Unreachable;
         };
         let future_write_id = self.ctx.ensure_canonical(
-            &format!("future-write{type_suffix}"),
+            CanonicalIntrinsic::FutureWrite(payload),
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
@@ -4971,18 +4990,22 @@ impl FunctionTranslator<'_, '_> {
             return WirInstr::Unreachable;
         };
         let future_write_id = self.ctx.ensure_canonical(
-            "future-write",
+            CanonicalIntrinsic::FutureWrite(None),
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
-        let ws_new_id = self
-            .ctx
-            .ensure_canonical("waitable-set-new", vec![], vec![WirType::I32]);
-        let w_join_id =
-            self.ctx
-                .ensure_canonical("waitable-join", vec![WirType::I32, WirType::I32], vec![]);
+        let ws_new_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableSetNew,
+            vec![],
+            vec![WirType::I32],
+        );
+        let w_join_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableJoin,
+            vec![WirType::I32, WirType::I32],
+            vec![],
+        );
         let ws_wait_id = self.ctx.ensure_canonical(
-            "waitable-set-wait",
+            CanonicalIntrinsic::WaitableSetWait,
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
@@ -5109,18 +5132,22 @@ impl FunctionTranslator<'_, '_> {
             return WirInstr::Unreachable;
         };
         let stream_read_id = self.ctx.ensure_canonical(
-            "stream-read",
+            CanonicalIntrinsic::StreamRead,
             vec![WirType::I32, WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
-        let ws_new_id = self
-            .ctx
-            .ensure_canonical("waitable-set-new", vec![], vec![WirType::I32]);
-        let w_join_id =
-            self.ctx
-                .ensure_canonical("waitable-join", vec![WirType::I32, WirType::I32], vec![]);
+        let ws_new_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableSetNew,
+            vec![],
+            vec![WirType::I32],
+        );
+        let w_join_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableJoin,
+            vec![WirType::I32, WirType::I32],
+            vec![],
+        );
         let ws_wait_id = self.ctx.ensure_canonical(
-            "waitable-set-wait",
+            CanonicalIntrinsic::WaitableSetWait,
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
@@ -5423,7 +5450,7 @@ impl FunctionTranslator<'_, '_> {
             return WirInstr::Unreachable;
         };
         let stream_write_id = self.ctx.ensure_canonical(
-            "stream-write",
+            CanonicalIntrinsic::StreamWrite,
             vec![WirType::I32, WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
@@ -5435,14 +5462,18 @@ impl FunctionTranslator<'_, '_> {
         else {
             return WirInstr::Unreachable;
         };
-        let ws_new_id = self
-            .ctx
-            .ensure_canonical("waitable-set-new", vec![], vec![WirType::I32]);
-        let w_join_id =
-            self.ctx
-                .ensure_canonical("waitable-join", vec![WirType::I32, WirType::I32], vec![]);
+        let ws_new_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableSetNew,
+            vec![],
+            vec![WirType::I32],
+        );
+        let w_join_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableJoin,
+            vec![WirType::I32, WirType::I32],
+            vec![],
+        );
         let ws_wait_id = self.ctx.ensure_canonical(
-            "waitable-set-wait",
+            CanonicalIntrinsic::WaitableSetWait,
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );

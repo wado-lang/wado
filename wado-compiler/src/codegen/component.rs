@@ -16,7 +16,7 @@ use crate::ast::Type;
 use crate::bundled::wado_bundled_libm_wasm;
 use crate::component_model::{CmInstanceTypeGen, WasiFunctionInfo};
 use crate::project::Project;
-use crate::wir::WirModule;
+use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmScalarType, WirModule};
 use indexmap::{IndexMap, IndexSet};
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
@@ -86,20 +86,20 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
 
     // Canonical intrinsics are discovered lazily during WIR translation via ensure_canonical().
     // They are stored in wir_module.needed_canonicals — the single source of truth.
-    let all_canonical_intrinsics: Vec<String> =
+    let all_canonical_intrinsics: Vec<CanonicalIntrinsic> =
         wir_module.needed_canonicals.iter().cloned().collect();
 
-    // HTTP response types for future<T> canonical intrinsics
+    // HTTP response types for future<T> canonical intrinsics (trailers pattern: payload = None)
     let needs_trailers_future = all_canonical_intrinsics
         .iter()
-        .any(|n| n.starts_with("future-") && !n.contains(':'));
+        .any(|i| i.future_payload() == Some(None));
     let trailers_future_type = if needs_trailers_future {
         build_future_intrinsic_types(&mut builder, &mut ctx, stream_u8_type)
     } else {
         0
     };
 
-    // Build scalar future types (e.g., future<s32>) for typed canonical intrinsics
+    // Build scalar future types (e.g., future<s32>) from structured metadata
     let scalar_future_types =
         build_scalar_future_types(&mut builder, &mut ctx, &all_canonical_intrinsics);
 
@@ -154,12 +154,9 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
 
     // Build wasi instance
     let mut wasi_exports: Vec<(String, ExportKind, u32)> = Vec::new();
-    for intrinsic_name in &all_canonical_intrinsics {
-        wasi_exports.push((
-            intrinsic_name.clone(),
-            ExportKind::Func,
-            ctx.core_func_idx(intrinsic_name),
-        ));
+    for intrinsic in &all_canonical_intrinsics {
+        let name = intrinsic.import_name();
+        wasi_exports.push((name.clone(), ExportKind::Func, ctx.core_func_idx(&name)));
     }
     for local_name in &available_wasi_funcs {
         wasi_exports.push((
@@ -615,83 +612,71 @@ fn build_future_intrinsic_types(
 
 /// Build component-level `future<T>` types for scalar CM types (e.g., `future<s32>`).
 ///
-/// Scans `canonical_intrinsics` for suffixed names like `"future-new:s32"` and registers
-/// the corresponding component types. Returns a map from suffix (e.g., `"s32"`) to type index.
+/// Collects unique scalar payload types from the canonical intrinsics and registers
+/// the corresponding component types. Returns a map from `CmScalarType` to type index.
 fn build_scalar_future_types(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
-    canonical_intrinsics: &[String],
-) -> IndexMap<String, u32> {
-    let mut result = IndexMap::new();
-
-    // Collect unique suffixes from all future-*:suffix names
-    let mut suffixes: IndexSet<String> = IndexSet::new();
-    for name in canonical_intrinsics {
-        if let Some(suffix) = name
-            .strip_prefix("future-")
-            .and_then(|rest| rest.split_once(':'))
-            .map(|(_, s)| s.to_string())
-        {
-            suffixes.insert(suffix);
+    canonical_intrinsics: &[CanonicalIntrinsic],
+) -> IndexSet<(CmScalarType, u32)> {
+    let mut scalars: IndexSet<CmScalarType> = IndexSet::new();
+    for intrinsic in canonical_intrinsics {
+        if let Some(Some(scalar)) = intrinsic.future_payload() {
+            scalars.insert(scalar);
         }
     }
 
-    for suffix in &suffixes {
-        let prim = match suffix.as_str() {
-            "s8" => PrimitiveValType::S8,
-            "s16" => PrimitiveValType::S16,
-            "s32" => PrimitiveValType::S32,
-            "s64" => PrimitiveValType::S64,
-            "u8" => PrimitiveValType::U8,
-            "u16" => PrimitiveValType::U16,
-            "u32" => PrimitiveValType::U32,
-            "u64" => PrimitiveValType::U64,
-            "float32" => PrimitiveValType::F32,
-            "float64" => PrimitiveValType::F64,
-            "bool" => PrimitiveValType::Bool,
-            "char" => PrimitiveValType::Char,
-            _ => continue,
-        };
-
-        let type_name = format!("future-{suffix}");
+    let mut result = IndexSet::new();
+    for scalar in &scalars {
+        let prim = cm_scalar_to_primitive(*scalar);
+        let type_name = format!("future-{scalar}");
         let future_type = ctx.register_type(&type_name);
         {
             let (_, enc) = builder.ty(Some(&type_name));
             enc.defined_type()
                 .future(Some(ComponentValType::Primitive(prim)));
         }
-        result.insert(suffix.clone(), future_type);
+        result.insert((*scalar, future_type));
     }
 
     result
 }
 
+/// Convert a `CmScalarType` to `wasm_encoder::PrimitiveValType`.
+fn cm_scalar_to_primitive(scalar: CmScalarType) -> PrimitiveValType {
+    match scalar {
+        CmScalarType::S8 => PrimitiveValType::S8,
+        CmScalarType::S16 => PrimitiveValType::S16,
+        CmScalarType::S32 => PrimitiveValType::S32,
+        CmScalarType::S64 => PrimitiveValType::S64,
+        CmScalarType::U8 => PrimitiveValType::U8,
+        CmScalarType::U16 => PrimitiveValType::U16,
+        CmScalarType::U32 => PrimitiveValType::U32,
+        CmScalarType::U64 => PrimitiveValType::U64,
+        CmScalarType::F32 => PrimitiveValType::F32,
+        CmScalarType::F64 => PrimitiveValType::F64,
+        CmScalarType::Bool => PrimitiveValType::Bool,
+        CmScalarType::Char => PrimitiveValType::Char,
+    }
+}
+
 fn emit_canonical_intrinsics(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
-    canonical_intrinsics: &[String],
+    canonical_intrinsics: &[CanonicalIntrinsic],
     stream_u8_type: u32,
     result_unit_type: u32,
     trailers_future_type: u32,
-    scalar_future_types: &IndexMap<String, u32>,
+    scalar_future_types: &IndexSet<(CmScalarType, u32)>,
 ) {
-    for name in canonical_intrinsics {
-        let name = name.as_str();
-        ctx.register_core_func(name);
+    for intrinsic in canonical_intrinsics {
+        ctx.register_core_func(&intrinsic.import_name());
 
-        // Handle typed future canonicals (e.g., "future-new:s32")
-        if let Some((base, suffix)) = name.split_once(':')
-            && let Some(&future_type) = scalar_future_types.get(suffix)
-        {
-            emit_typed_future_canonical(builder, ctx, base, future_type);
-            continue;
-        }
-
-        match name {
-            "stream-new" => {
+        match intrinsic {
+            CanonicalIntrinsic::StreamNew => {
                 builder.stream_new(stream_u8_type);
             }
-            "stream-write" => {
+            CanonicalIntrinsic::StreamWrite => {
                 builder.stream_write(
                     stream_u8_type,
                     [
@@ -700,7 +685,7 @@ fn emit_canonical_intrinsics(
                     ],
                 );
             }
-            "stream-read" => {
+            CanonicalIntrinsic::StreamRead => {
                 builder.stream_read(
                     stream_u8_type,
                     [
@@ -709,54 +694,61 @@ fn emit_canonical_intrinsics(
                     ],
                 );
             }
-            "stream-drop-writable" => {
+            CanonicalIntrinsic::StreamDropWritable => {
                 builder.stream_drop_writable(stream_u8_type);
             }
-            "stream-drop-readable" => {
+            CanonicalIntrinsic::StreamDropReadable => {
                 builder.stream_drop_readable(stream_u8_type);
             }
-            "future-new" => {
-                builder.future_new(trailers_future_type);
-            }
-            "future-write" => {
-                builder.future_write(
-                    trailers_future_type,
-                    [
-                        CanonicalOption::Async,
-                        CanonicalOption::Memory(ctx.memory_idx()),
-                        CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
-                    ],
-                );
-            }
-            "future-read" => {
-                builder.future_read(
-                    trailers_future_type,
-                    [
-                        CanonicalOption::Async,
-                        CanonicalOption::Memory(ctx.memory_idx()),
-                        CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
-                    ],
-                );
-            }
-            "future-cancel-read" => {
-                builder.future_cancel_read(trailers_future_type, false);
-            }
-            "future-cancel-write" => {
-                builder.future_cancel_write(trailers_future_type, false);
-            }
-            "future-drop-writable" => {
-                builder.future_drop_writable(trailers_future_type);
-            }
-            "future-drop-readable" => {
-                builder.future_drop_readable(trailers_future_type);
-            }
-            "stream-cancel-read" => {
+            CanonicalIntrinsic::StreamCancelRead => {
                 builder.stream_cancel_read(stream_u8_type, false);
             }
-            "stream-cancel-write" => {
+            CanonicalIntrinsic::StreamCancelWrite => {
                 builder.stream_cancel_write(stream_u8_type, false);
             }
-            "task-return" => {
+            CanonicalIntrinsic::FutureNew(payload) => {
+                let ft = resolve_future_type(*payload, trailers_future_type, scalar_future_types);
+                builder.future_new(ft);
+            }
+            CanonicalIntrinsic::FutureWrite(payload) => {
+                let ft = resolve_future_type(*payload, trailers_future_type, scalar_future_types);
+                builder.future_write(
+                    ft,
+                    [
+                        CanonicalOption::Async,
+                        CanonicalOption::Memory(ctx.memory_idx()),
+                        CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                    ],
+                );
+            }
+            CanonicalIntrinsic::FutureRead(payload) => {
+                let ft = resolve_future_type(*payload, trailers_future_type, scalar_future_types);
+                builder.future_read(
+                    ft,
+                    [
+                        CanonicalOption::Async,
+                        CanonicalOption::Memory(ctx.memory_idx()),
+                        CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                    ],
+                );
+            }
+            CanonicalIntrinsic::FutureCancelRead(payload) => {
+                let ft = resolve_future_type(*payload, trailers_future_type, scalar_future_types);
+                builder.future_cancel_read(ft, false);
+            }
+            CanonicalIntrinsic::FutureCancelWrite(payload) => {
+                let ft = resolve_future_type(*payload, trailers_future_type, scalar_future_types);
+                builder.future_cancel_write(ft, false);
+            }
+            CanonicalIntrinsic::FutureDropWritable(payload) => {
+                let ft = resolve_future_type(*payload, trailers_future_type, scalar_future_types);
+                builder.future_drop_writable(ft);
+            }
+            CanonicalIntrinsic::FutureDropReadable(payload) => {
+                let ft = resolve_future_type(*payload, trailers_future_type, scalar_future_types);
+                builder.future_drop_readable(ft);
+            }
+            CanonicalIntrinsic::TaskReturn => {
                 let task_return_type = if ctx.has_type("http-handler-result") {
                     ctx.type_idx("http-handler-result")
                 } else {
@@ -767,93 +759,64 @@ fn emit_canonical_intrinsics(
                     [CanonicalOption::Memory(ctx.memory_idx())],
                 );
             }
-            "waitable-set-new" => {
+            CanonicalIntrinsic::WaitableSetNew => {
                 builder.waitable_set_new();
             }
-            "waitable-join" => {
+            CanonicalIntrinsic::WaitableJoin => {
                 builder.waitable_join();
             }
-            "waitable-set-wait" => {
+            CanonicalIntrinsic::WaitableSetWait => {
                 builder.waitable_set_wait(false, ctx.memory_idx());
             }
-            "waitable-set-poll" => {
+            CanonicalIntrinsic::WaitableSetPoll => {
                 builder.waitable_set_poll(false, ctx.memory_idx());
             }
-            "waitable-set-drop" => {
+            CanonicalIntrinsic::WaitableSetDrop => {
                 builder.waitable_set_drop();
             }
-            "subtask-drop" => {
+            CanonicalIntrinsic::SubtaskDrop => {
                 builder.subtask_drop();
             }
-            "subtask-cancel" => {
+            CanonicalIntrinsic::SubtaskCancel => {
                 builder.subtask_cancel(false);
             }
-            "error-context-new" => {
+            CanonicalIntrinsic::ErrorContextNew => {
                 builder.error_context_new([
                     CanonicalOption::UTF8,
                     CanonicalOption::Memory(ctx.memory_idx()),
                     CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
                 ]);
             }
-            "error-context-debug-message" => {
+            CanonicalIntrinsic::ErrorContextDebugMessage => {
                 builder.error_context_debug_message([
                     CanonicalOption::UTF8,
                     CanonicalOption::Memory(ctx.memory_idx()),
                     CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
                 ]);
             }
-            "error-context-drop" => {
+            CanonicalIntrinsic::ErrorContextDrop => {
                 builder.error_context_drop();
             }
-            _ => {}
         }
     }
 }
 
-/// Emit a canonical intrinsic for a typed future (e.g., `future<s32>`).
-fn emit_typed_future_canonical(
-    builder: &mut ComponentBuilder,
-    ctx: &ComponentModelContext,
-    base: &str,
-    future_type: u32,
-) {
-    match base {
-        "future-new" => {
-            builder.future_new(future_type);
-        }
-        "future-write" => {
-            builder.future_write(
-                future_type,
-                [
-                    CanonicalOption::Async,
-                    CanonicalOption::Memory(ctx.memory_idx()),
-                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
-                ],
-            );
-        }
-        "future-read" => {
-            builder.future_read(
-                future_type,
-                [
-                    CanonicalOption::Async,
-                    CanonicalOption::Memory(ctx.memory_idx()),
-                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
-                ],
-            );
-        }
-        "future-cancel-read" => {
-            builder.future_cancel_read(future_type, false);
-        }
-        "future-cancel-write" => {
-            builder.future_cancel_write(future_type, false);
-        }
-        "future-drop-writable" => {
-            builder.future_drop_writable(future_type);
-        }
-        "future-drop-readable" => {
-            builder.future_drop_readable(future_type);
-        }
-        _ => {}
+/// Resolve the component-level type index for a future canonical intrinsic.
+///
+/// `None` payload → trailers future type (for HTTP response pattern).
+/// `Some(scalar)` → scalar future type (e.g., `future<s32>`).
+fn resolve_future_type(
+    payload: CmFuturePayload,
+    trailers_future_type: u32,
+    scalar_future_types: &IndexSet<(CmScalarType, u32)>,
+) -> u32 {
+    match payload {
+        None => trailers_future_type,
+        Some(scalar) => scalar_future_types
+            .iter()
+            .find(|(s, _)| *s == scalar)
+            .map(|(_, idx)| *idx)
+            .expect("scalar future type not registered"),
     }
 }
 

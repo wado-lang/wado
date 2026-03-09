@@ -65,10 +65,10 @@ pub struct WirModule {
     pub dead_func_indices: IndexSet<u32>,
     /// Global indices (into `globals`) extracted into `wasm_modules`; skipped by emitter.
     pub dead_global_indices: IndexSet<u32>,
-    /// CM canonical intrinsic names needed by this module (e.g., "stream-read", "waitable-set-new").
+    /// CM canonical intrinsics needed by this module.
     /// Populated during WIR translation via `WirContext::ensure_canonical`.
     /// Used by the component codegen to determine which canonical imports to generate.
-    pub needed_canonicals: IndexSet<String>,
+    pub needed_canonicals: IndexSet<CanonicalIntrinsic>,
     /// Original `WirFuncId` indices for each defined function (parallel to `functions`).
     /// These are the indices stored in `Call` instructions and may differ from
     /// `import_count + list_position` when `ensure_canonical` adds imports after registration.
@@ -249,6 +249,179 @@ impl WirModule {
             needed_canonicals: IndexSet::new(),
             func_wir_indices: Vec::new(),
         }
+    }
+}
+
+/// A CM (Component Model) scalar value type for parameterized canonical intrinsics.
+///
+/// Used to specify the element type of `future<T>` and (in the future) `stream<T>`.
+/// Maps 1:1 to `wasm_encoder::PrimitiveValType` in codegen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CmScalarType {
+    S8,
+    S16,
+    S32,
+    S64,
+    U8,
+    U16,
+    U32,
+    U64,
+    F32,
+    F64,
+    Bool,
+    Char,
+}
+
+impl fmt::Display for CmScalarType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::S8 => write!(f, "s8"),
+            Self::S16 => write!(f, "s16"),
+            Self::S32 => write!(f, "s32"),
+            Self::S64 => write!(f, "s64"),
+            Self::U8 => write!(f, "u8"),
+            Self::U16 => write!(f, "u16"),
+            Self::U32 => write!(f, "u32"),
+            Self::U64 => write!(f, "u64"),
+            Self::F32 => write!(f, "float32"),
+            Self::F64 => write!(f, "float64"),
+            Self::Bool => write!(f, "bool"),
+            Self::Char => write!(f, "char"),
+        }
+    }
+}
+
+/// The element type of a CM `future<T>` canonical intrinsic.
+///
+/// `None` represents the trailers pattern (`Result<Option<Trailers>, ErrorCode>`),
+/// `Some(scalar)` represents a scalar value type like `future<s32>`.
+pub type CmFuturePayload = Option<CmScalarType>;
+
+/// A canonical intrinsic needed by the compiled module.
+///
+/// Replaces the previous string-based approach (e.g., `"future-new:s32"`) with
+/// structured metadata. The future type parameter is stored as `CmFuturePayload`
+/// instead of being encoded in the name string.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CanonicalIntrinsic {
+    StreamNew,
+    StreamRead,
+    StreamWrite,
+    StreamDropReadable,
+    StreamDropWritable,
+    StreamCancelRead,
+    StreamCancelWrite,
+    FutureNew(CmFuturePayload),
+    FutureRead(CmFuturePayload),
+    FutureWrite(CmFuturePayload),
+    FutureDropReadable(CmFuturePayload),
+    FutureDropWritable(CmFuturePayload),
+    FutureCancelRead(CmFuturePayload),
+    FutureCancelWrite(CmFuturePayload),
+    WaitableSetNew,
+    WaitableSetWait,
+    WaitableSetPoll,
+    WaitableSetDrop,
+    WaitableJoin,
+    SubtaskDrop,
+    SubtaskCancel,
+    ErrorContextNew,
+    ErrorContextDebugMessage,
+    ErrorContextDrop,
+    TaskReturn,
+}
+
+impl CanonicalIntrinsic {
+    /// The import name used in the core Wasm module.
+    ///
+    /// For parameterized intrinsics, includes a type suffix (e.g., `"future-new:s32"`).
+    /// This is only used for the core-level import name; component codegen uses
+    /// the structured enum directly.
+    pub fn import_name(&self) -> String {
+        match self {
+            Self::StreamNew => "stream-new".to_string(),
+            Self::StreamRead => "stream-read".to_string(),
+            Self::StreamWrite => "stream-write".to_string(),
+            Self::StreamDropReadable => "stream-drop-readable".to_string(),
+            Self::StreamDropWritable => "stream-drop-writable".to_string(),
+            Self::StreamCancelRead => "stream-cancel-read".to_string(),
+            Self::StreamCancelWrite => "stream-cancel-write".to_string(),
+            Self::FutureNew(p) => format_future_name("future-new", *p),
+            Self::FutureRead(p) => format_future_name("future-read", *p),
+            Self::FutureWrite(p) => format_future_name("future-write", *p),
+            Self::FutureDropReadable(p) => format_future_name("future-drop-readable", *p),
+            Self::FutureDropWritable(p) => format_future_name("future-drop-writable", *p),
+            Self::FutureCancelRead(p) => format_future_name("future-cancel-read", *p),
+            Self::FutureCancelWrite(p) => format_future_name("future-cancel-write", *p),
+            Self::WaitableSetNew => "waitable-set-new".to_string(),
+            Self::WaitableSetWait => "waitable-set-wait".to_string(),
+            Self::WaitableSetPoll => "waitable-set-poll".to_string(),
+            Self::WaitableSetDrop => "waitable-set-drop".to_string(),
+            Self::WaitableJoin => "waitable-join".to_string(),
+            Self::SubtaskDrop => "subtask-drop".to_string(),
+            Self::SubtaskCancel => "subtask-cancel".to_string(),
+            Self::ErrorContextNew => "error-context-new".to_string(),
+            Self::ErrorContextDebugMessage => "error-context-debug-message".to_string(),
+            Self::ErrorContextDrop => "error-context-drop".to_string(),
+            Self::TaskReturn => "task-return".to_string(),
+        }
+    }
+
+    /// Parse a canonical intrinsic from a WASI import name.
+    ///
+    /// Used for TIR-level WASI imports (e.g., "task-return") that are registered
+    /// before WIR translation. Only handles non-parameterized intrinsics since
+    /// parameterized ones (future with type) are created directly in WIR translation.
+    pub fn from_import_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "stream-new" => Self::StreamNew,
+            "stream-read" => Self::StreamRead,
+            "stream-write" => Self::StreamWrite,
+            "stream-drop-readable" => Self::StreamDropReadable,
+            "stream-drop-writable" => Self::StreamDropWritable,
+            "stream-cancel-read" => Self::StreamCancelRead,
+            "stream-cancel-write" => Self::StreamCancelWrite,
+            "future-new" => Self::FutureNew(None),
+            "future-read" => Self::FutureRead(None),
+            "future-write" => Self::FutureWrite(None),
+            "future-drop-readable" => Self::FutureDropReadable(None),
+            "future-drop-writable" => Self::FutureDropWritable(None),
+            "future-cancel-read" => Self::FutureCancelRead(None),
+            "future-cancel-write" => Self::FutureCancelWrite(None),
+            "waitable-set-new" => Self::WaitableSetNew,
+            "waitable-set-wait" => Self::WaitableSetWait,
+            "waitable-set-poll" => Self::WaitableSetPoll,
+            "waitable-set-drop" => Self::WaitableSetDrop,
+            "waitable-join" => Self::WaitableJoin,
+            "subtask-drop" => Self::SubtaskDrop,
+            "subtask-cancel" => Self::SubtaskCancel,
+            "error-context-new" => Self::ErrorContextNew,
+            "error-context-debug-message" => Self::ErrorContextDebugMessage,
+            "error-context-drop" => Self::ErrorContextDrop,
+            "task-return" => Self::TaskReturn,
+            _ => return None,
+        })
+    }
+
+    /// Extract the future payload type, if this is a future intrinsic.
+    pub const fn future_payload(&self) -> Option<CmFuturePayload> {
+        match self {
+            Self::FutureNew(p)
+            | Self::FutureRead(p)
+            | Self::FutureWrite(p)
+            | Self::FutureDropReadable(p)
+            | Self::FutureDropWritable(p)
+            | Self::FutureCancelRead(p)
+            | Self::FutureCancelWrite(p) => Some(*p),
+            _ => None,
+        }
+    }
+}
+
+fn format_future_name(base: &str, payload: CmFuturePayload) -> String {
+    match payload {
+        Some(scalar) => format!("{base}:{scalar}"),
+        None => base.to_string(),
     }
 }
 

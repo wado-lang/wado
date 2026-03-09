@@ -10,8 +10,9 @@ use crate::name::{ModuleSource, StructName};
 use crate::project::Project;
 use crate::tir::{TirFunction, TypeId, TypeTable};
 use crate::wir::{
-    WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction, WirGlobal, WirImport,
-    WirImportDesc, WirModule, WirName, WirNames, WirRecGroup, WirType, WirTypeDef, WirTypeId,
+    CanonicalIntrinsic, WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction,
+    WirGlobal, WirImport, WirImportDesc, WirModule, WirName, WirNames, WirRecGroup, WirType,
+    WirTypeDef, WirTypeId,
 };
 
 /// Base offset for defined function `WirFuncId` indices.
@@ -109,9 +110,9 @@ pub struct WirContext<'a> {
 
     // === Canonical intrinsic registry ===
     /// CM canonical imports registered lazily by WIR synthesis functions via `ensure_canonical`.
-    /// Key: hyphenated canonical name (e.g., "stream-read").
+    /// Key: structured canonical intrinsic (e.g., `FutureNew(Some(S32))`).
     /// Value: the `WirFuncId` for the registered import.
-    pub needed_canonicals: IndexMap<String, WirFuncId>,
+    pub needed_canonicals: IndexMap<CanonicalIntrinsic, WirFuncId>,
 }
 
 /// A function body that needs to be translated from TIR to WIR.
@@ -395,13 +396,14 @@ impl<'a> WirContext<'a> {
     /// Called by WIR synthesis functions (`emit_stream_read`, `emit_waitable_set_new`, etc.)
     /// to declare the canonical imports they need without going through TIR imports or DCE.
     ///
-    /// The canonical name uses hyphenated CM notation (e.g., "stream-read", "waitable-set-new").
+    /// The import name is derived from `CanonicalIntrinsic::import_name()`.
     pub fn ensure_canonical(
         &mut self,
-        name: &str,
+        intrinsic: CanonicalIntrinsic,
         params: Vec<WirType>,
         results: Vec<WirType>,
     ) -> WirFuncId {
+        let name = intrinsic.import_name();
         let key = format!("wasi/{name}");
         if let Some(func_id) = self.func_map.get(&key) {
             return func_id.clone();
@@ -409,13 +411,13 @@ impl<'a> WirContext<'a> {
         let type_fq = format!("functype//wasi/{name}");
         let type_id = self.register_func_type(type_fq, params, results);
         let wir_name = WirName {
-            display: name.to_string(),
+            display: name.clone(),
             fq: key.clone(),
         };
         let func_id =
-            self.register_import_func("wasi".to_string(), name.to_string(), type_id, wir_name);
+            self.register_import_func("wasi".to_string(), name, type_id, wir_name);
         self.needed_canonicals
-            .insert(name.to_string(), func_id.clone());
+            .insert(intrinsic, func_id.clone());
         func_id
     }
 
@@ -757,7 +759,8 @@ impl<'a> WirContext<'a> {
             );
         }
 
-        let needed_canonicals: IndexSet<String> = self.needed_canonicals.keys().cloned().collect();
+        let needed_canonicals: IndexSet<CanonicalIntrinsic> =
+            self.needed_canonicals.keys().cloned().collect();
 
         // Build parallel list of stored WirFuncId indices for defined functions.
         // Each entry is the WirFuncId.index() that Call instructions use to call that function.
