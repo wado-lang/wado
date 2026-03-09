@@ -172,6 +172,17 @@ pub struct DumpResult {
     pub comments: comment::CommentMap,
 }
 
+/// Which allocator to use for the compiled component.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AllocatorMode {
+    /// Default bump allocator with free-rewind optimization.
+    #[default]
+    Bump,
+    /// Debug allocator: never reuses freed memory, poisons freed regions with 0xFF.
+    /// Useful for detecting use-after-free bugs.
+    Debug,
+}
+
 /// Compilation options for the compiler
 #[derive(Debug, Clone, Default)]
 pub struct CompilerOptions {
@@ -192,6 +203,9 @@ pub struct CompilerOptions {
     /// Override the number of fixed-point optimization iterations.
     /// When `None`, the default for the `opt_level` is used.
     pub opt_iterations: Option<u32>,
+    /// Which allocator to use. Defaults to `Bump`.
+    /// When `None`, the compiler auto-selects: `Debug` for test world, `Bump` otherwise.
+    pub allocator: Option<AllocatorMode>,
 }
 
 /// Compile Wado source code with a `CompilerHost` for I/O operations.
@@ -300,6 +314,29 @@ pub async fn compile_with_options<H: CompilerHost>(
         project.target_world = world;
     }
     project.skip_validation = options.skip_validation;
+
+    // Select allocator: swap export_name("realloc") to the chosen implementation
+    {
+        let allocator_mode = options.allocator.unwrap_or_else(|| {
+            if project.is_test_world() {
+                AllocatorMode::Debug
+            } else {
+                AllocatorMode::Bump
+            }
+        });
+        if allocator_mode == AllocatorMode::Debug {
+            if let Some(alloc_module) = project.tir_modules.get_mut(&ModuleSource::allocator()) {
+                for func_rc in &alloc_module.functions {
+                    let mut func = func_rc.borrow_mut();
+                    if func.name.ends_with("bump_realloc") {
+                        func.export_name = None;
+                    } else if func.name.ends_with("debug_realloc") {
+                        func.export_name = Some("realloc".to_string());
+                    }
+                }
+            }
+        }
+    }
 
     // Validate target world (test world is handled specially, not in registry)
     if !project.is_test_world() && project.world_registry.get(&project.target_world).is_none() {

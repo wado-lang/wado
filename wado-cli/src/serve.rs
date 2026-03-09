@@ -319,6 +319,7 @@ pub async fn run(opts: ServeOptions) {
         false,
         opts.inline_threshold,
         opts.opt_iterations,
+        None,
     )
     .await;
 

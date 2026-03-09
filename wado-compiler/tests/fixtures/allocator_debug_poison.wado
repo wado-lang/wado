@@ -1,0 +1,29 @@
+/// Test that the debug allocator poisons freed memory with 0xFF
+/// and never reuses freed addresses.
+use { println } from "core:cli";
+
+export fn run() with Stdout {
+    // Allocate a block
+    let ptr1 = builtin::realloc(0, 0, 4, 16);
+    assert ptr1 > 0;
+
+    // Write some data
+    builtin::i32_store(ptr1, 0x12345678);
+
+    // Free it
+    builtin::realloc(ptr1, 16, 4, 0);
+
+    // Verify freed memory is poisoned with 0xFF
+    let poisoned = builtin::i32_load(ptr1);
+    // 0xFFFFFFFF is -1 as i32
+    assert poisoned == -1, `expected poisoned memory (0xFFFFFFFF), got {poisoned}`;
+
+    // Allocate again — should NOT get the same address (no rewind)
+    let ptr2 = builtin::realloc(0, 0, 4, 16);
+    assert ptr2 != ptr1, `debug allocator should not reuse freed address: ptr1={ptr1}, ptr2={ptr2}`;
+
+    println("ok");
+}
+
+__DATA__
+{"allocator": "debug", "stdout": "ok\n"}

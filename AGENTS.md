@@ -55,6 +55,7 @@ The target world is indicated by the top-level key in the JSON object:
 | `TODO`                | `bool`               | Mark as TODO test - must fail until feature is implemented  |
 | `skip_os`             | `bool`               | Skip this test under `-Os` (e.g. tests relying on names)    |
 | `preopened_dirs`      | `[string, string][]` | Preopened directories `[host_path, guest_path]`             |
+| `allocator`           | `string`             | Override allocator: `"bump"` (default) or `"debug"`         |
 | `wir_expect:Ox`       | `string[]`           | Patterns that must appear in WIR at `-Ox` (substring match) |
 | `wir_not_expect:Ox`   | `string[]`           | Patterns that must NOT appear in WIR at `-Ox`               |
 
@@ -205,6 +206,17 @@ To inspect invalid Wasm when debugging codegen bugs, use `--no-validate`:
 # Skip validation and output raw Wasm bytes even if invalid
 wado compile --no-validate --wat-to-stdout file.wado
 ```
+
+### Debug Allocator
+
+Use `--allocator debug` to enable the debug allocator, which never reuses freed memory and poisons freed regions with `0xFF` bytes for use-after-free detection:
+
+```sh
+wado compile --allocator debug file.wado
+wado run --allocator debug file.wado      # not yet wired, use compile + wasmtime
+```
+
+The debug allocator is **automatically selected** when compiling for the test world (`--world test` or `wado test`).
 
 ### Serve Command
 

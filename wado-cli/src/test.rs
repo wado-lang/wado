@@ -249,6 +249,7 @@ async fn collect_test_jobs(
             false,
             None,
             None,
+            None, // auto-selects debug allocator for test world
         )
         .await;
         let compile_duration = compile_start.elapsed();

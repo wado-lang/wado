@@ -3,6 +3,14 @@
 
 /// This module defines the linear memory allocator for the Component Model.
 /// All items here are compiled into a separate Wasm core module named "mem".
+///
+/// Two allocator implementations are provided:
+/// - `bump_realloc`: Default bump allocator with free-rewind optimization.
+/// - `debug_realloc`: Debug allocator that poisons freed memory with 0xFF
+///   and never reuses freed addresses (for use-after-free detection).
+///
+/// The compiler selects one based on `--allocator` flag or target world,
+/// and DCE removes the unused implementation.
 
 /// Bump allocator heap pointer. Starts at 8 to avoid returning address 0 (null sentinel).
 global mut heap_offset: i32 = 8;
@@ -37,6 +45,30 @@ export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i
     if newsize == 0 {
         if oldptr + oldsize == heap_offset {
             heap_offset = oldptr;
+        }
+        return 0;
+    }
+
+    let aligned = builtin::i32_and(heap_offset + align - 1, 0 - align);
+    let new_offset = aligned + newsize;
+
+    if builtin::unlikely(new_offset > builtin::memory_size() * 65536) {
+        grow_memory(new_offset);
+    }
+
+    heap_offset = new_offset;
+
+    return aligned;
+}
+
+/// Debug allocator — advances a pointer with alignment, never reuses freed memory.
+/// When newsize is 0, poisons the freed region with 0xFF bytes.
+/// Selected by `--allocator debug` or automatically for the test world.
+export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
+    // Free: poison freed memory with 0xFF, never reuse
+    if newsize == 0 {
+        if oldsize > 0 {
+            builtin::memory_fill(oldptr, 0xFF as u8, oldsize);
         }
         return 0;
     }

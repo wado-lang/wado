@@ -170,6 +170,11 @@ struct TestSpec {
     #[serde(rename = "wasi:http/service")]
     http_service: Option<HttpServiceSpec>,
 
+    /// Override the allocator mode: "bump" or "debug".
+    /// If not set, auto-selects based on target world (debug for test world, bump otherwise).
+    #[serde(default)]
+    allocator: Option<String>,
+
     // --- WIR pattern expectations (per optimization level) ---
     /// Patterns that must appear in WIR output at -O0
     #[serde(rename = "wir_expect:O0", default)]
@@ -636,6 +641,11 @@ fn run_normal_test(
 
     // Use CompilerOptions to pass the target world through
     let has_wir = spec.has_wir_expectations(opt_level);
+    let allocator = spec.allocator.as_deref().map(|s| match s {
+        "bump" => wado_compiler::AllocatorMode::Bump,
+        "debug" => wado_compiler::AllocatorMode::Debug,
+        other => panic!("unknown allocator mode in test spec: {other}"),
+    });
     let options = CompilerOptions {
         opt_level,
         target_world,
@@ -643,6 +653,7 @@ fn run_normal_test(
         retain_wir: has_wir,
         inline_threshold: None,
         opt_iterations: None,
+        allocator,
     };
 
     // Try to compile the fixture

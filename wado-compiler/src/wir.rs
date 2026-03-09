@@ -1096,6 +1096,11 @@ pub enum WirInstr {
     // === Memory ===
     MemorySize,
     MemoryGrow(Box<WirInstr>),
+    MemoryFill {
+        dst: Box<WirInstr>,
+        value: Box<WirInstr>,
+        len: Box<WirInstr>,
+    },
     I32Load {
         offset: u64,
         align: u32,
@@ -1498,6 +1503,11 @@ impl WirInstr {
                 f(addr);
                 f(value);
             }
+            Self::MemoryFill { dst, value, len } => {
+                f(dst);
+                f(value);
+                f(len);
+            }
             // Vec<WirInstr> children
             Self::StructNew { fields, .. }
             | Self::ArrayNewFixed {
@@ -1823,6 +1833,11 @@ impl WirInstr {
             | Self::I64Store { addr, value, .. } => {
                 f(addr);
                 f(value);
+            }
+            Self::MemoryFill { dst, value, len } => {
+                f(dst);
+                f(value);
+                f(len);
             }
             // Vec<WirInstr> children
             Self::StructNew { fields, .. }
