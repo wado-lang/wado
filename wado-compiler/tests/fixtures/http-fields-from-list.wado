@@ -1,0 +1,28 @@
+// HTTP Fields.from_list() test
+// Tests constructing Fields from a list of [name, value] entries.
+
+use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, HeaderError, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // Build a list of header entries
+    let name_bytes: Array<u8> = [118 as u8, 49 as u8]; // "v1"
+    let entries: Array<[FieldName, FieldValue]> = [
+        ["x-one" as FieldName, name_bytes as FieldValue],
+    ];
+
+    let result = Fields::from_list(entries);
+    if let Ok(fields) = result {
+        assert fields.has("x-one" as FieldName);
+    } else {
+        panic("from_list failed");
+    }
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"TODO": true, "wasi:http/service": {"status": 200}}

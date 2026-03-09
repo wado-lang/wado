@@ -1,0 +1,28 @@
+// HTTP RequestOptions resource test
+// Tests creating and configuring RequestOptions.
+
+use { Request, Response, ErrorCode, Fields, RequestOptions, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // Create a new RequestOptions instance
+    let opts = RequestOptions::new();
+
+    // Get default timeout (should be None)
+    let connect = opts.get_connect_timeout();
+    assert connect matches { None };
+
+    let first_byte = opts.get_first_byte_timeout();
+    assert first_byte matches { None };
+
+    let between = opts.get_between_bytes_timeout();
+    assert between matches { None };
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"TODO": true, "wasi:http/service": {"status": 200}}

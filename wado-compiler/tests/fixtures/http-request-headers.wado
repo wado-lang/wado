@@ -1,0 +1,33 @@
+// HTTP request headers reading test
+// Verifies that request.get_headers() returns the correct headers
+// sent by the client, and that Fields.get() retrieves header values.
+
+use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let req_headers = request.get_headers();
+
+    // Verify the custom header exists
+    assert req_headers.has("x-custom" as FieldName);
+
+    // Get the header value using Fields.get()
+    let values = req_headers.get("x-custom" as FieldName);
+    assert values.len() == 1;
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+    "TODO": true,
+    "wasi:http/service": {
+        "request": {
+            "headers": [["x-custom", "test-value"]]
+        },
+        "status": 200
+    }
+}

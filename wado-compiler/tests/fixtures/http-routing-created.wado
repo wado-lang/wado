@@ -1,0 +1,24 @@
+// HTTP routing: 201 Created path
+// Tests that the handler returns 201 for /created path.
+
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let path = request.get_path_with_query();
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+
+    if let Some(p) = path {
+        if p == "/created" {
+            response.set_status_code(201);
+        }
+    }
+
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"request": {"path": "/created"}, "status": 201}}

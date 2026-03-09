@@ -1,0 +1,24 @@
+// HTTP Fields.copy_all() test
+// Tests enumerating all entries in a Fields using copy_all().
+
+use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let fields = Fields::new();
+
+    let v1: Array<u8> = [97 as u8]; // "a"
+    let v2: Array<u8> = [98 as u8]; // "b"
+    let _ = fields.append("x-first" as FieldName, v1 as FieldValue);
+    let _ = fields.append("x-second" as FieldName, v2 as FieldValue);
+
+    let all = fields.copy_all();
+    assert all.len() == 2;
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [response, _tx_future] = Response::new(fields, null, trailers_future);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"TODO": true, "wasi:http/service": {"status": 200}}
