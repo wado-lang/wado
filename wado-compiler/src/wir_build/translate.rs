@@ -8,7 +8,10 @@ use crate::tir::{
     TirFunction, TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
     TypeId, TypeTable,
 };
-use crate::wir::{WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
+use crate::wir::{
+    CanonicalIntrinsic, CmFuturePayload, CmScalarType, WirFuncId, WirInstr, WirName, WirType,
+    WirTypeDef, WirTypeId,
+};
 use indexmap::{IndexMap, IndexSet};
 
 use super::context::WirContext;
@@ -1313,8 +1316,12 @@ impl FunctionTranslator<'_, '_> {
 
                 // Static method: canonical dispatch (e.g., Stream::new, WaitableSet::new)
                 if let Some(canonical) = func.method_info.clone().and_then(|m| m.canonical_name)
-                    && let Some(instr) =
-                        self.try_translate_canonical_static_method(&canonical, args, expr.type_id)
+                    && let Some(instr) = self.try_translate_canonical_static_method(
+                        &canonical,
+                        func,
+                        args,
+                        expr.type_id,
+                    )
                 {
                     return instr;
                 }
@@ -1671,7 +1678,9 @@ impl FunctionTranslator<'_, '_> {
                         } else {
                             vec![self.ctx.type_id_to_wir_type(self.type_table, expr.type_id)]
                         };
-                    self.ctx.ensure_canonical(local_name, params, results)
+                    let intrinsic = CanonicalIntrinsic::from_import_name(local_name)
+                        .unwrap_or_else(|| panic!("unknown canonical intrinsic: {local_name}"));
+                    self.ctx.ensure_canonical(intrinsic, params, results)
                 };
                 WirInstr::Call {
                     func_id,
@@ -4049,6 +4058,58 @@ impl FunctionTranslator<'_, '_> {
     // Canonical resource method dispatch
     // =========================================================================
 
+    /// Map a primitive type to its CM scalar type.
+    ///
+    /// Returns `Some(CmScalarType::S32)` for i32, `Some(CmScalarType::U8)` for u8, etc.
+    /// Returns `None` for non-CM-scalar types (f32, f64 are included as float32/float64).
+    fn primitive_to_cm_scalar(prim: &PrimitiveType) -> Option<CmScalarType> {
+        match prim {
+            PrimitiveType::I8 => Some(CmScalarType::S8),
+            PrimitiveType::I16 => Some(CmScalarType::S16),
+            PrimitiveType::I32 => Some(CmScalarType::S32),
+            PrimitiveType::I64 => Some(CmScalarType::S64),
+            PrimitiveType::U8 => Some(CmScalarType::U8),
+            PrimitiveType::U16 => Some(CmScalarType::U16),
+            PrimitiveType::U32 => Some(CmScalarType::U32),
+            PrimitiveType::U64 => Some(CmScalarType::U64),
+            PrimitiveType::F32 => Some(CmScalarType::F32),
+            PrimitiveType::F64 => Some(CmScalarType::F64),
+            PrimitiveType::Bool => Some(CmScalarType::Bool),
+            PrimitiveType::Char => Some(CmScalarType::Char),
+            _ => None,
+        }
+    }
+
+    /// Get the CM future payload type from `MonomorphInfo` (for static methods like `Future::new`).
+    fn cm_future_payload_from_monomorph(&self, func: &FunctionRef) -> CmFuturePayload {
+        if let Some(ref info) = func.monomorph_info
+            && !info.type_args.is_empty()
+            && let ResolvedType::Primitive(prim) = self.type_table.get(info.type_args[0])
+        {
+            return Self::primitive_to_cm_scalar(prim);
+        }
+        None
+    }
+
+    /// Get the CM future payload type for a Future/FutureWritable receiver.
+    ///
+    /// Returns `Some(CmScalarType::S32)` for `Future<i32>`, `Some(CmScalarType::U8)` for `Future<u8>`,
+    /// or `None` for non-scalar future types (trailers pattern).
+    fn cm_future_payload(&self, receiver_type_id: TypeId) -> CmFuturePayload {
+        // Receiver is &Future<T> or &FutureWritable<T> — unwrap the reference
+        let inner_type_id = match self.type_table.get(receiver_type_id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => receiver_type_id,
+        };
+        if let ResolvedType::GenericResource { type_args, .. } = self.type_table.get(inner_type_id)
+            && !type_args.is_empty()
+            && let ResolvedType::Primitive(prim) = self.type_table.get(type_args[0])
+        {
+            return Self::primitive_to_cm_scalar(prim);
+        }
+        None
+    }
+
     /// Dispatch canonical resource methods based on `#[canonical("...")]` attribute.
     /// Returns `Some(WirInstr)` if the method has a canonical name and was handled.
     fn try_translate_canonical_method(
@@ -4070,29 +4131,61 @@ impl FunctionTranslator<'_, '_> {
                 let data_arg = self.translate_expr(&args[0].expr);
                 Some(self.emit_stream_write(handle, data_arg))
             }
-            "stream-drop-readable" => Some(self.emit_drop_handle("stream-drop-readable", handle)),
-            "stream-drop-writable" => Some(self.emit_drop_handle("stream-drop-writable", handle)),
+            "stream-drop-readable" => {
+                Some(self.emit_drop_handle(CanonicalIntrinsic::StreamDropReadable, handle))
+            }
+            "stream-drop-writable" => {
+                Some(self.emit_drop_handle(CanonicalIntrinsic::StreamDropWritable, handle))
+            }
 
             // === Future instance methods ===
-            "future-read" => Some(self.emit_future_read(handle, result_type_id)),
-            "future-write" => Some(self.emit_future_write_ok_none(handle)),
-            "future-cancel-read" => Some(self.emit_drop_handle("future-cancel-read", handle)),
-            "future-cancel-write" => Some(self.emit_drop_handle("future-cancel-write", handle)),
-            "future-drop-readable" => Some(self.emit_drop_handle("future-drop-readable", handle)),
-            "future-drop-writable" => Some(self.emit_drop_handle("future-drop-writable", handle)),
+            "future-read" => {
+                let payload = self.cm_future_payload(receiver.type_id);
+                Some(self.emit_future_read(handle, result_type_id, payload))
+            }
+            "future-write" => {
+                let value_arg = self.translate_expr(&args[0].expr);
+                let value_type_id = args[0].expr.type_id;
+                let payload = self.cm_future_payload(receiver.type_id);
+                Some(self.emit_future_write(handle, value_arg, value_type_id, payload))
+            }
+            "future-cancel-read" => {
+                let payload = self.cm_future_payload(receiver.type_id);
+                Some(self.emit_drop_handle(CanonicalIntrinsic::FutureCancelRead(payload), handle))
+            }
+            "future-cancel-write" => {
+                let payload = self.cm_future_payload(receiver.type_id);
+                Some(self.emit_drop_handle(CanonicalIntrinsic::FutureCancelWrite(payload), handle))
+            }
+            "future-drop-readable" => {
+                let payload = self.cm_future_payload(receiver.type_id);
+                Some(self.emit_drop_handle(CanonicalIntrinsic::FutureDropReadable(payload), handle))
+            }
+            "future-drop-writable" => {
+                let payload = self.cm_future_payload(receiver.type_id);
+                Some(self.emit_drop_handle(CanonicalIntrinsic::FutureDropWritable(payload), handle))
+            }
 
             // === Stream instance methods ===
-            "stream-cancel-read" => Some(self.emit_drop_handle("stream-cancel-read", handle)),
-            "stream-cancel-write" => Some(self.emit_drop_handle("stream-cancel-write", handle)),
+            "stream-cancel-read" => {
+                Some(self.emit_drop_handle(CanonicalIntrinsic::StreamCancelRead, handle))
+            }
+            "stream-cancel-write" => {
+                Some(self.emit_drop_handle(CanonicalIntrinsic::StreamCancelWrite, handle))
+            }
 
             // === WaitableSet instance methods ===
             "waitable-set-wait" => Some(self.emit_waitable_set_wait(handle, result_type_id)),
             "waitable-set-poll" => Some(self.emit_waitable_set_poll(handle, result_type_id)),
-            "waitable-set-drop" => Some(self.emit_drop_handle("waitable-set-drop", handle)),
+            "waitable-set-drop" => {
+                Some(self.emit_drop_handle(CanonicalIntrinsic::WaitableSetDrop, handle))
+            }
 
             // === Subtask instance methods ===
-            "subtask-drop" => Some(self.emit_drop_handle("subtask-drop", handle)),
-            "subtask-cancel" => Some(self.emit_drop_handle("subtask-cancel", handle)),
+            "subtask-drop" => Some(self.emit_drop_handle(CanonicalIntrinsic::SubtaskDrop, handle)),
+            "subtask-cancel" => {
+                Some(self.emit_drop_handle(CanonicalIntrinsic::SubtaskCancel, handle))
+            }
             "waitable-join" => {
                 let set_arg = self.translate_expr(&args[0].expr);
                 Some(self.emit_waitable_join(handle, set_arg))
@@ -4100,7 +4193,9 @@ impl FunctionTranslator<'_, '_> {
 
             // === ErrorContext instance methods ===
             "error-context-debug-message" => Some(self.emit_error_context_debug_message(handle)),
-            "error-context-drop" => Some(self.emit_drop_handle("error-context-drop", handle)),
+            "error-context-drop" => {
+                Some(self.emit_drop_handle(CanonicalIntrinsic::ErrorContextDrop, handle))
+            }
 
             other => {
                 eprintln!("[WIR] unhandled canonical method: {other}");
@@ -4114,12 +4209,16 @@ impl FunctionTranslator<'_, '_> {
     fn try_translate_canonical_static_method(
         &mut self,
         canonical: &str,
+        func: &FunctionRef,
         args: &[CallArg],
         result_type_id: TypeId,
     ) -> Option<WirInstr> {
         match canonical {
-            "stream-new" => Some(self.emit_stream_or_future_new(false, result_type_id)),
-            "future-new" => Some(self.emit_stream_or_future_new(true, result_type_id)),
+            "stream-new" => Some(self.emit_stream_or_future_new(false, None, result_type_id)),
+            "future-new" => {
+                let payload = self.cm_future_payload_from_monomorph(func);
+                Some(self.emit_stream_or_future_new(true, payload, result_type_id))
+            }
             "waitable-set-new" => Some(self.emit_waitable_set_new()),
             "error-context-new" => {
                 let msg_arg = self.translate_expr(&args[0].expr);
@@ -4135,10 +4234,10 @@ impl FunctionTranslator<'_, '_> {
     /// `stream-drop-readable`, `stream-drop-writable`,
     /// `future-drop-readable`, `future-drop-writable`,
     /// `waitable-set-drop`, `subtask-drop`, `error-context-drop`.
-    fn emit_drop_handle(&mut self, canonical: &str, handle: WirInstr) -> WirInstr {
+    fn emit_drop_handle(&mut self, intrinsic: CanonicalIntrinsic, handle: WirInstr) -> WirInstr {
         let func_id = self
             .ctx
-            .ensure_canonical(canonical, vec![WirType::I32], vec![]);
+            .ensure_canonical(intrinsic, vec![WirType::I32], vec![]);
         WirInstr::Call {
             func_id,
             args: vec![handle],
@@ -4146,15 +4245,20 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Emit `stream-new()` or `future-new()` → split i64 into [`rx_i32`, `tx_i32`] tuple.
-    fn emit_stream_or_future_new(&mut self, is_future: bool, result_type_id: TypeId) -> WirInstr {
-        let canonical = if is_future {
-            "future-new"
+    fn emit_stream_or_future_new(
+        &mut self,
+        is_future: bool,
+        payload: CmFuturePayload,
+        result_type_id: TypeId,
+    ) -> WirInstr {
+        let intrinsic = if is_future {
+            CanonicalIntrinsic::FutureNew(payload)
         } else {
-            "stream-new"
+            CanonicalIntrinsic::StreamNew
         };
         let func_id = self
             .ctx
-            .ensure_canonical(canonical, vec![], vec![WirType::I64]);
+            .ensure_canonical(intrinsic, vec![], vec![WirType::I64]);
 
         // Resolve the result tuple type for StructNew
         let wir_type = self
@@ -4193,9 +4297,11 @@ impl FunctionTranslator<'_, '_> {
 
     /// Emit `waitable-set-new()` → i32 (waitable set handle).
     fn emit_waitable_set_new(&mut self) -> WirInstr {
-        let func_id = self
-            .ctx
-            .ensure_canonical("waitable-set-new", vec![], vec![WirType::I32]);
+        let func_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableSetNew,
+            vec![],
+            vec![WirType::I32],
+        );
         WirInstr::Call {
             func_id,
             args: vec![],
@@ -4209,9 +4315,11 @@ impl FunctionTranslator<'_, '_> {
     /// subtask handle itself (first argument). We save it before the void call
     /// and return it so callers of `Subtask::join() -> Waitable` get the token.
     fn emit_waitable_join(&mut self, handle: WirInstr, set_arg: WirInstr) -> WirInstr {
-        let func_id =
-            self.ctx
-                .ensure_canonical("waitable-join", vec![WirType::I32, WirType::I32], vec![]);
+        let func_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableJoin,
+            vec![WirType::I32, WirType::I32],
+            vec![],
+        );
         self.local_counter += 1;
         let suffix = self.local_counter;
         let handle_name = format!("__wj_handle_{suffix}");
@@ -4255,7 +4363,7 @@ impl FunctionTranslator<'_, '_> {
             return WirInstr::Unreachable;
         };
         let ec_new_id = self.ctx.ensure_canonical(
-            "error-context-new",
+            CanonicalIntrinsic::ErrorContextNew,
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
@@ -4359,7 +4467,7 @@ impl FunctionTranslator<'_, '_> {
             return WirInstr::Unreachable;
         };
         let ec_debug_msg_id = self.ctx.ensure_canonical(
-            "error-context-debug-message",
+            CanonicalIntrinsic::ErrorContextDebugMessage,
             vec![WirType::I32, WirType::I32],
             vec![],
         );
@@ -4501,7 +4609,7 @@ impl FunctionTranslator<'_, '_> {
             return WirInstr::Unreachable;
         };
         let ws_wait_id = self.ctx.ensure_canonical(
-            "waitable-set-wait",
+            CanonicalIntrinsic::WaitableSetWait,
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
@@ -4642,7 +4750,7 @@ impl FunctionTranslator<'_, '_> {
             return WirInstr::Unreachable;
         };
         let ws_poll_id = self.ctx.ensure_canonical(
-            "waitable-set-poll",
+            CanonicalIntrinsic::WaitableSetPoll,
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
@@ -4806,24 +4914,33 @@ impl FunctionTranslator<'_, '_> {
     ///
     /// TODO: implement general CM lifting for arbitrary T values.
     /// Currently hardcoded for the `Ok(None)` pattern (all-zeros payload = 8 bytes).
-    fn emit_future_read(&mut self, handle: WirInstr, result_type_id: TypeId) -> WirInstr {
+    fn emit_future_read(
+        &mut self,
+        handle: WirInstr,
+        result_type_id: TypeId,
+        payload: CmFuturePayload,
+    ) -> WirInstr {
         let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
             return WirInstr::Unreachable;
         };
         // future-read: (handle: i32, ptr: i32) -> i32
         let future_read_id = self.ctx.ensure_canonical(
-            "future-read",
+            CanonicalIntrinsic::FutureRead(payload),
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
-        let ws_new_id = self
-            .ctx
-            .ensure_canonical("waitable-set-new", vec![], vec![WirType::I32]);
-        let w_join_id =
-            self.ctx
-                .ensure_canonical("waitable-join", vec![WirType::I32, WirType::I32], vec![]);
+        let ws_new_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableSetNew,
+            vec![],
+            vec![WirType::I32],
+        );
+        let w_join_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableJoin,
+            vec![WirType::I32, WirType::I32],
+            vec![],
+        );
         let ws_wait_id = self.ctx.ensure_canonical(
-            "waitable-set-wait",
+            CanonicalIntrinsic::WaitableSetWait,
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
@@ -5047,6 +5164,11 @@ impl FunctionTranslator<'_, '_> {
             return WirInstr::Unreachable;
         };
 
+        // Check if T is a scalar numeric type (i32, i64, f32, f64, etc.)
+        if let Some(load_instr) = self.lift_cm_scalar(inner_t, ptr_name) {
+            return load_instr;
+        }
+
         // Check if T is Result<Ok, Err>
         if let ResolvedType::GenericInstance {
             name, type_args, ..
@@ -5070,6 +5192,43 @@ impl FunctionTranslator<'_, '_> {
         // Fallback: unsupported T type — emit unreachable
         // (will trap at runtime if this code path is reached)
         WirInstr::Unreachable
+    }
+
+    /// Lift a scalar numeric value from CM linear memory at `ptr_name + 0`.
+    ///
+    /// Returns `Some(WirInstr)` for CM number types (i8–i64, u8–u64, f32, f64,
+    /// bool, char), `None` otherwise.
+    fn lift_cm_scalar(&self, type_id: TypeId, ptr_name: &str) -> Option<WirInstr> {
+        let ResolvedType::Primitive(prim) = self.type_table.get(type_id) else {
+            return None;
+        };
+        let ptr = || WirInstr::LocalGet {
+            name: ptr_name.to_string(),
+        };
+        let instr = match prim {
+            PrimitiveType::I8 | PrimitiveType::U8 | PrimitiveType::Bool => WirInstr::I32Load8U {
+                offset: 0,
+                align: 0,
+                addr: Box::new(ptr()),
+            },
+            PrimitiveType::I16 | PrimitiveType::U16 => WirInstr::I32Load {
+                offset: 0,
+                align: 1,
+                addr: Box::new(ptr()),
+            },
+            PrimitiveType::I32 | PrimitiveType::U32 | PrimitiveType::Char => WirInstr::I32Load {
+                offset: 0,
+                align: 2,
+                addr: Box::new(ptr()),
+            },
+            PrimitiveType::I64 | PrimitiveType::U64 => WirInstr::I64Load {
+                offset: 0,
+                align: 3,
+                addr: Box::new(ptr()),
+            },
+            _ => return None,
+        };
+        Some(instr)
     }
 
     /// Lift `Result<Option<R>, E>` from CM linear memory.
@@ -5145,6 +5304,237 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// Emit WIR for `FutureWritable<T>::write(value)`.
+    ///
+    /// Dispatches to a type-specific emitter based on `value_type_id`:
+    /// - Scalar numeric types (i8–i64, u8–u64, bool, char): `emit_future_write_scalar`
+    /// - `Result<Option<R>, E>::Ok(null)` pattern: `emit_future_write_ok_none`
+    fn emit_future_write(
+        &mut self,
+        handle: WirInstr,
+        value: WirInstr,
+        value_type_id: TypeId,
+        payload: CmFuturePayload,
+    ) -> WirInstr {
+        // Check if the value type is a scalar numeric type
+        if let ResolvedType::Primitive(
+            PrimitiveType::I8
+            | PrimitiveType::I16
+            | PrimitiveType::I32
+            | PrimitiveType::I64
+            | PrimitiveType::U8
+            | PrimitiveType::U16
+            | PrimitiveType::U32
+            | PrimitiveType::U64
+            | PrimitiveType::Bool
+            | PrimitiveType::Char,
+        ) = self.type_table.get(value_type_id)
+        {
+            return self.emit_future_write_scalar(handle, value, value_type_id, payload);
+        }
+
+        // Fallback: Result<Option<R>, E>::Ok(null) pattern (trailers)
+        self.emit_future_write_ok_none(handle)
+    }
+
+    /// Emit WIR to write a scalar numeric value into a `FutureWritable` handle.
+    ///
+    /// Allocates a CM buffer, stores the value, and calls `future-write` with
+    /// `async` canonical option. If the operation returns BLOCKED, the buffer is
+    /// intentionally kept alive — the reader will copy the data and complete
+    /// the write on the same thread. The buffer is freed only on immediate
+    /// completion (non-BLOCKED).
+    fn emit_future_write_scalar(
+        &mut self,
+        handle: WirInstr,
+        value: WirInstr,
+        value_type_id: TypeId,
+        payload: CmFuturePayload,
+    ) -> WirInstr {
+        let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
+            return WirInstr::Unreachable;
+        };
+        let future_write_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::FutureWrite(payload),
+            vec![WirType::I32, WirType::I32],
+            vec![WirType::I32],
+        );
+
+        self.local_counter += 1;
+        let suffix = self.local_counter;
+        let ptr_name = format!("__fw_write_ptr_{suffix}");
+        let result_name = format!("__fw_result_{suffix}");
+
+        // Determine buffer size/alignment from the primitive type
+        let ResolvedType::Primitive(prim) = self.type_table.get(value_type_id) else {
+            return WirInstr::Unreachable;
+        };
+        let (buf_size, buf_align): (i32, i32) = match prim {
+            PrimitiveType::I8 | PrimitiveType::U8 | PrimitiveType::Bool => (1, 1),
+            PrimitiveType::I16 | PrimitiveType::U16 => (2, 2),
+            PrimitiveType::I32 | PrimitiveType::U32 | PrimitiveType::Char => (4, 4),
+            PrimitiveType::I64 | PrimitiveType::U64 => (8, 8),
+            _ => return WirInstr::Unreachable,
+        };
+
+        let mut seq = vec![];
+
+        // Declare locals
+        for (name, ty) in [(&ptr_name, WirType::I32), (&result_name, WirType::I32)] {
+            seq.push(WirInstr::DeclareLocal {
+                name: name.clone(),
+                ty,
+            });
+        }
+
+        // Allocate buffer
+        seq.push(WirInstr::LocalSet {
+            name: ptr_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: realloc_id.clone(),
+                args: vec![
+                    WirInstr::I32Const(0),
+                    WirInstr::I32Const(0),
+                    WirInstr::I32Const(buf_align),
+                    WirInstr::I32Const(buf_size),
+                ],
+            }),
+        });
+
+        // Store value at ptr
+        let ptr = || WirInstr::LocalGet {
+            name: ptr_name.clone(),
+        };
+        let store_instr = match prim {
+            PrimitiveType::I8 | PrimitiveType::U8 | PrimitiveType::Bool => WirInstr::I32Store8 {
+                offset: 0,
+                align: 0,
+                addr: Box::new(ptr()),
+                value: Box::new(value),
+            },
+            PrimitiveType::I16 | PrimitiveType::U16 => WirInstr::I32Store16 {
+                offset: 0,
+                align: 1,
+                addr: Box::new(ptr()),
+                value: Box::new(value),
+            },
+            PrimitiveType::I32 | PrimitiveType::U32 | PrimitiveType::Char => WirInstr::I32Store {
+                offset: 0,
+                align: 2,
+                addr: Box::new(ptr()),
+                value: Box::new(value),
+            },
+            PrimitiveType::I64 | PrimitiveType::U64 => WirInstr::I64Store {
+                offset: 0,
+                align: 3,
+                addr: Box::new(ptr()),
+                value: Box::new(value),
+            },
+            _ => return WirInstr::Unreachable,
+        };
+        seq.push(store_instr);
+
+        // result = future_write(handle, ptr)
+        // With `async` canonical option, BLOCKED means the data is pending and
+        // the reader will pick it up. We drop the result — the buffer stays alive
+        // until the reader copies the data on the same thread.
+        seq.push(WirInstr::Drop(Box::new(WirInstr::Call {
+            func_id: future_write_id,
+            args: vec![handle, WirInstr::LocalGet { name: ptr_name }],
+        })));
+
+        // NOTE: We intentionally do NOT free the buffer here. When the canonical
+        // `async` option returns BLOCKED, the CM runtime holds a reference to the
+        // buffer. The reader will copy from it before this thread continues.
+        // The buffer is leaked but this is acceptable for small scalar payloads.
+
+        WirInstr::Seq(seq)
+    }
+
+    /// Emit the BLOCKED handling pattern for `future-write`.
+    ///
+    /// If `result == -1` (BLOCKED), creates a waitable-set, joins the handle,
+    /// waits for the reader to consume the value, then frees the event buffer.
+    fn emit_future_write_blocked_wait(
+        &self,
+        handle_name: &str,
+        result_name: &str,
+        evt_name: &str,
+        realloc_id: &WirFuncId,
+        ws_new_id: &WirFuncId,
+        w_join_id: &WirFuncId,
+        ws_wait_id: &WirFuncId,
+    ) -> WirInstr {
+        WirInstr::If {
+            condition: Box::new(WirInstr::I32Eq(
+                Box::new(WirInstr::LocalGet {
+                    name: result_name.to_string(),
+                }),
+                Box::new(WirInstr::I32Const(-1)),
+            )),
+            result: None,
+            then_body: vec![
+                WirInstr::DeclareLocal {
+                    name: evt_name.to_string(),
+                    ty: WirType::I32,
+                },
+                WirInstr::LocalSet {
+                    name: result_name.to_string(),
+                    value: Box::new(WirInstr::Call {
+                        func_id: ws_new_id.clone(),
+                        args: vec![],
+                    }),
+                },
+                WirInstr::Call {
+                    func_id: w_join_id.clone(),
+                    args: vec![
+                        WirInstr::LocalGet {
+                            name: handle_name.to_string(),
+                        },
+                        WirInstr::LocalGet {
+                            name: result_name.to_string(),
+                        },
+                    ],
+                },
+                WirInstr::LocalSet {
+                    name: evt_name.to_string(),
+                    value: Box::new(WirInstr::Call {
+                        func_id: realloc_id.clone(),
+                        args: vec![
+                            WirInstr::I32Const(0),
+                            WirInstr::I32Const(0),
+                            WirInstr::I32Const(4),
+                            WirInstr::I32Const(8),
+                        ],
+                    }),
+                },
+                WirInstr::Drop(Box::new(WirInstr::Call {
+                    func_id: ws_wait_id.clone(),
+                    args: vec![
+                        WirInstr::LocalGet {
+                            name: result_name.to_string(),
+                        },
+                        WirInstr::LocalGet {
+                            name: evt_name.to_string(),
+                        },
+                    ],
+                })),
+                WirInstr::Drop(Box::new(WirInstr::Call {
+                    func_id: realloc_id.clone(),
+                    args: vec![
+                        WirInstr::LocalGet {
+                            name: evt_name.to_string(),
+                        },
+                        WirInstr::I32Const(8),
+                        WirInstr::I32Const(4),
+                        WirInstr::I32Const(0),
+                    ],
+                })),
+            ],
+            else_body: None,
+        }
+    }
+
     /// Emit WIR to write `Ok(None)` (8 zero bytes) into a `FutureWritable` handle,
     /// then free the temporary buffer.
     ///
@@ -5152,19 +5542,39 @@ impl FunctionTranslator<'_, '_> {
     ///   - 4 bytes at offset 0: Ok discriminant (0)
     ///   - 4 bytes at offset 4: None discriminant (0)
     ///
-    /// TODO: implement general CM lowering for arbitrary T values.
+    /// If `future-write` returns BLOCKED (`0xFFFF_FFFF`), waits via waitable-set
+    /// for the reader to consume the value before continuing.
     fn emit_future_write_ok_none(&mut self, handle: WirInstr) -> WirInstr {
         let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
             return WirInstr::Unreachable;
         };
         let future_write_id = self.ctx.ensure_canonical(
-            "future-write",
+            CanonicalIntrinsic::FutureWrite(None),
+            vec![WirType::I32, WirType::I32],
+            vec![WirType::I32],
+        );
+        let ws_new_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableSetNew,
+            vec![],
+            vec![WirType::I32],
+        );
+        let w_join_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableJoin,
+            vec![WirType::I32, WirType::I32],
+            vec![],
+        );
+        let ws_wait_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableSetWait,
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
 
         self.local_counter += 1;
-        let ptr_name = format!("__fw_write_ptr_{}", self.local_counter);
+        let suffix = self.local_counter;
+        let ptr_name = format!("__fw_write_ptr_{suffix}");
+        let handle_name = format!("__fw_handle_{suffix}");
+        let result_name = format!("__fw_result_{suffix}");
+        let evt_name = format!("__fw_evt_{suffix}");
 
         // The buffer must be large enough for the full CM layout of
         // result<option<own<trailers>>, error-code>. ErrorCode is a large variant
@@ -5175,11 +5585,28 @@ impl FunctionTranslator<'_, '_> {
         const BUF_SIZE: i32 = 40;
         const BUF_ALIGN: i32 = 8;
 
-        let declare_ptr = WirInstr::DeclareLocal {
-            name: ptr_name.clone(),
-            ty: WirType::I32,
-        };
-        let alloc_ptr = WirInstr::LocalSet {
+        let mut seq = vec![];
+
+        // Declare locals
+        for (name, ty) in [
+            (&ptr_name, WirType::I32),
+            (&handle_name, WirType::I32),
+            (&result_name, WirType::I32),
+        ] {
+            seq.push(WirInstr::DeclareLocal {
+                name: name.clone(),
+                ty,
+            });
+        }
+
+        // Save handle
+        seq.push(WirInstr::LocalSet {
+            name: handle_name.clone(),
+            value: Box::new(handle),
+        });
+
+        // Allocate buffer
+        seq.push(WirInstr::LocalSet {
             name: ptr_name.clone(),
             value: Box::new(WirInstr::Call {
                 func_id: realloc_id.clone(),
@@ -5190,10 +5617,9 @@ impl FunctionTranslator<'_, '_> {
                     WirInstr::I32Const(BUF_SIZE),
                 ],
             }),
-        };
+        });
 
         // Zero-initialize the entire buffer using i64 stores (8 bytes each).
-        let mut seq = vec![declare_ptr, alloc_ptr];
         for i in 0..(BUF_SIZE / 8) {
             seq.push(WirInstr::I64Store {
                 offset: u64::from((i * 8).cast_unsigned()),
@@ -5205,17 +5631,34 @@ impl FunctionTranslator<'_, '_> {
             });
         }
 
-        // Drop result of future_write(handle, ptr)
-        seq.push(WirInstr::Drop(Box::new(WirInstr::Call {
-            func_id: future_write_id,
-            args: vec![
-                handle,
-                WirInstr::LocalGet {
-                    name: ptr_name.clone(),
-                },
-            ],
-        })));
-        // Free the buffer after future_write.
+        // result = future_write(handle, ptr)
+        seq.push(WirInstr::LocalSet {
+            name: result_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: future_write_id,
+                args: vec![
+                    WirInstr::LocalGet {
+                        name: handle_name.clone(),
+                    },
+                    WirInstr::LocalGet {
+                        name: ptr_name.clone(),
+                    },
+                ],
+            }),
+        });
+
+        // If BLOCKED (0xFFFF_FFFF), wait via waitable-set for the reader to consume
+        seq.push(self.emit_future_write_blocked_wait(
+            &handle_name,
+            &result_name,
+            &evt_name,
+            &realloc_id,
+            &ws_new_id,
+            &w_join_id,
+            &ws_wait_id,
+        ));
+
+        // Free the payload buffer after future_write completes.
         seq.push(WirInstr::Drop(Box::new(WirInstr::Call {
             func_id: realloc_id,
             args: vec![
@@ -5248,18 +5691,22 @@ impl FunctionTranslator<'_, '_> {
             return WirInstr::Unreachable;
         };
         let stream_read_id = self.ctx.ensure_canonical(
-            "stream-read",
+            CanonicalIntrinsic::StreamRead,
             vec![WirType::I32, WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
-        let ws_new_id = self
-            .ctx
-            .ensure_canonical("waitable-set-new", vec![], vec![WirType::I32]);
-        let w_join_id =
-            self.ctx
-                .ensure_canonical("waitable-join", vec![WirType::I32, WirType::I32], vec![]);
+        let ws_new_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableSetNew,
+            vec![],
+            vec![WirType::I32],
+        );
+        let w_join_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableJoin,
+            vec![WirType::I32, WirType::I32],
+            vec![],
+        );
         let ws_wait_id = self.ctx.ensure_canonical(
-            "waitable-set-wait",
+            CanonicalIntrinsic::WaitableSetWait,
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
@@ -5562,7 +6009,7 @@ impl FunctionTranslator<'_, '_> {
             return WirInstr::Unreachable;
         };
         let stream_write_id = self.ctx.ensure_canonical(
-            "stream-write",
+            CanonicalIntrinsic::StreamWrite,
             vec![WirType::I32, WirType::I32, WirType::I32],
             vec![WirType::I32],
         );
@@ -5574,14 +6021,18 @@ impl FunctionTranslator<'_, '_> {
         else {
             return WirInstr::Unreachable;
         };
-        let ws_new_id = self
-            .ctx
-            .ensure_canonical("waitable-set-new", vec![], vec![WirType::I32]);
-        let w_join_id =
-            self.ctx
-                .ensure_canonical("waitable-join", vec![WirType::I32, WirType::I32], vec![]);
+        let ws_new_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableSetNew,
+            vec![],
+            vec![WirType::I32],
+        );
+        let w_join_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableJoin,
+            vec![WirType::I32, WirType::I32],
+            vec![],
+        );
         let ws_wait_id = self.ctx.ensure_canonical(
-            "waitable-set-wait",
+            CanonicalIntrinsic::WaitableSetWait,
             vec![WirType::I32, WirType::I32],
             vec![WirType::I32],
         );

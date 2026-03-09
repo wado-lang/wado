@@ -394,13 +394,13 @@ type "functype/wasi/future-new" = fn() -> i64;
 
 type "functype/wasi/future-write" = fn(i32, i32) -> i32;
 
-type "functype/wasi/stream-write" = fn(i32, i32, i32) -> i32;
-
 type "functype/wasi/waitable-set-new" = fn() -> i32;
 
 type "functype/wasi/waitable-join" = fn(i32, i32);
 
 type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
+
+type "functype/wasi/stream-write" = fn(i32, i32, i32) -> i32;
 
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
@@ -427,10 +427,10 @@ import fn wasi:http/Response::new from "wasi/wasi:http/Response::new";
 import memory (1) from "mem/memory";
 import fn future-new from "wasi/future-new";
 import fn future-write from "wasi/future-write";
-import fn stream-write from "wasi/stream-write";
 import fn waitable-set-new from "wasi/waitable-set-new";
 import fn waitable-join from "wasi/waitable-join";
 import fn waitable-set-wait from "wasi/waitable-set-wait";
+import fn stream-write from "wasi/stream-write";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn subtask-drop from "wasi/subtask-drop";
 import fn waitable-set-drop from "wasi/waitable-set-drop";
@@ -975,13 +975,24 @@ condition: p == \"/hello\"
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     };
     let __fw_write_ptr_2: i32;
+    let __fw_handle_2: i32;
+    let __fw_result_2: i32;
+    __fw_handle_2 = trailers_tx;
     __fw_write_ptr_2 = "mem/realloc"(0, 0, 8, 40);
     builtin::store_i64(__fw_write_ptr_2, 0_i64);
     builtin::store_i64[8](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[16](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[24](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[32](__fw_write_ptr_2, 0_i64);
-    drop("wasi/future-write"(trailers_tx, __fw_write_ptr_2));
+    __fw_result_2 = "wasi/future-write"(__fw_handle_2, __fw_write_ptr_2);
+    if __fw_result_2 == -1 {
+        let __fw_evt_2: i32;
+        __fw_result_2 = "wasi/waitable-set-new"();
+        "wasi/waitable-join"(__fw_handle_2, __fw_result_2);
+        __fw_evt_2 = "mem/realloc"(0, 0, 4, 8);
+        drop("wasi/waitable-set-wait"(__fw_result_2, __fw_evt_2));
+        drop("mem/realloc"(__fw_evt_2, 8, 4, 0));
+    };
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
 }
 
@@ -1093,13 +1104,13 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal
     __for_0: block {
         i = 0;
         block {
-            l49: loop {
+            l50: loop {
                 if (i < len) == 0 {
                     break __for_0;
                 };
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
                 i = i + 1;
-                continue l49;
+                continue l50;
             };
         };
     };
@@ -1111,13 +1122,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l52: loop {
+            l53: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l52;
+                continue l53;
             };
         };
     };
@@ -1145,8 +1156,8 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         __local_11 = StrUtf8ByteIter { repr: ref.as_non_null(message.repr), used: message.used, index: 0 };
         break __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: __local_11;
     };
-    b55: block {
-        l56: loop {
+    b56: block {
+        l57: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: u8;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(__iter_2);
@@ -1154,9 +1165,9 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
                 b = __sroa___pattern_temp_0_payload_0;
                 "core:internal/Array<u8>::append"(arr, b);
             } else {
-                break b55;
+                break b56;
             };
-            continue l56;
+            continue l57;
         };
     };
     if add_newline {
@@ -1259,13 +1270,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l63: loop {
+            l64: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l63;
+                continue l64;
             };
         };
     };
@@ -1282,14 +1293,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l67: loop {
+                l68: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l67;
+                    continue l68;
                 };
             };
         };
@@ -1411,7 +1422,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l77: loop {
+            l78: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -1419,7 +1430,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l77;
+                continue l78;
             };
         };
     };
@@ -1526,13 +1537,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l90: loop {
+            l91: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l90;
+                continue l91;
             };
         };
     };
@@ -1662,8 +1673,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b109: block {
-        l110: loop {
+    b110: block {
+        l111: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_4);
@@ -1688,9 +1699,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b109;
+                break b110;
             };
-            continue l110;
+            continue l111;
         };
     };
     String::append_char(f.buf, 34);

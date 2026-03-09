@@ -1,0 +1,27 @@
+// Future::read E2E test (CLI world)
+// Tests Future::read() and FutureWritable::write() with scalar i32 in CLI world.
+
+use { println } from "core:cli";
+
+export fn run() with Stdout {
+    // Create a future pair for i32
+    let [future_rx, future_tx] = Future::<i32>::new();
+
+    // Write a value to the future
+    future_tx.write(42);
+
+    // Read from the future — should get Some(42)
+    let result = future_rx.read();
+
+    if let Some(value) = result {
+        println(`{value}`);
+    } else {
+        println("none");
+    }
+
+    // Drop the future handle
+    future_rx.drop();
+}
+
+__DATA__
+{"stdout": "42\n"}

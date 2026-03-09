@@ -3,7 +3,9 @@
 
 use crate::name::{FreeFunctionName, FunctionId, MethodName, ModuleSource};
 use crate::tir::{TirFunction, TypeTable};
-use crate::wir::{WirFunction, WirGlobal, WirImport, WirImportDesc, WirMeta, WirName, WirType};
+use crate::wir::{
+    CanonicalIntrinsic, WirFunction, WirGlobal, WirImport, WirImportDesc, WirMeta, WirName, WirType,
+};
 
 use super::context::{PendingFunctionBody, WirContext};
 
@@ -75,9 +77,10 @@ fn register_imports(ctx: &mut WirContext<'_>) {
         // Track "wasi" namespace imports as needed canonical intrinsics.
         // This ensures they appear in WirModule::needed_canonicals, which is
         // the single source of truth for component codegen.
-        if import.namespace == "wasi" {
-            ctx.needed_canonicals
-                .insert(import.canonical_name.clone(), func_id.clone());
+        if import.namespace == "wasi"
+            && let Some(intrinsic) = CanonicalIntrinsic::from_import_name(&import.canonical_name)
+        {
+            ctx.needed_canonicals.insert(intrinsic, func_id.clone());
         }
 
         // Also register under the TIR builtin function name so call sites can resolve.
