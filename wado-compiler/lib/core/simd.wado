@@ -127,7 +127,7 @@ impl i8x16 {
     }
 
     pub fn all_true(&self) -> bool {
-        return builtin::i8x16_all_true(*self as v128) != 0;
+        return builtin::i8x16_all_true(*self as v128);
     }
 
     pub fn bitmask(&self) -> i32 {
@@ -147,14 +147,14 @@ impl i8x16 {
     }
 
     pub fn any_true(&self) -> bool {
-        return builtin::v128_any_true(*self as v128) != 0;
+        return builtin::v128_any_true(*self as v128);
     }
 
     pub fn andnot(&self, other: &i8x16) -> i8x16 {
         return builtin::v128_andnot(*self as v128, *other as v128) as i8x16;
     }
 
-    pub fn select(&self, mask: &i8x16, other: &i8x16) -> i8x16 {
+    pub fn bitselect(&self, mask: &i8x16, other: &i8x16) -> i8x16 {
         return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as i8x16;
     }
 
@@ -372,7 +372,7 @@ impl i16x8 {
     }
 
     pub fn all_true(&self) -> bool {
-        return builtin::i16x8_all_true(*self as v128) != 0;
+        return builtin::i16x8_all_true(*self as v128);
     }
 
     pub fn bitmask(&self) -> i32 {
@@ -431,7 +431,7 @@ impl i16x8 {
         return builtin::i16x8_q15mulr_sat_s(*self as v128, *other as v128) as i16x8;
     }
 
-    pub fn select(&self, mask: &i16x8, other: &i16x8) -> i16x8 {
+    pub fn bitselect(&self, mask: &i16x8, other: &i16x8) -> i16x8 {
         return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as i16x8;
     }
 
@@ -599,7 +599,7 @@ impl i32x4 {
     }
 
     pub fn all_true(&self) -> bool {
-        return builtin::i32x4_all_true(*self as v128) != 0;
+        return builtin::i32x4_all_true(*self as v128);
     }
 
     pub fn bitmask(&self) -> i32 {
@@ -682,7 +682,7 @@ impl i32x4 {
         return builtin::i32x4_trunc_sat_f64x2_u_zero(a as v128) as i32x4;
     }
 
-    pub fn select(&self, mask: &i32x4, other: &i32x4) -> i32x4 {
+    pub fn bitselect(&self, mask: &i32x4, other: &i32x4) -> i32x4 {
         return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as i32x4;
     }
 
@@ -856,7 +856,7 @@ impl i64x2 {
     }
 
     pub fn all_true(&self) -> bool {
-        return builtin::i64x2_all_true(*self as v128) != 0;
+        return builtin::i64x2_all_true(*self as v128);
     }
 
     pub fn bitmask(&self) -> i32 {
@@ -895,7 +895,7 @@ impl i64x2 {
         return builtin::i64x2_extmul_high_i32x4_u(*self as v128, *other as v128) as i64x2;
     }
 
-    pub fn select(&self, mask: &i64x2, other: &i64x2) -> i64x2 {
+    pub fn bitselect(&self, mask: &i64x2, other: &i64x2) -> i64x2 {
         return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as i64x2;
     }
 
@@ -1081,7 +1081,7 @@ impl u8x16 {
     }
 
     pub fn all_true(&self) -> bool {
-        return builtin::i8x16_all_true(*self as v128) != 0;
+        return builtin::i8x16_all_true(*self as v128);
     }
 
     pub fn bitmask(&self) -> i32 {
@@ -1092,7 +1092,7 @@ impl u8x16 {
         return builtin::i8x16_popcnt(*self as v128) as u8x16;
     }
 
-    pub fn select(&self, mask: &u8x16, other: &u8x16) -> u8x16 {
+    pub fn bitselect(&self, mask: &u8x16, other: &u8x16) -> u8x16 {
         return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as u8x16;
     }
 }
@@ -1266,14 +1266,14 @@ impl u16x8 {
     }
 
     pub fn all_true(&self) -> bool {
-        return builtin::i16x8_all_true(*self as v128) != 0;
+        return builtin::i16x8_all_true(*self as v128);
     }
 
     pub fn bitmask(&self) -> i32 {
         return builtin::i16x8_bitmask(*self as v128);
     }
 
-    pub fn select(&self, mask: &u16x8, other: &u16x8) -> u16x8 {
+    pub fn bitselect(&self, mask: &u16x8, other: &u16x8) -> u16x8 {
         return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as u16x8;
     }
 }
@@ -1418,7 +1418,7 @@ impl u32x4 {
     }
 
     pub fn all_true(&self) -> bool {
-        return builtin::i32x4_all_true(*self as v128) != 0;
+        return builtin::i32x4_all_true(*self as v128);
     }
 
     pub fn bitmask(&self) -> i32 {
@@ -1433,7 +1433,7 @@ impl u32x4 {
         return builtin::i32x4_max_u(*self as v128, *other as v128) as u32x4;
     }
 
-    pub fn select(&self, mask: &u32x4, other: &u32x4) -> u32x4 {
+    pub fn bitselect(&self, mask: &u32x4, other: &u32x4) -> u32x4 {
         return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as u32x4;
     }
 }
@@ -1556,14 +1556,14 @@ impl u64x2 {
     }
 
     pub fn all_true(&self) -> bool {
-        return builtin::i64x2_all_true(*self as v128) != 0;
+        return builtin::i64x2_all_true(*self as v128);
     }
 
     pub fn bitmask(&self) -> i32 {
         return builtin::i64x2_bitmask(*self as v128);
     }
 
-    pub fn select(&self, mask: &u64x2, other: &u64x2) -> u64x2 {
+    pub fn bitselect(&self, mask: &u64x2, other: &u64x2) -> u64x2 {
         return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as u64x2;
     }
 }
@@ -1753,7 +1753,7 @@ impl f32x4 {
         return builtin::f32x4_demote_f64x2_zero(a as v128) as f32x4;
     }
 
-    pub fn select(&self, mask: &i32x4, other: &f32x4) -> f32x4 {
+    pub fn bitselect(&self, mask: &i32x4, other: &f32x4) -> f32x4 {
         return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as f32x4;
     }
 
@@ -1931,7 +1931,7 @@ impl f64x2 {
         return builtin::f64x2_promote_low_f32x4(a as v128) as f64x2;
     }
 
-    pub fn select(&self, mask: &i64x2, other: &f64x2) -> f64x2 {
+    pub fn bitselect(&self, mask: &i64x2, other: &f64x2) -> f64x2 {
         return builtin::v128_bitselect(*self as v128, *other as v128, *mask as v128) as f64x2;
     }
 
