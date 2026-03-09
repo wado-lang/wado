@@ -40,6 +40,35 @@ test "i16x8 literal coercion" {
     assert v.extract_lane_s(7) == 80;
 }
 
+test "u8x16 literal coercion" {
+    let v: u8x16 = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 200, 210, 220, 255];
+    assert v.extract_lane(0) == 10;
+    assert v.extract_lane(7) == 80;
+    assert v.extract_lane(12) == 200;
+    assert v.extract_lane(15) == 255;
+}
+
+test "u16x8 literal coercion" {
+    let v: u16x8 = [100, 200, 300, 400, 500, 600, 700, 800];
+    assert v.extract_lane(0) == 100;
+    assert v.extract_lane(3) == 400;
+    assert v.extract_lane(7) == 800;
+}
+
+test "u32x4 literal coercion" {
+    let v: u32x4 = [10, 20, 30, 40];
+    assert v.extract_lane(0) == 10;
+    assert v.extract_lane(1) == 20;
+    assert v.extract_lane(2) == 30;
+    assert v.extract_lane(3) == 40;
+}
+
+test "u64x2 literal coercion" {
+    let v: u64x2 = [1000 as i64, 2000 as i64];
+    assert v.extract_lane(0) == 1000 as i64;
+    assert v.extract_lane(1) == 2000 as i64;
+}
+
 // Splat
 
 test "i32x4 splat" {
