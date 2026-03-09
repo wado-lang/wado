@@ -1,0 +1,65 @@
+struct Box<i32> {  // Box<T> with T=i32
+    mut value: i32,
+}
+
+array array<u8> (mut u8);
+
+type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
+
+type "functype/wasi/task-return" = fn(i32);
+
+type "functype/__cm_export__run" = fn();
+
+type "functype/core:allocator/grow_memory" = fn(i32);
+
+type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
+
+import fn realloc from "mem/realloc";
+import fn task-return from "wasi/task-return";
+import memory (1) from "mem/memory";
+
+global mut heap_offset: i32 = 8;  // from core:allocator
+
+fn __cm_export__run() {
+    "wasi/task-return"(0);
+}
+
+fn "core:allocator/grow_memory"(new_offset) {  // from core:allocator
+    let current_bytes: i32;
+    let deficit: i32;
+    let __local_3: i32;
+    let normal_grow: i32;
+    let grow_bytes: i32;
+    let grow_pages: i32;
+    current_bytes = builtin::memory_size() * 65536;
+    deficit = new_offset - current_bytes;
+    normal_grow = select i32(current_bytes < 16777216, current_bytes, 16777216);
+    grow_bytes = if deficit > normal_grow -> i32 {
+        1 << (32 - builtin::i32_clz(deficit - 1));
+    } else {
+        normal_grow;
+    };
+    grow_pages = (grow_bytes + 65535) / 65536;
+    drop(builtin::memory_grow(grow_pages));
+}
+
+fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from core:allocator
+    let aligned: i32;
+    let new_offset: i32;
+    if newsize == 0 {
+        if (oldptr + oldsize) == heap_offset {
+            heap_offset = oldptr;
+        };
+        return 0;
+    };
+    aligned = ((heap_offset + align) - 1) & (0 - align);
+    new_offset = aligned + newsize;
+    if builtin::unlikely(new_offset > (builtin::memory_size() * 65536)) {
+        "core:allocator/grow_memory"(new_offset);
+    };
+    heap_offset = new_offset;
+    return aligned;
+}
+
+export fn __cm_export__run as "run"
+

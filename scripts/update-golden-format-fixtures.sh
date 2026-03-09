@@ -23,10 +23,10 @@ for f in "$FIXTURES_DIR"/*.dirty.wado; do
   if grep -q '^#!\[no_prelude\]' "$f"; then continue; fi
 
   # Generate compiler phase outputs (ignore non-zero exit from warnings)
-  cargo run --bin wado --quiet -- dump --tir --unparse "$f" > "$GOLDEN_DIR/$name.tir.wado" 2>/dev/null || true
-  cargo run --bin wado --quiet -- dump --lower --unparse "$f" > "$GOLDEN_DIR/$name.lower.wado" 2>/dev/null || true
-  cargo run --bin wado --quiet -- dump --optimize --unparse -O2 "$f" > "$GOLDEN_DIR/$name.optimize.wado" 2>/dev/null || true
-  cargo run --bin wado --quiet -- dump --wir --unparse -O2 "$f" > "$GOLDEN_DIR/$name.wir.wado" 2>/dev/null || true
+  cargo run --bin wado --quiet -- dump --tir "$f" > "$GOLDEN_DIR/$name.tir.wado" 2>/dev/null || true
+  cargo run --bin wado --quiet -- dump --tir-lowered "$f" > "$GOLDEN_DIR/$name.lower.wado" 2>/dev/null || true
+  cargo run --bin wado --quiet -- dump --tir -O2 "$f" > "$GOLDEN_DIR/$name.optimize.wado" 2>/dev/null || true
+  cargo run --bin wado --quiet -- dump --wir -O2 "$f" > "$GOLDEN_DIR/$name.wir.wado" 2>/dev/null || true
   cargo run --bin wado --quiet -- compile --wat-to-stdout "$f" > "$GOLDEN_DIR/$name.wat" 2>/dev/null || true
 done
 
