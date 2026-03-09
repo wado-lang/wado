@@ -3357,6 +3357,567 @@ impl FunctionTranslator<'_, '_> {
                 let b = self.translate_expr(&args[1].expr);
                 Some(WirInstr::F64x2Max(Box::new(a), Box::new(b)))
             }
+            "builtin::i8x16_abs" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I8x16Abs(Box::new(a)))
+            }
+            "builtin::i8x16_add_sat_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16AddSatS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_add_sat_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16AddSatU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_sub_sat_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16SubSatS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_sub_sat_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16SubSatU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_min_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16MinS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_min_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16MinU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_max_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16MaxS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_max_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16MaxU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_avgr_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16AvgrU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_all_true" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I8x16AllTrue(Box::new(a)))
+            }
+            "builtin::i8x16_bitmask" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I8x16Bitmask(Box::new(a)))
+            }
+            "builtin::i8x16_narrow_i16x8_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16NarrowI16x8S(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_narrow_i16x8_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16NarrowI16x8U(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_popcnt" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I8x16Popcnt(Box::new(a)))
+            }
+            "builtin::i16x8_abs" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I16x8Abs(Box::new(a)))
+            }
+            "builtin::i16x8_add_sat_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8AddSatS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_add_sat_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8AddSatU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_sub_sat_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8SubSatS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_sub_sat_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8SubSatU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_min_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8MinS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_min_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8MinU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_max_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8MaxS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_max_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8MaxU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_avgr_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8AvgrU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_all_true" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I16x8AllTrue(Box::new(a)))
+            }
+            "builtin::i16x8_bitmask" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I16x8Bitmask(Box::new(a)))
+            }
+            "builtin::i16x8_narrow_i32x4_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8NarrowI32x4S(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_narrow_i32x4_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8NarrowI32x4U(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_extend_low_i8x16_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I16x8ExtendLowI8x16S(Box::new(a)))
+            }
+            "builtin::i16x8_extend_high_i8x16_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I16x8ExtendHighI8x16S(Box::new(a)))
+            }
+            "builtin::i16x8_extend_low_i8x16_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I16x8ExtendLowI8x16U(Box::new(a)))
+            }
+            "builtin::i16x8_extend_high_i8x16_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I16x8ExtendHighI8x16U(Box::new(a)))
+            }
+            "builtin::i16x8_extmul_low_i8x16_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8ExtMulLowI8x16S(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_extmul_high_i8x16_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8ExtMulHighI8x16S(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_extmul_low_i8x16_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8ExtMulLowI8x16U(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_extmul_high_i8x16_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8ExtMulHighI8x16U(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_extadd_pairwise_i8x16_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I16x8ExtAddPairwiseI8x16S(Box::new(a)))
+            }
+            "builtin::i16x8_extadd_pairwise_i8x16_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I16x8ExtAddPairwiseI8x16U(Box::new(a)))
+            }
+            "builtin::i16x8_q15mulr_sat_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8Q15MulrSatS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_abs" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32x4Abs(Box::new(a)))
+            }
+            "builtin::i32x4_all_true" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32x4AllTrue(Box::new(a)))
+            }
+            "builtin::i32x4_bitmask" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32x4Bitmask(Box::new(a)))
+            }
+            "builtin::i32x4_min_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4MinS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_min_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4MinU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_max_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4MaxS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_max_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4MaxU(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_dot_i16x8_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4DotI16x8S(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_extend_low_i16x8_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32x4ExtendLowI16x8S(Box::new(a)))
+            }
+            "builtin::i32x4_extend_high_i16x8_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32x4ExtendHighI16x8S(Box::new(a)))
+            }
+            "builtin::i32x4_extend_low_i16x8_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32x4ExtendLowI16x8U(Box::new(a)))
+            }
+            "builtin::i32x4_extend_high_i16x8_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32x4ExtendHighI16x8U(Box::new(a)))
+            }
+            "builtin::i32x4_extmul_low_i16x8_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4ExtMulLowI16x8S(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_extmul_high_i16x8_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4ExtMulHighI16x8S(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_extmul_low_i16x8_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4ExtMulLowI16x8U(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_extmul_high_i16x8_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I32x4ExtMulHighI16x8U(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_extadd_pairwise_i16x8_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32x4ExtAddPairwiseI16x8S(Box::new(a)))
+            }
+            "builtin::i32x4_extadd_pairwise_i16x8_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32x4ExtAddPairwiseI16x8U(Box::new(a)))
+            }
+            "builtin::i32x4_trunc_sat_f32x4_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32x4TruncSatF32x4S(Box::new(a)))
+            }
+            "builtin::i32x4_trunc_sat_f32x4_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32x4TruncSatF32x4U(Box::new(a)))
+            }
+            "builtin::i32x4_trunc_sat_f64x2_s_zero" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32x4TruncSatF64x2SZero(Box::new(a)))
+            }
+            "builtin::i32x4_trunc_sat_f64x2_u_zero" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32x4TruncSatF64x2UZero(Box::new(a)))
+            }
+            "builtin::i64x2_abs" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I64x2Abs(Box::new(a)))
+            }
+            "builtin::i64x2_all_true" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I64x2AllTrue(Box::new(a)))
+            }
+            "builtin::i64x2_bitmask" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I64x2Bitmask(Box::new(a)))
+            }
+            "builtin::i64x2_extend_low_i32x4_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I64x2ExtendLowI32x4S(Box::new(a)))
+            }
+            "builtin::i64x2_extend_high_i32x4_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I64x2ExtendHighI32x4S(Box::new(a)))
+            }
+            "builtin::i64x2_extend_low_i32x4_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I64x2ExtendLowI32x4U(Box::new(a)))
+            }
+            "builtin::i64x2_extend_high_i32x4_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I64x2ExtendHighI32x4U(Box::new(a)))
+            }
+            "builtin::i64x2_extmul_low_i32x4_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I64x2ExtMulLowI32x4S(Box::new(a), Box::new(b)))
+            }
+            "builtin::i64x2_extmul_high_i32x4_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I64x2ExtMulHighI32x4S(Box::new(a), Box::new(b)))
+            }
+            "builtin::i64x2_extmul_low_i32x4_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I64x2ExtMulLowI32x4U(Box::new(a), Box::new(b)))
+            }
+            "builtin::i64x2_extmul_high_i32x4_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I64x2ExtMulHighI32x4U(Box::new(a), Box::new(b)))
+            }
+            "builtin::f32x4_ceil" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F32x4Ceil(Box::new(a)))
+            }
+            "builtin::f32x4_floor" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F32x4Floor(Box::new(a)))
+            }
+            "builtin::f32x4_trunc" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F32x4Trunc(Box::new(a)))
+            }
+            "builtin::f32x4_nearest" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F32x4Nearest(Box::new(a)))
+            }
+            "builtin::f32x4_pmin" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F32x4PMin(Box::new(a), Box::new(b)))
+            }
+            "builtin::f32x4_pmax" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F32x4PMax(Box::new(a), Box::new(b)))
+            }
+            "builtin::f32x4_convert_i32x4_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F32x4ConvertI32x4S(Box::new(a)))
+            }
+            "builtin::f32x4_convert_i32x4_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F32x4ConvertI32x4U(Box::new(a)))
+            }
+            "builtin::f32x4_demote_f64x2_zero" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F32x4DemoteF64x2Zero(Box::new(a)))
+            }
+            "builtin::f64x2_ceil" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F64x2Ceil(Box::new(a)))
+            }
+            "builtin::f64x2_floor" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F64x2Floor(Box::new(a)))
+            }
+            "builtin::f64x2_trunc" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F64x2Trunc(Box::new(a)))
+            }
+            "builtin::f64x2_nearest" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F64x2Nearest(Box::new(a)))
+            }
+            "builtin::f64x2_pmin" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F64x2PMin(Box::new(a), Box::new(b)))
+            }
+            "builtin::f64x2_pmax" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F64x2PMax(Box::new(a), Box::new(b)))
+            }
+            "builtin::f64x2_convert_low_i32x4_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F64x2ConvertLowI32x4S(Box::new(a)))
+            }
+            "builtin::f64x2_convert_low_i32x4_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F64x2ConvertLowI32x4U(Box::new(a)))
+            }
+            "builtin::f64x2_promote_low_f32x4" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::F64x2PromoteLowF32x4(Box::new(a)))
+            }
+            "builtin::v128_andnot" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::V128AndNot(Box::new(a), Box::new(b)))
+            }
+            "builtin::v128_any_true" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::V128AnyTrue(Box::new(a)))
+            }
+            "builtin::i8x16_relaxed_swizzle" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I8x16RelaxedSwizzle(Box::new(a), Box::new(b)))
+            }
+            "builtin::i8x16_relaxed_laneselect" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                let c = self.translate_expr(&args[2].expr);
+                Some(WirInstr::I8x16RelaxedLaneselect(
+                    Box::new(a),
+                    Box::new(b),
+                    Box::new(c),
+                ))
+            }
+            "builtin::i16x8_relaxed_laneselect" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                let c = self.translate_expr(&args[2].expr);
+                Some(WirInstr::I16x8RelaxedLaneselect(
+                    Box::new(a),
+                    Box::new(b),
+                    Box::new(c),
+                ))
+            }
+            "builtin::i32x4_relaxed_laneselect" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                let c = self.translate_expr(&args[2].expr);
+                Some(WirInstr::I32x4RelaxedLaneselect(
+                    Box::new(a),
+                    Box::new(b),
+                    Box::new(c),
+                ))
+            }
+            "builtin::i64x2_relaxed_laneselect" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                let c = self.translate_expr(&args[2].expr);
+                Some(WirInstr::I64x2RelaxedLaneselect(
+                    Box::new(a),
+                    Box::new(b),
+                    Box::new(c),
+                ))
+            }
+            "builtin::f32x4_relaxed_madd" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                let c = self.translate_expr(&args[2].expr);
+                Some(WirInstr::F32x4RelaxedMadd(
+                    Box::new(a),
+                    Box::new(b),
+                    Box::new(c),
+                ))
+            }
+            "builtin::f32x4_relaxed_nmadd" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                let c = self.translate_expr(&args[2].expr);
+                Some(WirInstr::F32x4RelaxedNmadd(
+                    Box::new(a),
+                    Box::new(b),
+                    Box::new(c),
+                ))
+            }
+            "builtin::f64x2_relaxed_madd" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                let c = self.translate_expr(&args[2].expr);
+                Some(WirInstr::F64x2RelaxedMadd(
+                    Box::new(a),
+                    Box::new(b),
+                    Box::new(c),
+                ))
+            }
+            "builtin::f64x2_relaxed_nmadd" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                let c = self.translate_expr(&args[2].expr);
+                Some(WirInstr::F64x2RelaxedNmadd(
+                    Box::new(a),
+                    Box::new(b),
+                    Box::new(c),
+                ))
+            }
+            "builtin::f32x4_relaxed_min" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F32x4RelaxedMin(Box::new(a), Box::new(b)))
+            }
+            "builtin::f32x4_relaxed_max" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F32x4RelaxedMax(Box::new(a), Box::new(b)))
+            }
+            "builtin::f64x2_relaxed_min" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F64x2RelaxedMin(Box::new(a), Box::new(b)))
+            }
+            "builtin::f64x2_relaxed_max" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::F64x2RelaxedMax(Box::new(a), Box::new(b)))
+            }
+            "builtin::i32x4_relaxed_trunc_f32x4_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32x4RelaxedTruncF32x4S(Box::new(a)))
+            }
+            "builtin::i32x4_relaxed_trunc_f32x4_u" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32x4RelaxedTruncF32x4U(Box::new(a)))
+            }
+            "builtin::i32x4_relaxed_trunc_f64x2_s_zero" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32x4RelaxedTruncF64x2SZero(Box::new(a)))
+            }
+            "builtin::i32x4_relaxed_trunc_f64x2_u_zero" => {
+                let a = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32x4RelaxedTruncF64x2UZero(Box::new(a)))
+            }
+            "builtin::i16x8_relaxed_q15mulr_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8RelaxedQ15mulrS(Box::new(a), Box::new(b)))
+            }
+            "builtin::i16x8_relaxed_dot_i8x16_i7x16_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                Some(WirInstr::I16x8RelaxedDotI8x16I7x16S(
+                    Box::new(a),
+                    Box::new(b),
+                ))
+            }
+            "builtin::i32x4_relaxed_dot_i8x16_i7x16_add_s" => {
+                let a = self.translate_expr(&args[0].expr);
+                let b = self.translate_expr(&args[1].expr);
+                let c = self.translate_expr(&args[2].expr);
+                Some(WirInstr::I32x4RelaxedDotI8x16I7x16AddS(
+                    Box::new(a),
+                    Box::new(b),
+                    Box::new(c),
+                ))
+            }
 
             // === Memory ===
             "builtin::memory_grow" => {

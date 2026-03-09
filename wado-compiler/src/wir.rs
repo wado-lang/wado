@@ -1035,6 +1035,119 @@ pub enum WirInstr {
     F64x2Ge(Box<WirInstr>, Box<WirInstr>),
     F64x2Min(Box<WirInstr>, Box<WirInstr>),
     F64x2Max(Box<WirInstr>, Box<WirInstr>),
+    V128AndNot(Box<WirInstr>, Box<WirInstr>),
+    V128AnyTrue(Box<WirInstr>),
+    I8x16Abs(Box<WirInstr>),
+    I8x16AddSatS(Box<WirInstr>, Box<WirInstr>),
+    I8x16AddSatU(Box<WirInstr>, Box<WirInstr>),
+    I8x16SubSatS(Box<WirInstr>, Box<WirInstr>),
+    I8x16SubSatU(Box<WirInstr>, Box<WirInstr>),
+    I8x16MinS(Box<WirInstr>, Box<WirInstr>),
+    I8x16MinU(Box<WirInstr>, Box<WirInstr>),
+    I8x16MaxS(Box<WirInstr>, Box<WirInstr>),
+    I8x16MaxU(Box<WirInstr>, Box<WirInstr>),
+    I8x16AvgrU(Box<WirInstr>, Box<WirInstr>),
+    I8x16AllTrue(Box<WirInstr>),
+    I8x16Bitmask(Box<WirInstr>),
+    I8x16NarrowI16x8S(Box<WirInstr>, Box<WirInstr>),
+    I8x16NarrowI16x8U(Box<WirInstr>, Box<WirInstr>),
+    I8x16Popcnt(Box<WirInstr>),
+    I16x8Abs(Box<WirInstr>),
+    I16x8AddSatS(Box<WirInstr>, Box<WirInstr>),
+    I16x8AddSatU(Box<WirInstr>, Box<WirInstr>),
+    I16x8SubSatS(Box<WirInstr>, Box<WirInstr>),
+    I16x8SubSatU(Box<WirInstr>, Box<WirInstr>),
+    I16x8MinS(Box<WirInstr>, Box<WirInstr>),
+    I16x8MinU(Box<WirInstr>, Box<WirInstr>),
+    I16x8MaxS(Box<WirInstr>, Box<WirInstr>),
+    I16x8MaxU(Box<WirInstr>, Box<WirInstr>),
+    I16x8AvgrU(Box<WirInstr>, Box<WirInstr>),
+    I16x8AllTrue(Box<WirInstr>),
+    I16x8Bitmask(Box<WirInstr>),
+    I16x8NarrowI32x4S(Box<WirInstr>, Box<WirInstr>),
+    I16x8NarrowI32x4U(Box<WirInstr>, Box<WirInstr>),
+    I16x8ExtendLowI8x16S(Box<WirInstr>),
+    I16x8ExtendHighI8x16S(Box<WirInstr>),
+    I16x8ExtendLowI8x16U(Box<WirInstr>),
+    I16x8ExtendHighI8x16U(Box<WirInstr>),
+    I16x8ExtMulLowI8x16S(Box<WirInstr>, Box<WirInstr>),
+    I16x8ExtMulHighI8x16S(Box<WirInstr>, Box<WirInstr>),
+    I16x8ExtMulLowI8x16U(Box<WirInstr>, Box<WirInstr>),
+    I16x8ExtMulHighI8x16U(Box<WirInstr>, Box<WirInstr>),
+    I16x8ExtAddPairwiseI8x16S(Box<WirInstr>),
+    I16x8ExtAddPairwiseI8x16U(Box<WirInstr>),
+    I16x8Q15MulrSatS(Box<WirInstr>, Box<WirInstr>),
+    I32x4Abs(Box<WirInstr>),
+    I32x4AllTrue(Box<WirInstr>),
+    I32x4Bitmask(Box<WirInstr>),
+    I32x4MinS(Box<WirInstr>, Box<WirInstr>),
+    I32x4MinU(Box<WirInstr>, Box<WirInstr>),
+    I32x4MaxS(Box<WirInstr>, Box<WirInstr>),
+    I32x4MaxU(Box<WirInstr>, Box<WirInstr>),
+    I32x4DotI16x8S(Box<WirInstr>, Box<WirInstr>),
+    I32x4ExtendLowI16x8S(Box<WirInstr>),
+    I32x4ExtendHighI16x8S(Box<WirInstr>),
+    I32x4ExtendLowI16x8U(Box<WirInstr>),
+    I32x4ExtendHighI16x8U(Box<WirInstr>),
+    I32x4ExtMulLowI16x8S(Box<WirInstr>, Box<WirInstr>),
+    I32x4ExtMulHighI16x8S(Box<WirInstr>, Box<WirInstr>),
+    I32x4ExtMulLowI16x8U(Box<WirInstr>, Box<WirInstr>),
+    I32x4ExtMulHighI16x8U(Box<WirInstr>, Box<WirInstr>),
+    I32x4ExtAddPairwiseI16x8S(Box<WirInstr>),
+    I32x4ExtAddPairwiseI16x8U(Box<WirInstr>),
+    I32x4TruncSatF32x4S(Box<WirInstr>),
+    I32x4TruncSatF32x4U(Box<WirInstr>),
+    I32x4TruncSatF64x2SZero(Box<WirInstr>),
+    I32x4TruncSatF64x2UZero(Box<WirInstr>),
+    I64x2Abs(Box<WirInstr>),
+    I64x2AllTrue(Box<WirInstr>),
+    I64x2Bitmask(Box<WirInstr>),
+    I64x2ExtendLowI32x4S(Box<WirInstr>),
+    I64x2ExtendHighI32x4S(Box<WirInstr>),
+    I64x2ExtendLowI32x4U(Box<WirInstr>),
+    I64x2ExtendHighI32x4U(Box<WirInstr>),
+    I64x2ExtMulLowI32x4S(Box<WirInstr>, Box<WirInstr>),
+    I64x2ExtMulHighI32x4S(Box<WirInstr>, Box<WirInstr>),
+    I64x2ExtMulLowI32x4U(Box<WirInstr>, Box<WirInstr>),
+    I64x2ExtMulHighI32x4U(Box<WirInstr>, Box<WirInstr>),
+    F32x4Ceil(Box<WirInstr>),
+    F32x4Floor(Box<WirInstr>),
+    F32x4Trunc(Box<WirInstr>),
+    F32x4Nearest(Box<WirInstr>),
+    F32x4PMin(Box<WirInstr>, Box<WirInstr>),
+    F32x4PMax(Box<WirInstr>, Box<WirInstr>),
+    F32x4ConvertI32x4S(Box<WirInstr>),
+    F32x4ConvertI32x4U(Box<WirInstr>),
+    F32x4DemoteF64x2Zero(Box<WirInstr>),
+    F64x2Ceil(Box<WirInstr>),
+    F64x2Floor(Box<WirInstr>),
+    F64x2Trunc(Box<WirInstr>),
+    F64x2Nearest(Box<WirInstr>),
+    F64x2PMin(Box<WirInstr>, Box<WirInstr>),
+    F64x2PMax(Box<WirInstr>, Box<WirInstr>),
+    F64x2ConvertLowI32x4S(Box<WirInstr>),
+    F64x2ConvertLowI32x4U(Box<WirInstr>),
+    F64x2PromoteLowF32x4(Box<WirInstr>),
+    I8x16RelaxedSwizzle(Box<WirInstr>, Box<WirInstr>),
+    I8x16RelaxedLaneselect(Box<WirInstr>, Box<WirInstr>, Box<WirInstr>),
+    I16x8RelaxedLaneselect(Box<WirInstr>, Box<WirInstr>, Box<WirInstr>),
+    I32x4RelaxedLaneselect(Box<WirInstr>, Box<WirInstr>, Box<WirInstr>),
+    I64x2RelaxedLaneselect(Box<WirInstr>, Box<WirInstr>, Box<WirInstr>),
+    F32x4RelaxedMadd(Box<WirInstr>, Box<WirInstr>, Box<WirInstr>),
+    F32x4RelaxedNmadd(Box<WirInstr>, Box<WirInstr>, Box<WirInstr>),
+    F64x2RelaxedMadd(Box<WirInstr>, Box<WirInstr>, Box<WirInstr>),
+    F64x2RelaxedNmadd(Box<WirInstr>, Box<WirInstr>, Box<WirInstr>),
+    F32x4RelaxedMin(Box<WirInstr>, Box<WirInstr>),
+    F32x4RelaxedMax(Box<WirInstr>, Box<WirInstr>),
+    F64x2RelaxedMin(Box<WirInstr>, Box<WirInstr>),
+    F64x2RelaxedMax(Box<WirInstr>, Box<WirInstr>),
+    I32x4RelaxedTruncF32x4S(Box<WirInstr>),
+    I32x4RelaxedTruncF32x4U(Box<WirInstr>),
+    I32x4RelaxedTruncF64x2SZero(Box<WirInstr>),
+    I32x4RelaxedTruncF64x2UZero(Box<WirInstr>),
+    I16x8RelaxedQ15mulrS(Box<WirInstr>, Box<WirInstr>),
+    I16x8RelaxedDotI8x16I7x16S(Box<WirInstr>, Box<WirInstr>),
+    I32x4RelaxedDotI8x16I7x16AddS(Box<WirInstr>, Box<WirInstr>, Box<WirInstr>),
 
     // === GC: Struct ===
     /// `struct.new` with type ID.
@@ -1474,7 +1587,59 @@ impl WirInstr {
             | Self::F64x2Splat(o)
             | Self::F64x2Neg(o)
             | Self::F64x2Sqrt(o)
-            | Self::F64x2Abs(o) => f(o),
+            | Self::F64x2Abs(o)
+            | Self::V128AnyTrue(o)
+            | Self::I8x16Abs(o)
+            | Self::I8x16AllTrue(o)
+            | Self::I8x16Bitmask(o)
+            | Self::I8x16Popcnt(o)
+            | Self::I16x8Abs(o)
+            | Self::I16x8AllTrue(o)
+            | Self::I16x8Bitmask(o)
+            | Self::I16x8ExtendLowI8x16S(o)
+            | Self::I16x8ExtendHighI8x16S(o)
+            | Self::I16x8ExtendLowI8x16U(o)
+            | Self::I16x8ExtendHighI8x16U(o)
+            | Self::I16x8ExtAddPairwiseI8x16S(o)
+            | Self::I16x8ExtAddPairwiseI8x16U(o)
+            | Self::I32x4Abs(o)
+            | Self::I32x4AllTrue(o)
+            | Self::I32x4Bitmask(o)
+            | Self::I32x4ExtendLowI16x8S(o)
+            | Self::I32x4ExtendHighI16x8S(o)
+            | Self::I32x4ExtendLowI16x8U(o)
+            | Self::I32x4ExtendHighI16x8U(o)
+            | Self::I32x4ExtAddPairwiseI16x8S(o)
+            | Self::I32x4ExtAddPairwiseI16x8U(o)
+            | Self::I32x4TruncSatF32x4S(o)
+            | Self::I32x4TruncSatF32x4U(o)
+            | Self::I32x4TruncSatF64x2SZero(o)
+            | Self::I32x4TruncSatF64x2UZero(o)
+            | Self::I64x2Abs(o)
+            | Self::I64x2AllTrue(o)
+            | Self::I64x2Bitmask(o)
+            | Self::I64x2ExtendLowI32x4S(o)
+            | Self::I64x2ExtendHighI32x4S(o)
+            | Self::I64x2ExtendLowI32x4U(o)
+            | Self::I64x2ExtendHighI32x4U(o)
+            | Self::F32x4Ceil(o)
+            | Self::F32x4Floor(o)
+            | Self::F32x4Trunc(o)
+            | Self::F32x4Nearest(o)
+            | Self::F32x4ConvertI32x4S(o)
+            | Self::F32x4ConvertI32x4U(o)
+            | Self::F32x4DemoteF64x2Zero(o)
+            | Self::F64x2Ceil(o)
+            | Self::F64x2Floor(o)
+            | Self::F64x2Trunc(o)
+            | Self::F64x2Nearest(o)
+            | Self::F64x2ConvertLowI32x4S(o)
+            | Self::F64x2ConvertLowI32x4U(o)
+            | Self::F64x2PromoteLowF32x4(o)
+            | Self::I32x4RelaxedTruncF32x4S(o)
+            | Self::I32x4RelaxedTruncF32x4U(o)
+            | Self::I32x4RelaxedTruncF64x2SZero(o)
+            | Self::I32x4RelaxedTruncF64x2UZero(o) => f(o),
             Self::I8x16ExtractLaneS(_, o)
             | Self::I8x16ExtractLaneU(_, o)
             | Self::I16x8ExtractLaneS(_, o)
@@ -1645,7 +1810,59 @@ impl WirInstr {
             | Self::F64x2Le(l, r)
             | Self::F64x2Ge(l, r)
             | Self::F64x2Min(l, r)
-            | Self::F64x2Max(l, r) => {
+            | Self::F64x2Max(l, r)
+            | Self::V128AndNot(l, r)
+            | Self::I8x16AddSatS(l, r)
+            | Self::I8x16AddSatU(l, r)
+            | Self::I8x16SubSatS(l, r)
+            | Self::I8x16SubSatU(l, r)
+            | Self::I8x16MinS(l, r)
+            | Self::I8x16MinU(l, r)
+            | Self::I8x16MaxS(l, r)
+            | Self::I8x16MaxU(l, r)
+            | Self::I8x16AvgrU(l, r)
+            | Self::I8x16NarrowI16x8S(l, r)
+            | Self::I8x16NarrowI16x8U(l, r)
+            | Self::I16x8AddSatS(l, r)
+            | Self::I16x8AddSatU(l, r)
+            | Self::I16x8SubSatS(l, r)
+            | Self::I16x8SubSatU(l, r)
+            | Self::I16x8MinS(l, r)
+            | Self::I16x8MinU(l, r)
+            | Self::I16x8MaxS(l, r)
+            | Self::I16x8MaxU(l, r)
+            | Self::I16x8AvgrU(l, r)
+            | Self::I16x8NarrowI32x4S(l, r)
+            | Self::I16x8NarrowI32x4U(l, r)
+            | Self::I16x8ExtMulLowI8x16S(l, r)
+            | Self::I16x8ExtMulHighI8x16S(l, r)
+            | Self::I16x8ExtMulLowI8x16U(l, r)
+            | Self::I16x8ExtMulHighI8x16U(l, r)
+            | Self::I16x8Q15MulrSatS(l, r)
+            | Self::I32x4MinS(l, r)
+            | Self::I32x4MinU(l, r)
+            | Self::I32x4MaxS(l, r)
+            | Self::I32x4MaxU(l, r)
+            | Self::I32x4DotI16x8S(l, r)
+            | Self::I32x4ExtMulLowI16x8S(l, r)
+            | Self::I32x4ExtMulHighI16x8S(l, r)
+            | Self::I32x4ExtMulLowI16x8U(l, r)
+            | Self::I32x4ExtMulHighI16x8U(l, r)
+            | Self::I64x2ExtMulLowI32x4S(l, r)
+            | Self::I64x2ExtMulHighI32x4S(l, r)
+            | Self::I64x2ExtMulLowI32x4U(l, r)
+            | Self::I64x2ExtMulHighI32x4U(l, r)
+            | Self::F32x4PMin(l, r)
+            | Self::F32x4PMax(l, r)
+            | Self::F64x2PMin(l, r)
+            | Self::F64x2PMax(l, r)
+            | Self::I8x16RelaxedSwizzle(l, r)
+            | Self::F32x4RelaxedMin(l, r)
+            | Self::F32x4RelaxedMax(l, r)
+            | Self::F64x2RelaxedMin(l, r)
+            | Self::F64x2RelaxedMax(l, r)
+            | Self::I16x8RelaxedQ15mulrS(l, r)
+            | Self::I16x8RelaxedDotI8x16I7x16S(l, r) => {
                 f(l);
                 f(r);
             }
@@ -1658,7 +1875,16 @@ impl WirInstr {
                 f(v);
                 f(val);
             }
-            Self::V128Bitselect(a, b, c) => {
+            Self::V128Bitselect(a, b, c)
+            | Self::I8x16RelaxedLaneselect(a, b, c)
+            | Self::I16x8RelaxedLaneselect(a, b, c)
+            | Self::I32x4RelaxedLaneselect(a, b, c)
+            | Self::I64x2RelaxedLaneselect(a, b, c)
+            | Self::F32x4RelaxedMadd(a, b, c)
+            | Self::F32x4RelaxedNmadd(a, b, c)
+            | Self::F64x2RelaxedMadd(a, b, c)
+            | Self::F64x2RelaxedNmadd(a, b, c)
+            | Self::I32x4RelaxedDotI8x16I7x16AddS(a, b, c) => {
                 f(a);
                 f(b);
                 f(c);
@@ -1936,7 +2162,59 @@ impl WirInstr {
             | Self::F64x2Splat(o)
             | Self::F64x2Neg(o)
             | Self::F64x2Sqrt(o)
-            | Self::F64x2Abs(o) => f(o),
+            | Self::F64x2Abs(o)
+            | Self::V128AnyTrue(o)
+            | Self::I8x16Abs(o)
+            | Self::I8x16AllTrue(o)
+            | Self::I8x16Bitmask(o)
+            | Self::I8x16Popcnt(o)
+            | Self::I16x8Abs(o)
+            | Self::I16x8AllTrue(o)
+            | Self::I16x8Bitmask(o)
+            | Self::I16x8ExtendLowI8x16S(o)
+            | Self::I16x8ExtendHighI8x16S(o)
+            | Self::I16x8ExtendLowI8x16U(o)
+            | Self::I16x8ExtendHighI8x16U(o)
+            | Self::I16x8ExtAddPairwiseI8x16S(o)
+            | Self::I16x8ExtAddPairwiseI8x16U(o)
+            | Self::I32x4Abs(o)
+            | Self::I32x4AllTrue(o)
+            | Self::I32x4Bitmask(o)
+            | Self::I32x4ExtendLowI16x8S(o)
+            | Self::I32x4ExtendHighI16x8S(o)
+            | Self::I32x4ExtendLowI16x8U(o)
+            | Self::I32x4ExtendHighI16x8U(o)
+            | Self::I32x4ExtAddPairwiseI16x8S(o)
+            | Self::I32x4ExtAddPairwiseI16x8U(o)
+            | Self::I32x4TruncSatF32x4S(o)
+            | Self::I32x4TruncSatF32x4U(o)
+            | Self::I32x4TruncSatF64x2SZero(o)
+            | Self::I32x4TruncSatF64x2UZero(o)
+            | Self::I64x2Abs(o)
+            | Self::I64x2AllTrue(o)
+            | Self::I64x2Bitmask(o)
+            | Self::I64x2ExtendLowI32x4S(o)
+            | Self::I64x2ExtendHighI32x4S(o)
+            | Self::I64x2ExtendLowI32x4U(o)
+            | Self::I64x2ExtendHighI32x4U(o)
+            | Self::F32x4Ceil(o)
+            | Self::F32x4Floor(o)
+            | Self::F32x4Trunc(o)
+            | Self::F32x4Nearest(o)
+            | Self::F32x4ConvertI32x4S(o)
+            | Self::F32x4ConvertI32x4U(o)
+            | Self::F32x4DemoteF64x2Zero(o)
+            | Self::F64x2Ceil(o)
+            | Self::F64x2Floor(o)
+            | Self::F64x2Trunc(o)
+            | Self::F64x2Nearest(o)
+            | Self::F64x2ConvertLowI32x4S(o)
+            | Self::F64x2ConvertLowI32x4U(o)
+            | Self::F64x2PromoteLowF32x4(o)
+            | Self::I32x4RelaxedTruncF32x4S(o)
+            | Self::I32x4RelaxedTruncF32x4U(o)
+            | Self::I32x4RelaxedTruncF64x2SZero(o)
+            | Self::I32x4RelaxedTruncF64x2UZero(o) => f(o),
             Self::I8x16ExtractLaneS(_, o)
             | Self::I8x16ExtractLaneU(_, o)
             | Self::I16x8ExtractLaneS(_, o)
@@ -2107,7 +2385,59 @@ impl WirInstr {
             | Self::F64x2Le(l, r)
             | Self::F64x2Ge(l, r)
             | Self::F64x2Min(l, r)
-            | Self::F64x2Max(l, r) => {
+            | Self::F64x2Max(l, r)
+            | Self::V128AndNot(l, r)
+            | Self::I8x16AddSatS(l, r)
+            | Self::I8x16AddSatU(l, r)
+            | Self::I8x16SubSatS(l, r)
+            | Self::I8x16SubSatU(l, r)
+            | Self::I8x16MinS(l, r)
+            | Self::I8x16MinU(l, r)
+            | Self::I8x16MaxS(l, r)
+            | Self::I8x16MaxU(l, r)
+            | Self::I8x16AvgrU(l, r)
+            | Self::I8x16NarrowI16x8S(l, r)
+            | Self::I8x16NarrowI16x8U(l, r)
+            | Self::I16x8AddSatS(l, r)
+            | Self::I16x8AddSatU(l, r)
+            | Self::I16x8SubSatS(l, r)
+            | Self::I16x8SubSatU(l, r)
+            | Self::I16x8MinS(l, r)
+            | Self::I16x8MinU(l, r)
+            | Self::I16x8MaxS(l, r)
+            | Self::I16x8MaxU(l, r)
+            | Self::I16x8AvgrU(l, r)
+            | Self::I16x8NarrowI32x4S(l, r)
+            | Self::I16x8NarrowI32x4U(l, r)
+            | Self::I16x8ExtMulLowI8x16S(l, r)
+            | Self::I16x8ExtMulHighI8x16S(l, r)
+            | Self::I16x8ExtMulLowI8x16U(l, r)
+            | Self::I16x8ExtMulHighI8x16U(l, r)
+            | Self::I16x8Q15MulrSatS(l, r)
+            | Self::I32x4MinS(l, r)
+            | Self::I32x4MinU(l, r)
+            | Self::I32x4MaxS(l, r)
+            | Self::I32x4MaxU(l, r)
+            | Self::I32x4DotI16x8S(l, r)
+            | Self::I32x4ExtMulLowI16x8S(l, r)
+            | Self::I32x4ExtMulHighI16x8S(l, r)
+            | Self::I32x4ExtMulLowI16x8U(l, r)
+            | Self::I32x4ExtMulHighI16x8U(l, r)
+            | Self::I64x2ExtMulLowI32x4S(l, r)
+            | Self::I64x2ExtMulHighI32x4S(l, r)
+            | Self::I64x2ExtMulLowI32x4U(l, r)
+            | Self::I64x2ExtMulHighI32x4U(l, r)
+            | Self::F32x4PMin(l, r)
+            | Self::F32x4PMax(l, r)
+            | Self::F64x2PMin(l, r)
+            | Self::F64x2PMax(l, r)
+            | Self::I8x16RelaxedSwizzle(l, r)
+            | Self::F32x4RelaxedMin(l, r)
+            | Self::F32x4RelaxedMax(l, r)
+            | Self::F64x2RelaxedMin(l, r)
+            | Self::F64x2RelaxedMax(l, r)
+            | Self::I16x8RelaxedQ15mulrS(l, r)
+            | Self::I16x8RelaxedDotI8x16I7x16S(l, r) => {
                 f(l);
                 f(r);
             }
@@ -2120,7 +2450,16 @@ impl WirInstr {
                 f(v);
                 f(val);
             }
-            Self::V128Bitselect(a, b, c) => {
+            Self::V128Bitselect(a, b, c)
+            | Self::I8x16RelaxedLaneselect(a, b, c)
+            | Self::I16x8RelaxedLaneselect(a, b, c)
+            | Self::I32x4RelaxedLaneselect(a, b, c)
+            | Self::I64x2RelaxedLaneselect(a, b, c)
+            | Self::F32x4RelaxedMadd(a, b, c)
+            | Self::F32x4RelaxedNmadd(a, b, c)
+            | Self::F64x2RelaxedMadd(a, b, c)
+            | Self::F64x2RelaxedNmadd(a, b, c)
+            | Self::I32x4RelaxedDotI8x16I7x16AddS(a, b, c) => {
                 f(a);
                 f(b);
                 f(c);

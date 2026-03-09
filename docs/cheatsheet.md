@@ -1004,27 +1004,7 @@ Wado intentionally does not support macros.
 
 ## SIMD
 
-See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md) for full design.
-
-```wado
-use { i32x4, f64x2, i8x16 } from "core:simd";
-
-// Construction
-let v = i32x4::splat(0);              // broadcast: [0, 0, 0, 0]
-let w: i32x4 = [1, 2, 3, 4];         // tuple literal coercion
-
-// Arithmetic (operator overloading)
-let sum = v + w;                       // i32x4.add
-let neg = -w;                          // i32x4.neg
-
-// Lane access
-let first = w.extract_lane(0);        // 1: i32
-
-// Comparison (returns mask, not bool)
-let mask = v.eq(&w);                   // per-lane all-0s or all-1s
-```
-
-Available types: `i8x16`, `i16x8`, `i32x4`, `i64x2`, `u8x16`, `u16x8`, `u32x4`, `u64x2`, `f32x4`, `f64x2`.
+See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md) for design and rationale. Includes Relaxed SIMD.
 
 ## Not Yet Implemented
 

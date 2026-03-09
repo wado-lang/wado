@@ -1376,6 +1376,274 @@ impl<'a> WirEmitter<'a> {
             WirInstr::F64x2Ge(l, r) => self.emit_binary(f, l, r, Instruction::F64x2Ge),
             WirInstr::F64x2Min(l, r) => self.emit_binary(f, l, r, Instruction::F64x2Min),
             WirInstr::F64x2Max(l, r) => self.emit_binary(f, l, r, Instruction::F64x2Max),
+            WirInstr::I8x16Abs(a) => self.emit_unary(f, a, Instruction::I8x16Abs),
+            WirInstr::I8x16AddSatS(l, r) => self.emit_binary(f, l, r, Instruction::I8x16AddSatS),
+            WirInstr::I8x16AddSatU(l, r) => self.emit_binary(f, l, r, Instruction::I8x16AddSatU),
+            WirInstr::I8x16SubSatS(l, r) => self.emit_binary(f, l, r, Instruction::I8x16SubSatS),
+            WirInstr::I8x16SubSatU(l, r) => self.emit_binary(f, l, r, Instruction::I8x16SubSatU),
+            WirInstr::I8x16MinS(l, r) => self.emit_binary(f, l, r, Instruction::I8x16MinS),
+            WirInstr::I8x16MinU(l, r) => self.emit_binary(f, l, r, Instruction::I8x16MinU),
+            WirInstr::I8x16MaxS(l, r) => self.emit_binary(f, l, r, Instruction::I8x16MaxS),
+            WirInstr::I8x16MaxU(l, r) => self.emit_binary(f, l, r, Instruction::I8x16MaxU),
+            WirInstr::I8x16AvgrU(l, r) => self.emit_binary(f, l, r, Instruction::I8x16AvgrU),
+            WirInstr::I8x16AllTrue(a) => self.emit_unary(f, a, Instruction::I8x16AllTrue),
+            WirInstr::I8x16Bitmask(a) => self.emit_unary(f, a, Instruction::I8x16Bitmask),
+            WirInstr::I8x16NarrowI16x8S(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I8x16NarrowI16x8S);
+            }
+            WirInstr::I8x16NarrowI16x8U(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I8x16NarrowI16x8U);
+            }
+            WirInstr::I8x16Popcnt(a) => self.emit_unary(f, a, Instruction::I8x16Popcnt),
+            WirInstr::I16x8Abs(a) => self.emit_unary(f, a, Instruction::I16x8Abs),
+            WirInstr::I16x8AddSatS(l, r) => self.emit_binary(f, l, r, Instruction::I16x8AddSatS),
+            WirInstr::I16x8AddSatU(l, r) => self.emit_binary(f, l, r, Instruction::I16x8AddSatU),
+            WirInstr::I16x8SubSatS(l, r) => self.emit_binary(f, l, r, Instruction::I16x8SubSatS),
+            WirInstr::I16x8SubSatU(l, r) => self.emit_binary(f, l, r, Instruction::I16x8SubSatU),
+            WirInstr::I16x8MinS(l, r) => self.emit_binary(f, l, r, Instruction::I16x8MinS),
+            WirInstr::I16x8MinU(l, r) => self.emit_binary(f, l, r, Instruction::I16x8MinU),
+            WirInstr::I16x8MaxS(l, r) => self.emit_binary(f, l, r, Instruction::I16x8MaxS),
+            WirInstr::I16x8MaxU(l, r) => self.emit_binary(f, l, r, Instruction::I16x8MaxU),
+            WirInstr::I16x8AvgrU(l, r) => self.emit_binary(f, l, r, Instruction::I16x8AvgrU),
+            WirInstr::I16x8AllTrue(a) => self.emit_unary(f, a, Instruction::I16x8AllTrue),
+            WirInstr::I16x8Bitmask(a) => self.emit_unary(f, a, Instruction::I16x8Bitmask),
+            WirInstr::I16x8NarrowI32x4S(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I16x8NarrowI32x4S);
+            }
+            WirInstr::I16x8NarrowI32x4U(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I16x8NarrowI32x4U);
+            }
+            WirInstr::I16x8ExtendLowI8x16S(a) => {
+                self.emit_unary(f, a, Instruction::I16x8ExtendLowI8x16S);
+            }
+            WirInstr::I16x8ExtendHighI8x16S(a) => {
+                self.emit_unary(f, a, Instruction::I16x8ExtendHighI8x16S);
+            }
+            WirInstr::I16x8ExtendLowI8x16U(a) => {
+                self.emit_unary(f, a, Instruction::I16x8ExtendLowI8x16U);
+            }
+            WirInstr::I16x8ExtendHighI8x16U(a) => {
+                self.emit_unary(f, a, Instruction::I16x8ExtendHighI8x16U);
+            }
+            WirInstr::I16x8ExtMulLowI8x16S(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I16x8ExtMulLowI8x16S);
+            }
+            WirInstr::I16x8ExtMulHighI8x16S(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I16x8ExtMulHighI8x16S);
+            }
+            WirInstr::I16x8ExtMulLowI8x16U(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I16x8ExtMulLowI8x16U);
+            }
+            WirInstr::I16x8ExtMulHighI8x16U(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I16x8ExtMulHighI8x16U);
+            }
+            WirInstr::I16x8ExtAddPairwiseI8x16S(a) => {
+                self.emit_unary(f, a, Instruction::I16x8ExtAddPairwiseI8x16S);
+            }
+            WirInstr::I16x8ExtAddPairwiseI8x16U(a) => {
+                self.emit_unary(f, a, Instruction::I16x8ExtAddPairwiseI8x16U);
+            }
+            WirInstr::I16x8Q15MulrSatS(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I16x8Q15MulrSatS);
+            }
+            WirInstr::I32x4Abs(a) => self.emit_unary(f, a, Instruction::I32x4Abs),
+            WirInstr::I32x4AllTrue(a) => self.emit_unary(f, a, Instruction::I32x4AllTrue),
+            WirInstr::I32x4Bitmask(a) => self.emit_unary(f, a, Instruction::I32x4Bitmask),
+            WirInstr::I32x4MinS(l, r) => self.emit_binary(f, l, r, Instruction::I32x4MinS),
+            WirInstr::I32x4MinU(l, r) => self.emit_binary(f, l, r, Instruction::I32x4MinU),
+            WirInstr::I32x4MaxS(l, r) => self.emit_binary(f, l, r, Instruction::I32x4MaxS),
+            WirInstr::I32x4MaxU(l, r) => self.emit_binary(f, l, r, Instruction::I32x4MaxU),
+            WirInstr::I32x4DotI16x8S(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I32x4DotI16x8S);
+            }
+            WirInstr::I32x4ExtendLowI16x8S(a) => {
+                self.emit_unary(f, a, Instruction::I32x4ExtendLowI16x8S);
+            }
+            WirInstr::I32x4ExtendHighI16x8S(a) => {
+                self.emit_unary(f, a, Instruction::I32x4ExtendHighI16x8S);
+            }
+            WirInstr::I32x4ExtendLowI16x8U(a) => {
+                self.emit_unary(f, a, Instruction::I32x4ExtendLowI16x8U);
+            }
+            WirInstr::I32x4ExtendHighI16x8U(a) => {
+                self.emit_unary(f, a, Instruction::I32x4ExtendHighI16x8U);
+            }
+            WirInstr::I32x4ExtMulLowI16x8S(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I32x4ExtMulLowI16x8S);
+            }
+            WirInstr::I32x4ExtMulHighI16x8S(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I32x4ExtMulHighI16x8S);
+            }
+            WirInstr::I32x4ExtMulLowI16x8U(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I32x4ExtMulLowI16x8U);
+            }
+            WirInstr::I32x4ExtMulHighI16x8U(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I32x4ExtMulHighI16x8U);
+            }
+            WirInstr::I32x4ExtAddPairwiseI16x8S(a) => {
+                self.emit_unary(f, a, Instruction::I32x4ExtAddPairwiseI16x8S);
+            }
+            WirInstr::I32x4ExtAddPairwiseI16x8U(a) => {
+                self.emit_unary(f, a, Instruction::I32x4ExtAddPairwiseI16x8U);
+            }
+            WirInstr::I32x4TruncSatF32x4S(a) => {
+                self.emit_unary(f, a, Instruction::I32x4TruncSatF32x4S);
+            }
+            WirInstr::I32x4TruncSatF32x4U(a) => {
+                self.emit_unary(f, a, Instruction::I32x4TruncSatF32x4U);
+            }
+            WirInstr::I32x4TruncSatF64x2SZero(a) => {
+                self.emit_unary(f, a, Instruction::I32x4TruncSatF64x2SZero);
+            }
+            WirInstr::I32x4TruncSatF64x2UZero(a) => {
+                self.emit_unary(f, a, Instruction::I32x4TruncSatF64x2UZero);
+            }
+            WirInstr::I64x2Abs(a) => self.emit_unary(f, a, Instruction::I64x2Abs),
+            WirInstr::I64x2AllTrue(a) => self.emit_unary(f, a, Instruction::I64x2AllTrue),
+            WirInstr::I64x2Bitmask(a) => self.emit_unary(f, a, Instruction::I64x2Bitmask),
+            WirInstr::I64x2ExtendLowI32x4S(a) => {
+                self.emit_unary(f, a, Instruction::I64x2ExtendLowI32x4S);
+            }
+            WirInstr::I64x2ExtendHighI32x4S(a) => {
+                self.emit_unary(f, a, Instruction::I64x2ExtendHighI32x4S);
+            }
+            WirInstr::I64x2ExtendLowI32x4U(a) => {
+                self.emit_unary(f, a, Instruction::I64x2ExtendLowI32x4U);
+            }
+            WirInstr::I64x2ExtendHighI32x4U(a) => {
+                self.emit_unary(f, a, Instruction::I64x2ExtendHighI32x4U);
+            }
+            WirInstr::I64x2ExtMulLowI32x4S(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I64x2ExtMulLowI32x4S);
+            }
+            WirInstr::I64x2ExtMulHighI32x4S(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I64x2ExtMulHighI32x4S);
+            }
+            WirInstr::I64x2ExtMulLowI32x4U(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I64x2ExtMulLowI32x4U);
+            }
+            WirInstr::I64x2ExtMulHighI32x4U(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I64x2ExtMulHighI32x4U);
+            }
+            WirInstr::F32x4Ceil(a) => self.emit_unary(f, a, Instruction::F32x4Ceil),
+            WirInstr::F32x4Floor(a) => self.emit_unary(f, a, Instruction::F32x4Floor),
+            WirInstr::F32x4Trunc(a) => self.emit_unary(f, a, Instruction::F32x4Trunc),
+            WirInstr::F32x4Nearest(a) => self.emit_unary(f, a, Instruction::F32x4Nearest),
+            WirInstr::F32x4PMin(l, r) => self.emit_binary(f, l, r, Instruction::F32x4PMin),
+            WirInstr::F32x4PMax(l, r) => self.emit_binary(f, l, r, Instruction::F32x4PMax),
+            WirInstr::F32x4ConvertI32x4S(a) => {
+                self.emit_unary(f, a, Instruction::F32x4ConvertI32x4S);
+            }
+            WirInstr::F32x4ConvertI32x4U(a) => {
+                self.emit_unary(f, a, Instruction::F32x4ConvertI32x4U);
+            }
+            WirInstr::F32x4DemoteF64x2Zero(a) => {
+                self.emit_unary(f, a, Instruction::F32x4DemoteF64x2Zero);
+            }
+            WirInstr::F64x2Ceil(a) => self.emit_unary(f, a, Instruction::F64x2Ceil),
+            WirInstr::F64x2Floor(a) => self.emit_unary(f, a, Instruction::F64x2Floor),
+            WirInstr::F64x2Trunc(a) => self.emit_unary(f, a, Instruction::F64x2Trunc),
+            WirInstr::F64x2Nearest(a) => self.emit_unary(f, a, Instruction::F64x2Nearest),
+            WirInstr::F64x2PMin(l, r) => self.emit_binary(f, l, r, Instruction::F64x2PMin),
+            WirInstr::F64x2PMax(l, r) => self.emit_binary(f, l, r, Instruction::F64x2PMax),
+            WirInstr::F64x2ConvertLowI32x4S(a) => {
+                self.emit_unary(f, a, Instruction::F64x2ConvertLowI32x4S);
+            }
+            WirInstr::F64x2ConvertLowI32x4U(a) => {
+                self.emit_unary(f, a, Instruction::F64x2ConvertLowI32x4U);
+            }
+            WirInstr::F64x2PromoteLowF32x4(a) => {
+                self.emit_unary(f, a, Instruction::F64x2PromoteLowF32x4);
+            }
+            WirInstr::V128AndNot(l, r) => self.emit_binary(f, l, r, Instruction::V128AndNot),
+            WirInstr::V128AnyTrue(a) => self.emit_unary(f, a, Instruction::V128AnyTrue),
+            WirInstr::I8x16RelaxedSwizzle(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I8x16RelaxedSwizzle);
+            }
+            WirInstr::I8x16RelaxedLaneselect(a, b, c) => {
+                self.emit_instr(f, a);
+                self.emit_instr(f, b);
+                self.emit_instr(f, c);
+                f.instruction(&Instruction::I8x16RelaxedLaneselect);
+            }
+            WirInstr::I16x8RelaxedLaneselect(a, b, c) => {
+                self.emit_instr(f, a);
+                self.emit_instr(f, b);
+                self.emit_instr(f, c);
+                f.instruction(&Instruction::I16x8RelaxedLaneselect);
+            }
+            WirInstr::I32x4RelaxedLaneselect(a, b, c) => {
+                self.emit_instr(f, a);
+                self.emit_instr(f, b);
+                self.emit_instr(f, c);
+                f.instruction(&Instruction::I32x4RelaxedLaneselect);
+            }
+            WirInstr::I64x2RelaxedLaneselect(a, b, c) => {
+                self.emit_instr(f, a);
+                self.emit_instr(f, b);
+                self.emit_instr(f, c);
+                f.instruction(&Instruction::I64x2RelaxedLaneselect);
+            }
+            WirInstr::F32x4RelaxedMadd(a, b, c) => {
+                self.emit_instr(f, a);
+                self.emit_instr(f, b);
+                self.emit_instr(f, c);
+                f.instruction(&Instruction::F32x4RelaxedMadd);
+            }
+            WirInstr::F32x4RelaxedNmadd(a, b, c) => {
+                self.emit_instr(f, a);
+                self.emit_instr(f, b);
+                self.emit_instr(f, c);
+                f.instruction(&Instruction::F32x4RelaxedNmadd);
+            }
+            WirInstr::F64x2RelaxedMadd(a, b, c) => {
+                self.emit_instr(f, a);
+                self.emit_instr(f, b);
+                self.emit_instr(f, c);
+                f.instruction(&Instruction::F64x2RelaxedMadd);
+            }
+            WirInstr::F64x2RelaxedNmadd(a, b, c) => {
+                self.emit_instr(f, a);
+                self.emit_instr(f, b);
+                self.emit_instr(f, c);
+                f.instruction(&Instruction::F64x2RelaxedNmadd);
+            }
+            WirInstr::F32x4RelaxedMin(l, r) => {
+                self.emit_binary(f, l, r, Instruction::F32x4RelaxedMin);
+            }
+            WirInstr::F32x4RelaxedMax(l, r) => {
+                self.emit_binary(f, l, r, Instruction::F32x4RelaxedMax);
+            }
+            WirInstr::F64x2RelaxedMin(l, r) => {
+                self.emit_binary(f, l, r, Instruction::F64x2RelaxedMin);
+            }
+            WirInstr::F64x2RelaxedMax(l, r) => {
+                self.emit_binary(f, l, r, Instruction::F64x2RelaxedMax);
+            }
+            WirInstr::I32x4RelaxedTruncF32x4S(a) => {
+                self.emit_unary(f, a, Instruction::I32x4RelaxedTruncF32x4S);
+            }
+            WirInstr::I32x4RelaxedTruncF32x4U(a) => {
+                self.emit_unary(f, a, Instruction::I32x4RelaxedTruncF32x4U);
+            }
+            WirInstr::I32x4RelaxedTruncF64x2SZero(a) => {
+                self.emit_unary(f, a, Instruction::I32x4RelaxedTruncF64x2SZero);
+            }
+            WirInstr::I32x4RelaxedTruncF64x2UZero(a) => {
+                self.emit_unary(f, a, Instruction::I32x4RelaxedTruncF64x2UZero);
+            }
+            WirInstr::I16x8RelaxedQ15mulrS(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I16x8RelaxedQ15mulrS);
+            }
+            WirInstr::I16x8RelaxedDotI8x16I7x16S(l, r) => {
+                self.emit_binary(f, l, r, Instruction::I16x8RelaxedDotI8x16I7x16S);
+            }
+            WirInstr::I32x4RelaxedDotI8x16I7x16AddS(a, b, c) => {
+                self.emit_instr(f, a);
+                self.emit_instr(f, b);
+                self.emit_instr(f, c);
+                f.instruction(&Instruction::I32x4RelaxedDotI8x16I7x16AddS);
+            }
 
             // GC: Struct
             WirInstr::StructNew { type_id, fields } => {
