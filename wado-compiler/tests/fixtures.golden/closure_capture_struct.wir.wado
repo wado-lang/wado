@@ -191,13 +191,6 @@ global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let p: ref Point;
-    let __local_1: ref __Closure_0;
-    let __local_2: ref __Closure_1;
-    let __local_3: ref __Closure_2;
-    let __local_4: ref __Closure_3;
-    let __local_5: ref Point;
-    let __local_6: ref __Closure_4;
-    let __local_7: ref __Closure_5;
     let __local_8: ref String;
     let __local_9: ref Formatter;
     let __local_10: ref String;
@@ -208,58 +201,22 @@ fn run() with Stdout {
     let __local_15: ref Formatter;
     let __local_16: ref String;
     let __local_17: ref Formatter;
-    let __local_18: ref Array<u64>;
-    let __local_19: i32;
     let __local_20: ref String;
-    let __local_21: ref "core:internal/Box<i32>";
     let __local_22: ref Formatter;
-    let __local_23: ref __Closure_0;
-    let __local_24: ref "core:internal/Box<i32>";
-    let __local_25: ref Formatter;
-    let __local_26: i32;
     let __local_27: ref String;
-    let __local_28: ref "core:internal/Box<i32>";
     let __local_29: ref Formatter;
-    let __local_30: ref __Closure_1;
-    let __local_31: ref "core:internal/Box<i32>";
-    let __local_32: ref Formatter;
-    let __local_33: i32;
     let __local_34: ref String;
-    let __local_35: ref "core:internal/Box<i32>";
     let __local_36: ref Formatter;
-    let __local_37: ref __Closure_2;
-    let __local_38: ref "core:internal/Box<i32>";
-    let __local_39: ref Formatter;
-    let __local_40: i32;
     let __local_41: ref String;
-    let __local_42: ref "core:internal/Box<i32>";
     let __local_43: ref Formatter;
-    let __local_44: ref __Closure_3;
     let __local_45: i32;
     let __local_46: i32;
-    let __local_47: ref "core:internal/Box<i32>";
-    let __local_48: ref Formatter;
-    let __local_49: i32;
     let __local_50: ref String;
-    let __local_51: ref "core:internal/Box<i32>";
     let __local_52: ref Formatter;
-    let __local_53: ref __Closure_4;
-    let __local_54: ref "core:internal/Box<i32>";
-    let __local_55: ref Formatter;
     let __local_56: ref String;
-    let __local_57: ref "core:internal/Box<i32>";
     let __local_58: ref Formatter;
-    let __local_59: ref __Closure_5;
-    let __local_60: ref "core:internal/Box<i32>";
-    let __local_61: ref Formatter;
-    let __local_62: ref Point;
-    let __local_63: ref Point;
     let __sroa_sum_coords___capture_0: ref Point;
     let __sroa_manhattan___capture_0: ref Point;
-    let __local_66: ref Point;
-    let __local_67: ref Point;
-    let __local_68: i32;
-    let __local_69: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -346,7 +303,6 @@ fn __cm_export__run() {
 fn "core:allocator/grow_memory"(new_offset) {  // from core:allocator
     let current_bytes: i32;
     let deficit: i32;
-    let __local_3: i32;
     let normal_grow: i32;
     let grow_bytes: i32;
     let grow_pages: i32;
@@ -404,11 +360,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let arr: ref Array<u8>;
     let __iter_0: ref StrUtf8ByteIter;
     let b: u8;
-    let __pattern_temp_0: ref Option<u8>;
-    let __local_9: ref String;
-    let __local_10: i32;
     let __local_11: ref StrUtf8ByteIter;
-    let __local_12: ref String;
     len = message.used;
     alloc_size = if add_newline -> i32 {
         len + 1;
@@ -516,8 +468,6 @@ fn "core:internal/cm_lower_list_u8"(data, len) {  // from core:internal
 fn "core:internal/cm_lower_array_u8"(arr) {  // from core:internal
     let data: ref array<u8>;
     let len: i32;
-    let __local_3: ref Array<u8>;
-    let __local_4: ref Array<u8>;
     data = arr.repr;
     len = arr.used;
     return "core:internal/cm_lower_list_u8"(data, len);
@@ -576,7 +526,6 @@ fn "core:cli/Array<u8>::append"(self, value) {  // from core:cli
     let new_capacity: i32;
     let new_repr: ref array<u8>;
     let __local_6: i32;
-    let __local_7: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
@@ -617,9 +566,7 @@ fn String::grow(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref array<u8>;
     let __local_5: i32;
-    let __local_6: i32;
     let __local_7: i32;
-    let __local_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
@@ -651,8 +598,6 @@ fn String::internal_reserve_uninit(self, n) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref String;
-    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -732,8 +677,6 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
-    let __local_14: ref String;
-    let __local_15: ref String;
     sign = String { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };

@@ -201,27 +201,6 @@ fn run() with Stdout {
     let arr: ref Array<Array<String>>;
     let __local_4: ref String;
     let __local_5: ref Formatter;
-    let __local_6: ref Array<u64>;
-    let __local_7: i32;
-    let __local_8: i32;
-    let __local_9: ref Array<Array<String>>;
-    let __local_10: ref Array<String>;
-    let __local_11: i32;
-    let __local_12: i32;
-    let __local_13: ref Array<String>;
-    let __local_14: ref String;
-    let __local_15: ref Array<String>;
-    let __local_16: ref String;
-    let __local_17: ref Array<String>;
-    let __local_18: ref Array<Array<String>>;
-    let __local_19: ref Array<String>;
-    let __local_20: i32;
-    let __local_21: i32;
-    let __local_22: ref Array<String>;
-    let __local_23: ref String;
-    let __local_24: ref Array<String>;
-    let __local_25: ref Array<Array<String>>;
-    let __local_26: i32;
     let __local_27: ref String;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -264,7 +243,6 @@ fn __cm_export__run() {
 fn "core:allocator/grow_memory"(new_offset) {  // from core:allocator
     let current_bytes: i32;
     let deficit: i32;
-    let __local_3: i32;
     let normal_grow: i32;
     let grow_bytes: i32;
     let grow_pages: i32;
@@ -322,11 +300,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let arr: ref Array<u8>;
     let __iter_0: ref StrUtf8ByteIter;
     let b: u8;
-    let __pattern_temp_0: ref Option<u8>;
-    let __local_9: ref String;
-    let __local_10: i32;
     let __local_11: ref StrUtf8ByteIter;
-    let __local_12: ref String;
     len = message.used;
     alloc_size = if add_newline -> i32 {
         len + 1;
@@ -415,11 +389,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
     let arr: ref Array<u8>;
     let __iter_2: ref StrUtf8ByteIter;
     let b: u8;
-    let __pattern_temp_0: ref Option<u8>;
-    let __local_9: ref String;
-    let __local_10: i32;
     let __local_11: ref StrUtf8ByteIter;
-    let __local_12: ref String;
     len = message.used;
     alloc_size = if add_newline -> i32 {
         len + 1;
@@ -515,8 +485,6 @@ fn "core:internal/cm_lower_list_u8"(data, len) {  // from core:internal
 fn "core:internal/cm_lower_array_u8"(arr) {  // from core:internal
     let data: ref array<u8>;
     let len: i32;
-    let __local_3: ref Array<u8>;
-    let __local_4: ref Array<u8>;
     data = arr.repr;
     len = arr.used;
     return "core:internal/cm_lower_list_u8"(data, len);
@@ -528,7 +496,6 @@ fn "core:cli/Array<u8>::append"(self, value) {  // from core:cli
     let new_capacity: i32;
     let new_repr: ref array<u8>;
     let __local_6: i32;
-    let __local_7: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
@@ -550,7 +517,6 @@ fn "core:internal/Array<u8>::append"(self, value) {  // from core:internal
     let new_capacity: i32;
     let new_repr: ref array<u8>;
     let __local_6: i32;
-    let __local_7: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
@@ -571,9 +537,7 @@ fn String::grow(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref array<u8>;
     let __local_5: i32;
-    let __local_6: i32;
     let __local_7: i32;
-    let __local_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
@@ -593,8 +557,6 @@ fn String::grow(self, min_capacity) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref String;
-    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -706,7 +668,6 @@ fn Array<String>::append(self, value) {
     let new_capacity: i32;
     let new_repr: ref array<String>;
     let __local_6: i32;
-    let __local_7: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
@@ -724,15 +685,8 @@ fn Array<String>::append(self, value) {
 
 fn Array<Array<String>>^Inspect::inspect(self, f) {
     let i: i32;
-    let __local_3: ref Formatter;
-    let __local_4: char;
-    let __local_5: ref Array<Array<String>>;
-    let __local_6: ref Formatter;
     let s: ref String;
-    let __local_8: ref Array<Array<String>>;
     let __local_9: i32;
-    let __local_10: ref Formatter;
-    let __local_11: char;
     let _licm_used_12: i32;
     let _licm_repr_13: ref array<Array<String>>;
     String::append_char(f.buf, 91);
@@ -763,15 +717,8 @@ fn Array<Array<String>>^Inspect::inspect(self, f) {
 
 fn Array<String>^Inspect::inspect(self, f) {
     let i: i32;
-    let __local_3: ref Formatter;
-    let __local_4: char;
-    let __local_5: ref Array<String>;
-    let __local_6: ref Formatter;
     let s: ref String;
-    let __local_8: ref Array<String>;
     let __local_9: i32;
-    let __local_10: ref Formatter;
-    let __local_11: char;
     let _licm_used_12: i32;
     let _licm_repr_13: ref array<String>;
     String::append_char(f.buf, 91);
@@ -806,7 +753,6 @@ fn Array<Array<String>>::append(self, value) {
     let new_capacity: i32;
     let new_repr: ref array<Array<String>>;
     let __local_6: i32;
-    let __local_7: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
@@ -825,35 +771,8 @@ fn Array<Array<String>>::append(self, value) {
 fn String^Inspect::inspect(self, f) {
     let __iter_4: ref StrCharIter;
     let c: char;
-    let __pattern_temp_0: ref Option<char>;
-    let __local_5: ref Formatter;
-    let __local_6: char;
     let __local_7: ref StrCharIter;
     let __local_8: ref String;
-    let __local_9: ref Formatter;
-    let __local_10: char;
-    let __local_11: ref Formatter;
-    let __local_12: char;
-    let __local_13: ref Formatter;
-    let __local_14: char;
-    let __local_15: ref Formatter;
-    let __local_16: char;
-    let __local_17: ref Formatter;
-    let __local_18: char;
-    let __local_19: ref Formatter;
-    let __local_20: char;
-    let __local_21: ref Formatter;
-    let __local_22: char;
-    let __local_23: ref Formatter;
-    let __local_24: char;
-    let __local_25: ref Formatter;
-    let __local_26: char;
-    let __local_27: ref Formatter;
-    let __local_28: char;
-    let __local_29: ref Formatter;
-    let __local_30: char;
-    let __local_31: ref Formatter;
-    let __local_32: char;
     let _licm_buf_33: ref String;
     String::append_char(f.buf, 34);
     __iter_4 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
