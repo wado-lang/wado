@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773150970196,
+  "lastUpdate": 1773183041906,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2285,6 +2285,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/72ce51c67c3c4f8993af73a06a6fbf1f11ccc164"
         },
         "date": 1773150969971,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2400,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10319,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19848,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0a7b1f6a434d552597a8e214d5b620ebc5ce6f1c",
+          "message": "Merge pull request #556 from wado-lang/claude/optimize-simd-ascii-FvHYg\n\nAdd i32/i64 bit manipulation functions (ctz, popcnt) and u8x16 string loading",
+          "timestamp": "2026-03-11T07:48:12+09:00",
+          "tree_id": "e856fba472b335fd1dbe59a9bcbff0b3a67e5240",
+          "url": "https://github.com/wado-lang/wado/commit/0a7b1f6a434d552597a8e214d5b620ebc5ce6f1c"
+        },
+        "date": 1773183041688,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
