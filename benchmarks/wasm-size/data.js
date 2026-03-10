@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773150721689,
+  "lastUpdate": 1773150970196,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2246,6 +2246,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0288ce2114c5e98da0fad9f15dff5800e3d78ff4"
         },
         "date": 1773150721468,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2400,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10319,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19848,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "72ce51c67c3c4f8993af73a06a6fbf1f11ccc164",
+          "message": "Merge pull request #554 from wado-lang/claude/fix-todo-tests-KWKpY\n\nRefactor HTTP response body collection to run outside run_concurrent",
+          "timestamp": "2026-03-10T22:53:31+09:00",
+          "tree_id": "616686aa51d6d20e0fe29ca8c45a78a62bedaf4c",
+          "url": "https://github.com/wado-lang/wado/commit/72ce51c67c3c4f8993af73a06a6fbf1f11ccc164"
+        },
+        "date": 1773150969971,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
