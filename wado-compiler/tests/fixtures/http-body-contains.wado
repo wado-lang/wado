@@ -1,0 +1,29 @@
+// HTTP body_contains test
+// Tests the body_contains assertion which checks for substrings in response body.
+
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [body_rx, body_tx] = Stream::<u8>::new();
+
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, Option::<Stream<u8>>::Some(body_rx), trailers_future);
+
+    task return Result::<Response, ErrorCode>::Ok(response);
+
+    // Write "Hello, World!" as response body
+    let data: Array<u8> = [72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33];
+    body_tx.write(data);
+    body_tx.drop();
+
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+    "wasi:http/service": {
+        "status": 200,
+        "body_contains": ["Hello", "World"]
+    }
+}

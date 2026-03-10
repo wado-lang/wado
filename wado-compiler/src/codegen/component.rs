@@ -1535,12 +1535,15 @@ fn import_http_types_for_service(
             .map(|i| i.functions)
             .unwrap_or_default();
 
-        // Emit [constructor]fields and [static]response.new from registry metadata.
+        // Emit constructor/static functions from registry metadata.
         // Processing their parameter and return types triggers on-demand emission of
         // all dependent types (error-code variant and its payload record types).
-        for func in all_funcs.iter().filter(|f| {
-            f.wasi_func_name == "[constructor]fields" || f.wasi_func_name == "[static]response.new"
-        }) {
+        let is_constructor_or_static = |f: &WasiFunctionInfo| {
+            f.wasi_func_name == "[constructor]fields"
+                || f.wasi_func_name == "[static]response.new"
+                || (f.effect_name == "Fields" && f.wasi_func_name.starts_with("[static]"))
+        };
+        for func in all_funcs.iter().filter(|f| is_constructor_or_static(f)) {
             let resolved_return = func
                 .return_type
                 .as_ref()
@@ -1587,8 +1590,13 @@ fn import_http_types_for_service(
         let resource_methods: Vec<WasiFunctionInfo> = all_funcs
             .iter()
             .filter(|f| {
-                let is_fields_method =
-                    f.effect_name == "Fields" && f.wasi_func_name.starts_with("[method]");
+                // Skip functions already emitted in the constructor/static block
+                if is_constructor_or_static(f) {
+                    return false;
+                }
+                let is_fields_func = f.effect_name == "Fields"
+                    && (f.wasi_func_name.starts_with("[method]")
+                        || f.wasi_func_name.starts_with("[static]"));
                 let is_response_method =
                     f.effect_name == "Response" && f.wasi_func_name.starts_with("[method]");
                 // Only include Request methods/statics that are actually used to avoid
@@ -1599,7 +1607,7 @@ fn import_http_types_for_service(
                     && project
                         .used_wasi_functions
                         .contains(&format!("{}::{}", f.effect_name, f.method_name));
-                is_fields_method || is_response_method || is_used_request_func
+                is_fields_func || is_response_method || is_used_request_func
             })
             .cloned()
             .collect();
@@ -1708,8 +1716,9 @@ fn import_http_types_for_service(
                 i.functions
                     .iter()
                     .filter(|f| {
-                        let is_fields_method =
-                            f.effect_name == "Fields" && f.wasi_func_name.starts_with("[method]");
+                        let is_fields_method = f.effect_name == "Fields"
+                            && (f.wasi_func_name.starts_with("[method]")
+                                || f.wasi_func_name.starts_with("[static]"));
                         let is_response_method =
                             f.effect_name == "Response" && f.wasi_func_name.starts_with("[method]");
                         let is_used_request_func = f.effect_name == "Request"

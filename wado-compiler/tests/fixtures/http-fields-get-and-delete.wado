@@ -1,0 +1,32 @@
+// HTTP Fields.get_and_delete() test
+// Tests atomic get-and-delete operation on Fields.
+
+use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let fields = Fields::new();
+
+    let v: Array<u8> = [120 as u8]; // "x"
+    let _ = fields.append("x-temp" as FieldName, v as FieldValue);
+    assert fields.has("x-temp" as FieldName);
+
+    // get_and_delete: retrieve the values and remove the header atomically
+    let result = fields.get_and_delete("x-temp" as FieldName);
+    if let Ok(values) = result {
+        assert values.len() == 1;
+    } else {
+        panic("get_and_delete failed");
+    }
+
+    // After get_and_delete, the header should be gone
+    assert !fields.has("x-temp" as FieldName);
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let resp_headers = Fields::new();
+    let [response, _tx_future] = Response::new(resp_headers, null, trailers_future);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}

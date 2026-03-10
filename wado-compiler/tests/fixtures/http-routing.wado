@@ -1,0 +1,27 @@
+// HTTP path-based routing test
+// Tests conditional logic based on request path to return different responses.
+
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let path = request.get_path_with_query();
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+
+    if let Some(p) = path {
+        if p == "/not-found" {
+            response.set_status_code(404);
+        } else if p == "/created" {
+            response.set_status_code(201);
+        }
+        // default: 200
+    }
+
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"request": {"path": "/not-found"}, "status": 404}}

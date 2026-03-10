@@ -242,6 +242,27 @@ fn register_struct(
         ctx.struct_type_map.insert(struct_name, existing);
         return;
     }
+    // Also check with newtypes resolved: e.g., Array<Tuple<FieldName,FieldValue>> should
+    // reuse the existing Array<Tuple<String,Array<u8>>> when FieldName/FieldValue are newtypes.
+    if let Some(ref mono) = tir_struct.monomorph_info {
+        let has_newtypes = mono
+            .type_args
+            .iter()
+            .any(|t| type_table.resolve_newtype_base(*t) != *t);
+        if has_newtypes {
+            let resolved_args: Vec<String> = mono
+                .type_args
+                .iter()
+                .map(|t| type_table.mangle_type_name_resolving_newtypes(*t))
+                .collect();
+            let resolved_name =
+                crate::name::mangle_generic_name(&mono.generic_name, &resolved_args);
+            if let Some(existing) = ctx.lookup_struct_by_name(&resolved_name).cloned() {
+                ctx.struct_type_map.insert(struct_name, existing);
+                return;
+            }
+        }
+    }
 
     let fq = format!("{module_source}//{}", tir_struct.name);
     let display = tir_struct.name.clone();
@@ -415,6 +436,13 @@ fn register_raw_array_type(
         ctx.array_type_map.insert(element_type_id, existing);
         return;
     }
+    // Fallback: resolve newtypes in element type name for deduplication
+    let resolved_name = type_table.mangle_type_name_resolving_newtypes(element_type_id);
+    if resolved_name != elem_name && ctx.array_type_by_name.contains_key(&resolved_name) {
+        let existing = ctx.array_type_by_name.get(&resolved_name).unwrap().clone();
+        ctx.array_type_map.insert(element_type_id, existing);
+        return;
+    }
 
     let fq = format!("builtin::array<{elem_name}>");
     let elem_wir_type = ctx.type_id_to_wir_type(type_table, element_type_id);
@@ -540,9 +568,28 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                 if elements.iter().any(|e| type_table.contains_type_param(*e)) {
                     continue;
                 }
+
+                // Newtype deduplication: if any element is a newtype, check if the
+                // resolved tuple already exists and reuse it.
+                let has_newtypes = elements
+                    .iter()
+                    .any(|e| type_table.resolve_newtype_base(*e) != *e);
+                if has_newtypes {
+                    let resolved_elements: Vec<TypeId> = elements
+                        .iter()
+                        .map(|e| type_table.resolve_newtype_base(*e))
+                        .collect();
+                    if let Some(existing) = ctx.tuple_type_map.get(&resolved_elements).cloned() {
+                        ctx.tuple_type_map.insert(elements.clone(), existing);
+                        continue;
+                    }
+                }
+
+                // Use resolved (base) names for tuple display/fq to ensure
+                // newtypes map to the same WIR type as their base types.
                 let elem_names: Vec<String> = elements
                     .iter()
-                    .map(|&e| type_table.mangle_type_name(e))
+                    .map(|&e| type_table.mangle_type_name_resolving_newtypes(e))
                     .collect();
                 let display = format!("[{}]", elem_names.join(", "));
                 let fq = format!("tuple//{display}");
@@ -576,7 +623,18 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                         newtype_origin: None,
                     }),
                 );
-                ctx.tuple_type_map.insert(elements.clone(), wir_type_id);
+                ctx.tuple_type_map
+                    .insert(elements.clone(), wir_type_id.clone());
+                // Also register under resolved elements key for deduplication
+                if has_newtypes {
+                    let resolved_elements: Vec<TypeId> = elements
+                        .iter()
+                        .map(|e| type_table.resolve_newtype_base(*e))
+                        .collect();
+                    if !ctx.tuple_type_map.contains_key(&resolved_elements) {
+                        ctx.tuple_type_map.insert(resolved_elements, wir_type_id);
+                    }
+                }
             }
         }
     }

@@ -486,6 +486,18 @@ impl<'a> WirContext<'a> {
                         nullable: false,
                     }
                 } else {
+                    // Fallback: resolve newtypes in element type (e.g., FieldName → String)
+                    let resolved_name =
+                        type_table.mangle_type_name_resolving_newtypes(type_args[0]);
+                    if resolved_name != elem_type_name {
+                        let resolved_fq = format!("core:prelude//Array<{resolved_name}>");
+                        if let Some(type_id) = self.type_map.get(&resolved_fq) {
+                            return WirType::Ref {
+                                type_id: type_id.clone(),
+                                nullable: false,
+                            };
+                        }
+                    }
                     WirType::AbstractRef {
                         heap_type: crate::wir::WirAbstractHeapType::Struct,
                         nullable: false,
@@ -493,9 +505,9 @@ impl<'a> WirContext<'a> {
                 }
             }
             ResolvedType::GenericInstance {
-                name: _,
+                name,
                 module_source,
-                type_args: _,
+                type_args,
             } => {
                 // GenericInstance.name is the base name (e.g., "Box"), but after
                 // monomorphization the struct is registered with the mangled name
@@ -522,6 +534,36 @@ impl<'a> WirContext<'a> {
                             nullable: false,
                         }
                     } else {
+                        // Fallback: resolve newtypes in type_args and retry
+                        let resolved_args: Vec<String> = type_args
+                            .iter()
+                            .map(|t| type_table.mangle_type_name_resolving_newtypes(*t))
+                            .collect();
+                        let resolved_mangled =
+                            crate::name::mangle_generic_name(name, &resolved_args);
+                        if resolved_mangled != mangled {
+                            let resolved_sn =
+                                StructName::new(module_source.clone(), resolved_mangled.clone());
+                            if let Some(tid) = self.struct_type_map.get(&resolved_sn) {
+                                return WirType::Ref {
+                                    type_id: tid.clone(),
+                                    nullable: false,
+                                };
+                            }
+                            if let Some(tid) = self.lookup_struct_by_name(&resolved_mangled) {
+                                return WirType::Ref {
+                                    type_id: tid.clone(),
+                                    nullable: false,
+                                };
+                            }
+                            let resolved_fq = format!("{module_source}//{resolved_mangled}");
+                            if let Some(tid) = self.type_map.get(&resolved_fq) {
+                                return WirType::Ref {
+                                    type_id: tid.clone(),
+                                    nullable: false,
+                                };
+                            }
+                        }
                         WirType::AbstractRef {
                             heap_type: crate::wir::WirAbstractHeapType::Struct,
                             nullable: false,
@@ -544,6 +586,17 @@ impl<'a> WirContext<'a> {
                             nullable: false,
                         }
                     } else {
+                        // Fallback: resolve newtypes in element type
+                        let resolved_name =
+                            type_table.mangle_type_name_resolving_newtypes(*elem_type_id);
+                        if resolved_name != elem_name
+                            && let Some(type_id) = self.array_type_by_name.get(&resolved_name)
+                        {
+                            return WirType::Ref {
+                                type_id: type_id.clone(),
+                                nullable: false,
+                            };
+                        }
                         WirType::AbstractRef {
                             heap_type: crate::wir::WirAbstractHeapType::Array,
                             nullable: false,

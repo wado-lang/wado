@@ -1,0 +1,24 @@
+// HTTP response.get_headers() test
+// Tests reading back the headers of a constructed response.
+
+use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+
+    let headers = Fields::new();
+    let v: Array<u8> = [121 as u8, 101 as u8, 115 as u8]; // "yes"
+    let _ = headers.append("x-check" as FieldName, v as FieldValue);
+
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+
+    // Read headers back from the response resource
+    let resp_headers = response.get_headers();
+    assert resp_headers.has("x-check" as FieldName);
+
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200, "headers_contain": [["x-check", "yes"]]}}

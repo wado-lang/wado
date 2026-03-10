@@ -1,0 +1,27 @@
+// HTTP method-based routing test
+// Tests match expression on Method variant to return different status codes.
+
+use { Request, Response, ErrorCode, Fields, Method, StatusCode, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let method = request.get_method();
+
+    let status: u16 = match method {
+        Get => 200,
+        Post => 201,
+        Delete => 204,
+        Put => 200,
+        Patch => 200,
+        _ => 405,
+    };
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    response.set_status_code(status as StatusCode);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"request": {"method": "POST"}, "status": 201}}
