@@ -912,6 +912,16 @@ impl f32 {
         }
         return null;
     }
+
+    /// Reinterprets the bits of this f32 as an i32.
+    pub fn to_bits(&self) -> i32 {
+        return builtin::i32_reinterpret_f32(*self);
+    }
+
+    /// Creates an f32 from its bit representation.
+    pub fn from_bits(bits: i32) -> f32 {
+        return builtin::f32_reinterpret_i32(bits);
+    }
 }
 
 impl f64 {
@@ -1241,6 +1251,16 @@ impl f64 {
 
     pub fn parse(s: String) -> Option<f64> {
         return parse_text(s);
+    }
+
+    /// Reinterprets the bits of this f64 as an i64.
+    pub fn to_bits(&self) -> i64 {
+        return builtin::i64_reinterpret_f64(*self);
+    }
+
+    /// Creates an f64 from its bit representation.
+    pub fn from_bits(bits: i64) -> f64 {
+        return builtin::f64_reinterpret_i64(bits);
     }
 }
 
