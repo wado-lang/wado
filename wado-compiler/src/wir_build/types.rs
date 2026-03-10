@@ -253,14 +253,10 @@ fn register_struct(
             let resolved_args: Vec<String> = mono
                 .type_args
                 .iter()
-                .map(|t| {
-                    type_table.mangle_type_name_resolving_newtypes(*t)
-                })
+                .map(|t| type_table.mangle_type_name_resolving_newtypes(*t))
                 .collect();
-            let resolved_name = crate::name::mangle_generic_name(
-                &mono.generic_name,
-                &resolved_args,
-            );
+            let resolved_name =
+                crate::name::mangle_generic_name(&mono.generic_name, &resolved_args);
             if let Some(existing) = ctx.lookup_struct_by_name(&resolved_name).cloned() {
                 ctx.struct_type_map.insert(struct_name, existing);
                 return;
@@ -441,8 +437,7 @@ fn register_raw_array_type(
         return;
     }
     // Fallback: resolve newtypes in element type name for deduplication
-    let resolved_name =
-        type_table.mangle_type_name_resolving_newtypes(element_type_id);
+    let resolved_name = type_table.mangle_type_name_resolving_newtypes(element_type_id);
     if resolved_name != elem_name && ctx.array_type_by_name.contains_key(&resolved_name) {
         let existing = ctx.array_type_by_name.get(&resolved_name).unwrap().clone();
         ctx.array_type_map.insert(element_type_id, existing);
@@ -584,8 +579,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                         .iter()
                         .map(|e| type_table.resolve_newtype_base(*e))
                         .collect();
-                    if let Some(existing) = ctx.tuple_type_map.get(&resolved_elements).cloned()
-                    {
+                    if let Some(existing) = ctx.tuple_type_map.get(&resolved_elements).cloned() {
                         ctx.tuple_type_map.insert(elements.clone(), existing);
                         continue;
                     }
@@ -629,7 +623,8 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                         newtype_origin: None,
                     }),
                 );
-                ctx.tuple_type_map.insert(elements.clone(), wir_type_id.clone());
+                ctx.tuple_type_map
+                    .insert(elements.clone(), wir_type_id.clone());
                 // Also register under resolved elements key for deduplication
                 if has_newtypes {
                     let resolved_elements: Vec<TypeId> = elements
@@ -637,8 +632,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                         .map(|e| type_table.resolve_newtype_base(*e))
                         .collect();
                     if !ctx.tuple_type_map.contains_key(&resolved_elements) {
-                        ctx.tuple_type_map
-                            .insert(resolved_elements, wir_type_id);
+                        ctx.tuple_type_map.insert(resolved_elements, wir_type_id);
                     }
                 }
             }

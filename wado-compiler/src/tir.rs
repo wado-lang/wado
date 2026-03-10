@@ -1093,14 +1093,16 @@ impl TypeTable {
     }
 
     /// Recursively resolve newtypes inside compound types (tuples, generics, arrays).
-    /// Returns the same TypeId if no newtypes are found, or a new TypeId with all
+    /// Returns the same `TypeId` if no newtypes are found, or a new `TypeId` with all
     /// newtypes replaced by their base types.
     pub fn resolve_newtypes_deep(&mut self, id: TypeId) -> TypeId {
         let base = self.resolve_newtype_base(id);
         match self.get(base).clone() {
             ResolvedType::Tuple(elems) => {
-                let resolved: Vec<TypeId> =
-                    elems.iter().map(|e| self.resolve_newtypes_deep(*e)).collect();
+                let resolved: Vec<TypeId> = elems
+                    .iter()
+                    .map(|e| self.resolve_newtypes_deep(*e))
+                    .collect();
                 if resolved == elems {
                     base
                 } else {
@@ -1112,8 +1114,10 @@ impl TypeTable {
                 module_source,
                 type_args,
             } => {
-                let resolved: Vec<TypeId> =
-                    type_args.iter().map(|t| self.resolve_newtypes_deep(*t)).collect();
+                let resolved: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|t| self.resolve_newtypes_deep(*t))
+                    .collect();
                 if resolved == type_args {
                     base
                 } else {
@@ -1133,7 +1137,7 @@ impl TypeTable {
     }
 
     /// Like `resolve_newtypes_deep` but non-mutating — only resolves if all
-    /// intermediate types already exist. Returns the original TypeId if resolution
+    /// intermediate types already exist. Returns the original `TypeId` if resolution
     /// would require creating new types.
     #[must_use]
     pub fn resolve_newtypes_deep_readonly(&self, id: TypeId) -> TypeId {

@@ -1064,16 +1064,20 @@ pub fn synthesize_lower(
         },
         Type::Generic(g) => match g.name.as_str() {
             // list<T>: lowered as (ptr, len) pair stored at addr
-            "Array" if g.args.len() == 1
-                && matches!(&g.args[0], Type::Named(n) if n.name == "u8") =>
+            "Array"
+                if g.args.len() == 1 && matches!(&g.args[0], Type::Named(n) if n.name == "u8") =>
             {
                 // list<u8>: use cm_lower_array_u8 → packed i64, store (ptr, len)
                 let packed_local = *next_local;
                 local_types.push(TypeTable::I64);
                 *next_local += 1;
                 let packed = internal_call("cm_lower_array_u8", vec![value], TypeTable::I64);
-                let mut stmts =
-                    vec![let_stmt("__elem_packed", packed_local, TypeTable::I64, packed)];
+                let mut stmts = vec![let_stmt(
+                    "__elem_packed",
+                    packed_local,
+                    TypeTable::I64,
+                    packed,
+                )];
                 // Store ptr (low 32 bits) at addr
                 let ptr = cast(
                     local_ref(packed_local, "__elem_packed", TypeTable::I64),
@@ -1095,7 +1099,12 @@ pub fn synthesize_lower(
                 stmts.push(expr_stmt(builtin_call(
                     "i32_store",
                     vec![
-                        binary(crate::tir::TirBinaryOp::Add, addr, i32_const(4), TypeTable::I32),
+                        binary(
+                            crate::tir::TirBinaryOp::Add,
+                            addr,
+                            i32_const(4),
+                            TypeTable::I32,
+                        ),
                         len,
                     ],
                     TypeTable::UNIT,
@@ -1185,7 +1194,14 @@ fn synthesize_lower_tuple(
 
         // Recursively lower: for tuples use synthesize_lower_tuple, otherwise synthesize_lower
         let field_stmts = if let Type::Tuple(sub_elems) = elem_ty {
-            synthesize_lower_tuple(sub_elems, field_expr, field_addr, next_local, local_types, type_table)
+            synthesize_lower_tuple(
+                sub_elems,
+                field_expr,
+                field_addr,
+                next_local,
+                local_types,
+                type_table,
+            )
         } else {
             synthesize_lower(elem_ty, field_expr, field_addr, next_local, local_types)
         };
@@ -1864,11 +1880,7 @@ fn synthesize_adapter(
                     binary(
                         crate::tir::TirBinaryOp::GtEq,
                         local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
-                        local_ref(
-                            len_local,
-                            &format!("__{param_name}_len"),
-                            TypeTable::I32,
-                        ),
+                        local_ref(len_local, &format!("__{param_name}_len"), TypeTable::I32),
                         TypeTable::BOOL,
                     ),
                     block(vec![break_stmt()]),
@@ -1882,18 +1894,10 @@ fn synthesize_adapter(
                     TypeTable::I32,
                     binary(
                         crate::tir::TirBinaryOp::Add,
-                        local_ref(
-                            base_local,
-                            &format!("__{param_name}_base"),
-                            TypeTable::I32,
-                        ),
+                        local_ref(base_local, &format!("__{param_name}_base"), TypeTable::I32),
                         binary(
                             crate::tir::TirBinaryOp::Mul,
-                            local_ref(
-                                i_local,
-                                &format!("__{param_name}_i"),
-                                TypeTable::I32,
-                            ),
+                            local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
                             i32_const(elem_size),
                             TypeTable::I32,
                         ),
@@ -1914,11 +1918,7 @@ fn synthesize_adapter(
                     elem_type_id,
                     TirExpr::new(
                         TirExprKind::MethodCall {
-                            receiver: Box::new(local_ref(
-                                param_local,
-                                param_name,
-                                array_type_id,
-                            )),
+                            receiver: Box::new(local_ref(param_local, param_name, array_type_id)),
                             func: FunctionRef {
                                 module_source: ModuleSource::prelude(),
                                 name: iv_mangled,
@@ -1928,11 +1928,7 @@ fn synthesize_adapter(
                             },
                             type_args: vec![],
                             args: vec![CallArg::new(
-                                local_ref(
-                                    i_local,
-                                    &format!("__{param_name}_i"),
-                                    TypeTable::I32,
-                                ),
+                                local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
                                 false,
                             )],
                         },
@@ -1941,14 +1937,26 @@ fn synthesize_adapter(
                     ),
                 ));
                 // Lower element to linear memory at __addr
-                let elem_ref =
-                    local_ref(elem_local, &format!("__{param_name}_elem"), elem_type_id);
+                let elem_ref = local_ref(elem_local, &format!("__{param_name}_elem"), elem_type_id);
                 let addr_ref =
                     local_ref(addr_local, &format!("__{param_name}_addr"), TypeTable::I32);
                 let lower_stmts = if let Type::Tuple(sub_elems) = elem_type {
-                    synthesize_lower_tuple(sub_elems, elem_ref, addr_ref, &mut next_local, &mut local_types, type_table)
+                    synthesize_lower_tuple(
+                        sub_elems,
+                        elem_ref,
+                        addr_ref,
+                        &mut next_local,
+                        &mut local_types,
+                        type_table,
+                    )
                 } else {
-                    synthesize_lower(elem_type, elem_ref, addr_ref, &mut next_local, &mut local_types)
+                    synthesize_lower(
+                        elem_type,
+                        elem_ref,
+                        addr_ref,
+                        &mut next_local,
+                        &mut local_types,
+                    )
                 };
                 loop_body.extend(lower_stmts);
                 // __i += 1
@@ -1956,11 +1964,7 @@ fn synthesize_adapter(
                     local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
                     binary(
                         crate::tir::TirBinaryOp::Add,
-                        local_ref(
-                            i_local,
-                            &format!("__{param_name}_i"),
-                            TypeTable::I32,
-                        ),
+                        local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
                         i32_const(1),
                         TypeTable::I32,
                     ),
@@ -4855,7 +4859,7 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
 }
 
 /// Recursively replace WASI-derived types with user types in the adapter.
-/// Given a WASI AST `Type` and the user's `TypeId`, compute the WASI-derived TypeId
+/// Given a WASI AST `Type` and the user's `TypeId`, compute the WASI-derived `TypeId`
 /// and replace it, then recurse into sub-types (Array elements, Tuple fields, etc.).
 fn replace_wasi_derived_type_recursive(
     adapter: &mut TirFunction,
@@ -4881,26 +4885,24 @@ fn replace_wasi_derived_type_recursive(
             let tt = type_table.borrow();
             let new_name = tt.mangle_type_name(user_type);
             drop(tt);
-            if old_name != new_name {
+            if old_name == new_name {
+                replace_type_in_adapter(adapter, old_type, user_type);
+            } else {
                 replace_type_in_adapter_with_names(
                     adapter, old_type, user_type, &old_name, &new_name,
                 );
-            } else {
-                replace_type_in_adapter(adapter, old_type, user_type);
             }
         }
     }
     match wasi_type {
         Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => {
             let tt = type_table.borrow();
-            if let Some(new_elem_args) = tt.generic_type_args(user_type) {
-                if new_elem_args.len() == 1 {
-                    let new_elem = new_elem_args[0];
-                    drop(tt);
-                    replace_wasi_derived_type_recursive(
-                        adapter, &g.args[0], new_elem, type_table,
-                    );
-                }
+            if let Some(new_elem_args) = tt.generic_type_args(user_type)
+                && new_elem_args.len() == 1
+            {
+                let new_elem = new_elem_args[0];
+                drop(tt);
+                replace_wasi_derived_type_recursive(adapter, &g.args[0], new_elem, type_table);
             }
         }
         Type::Tuple(elems) => {
@@ -4910,38 +4912,30 @@ fn replace_wasi_derived_type_recursive(
                 let user_elems = user_elems.clone();
                 drop(tt);
                 for (wasi_elem, &user_elem) in elems.iter().zip(user_elems.iter()) {
-                    replace_wasi_derived_type_recursive(
-                        adapter, wasi_elem, user_elem, type_table,
-                    );
+                    replace_wasi_derived_type_recursive(adapter, wasi_elem, user_elem, type_table);
                 }
             }
         }
         Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => {
             let tt = type_table.borrow();
-            if let Some(new_args) = tt.generic_type_args(user_type) {
-                if new_args.len() == 1 {
-                    let new_inner = new_args[0];
-                    drop(tt);
-                    replace_wasi_derived_type_recursive(
-                        adapter, &g.args[0], new_inner, type_table,
-                    );
-                }
+            if let Some(new_args) = tt.generic_type_args(user_type)
+                && new_args.len() == 1
+            {
+                let new_inner = new_args[0];
+                drop(tt);
+                replace_wasi_derived_type_recursive(adapter, &g.args[0], new_inner, type_table);
             }
         }
         Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
             let tt = type_table.borrow();
-            if let Some(new_args) = tt.generic_type_args(user_type) {
-                if new_args.len() == 2 {
-                    let new_ok = new_args[0];
-                    let new_err = new_args[1];
-                    drop(tt);
-                    replace_wasi_derived_type_recursive(
-                        adapter, &g.args[0], new_ok, type_table,
-                    );
-                    replace_wasi_derived_type_recursive(
-                        adapter, &g.args[1], new_err, type_table,
-                    );
-                }
+            if let Some(new_args) = tt.generic_type_args(user_type)
+                && new_args.len() == 2
+            {
+                let new_ok = new_args[0];
+                let new_err = new_args[1];
+                drop(tt);
+                replace_wasi_derived_type_recursive(adapter, &g.args[0], new_ok, type_table);
+                replace_wasi_derived_type_recursive(adapter, &g.args[1], new_err, type_table);
             }
         }
         _ => {}
@@ -4950,9 +4944,9 @@ fn replace_wasi_derived_type_recursive(
 
 /// Fix up WASI-derived types in the adapter body to match the user's types.
 ///
-/// The adapter body uses TypeIds from `wasi_type_to_type_id` (e.g., `Array<Tuple<String, Array<u8>>>`).
+/// The adapter body uses `TypeIds` from `wasi_type_to_type_id` (e.g., `Array<Tuple<String, Array<u8>>>`).
 /// The call site uses user types with newtype aliases (e.g., `Array<Tuple<FieldName, FieldValue>>`).
-/// This function computes the WASI-derived TypeId for each param and replaces it in the body.
+/// This function computes the WASI-derived `TypeId` for each param and replaces it in the body.
 fn fixup_wasi_derived_types_in_adapter(
     adapter: &mut TirFunction,
     func_info: &crate::component_model::WasiFunctionInfo,
@@ -5129,7 +5123,13 @@ fn replace_type_and_names_in_expr(
                 }
             }
             for arg in args {
-                replace_type_and_names_in_expr(&mut arg.expr, old_type, new_type, old_name, new_name);
+                replace_type_and_names_in_expr(
+                    &mut arg.expr,
+                    old_type,
+                    new_type,
+                    old_name,
+                    new_name,
+                );
             }
         }
         TirExprKind::MethodCall {
@@ -5150,7 +5150,13 @@ fn replace_type_and_names_in_expr(
             }
             replace_type_and_names_in_expr(receiver, old_type, new_type, old_name, new_name);
             for arg in args {
-                replace_type_and_names_in_expr(&mut arg.expr, old_type, new_type, old_name, new_name);
+                replace_type_and_names_in_expr(
+                    &mut arg.expr,
+                    old_type,
+                    new_type,
+                    old_name,
+                    new_name,
+                );
             }
         }
         TirExprKind::FieldAccess { expr: inner, .. } => {
@@ -5184,7 +5190,13 @@ fn replace_type_and_names_in_expr(
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for f in fields {
-                replace_type_and_names_in_expr(&mut f.value, old_type, new_type, old_name, new_name);
+                replace_type_and_names_in_expr(
+                    &mut f.value,
+                    old_type,
+                    new_type,
+                    old_name,
+                    new_name,
+                );
             }
         }
         _ => {}
@@ -5249,7 +5261,10 @@ fn replace_type_in_expr(expr: &mut TirExpr, old_type: TypeId, new_type: TypeId) 
             }
         }
         TirExprKind::MethodCall {
-            func, receiver, args, ..
+            func,
+            receiver,
+            args,
+            ..
         } => {
             if let Some(ref mut mono) = func.monomorph_info {
                 for ta in &mut mono.type_args {
@@ -5277,7 +5292,11 @@ fn replace_type_in_expr(expr: &mut TirExpr, old_type: TypeId, new_type: TypeId) 
         TirExprKind::Cast { expr: inner, .. } => {
             replace_type_in_expr(inner, old_type, new_type);
         }
-        TirExprKind::VariantConstruct { variant_type, payload, .. } => {
+        TirExprKind::VariantConstruct {
+            variant_type,
+            payload,
+            ..
+        } => {
             if *variant_type == old_type {
                 *variant_type = new_type;
             }
@@ -5549,7 +5568,13 @@ fn rewrite_calls_in_stmt(
             else_block,
         } => {
             rewrite_calls_in_expr(condition, adapters, entry_source, wasi_registry, type_table);
-            rewrite_calls_in_block(then_block, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_block(
+                then_block,
+                adapters,
+                entry_source,
+                wasi_registry,
+                type_table,
+            );
             if let Some(blk) = else_block {
                 rewrite_calls_in_block(blk, adapters, entry_source, wasi_registry, type_table);
             }
@@ -5564,7 +5589,13 @@ fn rewrite_calls_in_stmt(
             ..
         } => {
             rewrite_calls_in_expr(scrutinee, adapters, entry_source, wasi_registry, type_table);
-            rewrite_calls_in_block(then_block, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_block(
+                then_block,
+                adapters,
+                entry_source,
+                wasi_registry,
+                type_table,
+            );
             if let Some(blk) = else_block {
                 rewrite_calls_in_block(blk, adapters, entry_source, wasi_registry, type_table);
             }
@@ -5658,7 +5689,13 @@ fn rewrite_calls_in_expr(
 
             // Recurse into args
             for arg in args {
-                rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry, type_table);
+                rewrite_calls_in_expr(
+                    &mut arg.expr,
+                    adapters,
+                    entry_source,
+                    wasi_registry,
+                    type_table,
+                );
             }
             return;
         }
@@ -5673,15 +5710,13 @@ fn rewrite_calls_in_expr(
             method_info.base_struct_name, method_info.method_name
         );
         // Resolve through type aliases (e.g., Headers -> Fields)
-        if !adapters.contains_key(&qualified) {
-            if let Some(Type::Named(resolved)) =
+        if !adapters.contains_key(&qualified)
+            && let Some(Type::Named(resolved)) =
                 wasi_registry.get_newtype(&method_info.base_struct_name)
-            {
-                let aliased =
-                    format!("{}::{}", resolved.name, method_info.method_name);
-                if adapters.contains_key(&aliased) {
-                    qualified = aliased;
-                }
+        {
+            let aliased = format!("{}::{}", resolved.name, method_info.method_name);
+            if adapters.contains_key(&aliased) {
+                qualified = aliased;
             }
         }
         if let Some(adapter_rc) = adapters.get(&qualified) {
@@ -5733,7 +5768,8 @@ fn rewrite_calls_in_expr(
                 // Replace WASI-derived types in the body (including function names)
                 if let Some(func_info) = wasi_registry.get_function(&qualified) {
                     // For method calls, call_args excludes self (self is handled above)
-                    let call_args: Vec<TirExpr> = taken_args.iter().map(|a| a.expr.clone()).collect();
+                    let call_args: Vec<TirExpr> =
+                        taken_args.iter().map(|a| a.expr.clone()).collect();
                     fixup_wasi_derived_types_in_adapter(
                         &mut adapter,
                         func_info,
@@ -5763,7 +5799,13 @@ fn rewrite_calls_in_expr(
             // Recurse into args of the new Call
             if let TirExprKind::Call { args, .. } = &mut expr.kind {
                 for arg in args {
-                    rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry, type_table);
+                    rewrite_calls_in_expr(
+                        &mut arg.expr,
+                        adapters,
+                        entry_source,
+                        wasi_registry,
+                        type_table,
+                    );
                 }
             }
             return;
@@ -5862,9 +5904,7 @@ fn rewrite_calls_in_expr(
                         Type::Named(n) if n.name == "String" => {
                             flat.push(taken_args[i].clone());
                         }
-                        Type::Generic(g)
-                            if g.name == "Array" && g.args.len() == 1 =>
-                        {
+                        Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => {
                             flat.push(taken_args[i].clone());
                         }
                         _ => {
@@ -5897,7 +5937,13 @@ fn rewrite_calls_in_expr(
             // Recurse into args of the new Call
             if let TirExprKind::Call { args, .. } = &mut expr.kind {
                 for arg in args {
-                    rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry, type_table);
+                    rewrite_calls_in_expr(
+                        &mut arg.expr,
+                        adapters,
+                        entry_source,
+                        wasi_registry,
+                        type_table,
+                    );
                 }
             }
             return;
@@ -5908,7 +5954,13 @@ fn rewrite_calls_in_expr(
     match &mut expr.kind {
         TirExprKind::Call { args, .. } => {
             for arg in args {
-                rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry, type_table);
+                rewrite_calls_in_expr(
+                    &mut arg.expr,
+                    adapters,
+                    entry_source,
+                    wasi_registry,
+                    type_table,
+                );
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
@@ -5919,7 +5971,13 @@ fn rewrite_calls_in_expr(
         TirExprKind::MethodCall { receiver, args, .. } => {
             rewrite_calls_in_expr(receiver, adapters, entry_source, wasi_registry, type_table);
             for arg in args {
-                rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry, type_table);
+                rewrite_calls_in_expr(
+                    &mut arg.expr,
+                    adapters,
+                    entry_source,
+                    wasi_registry,
+                    type_table,
+                );
             }
         }
         TirExprKind::IndirectCall { callee, args } => {
@@ -5946,7 +6004,13 @@ fn rewrite_calls_in_expr(
             else_branch,
         } => {
             rewrite_calls_in_expr(condition, adapters, entry_source, wasi_registry, type_table);
-            rewrite_calls_in_block(then_branch, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_block(
+                then_branch,
+                adapters,
+                entry_source,
+                wasi_registry,
+                type_table,
+            );
             if let Some(blk) = else_branch {
                 rewrite_calls_in_block(blk, adapters, entry_source, wasi_registry, type_table);
             }
@@ -5980,7 +6044,13 @@ fn rewrite_calls_in_expr(
                 if let Some(guard) = &mut arm.guard {
                     rewrite_calls_in_expr(guard, adapters, entry_source, wasi_registry, type_table);
                 }
-                rewrite_calls_in_expr(&mut arm.body, adapters, entry_source, wasi_registry, type_table);
+                rewrite_calls_in_expr(
+                    &mut arm.body,
+                    adapters,
+                    entry_source,
+                    wasi_registry,
+                    type_table,
+                );
             }
         }
         TirExprKind::Closure { body, .. } => {
@@ -5991,7 +6061,13 @@ fn rewrite_calls_in_expr(
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in &mut fields.iter_mut() {
-                rewrite_calls_in_expr(&mut field.value, adapters, entry_source, wasi_registry, type_table);
+                rewrite_calls_in_expr(
+                    &mut field.value,
+                    adapters,
+                    entry_source,
+                    wasi_registry,
+                    type_table,
+                );
             }
         }
         TirExprKind::GlobalVarSet { value, .. } => {
@@ -6117,8 +6193,7 @@ fn collect_effect_calls_in_expr(
                     wasi_registry.get_newtype(&method_info.base_struct_name)
                 {
                     // Resolve through type aliases (e.g., Headers -> Fields)
-                    let aliased =
-                        format!("{}::{}", resolved.name, method_info.method_name);
+                    let aliased = format!("{}::{}", resolved.name, method_info.method_name);
                     if wasi_registry.get_function(&aliased).is_some() {
                         effects.insert(aliased);
                     }
@@ -6396,7 +6471,13 @@ mod tests {
 
     #[test]
     fn lower_i32() {
-        let stmts = synthesize_lower(&named_type("i32"), i32_const(42), i32_const(100), &mut 0, &mut vec![]);
+        let stmts = synthesize_lower(
+            &named_type("i32"),
+            i32_const(42),
+            i32_const(100),
+            &mut 0,
+            &mut vec![],
+        );
         assert_eq!(stmts.len(), 1);
     }
 
@@ -6407,14 +6488,26 @@ mod tests {
             TypeTable::BOOL,
             synth_span(),
         );
-        let stmts = synthesize_lower(&named_type("bool"), value, i32_const(100), &mut 0, &mut vec![]);
+        let stmts = synthesize_lower(
+            &named_type("bool"),
+            value,
+            i32_const(100),
+            &mut 0,
+            &mut vec![],
+        );
         assert_eq!(stmts.len(), 1);
     }
 
     #[test]
     fn lower_unit() {
         let value = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span());
-        let stmts = synthesize_lower(&Type::Tuple(vec![]), value, i32_const(100), &mut 0, &mut vec![]);
+        let stmts = synthesize_lower(
+            &Type::Tuple(vec![]),
+            value,
+            i32_const(100),
+            &mut 0,
+            &mut vec![],
+        );
         assert!(stmts.is_empty());
     }
 
