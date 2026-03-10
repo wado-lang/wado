@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773097378234,
+  "lastUpdate": 1773138446720,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2129,6 +2129,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/63d7d114e83676746963721c4e268f5983de8300"
         },
         "date": 1773097378153,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2400,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10319,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19848,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1914755448653aff2b880b398f6d022dee740e1a",
+          "message": "Merge pull request #552 from wado-lang/claude/remove-type-assertions-AhCud\n\nImprove numeric literal type coercion in builtin function calls",
+          "timestamp": "2026-03-10T19:24:59+09:00",
+          "tree_id": "44eb186579cc672908111fe55a0a14e2ed5da911",
+          "url": "https://github.com/wado-lang/wado/commit/1914755448653aff2b880b398f6d022dee740e1a"
+        },
+        "date": 1773138446503,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
