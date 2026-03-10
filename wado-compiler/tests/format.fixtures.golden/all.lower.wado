@@ -1453,6 +1453,14 @@ pub fn "Array<u8>::with_capacity"(capacity: i32) -> Array<u8> {
 
 
 // --- Module: core:internal ---
+pub struct "Box<f64>" {
+    value: f64,
+}
+
+pub struct "Box<f32>" {
+    value: f32,
+}
+
 pub struct "Box<bool>" {
     value: bool,
 }
@@ -1491,14 +1499,6 @@ pub struct "Box<i64>" {
 
 pub struct "Box<u64>" {
     value: u64,
-}
-
-pub struct "Box<f32>" {
-    value: f32,
-}
-
-pub struct "Box<f64>" {
-    value: f64,
 }
 
 pub struct "Box<Option<T>>" {
@@ -2363,7 +2363,7 @@ pub fn log2_pow10(x: i32) -> i32 {
 }
 
 pub fn unpack64(f: f64) -> UnpackResult {
-    let bits: u64 = core::builtin::i64_reinterpret_f64(f) as u64;
+    let bits: u64 = Box<f64> { value: f }.f64::to_bits() as u64;
     let mantissa_mask: u64 = 0x000FFFFFFFFFFFFF;
     let exp_mask: u64 = 0x7FF;
     let shift: i32 = (64 - 53);
@@ -2386,7 +2386,7 @@ pub fn unpack64(f: f64) -> UnpackResult {
 }
 
 pub fn unpack32(f: f32) -> UnpackResult {
-    let bits: u32 = core::builtin::i32_reinterpret_f32(f) as u32;
+    let bits: u32 = Box<f32> { value: f }.f32::to_bits() as u32;
     let mantissa_mask: u32 = 0x007FFFFF;
     let exp_mask: u32 = 0xFF;
     let shift: i32 = (64 - 24);
@@ -3162,7 +3162,7 @@ pub fn format_exp_prec(d: u64, p: i32, nd: i32, precision: i32, upper: bool) -> 
 }
 
 pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
-    let bits: i64 = core::builtin::i64_reinterpret_f64(f);
+    let bits: i64 = Box<f64> { value: f }.f64::to_bits();
     if (bits == 0) {
         return [true, false, SpecialKind::Zero];
     }
@@ -3184,11 +3184,11 @@ pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
 fn pack64(m: u64, e: i32) -> f64 {
     let bit52: u64 = (1 as u64 << 52);
     if ((m & bit52) == 0) {
-        return core::builtin::f64_reinterpret_i64(m as i64);
+        return "core::prelude/primitive.wado::f64::from_bits"(m as i64);
     }
     let mantissa_bits: u64 = (m & ~bit52);
     let exp_bits: u64 = ((1075 + e) as u64 << 52);
-    return core::builtin::f64_reinterpret_i64((mantissa_bits | exp_bits) as i64);
+    return "core::prelude/primitive.wado::f64::from_bits"((mantissa_bits | exp_bits) as i64);
 }
 
 pub fn parse(d: u64, p: i32) -> f64 {
