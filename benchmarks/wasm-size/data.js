@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773147480421,
+  "lastUpdate": 1773150721689,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2207,6 +2207,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/68776a276a1f71df244c750f5aa2d4536ed73747"
         },
         "date": 1773147480259,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2400,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10319,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19848,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0288ce2114c5e98da0fad9f15dff5800e3d78ff4",
+          "message": "Merge pull request #555 from wado-lang/claude/update-wasmtime-Xx9qi\n\nUpgrade Rust toolchain to 1.94 and update WASI dependencies",
+          "timestamp": "2026-03-10T22:45:54+09:00",
+          "tree_id": "c2009570bd503f91433f2cb335858274686db227",
+          "url": "https://github.com/wado-lang/wado/commit/0288ce2114c5e98da0fad9f15dff5800e3d78ff4"
+        },
+        "date": 1773150721468,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
