@@ -154,7 +154,7 @@ impl Serializer for NsdSerializer {
     }
 
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
-        if v > 9007199254740991 as i64 || v < -9007199254740991 as i64 {
+        if v > 9007199254740991 || v < -9007199254740991 {
             self.buf.append(`"{v}"`);
         } else {
             self.buf.append(`{v}`);
@@ -168,7 +168,7 @@ impl Serializer for NsdSerializer {
     }
 
     fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
-        if v > 9007199254740991 as u64 {
+        if v > 9007199254740991 {
             self.buf.append(`"{v}"`);
         } else {
             self.buf.append(`{v}`);
@@ -419,7 +419,7 @@ impl DeserializeVariant for NsdVariantAccess {
         return Result::<String, DeserializeError>::Err(DeserializeError {
             kind: DeserializeErrorKind::Custom,
             message: "NSD does not encode variant names",
-            offset: -1 as i64,
+            offset: -1,
         });
     }
 

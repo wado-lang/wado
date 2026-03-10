@@ -377,38 +377,38 @@ test "parse roundtrip via short" {
 }
 
 test "unpack32 zero" {
-    let r = unpack32(0.0 as f32);
+    let r = unpack32(0.0);
     assert r.mantissa == 0;
     assert r.exponent == 0;
 }
 
 test "unpack32 one" {
-    let r = unpack32(1.0 as f32);
+    let r = unpack32(1.0);
     assert r.mantissa & 0x8000000000000000 != 0;
 }
 
 test "short32 integers" {
-    let r1 = short32(1.0 as f32);
+    let r1 = short32(1.0);
     assert r1.digits == 1;
     assert r1.exponent == 0;
 
-    let r42 = short32(42.0 as f32);
+    let r42 = short32(42.0);
     assert r42.digits == 42;
     assert r42.exponent == 0;
 }
 
 test "short32 fractions" {
-    let r = short32(3.14 as f32);
+    let r = short32(3.14);
     assert r.digits == 314;
     assert r.exponent == -2;
 
-    let r5 = short32(0.5 as f32);
+    let r5 = short32(0.5);
     assert r5.digits == 5;
     assert r5.exponent == -1;
 }
 
 test "short32 pi" {
-    let pi: f32 = 3.14159265 as f32;
+    let pi: f32 = 3.14159265;
     let r = short32(pi);
     assert r.digits > 0;
     // f32 has at most 9 significant digits
@@ -417,7 +417,7 @@ test "short32 pi" {
 
 test "short32 roundtrip" {
     // Verify parse(short32(f).digits, short32(f).exponent) as f32 == f
-    let values: Array<f32> = [1.0 as f32, 2.5 as f32, 3.14 as f32, 0.1 as f32, 100.0 as f32];
+    let values: Array<f32> = [1.0, 2.5, 3.14, 0.1, 100.0];
     for let v of values {
         let r = short32(v);
         let reconstructed = parse(r.digits, r.exponent) as f32;

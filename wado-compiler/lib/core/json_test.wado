@@ -25,13 +25,13 @@ test "serialize negative i32" {
 }
 
 test "serialize i64" {
-    let n = 1000000000000 as i64;
+    let n: i64 = 1000000000000;
     let r = to_string::<i64>(&n);
     assert r matches { Ok(s) && s == "1000000000000" };
 }
 
 test "serialize u32" {
-    let n = 255 as u32;
+    let n: u32 = 255;
     let r = to_string::<u32>(&n);
     assert r matches { Ok(s) && s == "255" };
 }
@@ -135,12 +135,12 @@ test "deserialize i32 with whitespace" {
 
 test "deserialize i64" {
     let r = from_string::<i64>("1000000000000");
-    assert r matches { Ok(v) && v == 1000000000000 as i64 };
+    assert r matches { Ok(v) && v == 1000000000000 };
 }
 
 test "deserialize u32" {
     let r = from_string::<u32>("255");
-    assert r matches { Ok(v) && v == 255 as u32 };
+    assert r matches { Ok(v) && v == 255 };
 }
 
 test "deserialize f64" {

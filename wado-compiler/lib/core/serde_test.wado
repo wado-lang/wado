@@ -222,10 +222,10 @@ test "error type construction" {
 
     let de = DeserializeError::missing_field("name");
     assert de.message == "name";
-    assert de.offset == -1 as i64;
+    assert de.offset == -1;
 
-    let de2 = DeserializeError::malformed("bad json", 10 as i64);
-    assert de2.offset == 10 as i64;
+    let de2 = DeserializeError::malformed("bad json", 10);
+    assert de2.offset == 10;
 }
 
 test "serialize i32" {
@@ -239,17 +239,17 @@ test "serialize negative i32" {
 }
 
 test "serialize i64" {
-    let n = 1000000000000 as i64;
+    let n: i64 = 1000000000000;
     assert mock_serialize::<i64>(&n) == "1000000000000";
 }
 
 test "serialize u32" {
-    let n = 100 as u32;
+    let n: u32 = 100;
     assert mock_serialize::<u32>(&n) == "100";
 }
 
 test "serialize u64" {
-    let n = 42 as u64;
+    let n: u64 = 42;
     assert mock_serialize::<u64>(&n) == "42";
 }
 
