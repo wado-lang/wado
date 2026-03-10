@@ -380,47 +380,74 @@ async fn run_http_request_async(
 
     let timeout_duration = Duration::from_secs(1);
 
-    // Run handler and request body I/O concurrently inside run_concurrent.
-    // The io future must be driven alongside the handler so that the guest
-    // can read the request body stream via Request::consume_body().
-    // Use select! so that when the handler finishes, io is dropped (the guest
-    // may not consume the body at all).
-    let handler_result = tokio::time::timeout(timeout_duration, async {
-        store
-            .run_concurrent(async |store| {
-                use std::pin::pin;
-                let handler = pin!(async {
-                    let (res, task) = match service.handle(store, req).await? {
-                        Ok(pair) => pair,
-                        Err(err) => return anyhow::Ok(Err(Some(err))),
-                    };
-                    let _ = tx.send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
-                    task.block(store).await;
-                    Ok(Ok(()))
-                });
-                let io = pin!(async {
-                    io.await
-                        .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
-                });
-                // Drive both; when handler completes, drop io
-                tokio::select! {
-                    result = handler => result,
-                    result = io => result.map(|()| Ok(())),
+    // Run handler + request body I/O inside run_concurrent, while collecting
+    // the response body **outside** run_concurrent.  This follows the pattern
+    // used by wasmtime's own HTTP tests (see vendor/wasmtime/crates/wasi-http/
+    // tests/all/p3/mod.rs).  Body collection must happen concurrently with the
+    // handler so that streaming writes (body_tx.write) are drained as the
+    // handler produces them; otherwise the handler blocks on a full channel.
+    // Run handler + request body I/O inside run_concurrent, while collecting
+    // the response body **outside** run_concurrent via try_join!.  This follows
+    // wasmtime's own HTTP test pattern (vendor/wasmtime/crates/wasi-http/tests/
+    // all/p3/mod.rs).  Body collection must happen concurrently with the handler
+    // so that streaming writes (body_tx.write) are drained as the handler
+    // produces them; otherwise the handler blocks on a full channel.
+    //
+    // The inner join uses select! (not try_join!) because the guest may not
+    // consume the request body — when the handler completes, io is dropped.
+    let (handle_result, res) = tokio::time::timeout(timeout_duration, async {
+        tokio::try_join!(
+            async move {
+                store
+                    .run_concurrent(async |store| {
+                        use std::pin::pin;
+                        let handler = pin!(async {
+                            let (res, task) = match service.handle(store, req).await? {
+                                Ok(pair) => pair,
+                                Err(err) => return anyhow::Ok(Err(Some(err))),
+                            };
+                            let _ = tx
+                                .send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
+                            task.block(store).await;
+                            Ok(Ok(()))
+                        });
+                        let io = pin!(async {
+                            io.await
+                                .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
+                        });
+                        tokio::select! {
+                            result = handler => result,
+                            result = io => result.map(|()| Ok(())),
+                        }
+                    })
+                    .await?
+            },
+            async move {
+                // rx may be closed if the handler returned an error without
+                // sending a response — that is not a fatal error here.
+                match rx.await {
+                    Ok(res) => {
+                        let (parts, body) = res.into_parts();
+                        let body = body
+                            .collect()
+                            .await
+                            .map_err(|e| anyhow::anyhow!("failed to collect body: {e}"))?;
+                        anyhow::Ok(Some(http::Response::from_parts(parts, body)))
+                    }
+                    Err(_) => Ok(None),
                 }
-            })
-            .await?
+            }
+        )
     })
     .await
     .map_err(|_| anyhow::anyhow!("HTTP handler timed out after {timeout_duration:?}"))??;
 
-    match handler_result {
+    match handle_result {
         Ok(()) => {
-            let res = rx
-                .await
-                .map_err(|_| anyhow::anyhow!("response channel closed unexpectedly"))?;
+            let res = res.ok_or_else(|| anyhow::anyhow!("handler succeeded but no response"))?;
             let status = res.status().as_u16();
             let headers = res.headers().clone();
-            let body = res.into_body().collect().await?.to_bytes().to_vec();
+            let body = res.into_body().to_bytes().to_vec();
             Ok(HttpTestResult {
                 status,
                 headers,
