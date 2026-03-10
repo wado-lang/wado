@@ -60,7 +60,6 @@ pub enum ProfileMode {
 #[must_use]
 pub fn create_config(opt_level: OptLevel, profile: &ProfileMode) -> Config {
     let mut config = Config::new();
-    config.async_support(true);
     config.wasm_component_model(true);
     config.wasm_component_model_gc(true);
     config.wasm_component_model_async(true);
@@ -97,7 +96,7 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode) -> Config {
 ///
 /// Returns an error if the engine cannot be created with the given configuration.
 pub fn create_engine(opt_level: OptLevel, profile: &ProfileMode) -> Result<Engine> {
-    Engine::new(&create_config(opt_level, profile))
+    Ok(Engine::new(&create_config(opt_level, profile))?)
 }
 
 /// Create a Store with WASI state, preopened directories, and program arguments.
