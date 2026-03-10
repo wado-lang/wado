@@ -1,29 +1,6 @@
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
-    // Test i32_clz
-    let clz32_1 = builtin::i32_clz(0);
-    println(`i32_clz(0) = {clz32_1}`);  // 32
-
-    let clz32_2 = builtin::i32_clz(1);
-    println(`i32_clz(1) = {clz32_2}`);  // 31
-
-    let clz32_3 = builtin::i32_clz(0x80000000 as i32);
-    println(`i32_clz(0x80000000) = {clz32_3}`);  // 0
-
-    let clz32_4 = builtin::i32_clz(0x00010000 as i32);
-    println(`i32_clz(0x00010000) = {clz32_4}`);  // 15
-
-    // Test i64_clz
-    let clz64_1 = builtin::i64_clz(0 as i64);
-    println(`i64_clz(0) = {clz64_1}`);  // 64
-
-    let clz64_2 = builtin::i64_clz(1 as i64);
-    println(`i64_clz(1) = {clz64_2}`);  // 63
-
-    let clz64_3 = builtin::i64_clz(0x8000000000000000 as i64);
-    println(`i64_clz(0x8000000000000000) = {clz64_3}`);  // 0
-
     // Test f64 <-> i64 reinterpret
     let pi = 3.141592653589793;
     let pi_bits = builtin::i64_reinterpret_f64(pi);
@@ -52,4 +29,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"stdout": "i32_clz(0) = 32\ni32_clz(1) = 31\ni32_clz(0x80000000) = 0\ni32_clz(0x00010000) = 15\ni64_clz(0) = 64\ni64_clz(1) = 63\ni64_clz(0x8000000000000000) = 0\nf64 pi bits = 4614256656552045848\nback to pi = 3.141592653589793\nf64 0.0 bits = 0\nf64 -0.0 bits = -9223372036854775808\nf32 pi bits = 1078530011\nback to f32 pi = 3.1415927\nf32 0.0 bits = 0\n"}
+{"stdout": "f64 pi bits = 4614256656552045848\nback to pi = 3.141592653589793\nf64 0.0 bits = 0\nf64 -0.0 bits = -9223372036854775808\nf32 pi bits = 1078530011\nback to f32 pi = 3.1415927\nf32 0.0 bits = 0\n"}

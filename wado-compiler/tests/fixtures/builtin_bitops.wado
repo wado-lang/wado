@@ -1,0 +1,44 @@
+test "i32::clz" {
+    assert i32::clz(0) == 32;
+    assert i32::clz(1) == 31;
+    assert i32::clz(0xFF) == 24;
+    assert i32::clz(-1) == 0;
+    assert i32::clz(0x80000000 as i32) == 0;
+    assert i32::clz(0x00010000 as i32) == 15;
+}
+
+test "i32::ctz" {
+    assert i32::ctz(1) == 0;
+    assert i32::ctz(8) == 3;
+    assert i32::ctz(0) == 32;
+    assert i32::ctz(0x80000000 as i32) == 31;
+}
+
+test "i32::popcnt" {
+    assert i32::popcnt(0) == 0;
+    assert i32::popcnt(1) == 1;
+    assert i32::popcnt(0xFF) == 8;
+    assert i32::popcnt(-1) == 32;
+}
+
+test "i64::clz" {
+    assert i64::clz(0 as i64) == 64;
+    assert i64::clz(1 as i64) == 63;
+    assert i64::clz(0x8000000000000000 as i64) == 0;
+}
+
+test "i64::ctz" {
+    assert i64::ctz(1 as i64) == 0;
+    assert i64::ctz(0 as i64) == 64;
+    assert i64::ctz(0x8000000000000000 as i64) == 63;
+}
+
+test "i64::popcnt" {
+    assert i64::popcnt(0 as i64) == 0;
+    assert i64::popcnt(1 as i64) == 1;
+    assert i64::popcnt(-1 as i64) == 64;
+    assert i64::popcnt(0xFF as i64) == 8;
+}
+
+__DATA__
+{"test": {}}
