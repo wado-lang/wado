@@ -839,10 +839,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 None
                             });
                             if let Some(params) = params {
-                                return params
-                                    .iter()
-                                    .map(|p| self.resolve_type(&p.ty))
-                                    .collect();
+                                return params.iter().map(|p| self.resolve_type(&p.ty)).collect();
                             }
                         }
                     }
