@@ -1454,6 +1454,18 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
 ##### `pub fn min(a: i32, b: i32) -> i32`
 
+##### `pub fn clz(x: i32) -> i32`
+
+Counts the leading zeros in this integer.
+
+##### `pub fn ctz(x: i32) -> i32`
+
+Counts the trailing zeros in this integer.
+
+##### `pub fn popcnt(x: i32) -> i32`
+
+Counts the number of set bits (population count).
+
 ##### `pub fn to_string(&self) -> String`
 
 ##### `impl Display for i32`

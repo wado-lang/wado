@@ -894,6 +894,9 @@ impl i32 {
     pub const MIN: i32;
     pub fn max(a: i32, b: i32) -> i32;
     pub fn min(a: i32, b: i32) -> i32;
+    pub fn clz(x: i32) -> i32;
+    pub fn ctz(x: i32) -> i32;
+    pub fn popcnt(x: i32) -> i32;
     pub fn to_string(&self) -> String;
 }
 

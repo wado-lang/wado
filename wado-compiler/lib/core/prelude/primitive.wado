@@ -368,6 +368,21 @@ impl i32 {
         return builtin::select::<i32>(a < b, a, b);
     }
 
+    /// Counts the leading zeros in this integer.
+    pub fn clz(x: i32) -> i32 {
+        return builtin::i32_clz(x);
+    }
+
+    /// Counts the trailing zeros in this integer.
+    pub fn ctz(x: i32) -> i32 {
+        return builtin::i32_ctz(x);
+    }
+
+    /// Counts the number of set bits (population count).
+    pub fn popcnt(x: i32) -> i32 {
+        return builtin::i32_popcnt(x);
+    }
+
     fn fmt_decimal(&self, f: &mut Formatter) {
         let is_negative = *self < 0;
         let abs_val: i64 = if is_negative { 0 - *self as i64 } else { *self as i64 };

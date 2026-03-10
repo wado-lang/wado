@@ -1,0 +1,50 @@
+use { println, Stdout } from "core:cli";
+use { u8x16 } from "core:simd";
+
+export fn run() with Stdout {
+    // Test u8x16::from_string - load 16 bytes
+    let s = "ABCDEFGHIJKLMNOP";
+    let v = u8x16::from_string(&s, 0);
+    assert v.extract_lane(0) == 'A' as i32;
+    assert v.extract_lane(15) == 'P' as i32;
+
+    // Test with offset
+    let s2 = "____ABCDEFGHIJKLMNOP";
+    let v2 = u8x16::from_string(&s2, 4);
+    assert v2.extract_lane(0) == 'A' as i32;
+    assert v2.extract_lane(15) == 'P' as i32;
+
+    // Test store_to_string
+    let lower_a = u8x16::splat('a' as i32);
+    let mut result = String::with_capacity(16);
+    lower_a.store_to_string(&mut result);
+    assert result.len() == 16;
+    assert result.get_byte(0) == 'a' as u8;
+    assert result.get_byte(15) == 'a' as u8;
+
+    // Test roundtrip: load → transform → store
+    let input = "HELLO, WORLD!!!!";
+    let chunk = u8x16::from_string(&input, 0);
+    let upper_a = u8x16::splat('A' as i32);
+    let upper_z = u8x16::splat('Z' as i32);
+    let case_bit = u8x16::splat(0x20);
+    let is_upper = chunk.ge(&upper_a) & chunk.le(&upper_z);
+    let lowered = chunk + (case_bit & is_upper);
+    let mut out = String::with_capacity(16);
+    lowered.store_to_string(&mut out);
+    assert out == "hello, world!!!!";
+
+    // Test bitmask + popcnt for counting
+    let data = "a1b2c3d4e5f6g7h8";
+    let dv = u8x16::from_string(&data, 0);
+    let zero = u8x16::splat('0' as i32);
+    let nine = u8x16::splat('9' as i32);
+    let is_digit = dv.ge(&zero) & dv.le(&nine);
+    let digit_count = i32::popcnt(is_digit.bitmask());
+    assert digit_count == 8;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

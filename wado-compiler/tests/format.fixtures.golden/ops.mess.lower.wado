@@ -311,7 +311,15 @@ fn i64_mul_wide_s(a: i64, b: i64) -> [i64, i64];
 
 fn i32_clz(x: i32) -> i32;
 
+fn i32_ctz(x: i32) -> i32;
+
+fn i32_popcnt(x: i32) -> i32;
+
 fn i64_clz(x: i64) -> i64;
+
+fn i64_ctz(x: i64) -> i64;
+
+fn i64_popcnt(x: i64) -> i64;
 
 fn i64_reinterpret_f64(f: f64) -> i64;
 
@@ -4062,6 +4070,18 @@ pub fn i32::max(a: i32, b: i32) -> i32 {
 
 pub fn i32::min(a: i32, b: i32) -> i32 {
     return "core::prelude/primitive.wado::select<i32>"((a < b), a, b);
+}
+
+pub fn i32::clz(x: i32) -> i32 {
+    return core::builtin::i32_clz(x);
+}
+
+pub fn i32::ctz(x: i32) -> i32 {
+    return core::builtin::i32_ctz(x);
+}
+
+pub fn i32::popcnt(x: i32) -> i32 {
+    return core::builtin::i32_popcnt(x);
 }
 
 fn i32::fmt_decimal(self: Box<i32>, f: &mut Formatter) {
