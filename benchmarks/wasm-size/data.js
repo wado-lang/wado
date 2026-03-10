@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773138446720,
+  "lastUpdate": 1773147480421,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2168,6 +2168,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1914755448653aff2b880b398f6d022dee740e1a"
         },
         "date": 1773138446503,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2400,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10319,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19848,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "68776a276a1f71df244c750f5aa2d4536ed73747",
+          "message": "Merge pull request #553 from wado-lang/claude/add-e2e-tests-UVmh4\n\nFix list lowering and add HTTP test fixtures",
+          "timestamp": "2026-03-10T21:55:27+09:00",
+          "tree_id": "614e9111227562004da57798d15a88032dbe74d9",
+          "url": "https://github.com/wado-lang/wado/commit/68776a276a1f71df244c750f5aa2d4536ed73747"
+        },
+        "date": 1773147480259,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
