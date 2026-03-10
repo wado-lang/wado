@@ -11,11 +11,6 @@
 use { short, digits, check_special, SpecialKind, parse_text } from "./fpfmt.wado";
 use { println, Stdout } from "core:cli";
 
-// Helper to construct f64 from bits
-fn f64_from_bits(bits: i64) -> f64 {
-    return builtin::f64_reinterpret_i64(bits);
-}
-
 // format_exp with '+' sign and zero-padded exponent (matching Go %e style)
 fn format_exp_padded(d: u64, p: i32, nd: i32) -> String {
     let mut buf = String::with_capacity(30);
@@ -100,7 +95,7 @@ fn run_batch(bits: &Array<i64>, expected: &Array<String>, batch_name: String) ->
     let n = bits.len();
 
     for let mut i = 0; i < n; i += 1 {
-        let f = f64_from_bits(bits[i]);
+        let f = f64::from_bits(bits[i]);
         let actual = f64_to_string_exp(f, false);
         let exp = expected[i];
 

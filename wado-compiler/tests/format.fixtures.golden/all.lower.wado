@@ -403,7 +403,15 @@ fn i64_mul_wide_s(a: i64, b: i64) -> [i64, i64];
 
 fn i32_clz(x: i32) -> i32;
 
+fn i32_ctz(x: i32) -> i32;
+
+fn i32_popcnt(x: i32) -> i32;
+
 fn i64_clz(x: i64) -> i64;
+
+fn i64_ctz(x: i64) -> i64;
+
+fn i64_popcnt(x: i64) -> i64;
 
 fn i64_reinterpret_f64(f: f64) -> i64;
 
@@ -5017,6 +5025,18 @@ pub fn i32::min(a: i32, b: i32) -> i32 {
     return "core::prelude/primitive.wado::select<i32>"((a < b), a, b);
 }
 
+pub fn i32::clz(x: i32) -> i32 {
+    return core::builtin::i32_clz(x);
+}
+
+pub fn i32::ctz(x: i32) -> i32 {
+    return core::builtin::i32_ctz(x);
+}
+
+pub fn i32::popcnt(x: i32) -> i32 {
+    return core::builtin::i32_popcnt(x);
+}
+
 fn i32::fmt_decimal(self: Box<i32>, f: &mut Formatter) {
     let is_negative: bool = (self.value < 0);
     let abs_val: i64 = if is_negative {
@@ -5077,6 +5097,18 @@ pub fn i64::max(a: i64, b: i64) -> i64 {
 
 pub fn i64::min(a: i64, b: i64) -> i64 {
     return "core::prelude/primitive.wado::select<i64>"((a < b), a, b);
+}
+
+pub fn i64::clz(x: i64) -> i64 {
+    return core::builtin::i64_clz(x);
+}
+
+pub fn i64::ctz(x: i64) -> i64 {
+    return core::builtin::i64_ctz(x);
+}
+
+pub fn i64::popcnt(x: i64) -> i64 {
+    return core::builtin::i64_popcnt(x);
 }
 
 fn i64::fmt_decimal(self: Box<i64>, f: &mut Formatter) {
@@ -5521,6 +5553,14 @@ pub fn f32::parse(s: String) -> Option<f32> {
     return null;
 }
 
+pub fn f32::to_bits(self: Box<f32>) -> i32 {
+    return core::builtin::i32_reinterpret_f32(self.value);
+}
+
+pub fn f32::from_bits(bits: i32) -> f32 {
+    return core::builtin::f32_reinterpret_i32(bits);
+}
+
 fn f64::fmt_into(self: Box<f64>, f: &mut Formatter) {
     if (f.precision >= 0) {
         self.f64::fmt_fixed(f.precision, f);
@@ -5847,6 +5887,14 @@ pub fn f64::is_finite(self: Box<f64>) -> bool {
 
 pub fn f64::parse(s: String) -> Option<f64> {
     return "core::prelude/fpfmt.wado::parse_text"(s);
+}
+
+pub fn f64::to_bits(self: Box<f64>) -> i64 {
+    return core::builtin::i64_reinterpret_f64(self.value);
+}
+
+pub fn f64::from_bits(bits: i64) -> f64 {
+    return core::builtin::f64_reinterpret_i64(bits);
 }
 
 pub fn "bool^Display::fmt"(self: Box<bool>, f: &mut Formatter) {

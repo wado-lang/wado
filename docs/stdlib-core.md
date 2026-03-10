@@ -1454,6 +1454,18 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
 ##### `pub fn min(a: i32, b: i32) -> i32`
 
+##### `pub fn clz(x: i32) -> i32`
+
+Counts the leading zeros in this integer.
+
+##### `pub fn ctz(x: i32) -> i32`
+
+Counts the trailing zeros in this integer.
+
+##### `pub fn popcnt(x: i32) -> i32`
+
+Counts the number of set bits (population count).
+
 ##### `pub fn to_string(&self) -> String`
 
 ##### `impl Display for i32`
@@ -1541,6 +1553,18 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 ##### `pub fn max(a: i64, b: i64) -> i64`
 
 ##### `pub fn min(a: i64, b: i64) -> i64`
+
+##### `pub fn clz(x: i64) -> i64`
+
+Counts the leading zeros in this integer.
+
+##### `pub fn ctz(x: i64) -> i64`
+
+Counts the trailing zeros in this integer.
+
+##### `pub fn popcnt(x: i64) -> i64`
+
+Counts the number of set bits (population count).
 
 ##### `pub fn to_string(&self) -> String`
 
@@ -1790,6 +1814,14 @@ Floating-point remainder of x/y
 
 ##### `pub fn parse(s: String) -> Option<f32>`
 
+##### `pub fn to_bits(&self) -> i32`
+
+Reinterprets the bits of this f32 as an i32.
+
+##### `pub fn from_bits(bits: i32) -> f32`
+
+Creates an f32 from its bit representation.
+
 ##### `impl Display for f32`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1983,6 +2015,14 @@ Floating-point remainder of x/y
 ##### `pub fn is_finite(&self) -> bool`
 
 ##### `pub fn parse(s: String) -> Option<f64>`
+
+##### `pub fn to_bits(&self) -> i64`
+
+Reinterprets the bits of this f64 as an i64.
+
+##### `pub fn from_bits(bits: i64) -> f64`
+
+Creates an f64 from its bit representation.
 
 ##### `impl Display for f64`
 

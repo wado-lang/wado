@@ -256,3 +256,72 @@ test "f64::NAN and f32::NAN" {
     let nan32 = f32::NAN;
     assert !(nan32 == nan32);
 }
+
+test "i32::clz" {
+    assert i32::clz(0) == 32;
+    assert i32::clz(1) == 31;
+    assert i32::clz(0xFF) == 24;
+    assert i32::clz(-1) == 0;
+    assert i32::clz(0x80000000 as i32) == 0;
+    assert i32::clz(0x00010000) == 15;
+}
+
+test "i32::ctz" {
+    assert i32::ctz(1) == 0;
+    assert i32::ctz(8) == 3;
+    assert i32::ctz(0) == 32;
+    assert i32::ctz(0x80000000 as i32) == 31;
+}
+
+test "i32::popcnt" {
+    assert i32::popcnt(0) == 0;
+    assert i32::popcnt(1) == 1;
+    assert i32::popcnt(0xFF) == 8;
+    assert i32::popcnt(-1) == 32;
+}
+
+test "i64::clz" {
+    assert i64::clz(0) == 64;
+    assert i64::clz(1) == 63;
+    assert i64::clz(0x8000000000000000 as i64) == 0;
+}
+
+test "i64::ctz" {
+    assert i64::ctz(1) == 0;
+    assert i64::ctz(0) == 64;
+    assert i64::ctz(0x8000000000000000 as i64) == 63;
+}
+
+test "i64::popcnt" {
+    assert i64::popcnt(0) == 0;
+    assert i64::popcnt(1) == 1;
+    assert i64::popcnt(-1) == 64;
+    assert i64::popcnt(0xFF) == 8;
+}
+
+test "f64::to_bits and f64::from_bits" {
+    let pi = 3.141592653589793;
+    let pi_bits = pi.to_bits();
+    assert pi_bits == 4614256656552045848;
+
+    let back_to_pi = f64::from_bits(pi_bits);
+    assert back_to_pi == 3.141592653589793;
+
+    let zero_bits = (0.0).to_bits();
+    assert zero_bits == 0;
+
+    let neg_zero_bits = (-0.0).to_bits();
+    assert neg_zero_bits == -9223372036854775808;
+}
+
+test "f32::to_bits and f32::from_bits" {
+    let pi32 = 3.14159265 as f32;
+    let pi32_bits = pi32.to_bits();
+    assert pi32_bits == 1078530011;
+
+    let back_to_pi32 = f32::from_bits(pi32_bits);
+    assert back_to_pi32 == pi32;
+
+    let zero32_bits = (0.0 as f32).to_bits();
+    assert zero32_bits == 0;
+}

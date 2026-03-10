@@ -7,28 +7,6 @@
 use { println, Stdout } from "core:cli";
 use { u8x16 } from "core:simd";
 
-// Helper: Load 16 bytes from a String into u8x16
-fn load_chunk(s: String, offset: i32) -> u8x16 {
-    let b0 = s.get_byte(offset) as i32;
-    let b1 = s.get_byte(offset + 1) as i32;
-    let b2 = s.get_byte(offset + 2) as i32;
-    let b3 = s.get_byte(offset + 3) as i32;
-    let b4 = s.get_byte(offset + 4) as i32;
-    let b5 = s.get_byte(offset + 5) as i32;
-    let b6 = s.get_byte(offset + 6) as i32;
-    let b7 = s.get_byte(offset + 7) as i32;
-    let b8 = s.get_byte(offset + 8) as i32;
-    let b9 = s.get_byte(offset + 9) as i32;
-    let b10 = s.get_byte(offset + 10) as i32;
-    let b11 = s.get_byte(offset + 11) as i32;
-    let b12 = s.get_byte(offset + 12) as i32;
-    let b13 = s.get_byte(offset + 13) as i32;
-    let b14 = s.get_byte(offset + 14) as i32;
-    let b15 = s.get_byte(offset + 15) as i32;
-    let v: u8x16 = [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15];
-    return v;
-}
-
 // Convert ASCII uppercase letters to lowercase, 16 bytes at a time.
 // Non-letter bytes pass through unchanged.
 fn to_lowercase_simd(input: String) -> String {
@@ -41,7 +19,7 @@ fn to_lowercase_simd(input: String) -> String {
 
     let mut i = 0;
     while i + 16 <= len {
-        let chunk = load_chunk(input, i);
+        let chunk = u8x16::from_string(&input, i);
 
         // Build mask: bytes >= 'A' && bytes <= 'Z'
         let ge_a = chunk.ge(&upper_a);
@@ -53,14 +31,7 @@ fn to_lowercase_simd(input: String) -> String {
         let lowered = chunk + delta;
 
         // Append 16 bytes to result
-        let mut lane = 0;
-        while lane < 16 {
-            let c = char::from_i32(lowered.extract_lane(lane));
-            if let Some(ch) = c {
-                result.append_char(ch);
-            }
-            lane = lane + 1;
-        }
+        lowered.store_to_string(&mut result);
         i = i + 16;
     }
 
@@ -68,15 +39,9 @@ fn to_lowercase_simd(input: String) -> String {
     while i < len {
         let b = input.get_byte(i);
         if b >= 'A' as u8 && b <= 'Z' as u8 {
-            let lower = char::from_i32((b + 0x20 as u8) as i32);
-            if let Some(ch) = lower {
-                result.append_char(ch);
-            }
+            result.append_char(char::from_u32_unchecked((b + 0x20 as u8) as u32));
         } else {
-            let ch_opt = char::from_i32(b as i32);
-            if let Some(ch) = ch_opt {
-                result.append_char(ch);
-            }
+            result.append_char(char::from_u32_unchecked(b as u32));
         }
         i = i + 1;
     }
@@ -85,7 +50,7 @@ fn to_lowercase_simd(input: String) -> String {
 }
 
 // Count occurrences of a specific ASCII byte in a string using SIMD.
-// Useful for counting newlines, spaces, or any delimiter.
+// Uses bitmask + popcount instead of lane-by-lane extraction.
 fn count_byte_simd(input: String, target: u8) -> i32 {
     let len = input.len();
     let mut count = 0;
@@ -94,17 +59,11 @@ fn count_byte_simd(input: String, target: u8) -> i32 {
 
     let mut i = 0;
     while i + 16 <= len {
-        let chunk = load_chunk(input, i);
+        let chunk = u8x16::from_string(&input, i);
         let mask = chunk.eq(&target_vec);
 
-        // Count matching lanes (each match byte is 0xFF)
-        let mut lane = 0;
-        while lane < 16 {
-            if mask.extract_lane(lane) != 0 {
-                count = count + 1;
-            }
-            lane = lane + 1;
-        }
+        // bitmask: one bit per lane (high bit), then popcount to count matches
+        count = count + i32::popcnt(mask.bitmask());
         i = i + 16;
     }
 
@@ -120,6 +79,7 @@ fn count_byte_simd(input: String, target: u8) -> i32 {
 }
 
 // Check if a string contains only ASCII printable characters (0x20..0x7E)
+// Uses all_true instead of lane-by-lane checking.
 fn is_ascii_printable_simd(input: String) -> bool {
     let len = input.len();
 
@@ -128,19 +88,15 @@ fn is_ascii_printable_simd(input: String) -> bool {
 
     let mut i = 0;
     while i + 16 <= len {
-        let chunk = load_chunk(input, i);
+        let chunk = u8x16::from_string(&input, i);
 
         let ge_lo = chunk.ge(&lo);
         let le_hi = chunk.le(&hi);
         let in_range = ge_lo & le_hi;
 
-        // Check if any lane is NOT in range
-        let mut lane = 0;
-        while lane < 16 {
-            if in_range.extract_lane(lane) == 0 {
-                return false;
-            }
-            lane = lane + 1;
+        // all_true: single instruction to check all 16 lanes
+        if !in_range.all_true() {
+            return false;
         }
         i = i + 16;
     }
@@ -156,7 +112,8 @@ fn is_ascii_printable_simd(input: String) -> bool {
     return true;
 }
 
-// Count ASCII digits in a string using SIMD
+// Count ASCII digits in a string using SIMD.
+// Uses bitmask + popcount for efficient counting.
 fn count_digits_simd(input: String) -> i32 {
     let len = input.len();
     let mut count = 0;
@@ -166,19 +123,14 @@ fn count_digits_simd(input: String) -> i32 {
 
     let mut i = 0;
     while i + 16 <= len {
-        let chunk = load_chunk(input, i);
+        let chunk = u8x16::from_string(&input, i);
 
         let ge_0 = chunk.ge(&zero);
         let le_9 = chunk.le(&nine);
         let is_digit = ge_0 & le_9;
 
-        let mut lane = 0;
-        while lane < 16 {
-            if is_digit.extract_lane(lane) != 0 {
-                count = count + 1;
-            }
-            lane = lane + 1;
-        }
+        // bitmask + popcount: count matching lanes in two instructions
+        count = count + i32::popcnt(is_digit.bitmask());
         i = i + 16;
     }
 

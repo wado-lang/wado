@@ -191,7 +191,6 @@ static CLI_ENGINE: OnceLock<Engine> = OnceLock::new();
 pub fn cli_engine() -> &'static Engine {
     CLI_ENGINE.get_or_init(|| {
         let mut config = Config::new();
-        config.async_support(true);
         config.wasm_component_model(true);
         config.wasm_component_model_gc(true);
         config.wasm_component_model_async(true);
@@ -216,7 +215,6 @@ static HTTP_ENGINE: OnceLock<Engine> = OnceLock::new();
 pub fn http_engine() -> &'static Engine {
     HTTP_ENGINE.get_or_init(|| {
         let mut config = Config::new();
-        config.async_support(true);
         config.wasm_component_model(true);
         config.wasm_component_model_async(true);
         config.wasm_component_model_async_stackful(true);

@@ -368,6 +368,21 @@ impl i32 {
         return builtin::select::<i32>(a < b, a, b);
     }
 
+    /// Counts the leading zeros in this integer.
+    pub fn clz(x: i32) -> i32 {
+        return builtin::i32_clz(x);
+    }
+
+    /// Counts the trailing zeros in this integer.
+    pub fn ctz(x: i32) -> i32 {
+        return builtin::i32_ctz(x);
+    }
+
+    /// Counts the number of set bits (population count).
+    pub fn popcnt(x: i32) -> i32 {
+        return builtin::i32_popcnt(x);
+    }
+
     fn fmt_decimal(&self, f: &mut Formatter) {
         let is_negative = *self < 0;
         let abs_val: i64 = if is_negative { 0 - *self as i64 } else { *self as i64 };
@@ -430,6 +445,21 @@ impl i64 {
 
     pub fn min(a: i64, b: i64) -> i64 {
         return builtin::select::<i64>(a < b, a, b);
+    }
+
+    /// Counts the leading zeros in this integer.
+    pub fn clz(x: i64) -> i64 {
+        return builtin::i64_clz(x);
+    }
+
+    /// Counts the trailing zeros in this integer.
+    pub fn ctz(x: i64) -> i64 {
+        return builtin::i64_ctz(x);
+    }
+
+    /// Counts the number of set bits (population count).
+    pub fn popcnt(x: i64) -> i64 {
+        return builtin::i64_popcnt(x);
     }
 
     fn fmt_decimal(&self, f: &mut Formatter) {
@@ -882,6 +912,16 @@ impl f32 {
         }
         return null;
     }
+
+    /// Reinterprets the bits of this f32 as an i32.
+    pub fn to_bits(&self) -> i32 {
+        return builtin::i32_reinterpret_f32(*self);
+    }
+
+    /// Creates an f32 from its bit representation.
+    pub fn from_bits(bits: i32) -> f32 {
+        return builtin::f32_reinterpret_i32(bits);
+    }
 }
 
 impl f64 {
@@ -1211,6 +1251,16 @@ impl f64 {
 
     pub fn parse(s: String) -> Option<f64> {
         return parse_text(s);
+    }
+
+    /// Reinterprets the bits of this f64 as an i64.
+    pub fn to_bits(&self) -> i64 {
+        return builtin::i64_reinterpret_f64(*self);
+    }
+
+    /// Creates an f64 from its bit representation.
+    pub fn from_bits(bits: i64) -> f64 {
+        return builtin::f64_reinterpret_i64(bits);
     }
 }
 

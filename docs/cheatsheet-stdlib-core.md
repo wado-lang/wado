@@ -894,6 +894,9 @@ impl i32 {
     pub const MIN: i32;
     pub fn max(a: i32, b: i32) -> i32;
     pub fn min(a: i32, b: i32) -> i32;
+    pub fn clz(x: i32) -> i32;
+    pub fn ctz(x: i32) -> i32;
+    pub fn popcnt(x: i32) -> i32;
     pub fn to_string(&self) -> String;
 }
 
@@ -978,6 +981,9 @@ impl i64 {
     pub const MIN: i64;
     pub fn max(a: i64, b: i64) -> i64;
     pub fn min(a: i64, b: i64) -> i64;
+    pub fn clz(x: i64) -> i64;
+    pub fn ctz(x: i64) -> i64;
+    pub fn popcnt(x: i64) -> i64;
     pub fn to_string(&self) -> String;
 }
 
@@ -1109,6 +1115,8 @@ impl f32 {
     pub fn is_nan(&self) -> bool;
     pub fn is_finite(&self) -> bool;
     pub fn parse(s: String) -> Option<f32>;
+    pub fn to_bits(&self) -> i32;
+    pub fn from_bits(bits: i32) -> f32;
 }
 
 impl Display for f32 {
@@ -1189,6 +1197,8 @@ impl f64 {
     pub fn is_nan(&self) -> bool;
     pub fn is_finite(&self) -> bool;
     pub fn parse(s: String) -> Option<f64>;
+    pub fn to_bits(&self) -> i64;
+    pub fn from_bits(bits: i64) -> f64;
 }
 
 impl Display for f64 {
