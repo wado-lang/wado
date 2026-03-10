@@ -69,7 +69,7 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
     // Free: poison freed memory with 0xFF, never reuse
     if newsize == 0 {
         if oldsize > 0 {
-            builtin::memory_fill(oldptr, 0xFF as u8, oldsize);
+            builtin::memory_fill(oldptr, 0xFF, oldsize);
         }
         return 0;
     }

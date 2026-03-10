@@ -34,7 +34,7 @@ export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i
 export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     if (newsize == 0) {
         if (oldsize > 0) {
-            core::builtin::memory_fill(oldptr, 255, oldsize);
+            core::builtin::memory_fill(oldptr, 0xFF, oldsize);
         }
         return 0;
     }
@@ -1566,8 +1566,8 @@ pub fn log2_pow10(x: i32) -> i32 {
 
 pub fn unpack64(f: f64) -> UnpackResult {
     let bits: u64 = core::builtin::i64_reinterpret_f64(f) as u64;
-    let mantissa_mask: u64 = 0x000FFFFFFFFFFFFF as u64;
-    let exp_mask: u64 = 0x7FF as u64;
+    let mantissa_mask: u64 = 0x000FFFFFFFFFFFFF;
+    let exp_mask: u64 = 0x7FF;
     let shift: i32 = (64 - 53);
     let shift_u64: u64 = shift as u64;
     let min_exp: i32 = -(1074 + shift);
@@ -1582,15 +1582,15 @@ pub fn unpack64(f: f64) -> UnpackResult {
         let s: u64 = (64 - "core::prelude/fpfmt.wado::u64_bit_len"(m)) as u64;
         return UnpackResult { mantissa: (m << s), exponent: (e - s as i32) };
     }
-    let m: u64 = (0x8000000000000000 as u64 | (raw_mantissa << shift_u64));
+    let m: u64 = (0x8000000000000000 | (raw_mantissa << shift_u64));
     let e: i32 = ((raw_exp - 1) + min_exp);
     return UnpackResult { mantissa: m, exponent: e };
 }
 
 pub fn unpack32(f: f32) -> UnpackResult {
     let bits: u32 = core::builtin::i32_reinterpret_f32(f) as u32;
-    let mantissa_mask: u32 = 0x007FFFFF as u32;
-    let exp_mask: u32 = 0xFF as u32;
+    let mantissa_mask: u32 = 0x007FFFFF;
+    let exp_mask: u32 = 0xFF;
     let shift: i32 = (64 - 24);
     let shift_u64: u64 = shift as u64;
     let min_exp: i32 = -(149 + shift);
@@ -1605,7 +1605,7 @@ pub fn unpack32(f: f32) -> UnpackResult {
         let s: u64 = (64 - "core::prelude/fpfmt.wado::u64_bit_len"(m)) as u64;
         return UnpackResult { mantissa: (m << s), exponent: (e - s as i32) };
     }
-    let m: u64 = (0x8000000000000000 as u64 | (raw_mantissa << shift_u64));
+    let m: u64 = (0x8000000000000000 | (raw_mantissa << shift_u64));
     let e: i32 = ((raw_exp - 1) + min_exp);
     return UnpackResult { mantissa: m, exponent: e };
 }
@@ -1721,85 +1721,85 @@ fn pow10_coarse(i: i32) -> PmHiLo {
 fn pow10_fine(i: i32) -> u64 {
     return switch i (base=0) {
         0 => {
-            0x8000000000000000 as u64;
+            0x8000000000000000;
         }
         1 => {
-            0xa000000000000000 as u64;
+            0xa000000000000000;
         }
         2 => {
-            0xc800000000000000 as u64;
+            0xc800000000000000;
         }
         3 => {
-            0xfa00000000000000 as u64;
+            0xfa00000000000000;
         }
         4 => {
-            0x9c40000000000000 as u64;
+            0x9c40000000000000;
         }
         5 => {
-            0xc350000000000000 as u64;
+            0xc350000000000000;
         }
         6 => {
-            0xf424000000000000 as u64;
+            0xf424000000000000;
         }
         7 => {
-            0x9896800000000000 as u64;
+            0x9896800000000000;
         }
         8 => {
-            0xbebc200000000000 as u64;
+            0xbebc200000000000;
         }
         9 => {
-            0xee6b280000000000 as u64;
+            0xee6b280000000000;
         }
         10 => {
-            0x9502f90000000000 as u64;
+            0x9502f90000000000;
         }
         11 => {
-            0xba43b74000000000 as u64;
+            0xba43b74000000000;
         }
         12 => {
-            0xe8d4a51000000000 as u64;
+            0xe8d4a51000000000;
         }
         13 => {
-            0x9184e72a00000000 as u64;
+            0x9184e72a00000000;
         }
         14 => {
-            0xb5e620f480000000 as u64;
+            0xb5e620f480000000;
         }
         15 => {
-            0xe35fa931a0000000 as u64;
+            0xe35fa931a0000000;
         }
         16 => {
-            0x8e1bc9bf04000000 as u64;
+            0x8e1bc9bf04000000;
         }
         17 => {
-            0xb1a2bc2ec5000000 as u64;
+            0xb1a2bc2ec5000000;
         }
         18 => {
-            0xde0b6b3a76400000 as u64;
+            0xde0b6b3a76400000;
         }
         19 => {
-            0x8ac7230489e80000 as u64;
+            0x8ac7230489e80000;
         }
         20 => {
-            0xad78ebc5ac620000 as u64;
+            0xad78ebc5ac620000;
         }
         21 => {
-            0xd8d726b7177a8000 as u64;
+            0xd8d726b7177a8000;
         }
         22 => {
-            0x878678326eac9000 as u64;
+            0x878678326eac9000;
         }
         23 => {
-            0xa968163f0a57b400 as u64;
+            0xa968163f0a57b400;
         }
         24 => {
-            0xd3c21bcecceda100 as u64;
+            0xd3c21bcecceda100;
         }
         25 => {
-            0x84595161401484a0 as u64;
+            0x84595161401484a0;
         }
         26 => {
-            0xa56fa5b99019a5c8 as u64;
+            0xa56fa5b99019a5c8;
         }
         _ => {
             core::internal::unreachable();
@@ -1955,7 +1955,7 @@ pub fn short(f: f64) -> FormatResult {
     let mut min_m: u64 = 0;
     let mut z: i32 = 11;
     let mut p: i32 = 0;
-    let m_is_power_of_2: bool = (m == 0x8000000000000000 as u64);
+    let m_is_power_of_2: bool = (m == 0x8000000000000000);
     if (m_is_power_of_2 && (e > min_exp)) {
         p = -"core::prelude/fpfmt.wado::skewed"((e + z));
         min_m = (m - (1 as u64 << (z - 2) as u64));
@@ -1996,7 +1996,7 @@ pub fn short32(f: f32) -> FormatResult {
     let mut min_m: u64 = 0;
     let mut z: i32 = 40;
     let mut p: i32 = 0;
-    let m_is_power_of_2: bool = (m == 0x8000000000000000 as u64);
+    let m_is_power_of_2: bool = (m == 0x8000000000000000);
     if (m_is_power_of_2 && (e > min_exp)) {
         p = -"core::prelude/fpfmt.wado::skewed"((e + z));
         min_m = (m - (1 as u64 << (z - 2) as u64));
@@ -2039,14 +2039,14 @@ pub fn u64_mul(a: u64, b: u64) -> u64 {
 }
 
 pub fn trim_zeros(x: u64, p: i32) -> [u64, i32] {
-    let inv5: u64 = 0xcccccccccccccccd as u64;
-    let inv5p2: u64 = 0x8f5c28f5c28f5c29 as u64;
-    let inv5p4: u64 = 0xd288ce703afb7e91 as u64;
-    let inv5p8: u64 = 0xc767074b22e90e21 as u64;
-    let thresh_10: u64 = 1844674407370955161 as u64;
-    let thresh_100: u64 = 184467440737095516 as u64;
-    let thresh_10000: u64 = 1844674407370955 as u64;
-    let thresh_1e8: u64 = 184467440737 as u64;
+    let inv5: u64 = 0xcccccccccccccccd;
+    let inv5p2: u64 = 0x8f5c28f5c28f5c29;
+    let inv5p4: u64 = 0xd288ce703afb7e91;
+    let inv5p8: u64 = 0xc767074b22e90e21;
+    let thresh_10: u64 = 1844674407370955161;
+    let thresh_100: u64 = 184467440737095516;
+    let thresh_10000: u64 = 1844674407370955;
+    let thresh_1e8: u64 = 184467440737;
     let mut xv: u64 = x;
     let mut pv: i32 = p;
     let d1: u64 = "core::prelude/fpfmt.wado::rotate_right"("core::prelude/fpfmt.wado::u64_mul"(xv, inv5), 1);
@@ -2365,17 +2365,17 @@ pub fn format_exp_prec(d: u64, p: i32, nd: i32, precision: i32, upper: bool) -> 
 
 pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
     let bits: i64 = core::builtin::i64_reinterpret_f64(f);
-    if (bits == 0 as i64) {
+    if (bits == 0) {
         return [true, false, SpecialKind::Zero];
     }
     if (bits == 0x8000000000000000 as i64) {
         return [true, true, SpecialKind::Zero];
     }
-    let is_neg: bool = (bits < 0 as i64);
-    let exp_mask: i64 = 0x7FF0000000000000 as i64;
+    let is_neg: bool = (bits < 0);
+    let exp_mask: i64 = 0x7FF0000000000000;
     if ((bits & exp_mask) == exp_mask) {
-        let mantissa_mask: i64 = 0x000FFFFFFFFFFFFF as i64;
-        if ((bits & mantissa_mask) != 0 as i64) {
+        let mantissa_mask: i64 = 0x000FFFFFFFFFFFFF;
+        if ((bits & mantissa_mask) != 0) {
             return [true, false, SpecialKind::NaN];
         }
         return [true, is_neg, SpecialKind::Inf];

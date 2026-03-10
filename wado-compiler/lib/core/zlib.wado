@@ -171,7 +171,7 @@ fn build_crc_table() -> Array<u32> {
         let mut c = i as u32;
         for let mut j = 0; j < 8; j += 1 {
             if c & 1 != 0 {
-                c = 0xEDB88320 as u32 ^ c >> 1;
+                c = 0xEDB88320 ^ c >> 1;
             } else {
                 c = c >> 1;
             }
@@ -184,12 +184,12 @@ fn build_crc_table() -> Array<u32> {
 /// Computes a CRC-32 checksum over `buf[offset..offset+len]`, starting from `crc`.
 pub fn crc32(crc: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32 {
     let table = CRC_TABLE;
-    let mut c = crc ^ 0xFFFFFFFF as u32;
+    let mut c = crc ^ 0xFFFFFFFF;
     for let mut i = 0; i < len; i += 1 {
         let index = (c ^ buf[offset + i] as u32) & 0xFF;
         c = table[index as i32] ^ c >> 8;
     }
-    return c ^ 0xFFFFFFFF as u32;
+    return c ^ 0xFFFFFFFF;
 }
 
 /// Returns the initial CRC-32 checksum value (0).
@@ -230,7 +230,7 @@ pub fn crc32_combine(crc1: u32, crc2: u32, len2: i32) -> u32 {
     let mut odd: Array<u32> = Array::<u32>::filled(32, 0);
 
     // Put operator for one zero bit in odd
-    odd[0] = 0xEDB88320 as u32;  // CRC-32 polynomial
+    odd[0] = 0xEDB88320;  // CRC-32 polynomial
     let mut row: u32 = 1;
     for let mut n = 1; n < 32; n += 1 {
         odd[n] = row;

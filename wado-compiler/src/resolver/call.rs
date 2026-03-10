@@ -825,6 +825,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     if self.is_static_method(prefix, suffix) {
                         return self.lookup_static_method_param_types(prefix, suffix);
                     }
+
+                    // Builtin functions: look up param types from core:builtin module
+                    if prefix == "builtin" {
+                        let module_source = ModuleSource::builtin();
+                        if let Some(module) = self.loaded_modules.get(&module_source) {
+                            let params: Option<Vec<_>> = module.items.iter().find_map(|item| {
+                                if let Item::Function(func) = item
+                                    && func.name == suffix
+                                {
+                                    return Some(func.params.clone());
+                                }
+                                None
+                            });
+                            if let Some(params) = params {
+                                return params.iter().map(|p| self.resolve_type(&p.ty)).collect();
+                            }
+                        }
+                    }
+
                     return Vec::new(); // Effect operations handled separately
                 }
 

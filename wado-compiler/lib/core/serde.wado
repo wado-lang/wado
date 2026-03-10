@@ -43,7 +43,7 @@ impl DeserializeError {
     }
 
     pub fn missing_field(name: String) -> DeserializeError {
-        return DeserializeError { kind: DeserializeErrorKind::MissingField, message: name, offset: -1 as i64 };
+        return DeserializeError { kind: DeserializeErrorKind::MissingField, message: name, offset: -1 };
     }
 
     pub fn invalid_value(msg: String, offset: i64) -> DeserializeError {
@@ -335,7 +335,7 @@ impl Deserialize for i8 {
         let r = d.deserialize_i32();
         if let Ok(v) = r {
             if v < -128 || v > 127 {
-                return Result::<i8, DeserializeError>::Err(DeserializeError::overflow("value out of range for i8", -1 as i64));
+                return Result::<i8, DeserializeError>::Err(DeserializeError::overflow("value out of range for i8", -1));
             }
             return Result::<i8, DeserializeError>::Ok(v as i8);
         }
@@ -351,7 +351,7 @@ impl Deserialize for i16 {
         let r = d.deserialize_i32();
         if let Ok(v) = r {
             if v < -32768 || v > 32767 {
-                return Result::<i16, DeserializeError>::Err(DeserializeError::overflow("value out of range for i16", -1 as i64));
+                return Result::<i16, DeserializeError>::Err(DeserializeError::overflow("value out of range for i16", -1));
             }
             return Result::<i16, DeserializeError>::Ok(v as i16);
         }
@@ -378,8 +378,8 @@ impl Deserialize for u8 {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<u8, DeserializeError> {
         let r = d.deserialize_u32();
         if let Ok(v) = r {
-            if v > 255 as u32 {
-                return Result::<u8, DeserializeError>::Err(DeserializeError::overflow("value out of range for u8", -1 as i64));
+            if v > 255 {
+                return Result::<u8, DeserializeError>::Err(DeserializeError::overflow("value out of range for u8", -1));
             }
             return Result::<u8, DeserializeError>::Ok(v as u8);
         }
@@ -394,8 +394,8 @@ impl Deserialize for u16 {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<u16, DeserializeError> {
         let r = d.deserialize_u32();
         if let Ok(v) = r {
-            if v > 65535 as u32 {
-                return Result::<u16, DeserializeError>::Err(DeserializeError::overflow("value out of range for u16", -1 as i64));
+            if v > 65535 {
+                return Result::<u16, DeserializeError>::Err(DeserializeError::overflow("value out of range for u16", -1));
             }
             return Result::<u16, DeserializeError>::Ok(v as u16);
         }
@@ -545,7 +545,7 @@ impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
                     }
                 }
                 return Result::<Result<T, E>, DeserializeError>::Err(
-                    DeserializeError { kind: DeserializeErrorKind::UnknownVariant, message: `unknown Result variant: {name}`, offset: -1 as i64 }
+                    DeserializeError { kind: DeserializeErrorKind::UnknownVariant, message: `unknown Result variant: {name}`, offset: -1 }
                 );
             }
             if let Err(e) = name_r {
