@@ -769,6 +769,29 @@ impl TypeTable {
         None
     }
 
+    /// Find a tuple type with the given element types.
+    pub fn find_tuple(&self, elems: &[TypeId]) -> Option<TypeId> {
+        let key = ResolvedType::Tuple(elems.to_vec());
+        self.intern_map.get(&key).copied()
+    }
+
+    /// Find a generic instance type with the given name and type args.
+    pub fn find_generic_instance(&self, name: &str, type_args: &[TypeId]) -> Option<TypeId> {
+        for (&type_id, resolved) in &self.types {
+            if let ResolvedType::GenericInstance {
+                name: gname,
+                type_args: gargs,
+                ..
+            } = resolved
+                && gname == name
+                && gargs == type_args
+            {
+                return Some(type_id);
+            }
+        }
+        None
+    }
+
     pub fn make_enum(&mut self, name: String, module_source: ModuleSource) -> TypeId {
         self.intern(ResolvedType::Enum {
             name,
@@ -1037,6 +1060,114 @@ impl TypeTable {
                 ResolvedType::Newtype { base_type, .. } => current = *base_type,
                 _ => return current,
             }
+        }
+    }
+
+    /// Mangle a type name, resolving all newtypes to their base types recursively.
+    /// E.g., `Array<FieldName>` → `Array<String>` when `FieldName = String`.
+    pub fn mangle_type_name_resolving_newtypes(&self, id: TypeId) -> String {
+        let base = self.resolve_newtype_base(id);
+        match self.get(base) {
+            ResolvedType::Tuple(elems) => {
+                let names: Vec<String> = elems
+                    .iter()
+                    .map(|e| self.mangle_type_name_resolving_newtypes(*e))
+                    .collect();
+                crate::name::mangle_tuple_type(&names)
+            }
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => {
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_name_resolving_newtypes(*t))
+                    .collect();
+                crate::name::mangle_generic_name(name, &args)
+            }
+            ResolvedType::BuiltinArray(elem) => {
+                let elem_name = self.mangle_type_name_resolving_newtypes(*elem);
+                crate::name::mangle_builtin_array_type(&elem_name)
+            }
+            _ => self.mangle_type_name(base),
+        }
+    }
+
+    /// Recursively resolve newtypes inside compound types (tuples, generics, arrays).
+    /// Returns the same TypeId if no newtypes are found, or a new TypeId with all
+    /// newtypes replaced by their base types.
+    pub fn resolve_newtypes_deep(&mut self, id: TypeId) -> TypeId {
+        let base = self.resolve_newtype_base(id);
+        match self.get(base).clone() {
+            ResolvedType::Tuple(elems) => {
+                let resolved: Vec<TypeId> =
+                    elems.iter().map(|e| self.resolve_newtypes_deep(*e)).collect();
+                if resolved == elems {
+                    base
+                } else {
+                    self.make_tuple(resolved)
+                }
+            }
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => {
+                let resolved: Vec<TypeId> =
+                    type_args.iter().map(|t| self.resolve_newtypes_deep(*t)).collect();
+                if resolved == type_args {
+                    base
+                } else {
+                    self.make_generic_instance(name, module_source, resolved)
+                }
+            }
+            ResolvedType::BuiltinArray(elem) => {
+                let resolved = self.resolve_newtypes_deep(elem);
+                if resolved == elem {
+                    base
+                } else {
+                    self.intern(ResolvedType::BuiltinArray(resolved))
+                }
+            }
+            _ => base,
+        }
+    }
+
+    /// Like `resolve_newtypes_deep` but non-mutating — only resolves if all
+    /// intermediate types already exist. Returns the original TypeId if resolution
+    /// would require creating new types.
+    #[must_use]
+    pub fn resolve_newtypes_deep_readonly(&self, id: TypeId) -> TypeId {
+        let base = self.resolve_newtype_base(id);
+        match self.get(base) {
+            ResolvedType::Tuple(elems) => {
+                let resolved: Vec<TypeId> = elems
+                    .iter()
+                    .map(|e| self.resolve_newtypes_deep_readonly(*e))
+                    .collect();
+                if resolved == *elems {
+                    base
+                } else if let Some(existing) = self.find_tuple(&resolved) {
+                    existing
+                } else {
+                    id // Can't create new type, return original
+                }
+            }
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => {
+                let resolved: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|t| self.resolve_newtypes_deep_readonly(*t))
+                    .collect();
+                if resolved == *type_args {
+                    base
+                } else if let Some(existing) = self.find_generic_instance(name, &resolved) {
+                    existing
+                } else {
+                    id // Can't create new type, return original
+                }
+            }
+            _ => base,
         }
     }
 

@@ -12,6 +12,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
     // Get the header value using Fields.get()
     let values = req_headers.get("x-custom" as FieldName);
+
     assert values.len() == 1;
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
@@ -23,7 +24,6 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
 __DATA__
 {
-    "TODO": true,
     "wasi:http/service": {
         "request": {
             "headers": [["x-custom", "test-value"]]

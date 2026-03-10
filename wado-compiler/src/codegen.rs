@@ -39,6 +39,8 @@ fn validate_core_module(wasm: &[u8]) {
     let features = wasmparser::WasmFeatures::all();
     let mut validator = wasmparser::Validator::new_with_features(features);
     if let Err(e) = validator.validate_all(wasm) {
+        // Save invalid Wasm for debugging
+        let _ = std::fs::write("/tmp/invalid_core.wasm", wasm);
         panic!(
             "Internal compiler error: WIR pipeline generated invalid core Wasm module\n\
              Validation error: {e}"

@@ -676,7 +676,7 @@ fn synthesize_lift_list(
         None,
     ));
 
-    local_ref(result_local, "__result", TypeTable::I32)
+    local_ref(result_local, "__result", array_type_id)
 }
 
 /// Lift an `option<T>` from linear memory at `addr`.
@@ -963,6 +963,7 @@ pub fn synthesize_lower(
     value: TirExpr,
     addr: TirExpr,
     next_local: &mut u32,
+    local_types: &mut Vec<TypeId>,
 ) -> Vec<TirStmt> {
     match ty {
         Type::Named(named) => match named.name.as_str() {
@@ -1015,6 +1016,7 @@ pub fn synthesize_lower(
             "String" => {
                 // cm_lower_string(value) returns packed i64: (ptr | (len << 32))
                 let packed_local = *next_local;
+                local_types.push(TypeTable::I64);
                 *next_local += 1;
                 let packed = internal_call("cm_lower_string", vec![value], TypeTable::I64);
                 let mut stmts = vec![let_stmt("__packed", packed_local, TypeTable::I64, packed)];
@@ -1061,10 +1063,47 @@ pub fn synthesize_lower(
             ))],
         },
         Type::Generic(g) => match g.name.as_str() {
-            // list<T> and other composite types: lowered as (ptr, len) pair
+            // list<T>: lowered as (ptr, len) pair stored at addr
+            "Array" if g.args.len() == 1
+                && matches!(&g.args[0], Type::Named(n) if n.name == "u8") =>
+            {
+                // list<u8>: use cm_lower_array_u8 → packed i64, store (ptr, len)
+                let packed_local = *next_local;
+                local_types.push(TypeTable::I64);
+                *next_local += 1;
+                let packed = internal_call("cm_lower_array_u8", vec![value], TypeTable::I64);
+                let mut stmts =
+                    vec![let_stmt("__elem_packed", packed_local, TypeTable::I64, packed)];
+                // Store ptr (low 32 bits) at addr
+                let ptr = cast(
+                    local_ref(packed_local, "__elem_packed", TypeTable::I64),
+                    TypeTable::I32,
+                );
+                stmts.push(expr_stmt(builtin_call(
+                    "i32_store",
+                    vec![addr.clone(), ptr],
+                    TypeTable::UNIT,
+                )));
+                // Store len (high 32 bits) at addr + 4
+                let shifted = binary(
+                    crate::tir::TirBinaryOp::Shr,
+                    local_ref(packed_local, "__elem_packed", TypeTable::I64),
+                    i64_const(32),
+                    TypeTable::I64,
+                );
+                let len = cast(shifted, TypeTable::I32);
+                stmts.push(expr_stmt(builtin_call(
+                    "i32_store",
+                    vec![
+                        binary(crate::tir::TirBinaryOp::Add, addr, i32_const(4), TypeTable::I32),
+                        len,
+                    ],
+                    TypeTable::UNIT,
+                )));
+                stmts
+            }
             "Array" => {
-                // Call cm_lower_array_u8 or similar — for now, delegate to existing helpers
-                // Array<u8> is the most common case; other types need element-by-element lowering
+                // General list<T>: treat as opaque i32 for now
                 vec![expr_stmt(builtin_call(
                     "i32_store",
                     vec![addr, value],
@@ -1079,6 +1118,11 @@ pub fn synthesize_lower(
             ))],
         },
         Type::Tuple(elems) if elems.is_empty() => vec![],
+        Type::Tuple(_) => {
+            // Tuple lowering requires type_table for correct TypeIds.
+            // Callers with tuple elements should call synthesize_lower_tuple directly.
+            vec![]
+        }
         Type::Reference(_) | Type::MutReference(_) => vec![expr_stmt(builtin_call(
             "i32_store",
             vec![addr, value],
@@ -1086,6 +1130,69 @@ pub fn synthesize_lower(
         ))],
         _ => vec![],
     }
+}
+
+/// Lower a GC tuple to linear memory at `addr`.
+///
+/// Each tuple element is extracted via `FieldAccess` and recursively lowered
+/// at the computed CM ABI offset.
+#[allow(clippy::cast_possible_wrap)]
+fn synthesize_lower_tuple(
+    elems: &[Type],
+    value: TirExpr,
+    addr: TirExpr,
+    next_local: &mut u32,
+    local_types: &mut Vec<TypeId>,
+    type_table: &RefCell<TypeTable>,
+) -> Vec<TirStmt> {
+    let layout = cm_abi::layout_tuple(elems);
+    let mut stmts = Vec::new();
+
+    // Materialize the tuple value into a local so we can access fields
+    let tuple_local = *next_local;
+    local_types.push(value.type_id);
+    *next_local += 1;
+    stmts.push(let_stmt("__tuple", tuple_local, value.type_id, value));
+
+    for (i, elem_ty) in elems.iter().enumerate() {
+        let offset = layout.offsets[i] as i32;
+        let field_addr = if offset == 0 {
+            addr.clone()
+        } else {
+            binary_add(addr.clone(), i32_const(offset))
+        };
+
+        // Determine the type_id for this field
+        let field_type_id = {
+            let mut tt = type_table.borrow_mut();
+            wasi_type_to_type_id(elem_ty, &mut tt)
+        };
+
+        // Extract the i-th field from the tuple using FieldAccess
+        let field_expr = TirExpr::new(
+            TirExprKind::FieldAccess {
+                expr: Box::new(local_ref(
+                    tuple_local,
+                    "__tuple",
+                    local_types[tuple_local as usize],
+                )),
+                field_index: i as u32,
+                field_name: format!("{i}"),
+            },
+            field_type_id,
+            synth_span(),
+        );
+
+        // Recursively lower: for tuples use synthesize_lower_tuple, otherwise synthesize_lower
+        let field_stmts = if let Type::Tuple(sub_elems) = elem_ty {
+            synthesize_lower_tuple(sub_elems, field_expr, field_addr, next_local, local_types, type_table)
+        } else {
+            synthesize_lower(elem_ty, field_expr, field_addr, next_local, local_types)
+        };
+        stmts.extend(field_stmts);
+    }
+
+    stmts
 }
 
 /// Compute the flat ABI parameter types for a WASI function parameter.
@@ -1547,6 +1654,19 @@ fn synthesize_adapter(
                 next_local += 1;
                 param_mapping.push((start, 1));
             }
+            // General Array<T>: single placeholder param (adapter body lowers to ptr+len)
+            Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => {
+                params.push(TirParam {
+                    name: param_name.clone(),
+                    type_id: TypeTable::I32,
+                    local_index: next_local,
+                    is_mut: false,
+                    span: synth_span(),
+                });
+                local_types.push(TypeTable::I32);
+                next_local += 1;
+                param_mapping.push((start, 1));
+            }
             // All other types: create flat params matching CM ABI
             _ => {
                 for (j, flat_ty) in flat_tys.iter().enumerate() {
@@ -1668,6 +1788,194 @@ fn synthesize_adapter(
                         i64_const(32),
                         TypeTable::I64,
                     ),
+                    TypeTable::I32,
+                ));
+            }
+
+            // General Array<T> param: lower to (ptr, len) in linear memory
+            Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => {
+                let elem_type = &g.args[0];
+                let elem_size = cm_abi::cm_size(elem_type) as i32;
+                let elem_align = cm_abi::cm_align(elem_type) as i32;
+
+                // Resolve proper TypeIds for the element and array types
+                let (elem_type_id, array_type_id) = {
+                    let mut tt = type_table.borrow_mut();
+                    let elem_tid = wasi_type_to_type_id(elem_type, &mut tt);
+                    let array_tid = tt.make_array(elem_tid);
+                    (elem_tid, array_tid)
+                };
+
+                // __len = Array<T>::len(param)
+                let len_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
+                body_stmts.push(let_stmt(
+                    &format!("__{param_name}_len"),
+                    len_local,
+                    TypeTable::I32,
+                    generic_method_call(
+                        local_ref(param_local, param_name, array_type_id),
+                        "Array",
+                        "len",
+                        ModuleSource::prelude(),
+                        vec![],
+                        TypeTable::I32,
+                    ),
+                ));
+
+                // __base = realloc(0, 0, align, __len * elem_size)
+                let base_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
+                body_stmts.push(let_stmt(
+                    &format!("__{param_name}_base"),
+                    base_local,
+                    TypeTable::I32,
+                    builtin_call(
+                        "realloc",
+                        vec![
+                            i32_const(0),
+                            i32_const(0),
+                            i32_const(elem_align),
+                            binary(
+                                crate::tir::TirBinaryOp::Mul,
+                                local_ref(
+                                    len_local,
+                                    &format!("__{param_name}_len"),
+                                    TypeTable::I32,
+                                ),
+                                i32_const(elem_size),
+                                TypeTable::I32,
+                            ),
+                        ],
+                        TypeTable::I32,
+                    ),
+                ));
+
+                // __i = 0; loop { if __i >= __len { break; } lower elem[__i]; __i += 1; }
+                let i_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
+                body_stmts.push(let_mut_stmt(
+                    &format!("__{param_name}_i"),
+                    i_local,
+                    TypeTable::I32,
+                    i32_const(0),
+                ));
+
+                let mut loop_body = Vec::new();
+                // break if __i >= __len
+                loop_body.push(if_stmt(
+                    binary(
+                        crate::tir::TirBinaryOp::GtEq,
+                        local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
+                        local_ref(
+                            len_local,
+                            &format!("__{param_name}_len"),
+                            TypeTable::I32,
+                        ),
+                        TypeTable::BOOL,
+                    ),
+                    block(vec![break_stmt()]),
+                    None,
+                ));
+                // __addr = __base + __i * elem_size
+                let addr_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
+                loop_body.push(let_stmt(
+                    &format!("__{param_name}_addr"),
+                    addr_local,
+                    TypeTable::I32,
+                    binary(
+                        crate::tir::TirBinaryOp::Add,
+                        local_ref(
+                            base_local,
+                            &format!("__{param_name}_base"),
+                            TypeTable::I32,
+                        ),
+                        binary(
+                            crate::tir::TirBinaryOp::Mul,
+                            local_ref(
+                                i_local,
+                                &format!("__{param_name}_i"),
+                                TypeTable::I32,
+                            ),
+                            i32_const(elem_size),
+                            TypeTable::I32,
+                        ),
+                        TypeTable::I32,
+                    ),
+                ));
+                // __elem = param[__i] (IndexValue trait method)
+                let elem_local = alloc_local(&mut next_local, &mut local_types, elem_type_id);
+                let iv_info = crate::name::LocalMethodName::new(
+                    "Array".to_string(),
+                    Some("IndexValue".to_string()),
+                    "index_value".to_string(),
+                );
+                let iv_mangled = iv_info.to_mangled_name();
+                loop_body.push(let_stmt(
+                    &format!("__{param_name}_elem"),
+                    elem_local,
+                    elem_type_id,
+                    TirExpr::new(
+                        TirExprKind::MethodCall {
+                            receiver: Box::new(local_ref(
+                                param_local,
+                                param_name,
+                                array_type_id,
+                            )),
+                            func: FunctionRef {
+                                module_source: ModuleSource::prelude(),
+                                name: iv_mangled,
+                                monomorph_info: None,
+                                method_info: Some(iv_info),
+                                is_cm_adapter: false,
+                            },
+                            type_args: vec![],
+                            args: vec![CallArg::new(
+                                local_ref(
+                                    i_local,
+                                    &format!("__{param_name}_i"),
+                                    TypeTable::I32,
+                                ),
+                                false,
+                            )],
+                        },
+                        elem_type_id,
+                        synth_span(),
+                    ),
+                ));
+                // Lower element to linear memory at __addr
+                let elem_ref =
+                    local_ref(elem_local, &format!("__{param_name}_elem"), elem_type_id);
+                let addr_ref =
+                    local_ref(addr_local, &format!("__{param_name}_addr"), TypeTable::I32);
+                let lower_stmts = if let Type::Tuple(sub_elems) = elem_type {
+                    synthesize_lower_tuple(sub_elems, elem_ref, addr_ref, &mut next_local, &mut local_types, type_table)
+                } else {
+                    synthesize_lower(elem_type, elem_ref, addr_ref, &mut next_local, &mut local_types)
+                };
+                loop_body.extend(lower_stmts);
+                // __i += 1
+                loop_body.push(expr_stmt(assign(
+                    local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
+                    binary(
+                        crate::tir::TirBinaryOp::Add,
+                        local_ref(
+                            i_local,
+                            &format!("__{param_name}_i"),
+                            TypeTable::I32,
+                        ),
+                        i32_const(1),
+                        TypeTable::I32,
+                    ),
+                )));
+                body_stmts.push(loop_stmt(block(loop_body)));
+
+                // Push (base, len) as flat args
+                flat_args.push(local_ref(
+                    base_local,
+                    &format!("__{param_name}_base"),
+                    TypeTable::I32,
+                ));
+                flat_args.push(local_ref(
+                    len_local,
+                    &format!("__{param_name}_len"),
                     TypeTable::I32,
                 ));
             }
@@ -1906,8 +2214,9 @@ fn synthesize_adapter(
                 ],
                 TypeTable::I32,
             )));
+            let lifted_type_id = lifted.type_id;
             body_stmts.push(return_stmt(Some(lifted)));
-            adapter_return_type = TypeTable::I32; // placeholder, fixed up at call site
+            adapter_return_type = lifted_type_id; // real type, fixed up at call site if needed
         } else {
             // No return type: free the async results buffer.
             body_stmts.push(expr_stmt(builtin_call(
@@ -1962,8 +2271,9 @@ fn synthesize_adapter(
             TypeTable::I32,
         )));
 
+        let lifted_type_id = lifted.type_id;
         body_stmts.push(return_stmt(Some(lifted)));
-        adapter_return_type = TypeTable::I32; // placeholder, fixed up at call site
+        adapter_return_type = lifted_type_id; // real type, fixed up at call site if needed
     } else if let Some(return_type) = &func_info.return_type {
         let resolved = wasi_registry.resolve_type(return_type);
         if needs_flat_result_lifting(&resolved) {
@@ -1999,8 +2309,9 @@ fn synthesize_adapter(
                 &mut local_types,
                 &lift_ctx,
             );
+            let lifted_type_id = lifted.type_id;
             body_stmts.push(return_stmt(Some(lifted)));
-            adapter_return_type = TypeTable::I32; // placeholder
+            adapter_return_type = lifted_type_id; // real type, fixed up at call site if needed
         } else {
             // Truly flat return (primitive): cm_raw_call directly returns the value
             body_stmts.push(return_stmt(Some(raw_call_expr)));
@@ -4288,6 +4599,7 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
                         &adapter_map,
                         &entry_source,
                         project.wasi_registry,
+                        &entry_type_table,
                     );
                 }
                 // Sync local_types with any Let stmts that were updated by the rewrite
@@ -4542,40 +4854,474 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
     Ok(project)
 }
 
-/// Fix up the return expression's type in the adapter body to match the caller's
-/// expected return type. The adapter was created with placeholder `TypeId`s
-/// (e.g., `TypeTable::I32`) that need to be corrected to actual Wado types.
-fn fixup_return_type_in_body(adapter: &mut TirFunction, return_type: TypeId) {
-    if let Some(body) = &mut adapter.body {
-        fixup_types_in_block(body, return_type, &mut adapter.local_types);
+/// Recursively replace WASI-derived types with user types in the adapter.
+/// Given a WASI AST `Type` and the user's `TypeId`, compute the WASI-derived TypeId
+/// and replace it, then recurse into sub-types (Array elements, Tuple fields, etc.).
+fn replace_wasi_derived_type_recursive(
+    adapter: &mut TirFunction,
+    wasi_type: &Type,
+    user_type: TypeId,
+    type_table: &RefCell<TypeTable>,
+) {
+    let old_type = {
+        let mut tt = type_table.borrow_mut();
+        wasi_type_to_type_id(wasi_type, &mut tt)
+    };
+    if old_type != user_type && old_type != TypeTable::I32 && old_type != TypeTable::UNIT {
+        // Skip replacement if the user type resolves to the same base type
+        // after deep newtype resolution. Introducing newtypes into adapter
+        // bodies creates monomorphization and WIR type lookup issues.
+        let tt = type_table.borrow();
+        let old_name = tt.mangle_type_name(old_type);
+        let user_resolved_name = tt.mangle_type_name_resolving_newtypes(user_type);
+        drop(tt);
+        if old_name == user_resolved_name {
+            // Same underlying type after resolving newtypes — no replacement needed
+        } else {
+            let tt = type_table.borrow();
+            let new_name = tt.mangle_type_name(user_type);
+            drop(tt);
+            if old_name != new_name {
+                replace_type_in_adapter_with_names(
+                    adapter, old_type, user_type, &old_name, &new_name,
+                );
+            } else {
+                replace_type_in_adapter(adapter, old_type, user_type);
+            }
+        }
+    }
+    match wasi_type {
+        Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => {
+            let tt = type_table.borrow();
+            if let Some(new_elem_args) = tt.generic_type_args(user_type) {
+                if new_elem_args.len() == 1 {
+                    let new_elem = new_elem_args[0];
+                    drop(tt);
+                    replace_wasi_derived_type_recursive(
+                        adapter, &g.args[0], new_elem, type_table,
+                    );
+                }
+            }
+        }
+        Type::Tuple(elems) => {
+            // Get the user's tuple field types
+            let tt = type_table.borrow();
+            if let crate::tir::ResolvedType::Tuple(user_elems) = tt.get(user_type) {
+                let user_elems = user_elems.clone();
+                drop(tt);
+                for (wasi_elem, &user_elem) in elems.iter().zip(user_elems.iter()) {
+                    replace_wasi_derived_type_recursive(
+                        adapter, wasi_elem, user_elem, type_table,
+                    );
+                }
+            }
+        }
+        Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => {
+            let tt = type_table.borrow();
+            if let Some(new_args) = tt.generic_type_args(user_type) {
+                if new_args.len() == 1 {
+                    let new_inner = new_args[0];
+                    drop(tt);
+                    replace_wasi_derived_type_recursive(
+                        adapter, &g.args[0], new_inner, type_table,
+                    );
+                }
+            }
+        }
+        Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
+            let tt = type_table.borrow();
+            if let Some(new_args) = tt.generic_type_args(user_type) {
+                if new_args.len() == 2 {
+                    let new_ok = new_args[0];
+                    let new_err = new_args[1];
+                    drop(tt);
+                    replace_wasi_derived_type_recursive(
+                        adapter, &g.args[0], new_ok, type_table,
+                    );
+                    replace_wasi_derived_type_recursive(
+                        adapter, &g.args[1], new_err, type_table,
+                    );
+                }
+            }
+        }
+        _ => {}
     }
 }
 
-/// Recursively fix placeholder types in a block's return statements and
-/// their nested expressions.
-fn fixup_types_in_block(block: &mut TirBlock, return_type: TypeId, local_types: &mut Vec<TypeId>) {
+/// Fix up WASI-derived types in the adapter body to match the user's types.
+///
+/// The adapter body uses TypeIds from `wasi_type_to_type_id` (e.g., `Array<Tuple<String, Array<u8>>>`).
+/// The call site uses user types with newtype aliases (e.g., `Array<Tuple<FieldName, FieldValue>>`).
+/// This function computes the WASI-derived TypeId for each param and replaces it in the body.
+fn fixup_wasi_derived_types_in_adapter(
+    adapter: &mut TirFunction,
+    func_info: &crate::component_model::WasiFunctionInfo,
+    call_args: &[TirExpr],
+    user_return_type: TypeId,
+    type_table: &RefCell<TypeTable>,
+    wasi_registry: &crate::component_model::WasiRegistry,
+    skip_self: bool,
+) {
+    let params_iter: Box<dyn Iterator<Item = &(String, String, Type)>> = if skip_self {
+        Box::new(func_info.params.iter().skip(1))
+    } else {
+        Box::new(func_info.params.iter())
+    };
+    for (i, (_param_name, _, param_type)) in params_iter.enumerate() {
+        if i >= call_args.len() {
+            break;
+        }
+        let new_type = call_args[i].type_id;
+        // Resolve newtypes (e.g., FieldName → String) before computing WASI-derived TypeId
+        let resolved = wasi_registry.resolve_type(param_type);
+        replace_wasi_derived_type_recursive(adapter, &resolved, new_type, type_table);
+    }
+    // Also fix up return type's WASI-derived sub-types
+    if let Some(return_type) = &func_info.return_type {
+        let resolved = wasi_registry.resolve_type(return_type);
+        replace_wasi_derived_type_recursive(adapter, &resolved, user_return_type, type_table);
+    }
+}
+
+/// Fix up the return expression's type in the adapter body to match the caller's
+/// expected return type. The adapter was created with placeholder `TypeId`s
+/// (e.g., `TypeTable::I32`) that need to be corrected to actual Wado types.
+fn fixup_return_type_in_body(adapter: &mut TirFunction, old_type: TypeId, new_type: TypeId) {
+    if let Some(body) = &mut adapter.body {
+        fixup_types_in_block(body, old_type, new_type, &mut adapter.local_types);
+    }
+}
+
+/// Replace ALL occurrences of `old_type` with `new_type` throughout the adapter's
+/// body, locals, and params. Used when a param or return type is fixed up from
+/// WASI-derived types to the user code's newtype aliases.
+fn replace_type_in_adapter(adapter: &mut TirFunction, old_type: TypeId, new_type: TypeId) {
+    if old_type == new_type {
+        return;
+    }
+    // Fix return type
+    if adapter.return_type == old_type {
+        adapter.return_type = new_type;
+    }
+    // Fix params
+    for param in &mut adapter.params {
+        if param.type_id == old_type {
+            param.type_id = new_type;
+        }
+    }
+    // Fix local_types
+    for lt in &mut adapter.local_types {
+        if *lt == old_type {
+            *lt = new_type;
+        }
+    }
+    // Fix body
+    if let Some(body) = &mut adapter.body {
+        replace_type_in_block(body, old_type, new_type);
+    }
+}
+
+/// Like `replace_type_in_adapter` but also renames function references that
+/// contain the old type name to use the new type name. This is needed when
+/// the adapter body calls monomorphized functions like `Array<T>::with_capacity`
+/// where T is a WASI-derived type that differs from the user's newtype alias.
+fn replace_type_in_adapter_with_names(
+    adapter: &mut TirFunction,
+    old_type: TypeId,
+    new_type: TypeId,
+    old_name: &str,
+    new_name: &str,
+) {
+    if old_type == new_type {
+        return;
+    }
+    // Fix return type
+    if adapter.return_type == old_type {
+        adapter.return_type = new_type;
+    }
+    // Fix params
+    for param in &mut adapter.params {
+        if param.type_id == old_type {
+            param.type_id = new_type;
+        }
+    }
+    for lt in &mut adapter.local_types {
+        if *lt == old_type {
+            *lt = new_type;
+        }
+    }
+    if let Some(body) = &mut adapter.body {
+        replace_type_and_names_in_block(body, old_type, new_type, old_name, new_name);
+    }
+}
+
+fn replace_type_and_names_in_block(
+    block: &mut TirBlock,
+    old_type: TypeId,
+    new_type: TypeId,
+    old_name: &str,
+    new_name: &str,
+) {
+    for stmt in &mut block.stmts {
+        replace_type_and_names_in_stmt(stmt, old_type, new_type, old_name, new_name);
+    }
+}
+
+fn replace_type_and_names_in_stmt(
+    stmt: &mut TirStmt,
+    old_type: TypeId,
+    new_type: TypeId,
+    old_name: &str,
+    new_name: &str,
+) {
+    match &mut stmt.kind {
+        TirStmtKind::Expr(e) => {
+            replace_type_and_names_in_expr(e, old_type, new_type, old_name, new_name);
+        }
+        TirStmtKind::Return { value: Some(e), .. } => {
+            replace_type_and_names_in_expr(e, old_type, new_type, old_name, new_name);
+        }
+        TirStmtKind::Let { value, type_id, .. } => {
+            if *type_id == old_type {
+                *type_id = new_type;
+            }
+            replace_type_and_names_in_expr(value, old_type, new_type, old_name, new_name);
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+            ..
+        } => {
+            replace_type_and_names_in_expr(condition, old_type, new_type, old_name, new_name);
+            replace_type_and_names_in_block(then_block, old_type, new_type, old_name, new_name);
+            if let Some(eb) = else_block {
+                replace_type_and_names_in_block(eb, old_type, new_type, old_name, new_name);
+            }
+        }
+        TirStmtKind::Loop { body, .. } => {
+            replace_type_and_names_in_block(body, old_type, new_type, old_name, new_name);
+        }
+        _ => {}
+    }
+}
+
+fn replace_type_and_names_in_expr(
+    expr: &mut TirExpr,
+    old_type: TypeId,
+    new_type: TypeId,
+    old_name: &str,
+    new_name: &str,
+) {
+    if expr.type_id == old_type {
+        expr.type_id = new_type;
+    }
+    match &mut expr.kind {
+        TirExprKind::Call { func, args, .. } => {
+            if func.name.contains(old_name) {
+                func.name = func.name.replace(old_name, new_name);
+            }
+            if let Some(ref mut mono) = func.monomorph_info {
+                for ta in &mut mono.type_args {
+                    if *ta == old_type {
+                        *ta = new_type;
+                    }
+                }
+            }
+            for arg in args {
+                replace_type_and_names_in_expr(&mut arg.expr, old_type, new_type, old_name, new_name);
+            }
+        }
+        TirExprKind::MethodCall {
+            func,
+            receiver,
+            args,
+            ..
+        } => {
+            if func.name.contains(old_name) {
+                func.name = func.name.replace(old_name, new_name);
+            }
+            if let Some(ref mut mono) = func.monomorph_info {
+                for ta in &mut mono.type_args {
+                    if *ta == old_type {
+                        *ta = new_type;
+                    }
+                }
+            }
+            replace_type_and_names_in_expr(receiver, old_type, new_type, old_name, new_name);
+            for arg in args {
+                replace_type_and_names_in_expr(&mut arg.expr, old_type, new_type, old_name, new_name);
+            }
+        }
+        TirExprKind::FieldAccess { expr: inner, .. } => {
+            replace_type_and_names_in_expr(inner, old_type, new_type, old_name, new_name);
+        }
+        TirExprKind::Assign { target, value } => {
+            replace_type_and_names_in_expr(target, old_type, new_type, old_name, new_name);
+            replace_type_and_names_in_expr(value, old_type, new_type, old_name, new_name);
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            replace_type_and_names_in_expr(left, old_type, new_type, old_name, new_name);
+            replace_type_and_names_in_expr(right, old_type, new_type, old_name, new_name);
+        }
+        TirExprKind::Cast { expr: inner, .. } => {
+            replace_type_and_names_in_expr(inner, old_type, new_type, old_name, new_name);
+        }
+        TirExprKind::VariantConstruct {
+            variant_type,
+            payload,
+            ..
+        } => {
+            if *variant_type == old_type {
+                *variant_type = new_type;
+            }
+            if let Some(p) = payload {
+                replace_type_and_names_in_expr(p, old_type, new_type, old_name, new_name);
+            }
+        }
+        TirExprKind::Block(blk) => {
+            replace_type_and_names_in_block(blk, old_type, new_type, old_name, new_name);
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for f in fields {
+                replace_type_and_names_in_expr(&mut f.value, old_type, new_type, old_name, new_name);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn replace_type_in_block(block: &mut TirBlock, old_type: TypeId, new_type: TypeId) {
+    for stmt in &mut block.stmts {
+        replace_type_in_stmt(stmt, old_type, new_type);
+    }
+}
+
+fn replace_type_in_stmt(stmt: &mut TirStmt, old_type: TypeId, new_type: TypeId) {
+    match &mut stmt.kind {
+        TirStmtKind::Let { value, type_id, .. } => {
+            if *type_id == old_type {
+                *type_id = new_type;
+            }
+            replace_type_in_expr(value, old_type, new_type);
+        }
+        TirStmtKind::Return { value } => {
+            if let Some(v) = value {
+                replace_type_in_expr(v, old_type, new_type);
+            }
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            replace_type_in_expr(condition, old_type, new_type);
+            replace_type_in_block(then_block, old_type, new_type);
+            if let Some(blk) = else_block {
+                replace_type_in_block(blk, old_type, new_type);
+            }
+        }
+        TirStmtKind::Loop { body } => {
+            replace_type_in_block(body, old_type, new_type);
+        }
+        TirStmtKind::Expr(expr) => {
+            replace_type_in_expr(expr, old_type, new_type);
+        }
+        _ => {}
+    }
+}
+
+fn replace_type_in_expr(expr: &mut TirExpr, old_type: TypeId, new_type: TypeId) {
+    if expr.type_id == old_type {
+        expr.type_id = new_type;
+    }
+    match &mut expr.kind {
+        TirExprKind::Call { func, args, .. } => {
+            if let Some(ref mut mono) = func.monomorph_info {
+                for ta in &mut mono.type_args {
+                    if *ta == old_type {
+                        *ta = new_type;
+                    }
+                }
+            }
+            for arg in args {
+                replace_type_in_expr(&mut arg.expr, old_type, new_type);
+            }
+        }
+        TirExprKind::MethodCall {
+            func, receiver, args, ..
+        } => {
+            if let Some(ref mut mono) = func.monomorph_info {
+                for ta in &mut mono.type_args {
+                    if *ta == old_type {
+                        *ta = new_type;
+                    }
+                }
+            }
+            replace_type_in_expr(receiver, old_type, new_type);
+            for arg in args {
+                replace_type_in_expr(&mut arg.expr, old_type, new_type);
+            }
+        }
+        TirExprKind::FieldAccess { expr: inner, .. } => {
+            replace_type_in_expr(inner, old_type, new_type);
+        }
+        TirExprKind::Assign { target, value } => {
+            replace_type_in_expr(target, old_type, new_type);
+            replace_type_in_expr(value, old_type, new_type);
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            replace_type_in_expr(left, old_type, new_type);
+            replace_type_in_expr(right, old_type, new_type);
+        }
+        TirExprKind::Cast { expr: inner, .. } => {
+            replace_type_in_expr(inner, old_type, new_type);
+        }
+        TirExprKind::VariantConstruct { variant_type, payload, .. } => {
+            if *variant_type == old_type {
+                *variant_type = new_type;
+            }
+            if let Some(p) = payload {
+                replace_type_in_expr(p, old_type, new_type);
+            }
+        }
+        TirExprKind::Block(blk) => {
+            replace_type_in_block(blk, old_type, new_type);
+        }
+        _ => {}
+    }
+}
+
+/// Recursively fix types in a block — replaces `old_type` with `new_type`
+/// in return statements, let bindings, and expressions.
+/// Also replaces `TypeTable::I32` placeholders with `new_type` (for cases
+/// where the adapter used I32 as a placeholder).
+fn fixup_types_in_block(
+    block: &mut TirBlock,
+    old_type: TypeId,
+    new_type: TypeId,
+    local_types: &mut Vec<TypeId>,
+) {
     for stmt in &mut block.stmts {
         match &mut stmt.kind {
             TirStmtKind::Return {
                 value: Some(ret_expr),
             } => {
-                fixup_expr_type(ret_expr, return_type);
+                fixup_expr_type(ret_expr, old_type, new_type);
             }
-            // Recurse into control flow that contains return statements
             TirStmtKind::If {
                 then_block,
                 else_block,
                 ..
             } => {
-                fixup_types_in_block(then_block, return_type, local_types);
+                fixup_types_in_block(then_block, old_type, new_type, local_types);
                 if let Some(blk) = else_block {
-                    fixup_types_in_block(blk, return_type, local_types);
+                    fixup_types_in_block(blk, old_type, new_type, local_types);
                 }
             }
             TirStmtKind::Loop { body } => {
-                fixup_types_in_block(body, return_type, local_types);
+                fixup_types_in_block(body, old_type, new_type, local_types);
             }
-            // Fix up Let stmts that hold adapter intermediate results
             TirStmtKind::Let {
                 value,
                 local_index,
@@ -4583,10 +5329,10 @@ fn fixup_types_in_block(block: &mut TirBlock, return_type: TypeId, local_types: 
                 ..
             } => {
                 let idx = *local_index;
-                fixup_adapter_let(value, idx, return_type, type_id, local_types);
+                fixup_adapter_let(value, idx, old_type, new_type, type_id, local_types);
             }
             TirStmtKind::Expr(expr) => {
-                fixup_adapter_expr(expr, return_type);
+                fixup_adapter_expr(expr, old_type, new_type);
             }
             _ => {}
         }
@@ -4594,30 +5340,31 @@ fn fixup_types_in_block(block: &mut TirBlock, return_type: TypeId, local_types: 
 }
 
 /// Fix up an expression in a Let statement that might hold adapter intermediate values.
-/// Also fixes the Let's own `type_id` and the corresponding `local_types` entry.
 fn fixup_adapter_let(
     expr: &mut TirExpr,
     local_index: u32,
-    return_type: TypeId,
+    old_type: TypeId,
+    new_type: TypeId,
     let_type_id: &mut TypeId,
     local_types: &mut [TypeId],
 ) {
+    let should_fix = expr.type_id == TypeTable::I32 || expr.type_id == old_type;
     match &mut expr.kind {
         TirExprKind::Call { func, .. } if func.method_info.is_some() => {
-            if expr.type_id == TypeTable::I32 {
-                expr.type_id = return_type;
-                *let_type_id = return_type;
+            if should_fix {
+                expr.type_id = new_type;
+                *let_type_id = new_type;
                 if (local_index as usize) < local_types.len() {
-                    local_types[local_index as usize] = return_type;
+                    local_types[local_index as usize] = new_type;
                 }
             }
         }
         TirExprKind::Null => {
-            if expr.type_id == TypeTable::I32 {
-                expr.type_id = return_type;
-                *let_type_id = return_type;
+            if should_fix {
+                expr.type_id = new_type;
+                *let_type_id = new_type;
                 if (local_index as usize) < local_types.len() {
-                    local_types[local_index as usize] = return_type;
+                    local_types[local_index as usize] = new_type;
                 }
             }
         }
@@ -4626,37 +5373,38 @@ fn fixup_adapter_let(
 }
 
 /// Fix up an expression statement (e.g., Assign with `VariantConstruct`).
-fn fixup_adapter_expr(expr: &mut TirExpr, return_type: TypeId) {
+fn fixup_adapter_expr(expr: &mut TirExpr, old_type: TypeId, new_type: TypeId) {
     if let TirExprKind::Assign { target, value } = &mut expr.kind {
-        fixup_variant_construct(value, return_type);
-        // Also fix up the assign target (Local ref) type
-        if target.type_id == TypeTable::I32 {
-            target.type_id = return_type;
+        fixup_variant_construct(value, old_type, new_type);
+        if target.type_id == TypeTable::I32 || target.type_id == old_type {
+            target.type_id = new_type;
         }
     }
 }
 
 /// Fix up `VariantConstruct` expressions to use the real type.
-fn fixup_variant_construct(expr: &mut TirExpr, return_type: TypeId) {
+fn fixup_variant_construct(expr: &mut TirExpr, old_type: TypeId, new_type: TypeId) {
     if let TirExprKind::VariantConstruct { variant_type, .. } = &mut expr.kind {
-        if *variant_type == TypeTable::I32 {
-            *variant_type = return_type;
+        if *variant_type == TypeTable::I32 || *variant_type == old_type {
+            *variant_type = new_type;
         }
-        if expr.type_id == TypeTable::I32 {
-            expr.type_id = return_type;
+        if expr.type_id == TypeTable::I32 || expr.type_id == old_type {
+            expr.type_id = new_type;
         }
     }
 }
 
 /// Recursively fix the `type_id` of an expression and its leaf nodes.
-fn fixup_expr_type(expr: &mut TirExpr, type_id: TypeId) {
-    expr.type_id = type_id;
+fn fixup_expr_type(expr: &mut TirExpr, old_type: TypeId, new_type: TypeId) {
+    if expr.type_id == old_type || expr.type_id == TypeTable::I32 {
+        expr.type_id = new_type;
+    }
     match &mut expr.kind {
         TirExprKind::TupleLiteral { .. } | TirExprKind::Call { .. } | TirExprKind::Local { .. } => {
         }
         TirExprKind::VariantConstruct { variant_type, .. } => {
-            if *variant_type == TypeTable::I32 {
-                *variant_type = type_id;
+            if *variant_type == TypeTable::I32 || *variant_type == old_type {
+                *variant_type = new_type;
             }
         }
         _ => {}
@@ -4763,9 +5511,10 @@ fn rewrite_calls_in_block(
     adapters: &IndexMap<String, Rc<RefCell<TirFunction>>>,
     entry_source: &ModuleSource,
     wasi_registry: &WasiRegistry,
+    type_table: &Rc<RefCell<TypeTable>>,
 ) {
     for stmt in &mut block.stmts {
-        rewrite_calls_in_stmt(stmt, adapters, entry_source, wasi_registry);
+        rewrite_calls_in_stmt(stmt, adapters, entry_source, wasi_registry, type_table);
     }
 }
 
@@ -4774,11 +5523,12 @@ fn rewrite_calls_in_stmt(
     adapters: &IndexMap<String, Rc<RefCell<TirFunction>>>,
     entry_source: &ModuleSource,
     wasi_registry: &WasiRegistry,
+    type_table: &Rc<RefCell<TypeTable>>,
 ) {
     match &mut stmt.kind {
         TirStmtKind::Let { value, type_id, .. } => {
             let old_type = value.type_id;
-            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry, type_table);
             // If the expression type changed (e.g., streaming adapter returns i32
             // instead of Result<(), ErrorCode>), update the let binding's type.
             if value.type_id != old_type {
@@ -4786,11 +5536,11 @@ fn rewrite_calls_in_stmt(
             }
         }
         TirStmtKind::Expr(value) => {
-            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry, type_table);
         }
         TirStmtKind::Return { value } => {
             if let Some(v) = value {
-                rewrite_calls_in_expr(v, adapters, entry_source, wasi_registry);
+                rewrite_calls_in_expr(v, adapters, entry_source, wasi_registry, type_table);
             }
         }
         TirStmtKind::If {
@@ -4798,14 +5548,14 @@ fn rewrite_calls_in_stmt(
             then_block,
             else_block,
         } => {
-            rewrite_calls_in_expr(condition, adapters, entry_source, wasi_registry);
-            rewrite_calls_in_block(then_block, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_expr(condition, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_block(then_block, adapters, entry_source, wasi_registry, type_table);
             if let Some(blk) = else_block {
-                rewrite_calls_in_block(blk, adapters, entry_source, wasi_registry);
+                rewrite_calls_in_block(blk, adapters, entry_source, wasi_registry, type_table);
             }
         }
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            rewrite_calls_in_block(body, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_block(body, adapters, entry_source, wasi_registry, type_table);
         }
         TirStmtKind::IfPattern {
             scrutinee,
@@ -4813,23 +5563,23 @@ fn rewrite_calls_in_stmt(
             else_block,
             ..
         } => {
-            rewrite_calls_in_expr(scrutinee, adapters, entry_source, wasi_registry);
-            rewrite_calls_in_block(then_block, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_expr(scrutinee, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_block(then_block, adapters, entry_source, wasi_registry, type_table);
             if let Some(blk) = else_block {
-                rewrite_calls_in_block(blk, adapters, entry_source, wasi_registry);
+                rewrite_calls_in_block(blk, adapters, entry_source, wasi_registry, type_table);
             }
         }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                rewrite_calls_in_expr(v, adapters, entry_source, wasi_registry);
+                rewrite_calls_in_expr(v, adapters, entry_source, wasi_registry, type_table);
             }
         }
         TirStmtKind::LetPattern { value, .. } => {
-            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry, type_table);
         }
         TirStmtKind::Continue => {}
         TirStmtKind::TaskReturn { value } => {
-            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry, type_table);
         }
     }
 }
@@ -4839,6 +5589,7 @@ fn rewrite_calls_in_expr(
     adapters: &IndexMap<String, Rc<RefCell<TirFunction>>>,
     entry_source: &ModuleSource,
     wasi_registry: &WasiRegistry,
+    type_table: &Rc<RefCell<TypeTable>>,
 ) {
     // Check if this is an effect-like Call that should be rewritten
     let is_effect_call = matches!(&expr.kind, TirExprKind::Call { func, .. }
@@ -4869,8 +5620,9 @@ fn rewrite_calls_in_expr(
                     // Fix the call site's type to match.
                     expr.type_id = TypeTable::I32;
                 } else if adapter.return_type != expr.type_id {
+                    let old_return_type = adapter.return_type;
                     adapter.return_type = expr.type_id;
-                    fixup_return_type_in_body(&mut adapter, expr.type_id);
+                    fixup_return_type_in_body(&mut adapter, old_return_type, expr.type_id);
                 }
                 for (i, arg) in args.iter().enumerate() {
                     if i < adapter.params.len() && adapter.params[i].type_id != arg.expr.type_id {
@@ -4906,7 +5658,7 @@ fn rewrite_calls_in_expr(
 
             // Recurse into args
             for arg in args {
-                rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry);
+                rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry, type_table);
             }
             return;
         }
@@ -4916,10 +5668,22 @@ fn rewrite_calls_in_expr(
     if let TirExprKind::MethodCall { func, .. } = &expr.kind
         && let Some(method_info) = func.method_info.clone()
     {
-        let qualified = format!(
+        let mut qualified = format!(
             "{}::{}",
             method_info.base_struct_name, method_info.method_name
         );
+        // Resolve through type aliases (e.g., Headers -> Fields)
+        if !adapters.contains_key(&qualified) {
+            if let Some(Type::Named(resolved)) =
+                wasi_registry.get_newtype(&method_info.base_struct_name)
+            {
+                let aliased =
+                    format!("{}::{}", resolved.name, method_info.method_name);
+                if adapters.contains_key(&aliased) {
+                    qualified = aliased;
+                }
+            }
+        }
         if let Some(adapter_rc) = adapters.get(&qualified) {
             // Extract receiver and args before replacing
             let (taken_receiver, taken_args) =
@@ -4940,8 +5704,9 @@ fn rewrite_calls_in_expr(
             {
                 let mut adapter = adapter_rc.borrow_mut();
                 if adapter.return_type != expr.type_id {
+                    let old_return_type = adapter.return_type;
                     adapter.return_type = expr.type_id;
-                    fixup_return_type_in_body(&mut adapter, expr.type_id);
+                    fixup_return_type_in_body(&mut adapter, old_return_type, expr.type_id);
                 }
                 // Fix up self param (index 0) from the receiver
                 if !adapter.params.is_empty() && adapter.params[0].type_id != taken_receiver.type_id
@@ -4965,6 +5730,20 @@ fn rewrite_calls_in_expr(
                         }
                     }
                 }
+                // Replace WASI-derived types in the body (including function names)
+                if let Some(func_info) = wasi_registry.get_function(&qualified) {
+                    // For method calls, call_args excludes self (self is handled above)
+                    let call_args: Vec<TirExpr> = taken_args.iter().map(|a| a.expr.clone()).collect();
+                    fixup_wasi_derived_types_in_adapter(
+                        &mut adapter,
+                        func_info,
+                        &call_args,
+                        expr.type_id,
+                        type_table,
+                        wasi_registry,
+                        true, // skip_self: call_args excludes self
+                    );
+                }
             }
 
             // Replace MethodCall with Call targeting the adapter
@@ -4984,7 +5763,7 @@ fn rewrite_calls_in_expr(
             // Recurse into args of the new Call
             if let TirExprKind::Call { args, .. } = &mut expr.kind {
                 for arg in args {
-                    rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry);
+                    rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry, type_table);
                 }
             }
             return;
@@ -5010,12 +5789,60 @@ fn rewrite_calls_in_expr(
                 unreachable!()
             };
 
-            // Fix up adapter return type from the call site
+            // Fix up adapter return type and param types from the call site
             {
                 let mut adapter = adapter_rc.borrow_mut();
                 if adapter.return_type != expr.type_id {
+                    let old_return_type = adapter.return_type;
                     adapter.return_type = expr.type_id;
-                    fixup_return_type_in_body(&mut adapter, expr.type_id);
+                    fixup_return_type_in_body(&mut adapter, old_return_type, expr.type_id);
+                }
+                // Fix up adapter param types for GC pass-through params (String,
+                // Array<T>) where the adapter receives the GC value directly.
+                // Do NOT fix up params that get flattened (Option, resource handles)
+                // because taken_args indices don't match flat adapter param indices.
+                if let Some(func_info) = &wasi_func_info {
+                    let mut flat_idx = 0;
+                    for (i, (_name, _, param_type)) in func_info.params.iter().enumerate() {
+                        let is_gc_passthrough = matches!(
+                            param_type,
+                            Type::Named(n) if n.name == "String"
+                        ) || matches!(
+                            param_type,
+                            Type::Generic(g) if g.name == "Array" && g.args.len() == 1
+                        );
+                        if is_gc_passthrough {
+                            if flat_idx < adapter.params.len()
+                                && i < taken_args.len()
+                                && adapter.params[flat_idx].type_id != taken_args[i].type_id
+                            {
+                                let local_idx = adapter.params[flat_idx].local_index as usize;
+                                adapter.params[flat_idx].type_id = taken_args[i].type_id;
+                                if local_idx < adapter.local_types.len() {
+                                    adapter.local_types[local_idx] = taken_args[i].type_id;
+                                }
+                            }
+                            flat_idx += 1;
+                        } else {
+                            let flat_tys = flatten_param_type(param_type);
+                            flat_idx += flat_tys.len().max(1);
+                        }
+                    }
+                }
+                // Replace WASI-derived types in the body with the user's types.
+                // For each param that uses Array<T>/etc, the adapter body may have
+                // created method calls using the WASI-derived TypeId which differs
+                // from the user's newtype-aliased TypeId.
+                if let Some(func_info) = &wasi_func_info {
+                    fixup_wasi_derived_types_in_adapter(
+                        &mut adapter,
+                        func_info,
+                        &taken_args,
+                        expr.type_id,
+                        type_table,
+                        wasi_registry,
+                        false, // skip_self: static calls have no self
+                    );
                 }
             }
 
@@ -5036,9 +5863,7 @@ fn rewrite_calls_in_expr(
                             flat.push(taken_args[i].clone());
                         }
                         Type::Generic(g)
-                            if g.name == "Array"
-                                && g.args.len() == 1
-                                && matches!(&g.args[0], Type::Named(n) if n.name == "u8") =>
+                            if g.name == "Array" && g.args.len() == 1 =>
                         {
                             flat.push(taken_args[i].clone());
                         }
@@ -5072,7 +5897,7 @@ fn rewrite_calls_in_expr(
             // Recurse into args of the new Call
             if let TirExprKind::Call { args, .. } = &mut expr.kind {
                 for arg in args {
-                    rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry);
+                    rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry, type_table);
                 }
             }
             return;
@@ -5083,47 +5908,47 @@ fn rewrite_calls_in_expr(
     match &mut expr.kind {
         TirExprKind::Call { args, .. } => {
             for arg in args {
-                rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry);
+                rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry, type_table);
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                rewrite_calls_in_expr(arg, adapters, entry_source, wasi_registry);
+                rewrite_calls_in_expr(arg, adapters, entry_source, wasi_registry, type_table);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            rewrite_calls_in_expr(receiver, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_expr(receiver, adapters, entry_source, wasi_registry, type_table);
             for arg in args {
-                rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry);
+                rewrite_calls_in_expr(&mut arg.expr, adapters, entry_source, wasi_registry, type_table);
             }
         }
         TirExprKind::IndirectCall { callee, args } => {
-            rewrite_calls_in_expr(callee, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_expr(callee, adapters, entry_source, wasi_registry, type_table);
             for arg in args {
-                rewrite_calls_in_expr(arg, adapters, entry_source, wasi_registry);
+                rewrite_calls_in_expr(arg, adapters, entry_source, wasi_registry, type_table);
             }
         }
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            rewrite_calls_in_block(block, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_block(block, adapters, entry_source, wasi_registry, type_table);
         }
         TirExprKind::Binary { left, right, .. } => {
-            rewrite_calls_in_expr(left, adapters, entry_source, wasi_registry);
-            rewrite_calls_in_expr(right, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_expr(left, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_expr(right, adapters, entry_source, wasi_registry, type_table);
         }
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. } => {
-            rewrite_calls_in_expr(inner, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_expr(inner, adapters, entry_source, wasi_registry, type_table);
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            rewrite_calls_in_expr(condition, adapters, entry_source, wasi_registry);
-            rewrite_calls_in_block(then_branch, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_expr(condition, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_block(then_branch, adapters, entry_source, wasi_registry, type_table);
             if let Some(blk) = else_branch {
-                rewrite_calls_in_block(blk, adapters, entry_source, wasi_registry);
+                rewrite_calls_in_block(blk, adapters, entry_source, wasi_registry, type_table);
             }
         }
         TirExprKind::Index { expr: e, index }
@@ -5131,8 +5956,8 @@ fn rewrite_calls_in_expr(
             target: e,
             value: index,
         } => {
-            rewrite_calls_in_expr(e, adapters, entry_source, wasi_registry);
-            rewrite_calls_in_expr(index, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_expr(e, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_expr(index, adapters, entry_source, wasi_registry, type_table);
         }
         TirExprKind::Switch {
             scrutinee,
@@ -5140,37 +5965,37 @@ fn rewrite_calls_in_expr(
             default,
             ..
         } => {
-            rewrite_calls_in_expr(scrutinee, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_expr(scrutinee, adapters, entry_source, wasi_registry, type_table);
             for arm in arms {
-                rewrite_calls_in_block(arm, adapters, entry_source, wasi_registry);
+                rewrite_calls_in_block(arm, adapters, entry_source, wasi_registry, type_table);
             }
-            rewrite_calls_in_block(default, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_block(default, adapters, entry_source, wasi_registry, type_table);
         }
         TirExprKind::Match {
             expr: scrutinee,
             arms,
         } => {
-            rewrite_calls_in_expr(scrutinee, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_expr(scrutinee, adapters, entry_source, wasi_registry, type_table);
             for arm in arms {
                 if let Some(guard) = &mut arm.guard {
-                    rewrite_calls_in_expr(guard, adapters, entry_source, wasi_registry);
+                    rewrite_calls_in_expr(guard, adapters, entry_source, wasi_registry, type_table);
                 }
-                rewrite_calls_in_expr(&mut arm.body, adapters, entry_source, wasi_registry);
+                rewrite_calls_in_expr(&mut arm.body, adapters, entry_source, wasi_registry, type_table);
             }
         }
         TirExprKind::Closure { body, .. } => {
-            rewrite_calls_in_expr(body, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_expr(body, adapters, entry_source, wasi_registry, type_table);
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            rewrite_calls_in_expr(functor, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_expr(functor, adapters, entry_source, wasi_registry, type_table);
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in &mut fields.iter_mut() {
-                rewrite_calls_in_expr(&mut field.value, adapters, entry_source, wasi_registry);
+                rewrite_calls_in_expr(&mut field.value, adapters, entry_source, wasi_registry, type_table);
             }
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry, type_table);
         }
         _ => {} // Leaf nodes: no sub-expressions
     }
@@ -5288,6 +6113,15 @@ fn collect_effect_calls_in_expr(
                 );
                 if wasi_registry.get_function(&qualified).is_some() {
                     effects.insert(qualified);
+                } else if let Some(Type::Named(resolved)) =
+                    wasi_registry.get_newtype(&method_info.base_struct_name)
+                {
+                    // Resolve through type aliases (e.g., Headers -> Fields)
+                    let aliased =
+                        format!("{}::{}", resolved.name, method_info.method_name);
+                    if wasi_registry.get_function(&aliased).is_some() {
+                        effects.insert(aliased);
+                    }
                 }
             }
             collect_effect_calls_in_expr(receiver, effects, wasi_registry);
@@ -5562,7 +6396,7 @@ mod tests {
 
     #[test]
     fn lower_i32() {
-        let stmts = synthesize_lower(&named_type("i32"), i32_const(42), i32_const(100), &mut 0);
+        let stmts = synthesize_lower(&named_type("i32"), i32_const(42), i32_const(100), &mut 0, &mut vec![]);
         assert_eq!(stmts.len(), 1);
     }
 
@@ -5573,14 +6407,14 @@ mod tests {
             TypeTable::BOOL,
             synth_span(),
         );
-        let stmts = synthesize_lower(&named_type("bool"), value, i32_const(100), &mut 0);
+        let stmts = synthesize_lower(&named_type("bool"), value, i32_const(100), &mut 0, &mut vec![]);
         assert_eq!(stmts.len(), 1);
     }
 
     #[test]
     fn lower_unit() {
         let value = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span());
-        let stmts = synthesize_lower(&Type::Tuple(vec![]), value, i32_const(100), &mut 0);
+        let stmts = synthesize_lower(&Type::Tuple(vec![]), value, i32_const(100), &mut 0, &mut vec![]);
         assert!(stmts.is_empty());
     }
 
@@ -5597,6 +6431,7 @@ mod tests {
             value,
             i32_const(100),
             &mut next_local,
+            &mut vec![],
         );
         // Should produce: let __packed = cm_lower_string(value); store ptr; store len
         assert_eq!(stmts.len(), 3);
