@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773267584216,
+  "lastUpdate": 1773268368770,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2612,6 +2612,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 25163,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1c4794b8e875b7c6e933bd914e77ecb582cda813",
+          "message": "Merge pull request #564 from wado-lang/claude/refactor-inflate-raw-ex-B5x3F\n\nFix break/continue depth calculation in match expressions",
+          "timestamp": "2026-03-12T07:30:21+09:00",
+          "tree_id": "13f3d7ff55e065c79861795865a4bac3be28dc60",
+          "url": "https://github.com/wado-lang/wado/commit/1c4794b8e875b7c6e933bd914e77ecb582cda813"
+        },
+        "date": 1773268368580,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2378,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9895,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 23175,
             "unit": "bytes"
           }
         ]
