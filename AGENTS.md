@@ -285,7 +285,7 @@ Run `make on-task-started` to install mise and all required development tools au
 
 ```sh
 make test        # test Rust crates (included in on-task-done)
-make wado-test   # test Wado modules (included in on-task-done)
+make test-wado   # test Wado modules (included in on-task-done)
 make format      # format Rust files and Markdown files
 make format-wado # format Wado source files
 
