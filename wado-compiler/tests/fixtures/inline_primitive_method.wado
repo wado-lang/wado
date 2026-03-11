@@ -1,0 +1,23 @@
+// Test that primitive method calls like f64::to_bits are fully inlined
+// and Box<f64> dead locals are eliminated from WIR.
+// Uses float formatting to exercise fpfmt.wado code paths.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn get_value() -> f64 {
+    return 3.14;
+}
+
+export fn run() with Stdout {
+    let x = get_value();
+    let bits = x.to_bits();
+    let back = f64::from_bits(bits);
+    println(`{x} {bits} {back}`);
+}
+
+__DATA__
+{
+    "stdout": "3.14 4614253070214989087 3.14\n",
+    "wir_expect:O2": ["builtin::i64_reinterpret_f64"]
+}

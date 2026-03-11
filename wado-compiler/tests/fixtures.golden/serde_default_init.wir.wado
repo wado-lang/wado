@@ -524,38 +524,17 @@ fn run() {
     let __local_14: ref Formatter;
     let __local_15: ref String;
     let __local_16: ref Formatter;
-    let __local_17: ref Result<String,SerializeError>;
-    let __local_18: ref Result<Config,DeserializeError>;
-    let __local_19: ref Array<u64>;
-    let __local_20: i32;
     let __local_21: ref String;
-    let __local_22: ref "core:internal/Box<i32>";
     let __local_23: ref Formatter;
-    let __local_24: ref "core:internal/Box<i32>";
-    let __local_25: ref Formatter;
     let __local_26: ref String;
-    let __local_27: i32;
     let __local_28: ref String;
-    let __local_29: ref "core:internal/Box<i32>";
     let __local_30: ref Formatter;
-    let __local_31: ref "core:internal/Box<i32>";
-    let __local_32: ref Formatter;
     let __local_33: ref String;
-    let __local_34: ref "core:internal/Box<i32>";
     let __local_35: ref Formatter;
-    let __local_36: ref "core:internal/Box<i32>";
-    let __local_37: ref Formatter;
-    let __local_38: i32;
     let __local_39: ref String;
-    let __local_40: ref "core:internal/Box<i32>";
     let __local_41: ref Formatter;
-    let __local_42: ref "core:internal/Box<i32>";
-    let __local_43: ref Formatter;
     let __local_44: ref String;
-    let __local_45: ref "core:internal/Box<bool>";
     let __local_46: ref Formatter;
-    let __local_47: ref "core:internal/Box<bool>";
-    let __local_48: ref Formatter;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -813,9 +792,7 @@ fn from_string<Config>(input) {
 
 fn to_string<Config>(value) {
     let ser: ref "core:json/JsonSerializer";
-    let r: ref Result<unit,SerializeError>;
     let e: ref "core:serde/SerializeError";
-    let __local_4: ref Result<unit,SerializeError>;
     ser = "core:json/JsonSerializer" { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };
     let __sroa_r_discriminant: i32;
     let __sroa_r_payload_0: ref null "core:serde/SerializeError";
@@ -830,7 +807,6 @@ fn to_string<Config>(value) {
 fn "core:allocator/grow_memory"(new_offset) {  // from core:allocator
     let current_bytes: i32;
     let deficit: i32;
-    let __local_3: i32;
     let normal_grow: i32;
     let grow_bytes: i32;
     let grow_pages: i32;
@@ -905,11 +881,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
     let arr: ref Array<u8>;
     let __iter_2: ref StrUtf8ByteIter;
     let b: u8;
-    let __pattern_temp_0: ref Option<u8>;
-    let __local_9: ref String;
-    let __local_10: i32;
     let __local_11: ref StrUtf8ByteIter;
-    let __local_12: ref String;
     len = message.used;
     alloc_size = if add_newline -> i32 {
         len + 1;
@@ -1009,8 +981,6 @@ fn "core:internal/cm_lower_list_u8"(data, len) {  // from core:internal
 fn "core:internal/cm_lower_array_u8"(arr) {  // from core:internal
     let data: ref array<u8>;
     let len: i32;
-    let __local_3: ref Array<u8>;
-    let __local_4: ref Array<u8>;
     data = arr.repr;
     len = arr.used;
     return "core:internal/cm_lower_list_u8"(data, len);
@@ -1228,11 +1198,8 @@ fn pow10_fine(i) {
 }
 
 fn mul_pow10(p) {
-    let __local_1: i32;
-    let __local_2: i32;
     let q: i32;
     let r: i32;
-    let c: ref PmHiLo;
     let f: u64;
     let borrow: u64;
     let c_hi_raw: u64;
@@ -1314,15 +1281,22 @@ fn uscale(x, pm_hi, pm_lo, s) {
 }
 
 fn pack64(m, e) {
-    let __local_2: u64;
     let mantissa_bits: u64;
     let exp_bits: u64;
+    let __local_5: i64;
+    let __local_6: i64;
     if (m & 4503599627370496_i64) == 0_i64 {
-        return builtin::f64_reinterpret_i64(m);
+        return __inline_f64__from_bits_0: block -> f64 {
+            __local_5 = m;
+            break __inline_f64__from_bits_0: builtin::f64_reinterpret_i64(__local_5);
+        };
     };
     mantissa_bits = m & -4503599627370497_i64;
     exp_bits = builtin::i64_extend_i32_s(1075 + e) << 52_i64;
-    return builtin::f64_reinterpret_i64(mantissa_bits | exp_bits);
+    return __inline_f64__from_bits_1: block -> f64 {
+        __local_6 = mantissa_bits | exp_bits;
+        break __inline_f64__from_bits_1: builtin::f64_reinterpret_i64(__local_6);
+    };
 }
 
 fn parse(d, p) {
@@ -1330,16 +1304,10 @@ fn parse(d, p) {
     let lp: i32;
     let e: i32;
     let x: u64;
-    let pm: ref PmHiLo;
     let s_val: i32;
     let u: u64;
-    let __local_9: u64;
     let shift: u64;
-    let __local_11: u64;
-    let __local_12: i32;
-    let __local_13: i32;
     let __local_14: i32;
-    let __local_15: i32;
     b = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d));
     lp = (p * 108853) >> 15;
     e = __inline_i32__min_2: block -> i32 {
@@ -1431,9 +1399,7 @@ fn "core:json/write_escaped_string"(buf, s) {  // from core:json
     let code: i32;
     let hi: i32;
     let lo: i32;
-    let __pattern_temp_0: ref Option<char>;
     let __local_8: ref StrCharIter;
-    let __local_9: ref String;
     String::append_char(buf, 34);
     __iter_0 = __inline_StrCharIter_IntoIterator__into_iter_0: block -> ref StrCharIter {
         __local_8 = StrCharIter { repr: ref.as_non_null(s.repr), used: s.used, byte_index: 0 };
@@ -1489,7 +1455,6 @@ fn "core:internal/Array<u8>::append"(self, value) {  // from core:internal
     let new_capacity: i32;
     let new_repr: ref array<u8>;
     let __local_6: i32;
-    let __local_7: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
@@ -1506,7 +1471,6 @@ fn "core:internal/Array<u8>::append"(self, value) {  // from core:internal
 }
 
 fn char::from_u32(value) {
-    let __local_1: u32;
     if value >u 1114111 {
         return 1; 0;
     };
@@ -1542,9 +1506,7 @@ fn i32::fmt_decimal(self, f) {
 
 fn char^Display::fmt(self, f) {
     let s: ref String;
-    let __local_3: ref Formatter;
     let c: char;
-    let __local_5: i32;
     if f.width <= 0 {
         c = self;
         String::append_char(f.buf, c);
@@ -1564,9 +1526,7 @@ fn String::grow(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref array<u8>;
     let __local_5: i32;
-    let __local_6: i32;
     let __local_7: i32;
-    let __local_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
@@ -1598,8 +1558,6 @@ fn String::internal_reserve_uninit(self, n) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref String;
-    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -1618,10 +1576,6 @@ fn String^Eq::eq(self, other) {
     let a_repr: ref array<u8>;
     let b_repr: ref array<u8>;
     let i: i32;
-    let __local_7: ref String;
-    let __local_8: ref String;
-    let __local_9: ref String;
-    let __local_10: ref String;
     len_a = self.used;
     len_b = other.used;
     if len_a != len_b {
@@ -1756,22 +1710,13 @@ fn Config^Deserialize::deserialize<JsonDeserializer>(d) {
     let __local_13: i32;
     let __local_14: ref Result<bool,DeserializeError>;
     let __local_15: bool;
-    let __local_16: ref Result<JsonStructAccess,DeserializeError>;
     let __pattern_temp_1: ref Result<Option<i32>,DeserializeError>;
-    let __local_18: ref Option<i32>;
     let __local_19: ref Result<String,DeserializeError>;
     let __local_20: ref Result<i32,DeserializeError>;
     let __local_21: ref Result<bool,DeserializeError>;
-    let __local_22: ref "core:json/JsonStructAccess";
     let __local_23: ref "core:json/JsonDeserializer";
-    let __local_24: ref "core:json/JsonStructAccess";
     let __local_25: ref "core:json/JsonDeserializer";
-    let __local_26: ref "core:json/JsonStructAccess";
     let __local_27: ref "core:json/JsonDeserializer";
-    let __local_28: ref "core:json/JsonStructAccess";
-    let __local_29: ref "core:json/JsonStructAccess";
-    let __local_30: ref "core:json/JsonDeserializer";
-    let __local_31: ref "core:json/JsonDeserializer";
     __result = "core:json/JsonDeserializer^Deserializer::begin_struct"(d, String { repr: array.new_data<u8>("Config"), used: 6 }, 3, "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/__closure_wrapper_0") });
     if ref.test Result<JsonStructAccess,DeserializeError>::Ok(__result) {
         sd = value_copy "core:json/JsonStructAccess"(ref.cast Result<JsonStructAccess,DeserializeError>::Ok(__result).payload_0);
@@ -1853,11 +1798,7 @@ fn Config^Deserialize::deserialize<JsonDeserializer>(d) {
 fn Config^Serialize::serialize<JsonSerializer>(self, s) {
     let __result: ref Result<JsonStructSerializer,SerializeError>;
     let st: ref "core:json/JsonStructSerializer";
-    let __local_4: ref Result<JsonStructSerializer,SerializeError>;
-    let __local_5: ref "core:json/JsonSerializer";
     let __local_6: ref String;
-    let __local_7: i32;
-    let __local_8: ref "core:json/JsonStructSerializer";
     __result = __inline_JsonSerializer_Serializer__begin_struct_0: block -> ref Result<JsonStructSerializer,SerializeError> {
         __local_6 = String { repr: array.new_data<u8>("Config"), used: 6 };
         String::append_char(s, 123);
@@ -1880,7 +1821,6 @@ fn Config^Serialize::serialize<JsonSerializer>(self, s) {
 fn JsonStructSerializer^SerializeStruct::field<bool>(self, name, value) {
     let ser: ref "core:json/JsonSerializer";
     let r: ref Result<unit,SerializeError>;
-    let __local_5: ref "core:internal/Box<bool>";
     let __local_6: ref "core:json/JsonSerializer";
     if self.count > 0 {
         String::append_char(self.buf, 44);
@@ -1900,7 +1840,6 @@ fn JsonStructSerializer^SerializeStruct::field<bool>(self, name, value) {
 fn JsonStructSerializer^SerializeStruct::field<i32>(self, name, value) {
     let ser: ref "core:json/JsonSerializer";
     let r: ref Result<unit,SerializeError>;
-    let __local_5: ref "core:internal/Box<i32>";
     let __local_6: ref "core:json/JsonSerializer";
     if self.count > 0 {
         String::append_char(self.buf, 44);
@@ -1918,12 +1857,7 @@ fn JsonStructSerializer^SerializeStruct::field<i32>(self, name, value) {
 }
 
 fn JsonStructSerializer^SerializeStruct::field<String>(self, name, value) {
-    let __local_3: ref "core:json/JsonSerializer";
     let r: ref Result<unit,SerializeError>;
-    let __local_5: ref String;
-    let __local_6: ref "core:json/JsonSerializer";
-    let __local_7: ref "core:json/JsonSerializer";
-    let __local_8: ref String;
     let __sroa_ser_buf: ref String;
     if self.count > 0 {
         String::append_char(self.buf, 44);
@@ -1947,12 +1881,8 @@ fn __Closure_0::__call(self, __input, __start, __end) {
 fn "core:json/JsonSerializer^Serializer::serialize_i32"(self, v) {  // from core:json
     let __local_2: ref String;
     let __local_3: ref Formatter;
-    let __local_4: i32;
     let __local_5: ref String;
-    let __local_6: ref "core:internal/Box<i32>";
     let __local_7: ref Formatter;
-    let __local_8: ref "core:internal/Box<i32>";
-    let __local_9: ref Formatter;
     String::append(self, __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = __inline_Formatter__new_1: block -> ref Formatter {
@@ -1984,8 +1914,6 @@ fn "core:json/JsonSerializer^Serializer::serialize_bool"(self, v) {  // from cor
 
 fn "core:json/JsonDeserializer::skip_whitespace"(self) {  // from core:json
     let b: i32;
-    let __local_2: ref String;
-    let __local_3: ref String;
     let __local_4: i32;
     let _licm_input_5: ref String;
     let _licm_used_6: i32;
@@ -2032,7 +1960,6 @@ fn "core:json/JsonDeserializer::expect_char"(self, c) {  // from core:json
     let __local_6: i64;
     let __local_7: ref String;
     let __local_8: i32;
-    let __local_9: i32;
     let __local_10: ref String;
     let __local_11: ref String;
     let __local_12: ref String;
@@ -2084,14 +2011,9 @@ fn "core:json/JsonDeserializer::expect_literal"(self, lit) {  // from core:json
     let __iter_1: ref StrUtf8ByteIter;
     let b: u8;
     let __local_5: ref String;
-    let __pattern_temp_0: ref Option<u8>;
     let __local_7: ref StrUtf8ByteIter;
-    let __local_8: ref String;
-    let __local_9: ref String;
     let __local_10: i64;
-    let __local_11: ref String;
     let __local_12: i32;
-    let __local_13: i32;
     let __local_14: ref String;
     let __local_15: i64;
     let _licm_input_16: ref String;
@@ -2171,16 +2093,12 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
     let __local_24: ref Formatter;
     let __pattern_temp_0: ref Result<char,DeserializeError>;
     let __pattern_temp_1: ref Result<char,DeserializeError>;
-    let __pattern_temp_2: ref Option<char>;
-    let __pattern_temp_3: ref Option<char>;
-    let __pattern_temp_4: ref Option<char>;
     let __local_30: ref String;
     let __local_31: i64;
     let __local_32: ref String;
     let __local_33: i32;
     let __local_34: ref String;
     let __local_35: i64;
-    let __local_36: i32;
     let __local_37: ref String;
     let __local_38: ref String;
     let __local_39: i32;
@@ -2188,7 +2106,6 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
     let __local_41: i64;
     let __local_42: ref String;
     let __local_43: i32;
-    let __local_44: i32;
     let __local_45: ref String;
     let __local_46: ref String;
     let __local_47: i64;
@@ -2400,10 +2317,8 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
     let i: i32;
     let b: u32;
     let c: char;
-    let __pattern_temp_0: ref Option<char>;
     let __local_7: ref String;
     let __local_8: i64;
-    let __local_9: ref String;
     let __local_10: i32;
     let __local_11: ref String;
     let __local_12: i64;
@@ -2493,14 +2408,10 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
     let __local_6: ref String;
     let __local_7: ref String;
     let __local_8: i32;
-    let __local_9: ref String;
-    let __local_10: ref String;
     let __local_11: i32;
     let __local_12: ref String;
     let __local_13: ref String;
     let __local_14: i32;
-    let __local_15: ref String;
-    let __local_16: ref String;
     let __local_17: i32;
     let __local_18: ref String;
     let __local_19: ref String;
@@ -2508,8 +2419,6 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
     let __local_21: ref String;
     let __local_22: ref String;
     let __local_23: i32;
-    let __local_24: ref String;
-    let __local_25: ref String;
     let __local_26: i32;
     let _licm_input_27: ref String;
     let _licm_used_28: i32;
@@ -2673,7 +2582,6 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
     let v: f64;
     let v_signed: f64;
     let __local_16: ref String;
-    let __local_17: i64;
     let __local_18: ref String;
     let __local_19: i32;
     let __local_20: ref String;
@@ -2682,26 +2590,13 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
     let __local_23: i32;
     let __local_24: ref String;
     let __local_25: i64;
-    let __local_26: ref String;
-    let __local_27: ref String;
     let __local_28: i32;
-    let __local_29: ref String;
-    let __local_30: ref String;
     let __local_31: i32;
-    let __local_32: ref String;
-    let __local_33: ref String;
     let __local_34: i32;
-    let __local_35: ref String;
-    let __local_36: ref String;
     let __local_37: i32;
-    let __local_38: ref String;
-    let __local_39: ref String;
     let __local_40: i32;
-    let __local_41: f64;
     let __local_42: ref String;
-    let __local_43: i64;
     let __local_44: ref String;
-    let __local_45: i64;
     let _licm_input_46: ref String;
     let _licm_used_47: i32;
     let _licm_repr_48: ref array<u8>;
@@ -2895,12 +2790,8 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
 fn "core:json/JsonDeserializer::skip_string"(self) {  // from core:json
     let b: i32;
     let esc: i32;
-    let __local_3: ref String;
-    let __local_4: ref String;
     let __local_5: i32;
-    let __local_6: ref String;
     let __local_7: i64;
-    let __local_8: ref String;
     let __local_9: i32;
     let __local_10: i64;
     let _licm_input_11: ref String;
@@ -2963,10 +2854,6 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
     let c_11: i32;
     let __local_12: ref String;
     let __local_13: ref Formatter;
-    let __local_14: ref Result<unit,DeserializeError>;
-    let __local_15: ref Result<unit,DeserializeError>;
-    let __local_16: ref Result<unit,DeserializeError>;
-    let __local_17: ref Result<unit,DeserializeError>;
     let __local_18: ref String;
     let __local_19: i64;
     let __local_20: ref String;
@@ -2994,7 +2881,6 @@ fn "core:json/JsonDeserializer::skip_value"(self) {  // from core:json
     let __local_42: i32;
     let __local_43: ref String;
     let __local_44: i64;
-    let __local_45: i32;
     let __local_46: ref String;
     let __local_47: ref String;
     let __local_48: i64;
@@ -3213,12 +3099,7 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field"(self) {  // from c
     let idx_15: ref Option<i32>;
     let i_16: i32;
     let e_17: ref "core:serde/DeserializeError";
-    let __local_18: ref Result<unit,DeserializeError>;
-    let __local_19: ref Result<unit,DeserializeError>;
-    let __local_20: ref Option<i32>;
     let __pattern_temp_3: ref Result<String,DeserializeError>;
-    let __local_22: ref Result<unit,DeserializeError>;
-    let __local_23: ref Option<i32>;
     let __pattern_temp_6: ref Result<String,DeserializeError>;
     let __local_25: ref String;
     let __local_26: i64;
@@ -3232,7 +3113,6 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field"(self) {  // from c
     let __local_34: ref String;
     let __local_35: ref String;
     let __local_36: i32;
-    let __local_37: ref String;
     "core:json/JsonDeserializer::skip_whitespace"(self.de);
     if self.de.pos >= __inline_String__len_0: block -> i32 {
         __local_25 = self.de.input;
@@ -3359,8 +3239,6 @@ fn "core:json/JsonDeserializer^Deserializer::deserialize_bool"(self) {  // from 
     let e_3: ref "core:serde/DeserializeError";
     let r_4: ref Result<unit,DeserializeError>;
     let e_5: ref "core:serde/DeserializeError";
-    let __local_6: ref Result<unit,DeserializeError>;
-    let __local_7: ref Result<unit,DeserializeError>;
     let __local_8: ref String;
     let __local_9: i64;
     let __local_10: ref String;
@@ -3408,7 +3286,6 @@ fn "core:json/JsonDeserializer^Deserializer::deserialize_bool"(self) {  // from 
 fn "core:json/JsonDeserializer^Deserializer::begin_struct"(self, name, num_fields, lookup) {  // from core:json
     let r: ref Result<unit,DeserializeError>;
     let e: ref "core:serde/DeserializeError";
-    let __local_6: ref Result<unit,DeserializeError>;
     r = "core:json/JsonDeserializer::expect_char"(self, 123);
     if ref.test Result<unit,DeserializeError>::Err(r) {
         e = value_copy "core:serde/DeserializeError"(ref.cast Result<unit,DeserializeError>::Err(r).payload_0);
@@ -3442,7 +3319,6 @@ fn Formatter::pad(self, content) {
     let align: enum:Alignment;
     let left_pad: i32;
     let right_pad: i32;
-    let __local_7: ref String;
     content_len = content.used;
     if if self.width <= 0 -> i32 {
         1;
@@ -3480,8 +3356,6 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
-    let __local_14: ref String;
-    let __local_15: ref String;
     sign = String { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };
@@ -3554,35 +3428,8 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
 fn String^Inspect::inspect(self, f) {
     let __iter_4: ref StrCharIter;
     let c: char;
-    let __pattern_temp_0: ref Option<char>;
-    let __local_5: ref Formatter;
-    let __local_6: char;
     let __local_7: ref StrCharIter;
     let __local_8: ref String;
-    let __local_9: ref Formatter;
-    let __local_10: char;
-    let __local_11: ref Formatter;
-    let __local_12: char;
-    let __local_13: ref Formatter;
-    let __local_14: char;
-    let __local_15: ref Formatter;
-    let __local_16: char;
-    let __local_17: ref Formatter;
-    let __local_18: char;
-    let __local_19: ref Formatter;
-    let __local_20: char;
-    let __local_21: ref Formatter;
-    let __local_22: char;
-    let __local_23: ref Formatter;
-    let __local_24: char;
-    let __local_25: ref Formatter;
-    let __local_26: char;
-    let __local_27: ref Formatter;
-    let __local_28: char;
-    let __local_29: ref Formatter;
-    let __local_30: char;
-    let __local_31: ref Formatter;
-    let __local_32: char;
     let _licm_buf_33: ref String;
     String::append_char(f.buf, 34);
     __iter_4 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {

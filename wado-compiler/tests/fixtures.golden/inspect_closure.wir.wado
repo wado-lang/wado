@@ -196,12 +196,7 @@ global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let add_one: ref struct;
-    let __local_1: ref __Closure_1;
-    let __local_2: ref __Closure_2;
-    let __local_3: ref __Closure_3;
-    let __local_4: ref __Closure_4;
     let count: ref "core:internal/Box<i32>";
-    let __local_6: ref "core:internal/Box<i32>";
     let inc: ref struct;
     let __local_8: ref String;
     let __local_9: ref Formatter;
@@ -209,7 +204,6 @@ fn run() with Stdout {
     let __local_11: ref Formatter;
     let __local_12: ref String;
     let __local_13: ref Formatter;
-    let __local_14: ref String;
     let __local_15: ref String;
     let __local_16: ref Formatter;
     let __local_17: ref String;
@@ -228,48 +222,23 @@ fn run() with Stdout {
     let __local_30: ref Formatter;
     let __local_31: ref String;
     let __local_32: ref Formatter;
-    let __local_33: ref Array<u64>;
-    let __local_34: i32;
     let __local_35: ref String;
-    let __local_36: ref Formatter;
     let __local_37: ref String;
-    let __local_38: i32;
     let __local_39: ref String;
-    let __local_40: ref Formatter;
     let __local_41: ref String;
-    let __local_42: i32;
     let __local_43: ref String;
-    let __local_44: ref Formatter;
     let __local_45: ref String;
-    let __local_46: i32;
     let __local_47: ref String;
-    let __local_48: ref Formatter;
     let __local_49: ref String;
-    let __local_50: i32;
     let __local_51: ref String;
-    let __local_52: ref Formatter;
     let __local_53: ref String;
-    let __local_54: i32;
-    let __local_55: ref Formatter;
     let __local_56: ref String;
-    let __local_57: i32;
-    let __local_58: ref Formatter;
     let __local_59: ref String;
-    let __local_60: i32;
-    let __local_61: ref Formatter;
     let __local_62: ref String;
-    let __local_63: i32;
-    let __local_64: ref Formatter;
     let __local_65: ref String;
-    let __local_66: i32;
-    let __local_67: ref Formatter;
     let __local_68: ref String;
-    let __local_69: i32;
     let __local_70: ref String;
-    let __local_71: ref Formatter;
     let __local_72: ref String;
-    let __local_73: i32;
-    let __local_74: ref Formatter;
     let __local_75: ref String;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -399,7 +368,6 @@ fn __cm_export__run() {
 fn "core:allocator/grow_memory"(new_offset) {  // from core:allocator
     let current_bytes: i32;
     let deficit: i32;
-    let __local_3: i32;
     let normal_grow: i32;
     let grow_bytes: i32;
     let grow_pages: i32;
@@ -457,11 +425,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let arr: ref Array<u8>;
     let __iter_0: ref StrUtf8ByteIter;
     let b: u8;
-    let __pattern_temp_0: ref Option<u8>;
-    let __local_9: ref String;
-    let __local_10: i32;
     let __local_11: ref StrUtf8ByteIter;
-    let __local_12: ref String;
     len = message.used;
     alloc_size = if add_newline -> i32 {
         len + 1;
@@ -569,8 +533,6 @@ fn "core:internal/cm_lower_list_u8"(data, len) {  // from core:internal
 fn "core:internal/cm_lower_array_u8"(arr) {  // from core:internal
     let data: ref array<u8>;
     let len: i32;
-    let __local_3: ref Array<u8>;
-    let __local_4: ref Array<u8>;
     data = arr.repr;
     len = arr.used;
     return "core:internal/cm_lower_list_u8"(data, len);
@@ -582,7 +544,6 @@ fn "core:cli/Array<u8>::append"(self, value) {  // from core:cli
     let new_capacity: i32;
     let new_repr: ref array<u8>;
     let __local_6: i32;
-    let __local_7: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
@@ -603,9 +564,7 @@ fn String::grow(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref array<u8>;
     let __local_5: i32;
-    let __local_6: i32;
     let __local_7: i32;
-    let __local_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
@@ -625,8 +584,6 @@ fn String::grow(self, min_capacity) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref String;
-    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;

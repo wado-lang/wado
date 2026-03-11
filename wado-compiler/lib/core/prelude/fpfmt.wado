@@ -39,7 +39,7 @@ pub struct UnpackResult {
 
 // unpack64 returns (mantissa, exponent) such that f = mantissa * 2^exponent
 pub fn unpack64(f: f64) -> UnpackResult {
-    let bits = builtin::i64_reinterpret_f64(f) as u64;
+    let bits = f.to_bits() as u64;
 
     let mantissa_mask: u64 = 0x000FFFFFFFFFFFFF;
     let exp_mask: u64 = 0x7FF;
@@ -68,7 +68,7 @@ pub fn unpack64(f: f64) -> UnpackResult {
 // unpack32 returns (mantissa, exponent) such that f = mantissa * 2^exponent
 // The mantissa is left-aligned in 64 bits (top 24 bits significant).
 pub fn unpack32(f: f32) -> UnpackResult {
-    let bits = builtin::i32_reinterpret_f32(f) as u32;
+    let bits = f.to_bits() as u32;
 
     let mantissa_mask: u32 = 0x007FFFFF;
     let exp_mask: u32 = 0xFF;
@@ -795,7 +795,7 @@ pub enum SpecialKind {
 //   kind:       SpecialKind enum (NotSpecial, Zero, Inf, or NaN)
 // On the non-special path (is_special=false), kind is SpecialKind::NotSpecial.
 pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
-    let bits = builtin::i64_reinterpret_f64(f);
+    let bits = f.to_bits();
 
     // Check for zero
     if bits == 0 {
@@ -830,11 +830,11 @@ pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
 fn pack64(m: u64, e: i32) -> f64 {
     let bit52 = 1 as u64 << 52;
     if m & bit52 == 0 {
-        return builtin::f64_reinterpret_i64(m as i64);
+        return f64::from_bits(m as i64);
     }
     let mantissa_bits = m & ~bit52;
     let exp_bits = (1075 + e) as u64 << 52;
-    return builtin::f64_reinterpret_i64((mantissa_bits | exp_bits) as i64);
+    return f64::from_bits((mantissa_bits | exp_bits) as i64);
 }
 
 // parse rounds d * 10^p to the nearest f64.

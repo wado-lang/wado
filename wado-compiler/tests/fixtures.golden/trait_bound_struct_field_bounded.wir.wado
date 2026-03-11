@@ -183,29 +183,10 @@ global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let __local_0: ref Array<i32>;
-    let h: ref Holder<i32>;
     let __local_2: ref String;
     let __local_3: ref Formatter;
-    let __local_4: ref Array<u64>;
-    let __local_5: i32;
-    let __local_6: i32;
-    let __local_7: ref Array<i32>;
-    let __local_8: i32;
-    let __local_9: ref Array<i32>;
-    let __local_10: i32;
-    let __local_11: ref Array<i32>;
-    let __local_12: i32;
-    let __local_13: ref Array<i32>;
-    let __local_14: i32;
-    let __local_15: ref Array<i32>;
-    let __local_16: i32;
-    let __local_17: ref Array<i32>;
-    let __local_18: i32;
     let __local_19: ref String;
-    let __local_20: ref "core:internal/Box<i32>";
     let __local_21: ref Formatter;
-    let __local_22: ref "core:internal/Box<i32>";
-    let __local_23: ref Formatter;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -241,7 +222,6 @@ fn __cm_export__run() {
 fn "core:allocator/grow_memory"(new_offset) {  // from core:allocator
     let current_bytes: i32;
     let deficit: i32;
-    let __local_3: i32;
     let normal_grow: i32;
     let grow_bytes: i32;
     let grow_pages: i32;
@@ -299,11 +279,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let arr: ref Array<u8>;
     let __iter_0: ref StrUtf8ByteIter;
     let b: u8;
-    let __pattern_temp_0: ref Option<u8>;
-    let __local_9: ref String;
-    let __local_10: i32;
     let __local_11: ref StrUtf8ByteIter;
-    let __local_12: ref String;
     len = message.used;
     alloc_size = if add_newline -> i32 {
         len + 1;
@@ -392,11 +368,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
     let arr: ref Array<u8>;
     let __iter_2: ref StrUtf8ByteIter;
     let b: u8;
-    let __pattern_temp_0: ref Option<u8>;
-    let __local_9: ref String;
-    let __local_10: i32;
     let __local_11: ref StrUtf8ByteIter;
-    let __local_12: ref String;
     len = message.used;
     alloc_size = if add_newline -> i32 {
         len + 1;
@@ -492,8 +464,6 @@ fn "core:internal/cm_lower_list_u8"(data, len) {  // from core:internal
 fn "core:internal/cm_lower_array_u8"(arr) {  // from core:internal
     let data: ref array<u8>;
     let len: i32;
-    let __local_3: ref Array<u8>;
-    let __local_4: ref Array<u8>;
     data = arr.repr;
     len = arr.used;
     return "core:internal/cm_lower_list_u8"(data, len);
@@ -552,7 +522,6 @@ fn "core:cli/Array<u8>::append"(self, value) {  // from core:cli
     let new_capacity: i32;
     let new_repr: ref array<u8>;
     let __local_6: i32;
-    let __local_7: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
@@ -574,7 +543,6 @@ fn "core:internal/Array<u8>::append"(self, value) {  // from core:internal
     let new_capacity: i32;
     let new_repr: ref array<u8>;
     let __local_6: i32;
-    let __local_7: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
@@ -615,9 +583,7 @@ fn String::grow(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref array<u8>;
     let __local_5: i32;
-    let __local_6: i32;
     let __local_7: i32;
-    let __local_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
@@ -649,8 +615,6 @@ fn String::internal_reserve_uninit(self, n) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let __local_4: ref String;
-    let __local_5: ref String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -704,11 +668,7 @@ fn Holder<i32>::min(self) {
     let m: i32;
     let i: i32;
     let __local_3: ref Array<i32>;
-    let __local_4: i32;
-    let __local_5: ref Array<i32>;
-    let __local_6: ref Array<i32>;
     let __local_7: i32;
-    let __local_8: ref Array<i32>;
     let __local_9: i32;
     let _licm_items_10: ref Array<i32>;
     let _licm_used_11: i32;
@@ -758,7 +718,6 @@ fn Array<i32>::append(self, value) {
     let new_capacity: i32;
     let new_repr: ref array<i32>;
     let __local_6: i32;
-    let __local_7: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
@@ -804,8 +763,6 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
-    let __local_14: ref String;
-    let __local_15: ref String;
     sign = String { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };

@@ -182,7 +182,6 @@
     (global (;0;) (mut i32) (i32.const 0))
     (export "run" (func $__cm_export__run))
     (func $run (;2;) (type 10)
-      (local (ref null 5))
       (block ;; label = @1
         (if ;; label = @2
           (global.get 0)
@@ -192,7 +191,6 @@
           (i32.const 1)))
     )
     (func $__cm_export__run (;3;) (type 11)
-      (local (ref null 5))
       (block ;; label = @1
         (if ;; label = @2
           (global.get 0)
