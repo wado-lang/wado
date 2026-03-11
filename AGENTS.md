@@ -2,7 +2,7 @@
 
 This document describes how to develop the Wado compiler toolchain.
 
-Wado a Rust-like programming language targeting Wasm/WASI.
+Wado is a Rust-like programming language targeting Wasm/WASI.
 
 ## The Language
 
@@ -76,47 +76,9 @@ HTTP sub-fields (inside `"wasi:http/service": {...}`):
 #### Examples
 
 ```wado
-// Success test
-export fn run() {
+test "Hello, world!" {
     let x = 1;
-    assert x == 1; // prefer `assert` for test expectations
-
-    println("ok");
-}
-
-__DATA__
-{"stdout": "ok\n"}
-```
-
-```wado
-// Error test - expects compilation to fail
-export fn run() {
-    let a = 1 != 2 != 3;
-}
-
-__DATA__
-{"compile_error": "!= operator cannot be chained"}
-```
-
-```wado
-// TODO test - for unimplemented features
-// Test runs but MUST fail (compile/runtime error or wrong output)
-// If it passes, the test fails to remind you to remove TODO
-export fn run() {
-    let r: Result<i32, String> = Result::<i32, String>::Ok(42);
-    if let Ok(value) = r {  // Result pattern matching not yet implemented
-        println(`{value}`);
-    }
-}
-
-__DATA__
-{"TODO": true, "stdout": "value\n"}
-```
-
-```wado
-// Test world - test blocks are compiled and executed
-test "addition" {
-    assert 1 + 1 == 2;
+    assert x == 1;
 }
 
 __DATA__
@@ -124,24 +86,8 @@ __DATA__
 ```
 
 ```wado
-// HTTP world - compiled as wasi:http/service
-use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
-
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
-    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let headers = Fields::new();
-    let [response, _tx_future] = Response::new(headers, null, trailers_future);
-    task return Result::<Response, ErrorCode>::Ok(response);
-    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
-}
-
-__DATA__
-{"wasi:http/service": {"status": 200}}
-```
-
-```wado
 // WIR pattern test - verify optimization effects at a specific -Ox level
-// Use `wado dump --wir -O2 file.wado` to discover WIR patterns
+// Use `wado dump [-O0|-O2] file.wado` to discover WIR patterns
 export fn run() {
     let a: Array<i32> = [10, 20, 30];
     assert a.len() == 3;
@@ -150,8 +96,8 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
+    "wir_expect:O1": ["SequenceLiteralBuilder::push_literal("]
     "wir_expect:O2": ["array.new_fixed<i32>(10, 20, 30)"],
-    "wir_not_expect:O2": ["SequenceLiteralBuilder::push_literal("]
 }
 ```
 
@@ -183,7 +129,7 @@ It requires a git submodule `vendor/wasmtime` to be initialized.
 
 ## The Package Manifest
 
-`wado-manifest/` handles `wado.toml` parsing, validation, and `wado.lock` lock file management. It also defines the `DependencyProvider` trait that abstracts I/O for dependency resolution (registry queries, git operations, path lookups), with an `InMemoryDependencyProvider` for testing.
+`wado-manifest/` handles `wado.toml` parsing, validation, and `wado.lock` lock file management.
 
 This crate must compile for `wasm32-unknown-unknown` (same constraint as `wado-compiler`). CI enforces this.
 
@@ -216,7 +162,7 @@ wado compile --allocator debug file.wado
 wado run --allocator debug file.wado      # not yet wired, use compile + wasmtime
 ```
 
-The debug allocator is **automatically selected** when compiling for the test world (`--world test` or `wado test`).
+The debug allocator is **automatically selected** when compiling for tests.
 
 ### Serve Command
 
@@ -227,20 +173,10 @@ wado serve file.wado                        # serve on 0.0.0.0:8080 (default)
 wado serve --addr 127.0.0.1:3000 file.wado  # serve on custom address
 ```
 
-The source file must export an HTTP handler function:
-
-```wado
-use { Request, Response, ErrorCode } from "wasi:http";
-
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
-    // Handle HTTP request and return response
-}
-```
-
 ### Dump Command
 
 Use `wado dump` to inspect compiler internal state for debugging.
-Output defaults to unparsed Wado source code; use `--inspect` for internal Debug format.
+Output defaults to unparsed Wado source code; use `--inspect` for internal Debug format. See `wado dump --help` for the full help.
 
 ```sh
 wado dump file.wado                  # show final WIR (default)
@@ -254,24 +190,9 @@ wado dump --types file.wado          # show type table
 wado dump --tir-resolved file.wado   # show TIR after type resolution
 wado dump --tir-monomorphized file.wado  # show TIR after monomorphization
 wado dump --tir-lowered file.wado    # show TIR after lowering
-wado dump --wir --inspect file.wado  # show WIR in Debug format
 ```
 
-Available phases (in compilation order):
-
-1. `--tokens` - Lexer output (always Debug format)
-2. `--ast` - Parser output
-3. `--desugared` - Desugared AST
-4. `--modules` - Loaded modules
-5. `--symbols` - Symbol table
-6. `--types` - Type table (all resolved types)
-7. `--tir-resolved` - TIR after type resolution
-8. `--tir-monomorphized` - TIR after monomorphization
-9. `--tir-lowered` - TIR after lowering
-10. `--tir` - Final TIR (after optimization, affected by `-Ox`)
-11. `--wir` - Final WIR (after optimization, affected by `-Ox`) [default]
-
-Optimization levels: `-O0` (none), `-O1` (development), `-O2` (production, default), `-O3` (aggressive), `-Os` (`-O2` + strip names).
+Optimization levels: `-O0` (none), `-O1` (development), `-O2` (production, default), `-O3` (aggressive), `-Os` (`-O2` + strip symbols).
 
 ## The Formatter
 
@@ -323,21 +244,19 @@ Wado is designed on the following Wasm features:
 - Don't be anchored by existing implementations or conventions. Always design from first principles toward the optimal solution.
 - All the documents and comments must be written in English.
 - When referring to WAT, use folded style syntax.
-- Do not commit changes unless the user requests so. When commit, no need to explain the implementation details.
 - If you find a compiler bug, limitation, or awkward behavior, fix it. Such a problem must be treated as the highest priority.
 - Use sub-agents only for research tasks (searching, reading, exploring). Never use sub-agents for editing files.
 - `CLAUDE.md` is a symlink to `AGENTS.md`. Editing either one is sufficient.
 
 ## Rules for Rust
 
-- Follow `clippy::pedantic` lint rules. The workspace is configured with pedantic lints enabled.
 - Write tests in implementation files just for simple smoke tests. For comprehensive tests, write tests in the `tests/`.
 - Manage dependencies in the workspace `Cargo.toml`.
 - Do not use `#![allow(deprecated)]`; use newer alternatives instead.
-- Use `panic!("not yet implemented")` for things that are not yet implemented.
+- Use `panic!` for things that are not yet implemented or not supported.
 - YAGNI. Do the simplest thing that could possibly work.
-- Do not use `HashMap` or `HashSet` from `std::collections`. Use `IndexMap` and `IndexSet` from the `indexmap` crate instead, to ensure deterministic iteration order.
-- Do not use any comment sections to separate or organize code. Use Rust's natural structure (modules, impl blocks, trait definitions) instead.
+- Use `IndexMap` and `IndexSet` from the `indexmap` crate in order to ensure deterministic iteration order.
+- Do not use any comment sections to separate or organize code. Use Rust's natural structure instead.
 - Follow Test-Driven Development: write a failing test case first, then implement the concern.
 
 ### Rules for the Compiler Code Base
@@ -347,7 +266,6 @@ Wado is designed on the following Wasm features:
 - Do not parse mangled / formatted names even in `name.rs`. Use parsed objects instead.
 - Minimize hard-coded logic for compiler builtins. Define builtin and internal functions in Wado source files in `lib/core/*.wado`.
 - Minimize hard-coded logic for WASI. Use metadata extracted from `lib/wasi/*.wado`.
-- Synthesized and monomorphized entities must use the `module_source` of their defining module, not the entry module. `TypeTable` helpers like `make_option()` derive the module source from the `#[comp_feature]` registration, not by hardcoding a path.
 
 ## Wado Evolution Proposals (WEP)
 

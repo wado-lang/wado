@@ -24,24 +24,20 @@ Compares WebAssembly binary sizes across different languages.
 
 | Language       | Size (bytes) |
 | -------------- | -----------: |
-| wado           |        1,572 |
 | c              |        2,275 |
+| wado           |        2,378 |
 | zig            |        4,449 |
 | assemblyscript |        6,913 |
-| moonbit        |       20,864 |
-| rust           |       40,552 |
 | tinygo         |      162,341 |
 
 ### pi_approx
 
 | Language       | Size (bytes) |
 | -------------- | -----------: |
-| wado           |        9,269 |
+| wado           |        9,895 |
 | zig            |       10,608 |
 | assemblyscript |       11,372 |
 | c              |       14,275 |
-| moonbit        |       30,901 |
-| rust           |       60,508 |
 | tinygo         |      187,167 |
 
 ### zlib
@@ -50,10 +46,9 @@ Reads gzip data from stdin and decompresses it.
 
 | Language | Size (bytes) | Notes                                  |
 | -------- | -----------: | -------------------------------------- |
-| wado     |       19,063 | stdin + gzip decompress (core:zlib)    |
+| wado     |       17,659 | stdin + gzip decompress (core:zlib)    |
 | zig      |       20,072 | stdin + gzip decompress (std.compress) |
 | c        |       30,215 | stdin + gzip decompress (zlib 1.3.1)   |
-| rust     |       87,534 | stdin + gzip decompress (zlib-rs 0.6)  |
 
 ## Usage
 
