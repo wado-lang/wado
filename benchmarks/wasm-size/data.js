@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773227230654,
+  "lastUpdate": 1773232045330,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2441,6 +2441,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/51e3def0e26d749cc5251dd64ee3805089d3cbee"
         },
         "date": 1773227230422,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2378,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9895,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25163,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "132a665554960866492fb519783120fb294ff316",
+          "message": "Merge pull request #560 from wado-lang/claude/fix-agents-make-command-aThCi\n\nFix typo: rename `make wado-test` to `make test-wado` in AGENTS.md",
+          "timestamp": "2026-03-11T21:24:56+09:00",
+          "tree_id": "d45e8cdbc01158fe0840030d371c68db3351ef6b",
+          "url": "https://github.com/wado-lang/wado/commit/132a665554960866492fb519783120fb294ff316"
+        },
+        "date": 1773232045115,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
