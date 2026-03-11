@@ -6447,22 +6447,52 @@ impl FunctionTranslator<'_, '_> {
             default: default_target,
         };
 
-        // Translate default body
+        // The br_table switch generates wrapper blocks around each arm body.
+        // arm[i]'s body ends up inside (num_arms - i) wrapper blocks, and the
+        // default body inside (num_arms + 1) blocks. We must push dummy label
+        // entries so that break/continue inside arm bodies compute correct br
+        // depths.
+
+        // Translate default body (wrapped in num_arms + 1 blocks)
+        let default_block_count = num_arms + 1;
+        for _ in 0..default_block_count {
+            self.label_stack.push(LabelEntry {
+                label: None,
+                is_loop_break: false,
+                is_loop_continue: false,
+            });
+        }
         let default_body = if has_result {
             self.translate_stmts_as_value(&default.stmts)
         } else {
             self.translate_stmts(&default.stmts)
         };
+        for _ in 0..default_block_count {
+            self.label_stack.pop();
+        }
 
-        // Translate arm bodies
+        // Translate arm bodies (arm[i] wrapped in num_arms - i blocks)
         let arm_bodies: Vec<Vec<WirInstr>> = arms
             .iter()
-            .map(|arm| {
-                if has_result {
+            .enumerate()
+            .map(|(i, arm)| {
+                let block_count = num_arms - i;
+                for _ in 0..block_count {
+                    self.label_stack.push(LabelEntry {
+                        label: None,
+                        is_loop_break: false,
+                        is_loop_continue: false,
+                    });
+                }
+                let body = if has_result {
                     self.translate_stmts_as_value(&arm.stmts)
                 } else {
                     self.translate_stmts(&arm.stmts)
+                };
+                for _ in 0..block_count {
+                    self.label_stack.pop();
                 }
+                body
             })
             .collect();
 
@@ -6592,8 +6622,46 @@ impl FunctionTranslator<'_, '_> {
         // Build the if-else chain from inside out (last arm first)
         let mut result = WirInstr::Unreachable; // fallback: non-exhaustive
 
-        for arm in arms.iter().rev() {
+        // Pre-compute the wasm If nesting depth for each arm body.
+        // Each non-irrefutable arm generates a WirInstr::If (guarded arms generate 2).
+        // The arm at source index s will be nested inside all Ifs from arms 0..s,
+        // so we need to push dummy label entries to make break/continue compute
+        // correct br depths.
+        let mut if_depths = Vec::with_capacity(arms.len());
+        {
+            let mut depth = 0u32;
+            for arm in arms {
+                let is_irrefutable = matches!(
+                    arm.pattern,
+                    TirPattern::Wildcard
+                        | TirPattern::Binding { .. }
+                        | TirPattern::Struct { .. }
+                        | TirPattern::Tuple(_)
+                ) && arm.guard.is_none();
+                if !is_irrefutable {
+                    depth += 1;
+                    if arm.guard.is_some() {
+                        depth += 1; // guarded arms create an extra inner If
+                    }
+                }
+                if_depths.push(depth);
+            }
+        }
+
+        for (reverse_idx, arm) in arms.iter().rev().enumerate() {
+            let source_idx = arms.len() - 1 - reverse_idx;
+            let if_nesting = if_depths[source_idx];
+
             let body_instrs = {
+                // Push dummy label entries for the match's If nesting so that
+                // break/continue inside arm bodies compute correct br depths.
+                for _ in 0..if_nesting {
+                    self.label_stack.push(LabelEntry {
+                        label: None,
+                        is_loop_break: false,
+                        is_loop_continue: false,
+                    });
+                }
                 let mut instrs = Vec::new();
                 // Bind pattern variables
                 self.emit_pattern_bindings(
@@ -6618,6 +6686,9 @@ impl FunctionTranslator<'_, '_> {
                 instrs.push(body);
                 // Note: `translate_expr` already appends `unreachable` for
                 // `never`-typed arm bodies, so no extra push is needed here.
+                for _ in 0..if_nesting {
+                    self.label_stack.pop();
+                }
                 instrs
             };
 

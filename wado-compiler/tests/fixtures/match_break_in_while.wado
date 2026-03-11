@@ -1,0 +1,62 @@
+// Test: break inside match arm correctly exits enclosing while loop
+// Regression: match compilation generates nested WirInstr::If without pushing
+// label entries, causing break to compute wrong br depth.
+use { println, Stdout } from "core:cli";
+
+enum Mode {
+    Fill,
+    Process,
+    Done,
+}
+
+export fn run() with Stdout {
+    let mut mode = Mode::Fill;
+    let mut leave = false;
+    let mut result = 0;
+
+    while !leave {
+        match mode {
+            Fill => {
+                // Inner loop with conditional exit
+                let mut i = 0;
+                loop {
+                    if i >= 3 {
+                        break;
+                    }
+                    result += 1;
+                    i += 1;
+                }
+                mode = Mode::Process;
+            },
+            Process => {
+                // This arm's break must exit the while loop, not just the match
+                let mut i = 0;
+                while i < 5 {
+                    if i == 2 {
+                        leave = true;
+                        break;
+                    }
+                    result += 10;
+                    i += 1;
+                }
+                if leave {
+                    break;
+                }
+                // This code must NOT execute when leave is true
+                result += 1000;
+                mode = Mode::Done;
+            },
+            Done => {
+                leave = true;
+            },
+            _ => {
+                leave = true;
+            },
+        };
+    }
+    // result = 3 (from Fill) + 20 (from Process: i=0,1 each adds 10)
+    println(`{result}`);
+}
+
+__DATA__
+{"stdout": "23\n"}
