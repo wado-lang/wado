@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773226604287,
+  "lastUpdate": 1773227230654,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2402,6 +2402,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0bee09f34dd99082c9dd3c935fcf4cc63b48366d"
         },
         "date": 1773226604070,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2378,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9895,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25163,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "51e3def0e26d749cc5251dd64ee3805089d3cbee",
+          "message": "Merge pull request #559 from wado-lang/claude/closure-syntax-tests-xmUb8\n\nRequire explicit `return` for functions with non-unit return types",
+          "timestamp": "2026-03-11T20:04:41+09:00",
+          "tree_id": "ff3dda203f7c1575d5179b4118249260f89d810e",
+          "url": "https://github.com/wado-lang/wado/commit/51e3def0e26d749cc5251dd64ee3805089d3cbee"
+        },
+        "date": 1773227230422,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
