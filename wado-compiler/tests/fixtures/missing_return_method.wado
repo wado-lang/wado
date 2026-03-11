@@ -1,0 +1,20 @@
+// Method with return type but no explicit `return` is a compile error.
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+impl Pair {
+    fn sum(&self) -> i32 {
+        let s = self.a + self.b;
+        s
+    }
+}
+
+export fn run() {
+    let p = Pair { a: 3, b: 7 };
+    let _ = p.sum();
+}
+
+__DATA__
+{"compile_error": "function with return type 'i32' must use explicit `return`"}

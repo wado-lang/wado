@@ -1,0 +1,11 @@
+// Semicolons don't affect semantics in closures either.
+export fn run() {
+    let f = |x: i32| {
+        let d = x * 2;
+        d;
+    };
+    let _ = f(5);
+}
+
+__DATA__
+{"compile_error": "function with return type 'i32' must use explicit `return`"}
