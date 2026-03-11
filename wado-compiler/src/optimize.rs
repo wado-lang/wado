@@ -183,6 +183,9 @@ fn run_dce(project: &mut Project) {
 ///
 /// The `config` parameter controls the number of iterations and inline threshold.
 /// More iterations can find more optimization opportunities but take longer.
+///
+/// Hot Field Scalarization (HFS) runs once after the loop converges; see
+/// `optimize` for the rationale.
 fn run_optimization_passes(project: &mut Project, config: &OptConfig) {
     for _ in 0..config.iterations {
         let mut changed = false;
@@ -196,10 +199,14 @@ fn run_optimization_passes(project: &mut Project, config: &OptConfig) {
         changed |= promote_constant_globals(project);
         changed |= prune_constant_branches(project);
         changed |= apply_licm(project);
-        changed |= scalarize_hot_fields(project);
         changed |= hoist_template_buffers(project);
         if !changed {
             break;
         }
     }
+    // Hot Field Scalarization runs once after the main loop converges.
+    // Running inside the loop would cause the write-back/re-read stmts it
+    // inserts to be counted as new field accesses on the next iteration,
+    // triggering spurious re-scalarization of the same fields.
+    scalarize_hot_fields(project);
 }

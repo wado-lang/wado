@@ -1265,12 +1265,33 @@ fn replace_in_block(
                 then_block,
                 else_block,
             } => {
+                // Calls inside the condition can modify scalarized fields (e.g.
+                // `if !self.expect_byte(b)` where expect_byte mutates self.pos).
+                // Insert write-back before the If and re-read after it.
+                let mut cond_sync: IndexSet<(u32, u32)> = IndexSet::new();
+                compute_sync_fields_in_expr(
+                    condition,
+                    candidates,
+                    type_table,
+                    cache,
+                    &mut cond_sync,
+                );
+                for c in candidates {
+                    if cond_sync.contains(&(c.local_index, c.field_index)) {
+                        new_stmts.push(make_write_back_stmt(c, span));
+                    }
+                }
                 replace_in_expr(condition, candidates);
                 replace_in_block(then_block, candidates, local_types, type_table, cache);
                 if let Some(eb) = else_block {
                     replace_in_block(eb, candidates, local_types, type_table, cache);
                 }
                 new_stmts.push(stmt);
+                for c in candidates {
+                    if cond_sync.contains(&(c.local_index, c.field_index)) {
+                        new_stmts.push(make_re_read_stmt(c, span));
+                    }
+                }
                 continue;
             }
             TirStmtKind::IfPattern {
@@ -1279,12 +1300,31 @@ fn replace_in_block(
                 else_block,
                 ..
             } => {
+                // Same as If: calls in the scrutinee can modify scalarized fields.
+                let mut scrut_sync: IndexSet<(u32, u32)> = IndexSet::new();
+                compute_sync_fields_in_expr(
+                    scrutinee,
+                    candidates,
+                    type_table,
+                    cache,
+                    &mut scrut_sync,
+                );
+                for c in candidates {
+                    if scrut_sync.contains(&(c.local_index, c.field_index)) {
+                        new_stmts.push(make_write_back_stmt(c, span));
+                    }
+                }
                 replace_in_expr(scrutinee, candidates);
                 replace_in_block(then_block, candidates, local_types, type_table, cache);
                 if let Some(eb) = else_block {
                     replace_in_block(eb, candidates, local_types, type_table, cache);
                 }
                 new_stmts.push(stmt);
+                for c in candidates {
+                    if scrut_sync.contains(&(c.local_index, c.field_index)) {
+                        new_stmts.push(make_re_read_stmt(c, span));
+                    }
+                }
                 continue;
             }
             TirStmtKind::Loop { body } => {
@@ -1300,9 +1340,15 @@ fn replace_in_block(
             _ => {}
         }
 
-        // Insert write-back before return statements, since return exits the
-        // function and would skip the post-loop write-back.
-        if matches!(stmt.kind, TirStmtKind::Return { .. }) {
+        // Insert write-back before return/break statements, since they exit the
+        // current scope and would skip the post-loop write-back.
+        //
+        // `break <label>` in a for-loop desugars to a labeled block exit that
+        // skips post-loop write-back statements placed inside the labeled block.
+        if matches!(
+            stmt.kind,
+            TirStmtKind::Return { .. } | TirStmtKind::Break { .. }
+        ) {
             replace_in_stmt(&mut stmt, candidates);
             new_stmts.extend(make_write_back_stmts(candidates, span));
             new_stmts.push(stmt);
