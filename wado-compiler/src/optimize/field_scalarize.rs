@@ -10,39 +10,700 @@
 //! 3. Replace all `obj.field` reads with `_hfs_field_N`
 //! 4. Replace all `obj.field = val` writes with `_hfs_field_N = val`
 //! 5. Insert write-back `obj.field = _hfs_field_N` before function calls that receive `obj`
+//!    (only for fields the callee actually accesses)
 //! 6. Insert re-read `_hfs_field_N = obj.field` after function calls that receive `obj`
+//!    (only for fields the callee actually accesses)
 //! 7. Insert final write-back `obj.field = _hfs_field_N` after the loop
 //!
 //! This converts GC struct.get/struct.set into wasm local.get/local.set in hot loops.
+//!
+//! ## Field-Selective Sync
+//!
+//! When a scalarized struct is passed to a function call, only fields that the callee
+//! actually accesses need to be written back before and re-read after the call.
+//! A pre-computed `FieldUsageCache` maps each function to the set of fields it accesses
+//! on each struct-typed parameter. If the callee cannot be resolved or passes the struct
+//! transitively to another unknown call, all fields are conservatively synced.
 
+use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{
-    ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeId, TypeTable,
+    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use indexmap::{IndexMap, IndexSet};
 
 const MIN_ACCESS_COUNT: usize = 4;
 
+/// Per-parameter field usage: `Some(set)` = only these fields accessed,
+/// `None` = all fields potentially accessed (conservative).
+type ParamFieldUsage = Option<IndexSet<u32>>;
+
+/// Maps each function (by module + name) to its per-parameter field usage.
+type FieldUsageCache = IndexMap<(ModuleSource, String), IndexMap<u32, ParamFieldUsage>>;
+
 pub fn scalarize_hot_fields(project: &mut Project) -> bool {
+    // Phase 1: Build field usage cache (immutable access to all functions)
+    let cache = build_field_usage_cache(&project.tir_modules);
+
+    // Phase 2: Run scalarization (mutable access)
     let mut changed = false;
     for module in project.tir_modules.values_mut() {
         let type_table = module.type_table.borrow();
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
-            changed |= scalarize_function(&mut func, &type_table);
+            changed |= scalarize_function(&mut func, &type_table, &cache);
         }
     }
     changed
 }
 
-fn scalarize_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
+fn build_field_usage_cache(
+    modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+) -> FieldUsageCache {
+    let mut cache = FieldUsageCache::new();
+    for (module_source, module) in modules {
+        let type_table = module.type_table.borrow();
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            let usage = analyze_function_field_usage(&func, &type_table);
+            if !usage.is_empty() {
+                cache.insert((module_source.clone(), func.name.clone()), usage);
+            }
+        }
+    }
+    cache
+}
+
+/// Analyze which fields of struct-typed parameters a function accesses.
+/// Returns a map from parameter position (0-based index in params list) to the set
+/// of field indices accessed. `None` means "all fields" (conservative).
+fn analyze_function_field_usage(
+    func: &TirFunction,
+    type_table: &TypeTable,
+) -> IndexMap<u32, ParamFieldUsage> {
+    let Some(ref body) = func.body else {
+        return IndexMap::new();
+    };
+
+    // Build mapping: local_index → param_position for struct-typed params
+    let mut local_to_position: IndexMap<u32, u32> = IndexMap::new();
+    let mut struct_param_locals: IndexSet<u32> = IndexSet::new();
+
+    for (position, param) in func.params.iter().enumerate() {
+        if is_gc_heap_type(param.type_id, type_table) {
+            local_to_position.insert(param.local_index, position as u32);
+            struct_param_locals.insert(param.local_index);
+        }
+    }
+
+    if struct_param_locals.is_empty() {
+        return IndexMap::new();
+    }
+
+    let mut field_sets: IndexMap<u32, IndexSet<u32>> = IndexMap::new();
+    let mut conservative_locals: IndexSet<u32> = IndexSet::new();
+
+    collect_param_field_usage_in_block(
+        body,
+        &struct_param_locals,
+        &mut field_sets,
+        &mut conservative_locals,
+        type_table,
+    );
+
+    // Convert from local_index-keyed to position-keyed
+    let mut result: IndexMap<u32, ParamFieldUsage> = IndexMap::new();
+    for (&local_idx, &position) in &local_to_position {
+        if conservative_locals.contains(&local_idx) {
+            result.insert(position, None);
+        } else if let Some(fields) = field_sets.get(&local_idx) {
+            result.insert(position, Some(fields.clone()));
+        }
+        // If not in field_sets and not conservative, param is unused → empty set
+        // (no fields need syncing)
+    }
+    result
+}
+
+fn collect_param_field_usage_in_block(
+    block: &TirBlock,
+    struct_params: &IndexSet<u32>,
+    field_sets: &mut IndexMap<u32, IndexSet<u32>>,
+    conservative_params: &mut IndexSet<u32>,
+    type_table: &TypeTable,
+) {
+    for stmt in &block.stmts {
+        collect_param_field_usage_in_stmt(
+            stmt,
+            struct_params,
+            field_sets,
+            conservative_params,
+            type_table,
+        );
+    }
+}
+
+fn collect_param_field_usage_in_stmt(
+    stmt: &TirStmt,
+    struct_params: &IndexSet<u32>,
+    field_sets: &mut IndexMap<u32, IndexSet<u32>>,
+    conservative_params: &mut IndexSet<u32>,
+    type_table: &TypeTable,
+) {
+    match &stmt.kind {
+        TirStmtKind::Let { value, .. } => {
+            collect_param_field_usage_in_expr(
+                value,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
+        TirStmtKind::Expr(expr) => {
+            collect_param_field_usage_in_expr(
+                expr,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
+        TirStmtKind::Return { value } => {
+            if let Some(v) = value {
+                collect_param_field_usage_in_expr(
+                    v,
+                    struct_params,
+                    field_sets,
+                    conservative_params,
+                    type_table,
+                );
+            }
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            collect_param_field_usage_in_expr(
+                condition,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+            collect_param_field_usage_in_block(
+                then_block,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+            if let Some(eb) = else_block {
+                collect_param_field_usage_in_block(
+                    eb,
+                    struct_params,
+                    field_sets,
+                    conservative_params,
+                    type_table,
+                );
+            }
+        }
+        TirStmtKind::Loop { body } => {
+            collect_param_field_usage_in_block(
+                body,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
+        TirStmtKind::LabeledBlock { block, .. } => {
+            collect_param_field_usage_in_block(
+                block,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
+        TirStmtKind::IfPattern {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            collect_param_field_usage_in_expr(
+                scrutinee,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+            collect_param_field_usage_in_block(
+                then_block,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+            if let Some(eb) = else_block {
+                collect_param_field_usage_in_block(
+                    eb,
+                    struct_params,
+                    field_sets,
+                    conservative_params,
+                    type_table,
+                );
+            }
+        }
+        TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                collect_param_field_usage_in_expr(
+                    v,
+                    struct_params,
+                    field_sets,
+                    conservative_params,
+                    type_table,
+                );
+            }
+        }
+        TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } => {}
+        TirStmtKind::LetPattern { value, .. } => {
+            collect_param_field_usage_in_expr(
+                value,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
+    }
+}
+
+fn collect_param_field_usage_in_expr(
+    expr: &TirExpr,
+    struct_params: &IndexSet<u32>,
+    field_sets: &mut IndexMap<u32, IndexSet<u32>>,
+    conservative_params: &mut IndexSet<u32>,
+    type_table: &TypeTable,
+) {
+    match &expr.kind {
+        TirExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            ..
+        } => {
+            // Track field access on struct param: `self.field` or `(&mut self).field`
+            let local_idx = extract_local_index(inner);
+            if let Some(idx) = local_idx
+                && struct_params.contains(&idx) {
+                    field_sets
+                        .entry(idx)
+                        .or_default()
+                        .insert(*field_index);
+                    return;
+                }
+            collect_param_field_usage_in_expr(
+                inner,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
+        TirExprKind::Assign { target, value } => {
+            // Check for `self.field = val` (field assignment)
+            if let TirExprKind::FieldAccess {
+                expr: inner,
+                field_index,
+                ..
+            } = &target.kind
+            {
+                let local_idx = extract_local_index(inner);
+                if let Some(idx) = local_idx
+                    && struct_params.contains(&idx) {
+                        field_sets
+                            .entry(idx)
+                            .or_default()
+                            .insert(*field_index);
+                        collect_param_field_usage_in_expr(
+                            value,
+                            struct_params,
+                            field_sets,
+                            conservative_params,
+                            type_table,
+                        );
+                        return;
+                    }
+            }
+            // Check for full local assignment `param = val` → conservative
+            if let TirExprKind::Local { index, .. } = &target.kind
+                && struct_params.contains(index) {
+                    conservative_params.insert(*index);
+                }
+            collect_param_field_usage_in_expr(
+                target,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+            collect_param_field_usage_in_expr(
+                value,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
+        TirExprKind::Call { args, .. } => {
+            // If a struct param is passed as argument → conservative
+            for arg in args {
+                mark_if_param_passed(&arg.expr, struct_params, conservative_params, type_table);
+                collect_param_field_usage_in_expr(
+                    &arg.expr,
+                    struct_params,
+                    field_sets,
+                    conservative_params,
+                    type_table,
+                );
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            // If a struct param is the receiver → conservative (self passed to another method)
+            mark_if_param_passed(receiver, struct_params, conservative_params, type_table);
+            collect_param_field_usage_in_expr(
+                receiver,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+            for arg in args {
+                mark_if_param_passed(&arg.expr, struct_params, conservative_params, type_table);
+                collect_param_field_usage_in_expr(
+                    &arg.expr,
+                    struct_params,
+                    field_sets,
+                    conservative_params,
+                    type_table,
+                );
+            }
+        }
+        TirExprKind::IndirectCall { callee, args, .. } => {
+            collect_param_field_usage_in_expr(
+                callee,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+            for arg in args {
+                mark_if_param_passed(arg, struct_params, conservative_params, type_table);
+                collect_param_field_usage_in_expr(
+                    arg,
+                    struct_params,
+                    field_sets,
+                    conservative_params,
+                    type_table,
+                );
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                collect_param_field_usage_in_expr(
+                    arg,
+                    struct_params,
+                    field_sets,
+                    conservative_params,
+                    type_table,
+                );
+            }
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            collect_param_field_usage_in_expr(
+                left,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+            collect_param_field_usage_in_expr(
+                right,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
+        TirExprKind::Unary { expr, .. } => {
+            collect_param_field_usage_in_expr(
+                expr,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
+        TirExprKind::Cast { expr, .. } => {
+            collect_param_field_usage_in_expr(
+                expr,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
+        TirExprKind::Index { expr, index } => {
+            collect_param_field_usage_in_expr(
+                expr,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+            collect_param_field_usage_in_expr(
+                index,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
+        TirExprKind::Block(block) => {
+            collect_param_field_usage_in_block(
+                block,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            collect_param_field_usage_in_expr(
+                condition,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+            collect_param_field_usage_in_block(
+                then_branch,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+            if let Some(eb) = else_branch {
+                collect_param_field_usage_in_block(
+                    eb,
+                    struct_params,
+                    field_sets,
+                    conservative_params,
+                    type_table,
+                );
+            }
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                collect_param_field_usage_in_expr(
+                    &field.value,
+                    struct_params,
+                    field_sets,
+                    conservative_params,
+                    type_table,
+                );
+            }
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                collect_param_field_usage_in_expr(
+                    elem,
+                    struct_params,
+                    field_sets,
+                    conservative_params,
+                    type_table,
+                );
+            }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            collect_param_field_usage_in_expr(
+                functor,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
+        TirExprKind::Closure { body, .. } => {
+            collect_param_field_usage_in_expr(
+                body,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                collect_param_field_usage_in_expr(
+                    p,
+                    struct_params,
+                    field_sets,
+                    conservative_params,
+                    type_table,
+                );
+            }
+        }
+        TirExprKind::LabeledBlock { block, .. } => {
+            collect_param_field_usage_in_block(
+                block,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            collect_param_field_usage_in_expr(
+                value,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
+            collect_param_field_usage_in_expr(
+                expr,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
+        TirExprKind::VariantPayload { expr, .. } => {
+            collect_param_field_usage_in_expr(
+                expr,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            collect_param_field_usage_in_expr(
+                scrutinee,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+            for arm in arms {
+                collect_param_field_usage_in_block(
+                    arm,
+                    struct_params,
+                    field_sets,
+                    conservative_params,
+                    type_table,
+                );
+            }
+            collect_param_field_usage_in_block(
+                default,
+                struct_params,
+                field_sets,
+                conservative_params,
+                type_table,
+            );
+        }
+        TirExprKind::TemplateString { .. } => {}
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::Match { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
+    }
+}
+
+/// Extract local index from a local expression or `&mut local`.
+fn extract_local_index(expr: &TirExpr) -> Option<u32> {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => Some(*index),
+        TirExprKind::Unary {
+            op: TirUnaryOp::MutRef,
+            expr: inner,
+        } => {
+            if let TirExprKind::Local { index, .. } = &inner.kind {
+                Some(*index)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// If `expr` is a struct param (or &mut of one), mark it as conservative.
+fn mark_if_param_passed(
+    expr: &TirExpr,
+    struct_params: &IndexSet<u32>,
+    conservative_params: &mut IndexSet<u32>,
+    type_table: &TypeTable,
+) {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => {
+            if struct_params.contains(index) && is_gc_heap_type(expr.type_id, type_table) {
+                conservative_params.insert(*index);
+            }
+        }
+        TirExprKind::Unary {
+            op: TirUnaryOp::MutRef,
+            expr: inner,
+        } => {
+            if let TirExprKind::Local { index, .. } = &inner.kind
+                && struct_params.contains(index) && is_gc_heap_type(inner.type_id, type_table) {
+                    conservative_params.insert(*index);
+                }
+        }
+        _ => {}
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scalarization core (candidate selection and rewriting)
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn scalarize_function(
+    func: &mut TirFunction,
+    type_table: &TypeTable,
+    cache: &FieldUsageCache,
+) -> bool {
     let Some(ref mut body) = func.body else {
         return false;
     };
     let mut local_count = func.local_count;
     let mut local_types = func.local_types.clone();
-    let changed = scalarize_block(body, &mut local_count, &mut local_types, type_table);
+    let changed = scalarize_block(body, &mut local_count, &mut local_types, type_table, cache);
     func.local_count = local_count;
     func.local_types = local_types;
     changed
@@ -53,6 +714,7 @@ fn scalarize_block(
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
     type_table: &TypeTable,
+    cache: &FieldUsageCache,
 ) -> bool {
     let mut changed = false;
     let mut new_stmts = Vec::new();
@@ -61,17 +723,16 @@ fn scalarize_block(
         match &mut stmt.kind {
             TirStmtKind::Loop { body } => {
                 // Recurse into inner blocks/loops first.
-                changed |= scalarize_block(body, local_count, local_types, type_table);
+                changed |= scalarize_block(body, local_count, local_types, type_table, cache);
                 // Try to scalarize hot fields at this loop level.
-                let result =
-                    scalarize_loop(body, local_count, local_types, type_table);
-                if !result.pre_stmts.is_empty() {
+                let result = scalarize_loop(body, local_count, local_types, type_table, cache);
+                if result.pre_stmts.is_empty() {
+                    new_stmts.push(stmt);
+                } else {
                     changed = true;
                     new_stmts.extend(result.pre_stmts);
                     new_stmts.push(stmt);
                     new_stmts.extend(result.post_stmts);
-                } else {
-                    new_stmts.push(stmt);
                 }
             }
             TirStmtKind::If {
@@ -79,14 +740,16 @@ fn scalarize_block(
                 else_block,
                 ..
             } => {
-                changed |= scalarize_block(then_block, local_count, local_types, type_table);
+                changed |=
+                    scalarize_block(then_block, local_count, local_types, type_table, cache);
                 if let Some(eb) = else_block {
-                    changed |= scalarize_block(eb, local_count, local_types, type_table);
+                    changed |=
+                        scalarize_block(eb, local_count, local_types, type_table, cache);
                 }
                 new_stmts.push(stmt);
             }
             TirStmtKind::LabeledBlock { block: inner, .. } => {
-                changed |= scalarize_block(inner, local_count, local_types, type_table);
+                changed |= scalarize_block(inner, local_count, local_types, type_table, cache);
                 new_stmts.push(stmt);
             }
             TirStmtKind::IfPattern {
@@ -94,9 +757,11 @@ fn scalarize_block(
                 else_block,
                 ..
             } => {
-                changed |= scalarize_block(then_block, local_count, local_types, type_table);
+                changed |=
+                    scalarize_block(then_block, local_count, local_types, type_table, cache);
                 if let Some(eb) = else_block {
-                    changed |= scalarize_block(eb, local_count, local_types, type_table);
+                    changed |=
+                        scalarize_block(eb, local_count, local_types, type_table, cache);
                 }
                 new_stmts.push(stmt);
             }
@@ -131,16 +796,13 @@ fn scalarize_loop(
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
     type_table: &TypeTable,
+    cache: &FieldUsageCache,
 ) -> ScalarizeResult {
     // Step 1: Count field accesses (reads + writes) in the loop body
     let mut access_counts: IndexMap<(u32, u32), FieldAccessInfo> = IndexMap::new();
     count_field_accesses_in_block(loop_body, &mut access_counts, type_table);
 
-    // Step 2: Find which locals are passed to function calls (and thus could be aliased)
-    let mut call_passed_locals: IndexSet<u32> = IndexSet::new();
-    collect_call_passed_locals_in_block(loop_body, &mut call_passed_locals, type_table);
-
-    // Step 3: Select candidates - fields accessed frequently enough,
+    // Step 2: Select candidates - fields accessed frequently enough,
     // where the field is modified only by direct assignment (not by the whole local being reassigned)
     let mut candidates: Vec<ScalarizeCandidate> = Vec::new();
     let mut next_local = *local_count;
@@ -187,7 +849,7 @@ fn scalarize_loop(
 
     *local_count = next_local;
 
-    // Step 4: Create pre-loop load statements
+    // Step 3: Create pre-loop load statements
     let span = crate::token::Span::new(0, 0, 0, 0);
     let mut pre_stmts = Vec::new();
     for c in &candidates {
@@ -227,15 +889,15 @@ fn scalarize_loop(
         pre_stmts.push(load_stmt);
     }
 
-    // Step 5: Create post-loop write-back statements
+    // Step 4: Create post-loop write-back statements
     let mut post_stmts = Vec::new();
     for c in &candidates {
         post_stmts.push(make_write_back_stmt(c, span));
     }
 
-    // Step 6: Replace field accesses in the loop body, and insert write-back/re-read
-    // around function calls that pass the struct
-    replace_in_block(loop_body, &candidates, &call_passed_locals, local_types, type_table);
+    // Step 5: Replace field accesses in the loop body, and insert write-back/re-read
+    // around function calls (only for fields the callee actually accesses)
+    replace_in_block(loop_body, &candidates, local_types, type_table, cache);
 
     ScalarizeResult {
         pre_stmts,
@@ -314,6 +976,10 @@ fn make_re_read_stmt(c: &ScalarizeCandidate, span: crate::token::Span) -> TirStm
         span,
     )
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Field access counting (unchanged from original)
+// ─────────────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 struct FieldAccessInfo {
@@ -583,233 +1249,16 @@ fn mark_local_fully_assigned(
     }
 }
 
-fn collect_call_passed_locals_in_block(
-    block: &TirBlock,
-    locals: &mut IndexSet<u32>,
-    type_table: &TypeTable,
-) {
-    for stmt in &block.stmts {
-        collect_call_passed_locals_in_stmt(stmt, locals, type_table);
-    }
-}
-
-fn collect_call_passed_locals_in_stmt(
-    stmt: &TirStmt,
-    locals: &mut IndexSet<u32>,
-    type_table: &TypeTable,
-) {
-    match &stmt.kind {
-        TirStmtKind::Let { value, .. } => {
-            collect_call_passed_locals_in_expr(value, locals, type_table);
-        }
-        TirStmtKind::Expr(expr) => {
-            collect_call_passed_locals_in_expr(expr, locals, type_table);
-        }
-        TirStmtKind::Return { value } => {
-            if let Some(v) = value {
-                collect_call_passed_locals_in_expr(v, locals, type_table);
-            }
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            collect_call_passed_locals_in_expr(condition, locals, type_table);
-            collect_call_passed_locals_in_block(then_block, locals, type_table);
-            if let Some(eb) = else_block {
-                collect_call_passed_locals_in_block(eb, locals, type_table);
-            }
-        }
-        TirStmtKind::Loop { body } => {
-            collect_call_passed_locals_in_block(body, locals, type_table);
-        }
-        TirStmtKind::LabeledBlock { block, .. } => {
-            collect_call_passed_locals_in_block(block, locals, type_table);
-        }
-        TirStmtKind::IfPattern {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            collect_call_passed_locals_in_expr(scrutinee, locals, type_table);
-            collect_call_passed_locals_in_block(then_block, locals, type_table);
-            if let Some(eb) = else_block {
-                collect_call_passed_locals_in_block(eb, locals, type_table);
-            }
-        }
-        TirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                collect_call_passed_locals_in_expr(v, locals, type_table);
-            }
-        }
-        TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => {
-            collect_call_passed_locals_in_expr(value, locals, type_table);
-        }
-        TirStmtKind::TaskReturn { .. } => {}
-    }
-}
-
-fn collect_call_passed_locals_in_expr(
-    expr: &TirExpr,
-    locals: &mut IndexSet<u32>,
-    type_table: &TypeTable,
-) {
-    match &expr.kind {
-        TirExprKind::Call { args, .. } => {
-            for arg in args {
-                collect_gc_local_from_expr(&arg.expr, locals, type_table);
-                collect_call_passed_locals_in_expr(&arg.expr, locals, type_table);
-            }
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            collect_gc_local_from_expr(receiver, locals, type_table);
-            collect_call_passed_locals_in_expr(receiver, locals, type_table);
-            for arg in args {
-                collect_gc_local_from_expr(&arg.expr, locals, type_table);
-                collect_call_passed_locals_in_expr(&arg.expr, locals, type_table);
-            }
-        }
-        TirExprKind::IndirectCall { callee, args, .. } => {
-            collect_call_passed_locals_in_expr(callee, locals, type_table);
-            for arg in args {
-                collect_gc_local_from_expr(arg, locals, type_table);
-                collect_call_passed_locals_in_expr(arg, locals, type_table);
-            }
-        }
-        TirExprKind::Binary { left, right, .. } => {
-            collect_call_passed_locals_in_expr(left, locals, type_table);
-            collect_call_passed_locals_in_expr(right, locals, type_table);
-        }
-        TirExprKind::Unary { expr, .. } => {
-            collect_call_passed_locals_in_expr(expr, locals, type_table);
-        }
-        TirExprKind::Assign { target, value } => {
-            collect_call_passed_locals_in_expr(target, locals, type_table);
-            collect_call_passed_locals_in_expr(value, locals, type_table);
-        }
-        TirExprKind::Cast { expr, .. } => {
-            collect_call_passed_locals_in_expr(expr, locals, type_table);
-        }
-        TirExprKind::FieldAccess { expr, .. } => {
-            collect_call_passed_locals_in_expr(expr, locals, type_table);
-        }
-        TirExprKind::Index { expr, index } => {
-            collect_call_passed_locals_in_expr(expr, locals, type_table);
-            collect_call_passed_locals_in_expr(index, locals, type_table);
-        }
-        TirExprKind::Block(block) => {
-            collect_call_passed_locals_in_block(block, locals, type_table);
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            collect_call_passed_locals_in_expr(condition, locals, type_table);
-            collect_call_passed_locals_in_block(then_branch, locals, type_table);
-            if let Some(eb) = else_branch {
-                collect_call_passed_locals_in_block(eb, locals, type_table);
-            }
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                collect_call_passed_locals_in_expr(&field.value, locals, type_table);
-            }
-        }
-        TirExprKind::TupleLiteral { elements } => {
-            for elem in elements {
-                collect_call_passed_locals_in_expr(elem, locals, type_table);
-            }
-        }
-        TirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                collect_call_passed_locals_in_expr(arg, locals, type_table);
-            }
-        }
-        TirExprKind::ClosureToCanonical { functor, .. } => {
-            collect_call_passed_locals_in_expr(functor, locals, type_table);
-        }
-        TirExprKind::Closure { body, .. } => {
-            collect_call_passed_locals_in_expr(body, locals, type_table);
-        }
-        TirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                collect_call_passed_locals_in_expr(p, locals, type_table);
-            }
-        }
-        TirExprKind::LabeledBlock { block, .. } => {
-            collect_call_passed_locals_in_block(block, locals, type_table);
-        }
-        TirExprKind::GlobalVarSet { value, .. } => {
-            collect_call_passed_locals_in_expr(value, locals, type_table);
-        }
-        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
-            collect_call_passed_locals_in_expr(expr, locals, type_table);
-        }
-        TirExprKind::VariantPayload { expr, .. } => {
-            collect_call_passed_locals_in_expr(expr, locals, type_table);
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            collect_call_passed_locals_in_expr(scrutinee, locals, type_table);
-            for arm in arms {
-                collect_call_passed_locals_in_block(arm, locals, type_table);
-            }
-            collect_call_passed_locals_in_block(default, locals, type_table);
-        }
-        _ => {}
-    }
-}
-
-fn collect_gc_local_from_expr(
-    expr: &TirExpr,
-    locals: &mut IndexSet<u32>,
-    type_table: &TypeTable,
-) {
-    match &expr.kind {
-        TirExprKind::Local { index, .. } => {
-            if is_gc_heap_type(expr.type_id, type_table) {
-                locals.insert(*index);
-            }
-        }
-        // &mut local — used as method receiver or passed by mutable reference
-        TirExprKind::Unary {
-            op: TirUnaryOp::MutRef,
-            expr: inner,
-        } => {
-            if let TirExprKind::Local { index, .. } = &inner.kind {
-                if is_gc_heap_type(inner.type_id, type_table) {
-                    locals.insert(*index);
-                }
-            }
-        }
-        _ => {}
-    }
-}
-
-fn is_gc_heap_type(type_id: TypeId, type_table: &TypeTable) -> bool {
-    match type_table.get(type_id) {
-        ResolvedType::Struct { .. } => true,
-        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-            is_gc_heap_type(*inner, type_table)
-        }
-        _ => false,
-    }
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Replacement pass: replace field accesses and insert field-selective sync
+// ─────────────────────────────────────────────────────────────────────────────
 
 fn replace_in_block(
     block: &mut TirBlock,
     candidates: &[ScalarizeCandidate],
-    call_passed_locals: &IndexSet<u32>,
     local_types: &[TypeId],
     type_table: &TypeTable,
+    cache: &FieldUsageCache,
 ) {
     let span = crate::token::Span::new(0, 0, 0, 0);
     let mut new_stmts = Vec::new();
@@ -825,9 +1274,9 @@ fn replace_in_block(
                 else_block,
             } => {
                 replace_in_expr(condition, candidates);
-                replace_in_block(then_block, candidates, call_passed_locals, local_types, type_table);
+                replace_in_block(then_block, candidates, local_types, type_table, cache);
                 if let Some(eb) = else_block {
-                    replace_in_block(eb, candidates, call_passed_locals, local_types, type_table);
+                    replace_in_block(eb, candidates, local_types, type_table, cache);
                 }
                 new_stmts.push(stmt);
                 continue;
@@ -839,20 +1288,20 @@ fn replace_in_block(
                 ..
             } => {
                 replace_in_expr(scrutinee, candidates);
-                replace_in_block(then_block, candidates, call_passed_locals, local_types, type_table);
+                replace_in_block(then_block, candidates, local_types, type_table, cache);
                 if let Some(eb) = else_block {
-                    replace_in_block(eb, candidates, call_passed_locals, local_types, type_table);
+                    replace_in_block(eb, candidates, local_types, type_table, cache);
                 }
                 new_stmts.push(stmt);
                 continue;
             }
             TirStmtKind::Loop { body } => {
-                replace_in_block(body, candidates, call_passed_locals, local_types, type_table);
+                replace_in_block(body, candidates, local_types, type_table, cache);
                 new_stmts.push(stmt);
                 continue;
             }
             TirStmtKind::LabeledBlock { block: inner, .. } => {
-                replace_in_block(inner, candidates, call_passed_locals, local_types, type_table);
+                replace_in_block(inner, candidates, local_types, type_table, cache);
                 new_stmts.push(stmt);
                 continue;
             }
@@ -868,13 +1317,13 @@ fn replace_in_block(
             continue;
         }
 
-        // For leaf statements: check if this statement contains a function call
-        // that passes a scalarized local, and add write-back/re-read around it.
-        let needs_sync = stmt_has_call_with_scalarized_local(&stmt, candidates, call_passed_locals, type_table);
+        // For leaf statements: compute which (local, field) pairs need sync
+        // based on what the callee functions actually access.
+        let sync_fields = compute_sync_fields(&stmt, candidates, type_table, cache);
 
-        if needs_sync {
+        if !sync_fields.is_empty() {
             for c in candidates {
-                if call_passed_locals.contains(&c.local_index) {
+                if sync_fields.contains(&(c.local_index, c.field_index)) {
                     new_stmts.push(make_write_back_stmt(c, span));
                 }
             }
@@ -883,9 +1332,9 @@ fn replace_in_block(
         replace_in_stmt(&mut stmt, candidates);
         new_stmts.push(stmt);
 
-        if needs_sync {
+        if !sync_fields.is_empty() {
             for c in candidates {
-                if call_passed_locals.contains(&c.local_index) {
+                if sync_fields.contains(&(c.local_index, c.field_index)) {
                     new_stmts.push(make_re_read_stmt(c, span));
                 }
             }
@@ -895,52 +1344,63 @@ fn replace_in_block(
     block.stmts = new_stmts;
 }
 
-fn stmt_has_call_with_scalarized_local(
+/// Compute which (`local_index`, `field_index`) pairs need write-back/re-read
+/// for calls in this statement. Uses the field usage cache to narrow down
+/// to only fields the callee actually accesses.
+fn compute_sync_fields(
     stmt: &TirStmt,
     candidates: &[ScalarizeCandidate],
-    call_passed_locals: &IndexSet<u32>,
     type_table: &TypeTable,
-) -> bool {
-    let scalarized_locals: IndexSet<u32> = candidates
-        .iter()
-        .filter(|c| call_passed_locals.contains(&c.local_index))
-        .map(|c| c.local_index)
-        .collect();
-
-    if scalarized_locals.is_empty() {
-        return false;
-    }
-
-    expr_has_call_passing_locals_stmt(stmt, &scalarized_locals, type_table)
+    cache: &FieldUsageCache,
+) -> IndexSet<(u32, u32)> {
+    let mut result = IndexSet::new();
+    compute_sync_fields_in_stmt(stmt, candidates, type_table, cache, &mut result);
+    result
 }
 
-fn expr_has_call_passing_locals_stmt(
+fn compute_sync_fields_in_stmt(
     stmt: &TirStmt,
-    locals: &IndexSet<u32>,
+    candidates: &[ScalarizeCandidate],
     type_table: &TypeTable,
-) -> bool {
+    cache: &FieldUsageCache,
+    result: &mut IndexSet<(u32, u32)>,
+) {
     match &stmt.kind {
         TirStmtKind::Let { value, .. } => {
-            expr_has_call_passing_locals(value, locals, type_table)
+            compute_sync_fields_in_expr(value, candidates, type_table, cache, result);
         }
-        TirStmtKind::Expr(expr) => expr_has_call_passing_locals(expr, locals, type_table),
-        TirStmtKind::Return { value } => value
-            .as_ref()
-            .is_some_and(|v| expr_has_call_passing_locals(v, locals, type_table)),
+        TirStmtKind::Expr(expr) => {
+            compute_sync_fields_in_expr(expr, candidates, type_table, cache, result);
+        }
+        TirStmtKind::Return { value } => {
+            if let Some(v) = value {
+                compute_sync_fields_in_expr(v, candidates, type_table, cache, result);
+            }
+        }
         TirStmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            expr_has_call_passing_locals(condition, locals, type_table)
-                || block_has_call_passing_locals(then_block, locals, type_table)
-                || else_block
-                    .as_ref()
-                    .is_some_and(|eb| block_has_call_passing_locals(eb, locals, type_table))
+            compute_sync_fields_in_expr(condition, candidates, type_table, cache, result);
+            for s in &then_block.stmts {
+                compute_sync_fields_in_stmt(s, candidates, type_table, cache, result);
+            }
+            if let Some(eb) = else_block {
+                for s in &eb.stmts {
+                    compute_sync_fields_in_stmt(s, candidates, type_table, cache, result);
+                }
+            }
         }
-        TirStmtKind::Loop { body } => block_has_call_passing_locals(body, locals, type_table),
+        TirStmtKind::Loop { body } => {
+            for s in &body.stmts {
+                compute_sync_fields_in_stmt(s, candidates, type_table, cache, result);
+            }
+        }
         TirStmtKind::LabeledBlock { block, .. } => {
-            block_has_call_passing_locals(block, locals, type_table)
+            for s in &block.stmts {
+                compute_sync_fields_in_stmt(s, candidates, type_table, cache, result);
+            }
         }
         TirStmtKind::IfPattern {
             scrutinee,
@@ -948,133 +1408,155 @@ fn expr_has_call_passing_locals_stmt(
             else_block,
             ..
         } => {
-            expr_has_call_passing_locals(scrutinee, locals, type_table)
-                || block_has_call_passing_locals(then_block, locals, type_table)
-                || else_block
-                    .as_ref()
-                    .is_some_and(|eb| block_has_call_passing_locals(eb, locals, type_table))
+            compute_sync_fields_in_expr(scrutinee, candidates, type_table, cache, result);
+            for s in &then_block.stmts {
+                compute_sync_fields_in_stmt(s, candidates, type_table, cache, result);
+            }
+            if let Some(eb) = else_block {
+                for s in &eb.stmts {
+                    compute_sync_fields_in_stmt(s, candidates, type_table, cache, result);
+                }
+            }
         }
-        TirStmtKind::Break { value, .. } => value
-            .as_ref()
-            .is_some_and(|v| expr_has_call_passing_locals(v, locals, type_table)),
-        TirStmtKind::Continue => false,
+        TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                compute_sync_fields_in_expr(v, candidates, type_table, cache, result);
+            }
+        }
+        TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } => {}
         TirStmtKind::LetPattern { value, .. } => {
-            expr_has_call_passing_locals(value, locals, type_table)
+            compute_sync_fields_in_expr(value, candidates, type_table, cache, result);
         }
-        TirStmtKind::TaskReturn { .. } => false,
     }
 }
 
-fn block_has_call_passing_locals(
-    block: &TirBlock,
-    locals: &IndexSet<u32>,
-    type_table: &TypeTable,
-) -> bool {
-    block
-        .stmts
-        .iter()
-        .any(|s| expr_has_call_passing_locals_stmt(s, locals, type_table))
-}
-
-fn expr_is_gc_local_in_set(
+fn compute_sync_fields_in_expr(
     expr: &TirExpr,
-    locals: &IndexSet<u32>,
+    candidates: &[ScalarizeCandidate],
     type_table: &TypeTable,
-) -> bool {
+    cache: &FieldUsageCache,
+    result: &mut IndexSet<(u32, u32)>,
+) {
     match &expr.kind {
-        TirExprKind::Local { index, .. } => {
-            is_gc_heap_type(expr.type_id, type_table) && locals.contains(index)
+        TirExprKind::Call { func, args, .. } => {
+            // Check each argument: if it's a scalarized local, determine which fields to sync
+            for (arg_position, arg) in args.iter().enumerate() {
+                add_sync_fields_for_arg(
+                    &arg.expr,
+                    func,
+                    arg_position as u32,
+                    candidates,
+                    type_table,
+                    cache,
+                    result,
+                );
+            }
+            // Recurse into sub-expressions
+            for arg in args {
+                compute_sync_fields_in_expr(&arg.expr, candidates, type_table, cache, result);
+            }
         }
-        TirExprKind::Unary {
-            op: TirUnaryOp::MutRef,
-            expr: inner,
+        TirExprKind::MethodCall {
+            func,
+            receiver,
+            args,
+            ..
         } => {
-            if let TirExprKind::Local { index, .. } = &inner.kind {
-                is_gc_heap_type(inner.type_id, type_table) && locals.contains(index)
-            } else {
-                false
+            // Receiver maps to param 0 (self)
+            add_sync_fields_for_arg(
+                receiver,
+                func,
+                0,
+                candidates,
+                type_table,
+                cache,
+                result,
+            );
+            // Additional args map to params 1, 2, ...
+            for (arg_position, arg) in args.iter().enumerate() {
+                add_sync_fields_for_arg(
+                    &arg.expr,
+                    func,
+                    (arg_position + 1) as u32,
+                    candidates,
+                    type_table,
+                    cache,
+                    result,
+                );
+            }
+            // Recurse
+            compute_sync_fields_in_expr(receiver, candidates, type_table, cache, result);
+            for arg in args {
+                compute_sync_fields_in_expr(&arg.expr, candidates, type_table, cache, result);
             }
         }
-        _ => false,
-    }
-}
-
-fn expr_has_call_passing_locals(
-    expr: &TirExpr,
-    locals: &IndexSet<u32>,
-    type_table: &TypeTable,
-) -> bool {
-    match &expr.kind {
-        TirExprKind::Call { args, .. } => {
-            let has_match = args
-                .iter()
-                .any(|arg| expr_is_gc_local_in_set(&arg.expr, locals, type_table));
-            if has_match {
-                return true;
+        TirExprKind::IndirectCall { callee, args, .. } => {
+            // Indirect calls: can't resolve callee, conservative for all GC args
+            for arg in args {
+                if let Some(local_idx) = extract_gc_local_index(arg, type_table) {
+                    add_all_fields_for_local(local_idx, candidates, result);
+                }
             }
-            args.iter()
-                .any(|arg| expr_has_call_passing_locals(&arg.expr, locals, type_table))
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            let has_match = expr_is_gc_local_in_set(receiver, locals, type_table)
-                || args
-                    .iter()
-                    .any(|arg| expr_is_gc_local_in_set(&arg.expr, locals, type_table));
-            if has_match {
-                return true;
+            compute_sync_fields_in_expr(callee, candidates, type_table, cache, result);
+            for arg in args {
+                compute_sync_fields_in_expr(arg, candidates, type_table, cache, result);
             }
-            expr_has_call_passing_locals(receiver, locals, type_table)
-                || args
-                    .iter()
-                    .any(|arg| expr_has_call_passing_locals(&arg.expr, locals, type_table))
         }
         TirExprKind::Binary { left, right, .. } => {
-            expr_has_call_passing_locals(left, locals, type_table)
-                || expr_has_call_passing_locals(right, locals, type_table)
+            compute_sync_fields_in_expr(left, candidates, type_table, cache, result);
+            compute_sync_fields_in_expr(right, candidates, type_table, cache, result);
         }
         TirExprKind::Unary { expr, .. } => {
-            expr_has_call_passing_locals(expr, locals, type_table)
+            compute_sync_fields_in_expr(expr, candidates, type_table, cache, result);
         }
         TirExprKind::Assign { target, value } => {
-            expr_has_call_passing_locals(target, locals, type_table)
-                || expr_has_call_passing_locals(value, locals, type_table)
+            compute_sync_fields_in_expr(target, candidates, type_table, cache, result);
+            compute_sync_fields_in_expr(value, candidates, type_table, cache, result);
         }
         TirExprKind::Cast { expr, .. } => {
-            expr_has_call_passing_locals(expr, locals, type_table)
+            compute_sync_fields_in_expr(expr, candidates, type_table, cache, result);
         }
         TirExprKind::FieldAccess { expr, .. } => {
-            expr_has_call_passing_locals(expr, locals, type_table)
+            compute_sync_fields_in_expr(expr, candidates, type_table, cache, result);
         }
         TirExprKind::Index { expr, index } => {
-            expr_has_call_passing_locals(expr, locals, type_table)
-                || expr_has_call_passing_locals(index, locals, type_table)
+            compute_sync_fields_in_expr(expr, candidates, type_table, cache, result);
+            compute_sync_fields_in_expr(index, candidates, type_table, cache, result);
         }
-        TirExprKind::Block(block) => block_has_call_passing_locals(block, locals, type_table),
+        TirExprKind::Block(block) => {
+            for s in &block.stmts {
+                compute_sync_fields_in_stmt(s, candidates, type_table, cache, result);
+            }
+        }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            expr_has_call_passing_locals(condition, locals, type_table)
-                || block_has_call_passing_locals(then_branch, locals, type_table)
-                || else_branch
-                    .as_ref()
-                    .is_some_and(|eb| block_has_call_passing_locals(eb, locals, type_table))
+            compute_sync_fields_in_expr(condition, candidates, type_table, cache, result);
+            for s in &then_branch.stmts {
+                compute_sync_fields_in_stmt(s, candidates, type_table, cache, result);
+            }
+            if let Some(eb) = else_branch {
+                for s in &eb.stmts {
+                    compute_sync_fields_in_stmt(s, candidates, type_table, cache, result);
+                }
+            }
         }
-        TirExprKind::StructLiteral { fields, .. } => fields
-            .iter()
-            .any(|f| expr_has_call_passing_locals(&f.value, locals, type_table)),
-        TirExprKind::TupleLiteral { elements } => elements
-            .iter()
-            .any(|e| expr_has_call_passing_locals(e, locals, type_table)),
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                compute_sync_fields_in_expr(&field.value, candidates, type_table, cache, result);
+            }
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                compute_sync_fields_in_expr(elem, candidates, type_table, cache, result);
+            }
+        }
         TirExprKind::LabeledBlock { block, .. } => {
-            block_has_call_passing_locals(block, locals, type_table)
-        }
-        TirExprKind::IndirectCall { callee, args, .. } => {
-            expr_has_call_passing_locals(callee, locals, type_table)
-                || args
-                    .iter()
-                    .any(|arg| expr_has_call_passing_locals(arg, locals, type_table))
+            for s in &block.stmts {
+                compute_sync_fields_in_stmt(s, candidates, type_table, cache, result);
+            }
         }
         TirExprKind::Switch {
             scrutinee,
@@ -1082,15 +1564,130 @@ fn expr_has_call_passing_locals(
             default,
             ..
         } => {
-            expr_has_call_passing_locals(scrutinee, locals, type_table)
-                || arms
-                    .iter()
-                    .any(|arm| block_has_call_passing_locals(arm, locals, type_table))
-                || block_has_call_passing_locals(default, locals, type_table)
+            compute_sync_fields_in_expr(scrutinee, candidates, type_table, cache, result);
+            for arm in arms {
+                for s in &arm.stmts {
+                    compute_sync_fields_in_stmt(s, candidates, type_table, cache, result);
+                }
+            }
+            for s in &default.stmts {
+                compute_sync_fields_in_stmt(s, candidates, type_table, cache, result);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// For a call argument that might be a scalarized local, determine which fields
+/// need syncing based on the callee's field usage cache.
+fn add_sync_fields_for_arg(
+    arg_expr: &TirExpr,
+    func_ref: &FunctionRef,
+    param_position: u32,
+    candidates: &[ScalarizeCandidate],
+    type_table: &TypeTable,
+    cache: &FieldUsageCache,
+    result: &mut IndexSet<(u32, u32)>,
+) {
+    let Some(local_idx) = extract_gc_local_index(arg_expr, type_table) else {
+        return;
+    };
+
+    // Check if this local has any scalarized fields
+    let has_scalarized = candidates.iter().any(|c| c.local_index == local_idx);
+    if !has_scalarized {
+        return;
+    }
+
+    // Look up the callee's field usage in the cache (keyed by param position).
+    let cache_key = (func_ref.module_source.clone(), func_ref.name.clone());
+
+    match cache.get(&cache_key) {
+        Some(param_usage) => {
+            match param_usage.get(&param_position) {
+                Some(Some(field_set)) => {
+                    // Precise: only sync fields the callee accesses
+                    for c in candidates {
+                        if c.local_index == local_idx && field_set.contains(&c.field_index) {
+                            result.insert((c.local_index, c.field_index));
+                        }
+                    }
+                }
+                Some(None) => {
+                    // Conservative: callee passes the struct further, all fields potentially touched
+                    add_all_fields_for_local(local_idx, candidates, result);
+                }
+                None => {
+                    // Param at this position is not struct-typed in callee, or not tracked.
+                    // No fields need syncing (callee can't access fields of a non-struct param).
+                    // But if the callee has no entry for this position and the arg IS a
+                    // struct, it means the callee wasn't analyzed (no struct params) — safe
+                    // to skip since the callee doesn't treat it as a struct.
+                }
+            }
+        }
+        None => {
+            // Callee not in cache (external/imported function, no body, etc.)
+            // Conservative: sync all fields.
+            add_all_fields_for_local(local_idx, candidates, result);
+        }
+    }
+}
+
+/// Extract local index from an expression if it's a GC-typed local or &mut local.
+fn extract_gc_local_index(expr: &TirExpr, type_table: &TypeTable) -> Option<u32> {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => {
+            if is_gc_heap_type(expr.type_id, type_table) {
+                Some(*index)
+            } else {
+                None
+            }
+        }
+        TirExprKind::Unary {
+            op: TirUnaryOp::MutRef,
+            expr: inner,
+        } => {
+            if let TirExprKind::Local { index, .. } = &inner.kind {
+                if is_gc_heap_type(inner.type_id, type_table) {
+                    Some(*index)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Add all scalarized fields for a local (conservative fallback).
+fn add_all_fields_for_local(
+    local_idx: u32,
+    candidates: &[ScalarizeCandidate],
+    result: &mut IndexSet<(u32, u32)>,
+) {
+    for c in candidates {
+        if c.local_index == local_idx {
+            result.insert((c.local_index, c.field_index));
+        }
+    }
+}
+
+fn is_gc_heap_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+    match type_table.get(type_id) {
+        ResolvedType::Struct { .. } => true,
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+            is_gc_heap_type(*inner, type_table)
         }
         _ => false,
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Expression replacement (replace field accesses with scalarized locals)
+// ─────────────────────────────────────────────────────────────────────────────
 
 fn replace_in_stmt(stmt: &mut TirStmt, candidates: &[ScalarizeCandidate]) {
     match &mut stmt.kind {
@@ -1157,7 +1754,10 @@ fn make_write_back_stmts(
     candidates: &[ScalarizeCandidate],
     span: crate::token::Span,
 ) -> Vec<TirStmt> {
-    candidates.iter().map(|c| make_write_back_stmt(c, span)).collect()
+    candidates
+        .iter()
+        .map(|c| make_write_back_stmt(c, span))
+        .collect()
 }
 
 fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate]) {
@@ -1168,8 +1768,7 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate]) {
             field_index,
             ..
         } = &target.kind
-        {
-            if let TirExprKind::Local { index, .. } = &inner.kind {
+            && let TirExprKind::Local { index, .. } = &inner.kind {
                 for c in candidates {
                     if c.local_index == *index && c.field_index == *field_index {
                         // Replace obj.field = val with _hfs_local = val
@@ -1182,12 +1781,11 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate]) {
                             c.type_id,
                             expr.span,
                         );
-                        *target = Box::new(new_target);
+                        **target = new_target;
                         return;
                     }
                 }
             }
-        }
         replace_in_expr(target, candidates);
         replace_in_expr(value, candidates);
         return;
@@ -1199,8 +1797,7 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate]) {
         field_index,
         ..
     } = &expr.kind
-    {
-        if let TirExprKind::Local { index, .. } = &inner.kind {
+        && let TirExprKind::Local { index, .. } = &inner.kind {
             for c in candidates {
                 if c.local_index == *index && c.field_index == *field_index {
                     // Replace obj.field with _hfs_local
@@ -1212,7 +1809,6 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate]) {
                 }
             }
         }
-    }
 
     // Recurse into sub-expressions
     match &mut expr.kind {
