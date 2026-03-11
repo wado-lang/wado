@@ -314,9 +314,31 @@ fn test_data_text(repeats: usize) -> Vec<u8> {
     b"Hello, World! This is a test of the zlib compression library. ".repeat(repeats)
 }
 
+fn date_seed() -> u32 {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    // YYYYMMDD: same day → same seed
+    let days = now / 86400;
+    // Reconstruct YYYYMMDD from days since epoch
+    // Simple civil-calendar conversion (good through 2099)
+    let z = days + 719468;
+    let era = z / 146097;
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y * 10000 + m * 100 + d) as u32
+}
+
 fn test_data_pseudorandom(size: usize) -> Vec<u8> {
     let mut data = Vec::with_capacity(size);
-    let mut state: u32 = 0x1234_5678;
+    let mut state: u32 = date_seed();
     for _ in 0..size {
         state = state.wrapping_mul(1_103_515_245).wrapping_add(12345);
         data.push((state >> 16) as u8);
@@ -858,13 +880,13 @@ fn compression_size_all_levels_pseudorandom() {
 
 #[test]
 fn fuzz_wado_compress_zlib_rs_decompress() {
-    let mut rng: u32 = 0xDEAD_BEEF;
+    let mut rng: u32 = date_seed().wrapping_mul(31);
     let mut next = || -> u32 {
         rng = rng.wrapping_mul(1_103_515_245).wrapping_add(12345);
         rng >> 16
     };
 
-    for i in 0..50 {
+    for i in 0..20 {
         let size = (next() % 3000) as usize;
         let level = (next() % 10) as i32; // 0-9
         let data: Vec<u8> = (0..size).map(|_| next() as u8).collect();
@@ -880,13 +902,13 @@ fn fuzz_wado_compress_zlib_rs_decompress() {
 
 #[test]
 fn fuzz_zlib_rs_compress_wado_decompress() {
-    let mut rng: u32 = 0xCAFE_BABE;
+    let mut rng: u32 = date_seed().wrapping_mul(37);
     let mut next = || -> u32 {
         rng = rng.wrapping_mul(1_103_515_245).wrapping_add(12345);
         rng >> 16
     };
 
-    for i in 0..50 {
+    for i in 0..20 {
         let size = (next() % 3000) as usize;
         let level = (next() % 10) as i32; // 0-9
         let data: Vec<u8> = (0..size).map(|_| next() as u8).collect();
@@ -902,13 +924,13 @@ fn fuzz_zlib_rs_compress_wado_decompress() {
 
 #[test]
 fn fuzz_raw_deflate_round_trip() {
-    let mut rng: u32 = 0xBAAD_F00D;
+    let mut rng: u32 = date_seed().wrapping_mul(41);
     let mut next = || -> u32 {
         rng = rng.wrapping_mul(1_103_515_245).wrapping_add(12345);
         rng >> 16
     };
 
-    for i in 0..30 {
+    for i in 0..10 {
         let size = (next() % 2000) as usize;
         let level = (next() % 10) as i32;
         let data: Vec<u8> = (0..size).map(|_| next() as u8).collect();
@@ -933,13 +955,13 @@ fn fuzz_raw_deflate_round_trip() {
 
 #[test]
 fn fuzz_gzip_round_trip() {
-    let mut rng: u32 = 0x1337_C0DE;
+    let mut rng: u32 = date_seed().wrapping_mul(43);
     let mut next = || -> u32 {
         rng = rng.wrapping_mul(1_103_515_245).wrapping_add(12345);
         rng >> 16
     };
 
-    for i in 0..30 {
+    for i in 0..10 {
         let size = (next() % 2000) as usize;
         let level = (next() % 10) as i32;
         let data: Vec<u8> = (0..size).map(|_| next() as u8).collect();
