@@ -1,0 +1,64 @@
+// Test: break inside match with many arms (>8) correctly exits while loop
+// Regression: match compilation generates nested if-else without label entries
+use { println, Stdout } from "core:cli";
+
+enum State {
+    S0,
+    S1,
+    S2,
+    S3,
+    S4,
+    S5,
+    S6,
+    S7,
+    S8,
+    S9,
+    Done,
+    Bad,
+}
+
+export fn run() with Stdout {
+    let mut state = State::S0;
+    let mut leave = false;
+    let mut result = 0;
+
+    while !leave {
+        match state {
+            S0 => { result += 1; state = State::S1; },
+            S1 => { result += 2; state = State::S2; },
+            S2 => { result += 3; state = State::S3; },
+            S3 => { result += 4; state = State::S4; },
+            S4 => { result += 5; state = State::S5; },
+            S5 => {
+                // This arm is deep in the if-else chain.
+                // The break must exit the while loop, not a match if-else.
+                let mut i = 0;
+                while i < 3 {
+                    if i == 1 {
+                        leave = true;
+                        break;
+                    }
+                    result += 100;
+                    i += 1;
+                }
+                if leave {
+                    break;
+                }
+                // This must NOT execute when leave is true
+                result += 9999;
+                state = State::S6;
+            },
+            S6 => { result += 7; state = State::S7; },
+            S7 => { result += 8; state = State::S8; },
+            S8 => { result += 9; state = State::S9; },
+            S9 => { result += 10; state = State::Done; },
+            Done => { leave = true; },
+            _ => { leave = true; },
+        };
+    }
+    // result = 1+2+3+4+5 + 100 (one iteration of inner loop with i=0) = 115
+    println(`{result}`);
+}
+
+__DATA__
+{"stdout": "115\n"}

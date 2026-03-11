@@ -2765,6 +2765,16 @@ fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
             expr_has_break_to(label, expr)
                 || arms.iter().any(|arm| expr_has_break_to(label, &arm.body))
         }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            expr_has_break_to(label, scrutinee)
+                || arms.iter().any(|arm| block_has_break_to(label, arm))
+                || block_has_break_to(label, default)
+        }
         _ => false,
     }
 }

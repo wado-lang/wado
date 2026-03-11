@@ -534,23 +534,24 @@ fn inflate_table(codetype: i32, lens: &Array<u16>, lens_offset: i32, codes_count
 }
 
 
-// Inflate mode constants
-global INF_HEAD: i32 = 0;
-global INF_TYPEDO: i32 = 1;
-global INF_STORED: i32 = 2;
-global INF_COPY: i32 = 3;
-global INF_TABLE: i32 = 4;
-global INF_LENLENS: i32 = 5;
-global INF_CODELENS: i32 = 6;
-global INF_LEN: i32 = 7;
-global INF_LENEXT: i32 = 8;
-global INF_DIST: i32 = 9;
-global INF_DISTEXT: i32 = 10;
-global INF_MATCH: i32 = 11;
-global INF_LIT: i32 = 12;
-global INF_CHECK: i32 = 13;
-global INF_DONE: i32 = 14;
-global INF_BAD: i32 = 15;
+enum InflateMode {
+    Head,
+    TypeDo,
+    Stored,
+    Copy,
+    Table,
+    LenLens,
+    CodeLens,
+    Len,
+    LenExt,
+    Dist,
+    DistExt,
+    Match,
+    Lit,
+    Check,
+    Done,
+    Bad,
+}
 
 // Permutation of code lengths for dynamic blocks
 fn get_order() -> Array<u16> {
@@ -558,7 +559,7 @@ fn get_order() -> Array<u16> {
 }
 
 struct InflateState {
-    mode: i32,
+    mode: InflateMode,
     last_block: bool,
     wrap: i32,  // 0=raw, 1=zlib
 
@@ -607,7 +608,7 @@ impl InflateState {
     fn new(raw: bool) -> InflateState {
         let wbits = 15;
         return InflateState {
-            mode: if raw { INF_TYPEDO } else { INF_HEAD },
+            mode: if raw { InflateMode::TypeDo } else { InflateMode::Head },
             last_block: false,
             wrap: if raw { 0 } else { 1 },
             wbits,
@@ -737,15 +738,56 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
     let mut leave = false;
 
     while !leave {
-        if state.mode == INF_TYPEDO {
-            if state.last_block {
-                // discard remaining bits to byte boundary
+        match state.mode {
+            TypeDo => {
+                if state.last_block {
+                    // discard remaining bits to byte boundary
+                    state.hold = state.hold >> (state.bits & 7) as u32;
+                    state.bits -= state.bits & 7;
+                    state.mode = InflateMode::Check;
+                } else {
+                    // need 3 bits
+                    while state.bits < 3 {
+                        if have == 0 {
+                            leave = true;
+                            break;
+                        }
+                        state.hold = state.hold | input[inp] as u32 << state.bits as u32;
+                        state.bits += 8;
+                        inp += 1;
+                        have -= 1;
+                    }
+                    if leave {
+                        break;
+                    }
+
+                    state.last_block = state.hold & 1 != 0;
+                    state.hold = state.hold >> 1;
+                    state.bits -= 1;
+
+                    let block_type = (state.hold & 3) as i32;
+                    state.hold = state.hold >> 2;
+                    state.bits -= 2;
+
+                    if block_type == 0 {
+                        state.mode = InflateMode::Stored;
+                    } else if block_type == 1 {
+                        state.load_fixed_tables();
+                        state.mode = InflateMode::Len;
+                    } else if block_type == 2 {
+                        state.mode = InflateMode::Table;
+                    } else {
+                        state.mode = InflateMode::Bad;
+                    }
+                }
+            },
+            Stored => {
+                // go to byte boundary
                 state.hold = state.hold >> (state.bits & 7) as u32;
                 state.bits -= state.bits & 7;
-                state.mode = INF_CHECK;
-            } else {
-                // need 3 bits
-                while state.bits < 3 {
+
+                // need 32 bits
+                while state.bits < 32 {
                     if have == 0 {
                         leave = true;
                         break;
@@ -759,108 +801,39 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                     break;
                 }
 
-                state.last_block = state.hold & 1 != 0;
-                state.hold = state.hold >> 1;
-                state.bits -= 1;
-
-                let block_type = (state.hold & 3) as i32;
-                state.hold = state.hold >> 2;
-                state.bits -= 2;
-
-                if block_type == 0 {
-                    state.mode = INF_STORED;
-                } else if block_type == 1 {
-                    state.load_fixed_tables();
-                    state.mode = INF_LEN;
-                } else if block_type == 2 {
-                    state.mode = INF_TABLE;
+                let stored_len = (state.hold & 0xFFFF) as i32;
+                let stored_nlen = (state.hold >> 16 & 0xFFFF) as i32;
+                if stored_len != stored_nlen ^ 0xFFFF {
+                    state.mode = InflateMode::Bad;
                 } else {
-                    state.mode = INF_BAD;
+                    state.length = stored_len;
+                    state.hold = 0;
+                    state.bits = 0;
+                    state.mode = InflateMode::Copy;
                 }
-            }
-        } else if state.mode == INF_STORED {
-            // go to byte boundary
-            state.hold = state.hold >> (state.bits & 7) as u32;
-            state.bits -= state.bits & 7;
-
-            // need 32 bits
-            while state.bits < 32 {
-                if have == 0 {
+            },
+            Copy => {
+                let mut copy = state.length;
+                if copy > 0 {
+                    if copy > have {
+                        copy = have;
+                    }
+                    for let mut i = 0; i < copy; i += 1 {
+                        output.append(input[inp + i]);
+                    }
+                    have -= copy;
+                    inp += copy;
+                    state.length -= copy;
+                }
+                if state.length == 0 {
+                    state.mode = InflateMode::TypeDo;
+                } else {
                     leave = true;
-                    break;
                 }
-                state.hold = state.hold | input[inp] as u32 << state.bits as u32;
-                state.bits += 8;
-                inp += 1;
-                have -= 1;
-            }
-            if leave {
-                break;
-            }
-
-            let stored_len = (state.hold & 0xFFFF) as i32;
-            let stored_nlen = (state.hold >> 16 & 0xFFFF) as i32;
-            if stored_len != stored_nlen ^ 0xFFFF {
-                state.mode = INF_BAD;
-            } else {
-                state.length = stored_len;
-                state.hold = 0;
-                state.bits = 0;
-                state.mode = INF_COPY;
-            }
-        } else if state.mode == INF_COPY {
-            let mut copy = state.length;
-            if copy > 0 {
-                if copy > have {
-                    copy = have;
-                }
-                for let mut i = 0; i < copy; i += 1 {
-                    output.append(input[inp + i]);
-                }
-                have -= copy;
-                inp += copy;
-                state.length -= copy;
-            }
-            if state.length == 0 {
-                state.mode = INF_TYPEDO;
-            } else {
-                leave = true;
-            }
-        } else if state.mode == INF_TABLE {
-            // need 14 bits for table header
-            while state.bits < 14 {
-                if have == 0 {
-                    leave = true;
-                    break;
-                }
-                state.hold = state.hold | input[inp] as u32 << state.bits as u32;
-                state.bits += 8;
-                inp += 1;
-                have -= 1;
-            }
-            if leave {
-                break;
-            }
-
-            state.nlen = (state.hold & 0x1F) as i32 + 257;
-            state.hold = state.hold >> 5;
-            state.bits -= 5;
-            state.ndist = (state.hold & 0x1F) as i32 + 1;
-            state.hold = state.hold >> 5;
-            state.bits -= 5;
-            state.ncode = (state.hold & 0x0F) as i32 + 4;
-            state.hold = state.hold >> 4;
-            state.bits -= 4;
-
-            if state.nlen > 286 || state.ndist > 30 {
-                state.mode = INF_BAD;
-            } else {
-                state.have_count = 0;
-                state.mode = INF_LENLENS;
-            }
-        } else if state.mode == INF_LENLENS {
-            while state.have_count < state.ncode {
-                while state.bits < 3 {
+            },
+            Table => {
+                // need 14 bits for table header
+                while state.bits < 14 {
                     if have == 0 {
                         leave = true;
                         break;
@@ -874,33 +847,223 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                     break;
                 }
 
-                state.lens[order[state.have_count] as i32] = (state.hold & 7) as u16;
-                state.hold = state.hold >> 3;
-                state.bits -= 3;
-                state.have_count += 1;
-            }
-            if leave {
-                break;
-            }
+                state.nlen = (state.hold & 0x1F) as i32 + 257;
+                state.hold = state.hold >> 5;
+                state.bits -= 5;
+                state.ndist = (state.hold & 0x1F) as i32 + 1;
+                state.hold = state.hold >> 5;
+                state.bits -= 5;
+                state.ncode = (state.hold & 0x0F) as i32 + 4;
+                state.hold = state.hold >> 4;
+                state.bits -= 4;
 
-            while state.have_count < 19 {
-                state.lens[order[state.have_count] as i32] = 0;
-                state.have_count += 1;
-            }
+                if state.nlen > 286 || state.ndist > 30 {
+                    state.mode = InflateMode::Bad;
+                } else {
+                    state.have_count = 0;
+                    state.mode = InflateMode::LenLens;
+                }
+            },
+            LenLens => {
+                while state.have_count < state.ncode {
+                    while state.bits < 3 {
+                        if have == 0 {
+                            leave = true;
+                            break;
+                        }
+                        state.hold = state.hold | input[inp] as u32 << state.bits as u32;
+                        state.bits += 8;
+                        inp += 1;
+                        have -= 1;
+                    }
+                    if leave {
+                        break;
+                    }
 
-            let result = inflate_table(CODES_TYPE, &state.lens, 0, 19, &mut state.codes, 0, 7, &mut state.work);
-            if result.0 != 0 {
-                state.mode = INF_BAD;
-            } else {
-                state.lencode_off = 0;
-                state.lenbits = result.1;
-                state.have_count = 0;
-                state.mode = INF_CODELENS;
-            }
-        } else if state.mode == INF_CODELENS {
-            let mut bad = false;
-            while state.have_count < state.nlen + state.ndist {
-                // decode using code length code
+                    state.lens[order[state.have_count] as i32] = (state.hold & 7) as u16;
+                    state.hold = state.hold >> 3;
+                    state.bits -= 3;
+                    state.have_count += 1;
+                }
+                if leave {
+                    break;
+                }
+
+                while state.have_count < 19 {
+                    state.lens[order[state.have_count] as i32] = 0;
+                    state.have_count += 1;
+                }
+
+                let result = inflate_table(CODES_TYPE, &state.lens, 0, 19, &mut state.codes, 0, 7, &mut state.work);
+                if result.0 != 0 {
+                    state.mode = InflateMode::Bad;
+                } else {
+                    state.lencode_off = 0;
+                    state.lenbits = result.1;
+                    state.have_count = 0;
+                    state.mode = InflateMode::CodeLens;
+                }
+            },
+            CodeLens => {
+                let mut bad = false;
+                while state.have_count < state.nlen + state.ndist {
+                    // decode using code length code
+                    loop {
+                        let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
+                        let here = &state.codes[idx];
+                        if here.bits as i32 <= state.bits {
+                            break;
+                        }
+                        if have == 0 {
+                            leave = true;
+                            break;
+                        }
+                        state.hold = state.hold | input[inp] as u32 << state.bits as u32;
+                        state.bits += 8;
+                        inp += 1;
+                        have -= 1;
+                    }
+                    if leave {
+                        break;
+                    }
+
+                    let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
+                    let here_val = state.codes[idx].val as i32;
+                    let here_bits = state.codes[idx].bits as i32;
+
+                    if here_val < 16 {
+                        state.hold = state.hold >> here_bits as u32;
+                        state.bits -= here_bits;
+                        state.lens[state.have_count] = here_val as u16;
+                        state.have_count += 1;
+                    } else {
+                        let mut copy_len = 0;
+                        let mut copy_val: u16 = 0;
+                        if here_val == 16 {
+                            // need here_bits + 2
+                            while state.bits < here_bits + 2 {
+                                if have == 0 {
+                                    leave = true;
+                                    break;
+                                }
+                                state.hold = state.hold | input[inp] as u32 << state.bits as u32;
+                                state.bits += 8;
+                                inp += 1;
+                                have -= 1;
+                            }
+                            if leave {
+                                break;
+                            }
+                            state.hold = state.hold >> here_bits as u32;
+                            state.bits -= here_bits;
+                            if state.have_count == 0 {
+                                bad = true;
+                                break;
+                            }
+                            copy_val = state.lens[state.have_count - 1];
+                            copy_len = 3 + (state.hold & 3) as i32;
+                            state.hold = state.hold >> 2;
+                            state.bits -= 2;
+                        } else if here_val == 17 {
+                            while state.bits < here_bits + 3 {
+                                if have == 0 {
+                                    leave = true;
+                                    break;
+                                }
+                                state.hold = state.hold | input[inp] as u32 << state.bits as u32;
+                                state.bits += 8;
+                                inp += 1;
+                                have -= 1;
+                            }
+                            if leave {
+                                break;
+                            }
+                            state.hold = state.hold >> here_bits as u32;
+                            state.bits -= here_bits;
+                            copy_val = 0;
+                            copy_len = 3 + (state.hold & 7) as i32;
+                            state.hold = state.hold >> 3;
+                            state.bits -= 3;
+                        } else {
+                            while state.bits < here_bits + 7 {
+                                if have == 0 {
+                                    leave = true;
+                                    break;
+                                }
+                                state.hold = state.hold | input[inp] as u32 << state.bits as u32;
+                                state.bits += 8;
+                                inp += 1;
+                                have -= 1;
+                            }
+                            if leave {
+                                break;
+                            }
+                            state.hold = state.hold >> here_bits as u32;
+                            state.bits -= here_bits;
+                            copy_val = 0;
+                            copy_len = 11 + (state.hold & 0x7F) as i32;
+                            state.hold = state.hold >> 7;
+                            state.bits -= 7;
+                        }
+                        if state.have_count + copy_len > state.nlen + state.ndist {
+                            bad = true;
+                            break;
+                        }
+                        for let mut i = 0; i < copy_len; i += 1 {
+                            state.lens[state.have_count] = copy_val;
+                            state.have_count += 1;
+                        }
+                    }
+                }
+
+                if leave {
+                    break;
+                }
+                if bad {
+                    state.mode = InflateMode::Bad;
+                } else if state.lens[256] == 0 {
+                    // check for end-of-block code
+                    state.mode = InflateMode::Bad;
+                } else {
+                    // build code tables
+                    let result1 = inflate_table(
+                        LENS_TYPE,
+                        &state.lens,
+                        0,
+                        state.nlen,
+                        &mut state.codes,
+                        0,
+                        9,
+                        &mut state.work,
+                    );
+                    if result1.0 != 0 {
+                        state.mode = InflateMode::Bad;
+                    } else {
+                        state.lencode_off = 0;
+                        state.lenbits = result1.1;
+                        let dist_start = result1.2;
+                        let result2 = inflate_table(
+                            DISTS_TYPE,
+                            &state.lens,
+                            state.nlen,
+                            state.ndist,
+                            &mut state.codes,
+                            dist_start,
+                            6,
+                            &mut state.work,
+                        );
+                        if result2.0 != 0 {
+                            state.mode = InflateMode::Bad;
+                        } else {
+                            state.distcode_off = dist_start;
+                            state.distbits = result2.1;
+                            state.mode = InflateMode::Len;
+                        }
+                    }
+                }
+            },
+            Len => {
+                // decode literal/length code
                 loop {
                     let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
                     let here = &state.codes[idx];
@@ -921,178 +1084,85 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                 }
 
                 let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
-                let here_val = state.codes[idx].val as i32;
-                let here_bits = state.codes[idx].bits as i32;
+                let mut here_op = state.codes[idx].op;
+                let mut here_bits = state.codes[idx].bits;
+                let mut here_val = state.codes[idx].val;
 
-                if here_val < 16 {
-                    state.hold = state.hold >> here_bits as u32;
-                    state.bits -= here_bits;
-                    state.lens[state.have_count] = here_val as u16;
-                    state.have_count += 1;
-                } else {
-                    let mut copy_len = 0;
-                    let mut copy_val: u16 = 0;
-                    if here_val == 16 {
-                        // need here_bits + 2
-                        while state.bits < here_bits + 2 {
-                            if have == 0 {
-                                leave = true;
-                                break;
-                            }
-                            state.hold = state.hold | input[inp] as u32 << state.bits as u32;
-                            state.bits += 8;
-                            inp += 1;
-                            have -= 1;
-                        }
-                        if leave {
+                // handle 2nd level length code
+                if here_op != 0 && here_op & 0xF0 == 0 {
+                    let last_bits = here_bits;
+                    let last_op = here_op;
+                    let last_val = here_val;
+                    loop {
+                        let idx2 = state.lencode_off + last_val as i32 + ((state.hold & (1 as u32 << last_bits as u32 + last_op as u32) - 1) >> last_bits as u32) as i32;
+                        here_op = state.codes[idx2].op;
+                        here_bits = state.codes[idx2].bits;
+                        here_val = state.codes[idx2].val;
+                        if last_bits as i32 + here_bits as i32 <= state.bits {
                             break;
                         }
-                        state.hold = state.hold >> here_bits as u32;
-                        state.bits -= here_bits;
-                        if state.have_count == 0 {
-                            bad = true;
+                        if have == 0 {
+                            leave = true;
                             break;
                         }
-                        copy_val = state.lens[state.have_count - 1];
-                        copy_len = 3 + (state.hold & 3) as i32;
-                        state.hold = state.hold >> 2;
-                        state.bits -= 2;
-                    } else if here_val == 17 {
-                        while state.bits < here_bits + 3 {
-                            if have == 0 {
-                                leave = true;
-                                break;
-                            }
-                            state.hold = state.hold | input[inp] as u32 << state.bits as u32;
-                            state.bits += 8;
-                            inp += 1;
-                            have -= 1;
-                        }
-                        if leave {
-                            break;
-                        }
-                        state.hold = state.hold >> here_bits as u32;
-                        state.bits -= here_bits;
-                        copy_val = 0;
-                        copy_len = 3 + (state.hold & 7) as i32;
-                        state.hold = state.hold >> 3;
-                        state.bits -= 3;
-                    } else {
-                        while state.bits < here_bits + 7 {
-                            if have == 0 {
-                                leave = true;
-                                break;
-                            }
-                            state.hold = state.hold | input[inp] as u32 << state.bits as u32;
-                            state.bits += 8;
-                            inp += 1;
-                            have -= 1;
-                        }
-                        if leave {
-                            break;
-                        }
-                        state.hold = state.hold >> here_bits as u32;
-                        state.bits -= here_bits;
-                        copy_val = 0;
-                        copy_len = 11 + (state.hold & 0x7F) as i32;
-                        state.hold = state.hold >> 7;
-                        state.bits -= 7;
+                        state.hold = state.hold | input[inp] as u32 << state.bits as u32;
+                        state.bits += 8;
+                        inp += 1;
+                        have -= 1;
                     }
-                    if state.have_count + copy_len > state.nlen + state.ndist {
-                        bad = true;
+                    if leave {
                         break;
                     }
-                    for let mut i = 0; i < copy_len; i += 1 {
-                        state.lens[state.have_count] = copy_val;
-                        state.have_count += 1;
-                    }
+                    state.hold = state.hold >> last_bits as u32;
+                    state.bits -= last_bits as i32;
                 }
-            }
 
-            if leave {
-                break;
-            }
-            if bad {
-                state.mode = INF_BAD;
-            } else if state.lens[256] == 0 {
-                // check for end-of-block code
+                state.hold = state.hold >> here_bits as u32;
+                state.bits -= here_bits as i32;
+                state.length = here_val as i32;
 
-                state.mode = INF_BAD;
-            } else {
-                // build code tables
-                let result1 = inflate_table(
-                    LENS_TYPE,
-                    &state.lens,
-                    0,
-                    state.nlen,
-                    &mut state.codes,
-                    0,
-                    9,
-                    &mut state.work,
-                );
-                if result1.0 != 0 {
-                    state.mode = INF_BAD;
+                if here_op as i32 == 0 {
+                    // literal
+                    state.mode = InflateMode::Lit;
+                } else if here_op & 32 != 0 {
+                    // end of block
+                    state.back = -1;
+                    state.mode = InflateMode::TypeDo;
+                } else if here_op & 64 != 0 {
+                    state.mode = InflateMode::Bad;
                 } else {
-                    state.lencode_off = 0;
-                    state.lenbits = result1.1;
-                    let dist_start = result1.2;
-                    let result2 = inflate_table(
-                        DISTS_TYPE,
-                        &state.lens,
-                        state.nlen,
-                        state.ndist,
-                        &mut state.codes,
-                        dist_start,
-                        6,
-                        &mut state.work,
-                    );
-                    if result2.0 != 0 {
-                        state.mode = INF_BAD;
-                    } else {
-                        state.distcode_off = dist_start;
-                        state.distbits = result2.1;
-                        state.mode = INF_LEN;
+                    state.extra = (here_op & 15) as i32;
+                    state.mode = InflateMode::LenExt;
+                }
+            },
+            LenExt => {
+                if state.extra > 0 {
+                    while state.bits < state.extra {
+                        if have == 0 {
+                            leave = true;
+                            break;
+                        }
+                        state.hold = state.hold | input[inp] as u32 << state.bits as u32;
+                        state.bits += 8;
+                        inp += 1;
+                        have -= 1;
                     }
+                    if leave {
+                        break;
+                    }
+                    state.length += (state.hold & (1 as u32 << state.extra as u32) - 1) as i32;
+                    state.hold = state.hold >> state.extra as u32;
+                    state.bits -= state.extra;
                 }
-            }
-        } else if state.mode == INF_LEN {
-            // decode literal/length code
-            loop {
-                let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
-                let here = &state.codes[idx];
-                if here.bits as i32 <= state.bits {
-                    break;
-                }
-                if have == 0 {
-                    leave = true;
-                    break;
-                }
-                state.hold = state.hold | input[inp] as u32 << state.bits as u32;
-                state.bits += 8;
-                inp += 1;
-                have -= 1;
-            }
-            if leave {
-                break;
-            }
-
-            let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
-            let mut here_op = state.codes[idx].op;
-            let mut here_bits = state.codes[idx].bits;
-            let mut here_val = state.codes[idx].val;
-
-
-            // handle 2nd level length code
-            if here_op != 0 && here_op & 0xF0 == 0 {
-                let last_bits = here_bits;
-                let last_op = here_op;
-                let last_val = here_val;
+                state.was = state.length;
+                state.mode = InflateMode::Dist;
+            },
+            Dist => {
+                // decode distance code
                 loop {
-                    let idx2 = state.lencode_off + last_val as i32 + ((state.hold & (1 as u32 << last_bits as u32 + last_op as u32) - 1) >> last_bits as u32) as i32;
-                    here_op = state.codes[idx2].op;
-                    here_bits = state.codes[idx2].bits;
-                    here_val = state.codes[idx2].val;
-                    if last_bits as i32 + here_bits as i32 <= state.bits {
+                    let idx = state.distcode_off + (state.hold & (1 as u32 << state.distbits as u32) - 1) as i32;
+                    let here = &state.codes[idx];
+                    if here.bits as i32 <= state.bits {
                         break;
                     }
                     if have == 0 {
@@ -1107,213 +1177,159 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                 if leave {
                     break;
                 }
-                state.hold = state.hold >> last_bits as u32;
-                state.bits -= last_bits as i32;
-            }
 
-            state.hold = state.hold >> here_bits as u32;
-            state.bits -= here_bits as i32;
-            state.length = here_val as i32;
-
-            if here_op as i32 == 0 {
-                // literal
-                state.mode = INF_LIT;
-            } else if here_op & 32 != 0 {
-                // end of block
-                state.back = -1;
-                state.mode = INF_TYPEDO;
-            } else if here_op & 64 != 0 {
-                state.mode = INF_BAD;
-            } else {
-                state.extra = (here_op & 15) as i32;
-                state.mode = INF_LENEXT;
-            }
-        } else if state.mode == INF_LENEXT {
-            if state.extra > 0 {
-                while state.bits < state.extra {
-                    if have == 0 {
-                        leave = true;
-                        break;
-                    }
-                    state.hold = state.hold | input[inp] as u32 << state.bits as u32;
-                    state.bits += 8;
-                    inp += 1;
-                    have -= 1;
-                }
-                if leave {
-                    break;
-                }
-                state.length += (state.hold & (1 as u32 << state.extra as u32) - 1) as i32;
-                state.hold = state.hold >> state.extra as u32;
-                state.bits -= state.extra;
-            }
-            state.was = state.length;
-            state.mode = INF_DIST;
-        } else if state.mode == INF_DIST {
-            // decode distance code
-            loop {
                 let idx = state.distcode_off + (state.hold & (1 as u32 << state.distbits as u32) - 1) as i32;
-                let here = &state.codes[idx];
-                if here.bits as i32 <= state.bits {
-                    break;
-                }
-                if have == 0 {
-                    leave = true;
-                    break;
-                }
-                state.hold = state.hold | input[inp] as u32 << state.bits as u32;
-                state.bits += 8;
-                inp += 1;
-                have -= 1;
-            }
-            if leave {
-                break;
-            }
+                let mut here_op = state.codes[idx].op;
+                let mut here_bits = state.codes[idx].bits;
+                let mut here_val = state.codes[idx].val;
 
-            let idx = state.distcode_off + (state.hold & (1 as u32 << state.distbits as u32) - 1) as i32;
-            let mut here_op = state.codes[idx].op;
-            let mut here_bits = state.codes[idx].bits;
-            let mut here_val = state.codes[idx].val;
-
-            // handle 2nd level distance code
-            if here_op & 0xF0 == 0 {
-                let last_bits = here_bits;
-                let last_op = here_op;
-                let last_val = here_val;
-                loop {
-                    let idx2 = state.distcode_off + last_val as i32 + ((state.hold & (1 as u32 << last_bits as u32 + last_op as u32) - 1) >> last_bits as u32) as i32;
-                    here_op = state.codes[idx2].op;
-                    here_bits = state.codes[idx2].bits;
-                    here_val = state.codes[idx2].val;
-                    if last_bits as i32 + here_bits as i32 <= state.bits {
+                // handle 2nd level distance code
+                if here_op & 0xF0 == 0 {
+                    let last_bits = here_bits;
+                    let last_op = here_op;
+                    let last_val = here_val;
+                    loop {
+                        let idx2 = state.distcode_off + last_val as i32 + ((state.hold & (1 as u32 << last_bits as u32 + last_op as u32) - 1) >> last_bits as u32) as i32;
+                        here_op = state.codes[idx2].op;
+                        here_bits = state.codes[idx2].bits;
+                        here_val = state.codes[idx2].val;
+                        if last_bits as i32 + here_bits as i32 <= state.bits {
+                            break;
+                        }
+                        if have == 0 {
+                            leave = true;
+                            break;
+                        }
+                        state.hold = state.hold | input[inp] as u32 << state.bits as u32;
+                        state.bits += 8;
+                        inp += 1;
+                        have -= 1;
+                    }
+                    if leave {
                         break;
                     }
-                    if have == 0 {
-                        leave = true;
-                        break;
-                    }
-                    state.hold = state.hold | input[inp] as u32 << state.bits as u32;
-                    state.bits += 8;
-                    inp += 1;
-                    have -= 1;
+                    state.hold = state.hold >> last_bits as u32;
+                    state.bits -= last_bits as i32;
                 }
-                if leave {
-                    break;
-                }
-                state.hold = state.hold >> last_bits as u32;
-                state.bits -= last_bits as i32;
-            }
 
-            state.hold = state.hold >> here_bits as u32;
-            state.bits -= here_bits as i32;
+                state.hold = state.hold >> here_bits as u32;
+                state.bits -= here_bits as i32;
 
-            if here_op & 64 != 0 {
-                state.mode = INF_BAD;
-            } else {
-                state.offset = here_val as i32;
-                state.extra = (here_op & 15) as i32;
-                state.mode = INF_DISTEXT;
-            }
-        } else if state.mode == INF_DISTEXT {
-            if state.extra > 0 {
-                while state.bits < state.extra {
-                    if have == 0 {
-                        leave = true;
-                        break;
-                    }
-                    state.hold = state.hold | input[inp] as u32 << state.bits as u32;
-                    state.bits += 8;
-                    inp += 1;
-                    have -= 1;
-                }
-                if leave {
-                    break;
-                }
-                state.offset += (state.hold & (1 as u32 << state.extra as u32) - 1) as i32;
-                state.hold = state.hold >> state.extra as u32;
-                state.bits -= state.extra;
-            }
-            state.mode = INF_MATCH;
-        } else if state.mode == INF_MATCH {
-            // copy match from output or window
-            let out_pos = output.len();
-            let mut copy = state.length;
-            if state.offset > out_pos {
-                // need to copy from window
-                let mut win_copy = state.offset - out_pos;
-                if win_copy > state.whave {
-                    state.mode = INF_BAD;
+                if here_op & 64 != 0 {
+                    state.mode = InflateMode::Bad;
                 } else {
-                    let mut from_win = 0;
-                    if state.wnext >= win_copy {
-                        from_win = state.wnext - win_copy;
+                    state.offset = here_val as i32;
+                    state.extra = (here_op & 15) as i32;
+                    state.mode = InflateMode::DistExt;
+                }
+            },
+            DistExt => {
+                if state.extra > 0 {
+                    while state.bits < state.extra {
+                        if have == 0 {
+                            leave = true;
+                            break;
+                        }
+                        state.hold = state.hold | input[inp] as u32 << state.bits as u32;
+                        state.bits += 8;
+                        inp += 1;
+                        have -= 1;
+                    }
+                    if leave {
+                        break;
+                    }
+                    state.offset += (state.hold & (1 as u32 << state.extra as u32) - 1) as i32;
+                    state.hold = state.hold >> state.extra as u32;
+                    state.bits -= state.extra;
+                }
+                state.mode = InflateMode::Match;
+            },
+            Match => {
+                // copy match from output or window
+                let out_pos = output.len();
+                let mut copy = state.length;
+                if state.offset > out_pos {
+                    // need to copy from window
+                    let mut win_copy = state.offset - out_pos;
+                    if win_copy > state.whave {
+                        state.mode = InflateMode::Bad;
                     } else {
-                        from_win = state.wsize - (win_copy - state.wnext);
-                    }
-                    if win_copy > copy {
-                        win_copy = copy;
-                    }
-                    for let mut i = 0; i < win_copy; i += 1 {
-                        output.append(state.window[(from_win + i) % state.wsize]);
-                    }
-                    copy -= win_copy;
-                    // rest from output
-                    if copy > 0 {
-                        let src_start = output.len() - state.offset;
-                        for let mut i = 0; i < copy; i += 1 {
-                            output.append(output[src_start + i]);
+                        let mut from_win = 0;
+                        if state.wnext >= win_copy {
+                            from_win = state.wnext - win_copy;
+                        } else {
+                            from_win = state.wsize - (win_copy - state.wnext);
+                        }
+                        if win_copy > copy {
+                            win_copy = copy;
+                        }
+                        for let mut i = 0; i < win_copy; i += 1 {
+                            output.append(state.window[(from_win + i) % state.wsize]);
+                        }
+                        copy -= win_copy;
+                        // rest from output
+                        if copy > 0 {
+                            let src_start = output.len() - state.offset;
+                            for let mut i = 0; i < copy; i += 1 {
+                                output.append(output[src_start + i]);
+                            }
                         }
                     }
+                } else {
+                    // copy from output
+                    let src_start = out_pos - state.offset;
+                    for let mut i = 0; i < copy; i += 1 {
+                        output.append(output[src_start + i]);
+                    }
                 }
-            } else {
-                // copy from output
-                let src_start = out_pos - state.offset;
-                for let mut i = 0; i < copy; i += 1 {
-                    output.append(output[src_start + i]);
+                if state.mode != InflateMode::Bad {
+                    // update window
+                    state.update_window(&output, output.len(), state.length);
+                    state.mode = InflateMode::Len;
                 }
-            }
-            if state.mode != INF_BAD {
-                // update window
-                state.update_window(&output, output.len(), state.length);
-                state.mode = INF_LEN;
-            }
-        } else if state.mode == INF_LIT {
-            output.append(state.length as u8);
-            // update window periodically
-            if output.len() % 32768 == 0 {
-                let wlen = if output.len() > 32768 { 32768 } else { output.len() };
-                state.update_window(&output, output.len(), wlen);
-            }
-            state.mode = INF_LEN;
-        } else if state.mode == INF_CHECK {
-            if state.wrap == 1 {
-                // verify adler32 for zlib streams
-                while state.bits < 32 {
-                    if have == 0 {
-                        leave = true;
+            },
+            Lit => {
+                output.append(state.length as u8);
+                // update window periodically
+                if output.len() % 32768 == 0 {
+                    let wlen = if output.len() > 32768 { 32768 } else { output.len() };
+                    state.update_window(&output, output.len(), wlen);
+                }
+                state.mode = InflateMode::Len;
+            },
+            Check => {
+                if state.wrap == 1 {
+                    // verify adler32 for zlib streams
+                    while state.bits < 32 {
+                        if have == 0 {
+                            leave = true;
+                            break;
+                        }
+                        state.hold = state.hold | input[inp] as u32 << state.bits as u32;
+                        state.bits += 8;
+                        inp += 1;
+                        have -= 1;
+                    }
+                    if leave {
                         break;
                     }
-                    state.hold = state.hold | input[inp] as u32 << state.bits as u32;
-                    state.bits += 8;
-                    inp += 1;
-                    have -= 1;
+                    // swap bytes for adler32 comparison
+                    let check_val = state.hold >> 24 & 0xFF | state.hold >> 8 & 0xFF00 | (state.hold & 0xFF00) << 8 | (state.hold & 0xFF) << 24;
+                    state.hold = 0;
+                    state.bits = 0;
                 }
-                if leave {
-                    break;
-                }
-                // swap bytes for adler32 comparison
-                let check_val = state.hold >> 24 & 0xFF | state.hold >> 8 & 0xFF00 | (state.hold & 0xFF00) << 8 | (state.hold & 0xFF) << 24;
-                state.hold = 0;
-                state.bits = 0;
-            }
-            state.mode = INF_DONE;
-        } else if state.mode == INF_DONE {
-            leave = true;
-        } else if state.mode == INF_BAD {
-            leave = true;
-        } else {
-            leave = true;
-        }
+                state.mode = InflateMode::Done;
+            },
+            Done => {
+                leave = true;
+            },
+            Bad => {
+                leave = true;
+            },
+            _ => {
+                leave = true;
+            },
+        };
     }
 
     // final window update

@@ -1337,6 +1337,27 @@ fn replace_in_block(
                 new_stmts.push(stmt);
                 continue;
             }
+            TirStmtKind::Expr(expr) if matches!(expr.kind, TirExprKind::Switch { .. }) => {
+                // Switch arms are blocks that may contain function calls needing
+                // write-back/re-read sync. We must recurse with replace_in_block
+                // (not replace_in_block_stmts) so that sync is inserted around
+                // calls inside the arms.
+                if let TirExprKind::Switch {
+                    scrutinee,
+                    arms,
+                    default,
+                    ..
+                } = &mut expr.kind
+                {
+                    replace_in_expr(scrutinee, candidates);
+                    for arm in arms {
+                        replace_in_block(arm, candidates, local_types, type_table, cache);
+                    }
+                    replace_in_block(default, candidates, local_types, type_table, cache);
+                }
+                new_stmts.push(stmt);
+                continue;
+            }
             _ => {}
         }
 
