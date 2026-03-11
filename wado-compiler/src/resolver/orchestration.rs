@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{self, Item, Module, Type};
 use crate::builtin_registry::BuiltinRegistry;
@@ -33,21 +33,21 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         logger: &'a Logger<'a, H>,
         included_files: &'a IndexMap<[String; 2], Vec<u8>>,
     ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
-        let mut result = IndexMap::new();
+        let mut result = IndexMap::default();
 
         // Create a shared type table wrapped in Rc<RefCell<>> for cross-module sharing
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
-        let mut all_newtypes: IndexMap<ModuleSource, IndexMap<String, TypeId>> = IndexMap::new();
+        let mut all_newtypes: IndexMap<ModuleSource, IndexMap<String, TypeId>> = IndexMap::default();
         let mut all_struct_fields: IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>> =
-            IndexMap::new();
+            IndexMap::default();
         let mut all_variant_cases: IndexMap<ModuleSource, IndexMap<String, VariantInfo>> =
-            IndexMap::new();
+            IndexMap::default();
         let mut all_enum_cases: IndexMap<ModuleSource, IndexMap<String, EnumInfo>> =
-            IndexMap::new();
+            IndexMap::default();
         let mut all_flags_cases: IndexMap<ModuleSource, IndexMap<String, FlagsInfo>> =
-            IndexMap::new();
+            IndexMap::default();
         let mut all_resource_types: IndexMap<ModuleSource, IndexMap<String, ResourceInfo>> =
-            IndexMap::new();
+            IndexMap::default();
 
         // First pass: collect struct, variant, enum, and resource names from all modules (for forward references)
         for (module_source, module) in modules {
@@ -472,7 +472,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
             // Build function_return_types for this module only
             // (functions defined in this module)
-            let mut function_return_types = IndexMap::new();
+            let mut function_return_types = IndexMap::default();
             for item in &module.items {
                 if let Item::Function(func) = item {
                     let return_type = if let Some(ret_ty) = &func.return_type {
@@ -494,7 +494,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
 
             // Collect imported function names from this module's use declarations
-            let mut imported_functions = IndexSet::new();
+            let mut imported_functions = IndexSet::default();
             for item in &module.items {
                 if let Item::Use(use_decl) = item {
                     for use_item in &use_decl.items {
@@ -544,24 +544,26 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 logger,
                 current_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"), // Set in resolve_module
                 current_module_items: Vec::new(), // Set in resolve_module
-                current_type_params: IndexMap::new(),
-                current_type_param_bounds: IndexMap::new(),
-                generic_struct_names: IndexSet::new(),
-                generic_function_params: IndexMap::new(),
-                generic_method_params: IndexMap::new(),
-                current_associated_type_bindings: IndexMap::new(),
+                current_type_params: IndexMap::default(),
+                current_type_param_bounds: IndexMap::default(),
+                generic_struct_names: IndexSet::default(),
+                generic_function_params: IndexMap::default(),
+                generic_method_params: IndexMap::default(),
+                current_associated_type_bindings: IndexMap::default(),
                 current_self_type: None,
                 wasi_registry,
                 builtin_registry: &builtin_registry,
-                current_module_globals: IndexMap::new(),
-                imported_globals: IndexMap::new(),
-                associated_constants: IndexMap::new(),
-                module_type_maps_cache: IndexMap::new(),
+                current_module_globals: IndexMap::default(),
+                imported_globals: IndexMap::default(),
+                associated_constants: IndexMap::default(),
+                module_type_maps_cache: IndexMap::default(),
                 trait_impl_index: Arc::clone(&trait_impl_index),
                 trait_decl_index: Arc::clone(&trait_decl_index),
                 blanket_trait_impl_index: Arc::clone(&blanket_trait_impl_index),
                 included_files,
+                known_type_names_cache: IndexSet::default(),
             };
+            resolver.rebuild_known_type_names_cache();
 
             // Set file context so diagnostics emitted during resolution
             // carry the correct module filename (not the entry module).
@@ -586,7 +588,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         imported_type_sources: &IndexMap<String, ModuleSource>,
         import_original_names: &IndexMap<String, String>,
     ) -> IndexMap<String, V> {
-        let mut result = IndexMap::new();
+        let mut result = IndexMap::default();
         // First: add all entries from all modules (arbitrary winner for conflicts)
         for name_map in per_module.values() {
             for (name, value) in name_map {
@@ -621,8 +623,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         module: &Module,
         from_module: &ModuleSource,
     ) -> (IndexMap<String, ModuleSource>, IndexMap<String, String>) {
-        let mut sources = IndexMap::new();
-        let mut original_names = IndexMap::new();
+        let mut sources = IndexMap::default();
+        let mut original_names = IndexMap::default();
         for item in &module.items {
             if let Item::Use(use_decl) = item {
                 let source = name::resolve_import(from_module, &use_decl.source);
@@ -761,7 +763,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Track dependency counts directly (no need for full dependency sets)
         let mut dependency_count: Vec<usize> = vec![0; sources.len()];
         // Track which edges we've already added to avoid duplicates
-        let mut seen_edges: IndexSet<(usize, usize)> = IndexSet::new();
+        let mut seen_edges: IndexSet<(usize, usize)> = IndexSet::default();
         // Build reverse graph: dependents[i] = modules that depend on module i
         let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); sources.len()];
 

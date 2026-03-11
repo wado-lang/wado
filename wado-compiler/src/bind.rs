@@ -11,9 +11,9 @@
 //! - Resolve cross-module references (that's the resolve phase)
 //! - Perform type checking (that's the resolve phase)
 
-use indexmap::IndexSet;
+use crate::hashmap::IndexSet;
 
-use indexmap::IndexMap;
+use crate::hashmap::IndexMap;
 
 use crate::ast::{
     AssertStmt, Block, ClosureExpr, Condition, Expr, ExprStmt, ForOfStmt, ForStmt, Function,
@@ -47,7 +47,7 @@ struct Scope {
 impl Scope {
     fn new() -> Self {
         Self {
-            bindings: IndexMap::new(),
+            bindings: IndexMap::default(),
         }
     }
 }
@@ -156,7 +156,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             scopes: vec![Scope::new()], // Global scope
             logger,
             current_depth: 0,
-            local_names_in_function: IndexSet::new(),
+            local_names_in_function: IndexSet::default(),
         }
     }
 

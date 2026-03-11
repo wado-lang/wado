@@ -19,7 +19,7 @@
 use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
-use indexmap::IndexMap;
+use crate::hashmap::IndexMap;
 
 type GlobalKey = (ModuleSource, String);
 
@@ -40,7 +40,7 @@ fn promote_in_module(project: &mut Project, module_source: &ModuleSource) -> boo
     let module = &project.tir_modules[module_source];
 
     // Build a lookup of promotable globals: currently Wasm-mutable but user-declared immutable
-    let mut promotable_globals: IndexMap<GlobalKey, usize> = IndexMap::new();
+    let mut promotable_globals: IndexMap<GlobalKey, usize> = IndexMap::default();
     for (idx, global) in module.globals.iter().enumerate() {
         if global.mutable && !global.wado_mutable {
             promotable_globals.insert((global.module_source.clone(), global.name.clone()), idx);
@@ -52,7 +52,7 @@ fn promote_in_module(project: &mut Project, module_source: &ModuleSource) -> boo
     }
 
     // Scan all functions for GlobalVarSet to promotable globals with constant values
-    let mut promotions: IndexMap<GlobalKey, TirExprKind> = IndexMap::new();
+    let mut promotions: IndexMap<GlobalKey, TirExprKind> = IndexMap::default();
     for func_rc in &module.functions {
         let func = func_rc.borrow();
         let Some(body) = &func.body else { continue };

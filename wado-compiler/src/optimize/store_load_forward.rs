@@ -26,7 +26,7 @@ use crate::project::Project;
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeTable,
 };
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 /// A forwardable value: a scalar literal.
 /// We only forward literals (not locals) to avoid complications with
@@ -107,7 +107,7 @@ impl KnownValues {
 
 /// Collect all locals that are assigned within a block (including nested blocks).
 fn collect_modified_locals(block: &TirBlock) -> IndexSet<u32> {
-    let mut modified = IndexSet::new();
+    let mut modified = IndexSet::default();
     for stmt in &block.stmts {
         collect_modified_in_stmt(stmt, &mut modified);
     }
@@ -287,7 +287,7 @@ fn collect_modified_in_expr(expr: &TirExpr, modified: &mut IndexSet<u32>) {
 /// - Captured by a closure
 /// - Assigned through dereference (*ptr = ...)
 fn collect_unsafe_locals(body: &TirBlock) -> IndexSet<u32> {
-    let mut unsafe_locals = IndexSet::new();
+    let mut unsafe_locals = IndexSet::default();
     collect_unsafe_in_block(body, &mut unsafe_locals);
     unsafe_locals
 }
@@ -748,7 +748,7 @@ fn forward_in_expr(
         }
         TirExprKind::Match { expr: inner, arms } => {
             changed |= forward_in_expr(inner, known, unsafe_locals, type_table);
-            let mut modified = IndexSet::new();
+            let mut modified = IndexSet::default();
             for arm in arms.iter() {
                 if let Some(guard) = &arm.guard {
                     collect_modified_in_expr(guard, &mut modified);
@@ -780,7 +780,7 @@ fn forward_in_expr(
             ..
         } => {
             changed |= forward_in_expr(scrutinee, known, unsafe_locals, type_table);
-            let mut modified = IndexSet::new();
+            let mut modified = IndexSet::default();
             for arm in arms.iter() {
                 modified.extend(collect_modified_locals(arm));
             }

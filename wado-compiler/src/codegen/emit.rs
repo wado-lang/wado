@@ -3,7 +3,7 @@
 //! This module handles the mechanical translation from WIR's tree-structured
 //! representation to flat Wasm instructions and binary encoding.
 
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::wir::{
     WirAbstractHeapType, WirArrayType, WirCopyType, WirExportDesc, WirFuncType, WirFunction,
@@ -67,17 +67,17 @@ impl<'a> WirEmitter<'a> {
     fn new(wir: &'a WirModule, strip_names: bool) -> Self {
         Self {
             wir,
-            type_index_map: IndexMap::new(),
-            variant_case_types: IndexMap::new(),
-            struct_field_map: IndexMap::new(),
+            type_index_map: IndexMap::default(),
+            variant_case_types: IndexMap::default(),
+            struct_field_map: IndexMap::default(),
             func_index_offset: 0,
-            func_index_map: IndexMap::new(),
-            global_name_map: IndexMap::new(),
-            current_locals: IndexMap::new(),
-            ref_locals: IndexSet::new(),
+            func_index_map: IndexMap::default(),
+            global_name_map: IndexMap::default(),
+            current_locals: IndexMap::default(),
+            ref_locals: IndexSet::default(),
             next_local: 0,
             next_type_idx: 0,
-            variant_pre_assigned: IndexMap::new(),
+            variant_pre_assigned: IndexMap::default(),
             current_branch_hints: Vec::new(),
             all_branch_hints: Vec::new(),
             strip_names,
@@ -325,7 +325,7 @@ impl<'a> WirEmitter<'a> {
     /// Find func type indices that are referenced from struct fields.
     /// These must go in the rec group to avoid forward reference errors.
     fn find_gc_referenced_func_types(&self) -> IndexSet<u32> {
-        let mut gc_func_types = IndexSet::new();
+        let mut gc_func_types = IndexSet::default();
         for typedef in &self.wir.types {
             if let WirTypeDef::Struct(s) = typedef {
                 for field in &s.fields {
@@ -370,7 +370,7 @@ impl<'a> WirEmitter<'a> {
     ) {
         debug_assert!(self.type_index_map.contains_key(&wir_idx));
 
-        let mut field_map = IndexMap::new();
+        let mut field_map = IndexMap::default();
         let fields: Vec<FieldType> = s
             .fields
             .iter()
@@ -415,7 +415,7 @@ impl<'a> WirEmitter<'a> {
             .unwrap_or_default();
 
         // Build field map for the base type
-        let mut field_map = IndexMap::new();
+        let mut field_map = IndexMap::default();
         field_map.insert("discriminant".to_string(), 0);
         self.struct_field_map.insert(wir_idx, field_map);
 
@@ -467,7 +467,7 @@ impl<'a> WirEmitter<'a> {
         // Register field maps for variant case structs
         for (&case_wir_idx, &(variant_wir_idx, case_idx)) in &self.wir.variant_case_info {
             if variant_wir_idx == wir_idx {
-                let mut case_field_map = IndexMap::new();
+                let mut case_field_map = IndexMap::default();
                 case_field_map.insert("discriminant".to_string(), 0);
                 if let Some(case_def) = v.cases.get(case_idx as usize) {
                     for (j, _) in case_def.payload.iter().enumerate() {
@@ -2672,7 +2672,7 @@ impl<'a> WirEmitter<'a> {
     /// Collect all function indices referenced by `RefFunc` instructions.
     /// These need to be declared in a declarative element segment.
     fn collect_ref_func_indices(&self) -> Vec<u32> {
-        let mut indices = IndexSet::new();
+        let mut indices = IndexSet::default();
         for (i, func) in self.wir.functions.iter().enumerate() {
             if self
                 .wir

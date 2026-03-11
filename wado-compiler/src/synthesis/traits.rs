@@ -11,7 +11,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use indexmap::IndexSet;
+use crate::hashmap::IndexSet;
 
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::project::Project;
@@ -862,7 +862,7 @@ fn generate_generic_struct_inspect_fn(
         span,
         local_count,
         local_types: vec![ref_struct_type, fmt_type],
-        address_taken_locals: IndexSet::new(),
+        address_taken_locals: IndexSet::default(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
@@ -1174,7 +1174,7 @@ fn generate_generic_variant_inspect_fn(
         span,
         local_count: 2,
         local_types: vec![ref_variant_type, fmt_type],
-        address_taken_locals: IndexSet::new(),
+        address_taken_locals: IndexSet::default(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
@@ -2022,7 +2022,7 @@ fn generate_display_fallback(
         span,
         local_count: 2,
         local_types: vec![ref_type, fmt_type],
-        address_taken_locals: IndexSet::new(),
+        address_taken_locals: IndexSet::default(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,

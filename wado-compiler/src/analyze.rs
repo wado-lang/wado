@@ -156,7 +156,7 @@ pub struct Analyzer<'a, H: CompilerHost> {
     /// Logger for emitting diagnostics
     logger: &'a Logger<'a, H>,
     /// Modules loaded implicitly by the compiler (not by user imports)
-    implicit_modules: indexmap::IndexSet<ModuleSource>,
+    implicit_modules: crate::hashmap::IndexSet<ModuleSource>,
 }
 
 impl<'a, H: CompilerHost> Analyzer<'a, H> {
@@ -165,7 +165,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         Self {
             symbols: SymbolTable::new(),
             logger,
-            implicit_modules: indexmap::IndexSet::new(),
+            implicit_modules: crate::hashmap::IndexSet::default(),
         }
     }
 
@@ -420,9 +420,9 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     /// * `implicit_modules` - Set of implicitly loaded modules
     pub fn analyze_loaded_modules(
         &mut self,
-        modules: &indexmap::IndexMap<ModuleSource, Module>,
+        modules: &crate::hashmap::IndexMap<ModuleSource, Module>,
         _entry_source: &ModuleSource,
-        implicit_modules: indexmap::IndexSet<ModuleSource>,
+        implicit_modules: crate::hashmap::IndexSet<ModuleSource>,
     ) -> Result<(), Bail> {
         self.implicit_modules = implicit_modules;
 
@@ -444,7 +444,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
     fn validate_all_imports(
         &mut self,
-        modules: &indexmap::IndexMap<ModuleSource, Module>,
+        modules: &crate::hashmap::IndexMap<ModuleSource, Module>,
     ) -> Result<(), Bail> {
         for (source, module) in modules {
             self.logger.set_file(source.diagnostic_filename());
@@ -462,7 +462,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         &mut self,
         module: &Module,
         module_source: &ModuleSource,
-        all_modules: &indexmap::IndexMap<ModuleSource, Module>,
+        all_modules: &crate::hashmap::IndexMap<ModuleSource, Module>,
     ) {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
@@ -526,7 +526,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         &mut self,
         module: &Module,
         from_module_source: &ModuleSource,
-        all_modules: &indexmap::IndexMap<ModuleSource, Module>,
+        all_modules: &crate::hashmap::IndexMap<ModuleSource, Module>,
     ) -> Result<(), Bail> {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
@@ -604,7 +604,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     }
 
     /// Get a copy of the implicit modules set
-    pub fn get_implicit_modules(&self) -> &indexmap::IndexSet<ModuleSource> {
+    pub fn get_implicit_modules(&self) -> &crate::hashmap::IndexSet<ModuleSource> {
         &self.implicit_modules
     }
 }

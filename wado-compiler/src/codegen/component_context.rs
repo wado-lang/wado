@@ -4,7 +4,7 @@
 //! (types, instances, core functions, modules) to eliminate hardcoded magic
 //! numbers when building Wasm Components with wasm-encoder.
 
-use indexmap::IndexMap;
+use crate::hashmap::IndexMap;
 
 /// Tracks component-level indices for types, instances, and core functions.
 /// Used alongside wasm-encoder's `ComponentBuilder` to eliminate magic numbers.
@@ -41,18 +41,18 @@ impl ComponentModelContext {
     /// Create a new context with all indices starting at 0
     pub fn new() -> Self {
         Self {
-            type_names: IndexMap::new(),
+            type_names: IndexMap::default(),
             next_type_idx: 0,
-            instance_names: IndexMap::new(),
+            instance_names: IndexMap::default(),
             next_instance_idx: 0,
-            core_func_names: IndexMap::new(),
+            core_func_names: IndexMap::default(),
             next_core_func_idx: 0,
             core_memory_idx: None,
-            comp_func_names: IndexMap::new(),
+            comp_func_names: IndexMap::default(),
             next_comp_func_idx: 0,
-            core_module_names: IndexMap::new(),
+            core_module_names: IndexMap::default(),
             next_core_module_idx: 0,
-            core_instance_names: IndexMap::new(),
+            core_instance_names: IndexMap::default(),
             next_core_instance_idx: 0,
         }
     }

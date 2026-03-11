@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::name::{ModuleSource, mangle_generic_name};
 use crate::tir::{
@@ -33,14 +33,14 @@ pub(super) struct BoxLowerer {
 impl BoxLowerer {
     pub(super) fn new() -> Self {
         Self {
-            box_struct_types: IndexMap::new(),
-            box_type_ids: IndexSet::new(),
+            box_struct_types: IndexMap::default(),
+            box_type_ids: IndexSet::default(),
             generated_structs: Vec::new(),
             box_module_source: ModuleSource::Core {
                 name: "internal".to_string(),
             },
-            struct_fields_map: IndexMap::new(),
-            variant_names: IndexSet::<String>::new(),
+            struct_fields_map: IndexMap::default(),
+            variant_names: IndexSet::default(),
         }
     }
 
@@ -389,7 +389,7 @@ impl BoxLowerer {
         {
             let type_table = module.type_table.borrow();
             for global in &mut module.globals {
-                self.transform_expr(&mut global.initializer, &IndexSet::new(), &type_table);
+                self.transform_expr(&mut global.initializer, &IndexSet::default(), &type_table);
             }
         }
 
@@ -403,7 +403,7 @@ impl BoxLowerer {
         // Boxing is required for:
         // - Primitives (except i128/u128 which are already GC types)
         // - Variant types (subtype hierarchy prevents field-by-field deref assignment)
-        let mut needs_box_base: IndexSet<TypeId> = IndexSet::new();
+        let mut needs_box_base: IndexSet<TypeId> = IndexSet::default();
         let mut newtype_pairs: Vec<(TypeId, TypeId)> = Vec::new(); // (alias, base)
 
         for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {

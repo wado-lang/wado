@@ -15,7 +15,7 @@
 use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind};
-use indexmap::IndexMap;
+use crate::hashmap::IndexMap;
 
 /// A constant value extracted from a global variable's initializer.
 #[derive(Debug, Clone)]
@@ -66,7 +66,7 @@ type GlobalKey = (ModuleSource, String);
 /// Collect all constant globals from the project.
 /// Returns a map from (`module_source`, name) to the constant value.
 fn collect_constant_globals(project: &Project) -> IndexMap<GlobalKey, ConstValue> {
-    let mut constants: IndexMap<GlobalKey, ConstValue> = IndexMap::new();
+    let mut constants: IndexMap<GlobalKey, ConstValue> = IndexMap::default();
 
     for module in project.tir_modules.values() {
         for global in &module.globals {

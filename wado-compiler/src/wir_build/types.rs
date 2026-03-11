@@ -12,7 +12,7 @@ use crate::wir::{
     WirStructType, WirType, WirTypeDef, WirVariantCase, WirVariantType,
 };
 
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 use super::context::WirContext;
 
@@ -67,7 +67,7 @@ fn sort_types_topologically<'a>(
     let variant_names: IndexSet<String> = variants.iter().map(|v| v.name.clone()).collect();
     let all_names: IndexSet<String> = struct_names.union(&variant_names).cloned().collect();
 
-    let mut deps: IndexMap<String, Vec<String>> = IndexMap::new();
+    let mut deps: IndexMap<String, Vec<String>> = IndexMap::default();
 
     for s in structs {
         let mut type_deps = Vec::new();
@@ -93,12 +93,12 @@ fn sort_types_topologically<'a>(
         deps.insert(v.name.clone(), type_deps);
     }
 
-    let mut in_degree: IndexMap<String, usize> = IndexMap::new();
+    let mut in_degree: IndexMap<String, usize> = IndexMap::default();
     for name in &all_names {
         in_degree.insert(name.clone(), deps.get(name).map(Vec::len).unwrap_or(0));
     }
 
-    let mut dependents: IndexMap<String, Vec<String>> = IndexMap::new();
+    let mut dependents: IndexMap<String, Vec<String>> = IndexMap::default();
     for (name, type_deps) in &deps {
         for dep in type_deps {
             dependents
@@ -1043,7 +1043,7 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
 
     // Collect all unique function signatures from all modules
     let mut fn_sigs: Vec<(Vec<WirType>, Vec<WirType>)> = Vec::new();
-    let mut seen_keys: indexmap::IndexSet<String> = indexmap::IndexSet::new();
+    let mut seen_keys: crate::hashmap::IndexSet<String> = crate::hashmap::IndexSet::default();
 
     for tir_mod in ctx.project.tir_modules.values() {
         let type_table = &*tir_mod.type_table.borrow();

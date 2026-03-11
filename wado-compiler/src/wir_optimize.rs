@@ -19,7 +19,7 @@
 //! - **Cleanup**: removes redundant `RefAsNonNull`, `Nop`, and dead code after
 //!   `Unreachable`, normalizing WIR so that codegen can emit it as-is.
 
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::optimize::OptLevel;
 use crate::wir::{
@@ -157,11 +157,11 @@ struct VariantReplacement {
     /// Local name holding the discriminant value.
     disc_local: String,
     /// `case_wir_type_idx` → discriminant value (i32).
-    case_disc_values: indexmap::IndexMap<u32, i32>,
+    case_disc_values: crate::hashmap::IndexMap<u32, i32>,
     /// `(case_wir_type_idx, field_name_in_case_struct)` → sroa local name.
-    field_to_local: indexmap::IndexMap<(u32, String), String>,
+    field_to_local: crate::hashmap::IndexMap<(u32, String), String>,
     /// SROA locals that hold ref types (need `ref.as_non_null` when read).
-    ref_locals: indexmap::IndexSet<String>,
+    ref_locals: crate::hashmap::IndexSet<String>,
 }
 
 /// Returns true if a `WirType` is a valid Wasm value type for multi-value returns.
@@ -212,7 +212,7 @@ fn wir_types_equal(a: &WirType, b: &WirType) -> bool {
 
 /// Collect all `func_ids` that must NOT be SROA'd (exports, element tables, `RefFunc`).
 fn collect_pinned_func_ids(module: &WirModule) -> IndexSet<u32> {
-    let mut pinned = IndexSet::new();
+    let mut pinned = IndexSet::default();
 
     // Exported functions
     for export in &module.exports {
@@ -366,7 +366,7 @@ fn try_variant_sroa_candidate(
     let mut max_payload_count: usize = 0;
 
     // Build a mapping of case_wir_type_idx for this variant from variant_case_info
-    let mut case_idx_to_type_idx: indexmap::IndexMap<u32, u32> = indexmap::IndexMap::new();
+    let mut case_idx_to_type_idx: crate::hashmap::IndexMap<u32, u32> = crate::hashmap::IndexMap::default();
     for (&case_wir_idx, &(parent_variant_idx, case_index)) in &module.variant_case_info {
         if parent_variant_idx == variant_type_idx {
             case_idx_to_type_idx.insert(case_index, case_wir_idx);
@@ -436,7 +436,7 @@ fn try_variant_sroa_candidate(
     }
 
     // Collect ALL case type indices (including unit cases) for return validation
-    let mut all_case_type_indices: IndexSet<u32> = IndexSet::new();
+    let mut all_case_type_indices: IndexSet<u32> = IndexSet::default();
     for &opt in &case_type_indices {
         if let Some(idx) = opt {
             all_case_type_indices.insert(idx);
@@ -730,7 +730,7 @@ fn validate_call_sites(
         .collect();
 
     // Scan all function bodies for calls to candidate functions
-    let mut invalid: IndexSet<u32> = IndexSet::new();
+    let mut invalid: IndexSet<u32> = IndexSet::default();
 
     for func in &module.functions {
         if let Some(body) = &func.body {
@@ -1213,7 +1213,7 @@ fn check_uses_in_subtree(instr: &WirInstr, local_name: &str) -> bool {
 /// Phase 3: apply SROA transformations to confirmed candidates.
 fn apply_sroa(module: &mut WirModule, confirmed: &[(u32, SroaCandidate)]) {
     // Build a lookup from func_id_index → candidate info
-    let candidate_map: indexmap::IndexMap<u32, &SroaCandidate> =
+    let candidate_map: crate::hashmap::IndexMap<u32, &SroaCandidate> =
         confirmed.iter().map(|(id, c)| (*id, c)).collect();
 
     // Step A: Create new func types and rewrite function signatures + bodies.
@@ -1732,15 +1732,15 @@ fn default_value_for_type(ty: &WirType) -> WirInstr {
 ///    `StructGet { RefCast { LocalGet(T) } }` with `LocalGet`.
 fn rewrite_call_sites(
     instrs: &mut Vec<WirInstr>,
-    candidate_map: &indexmap::IndexMap<u32, &SroaCandidate>,
+    candidate_map: &crate::hashmap::IndexMap<u32, &SroaCandidate>,
     types: &[WirTypeDef],
 ) {
     // Collect replacements: temp_name → (field_name → fresh_local_name)
-    let mut replacements: indexmap::IndexMap<String, indexmap::IndexMap<String, String>> =
-        indexmap::IndexMap::new();
+    let mut replacements: crate::hashmap::IndexMap<String, crate::hashmap::IndexMap<String, String>> =
+        crate::hashmap::IndexMap::default();
     // Variant replacements: temp_name → VariantReplacement
-    let mut variant_replacements: indexmap::IndexMap<String, VariantReplacement> =
-        indexmap::IndexMap::new();
+    let mut variant_replacements: crate::hashmap::IndexMap<String, VariantReplacement> =
+        crate::hashmap::IndexMap::default();
 
     // First pass: find call sites and prepare MultiValueLocalBind + replacement map
     let mut result = Vec::with_capacity(instrs.len());
@@ -1773,7 +1773,7 @@ fn rewrite_call_sites(
         let candidate = candidate_map[&func_id_idx];
 
         // Generate fresh local names for each field and declare them
-        let mut field_map: indexmap::IndexMap<String, String> = indexmap::IndexMap::new();
+        let mut field_map: crate::hashmap::IndexMap<String, String> = crate::hashmap::IndexMap::default();
         let mut locals: Vec<Option<String>> = Vec::with_capacity(candidate.field_count);
         for (fi, field_name) in candidate.field_names.iter().enumerate() {
             let fresh = format!("__sroa_{temp_name}_{field_name}");
@@ -1789,9 +1789,9 @@ fn rewrite_call_sites(
         if let Some(vi) = &candidate.variant_info {
             // Variant candidate: build VariantReplacement
             let disc_local = field_map["discriminant"].clone();
-            let mut case_disc_values: indexmap::IndexMap<u32, i32> = indexmap::IndexMap::new();
-            let mut field_to_local: indexmap::IndexMap<(u32, String), String> =
-                indexmap::IndexMap::new();
+            let mut case_disc_values: crate::hashmap::IndexMap<u32, i32> = crate::hashmap::IndexMap::default();
+            let mut field_to_local: crate::hashmap::IndexMap<(u32, String), String> =
+                crate::hashmap::IndexMap::default();
 
             for (disc_val, case_type_opt) in vi.case_type_indices.iter().enumerate() {
                 if let Some(case_type_idx) = case_type_opt {
@@ -1822,7 +1822,7 @@ fn rewrite_call_sites(
             }
 
             // Track which SROA locals hold ref types (need ref.as_non_null when read)
-            let mut ref_locals = indexmap::IndexSet::new();
+            let mut ref_locals = crate::hashmap::IndexSet::default();
             for (fi, ft) in candidate.field_types.iter().enumerate() {
                 if matches!(ft, WirType::Ref { .. } | WirType::AbstractRef { .. })
                     && let Some(local_name) = field_map.get(&candidate.field_names[fi])
@@ -1888,7 +1888,7 @@ fn rewrite_call_sites(
 /// Recurse into nested instruction bodies for call site rewriting.
 fn recurse_rewrite_call_sites(
     instr: &mut WirInstr,
-    candidate_map: &indexmap::IndexMap<u32, &SroaCandidate>,
+    candidate_map: &crate::hashmap::IndexMap<u32, &SroaCandidate>,
     types: &[WirTypeDef],
 ) {
     match instr {
@@ -1922,7 +1922,7 @@ fn recurse_rewrite_call_sites(
 /// has eliminated the struct, the copy is redundant.
 fn replace_struct_gets(
     instr: &mut WirInstr,
-    replacements: &indexmap::IndexMap<String, indexmap::IndexMap<String, String>>,
+    replacements: &crate::hashmap::IndexMap<String, crate::hashmap::IndexMap<String, String>>,
 ) {
     // Handle ValueCopy(StructGet(LocalGet(temp))) → LocalGet(sroa_fresh).
     // This eliminates the unnecessary shallow copy that was emitted to preserve value
@@ -1964,7 +1964,7 @@ fn replace_struct_gets(
 
 /// Produce a `LocalGet` for an SROA local, wrapping with `RefAsNonNull` if the local
 /// holds a nullable ref type (variant SROA payload locals use nullable types for padding).
-fn sroa_local_get(local_name: &str, ref_locals: &indexmap::IndexSet<String>) -> WirInstr {
+fn sroa_local_get(local_name: &str, ref_locals: &crate::hashmap::IndexSet<String>) -> WirInstr {
     let get = WirInstr::LocalGet {
         name: local_name.to_string(),
     };
@@ -1983,7 +1983,7 @@ fn sroa_local_get(local_name: &str, ref_locals: &indexmap::IndexSet<String>) -> 
 /// 3. `ValueCopy { StructGet { field, expr: RefCast { type_id, expr: LocalGet(temp) } } }` → same
 fn replace_variant_accesses(
     instr: &mut WirInstr,
-    variant_replacements: &indexmap::IndexMap<String, VariantReplacement>,
+    variant_replacements: &crate::hashmap::IndexMap<String, VariantReplacement>,
 ) {
     // Pattern 3: ValueCopy wrapping StructGet(RefCast(LocalGet(temp)))
     if let WirInstr::ValueCopy { expr, .. } = instr
@@ -2053,7 +2053,7 @@ fn replace_variant_accesses(
 fn is_candidate_call_set(
     instr: &WirInstr,
     expected_name: &str,
-    candidate_map: &indexmap::IndexMap<u32, &SroaCandidate>,
+    candidate_map: &crate::hashmap::IndexMap<u32, &SroaCandidate>,
 ) -> bool {
     let WirInstr::LocalSet { name, value } = instr else {
         return false;
@@ -2069,7 +2069,7 @@ fn is_candidate_call_set(
 /// Handles calls wrapped in `ValueCopy` or trivial inlined `Block`.
 fn extract_candidate_call_info(
     instr: &WirInstr,
-    candidate_map: &indexmap::IndexMap<u32, &SroaCandidate>,
+    candidate_map: &crate::hashmap::IndexMap<u32, &SroaCandidate>,
 ) -> Option<(u32, String)> {
     let WirInstr::LocalSet { name, value } = instr else {
         return None;
@@ -2181,10 +2181,10 @@ fn sroa_single_field_parameters(module: &mut WirModule) {
     let pinned = collect_pinned_func_ids(module);
 
     // Phase 1: identify candidate (func_id, param_index) pairs.
-    let mut candidates: IndexSet<(u32, usize)> = IndexSet::new();
+    let mut candidates: IndexSet<(u32, usize)> = IndexSet::default();
     // Map from (func_id, param_idx) → (struct_type_id_index, inner WirType, field_name).
-    let mut candidate_info: indexmap::IndexMap<(u32, usize), (u32, WirType, String)> =
-        indexmap::IndexMap::new();
+    let mut candidate_info: crate::hashmap::IndexMap<(u32, usize), (u32, WirType, String)> =
+        crate::hashmap::IndexMap::default();
 
     for (i, func) in module.functions.iter().enumerate() {
         let func_id_index = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
@@ -2229,7 +2229,7 @@ fn sroa_single_field_parameters(module: &mut WirModule) {
 
     // Phase 2: validate uses — eliminate candidates whose parameter escapes.
     loop {
-        let mut invalid: IndexSet<(u32, usize)> = IndexSet::new();
+        let mut invalid: IndexSet<(u32, usize)> = IndexSet::default();
 
         for &(func_id_index, param_idx) in &candidates {
             let func_array_idx = (func_id_index - crate::wir_build::DEFINED_FUNC_BASE) as usize;
@@ -2301,7 +2301,7 @@ fn sroa_single_field_parameters(module: &mut WirModule) {
 
     // Step B: rewrite call sites in ALL function bodies.
     // Build lookup: func_id_index → set of SROA'd param indices.
-    let mut sroa_params: indexmap::IndexMap<u32, IndexSet<usize>> = indexmap::IndexMap::new();
+    let mut sroa_params: crate::hashmap::IndexMap<u32, IndexSet<usize>> = crate::hashmap::IndexMap::default();
     for &(func_id_index, param_idx) in &candidates {
         sroa_params
             .entry(func_id_index)
@@ -2310,8 +2310,8 @@ fn sroa_single_field_parameters(module: &mut WirModule) {
     }
 
     // Build (func_id, param_idx) → (WirTypeId of the struct type, field name).
-    let mut param_struct_info: indexmap::IndexMap<(u32, usize), (WirTypeId, String)> =
-        indexmap::IndexMap::new();
+    let mut param_struct_info: crate::hashmap::IndexMap<(u32, usize), (WirTypeId, String)> =
+        crate::hashmap::IndexMap::default();
     for &(func_id_index, param_idx) in &candidates {
         let (ref struct_type_idx, _, ref field_name) = candidate_info[&(func_id_index, param_idx)];
         if let Some(WirTypeDef::Struct(st)) = module.types.get(*struct_type_idx as usize) {
@@ -2323,8 +2323,8 @@ fn sroa_single_field_parameters(module: &mut WirModule) {
     // Build per-function map of param names → struct type that was unwrapped.
     // This tells us what struct type each scalar param was derived from (so we
     // know whether a bare `LocalGet(param)` at a call site needs a StructGet).
-    let mut func_scalar_param_struct: indexmap::IndexMap<u32, indexmap::IndexMap<String, u32>> =
-        indexmap::IndexMap::new();
+    let mut func_scalar_param_struct: crate::hashmap::IndexMap<u32, crate::hashmap::IndexMap<String, u32>> =
+        crate::hashmap::IndexMap::default();
     for &(func_id_index, param_idx) in &candidates {
         let func_array_idx = (func_id_index - crate::wir_build::DEFINED_FUNC_BASE) as usize;
         let param_name = module.functions[func_array_idx].param_names[param_idx].clone();
@@ -2539,9 +2539,9 @@ fn rewrite_single_field_param_reads(instr: &mut WirInstr, param_name: &str, expe
 /// - Other expressions → `StructGet(expr, field_name)` (extract scalar from existing ref)
 fn rewrite_single_field_args_at_call_sites(
     instr: &mut WirInstr,
-    sroa_params: &indexmap::IndexMap<u32, IndexSet<usize>>,
-    param_struct_info: &indexmap::IndexMap<(u32, usize), (WirTypeId, String)>,
-    scalar_param_structs: &indexmap::IndexMap<String, u32>,
+    sroa_params: &crate::hashmap::IndexMap<u32, IndexSet<usize>>,
+    param_struct_info: &crate::hashmap::IndexMap<(u32, usize), (WirTypeId, String)>,
+    scalar_param_structs: &crate::hashmap::IndexMap<String, u32>,
 ) {
     // Recurse first (bottom-up)
     instr.for_each_boxed_child_mut(&mut |child| {
@@ -2637,7 +2637,7 @@ fn elide_dead_single_field_struct_locals(module: &mut WirModule) {
 /// One pass: collect candidates, validate, rewrite. Returns `true` if anything changed.
 fn elide_struct_locals_one_pass(body: &mut [WirInstr]) -> bool {
     // Step 1: collect LocalSet(name, StructNew { [inner] }) at any depth.
-    let mut all_defs: IndexMap<String, WirInstr> = IndexMap::new();
+    let mut all_defs: IndexMap<String, WirInstr> = IndexMap::default();
     for instr in body.iter() {
         collect_struct_single_field_defs(instr, &mut all_defs);
     }
@@ -4282,7 +4282,7 @@ fn forward_struct_field_constants(module: &mut WirModule) {
 /// Collect locals whose references escape (address taken, embedded in structs,
 /// or passed to function calls). These are unsafe for field forwarding.
 fn collect_aliased_locals(body: &[WirInstr]) -> IndexSet<String> {
-    let mut aliased = IndexSet::new();
+    let mut aliased = IndexSet::default();
     for instr in body {
         collect_aliased_in_instr(instr, &mut aliased);
     }
@@ -4343,7 +4343,7 @@ struct FieldKnowledge<'a> {
 impl<'a> FieldKnowledge<'a> {
     fn new(types: &'a [WirTypeDef], aliased: &'a IndexSet<String>) -> Self {
         Self {
-            fields: IndexMap::new(),
+            fields: IndexMap::default(),
             types,
             aliased,
         }
@@ -4759,7 +4759,7 @@ fn elim_bounds_in_guarded_loop(body: &mut [WirInstr]) {
 
     // Collect copies: locals that are set to `constraint.var` within the loop body.
     // These are equivalent to `var` for the purpose of bounds checking.
-    let mut equivalent_vars: IndexSet<String> = IndexSet::new();
+    let mut equivalent_vars: IndexSet<String> = IndexSet::default();
     equivalent_vars.insert(constraint.var.clone());
     collect_copies_in_body(body, &constraint.var, &mut equivalent_vars);
 
@@ -4893,7 +4893,7 @@ fn cleanup_wir(module: &mut WirModule) {
 /// Remove `DeclareLocal` instructions for locals that are never referenced
 /// by any `LocalGet`, `LocalSet`, `LocalTee`, or `MultiValueLocalBind`.
 fn eliminate_dead_locals(body: &mut [WirInstr]) {
-    let mut used: IndexSet<String> = IndexSet::new();
+    let mut used: IndexSet<String> = IndexSet::default();
     for instr in body.iter() {
         collect_local_uses(instr, &mut used);
     }

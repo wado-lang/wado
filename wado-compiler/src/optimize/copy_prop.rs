@@ -15,8 +15,8 @@ use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp,
     TypeId, TypeTable,
 };
-use indexmap::IndexMap;
-use indexmap::IndexSet;
+use crate::hashmap::IndexMap;
+use crate::hashmap::IndexSet;
 
 /// Information about a copy binding that may be eliminable.
 /// Pattern: `let x: T = y` where y is a local variable or simple literal
@@ -105,7 +105,7 @@ fn analyze_copy_binding(stmt: &TirStmt) -> Option<CopyBinding> {
 
 /// Collect usage information for all locals in a function body.
 fn collect_local_usage(body: &TirBlock) -> IndexMap<u32, LocalUsage> {
-    let mut usage: IndexMap<u32, LocalUsage> = IndexMap::new();
+    let mut usage: IndexMap<u32, LocalUsage> = IndexMap::default();
     collect_usage_in_block(body, &mut usage, false);
     usage
 }
@@ -1094,7 +1094,7 @@ fn propagate_copies_in_function(func: &mut TirFunction, type_table: &TypeTable) 
         // (e.g., `let a = 5; let x = a`).
         let target_set: IndexSet<u32> = eliminable.iter().map(|b| b.target_local).collect();
 
-        let mut substitutions: IndexMap<u32, CopySource> = IndexMap::new();
+        let mut substitutions: IndexMap<u32, CopySource> = IndexMap::default();
         let mut has_deferred = false;
 
         for binding in eliminable {

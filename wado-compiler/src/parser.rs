@@ -33,7 +33,7 @@ pub struct Parser {
     /// Content of the __DATA__ section, passed from the lexer.
     data_section: Option<String>,
     /// Paths referenced by `#include_str` / `#include_bytes`, collected as they are parsed.
-    include_paths: indexmap::IndexSet<String>,
+    include_paths: crate::hashmap::IndexSet<String>,
 }
 
 #[derive(Debug)]
@@ -78,7 +78,7 @@ impl Parser {
             restrict_struct_literals: false,
             shebang: None,
             data_section: None,
-            include_paths: indexmap::IndexSet::new(),
+            include_paths: crate::hashmap::IndexSet::default(),
         }
     }
 
@@ -95,7 +95,7 @@ impl Parser {
             restrict_struct_literals: false,
             shebang,
             data_section,
-            include_paths: indexmap::IndexSet::new(),
+            include_paths: crate::hashmap::IndexSet::default(),
         }
     }
 

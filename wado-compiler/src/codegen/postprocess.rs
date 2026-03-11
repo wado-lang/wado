@@ -3,7 +3,7 @@
 //! This module provides utilities to transform Wasm modules, such as
 //! converting memory definitions to imports and dead code elimination.
 
-use indexmap::IndexSet;
+use crate::hashmap::IndexSet;
 
 use walrus::passes;
 use wasm_encoder::{

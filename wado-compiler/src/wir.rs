@@ -17,7 +17,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::name::ModuleSource;
 use crate::token::Span;
@@ -240,13 +240,13 @@ impl WirModule {
             branch_hints: Vec::new(),
             names: WirNames::default(),
             component: WirComponent::default(),
-            variant_case_info: IndexMap::new(),
+            variant_case_info: IndexMap::default(),
             entry_point_path: None,
-            wasm_modules: IndexMap::new(),
-            dead_type_indices: IndexSet::new(),
-            dead_func_indices: IndexSet::new(),
-            dead_global_indices: IndexSet::new(),
-            needed_canonicals: IndexSet::new(),
+            wasm_modules: IndexMap::default(),
+            dead_type_indices: IndexSet::default(),
+            dead_func_indices: IndexSet::default(),
+            dead_global_indices: IndexSet::default(),
+            needed_canonicals: IndexSet::default(),
             func_wir_indices: Vec::new(),
         }
     }

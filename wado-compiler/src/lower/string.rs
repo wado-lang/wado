@@ -1,4 +1,4 @@
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::name::LocalMethodName;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirModule, TirStmt, TirStmtKind};
@@ -17,10 +17,10 @@ pub(super) struct StringCollector {
 impl StringCollector {
     pub(super) fn new() -> Self {
         Self {
-            strings: IndexSet::new(),
-            bytes: IndexSet::new(),
-            function_strings: IndexMap::new(),
-            function_method_info: IndexMap::new(),
+            strings: IndexSet::default(),
+            bytes: IndexSet::default(),
+            function_strings: IndexMap::default(),
+            function_method_info: IndexMap::default(),
             current_function: None,
         }
     }

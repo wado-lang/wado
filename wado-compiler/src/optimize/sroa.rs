@@ -29,8 +29,8 @@ use crate::tir::{
     TypeId, TypeTable,
 };
 use crate::token::Span;
-use indexmap::IndexMap;
-use indexmap::IndexSet;
+use crate::hashmap::IndexMap;
+use crate::hashmap::IndexSet;
 
 /// Information about a struct/tuple local that may be decomposable.
 struct SroaCandidate {
@@ -82,8 +82,8 @@ fn sroa_in_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
     let soft_escaped = find_soft_escaped_locals(body, &candidates, &escaped);
 
     // Filter candidates: non-escaped are "safe", soft-escaped are "reconstruct".
-    let mut safe_set: IndexSet<u32> = IndexSet::new();
-    let mut reconstruct_set: IndexSet<u32> = IndexSet::new();
+    let mut safe_set: IndexSet<u32> = IndexSet::default();
+    let mut reconstruct_set: IndexSet<u32> = IndexSet::default();
     for c in &candidates {
         if !escaped.contains(&c.local_index) {
             safe_set.insert(c.local_index);
@@ -104,9 +104,9 @@ fn sroa_in_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
 
     // Step 3: Allocate scalar locals for each field of each SROA'd candidate.
     // Map: (original_local, field_index) → new_local_index
-    let mut field_local_map: IndexMap<(u32, u32), u32> = IndexMap::new();
+    let mut field_local_map: IndexMap<(u32, u32), u32> = IndexMap::default();
     // Map: (original_local, field_index) → (new_local_name, field_type)
-    let mut field_info_map: IndexMap<(u32, u32), (String, TypeId)> = IndexMap::new();
+    let mut field_info_map: IndexMap<(u32, u32), (String, TypeId)> = IndexMap::default();
 
     for candidate in &candidates {
         if !all_sroa.contains(&candidate.local_index) {
@@ -124,8 +124,8 @@ fn sroa_in_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
     }
 
     // Collect mutability and reconstruction info for SROA'd candidates.
-    let mut candidate_mut: IndexMap<u32, bool> = IndexMap::new();
-    let mut reconstruct_info: IndexMap<u32, ReconstructInfo> = IndexMap::new();
+    let mut candidate_mut: IndexMap<u32, bool> = IndexMap::default();
+    let mut reconstruct_info: IndexMap<u32, ReconstructInfo> = IndexMap::default();
     for candidate in &candidates {
         if !all_sroa.contains(&candidate.local_index) {
             continue;
@@ -336,7 +336,7 @@ fn collect_candidates_in_expr(
 /// Escape analysis: find all candidate locals that escape (used in non-field-access positions).
 fn find_escaped_locals(body: &TirBlock, candidates: &[SroaCandidate]) -> IndexSet<u32> {
     let candidate_set: IndexSet<u32> = candidates.iter().map(|c| c.local_index).collect();
-    let mut escaped = IndexSet::new();
+    let mut escaped = IndexSet::default();
     check_escape_in_block(body, &candidate_set, &mut escaped);
     escaped
 }
@@ -609,15 +609,15 @@ fn find_soft_escaped_locals(
         .filter(|idx| escaped.contains(idx))
         .collect();
     if escaped_candidates.is_empty() {
-        return IndexSet::new();
+        return IndexSet::default();
     }
 
     // Check: does every non-field-access use of this candidate appear as a call arg or return?
-    let mut hard_escaped = IndexSet::new();
+    let mut hard_escaped = IndexSet::default();
     check_soft_escape_in_block(body, &escaped_candidates, &mut hard_escaped);
 
     // Soft-escaped = escaped but NOT hard-escaped, AND has at least one field access
-    let mut has_field_access = IndexSet::new();
+    let mut has_field_access = IndexSet::default();
     check_has_field_access(body, &escaped_candidates, &mut has_field_access);
 
     escaped_candidates

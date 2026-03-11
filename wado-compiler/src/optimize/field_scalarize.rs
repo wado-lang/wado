@@ -31,7 +31,7 @@ use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,
 };
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 const MIN_ACCESS_COUNT: usize = 4;
 
@@ -61,7 +61,7 @@ pub fn scalarize_hot_fields(project: &mut Project) -> bool {
 fn build_field_usage_cache(
     modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
 ) -> FieldUsageCache {
-    let mut cache = FieldUsageCache::new();
+    let mut cache = FieldUsageCache::default();
     for (module_source, module) in modules {
         let type_table = module.type_table.borrow();
         for func_rc in &module.functions {
@@ -83,12 +83,12 @@ fn analyze_function_field_usage(
     type_table: &TypeTable,
 ) -> IndexMap<u32, ParamFieldUsage> {
     let Some(ref body) = func.body else {
-        return IndexMap::new();
+        return IndexMap::default();
     };
 
     // Build mapping: local_index → param_position for struct-typed params
-    let mut local_to_position: IndexMap<u32, u32> = IndexMap::new();
-    let mut struct_param_locals: IndexSet<u32> = IndexSet::new();
+    let mut local_to_position: IndexMap<u32, u32> = IndexMap::default();
+    let mut struct_param_locals: IndexSet<u32> = IndexSet::default();
 
     for (position, param) in func.params.iter().enumerate() {
         if is_gc_heap_type(param.type_id, type_table) {
@@ -98,11 +98,11 @@ fn analyze_function_field_usage(
     }
 
     if struct_param_locals.is_empty() {
-        return IndexMap::new();
+        return IndexMap::default();
     }
 
-    let mut field_sets: IndexMap<u32, IndexSet<u32>> = IndexMap::new();
-    let mut conservative_locals: IndexSet<u32> = IndexSet::new();
+    let mut field_sets: IndexMap<u32, IndexSet<u32>> = IndexMap::default();
+    let mut conservative_locals: IndexSet<u32> = IndexSet::default();
 
     collect_param_field_usage_in_block(
         body,
@@ -113,7 +113,7 @@ fn analyze_function_field_usage(
     );
 
     // Convert from local_index-keyed to position-keyed
-    let mut result: IndexMap<u32, ParamFieldUsage> = IndexMap::new();
+    let mut result: IndexMap<u32, ParamFieldUsage> = IndexMap::default();
     for (&local_idx, &position) in &local_to_position {
         if conservative_locals.contains(&local_idx) {
             result.insert(position, None);
@@ -794,7 +794,7 @@ fn scalarize_loop(
     cache: &FieldUsageCache,
 ) -> ScalarizeResult {
     // Step 1: Count field accesses (reads + writes) in the loop body
-    let mut access_counts: IndexMap<(u32, u32), FieldAccessInfo> = IndexMap::new();
+    let mut access_counts: IndexMap<(u32, u32), FieldAccessInfo> = IndexMap::default();
     count_field_accesses_in_block(loop_body, &mut access_counts, type_table);
 
     // Step 2: Select candidates - fields accessed frequently enough,
@@ -1268,7 +1268,7 @@ fn replace_in_block(
                 // Calls inside the condition can modify scalarized fields (e.g.
                 // `if !self.expect_byte(b)` where expect_byte mutates self.pos).
                 // Insert write-back before the If and re-read after it.
-                let mut cond_sync: IndexSet<(u32, u32)> = IndexSet::new();
+                let mut cond_sync: IndexSet<(u32, u32)> = IndexSet::default();
                 compute_sync_fields_in_expr(
                     condition,
                     candidates,
@@ -1301,7 +1301,7 @@ fn replace_in_block(
                 ..
             } => {
                 // Same as If: calls in the scrutinee can modify scalarized fields.
-                let mut scrut_sync: IndexSet<(u32, u32)> = IndexSet::new();
+                let mut scrut_sync: IndexSet<(u32, u32)> = IndexSet::default();
                 compute_sync_fields_in_expr(
                     scrutinee,
                     candidates,
@@ -1391,7 +1391,7 @@ fn compute_sync_fields(
     type_table: &TypeTable,
     cache: &FieldUsageCache,
 ) -> IndexSet<(u32, u32)> {
-    let mut result = IndexSet::new();
+    let mut result = IndexSet::default();
     compute_sync_fields_in_stmt(stmt, candidates, type_table, cache, &mut result);
     result
 }

@@ -2,7 +2,7 @@
 
 use std::cell::RefCell;
 
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{self};
 use crate::name::ModuleSource;
@@ -454,20 +454,20 @@ pub(super) struct FunctionContext {
 impl FunctionContext {
     pub(super) fn new(return_type: TypeId, function_name: String) -> Self {
         Self {
-            scopes: vec![IndexMap::new()], // Start with one scope for function parameters
+            scopes: vec![IndexMap::default()], // Start with one scope for function parameters
             next_local: 0,
             return_type,
             is_async: false,
             task_return_type: None,
             local_types: Vec::new(),
-            address_taken_locals: IndexSet::new(),
-            outer_locals: IndexMap::new(),
-            captured_vars: IndexMap::new(),
+            address_taken_locals: IndexSet::default(),
+            outer_locals: IndexMap::default(),
+            captured_vars: IndexMap::default(),
             labeled_block_targets: Vec::new(),
             active_labels: Vec::new(),
             function_name,
-            deref_overrides: IndexMap::new(),
-            outer_box_types: IndexMap::new(),
+            deref_overrides: IndexMap::default(),
+            outer_box_types: IndexMap::default(),
         }
     }
 
@@ -481,7 +481,7 @@ impl FunctionContext {
         type_table: &RefCell<crate::tir::TypeTable>,
     ) -> Self {
         // Snapshot all locals from outer context
-        let mut outer_locals = IndexMap::new();
+        let mut outer_locals = IndexMap::default();
         for scope in &outer_ctx.scopes {
             for (name, local) in scope {
                 outer_locals.insert(name.clone(), local.clone());
@@ -489,7 +489,7 @@ impl FunctionContext {
         }
 
         // Compute box types for address-taken outer locals
-        let mut outer_box_types = IndexMap::new();
+        let mut outer_box_types = IndexMap::default();
         for scope in &outer_ctx.scopes {
             for (name, local) in scope {
                 if outer_ctx.address_taken_locals.contains(&local.index) {
@@ -503,26 +503,26 @@ impl FunctionContext {
         let function_name = format!("{}::{{closure}}", outer_ctx.function_name);
 
         Self {
-            scopes: vec![IndexMap::new()],
+            scopes: vec![IndexMap::default()],
             next_local: 0,
             return_type,
             is_async: false, // Closures are never async
             task_return_type: None,
             local_types: Vec::new(),
-            address_taken_locals: IndexSet::new(),
+            address_taken_locals: IndexSet::default(),
             outer_locals,
-            captured_vars: IndexMap::new(),
+            captured_vars: IndexMap::default(),
             labeled_block_targets: Vec::new(),
             active_labels: Vec::new(),
             function_name,
-            deref_overrides: IndexMap::new(),
+            deref_overrides: IndexMap::default(),
             outer_box_types,
         }
     }
 
     /// Enter a new scope (for blocks, if/while/for/loop bodies)
     pub(super) fn enter_scope(&mut self) {
-        self.scopes.push(IndexMap::new());
+        self.scopes.push(IndexMap::default());
     }
 
     /// Exit the current scope

@@ -12,7 +12,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::name::{LocalMethodName, ModuleSource, TypeNameInfo, format_type_name};
 use crate::token::Span;
@@ -78,7 +78,7 @@ pub struct SubstitutionContext {
 impl SubstitutionContext {
     pub fn new() -> Self {
         Self {
-            substitutions: IndexMap::new(),
+            substitutions: IndexMap::default(),
         }
     }
 
@@ -271,6 +271,13 @@ impl PrimitiveType {
                 | "v128"
         )
     }
+
+    pub fn all_primitive_names() -> &'static [&'static str] {
+        &[
+            "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "f32", "f64",
+            "bool", "char", "v128",
+        ]
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -436,13 +443,13 @@ impl TypeTable {
 
     pub fn new() -> Self {
         let mut table = Self {
-            types: IndexMap::new(),
-            intern_map: IndexMap::new(),
+            types: IndexMap::default(),
+            intern_map: IndexMap::default(),
             next_id: 0,
             option_module_source: None,
             result_module_source: None,
             default_trait_module_source: None,
-            assoc_type_resolutions: IndexMap::new(),
+            assoc_type_resolutions: IndexMap::default(),
         };
 
         // Pre-populate primitive types matching the constants above
@@ -2370,11 +2377,11 @@ impl TirModule {
             wasm_module: None,
             string_literals: Vec::new(),
             bytes_literals: Vec::new(),
-            function_strings: IndexMap::new(),
-            function_method_info: IndexMap::new(),
-            generic_structs: IndexMap::new(),
-            generic_functions: IndexMap::new(),
-            instantiation_requests: IndexSet::new(),
+            function_strings: IndexMap::default(),
+            function_method_info: IndexMap::default(),
+            generic_structs: IndexMap::default(),
+            generic_functions: IndexMap::default(),
+            instantiation_requests: IndexSet::default(),
             closure_functors: Vec::new(),
         }
     }
@@ -2403,11 +2410,11 @@ impl TirModule {
             wasm_module: None,
             string_literals: Vec::new(),
             bytes_literals: Vec::new(),
-            function_strings: IndexMap::new(),
-            function_method_info: IndexMap::new(),
-            generic_structs: IndexMap::new(),
-            generic_functions: IndexMap::new(),
-            instantiation_requests: IndexSet::new(),
+            function_strings: IndexMap::default(),
+            function_method_info: IndexMap::default(),
+            generic_structs: IndexMap::default(),
+            generic_functions: IndexMap::default(),
+            instantiation_requests: IndexSet::default(),
             closure_functors: Vec::new(),
         }
     }

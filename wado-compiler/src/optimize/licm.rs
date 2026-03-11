@@ -9,8 +9,8 @@ use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,
 };
-use indexmap::IndexMap;
-use indexmap::IndexSet;
+use crate::hashmap::IndexMap;
+use crate::hashmap::IndexSet;
 
 /// Tracks which variables and fields are modified within a loop.
 ///
@@ -85,7 +85,7 @@ fn licm_block(
         match &mut stmt.kind {
             TirStmtKind::Loop { body } => {
                 // Apply LICM to the loop body
-                let empty_set = IndexSet::new();
+                let empty_set = IndexSet::default();
                 let hoist_stmts = licm_loop(body, local_count, local_types, type_table, &empty_set);
 
                 if !hoist_stmts.is_empty() {
@@ -162,7 +162,7 @@ fn licm_loop(
 
         // Step 3: Find field accesses that can be hoisted
         let mut candidates = Vec::new();
-        let mut seen = IndexSet::new();
+        let mut seen = IndexSet::default();
         let mut next_local = *local_count;
         find_hoist_candidates_in_block(
             loop_body,
@@ -630,7 +630,7 @@ fn collect_immutable_ref_bindings(
     block: &TirBlock,
     type_table: &TypeTable,
 ) -> IndexMap<u32, LicmRefBinding> {
-    let mut bindings = IndexMap::new();
+    let mut bindings = IndexMap::default();
     collect_licm_ref_bindings_in_block(block, type_table, &mut bindings);
     bindings
 }

@@ -1,6 +1,6 @@
 //! Closure expression resolution (mutable and immutable captures).
 
-use indexmap::IndexSet;
+use crate::hashmap::IndexSet;
 
 use crate::ast::{self};
 use crate::compiler_host::CompilerHost;
@@ -11,7 +11,7 @@ use crate::token::Span;
 
 use super::Resolver;
 use super::types::{FunctionContext, TypeError};
-use indexmap::IndexMap;
+use crate::hashmap::IndexMap;
 
 impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn resolve_mutable_closure(
@@ -21,13 +21,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
         span: Span,
     ) -> TirExpr {
         // Step 1: Find all directly-assigned outer mutable variables
-        let mut assigned_names: IndexSet<String> = IndexSet::new();
+        let mut assigned_names: IndexSet<String> = IndexSet::default();
         Self::collect_mutated_vars(&closure.body, &mut assigned_names);
 
         // Step 2: For each assigned name that is an outer mutable variable,
         // create a `&mut T` reference in the outer context
         let mut ref_stmts: Vec<TirStmt> = Vec::new();
-        let mut deref_overrides: IndexMap<String, (String, TypeId)> = IndexMap::new();
+        let mut deref_overrides: IndexMap<String, (String, TypeId)> = IndexMap::default();
 
         for var_name in &assigned_names {
             if let Some(local) = ctx.lookup(var_name)

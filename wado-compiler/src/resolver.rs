@@ -28,7 +28,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{self, Item, Module};
 use crate::builtin_registry::BuiltinRegistry;
@@ -132,6 +132,8 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Pre-loaded file contents for `#include_str` / `#include_bytes`.
     /// Key: `[module_source_display, raw_path]`, value: raw bytes.
     included_files: &'a IndexMap<[String; 2], Vec<u8>>,
+    /// Cached flat set of all known type names for fast `is_known_type_name` lookups.
+    known_type_names_cache: IndexSet<String>,
 }
 
 impl<'a, H: CompilerHost> Resolver<'a, H> {
@@ -150,41 +152,91 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             type_table,
             symbols,
             loaded_modules,
-            newtypes: IndexMap::new(),
-            struct_fields: IndexMap::new(),
-            variant_cases: IndexMap::new(),
-            enum_cases: IndexMap::new(),
-            flags_cases: IndexMap::new(),
-            resource_types: IndexMap::new(),
-            all_newtypes: IndexMap::new(),
-            all_struct_fields: IndexMap::new(),
-            all_variant_cases: IndexMap::new(),
-            all_enum_cases: IndexMap::new(),
-            all_flags_cases: IndexMap::new(),
-            all_resource_types: IndexMap::new(),
-            function_return_types: IndexMap::new(),
-            imported_functions: IndexSet::new(),
+            newtypes: IndexMap::default(),
+            struct_fields: IndexMap::default(),
+            variant_cases: IndexMap::default(),
+            enum_cases: IndexMap::default(),
+            flags_cases: IndexMap::default(),
+            resource_types: IndexMap::default(),
+            all_newtypes: IndexMap::default(),
+            all_struct_fields: IndexMap::default(),
+            all_variant_cases: IndexMap::default(),
+            all_enum_cases: IndexMap::default(),
+            all_flags_cases: IndexMap::default(),
+            all_resource_types: IndexMap::default(),
+            function_return_types: IndexMap::default(),
+            imported_functions: IndexSet::default(),
             logger,
             current_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"),
             current_module_items: Vec::new(),
-            current_type_params: IndexMap::new(),
-            current_type_param_bounds: IndexMap::new(),
-            generic_struct_names: IndexSet::new(),
-            generic_function_params: IndexMap::new(),
-            generic_method_params: IndexMap::new(),
-            current_associated_type_bindings: IndexMap::new(),
+            current_type_params: IndexMap::default(),
+            current_type_param_bounds: IndexMap::default(),
+            generic_struct_names: IndexSet::default(),
+            generic_function_params: IndexMap::default(),
+            generic_method_params: IndexMap::default(),
+            current_associated_type_bindings: IndexMap::default(),
             current_self_type: None,
             wasi_registry,
             builtin_registry,
-            current_module_globals: IndexMap::new(),
-            imported_globals: IndexMap::new(),
-            associated_constants: IndexMap::new(),
-            module_type_maps_cache: IndexMap::new(),
+            current_module_globals: IndexMap::default(),
+            imported_globals: IndexMap::default(),
+            associated_constants: IndexMap::default(),
+            module_type_maps_cache: IndexMap::default(),
             trait_impl_index,
             trait_decl_index,
             blanket_trait_impl_index,
             included_files,
+            known_type_names_cache: IndexSet::default(),
         }
+    }
+
+    /// Build the flat set of all known type names from current and cross-module maps.
+    fn rebuild_known_type_names_cache(&mut self) {
+        let mut cache = IndexSet::default();
+        for name in self.struct_fields.keys() {
+            cache.insert(name.clone());
+        }
+        for m in self.all_struct_fields.values() {
+            for name in m.keys() {
+                cache.insert(name.clone());
+            }
+        }
+        for name in self.variant_cases.keys() {
+            cache.insert(name.clone());
+        }
+        for m in self.all_variant_cases.values() {
+            for name in m.keys() {
+                cache.insert(name.clone());
+            }
+        }
+        for name in self.enum_cases.keys() {
+            cache.insert(name.clone());
+        }
+        for m in self.all_enum_cases.values() {
+            for name in m.keys() {
+                cache.insert(name.clone());
+            }
+        }
+        for name in self.flags_cases.keys() {
+            cache.insert(name.clone());
+        }
+        for m in self.all_flags_cases.values() {
+            for name in m.keys() {
+                cache.insert(name.clone());
+            }
+        }
+        for name in self.newtypes.keys() {
+            cache.insert(name.clone());
+        }
+        for m in self.all_newtypes.values() {
+            for name in m.keys() {
+                cache.insert(name.clone());
+            }
+        }
+        for name in crate::tir::PrimitiveType::all_primitive_names() {
+            cache.insert(name.to_string());
+        }
+        self.known_type_names_cache = cache;
     }
 
     /// Resolve a module, converting AST to TIR
@@ -569,7 +621,7 @@ pub fn resolve_module<H: CompilerHost>(
 ) -> Result<TirModule, Bail> {
     let type_table = std::cell::RefCell::new(crate::tir::TypeTable::new());
     let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
-    let empty_included = IndexMap::new();
+    let empty_included = IndexMap::default();
     let mut resolver = Resolver::new(
         symbols,
         loaded_modules,

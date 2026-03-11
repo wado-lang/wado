@@ -9,8 +9,8 @@ use crate::tir::{
     CallArg, FunctionRef, InlineHint, PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind,
     TirFunction, TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
-use indexmap::IndexMap;
-use indexmap::IndexSet;
+use crate::hashmap::IndexMap;
+use crate::hashmap::IndexSet;
 
 // The inline threshold is based on expression count, which provides a more
 // accurate measure of function complexity than statement count.
@@ -197,10 +197,10 @@ fn is_inline_eligible(
 
 /// Detect recursive functions using call graph analysis
 fn find_recursive_functions(modules: &IndexMap<ModuleSource, TirModule>) -> IndexSet<String> {
-    let mut recursive = IndexSet::new();
+    let mut recursive = IndexSet::default();
 
     // Build a simple call graph: function name -> called function names
-    let mut call_graph: IndexMap<String, IndexSet<String>> = IndexMap::new();
+    let mut call_graph: IndexMap<String, IndexSet<String>> = IndexMap::default();
 
     for module in modules.values() {
         for func_rc in &module.functions {
@@ -212,7 +212,7 @@ fn find_recursive_functions(modules: &IndexMap<ModuleSource, TirModule>) -> Inde
 
     // Find functions that can reach themselves
     for func_name in call_graph.keys() {
-        if can_reach(&call_graph, func_name, func_name, &mut IndexSet::new()) {
+        if can_reach(&call_graph, func_name, func_name, &mut IndexSet::default()) {
             recursive.insert(func_name.clone());
         }
     }
@@ -222,7 +222,7 @@ fn find_recursive_functions(modules: &IndexMap<ModuleSource, TirModule>) -> Inde
 
 /// Collect all function names called from a function
 fn collect_callees_from_function(func: &TirFunction) -> IndexSet<String> {
-    let mut callees = IndexSet::new();
+    let mut callees = IndexSet::default();
     if let Some(body) = &func.body {
         collect_callees_from_block(body, &mut callees);
     }
@@ -457,10 +457,10 @@ pub fn inline_functions(project: &mut Project, inline_threshold: usize) -> bool 
 
     // Collect inline candidates from all modules
     // Key: (module_source, func_name), Value: cloned function
-    let mut inline_candidates: IndexMap<(ModuleSource, String), TirFunction> = IndexMap::new();
+    let mut inline_candidates: IndexMap<(ModuleSource, String), TirFunction> = IndexMap::default();
 
     // Also collect function_strings for each candidate (to update caller's strings after inlining)
-    let mut candidate_strings: IndexMap<(ModuleSource, String), Vec<String>> = IndexMap::new();
+    let mut candidate_strings: IndexMap<(ModuleSource, String), Vec<String>> = IndexMap::default();
 
     for (module_source, module) in &project.tir_modules {
         for func_rc in &module.functions {
@@ -521,7 +521,7 @@ pub fn inline_functions(project: &mut Project, inline_threshold: usize) -> bool 
                 }
 
                 // Update function_strings: add strings from inlined functions to the caller
-                let mut all_inlined_strings: IndexSet<String> = IndexSet::new();
+                let mut all_inlined_strings: IndexSet<String> = IndexSet::default();
                 for inlined_key in inlined_funcs {
                     if let Some(inlined_strings) = candidate_strings.get(&inlined_key) {
                         all_inlined_strings.extend(inlined_strings.iter().cloned());
@@ -1079,7 +1079,7 @@ fn try_inline_call_expr(
     // IMPORTANT: Push param types first to match index assignment order
     // (params get indices local_offset+0, local_offset+1, ..., then non-params follow)
     let mut block_stmts = Vec::new();
-    let mut param_to_local: IndexMap<u32, u32> = IndexMap::new();
+    let mut param_to_local: IndexMap<u32, u32> = IndexMap::default();
 
     for (i, (param, arg)) in candidate.params.iter().zip(args.iter()).enumerate() {
         let new_local_index = local_offset + i as u32;
@@ -1198,7 +1198,7 @@ fn try_inline_method_call_expr(
     // IMPORTANT: Push param types first to match index assignment order
     // For methods, first param is `self` (receiver), then the rest are args
     let mut block_stmts = Vec::new();
-    let mut param_to_local: IndexMap<u32, u32> = IndexMap::new();
+    let mut param_to_local: IndexMap<u32, u32> = IndexMap::default();
 
     // Bind receiver to first parameter (self).
     // For &mut self receivers, wrap in a MutRef expression so that field

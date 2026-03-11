@@ -6,7 +6,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use indexmap::IndexSet;
+use crate::hashmap::IndexSet;
 
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_local_trait_method};
 use crate::project::Project;
@@ -682,7 +682,7 @@ fn generate_struct_serialize(
         span,
         local_count: next_local,
         local_types,
-        address_taken_locals: IndexSet::new(),
+        address_taken_locals: IndexSet::default(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
@@ -1202,7 +1202,7 @@ fn generate_struct_deserialize(
         span,
         local_count: next_local,
         local_types,
-        address_taken_locals: IndexSet::new(),
+        address_taken_locals: IndexSet::default(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
@@ -1382,7 +1382,7 @@ fn generate_lookup_function(
         span,
         local_count: next_local,
         local_types,
-        address_taken_locals: IndexSet::new(),
+        address_taken_locals: IndexSet::default(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
@@ -1524,7 +1524,7 @@ fn generate_enum_serialize(
         span,
         local_count: next_local,
         local_types,
-        address_taken_locals: IndexSet::new(),
+        address_taken_locals: IndexSet::default(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
@@ -1889,7 +1889,7 @@ fn generate_enum_deserialize(
         span,
         local_count: next_local,
         local_types,
-        address_taken_locals: IndexSet::new(),
+        address_taken_locals: IndexSet::default(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
@@ -2158,7 +2158,7 @@ fn generate_variant_serialize(
         span,
         local_count: next_local,
         local_types,
-        address_taken_locals: IndexSet::new(),
+        address_taken_locals: IndexSet::default(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
@@ -2683,7 +2683,7 @@ fn generate_variant_deserialize(
         span,
         local_count: next_local,
         local_types,
-        address_taken_locals: IndexSet::new(),
+        address_taken_locals: IndexSet::default(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
@@ -2903,7 +2903,7 @@ fn generate_tuple_serialize(
         span,
         local_count: next_local,
         local_types,
-        address_taken_locals: IndexSet::new(),
+        address_taken_locals: IndexSet::default(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
@@ -3176,7 +3176,7 @@ fn generate_tuple_deserialize(
         span,
         local_count: next_local,
         local_types,
-        address_taken_locals: IndexSet::new(),
+        address_taken_locals: IndexSet::default(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,

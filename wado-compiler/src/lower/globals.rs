@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::name::ModuleSource;
 use crate::tir::FunctionRef;
@@ -209,7 +209,7 @@ pub(super) fn lower_global_initializers(module: &mut TirModule) {
         span,
         local_count,
         local_types: merged_local_types,
-        address_taken_locals: IndexSet::new(),
+        address_taken_locals: IndexSet::default(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
@@ -333,10 +333,10 @@ fn topological_sort_global_inits(
         .collect();
 
     // Build dependency graph: deps[i] = set of indices that i depends on
-    let mut deps: Vec<IndexSet<usize>> = vec![IndexSet::new(); lazy_inits.len()];
+    let mut deps: Vec<IndexSet<usize>> = vec![IndexSet::default(); lazy_inits.len()];
 
     for (i, (_, _, _, _, initializer, _)) in lazy_inits.iter().enumerate() {
-        let mut refs = IndexSet::new();
+        let mut refs = IndexSet::default();
         collect_global_refs(initializer, &mut refs);
 
         for ref_name in refs {
@@ -717,7 +717,7 @@ pub(super) fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, T
         span,
         local_count: 0,
         local_types: Vec::new(),
-        address_taken_locals: IndexSet::new(),
+        address_taken_locals: IndexSet::default(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,

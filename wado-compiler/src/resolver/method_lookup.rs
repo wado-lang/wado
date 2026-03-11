@@ -1,6 +1,6 @@
 //! Method and trait lookup, trait implementation search, bounds checking.
 
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{self, BinaryOp, Expr, Function, Item, Literal, Type, UnaryOp};
 use crate::compiler_host::CompilerHost;
@@ -60,26 +60,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     /// Check if a name refers to a known type (struct, variant, enum, flags, newtype, or primitive).
-    /// Used to distinguish concrete types from type parameters in impl blocks,
-    /// since the parser treats all args in `<String, V>` as type params.
+    /// Uses pre-built cache for O(1) lookup instead of scanning all module maps.
     pub(super) fn is_known_type_name(&self, name: &str) -> bool {
-        self.struct_fields.contains_key(name)
-            || self
-                .all_struct_fields
-                .values()
-                .any(|m| m.contains_key(name))
-            || self.variant_cases.contains_key(name)
-            || self
-                .all_variant_cases
-                .values()
-                .any(|m| m.contains_key(name))
-            || self.enum_cases.contains_key(name)
-            || self.all_enum_cases.values().any(|m| m.contains_key(name))
-            || self.flags_cases.contains_key(name)
-            || self.all_flags_cases.values().any(|m| m.contains_key(name))
-            || self.newtypes.contains_key(name)
-            || self.all_newtypes.values().any(|m| m.contains_key(name))
-            || crate::tir::PrimitiveType::is_primitive_name(name)
+        self.known_type_names_cache.contains(name)
     }
 
     /// Find the rhs parameter type for an operator trait on a struct type.
@@ -1834,7 +1817,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             // Build type parameter mapping from impl_ty to concrete types
             let mut type_param_mapping =
-                Self::build_type_param_mapping(&impl_ty, &concrete_type_args, &IndexSet::new());
+                Self::build_type_param_mapping(&impl_ty, &concrete_type_args, &IndexSet::default());
             // Map `Self` to the concrete base type so `&Self` parameters resolve correctly
             type_param_mapping.insert("Self".to_string(), base_type_id);
 
@@ -1842,7 +1825,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             for method in &methods {
                 if method.name == method_name {
                     // Set up associated type bindings
-                    let mut assoc_type_map: IndexMap<String, TypeId> = IndexMap::new();
+                    let mut assoc_type_map: IndexMap<String, TypeId> = IndexMap::default();
 
                     // Process associated types (e.g., `type Output = Self`)
                     for assoc in &associated_types {
@@ -2480,7 +2463,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         concrete_type_args: &[TypeId],
         declared_type_params: &IndexSet<String>,
     ) -> IndexMap<String, TypeId> {
-        let mut mapping = IndexMap::new();
+        let mut mapping = IndexMap::default();
 
         // Extract type parameter names from impl_ty, tracking positions
         // Position tracking is needed to map type params to the correct concrete arg
@@ -2712,7 +2695,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 None => continue,
             };
 
-            let mut declared_type_params: indexmap::IndexSet<String> = impl_type_params
+            let mut declared_type_params: crate::hashmap::IndexSet<String> = impl_type_params
                 .iter()
                 .map(|p| p.name.clone())
                 .filter(|name| !self.is_known_type_name(name))

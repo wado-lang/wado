@@ -5,9 +5,9 @@
 
 use std::collections::VecDeque;
 
-use indexmap::IndexSet;
+use crate::hashmap::IndexSet;
 
-use indexmap::IndexMap;
+use crate::hashmap::IndexMap;
 
 use crate::ast::{Item, Module};
 use crate::bind;
@@ -221,7 +221,7 @@ fn cached_core_stdlib() -> &'static IndexMap<ModuleSource, Module> {
             ("prelude/types.wado", stdlib::CORE_PRELUDE_TYPES),
             ("zlib", stdlib::CORE_ZLIB),
         ];
-        let mut cache = IndexMap::with_capacity(core_modules.len());
+        let mut cache = IndexMap::with_capacity_and_hasher(core_modules.len(), Default::default());
         for &(name, source) in core_modules {
             let module_source = ModuleSource::Core {
                 name: name.to_string(),
@@ -276,9 +276,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             host,
             log_level,
             logger: Logger::new(host, log_level),
-            loaded: IndexMap::new(),
-            loading: IndexSet::new(),
-            implicit_modules: IndexSet::new(),
+            loaded: IndexMap::default(),
+            loading: IndexSet::default(),
+            implicit_modules: IndexSet::default(),
         }
     }
 
@@ -613,14 +613,14 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// Scan all loaded modules for `#include_str`/`#include_bytes` and load referenced files.
     async fn load_included_files(&self) -> Result<IndexMap<[String; 2], Vec<u8>>, LoadError> {
         // Collect (module_source, raw_path) pairs
-        let mut pairs: IndexSet<[String; 2]> = IndexSet::new();
+        let mut pairs: IndexSet<[String; 2]> = IndexSet::default();
         for (module_source, module) in &self.loaded {
             let ms_str = module_source.to_string();
             for raw_path in module.include_paths() {
                 pairs.insert([ms_str.clone(), raw_path.clone()]);
             }
         }
-        let mut included = IndexMap::new();
+        let mut included = IndexMap::default();
         for pair in pairs {
             let [ref ms_str, ref raw_path] = pair;
             // Resolve path relative to the module source's directory

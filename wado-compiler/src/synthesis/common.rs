@@ -5,7 +5,7 @@
 //! - TIR expression and statement builders
 //! - Synthetic function creation
 
-use indexmap::IndexSet;
+use crate::hashmap::IndexSet;
 
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::{
@@ -372,7 +372,7 @@ pub fn make_synthetic_method(
         span: synth_span(),
         local_count,
         local_types,
-        address_taken_locals: IndexSet::new(),
+        address_taken_locals: IndexSet::default(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,

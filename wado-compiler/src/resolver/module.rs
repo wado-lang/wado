@@ -1,6 +1,6 @@
 //! Single module type/signature collection and name resolution helpers.
 
-use indexmap::IndexMap;
+use crate::hashmap::IndexMap;
 
 use crate::ast::{self, Item, Module, Type};
 use crate::compiler_host::CompilerHost;
@@ -366,8 +366,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         Arc<TraitDeclIndex>,
         Arc<BlanketTraitImplIndex>,
     ) {
-        let mut impl_index: TraitImplIndex = IndexMap::new();
-        let mut decl_index: TraitDeclIndex = IndexMap::new();
+        let mut impl_index: TraitImplIndex = IndexMap::default();
+        let mut decl_index: TraitDeclIndex = IndexMap::default();
         let mut blanket_index: BlanketTraitImplIndex = Vec::new();
         for (module_source, module) in modules {
             for (item_idx, item) in module.items.iter().enumerate() {

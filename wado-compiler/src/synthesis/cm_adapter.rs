@@ -13,7 +13,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::Type;
 use crate::cm_abi;
@@ -1529,7 +1529,7 @@ fn make_adapter_function(
         span: synth_span(),
         local_count,
         local_types,
-        address_taken_locals: IndexSet::new(),
+        address_taken_locals: IndexSet::default(),
         is_cm_adapter: true,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
@@ -4546,7 +4546,7 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
     // ---- Import adapters ----
 
     // Step 1: Collect all used WASI effect calls and resource method calls
-    let mut seen_effects: IndexSet<String> = IndexSet::new();
+    let mut seen_effects: IndexSet<String> = IndexSet::default();
     for module in project.tir_modules.values() {
         for func_rc in &module.functions {
             let func = func_rc.borrow();
@@ -4563,7 +4563,7 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
             .get(&project.entry_module_source)
             .map(|m| m.type_table.clone())
             .unwrap_or_else(|| Rc::new(RefCell::new(TypeTable::new())));
-        let mut adapters: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::new();
+        let mut adapters: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
         for qualified_name in &seen_effects {
             if let Some(func_info) = project.wasi_registry.get_function(qualified_name) {
                 let func_info = func_info.clone();
@@ -6667,7 +6667,7 @@ mod tests {
     fn compute_flat_params_empty() {
         let params: Vec<(String, Type)> = vec![];
         let type_table = TypeTable::new();
-        let tir_modules = IndexMap::new();
+        let tir_modules = IndexMap::default();
         let flat = compute_export_flat_param_types(&params, &tir_modules, &type_table);
         assert!(flat.is_empty());
     }
@@ -6679,7 +6679,7 @@ mod tests {
             ("b".to_string(), named_type("f64")),
         ];
         let type_table = TypeTable::new();
-        let tir_modules = IndexMap::new();
+        let tir_modules = IndexMap::default();
         let flat = compute_export_flat_param_types(&params, &tir_modules, &type_table);
         assert_eq!(flat, vec![cm_abi::CmValType::I32, cm_abi::CmValType::F64]);
     }
@@ -6688,7 +6688,7 @@ mod tests {
     fn compute_flat_params_string() {
         let params = vec![("name".to_string(), named_type("String"))];
         let type_table = TypeTable::new();
-        let tir_modules = IndexMap::new();
+        let tir_modules = IndexMap::default();
         let flat = compute_export_flat_param_types(&params, &tir_modules, &type_table);
         assert_eq!(flat, vec![cm_abi::CmValType::I32, cm_abi::CmValType::I32]);
     }
@@ -6701,7 +6701,7 @@ mod tests {
             ("b".to_string(), named_type("f32")),
         ];
         let type_table = TypeTable::new();
-        let tir_modules = IndexMap::new();
+        let tir_modules = IndexMap::default();
         let flat = compute_export_flat_param_types(&params, &tir_modules, &type_table);
         assert_eq!(
             flat,
@@ -6722,7 +6722,7 @@ mod tests {
         let mut local_types = Vec::new();
         let mut next_local = 1_u32;
         let type_table = TypeTable::new();
-        let tir_modules = IndexMap::new();
+        let tir_modules = IndexMap::default();
         let (expr, consumed) = synthesize_lift_from_flat_params(
             &named_type("i32"),
             &[0],
@@ -6745,7 +6745,7 @@ mod tests {
         let mut local_types = Vec::new();
         let mut next_local = 2_u32;
         let type_table = TypeTable::new();
-        let tir_modules = IndexMap::new();
+        let tir_modules = IndexMap::default();
         let (expr, consumed) = synthesize_lift_from_flat_params(
             &named_type("String"),
             &[0, 1],
@@ -6768,7 +6768,7 @@ mod tests {
         let mut local_types = Vec::new();
         let mut next_local = 1_u32;
         let type_table = TypeTable::new();
-        let tir_modules = IndexMap::new();
+        let tir_modules = IndexMap::default();
         let (expr, consumed) = synthesize_lift_from_flat_params(
             &named_type("bool"),
             &[0],
@@ -6791,7 +6791,7 @@ mod tests {
         let mut local_types = Vec::new();
         let mut next_local = 0_u32;
         let type_table = TypeTable::new();
-        let tir_modules = IndexMap::new();
+        let tir_modules = IndexMap::default();
         let (expr, consumed) = synthesize_lift_from_flat_params(
             &Type::Tuple(vec![]),
             &[],
@@ -6813,7 +6813,7 @@ mod tests {
         let mut local_types = Vec::new();
         let mut next_local = 1_u32;
         let type_table = TypeTable::new();
-        let tir_modules = IndexMap::new();
+        let tir_modules = IndexMap::default();
         let (expr, consumed) = synthesize_lift_from_flat_params(
             &named_type("Request"),
             &[0],

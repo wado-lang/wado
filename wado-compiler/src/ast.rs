@@ -1,7 +1,7 @@
 // AST definitions for Wado
 
 use crate::token::Span;
-use indexmap::IndexSet;
+use crate::hashmap::IndexSet;
 
 #[derive(Debug, Clone)]
 pub struct Module {
@@ -33,7 +33,7 @@ impl Module {
             inner_attributes: Vec::new(),
             shebang: None,
             data_section: None,
-            include_paths: IndexSet::new(),
+            include_paths: IndexSet::default(),
         }
     }
 
