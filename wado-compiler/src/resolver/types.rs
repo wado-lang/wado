@@ -148,10 +148,7 @@ pub enum TypeError {
     DuplicateField { name: String, span: Span },
 
     /// Function/method/closure with return type but no return statement
-    MissingReturn {
-        return_type: String,
-        span: Span,
-    },
+    MissingReturn { return_type: String, span: Span },
 }
 
 impl std::fmt::Display for TypeError {

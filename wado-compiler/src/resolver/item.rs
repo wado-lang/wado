@@ -318,15 +318,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .map(|b| self.resolve_block(b, &mut ctx, None));
 
         // Validate: non-unit return type requires explicit `return` in the body
-        if return_type != TypeTable::UNIT && return_type != TypeTable::NEVER {
-            if let Some(ref body) = body {
-                if Self::find_return_type_in_block(body).is_none() {
-                    let _ = self.logger.error(TypeError::MissingReturn {
-                        return_type: self.type_table.borrow().type_name(return_type),
-                        span: func.span,
-                    });
-                }
-            }
+        if return_type != TypeTable::UNIT
+            && return_type != TypeTable::NEVER
+            && let Some(ref body) = body
+            && Self::find_return_type_in_block(body).is_none()
+        {
+            let _ = self.logger.error(TypeError::MissingReturn {
+                return_type: self.type_table.borrow().type_name(return_type),
+                span: func.span,
+            });
         }
 
         // Convert AST type params to TIR type params (while type params still in scope)
@@ -594,15 +594,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .map(|b| self.resolve_block(b, &mut ctx, None));
 
         // Validate: non-unit return type requires explicit `return` in the body
-        if return_type != TypeTable::UNIT && return_type != TypeTable::NEVER {
-            if let Some(ref body) = body {
-                if Self::find_return_type_in_block(body).is_none() {
-                    let _ = self.logger.error(TypeError::MissingReturn {
-                        return_type: self.type_table.borrow().type_name(return_type),
-                        span: func.span,
-                    });
-                }
-            }
+        if return_type != TypeTable::UNIT
+            && return_type != TypeTable::NEVER
+            && let Some(ref body) = body
+            && Self::find_return_type_in_block(body).is_none()
+        {
+            let _ = self.logger.error(TypeError::MissingReturn {
+                return_type: self.type_table.borrow().type_name(return_type),
+                span: func.span,
+            });
         }
 
         // Convert AST type params to TIR type params (while type params still in scope)
