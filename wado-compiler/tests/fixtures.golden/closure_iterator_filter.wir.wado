@@ -724,26 +724,31 @@ fn FilterIter<i32>^Iterator::next(self) {
     let _licm_used_2: i32;
     let _licm_repr_3: ref array<i32>;
     let _licm_pred_4: ref struct;
+    let _hfs_index_5: i32;
     _licm_used_2 = self.used;
     _licm_repr_3 = self.repr;
     _licm_pred_4 = self.pred;
+    _hfs_index_5 = self.index;
     block {
         l49: loop {
-            if self.index >= _licm_used_2 {
+            if _hfs_index_5 >= _licm_used_2 {
+                self.index = _hfs_index_5;
                 return 1; 0;
             };
-            item = builtin::array_get<i32>(_licm_repr_3, self.index);
-            self.index = self.index + 1;
+            item = builtin::array_get<i32>(_licm_repr_3, _hfs_index_5);
+            _hfs_index_5 = _hfs_index_5 + 1;
             if block -> bool {
                 let __indirect_call_0: ref "canonical/CanonicalClosure_0";
                 __indirect_call_0 = ref.cast "canonical/CanonicalClosure_0"(_licm_pred_4);
                 call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, item);
             } {
+                self.index = _hfs_index_5;
                 return 0; item;
             };
             continue l49;
         };
     };
+    self.index = _hfs_index_5;
 }
 
 fn __Closure_0::__call(self, x) {

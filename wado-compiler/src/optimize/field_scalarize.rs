@@ -298,13 +298,11 @@ fn collect_param_field_usage_in_expr(
             // Track field access on struct param: `self.field` or `(&mut self).field`
             let local_idx = extract_local_index(inner);
             if let Some(idx) = local_idx
-                && struct_params.contains(&idx) {
-                    field_sets
-                        .entry(idx)
-                        .or_default()
-                        .insert(*field_index);
-                    return;
-                }
+                && struct_params.contains(&idx)
+            {
+                field_sets.entry(idx).or_default().insert(*field_index);
+                return;
+            }
             collect_param_field_usage_in_expr(
                 inner,
                 struct_params,
@@ -323,26 +321,25 @@ fn collect_param_field_usage_in_expr(
             {
                 let local_idx = extract_local_index(inner);
                 if let Some(idx) = local_idx
-                    && struct_params.contains(&idx) {
-                        field_sets
-                            .entry(idx)
-                            .or_default()
-                            .insert(*field_index);
-                        collect_param_field_usage_in_expr(
-                            value,
-                            struct_params,
-                            field_sets,
-                            conservative_params,
-                            type_table,
-                        );
-                        return;
-                    }
+                    && struct_params.contains(&idx)
+                {
+                    field_sets.entry(idx).or_default().insert(*field_index);
+                    collect_param_field_usage_in_expr(
+                        value,
+                        struct_params,
+                        field_sets,
+                        conservative_params,
+                        type_table,
+                    );
+                    return;
+                }
             }
             // Check for full local assignment `param = val` → conservative
             if let TirExprKind::Local { index, .. } = &target.kind
-                && struct_params.contains(index) {
-                    conservative_params.insert(*index);
-                }
+                && struct_params.contains(index)
+            {
+                conservative_params.insert(*index);
+            }
             collect_param_field_usage_in_expr(
                 target,
                 struct_params,
@@ -681,9 +678,11 @@ fn mark_if_param_passed(
             expr: inner,
         } => {
             if let TirExprKind::Local { index, .. } = &inner.kind
-                && struct_params.contains(index) && is_gc_heap_type(inner.type_id, type_table) {
-                    conservative_params.insert(*index);
-                }
+                && struct_params.contains(index)
+                && is_gc_heap_type(inner.type_id, type_table)
+            {
+                conservative_params.insert(*index);
+            }
         }
         _ => {}
     }
@@ -740,11 +739,9 @@ fn scalarize_block(
                 else_block,
                 ..
             } => {
-                changed |=
-                    scalarize_block(then_block, local_count, local_types, type_table, cache);
+                changed |= scalarize_block(then_block, local_count, local_types, type_table, cache);
                 if let Some(eb) = else_block {
-                    changed |=
-                        scalarize_block(eb, local_count, local_types, type_table, cache);
+                    changed |= scalarize_block(eb, local_count, local_types, type_table, cache);
                 }
                 new_stmts.push(stmt);
             }
@@ -757,11 +754,9 @@ fn scalarize_block(
                 else_block,
                 ..
             } => {
-                changed |=
-                    scalarize_block(then_block, local_count, local_types, type_table, cache);
+                changed |= scalarize_block(then_block, local_count, local_types, type_table, cache);
                 if let Some(eb) = else_block {
-                    changed |=
-                        scalarize_block(eb, local_count, local_types, type_table, cache);
+                    changed |= scalarize_block(eb, local_count, local_types, type_table, cache);
                 }
                 new_stmts.push(stmt);
             }
@@ -1238,10 +1233,7 @@ fn count_field_accesses_in_expr(
     }
 }
 
-fn mark_local_fully_assigned(
-    local_idx: u32,
-    counts: &mut IndexMap<(u32, u32), FieldAccessInfo>,
-) {
+fn mark_local_fully_assigned(local_idx: u32, counts: &mut IndexMap<(u32, u32), FieldAccessInfo>) {
     for (&(li, _fi), info) in counts.iter_mut() {
         if li == local_idx {
             info.local_fully_assigned = true;
@@ -1463,15 +1455,7 @@ fn compute_sync_fields_in_expr(
             ..
         } => {
             // Receiver maps to param 0 (self)
-            add_sync_fields_for_arg(
-                receiver,
-                func,
-                0,
-                candidates,
-                type_table,
-                cache,
-                result,
-            );
+            add_sync_fields_for_arg(receiver, func, 0, candidates, type_table, cache, result);
             // Additional args map to params 1, 2, ...
             for (arg_position, arg) in args.iter().enumerate() {
                 add_sync_fields_for_arg(
@@ -1768,24 +1752,25 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate]) {
             field_index,
             ..
         } = &target.kind
-            && let TirExprKind::Local { index, .. } = &inner.kind {
-                for c in candidates {
-                    if c.local_index == *index && c.field_index == *field_index {
-                        // Replace obj.field = val with _hfs_local = val
-                        replace_in_expr(value, candidates);
-                        let new_target = TirExpr::new(
-                            TirExprKind::Local {
-                                index: c.new_local_index,
-                                name: format!("_hfs_{}_{}", c.field_name, c.new_local_index),
-                            },
-                            c.type_id,
-                            expr.span,
-                        );
-                        **target = new_target;
-                        return;
-                    }
+            && let TirExprKind::Local { index, .. } = &inner.kind
+        {
+            for c in candidates {
+                if c.local_index == *index && c.field_index == *field_index {
+                    // Replace obj.field = val with _hfs_local = val
+                    replace_in_expr(value, candidates);
+                    let new_target = TirExpr::new(
+                        TirExprKind::Local {
+                            index: c.new_local_index,
+                            name: format!("_hfs_{}_{}", c.field_name, c.new_local_index),
+                        },
+                        c.type_id,
+                        expr.span,
+                    );
+                    **target = new_target;
+                    return;
                 }
             }
+        }
         replace_in_expr(target, candidates);
         replace_in_expr(value, candidates);
         return;
@@ -1797,18 +1782,19 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate]) {
         field_index,
         ..
     } = &expr.kind
-        && let TirExprKind::Local { index, .. } = &inner.kind {
-            for c in candidates {
-                if c.local_index == *index && c.field_index == *field_index {
-                    // Replace obj.field with _hfs_local
-                    expr.kind = TirExprKind::Local {
-                        index: c.new_local_index,
-                        name: format!("_hfs_{}_{}", c.field_name, c.new_local_index),
-                    };
-                    return;
-                }
+        && let TirExprKind::Local { index, .. } = &inner.kind
+    {
+        for c in candidates {
+            if c.local_index == *index && c.field_index == *field_index {
+                // Replace obj.field with _hfs_local
+                expr.kind = TirExprKind::Local {
+                    index: c.new_local_index,
+                    name: format!("_hfs_{}_{}", c.field_name, c.new_local_index),
+                };
+                return;
             }
         }
+    }
 
     // Recurse into sub-expressions
     match &mut expr.kind {

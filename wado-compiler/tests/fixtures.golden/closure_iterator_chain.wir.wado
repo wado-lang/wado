@@ -799,22 +799,26 @@ fn FilterMapIter<i32,i32>^Iterator::next(self) {
     let _licm_repr_3: ref array<i32>;
     let _licm_pred_4: ref struct;
     let _licm_f_5: ref struct;
+    let _hfs_index_6: i32;
     _licm_used_2 = self.used;
     _licm_repr_3 = self.repr;
     _licm_pred_4 = self.pred;
     _licm_f_5 = self.f;
+    _hfs_index_6 = self.index;
     block {
         l52: loop {
-            if self.index >= _licm_used_2 {
+            if _hfs_index_6 >= _licm_used_2 {
+                self.index = _hfs_index_6;
                 return 1; 0;
             };
-            item = builtin::array_get<i32>(_licm_repr_3, self.index);
-            self.index = self.index + 1;
+            item = builtin::array_get<i32>(_licm_repr_3, _hfs_index_6);
+            _hfs_index_6 = _hfs_index_6 + 1;
             if block -> bool {
                 let __indirect_call_0: ref "canonical/CanonicalClosure_0";
                 __indirect_call_0 = ref.cast "canonical/CanonicalClosure_0"(_licm_pred_4);
                 call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, item);
             } {
+                self.index = _hfs_index_6;
                 return 0; block -> i32 {
                     let __indirect_call_1: ref "canonical/CanonicalClosure_1";
                     __indirect_call_1 = ref.cast "canonical/CanonicalClosure_1"(_licm_f_5);
@@ -824,6 +828,7 @@ fn FilterMapIter<i32,i32>^Iterator::next(self) {
             continue l52;
         };
     };
+    self.index = _hfs_index_6;
 }
 
 fn __Closure_0::__call(self, x) {
