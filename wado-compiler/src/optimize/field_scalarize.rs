@@ -25,13 +25,13 @@
 //! on each struct-typed parameter. If the callee cannot be resolved or passes the struct
 //! transitively to another unknown call, all fields are conservatively synced.
 
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,
 };
-use crate::hashmap::{IndexMap, IndexSet};
 
 const MIN_ACCESS_COUNT: usize = 4;
 

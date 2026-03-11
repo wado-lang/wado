@@ -34,12 +34,12 @@
 //! the result must be bound to a Let variable that is only used as a method
 //! receiver (`self`), never passed as a regular function argument.
 
+use crate::hashmap::IndexSet;
 use crate::project::Project;
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 use crate::token::Span;
-use crate::hashmap::IndexSet;
 
 /// Apply template string buffer hoisting to all functions in the project.
 pub fn hoist_template_buffers(project: &mut Project) -> bool {

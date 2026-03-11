@@ -1,7 +1,7 @@
 // AST definitions for Wado
 
-use crate::token::Span;
 use crate::hashmap::IndexSet;
+use crate::token::Span;
 
 #[derive(Debug, Clone)]
 pub struct Module {

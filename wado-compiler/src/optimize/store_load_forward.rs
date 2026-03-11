@@ -22,11 +22,11 @@
 //! invalidated (selective invalidation), allowing known values for unmodified
 //! locals to survive through assert branches and similar patterns.
 
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::project::Project;
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeTable,
 };
-use crate::hashmap::{IndexMap, IndexSet};
 
 /// A forwardable value: a scalar literal.
 /// We only forward literals (not locals) to avoid complications with

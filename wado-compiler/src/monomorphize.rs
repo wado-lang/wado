@@ -68,7 +68,8 @@ pub fn monomorphize_modules_indexed(
     // (a struct name can appear in multiple modules due to shadowing)
     // This includes private structs as they may be needed for instantiating public structs
     // (e.g., TreeMap uses TreeMapNode internally)
-    let mut all_generic_structs: IndexMap<String, Vec<(ModuleSource, TirStruct)>> = IndexMap::default();
+    let mut all_generic_structs: IndexMap<String, Vec<(ModuleSource, TirStruct)>> =
+        IndexMap::default();
     for (module_source, module) in &modules {
         for tir_struct in &module.structs {
             if !tir_struct.type_params.is_empty() {

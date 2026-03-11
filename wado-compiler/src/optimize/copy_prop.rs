@@ -10,13 +10,13 @@
 //! - For local-to-local copies: the source is not modified after the copy
 //! - For value types: the source is dead after the binding (`read_count` is 1)
 
+use crate::hashmap::IndexMap;
+use crate::hashmap::IndexSet;
 use crate::project::Project;
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp,
     TypeId, TypeTable,
 };
-use crate::hashmap::IndexMap;
-use crate::hashmap::IndexSet;
 
 /// Information about a copy binding that may be eliminable.
 /// Pattern: `let x: T = y` where y is a local variable or simple literal

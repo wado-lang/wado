@@ -4,13 +4,13 @@
 //! It identifies field accesses on variables that don't change within a loop and moves
 //! those accesses before the loop.
 
+use crate::hashmap::IndexMap;
+use crate::hashmap::IndexSet;
 use crate::project::Project;
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,
 };
-use crate::hashmap::IndexMap;
-use crate::hashmap::IndexSet;
 
 /// Tracks which variables and fields are modified within a loop.
 ///

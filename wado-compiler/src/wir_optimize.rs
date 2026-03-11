@@ -366,7 +366,8 @@ fn try_variant_sroa_candidate(
     let mut max_payload_count: usize = 0;
 
     // Build a mapping of case_wir_type_idx for this variant from variant_case_info
-    let mut case_idx_to_type_idx: crate::hashmap::IndexMap<u32, u32> = crate::hashmap::IndexMap::default();
+    let mut case_idx_to_type_idx: crate::hashmap::IndexMap<u32, u32> =
+        crate::hashmap::IndexMap::default();
     for (&case_wir_idx, &(parent_variant_idx, case_index)) in &module.variant_case_info {
         if parent_variant_idx == variant_type_idx {
             case_idx_to_type_idx.insert(case_index, case_wir_idx);
@@ -1736,8 +1737,10 @@ fn rewrite_call_sites(
     types: &[WirTypeDef],
 ) {
     // Collect replacements: temp_name → (field_name → fresh_local_name)
-    let mut replacements: crate::hashmap::IndexMap<String, crate::hashmap::IndexMap<String, String>> =
-        crate::hashmap::IndexMap::default();
+    let mut replacements: crate::hashmap::IndexMap<
+        String,
+        crate::hashmap::IndexMap<String, String>,
+    > = crate::hashmap::IndexMap::default();
     // Variant replacements: temp_name → VariantReplacement
     let mut variant_replacements: crate::hashmap::IndexMap<String, VariantReplacement> =
         crate::hashmap::IndexMap::default();
@@ -1773,7 +1776,8 @@ fn rewrite_call_sites(
         let candidate = candidate_map[&func_id_idx];
 
         // Generate fresh local names for each field and declare them
-        let mut field_map: crate::hashmap::IndexMap<String, String> = crate::hashmap::IndexMap::default();
+        let mut field_map: crate::hashmap::IndexMap<String, String> =
+            crate::hashmap::IndexMap::default();
         let mut locals: Vec<Option<String>> = Vec::with_capacity(candidate.field_count);
         for (fi, field_name) in candidate.field_names.iter().enumerate() {
             let fresh = format!("__sroa_{temp_name}_{field_name}");
@@ -1789,7 +1793,8 @@ fn rewrite_call_sites(
         if let Some(vi) = &candidate.variant_info {
             // Variant candidate: build VariantReplacement
             let disc_local = field_map["discriminant"].clone();
-            let mut case_disc_values: crate::hashmap::IndexMap<u32, i32> = crate::hashmap::IndexMap::default();
+            let mut case_disc_values: crate::hashmap::IndexMap<u32, i32> =
+                crate::hashmap::IndexMap::default();
             let mut field_to_local: crate::hashmap::IndexMap<(u32, String), String> =
                 crate::hashmap::IndexMap::default();
 
@@ -2301,7 +2306,8 @@ fn sroa_single_field_parameters(module: &mut WirModule) {
 
     // Step B: rewrite call sites in ALL function bodies.
     // Build lookup: func_id_index → set of SROA'd param indices.
-    let mut sroa_params: crate::hashmap::IndexMap<u32, IndexSet<usize>> = crate::hashmap::IndexMap::default();
+    let mut sroa_params: crate::hashmap::IndexMap<u32, IndexSet<usize>> =
+        crate::hashmap::IndexMap::default();
     for &(func_id_index, param_idx) in &candidates {
         sroa_params
             .entry(func_id_index)
@@ -2323,8 +2329,10 @@ fn sroa_single_field_parameters(module: &mut WirModule) {
     // Build per-function map of param names → struct type that was unwrapped.
     // This tells us what struct type each scalar param was derived from (so we
     // know whether a bare `LocalGet(param)` at a call site needs a StructGet).
-    let mut func_scalar_param_struct: crate::hashmap::IndexMap<u32, crate::hashmap::IndexMap<String, u32>> =
-        crate::hashmap::IndexMap::default();
+    let mut func_scalar_param_struct: crate::hashmap::IndexMap<
+        u32,
+        crate::hashmap::IndexMap<String, u32>,
+    > = crate::hashmap::IndexMap::default();
     for &(func_id_index, param_idx) in &candidates {
         let func_array_idx = (func_id_index - crate::wir_build::DEFINED_FUNC_BASE) as usize;
         let param_name = module.functions[func_array_idx].param_names[param_idx].clone();

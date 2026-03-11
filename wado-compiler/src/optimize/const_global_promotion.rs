@@ -16,10 +16,10 @@
 //! - Promoted constants become available for constant propagation
 //! - Dependent globals may then also fold to constants and get promoted
 
+use crate::hashmap::IndexMap;
 use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
-use crate::hashmap::IndexMap;
 
 type GlobalKey = (ModuleSource, String);
 

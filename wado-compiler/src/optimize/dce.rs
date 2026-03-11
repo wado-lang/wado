@@ -10,6 +10,7 @@
 
 use crate::hashmap::IndexSet;
 
+use crate::hashmap::IndexMap;
 use crate::name::{
     FreeFunctionName, FunctionId, MethodName, ModuleSource, mangle_generic_name,
     mangle_local_method, mangle_local_trait_method, mangle_method_generic,
@@ -19,7 +20,6 @@ use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirImport, TirModule, TirStmt,
     TirStmtKind, TypeId, TypeTable,
 };
-use crate::hashmap::IndexMap;
 
 /// Call graph: function ID -> set of called function IDs
 type CallGraph = IndexMap<FunctionId, IndexSet<FunctionId>>;
@@ -2789,10 +2789,10 @@ mod tests {
     #[test]
     fn test_transitive_reachability() {
         let mut call_graph = IndexMap::default();
-        call_graph.insert(free_fn("run"), IndexSet::from([free_fn("foo")]));
-        call_graph.insert(free_fn("foo"), IndexSet::from([free_fn("bar")]));
+        call_graph.insert(free_fn("run"), IndexSet::from_iter([free_fn("foo")]));
+        call_graph.insert(free_fn("foo"), IndexSet::from_iter([free_fn("bar")]));
         call_graph.insert(free_fn("bar"), IndexSet::default());
-        call_graph.insert(free_fn("unused"), IndexSet::from([free_fn("bar")]));
+        call_graph.insert(free_fn("unused"), IndexSet::from_iter([free_fn("bar")]));
 
         let reachable = compute_reachable(&call_graph, &free_fn("run"));
         assert!(reachable.contains(&free_fn("run")));

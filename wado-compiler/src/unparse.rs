@@ -14,8 +14,8 @@ use crate::ast::{
     VariantDecl, WhileStmt, WorldDecl,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
-use crate::token::Span;
 use crate::hashmap::IndexSet;
+use crate::token::Span;
 
 const MAX_LINE_WIDTH: usize = 120;
 

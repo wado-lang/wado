@@ -3,6 +3,7 @@
 //! This is the core of the `tir_to_wir` phase, translating each TIR function body
 //! into a sequence of WIR instructions.
 
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
     CallArg, FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
     TirFunction, TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
@@ -12,7 +13,6 @@ use crate::wir::{
     CanonicalIntrinsic, CmFuturePayload, CmScalarType, WirFuncId, WirInstr, WirName, WirType,
     WirTypeDef, WirTypeId,
 };
-use crate::hashmap::{IndexMap, IndexSet};
 
 use super::context::WirContext;
 

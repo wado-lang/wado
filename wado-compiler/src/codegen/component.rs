@@ -15,9 +15,9 @@ use super::postprocess;
 use crate::ast::Type;
 use crate::bundled::wado_bundled_libm_wasm;
 use crate::component_model::{CmInstanceTypeGen, WasiFunctionInfo};
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::project::Project;
 use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmScalarType, WirModule};
-use crate::hashmap::{IndexMap, IndexSet};
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
     ComponentValType, ExportKind, InstanceType, ModuleArg, PrimitiveValType, TypeBounds,

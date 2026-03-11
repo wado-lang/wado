@@ -23,11 +23,11 @@
 //! Pass 2 (transform): Single traversal to replace eliminable field accesses
 //!   and remove dead let statements.
 
+use crate::hashmap::IndexMap;
 use crate::project::Project;
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeTable,
 };
-use crate::hashmap::IndexMap;
 
 /// Per-binding analysis state, keyed by the ref local index.
 struct RefInfo {

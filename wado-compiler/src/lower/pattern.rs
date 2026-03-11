@@ -218,7 +218,8 @@ pub(super) fn lower_patterns(
     }
 
     // Build struct fields map from module structs
-    let mut struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>> = IndexMap::default();
+    let mut struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>> =
+        IndexMap::default();
     for s in &module.structs {
         struct_fields_map.insert(
             (s.name.clone(), module.module_source.clone()),

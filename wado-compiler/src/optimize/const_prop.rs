@@ -12,10 +12,10 @@
 //! Therefore, any global with `mutable == false` at optimization time is guaranteed
 //! to have a constant initializer.
 
+use crate::hashmap::IndexMap;
 use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind};
-use crate::hashmap::IndexMap;
 
 /// A constant value extracted from a global variable's initializer.
 #[derive(Debug, Clone)]

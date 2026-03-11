@@ -2,13 +2,13 @@
 
 use crate::ast::{self, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
+use crate::hashmap::IndexSet;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt,
     TirStmtKind, TypeId, TypeTable,
 };
 use crate::token::Span;
-use crate::hashmap::IndexSet;
 
 use super::Resolver;
 use super::types::{FunctionContext, TypeError};

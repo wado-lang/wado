@@ -37,7 +37,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
         // Create a shared type table wrapped in Rc<RefCell<>> for cross-module sharing
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
-        let mut all_newtypes: IndexMap<ModuleSource, IndexMap<String, TypeId>> = IndexMap::default();
+        let mut all_newtypes: IndexMap<ModuleSource, IndexMap<String, TypeId>> =
+            IndexMap::default();
         let mut all_struct_fields: IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>> =
             IndexMap::default();
         let mut all_variant_cases: IndexMap<ModuleSource, IndexMap<String, VariantInfo>> =

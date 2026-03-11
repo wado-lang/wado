@@ -23,14 +23,14 @@
 //! This is the single most impactful optimization for WasmGC-targeting compilers,
 //! as struct allocations are GC-managed heap objects.
 
+use crate::hashmap::IndexMap;
+use crate::hashmap::IndexSet;
 use crate::project::Project;
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirStructField, TirUnaryOp,
     TypeId, TypeTable,
 };
 use crate::token::Span;
-use crate::hashmap::IndexMap;
-use crate::hashmap::IndexSet;
 
 /// Information about a struct/tuple local that may be decomposable.
 struct SroaCandidate {

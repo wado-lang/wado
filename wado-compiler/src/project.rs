@@ -10,12 +10,12 @@
 
 use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{FunctionId, ModuleSource};
 use crate::symbol::SymbolTable;
 use crate::tir::{TirModule, TypeId};
 use crate::wasm_plan::ComponentPlan;
 use crate::world_registry::{self, WorldRegistry};
-use crate::hashmap::{IndexMap, IndexSet};
 
 /// A Wado project ready for code generation.
 ///
