@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773236977861,
+  "lastUpdate": 1773263080502,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2519,6 +2519,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d64f557bcdb9ad890d78bf6314a3af5659264739"
         },
         "date": 1773236977644,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2378,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9895,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25163,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "baff624c01ce64dfb961cdf978472786125612c0",
+          "message": "Merge pull request #562 from wado-lang/claude/optimize-compiler-resolve-GXyew\n\nReplace indexmap default hasher with rustc-hash FxHash",
+          "timestamp": "2026-03-12T06:02:21+09:00",
+          "tree_id": "27da4acdc8d210e5249f15a9aaf31a085dd2dd2d",
+          "url": "https://github.com/wado-lang/wado/commit/baff624c01ce64dfb961cdf978472786125612c0"
+        },
+        "date": 1773263080302,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
