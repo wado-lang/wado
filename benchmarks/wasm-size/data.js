@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773183041906,
+  "lastUpdate": 1773188475718,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2339,6 +2339,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 19848,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2bdc2023a6e1c2ca965a889e4aa1f553d59f0501",
+          "message": "Merge pull request #557 from wado-lang/claude/fix-f64-to-bits-inline-AvX7T\n\nOptimize dead code elimination for unused local variables",
+          "timestamp": "2026-03-11T09:18:56+09:00",
+          "tree_id": "ec141d1e9500fb68f366073f7ed82ace7317e7fd",
+          "url": "https://github.com/wado-lang/wado/commit/2bdc2023a6e1c2ca965a889e4aa1f553d59f0501"
+        },
+        "date": 1773188475506,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2378,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9895,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18344,
             "unit": "bytes"
           }
         ]
