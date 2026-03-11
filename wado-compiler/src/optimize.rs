@@ -16,6 +16,7 @@ mod const_global_promotion;
 mod const_prop;
 mod copy_prop;
 pub mod dce;
+mod field_scalarize;
 mod inline;
 mod licm;
 mod ref_elim;
@@ -32,6 +33,7 @@ use dce::{
     analyze_project, prune_constant_branches, remove_unreachable_functions,
     remove_unreachable_globals, remove_unreachable_types,
 };
+use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 use licm::apply_licm;
 use ref_elim::eliminate_unnecessary_refs;
@@ -194,6 +196,7 @@ fn run_optimization_passes(project: &mut Project, config: &OptConfig) {
         changed |= promote_constant_globals(project);
         changed |= prune_constant_branches(project);
         changed |= apply_licm(project);
+        changed |= scalarize_hot_fields(project);
         changed |= hoist_template_buffers(project);
         if !changed {
             break;
