@@ -114,6 +114,8 @@ type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
+type "functype/get_value" = fn() -> f64;
+
 type "functype/run" = fn();
 
 type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
@@ -270,7 +272,12 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut POW10: ref null Array<u64> = ref.null none;
 global mut __modules_initialized: bool = 0;
 
+fn get_value() {
+    return 3.14;
+}
+
 fn run() with Stdout {
+    let x: f64;
     let bits: i64;
     let back: f64;
     let __local_3: ref String;
@@ -288,7 +295,8 @@ fn run() with Stdout {
         __initialize_module();
         __modules_initialized = 1;
     };
-    bits = builtin::i64_reinterpret_f64(3.14);
+    x = get_value();
+    bits = builtin::i64_reinterpret_f64(x);
     back = builtin::f64_reinterpret_i64(bits);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_3 = String { repr: builtin::array_new<u8>(50), used: 0 };
@@ -297,7 +305,7 @@ fn run() with Stdout {
             break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_8) };
         };
         __local_10 = __local_4;
-        f64::fmt_into(3.14, __local_10);
+        f64::fmt_into(x, __local_10);
         String::append_char(__local_3, 32);
         __local_4 = __inline_Formatter__new_6: block -> ref Formatter {
             __local_11 = __local_3;
