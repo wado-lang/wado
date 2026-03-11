@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773188475718,
+  "lastUpdate": 1773226604287,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2378,6 +2378,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 18344,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0bee09f34dd99082c9dd3c935fcf4cc63b48366d",
+          "message": "Merge pull request #558 from wado-lang/claude/optimize-zlib-decompress-iuWGS\n\nNew optimize pass: Hot Field Scalarization (HFS)",
+          "timestamp": "2026-03-11T19:54:16+09:00",
+          "tree_id": "cc64b666a2041fb96de314a8fcc9535c333cb45f",
+          "url": "https://github.com/wado-lang/wado/commit/0bee09f34dd99082c9dd3c935fcf4cc63b48366d"
+        },
+        "date": 1773226604070,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2378,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9895,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25163,
             "unit": "bytes"
           }
         ]
