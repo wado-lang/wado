@@ -34,12 +34,12 @@
 //! the result must be bound to a Let variable that is only used as a method
 //! receiver (`self`), never passed as a regular function argument.
 
+use crate::hashmap::IndexSet;
 use crate::project::Project;
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 use crate::token::Span;
-use indexmap::IndexSet;
 
 /// Apply template string buffer hoisting to all functions in the project.
 pub fn hoist_template_buffers(project: &mut Project) -> bool {
@@ -165,7 +165,7 @@ fn hoist_tmpl_from_loop(
 /// Collect local indices that "escape" — used as a non-receiver function argument
 /// or stored in a struct/array/collection.
 fn collect_escaping_locals(block: &TirBlock) -> IndexSet<u32> {
-    let mut escaping = IndexSet::new();
+    let mut escaping = IndexSet::default();
     for stmt in &block.stmts {
         collect_escaping_in_stmt(stmt, &mut escaping);
     }

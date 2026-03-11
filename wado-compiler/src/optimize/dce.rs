@@ -8,8 +8,9 @@
 //! 2. **Constant branch pruning**: When an `if` condition is a compile-time boolean
 //!    literal, the dead branch is eliminated and the taken branch is inlined in place.
 
-use indexmap::IndexSet;
+use crate::hashmap::IndexSet;
 
+use crate::hashmap::IndexMap;
 use crate::name::{
     FreeFunctionName, FunctionId, MethodName, ModuleSource, mangle_generic_name,
     mangle_local_method, mangle_local_trait_method, mangle_method_generic,
@@ -19,7 +20,6 @@ use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirImport, TirModule, TirStmt,
     TirStmtKind, TypeId, TypeTable,
 };
-use indexmap::IndexMap;
 
 /// Call graph: function ID -> set of called function IDs
 type CallGraph = IndexMap<FunctionId, IndexSet<FunctionId>>;
@@ -72,7 +72,7 @@ pub fn analyze_project(project: &mut Project) {
     }
 
     // Compute reachable functions from all entry points
-    let mut reachable = IndexSet::new();
+    let mut reachable = IndexSet::default();
     for entry_name in &entry_func_names {
         let entry_func = FunctionId::Free(FreeFunctionName::from_module_source(
             &project.entry_module_source,
@@ -116,7 +116,7 @@ pub fn analyze_project(project: &mut Project) {
     }
 
     // Collect used WASI functions from reachable functions
-    let mut used_wasi_functions: IndexSet<String> = IndexSet::new();
+    let mut used_wasi_functions: IndexSet<String> = IndexSet::default();
     for func_id in &reachable {
         if let Some(effects) = effect_usage.get(func_id) {
             for (effect_name, op_name) in effects {
@@ -188,7 +188,7 @@ pub fn analyze_project(project: &mut Project) {
     }
 
     // Collect imports using registry lookup instead of hard-coded match
-    let mut imports: IndexSet<TirImport> = IndexSet::new();
+    let mut imports: IndexSet<TirImport> = IndexSet::default();
 
     // Helper to add an import from builtin registry by function name
     let add_import_by_name = |imports: &mut IndexSet<TirImport>, name: &str| {
@@ -267,7 +267,7 @@ pub fn analyze_project(project: &mut Project) {
     // Filter string literals in each module to only include strings from reachable functions
     for module in project.tir_modules.values_mut() {
         let module_source = &module.module_source;
-        let mut reachable_strings: IndexSet<String> = IndexSet::new();
+        let mut reachable_strings: IndexSet<String> = IndexSet::default();
 
         for (func_name, strings) in &module.function_strings {
             // Build function ID(s) to check if it's reachable
@@ -317,9 +317,9 @@ pub fn analyze_project(project: &mut Project) {
 fn build_analysis_graph(
     modules: &IndexMap<ModuleSource, TirModule>,
 ) -> (CallGraph, EffectUsageMap, CanonicalMethodUsageMap) {
-    let mut call_graph: CallGraph = IndexMap::new();
-    let mut effect_usage: EffectUsageMap = IndexMap::new();
-    let mut canonical_method_usage: CanonicalMethodUsageMap = IndexMap::new();
+    let mut call_graph: CallGraph = IndexMap::default();
+    let mut effect_usage: EffectUsageMap = IndexMap::default();
+    let mut canonical_method_usage: CanonicalMethodUsageMap = IndexMap::default();
 
     for (module_source, module) in modules {
         let type_table = &*module.type_table.borrow();
@@ -1085,7 +1085,7 @@ fn compute_reachable(
     call_graph: &IndexMap<FunctionId, IndexSet<FunctionId>>,
     entry: &FunctionId,
 ) -> IndexSet<FunctionId> {
-    let mut reachable = IndexSet::new();
+    let mut reachable = IndexSet::default();
     let mut worklist = vec![entry.clone()];
 
     while let Some(func) = worklist.pop() {
@@ -1219,7 +1219,7 @@ fn is_generic_func_reachable(
 /// A type is reachable if it's used in any reachable function's signature,
 /// locals, or expressions.
 fn compute_reachable_types(project: &Project) -> IndexSet<TypeId> {
-    let mut reachable_types: IndexSet<TypeId> = IndexSet::new();
+    let mut reachable_types: IndexSet<TypeId> = IndexSet::default();
 
     // Always include primitive types (TypeId 0-17)
     for i in 0..18 {
@@ -1905,7 +1905,7 @@ pub fn remove_unreachable_types(project: &mut Project) {
 pub fn remove_unreachable_globals(project: &mut Project) {
     // Phase 1: Collect all GlobalVarGet references from surviving functions.
     // Key: (module_source path as string, global name)
-    let mut used_globals: IndexSet<(String, String)> = IndexSet::new();
+    let mut used_globals: IndexSet<(String, String)> = IndexSet::default();
 
     for module in project.tir_modules.values() {
         for func_rc in &module.functions {
@@ -2779,7 +2779,7 @@ mod tests {
 
     #[test]
     fn test_empty_reachable_set() {
-        let call_graph = IndexMap::new();
+        let call_graph = IndexMap::default();
         let entry = free_fn("run");
         let reachable = compute_reachable(&call_graph, &entry);
         assert!(reachable.contains(&free_fn("run")));
@@ -2788,11 +2788,11 @@ mod tests {
 
     #[test]
     fn test_transitive_reachability() {
-        let mut call_graph = IndexMap::new();
-        call_graph.insert(free_fn("run"), IndexSet::from([free_fn("foo")]));
-        call_graph.insert(free_fn("foo"), IndexSet::from([free_fn("bar")]));
-        call_graph.insert(free_fn("bar"), IndexSet::new());
-        call_graph.insert(free_fn("unused"), IndexSet::from([free_fn("bar")]));
+        let mut call_graph = IndexMap::default();
+        call_graph.insert(free_fn("run"), IndexSet::from_iter([free_fn("foo")]));
+        call_graph.insert(free_fn("foo"), IndexSet::from_iter([free_fn("bar")]));
+        call_graph.insert(free_fn("bar"), IndexSet::default());
+        call_graph.insert(free_fn("unused"), IndexSet::from_iter([free_fn("bar")]));
 
         let reachable = compute_reachable(&call_graph, &free_fn("run"));
         assert!(reachable.contains(&free_fn("run")));

@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 use wasm_encoder::ValType;
 
@@ -1089,7 +1089,7 @@ impl CmInstanceTypeGen {
     pub fn new(start_idx: u32) -> Self {
         Self {
             next_idx: start_idx,
-            cache: IndexMap::new(),
+            cache: IndexMap::default(),
         }
     }
 
@@ -1846,12 +1846,12 @@ fn is_primitive_type_supported_with_types(
 
 /// Check if a parameter type is supported (without enum/resource knowledge)
 pub fn is_param_type_supported(ty: &Type) -> bool {
-    is_param_type_supported_with_types(ty, &IndexSet::new(), &IndexSet::new())
+    is_param_type_supported_with_types(ty, &IndexSet::default(), &IndexSet::default())
 }
 
 /// Check if a return type is supported (without enum/resource knowledge)
 pub fn is_return_type_supported(ty: &Type) -> bool {
-    is_return_type_supported_with_types(ty, &IndexSet::new(), &IndexSet::new())
+    is_return_type_supported_with_types(ty, &IndexSet::default(), &IndexSet::default())
 }
 
 /// Check if all types in a WASI function are supported for Component Model generation

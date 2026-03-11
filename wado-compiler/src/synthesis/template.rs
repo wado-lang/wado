@@ -13,7 +13,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use indexmap::IndexMap;
+use crate::hashmap::IndexMap;
 
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::{
@@ -47,7 +47,7 @@ pub fn expand_templates(module: &TirModule, tt: &Rc<RefCell<TypeTable>>) {
 
 /// Collect closure source text from the body for `#:?` format.
 fn collect_closure_sources(body: &TirBlock) -> IndexMap<u32, String> {
-    let mut sources = IndexMap::new();
+    let mut sources = IndexMap::default();
     for stmt in &body.stmts {
         collect_closure_sources_stmt(stmt, &mut sources);
     }

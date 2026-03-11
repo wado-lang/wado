@@ -3,7 +3,7 @@
 //! The symbol table tracks all definitions (functions, types, effects, etc.)
 //! and their metadata. It supports module namespacing and scoped lookups.
 
-use indexmap::IndexMap;
+use crate::hashmap::IndexMap;
 use std::ops::Index;
 
 use crate::ast::WasiImport;
@@ -446,7 +446,7 @@ impl SymbolTable {
 
     /// Enter a new local scope
     pub fn enter_scope(&mut self) {
-        self.scopes.push(IndexMap::new());
+        self.scopes.push(IndexMap::default());
     }
 
     /// Exit the current local scope

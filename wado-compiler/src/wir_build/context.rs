@@ -4,7 +4,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::name::{ModuleSource, StructName};
 use crate::project::Project;
@@ -129,7 +129,7 @@ impl<'a> WirContext<'a> {
     /// Create a new `WirContext` from a Project.
     pub fn new(project: &'a Project) -> Self {
         // Collect string literals from all TIR modules (deduped)
-        let mut seen: IndexSet<&str> = IndexSet::new();
+        let mut seen: IndexSet<&str> = IndexSet::default();
         let mut string_literals = Vec::new();
         for tir_module in project.tir_modules.values() {
             for s in &tir_module.string_literals {
@@ -140,7 +140,7 @@ impl<'a> WirContext<'a> {
         }
 
         // Collect bytes literals from all TIR modules (deduped)
-        let mut seen_bytes: IndexSet<&[u8]> = IndexSet::new();
+        let mut seen_bytes: IndexSet<&[u8]> = IndexSet::default();
         let mut bytes_literals = Vec::new();
         for tir_module in project.tir_modules.values() {
             for b in &tir_module.bytes_literals {
@@ -153,36 +153,36 @@ impl<'a> WirContext<'a> {
         Self {
             project,
             types: Vec::new(),
-            type_map: IndexMap::new(),
+            type_map: IndexMap::default(),
             rec_groups: Vec::new(),
-            struct_type_map: IndexMap::new(),
-            array_type_map: IndexMap::new(),
-            array_type_by_name: IndexMap::new(),
-            tuple_type_map: IndexMap::new(),
-            variant_type_map: IndexMap::new(),
-            variant_case_info: IndexMap::new(),
+            struct_type_map: IndexMap::default(),
+            array_type_map: IndexMap::default(),
+            array_type_by_name: IndexMap::default(),
+            tuple_type_map: IndexMap::default(),
+            variant_type_map: IndexMap::default(),
+            variant_case_info: IndexMap::default(),
             functions: Vec::new(),
-            func_map: IndexMap::new(),
+            func_map: IndexMap::default(),
             func_type_ids: Vec::new(),
             imports: Vec::new(),
             import_func_count: 0,
-            import_func_map: IndexMap::new(),
+            import_func_map: IndexMap::default(),
             globals: Vec::new(),
-            global_map: IndexMap::new(),
+            global_map: IndexMap::default(),
             exports: Vec::new(),
             data: Vec::new(),
-            string_literal_map: IndexMap::new(),
-            bytes_literal_map: IndexMap::new(),
+            string_literal_map: IndexMap::default(),
+            bytes_literal_map: IndexMap::default(),
             names: WirNames::default(),
-            canonical_closure_types: IndexMap::new(),
-            closure_wrapper_funcs: IndexMap::new(),
+            canonical_closure_types: IndexMap::default(),
+            closure_wrapper_funcs: IndexMap::default(),
             canonical_closure_counter: 0,
             string_literals,
             bytes_literals,
-            wasm_module_sources: IndexMap::new(),
-            available_wasi_funcs: IndexSet::new(),
+            wasm_module_sources: IndexMap::default(),
+            available_wasi_funcs: IndexSet::default(),
             pending_bodies: Vec::new(),
-            needed_canonicals: IndexMap::new(),
+            needed_canonicals: IndexMap::default(),
         }
     }
 
@@ -731,15 +731,15 @@ impl<'a> WirContext<'a> {
 
         // Extract functions and globals from #![wasm_module("...")] sources
         // into separate WasmModuleInfo structures.
-        let mut wasm_modules: IndexMap<String, crate::wir::WasmModuleInfo> = IndexMap::new();
-        let mut dead_type_indices: IndexSet<u32> = IndexSet::new();
-        let mut dead_func_indices: IndexSet<u32> = IndexSet::new();
-        let mut dead_global_indices: IndexSet<u32> = IndexSet::new();
+        let mut wasm_modules: IndexMap<String, crate::wir::WasmModuleInfo> = IndexMap::default();
+        let mut dead_type_indices: IndexSet<u32> = IndexSet::default();
+        let mut dead_func_indices: IndexSet<u32> = IndexSet::default();
+        let mut dead_global_indices: IndexSet<u32> = IndexSet::default();
 
         for (source_prefix, wasm_mod_name) in &self.wasm_module_sources {
             let mut mod_functions = Vec::new();
             let mut mod_globals = Vec::new();
-            let mut mod_global_name_to_index = IndexMap::new();
+            let mut mod_global_name_to_index = IndexMap::default();
 
             // Find functions belonging to this wasm module (keep in list, mark as dead)
             for (i, func) in functions.iter().enumerate() {
@@ -761,7 +761,7 @@ impl<'a> WirContext<'a> {
                 let body = func.body.clone().unwrap_or_default();
 
                 // Collect referenced globals
-                let mut referenced_globals = IndexMap::new();
+                let mut referenced_globals = IndexMap::default();
                 collect_referenced_globals(&body, &mut referenced_globals);
 
                 for (global_fq, ()) in &referenced_globals {

@@ -1,4 +1,4 @@
-use indexmap::IndexSet;
+use crate::hashmap::IndexSet;
 use serde::Serialize;
 
 use crate::ast::{
@@ -798,7 +798,7 @@ fn collect_pub_use_sources(module: &Module) -> Vec<String> {
 
 /// Collect item names from `pub use { Name1, Name2 } from "..."` declarations.
 fn collect_pub_use_names(module: &Module) -> IndexSet<String> {
-    let mut names = IndexSet::new();
+    let mut names = IndexSet::default();
     for item in &module.items {
         if let Item::Use(u) = item
             && u.is_pub
@@ -982,7 +982,7 @@ fn collect_primitive_types_from_module(
     module: &Module,
     comments: &CommentMap,
 ) -> Vec<DocPrimitiveType> {
-    use indexmap::IndexMap;
+    use crate::hashmap::IndexMap;
 
     let mut impls: Vec<&ImplBlock> = Vec::new();
     for item in &module.items {
@@ -991,7 +991,7 @@ fn collect_primitive_types_from_module(
         }
     }
 
-    let mut by_name: IndexMap<&str, DocPrimitiveType> = IndexMap::new();
+    let mut by_name: IndexMap<&str, DocPrimitiveType> = IndexMap::default();
 
     for &prim_name in PRIMITIVE_TYPE_NAMES {
         let (methods, trait_impls) = collect_impl_methods_for_type(prim_name, &impls, comments);

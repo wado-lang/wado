@@ -1,7 +1,7 @@
 //! Expression resolution (literals, identifiers, field access, index,
 //! if-expressions, match, cast, struct/tuple literals, etc.).
 
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{self, Expr, IfExpr, Item, Literal, MatchArm};
 use crate::compiler_host::CompilerHost;
@@ -2002,7 +2002,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // Build a map from type param TypeId to concrete TypeId
-        let mut type_param_map: IndexMap<TypeId, TypeId> = IndexMap::new();
+        let mut type_param_map: IndexMap<TypeId, TypeId> = IndexMap::default();
 
         for (struct_field, (_, expected_type_id, _)) in fields.iter().zip(struct_info.fields.iter())
         {

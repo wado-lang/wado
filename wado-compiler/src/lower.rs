@@ -18,7 +18,7 @@ mod pattern;
 mod string;
 mod wide_int;
 
-use indexmap::IndexMap;
+use crate::hashmap::IndexMap;
 
 use crate::name::ModuleSource;
 use crate::project::Project;
@@ -40,7 +40,9 @@ use wide_int::lower_wide_int_match_patterns;
 ///
 /// Note: All loop constructs are desugared at the AST level in desugar.rs.
 pub fn lower(module: TirModule) -> TirModule {
-    let modules = IndexMap::from([(module.module_source.clone(), module)]);
+    let mut modules = IndexMap::default();
+    modules.insert(module.module_source.clone(), module);
+    let modules = modules;
     let mut modules = lower_modules_indexed(modules);
     modules.pop().unwrap().1
 }
@@ -98,7 +100,7 @@ pub fn lower_modules_indexed(
 ) -> IndexMap<ModuleSource, TirModule> {
     // Build a global variant map from ALL modules so that cross-module pattern
     // matching works (e.g., `if let Greater = ord` where Ordering is from another module)
-    let mut global_variant_map: IndexMap<String, Vec<(String, u32)>> = IndexMap::new();
+    let mut global_variant_map: IndexMap<String, Vec<(String, u32)>> = IndexMap::default();
     for module in modules.values() {
         for variant in &module.variants {
             let cases: Vec<(String, u32)> = variant

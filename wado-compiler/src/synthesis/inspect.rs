@@ -16,7 +16,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
@@ -85,7 +85,7 @@ impl Default for InspectRegistry {
 impl InspectRegistry {
     pub fn new() -> Self {
         Self {
-            functions: IndexMap::new(),
+            functions: IndexMap::default(),
             pending: Vec::new(),
         }
     }
@@ -139,7 +139,7 @@ fn ensure_inspect_fn(
         span,
         local_count: 2,
         local_types: vec![type_id, fmt_type],
-        address_taken_locals: IndexSet::new(),
+        address_taken_locals: IndexSet::default(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
@@ -261,7 +261,7 @@ impl LocalAlloc {
 /// Collect closure source texts from Let statements in a function body.
 /// Maps `local_index` → `source_text` for closures that have pre-desugar source.
 pub fn collect_closure_sources(block: &TirBlock) -> IndexMap<u32, String> {
-    let mut map = IndexMap::new();
+    let mut map = IndexMap::default();
     collect_closure_sources_block(block, &mut map);
     map
 }

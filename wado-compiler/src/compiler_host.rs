@@ -296,7 +296,7 @@ pub trait CompilerHost: Send + Sync {
 #[derive(Debug, Default)]
 pub struct InMemoryCompilerHost {
     /// Source files by path (stored as raw bytes)
-    sources: indexmap::IndexMap<String, Vec<u8>>,
+    sources: crate::hashmap::IndexMap<String, Vec<u8>>,
     /// Collected diagnostics
     diagnostics: std::sync::Mutex<Vec<Diagnostic>>,
 }

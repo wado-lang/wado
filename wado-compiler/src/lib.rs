@@ -81,6 +81,7 @@ pub mod component_model;
 pub mod desugar;
 pub mod doc;
 pub mod effect_check;
+pub mod hashmap;
 pub mod lexer;
 pub mod loader;
 pub mod logger;
@@ -129,7 +130,7 @@ pub use token::Span;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use indexmap::IndexMap;
+use crate::hashmap::IndexMap;
 
 /// Result of compiling a Wado source file
 #[derive(Debug)]

@@ -6,7 +6,7 @@
 //! Worlds are keyed by their fully-qualified name (e.g., "wasi:cli/command",
 //! "wasi:http/service") derived from the `#[wasi("...")]` attribute.
 
-use indexmap::IndexMap;
+use crate::hashmap::IndexMap;
 
 use crate::ast::{Type, WorldDecl, WorldExport};
 

@@ -1,6 +1,6 @@
 //! Function call resolution.
 
-use indexmap::IndexMap;
+use crate::hashmap::IndexMap;
 
 use crate::ast::{self, Expr, Item, Type};
 use crate::compiler_host::CompilerHost;
@@ -521,7 +521,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // callee's types, not the caller's (which may have same-named different types).
                 let callee_module_ast = self.loaded_modules.get(callee_module);
                 let (callee_imported, callee_original_names) = callee_module_ast.map_or_else(
-                    || (IndexMap::new(), IndexMap::new()),
+                    || (IndexMap::default(), IndexMap::default()),
                     |m| Self::build_imported_type_sources(m, callee_module),
                 );
                 let callee_newtypes = Self::build_module_map(
@@ -1012,7 +1012,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         payload: Option<&TirExpr>,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        let mut type_param_map: IndexMap<TypeId, TypeId> = IndexMap::new();
+        let mut type_param_map: IndexMap<TypeId, TypeId> = IndexMap::default();
         // Track the canonical module_source from expected_type if available.
         // This ensures the created GenericInstance uses the same module_source
         // as the type annotation (e.g., ModuleSource::prelude() for Option/Result),

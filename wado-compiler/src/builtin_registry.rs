@@ -3,7 +3,7 @@
 //! This module collects function signatures from lib/core/builtin.wado
 //! and provides type information for code generation.
 
-use indexmap::IndexMap;
+use crate::hashmap::IndexMap;
 use std::cell::RefCell;
 
 use crate::ast::{Function, Type};

@@ -10,12 +10,12 @@
 
 use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{FunctionId, ModuleSource};
 use crate::symbol::SymbolTable;
 use crate::tir::{TirModule, TypeId};
 use crate::wasm_plan::ComponentPlan;
 use crate::world_registry::{self, WorldRegistry};
-use indexmap::{IndexMap, IndexSet};
 
 /// A Wado project ready for code generation.
 ///
@@ -93,8 +93,8 @@ impl Project {
             world_registry,
             builtin_registry,
             // Usage analysis fields default to empty/false
-            reachable_functions: IndexSet::new(),
-            used_wasi_functions: IndexSet::new(),
+            reachable_functions: IndexSet::default(),
+            used_wasi_functions: IndexSet::default(),
             // Codegen options
             strip_names: false,
             skip_validation: false,
@@ -102,7 +102,7 @@ impl Project {
             // CM export characteristics
             has_http_handler_export: false,
             // CM export adapter mapping
-            export_adapter_names: IndexMap::new(),
+            export_adapter_names: IndexMap::default(),
             task_return_flat_params: None,
             // Wasm plan
             component_plan: None,

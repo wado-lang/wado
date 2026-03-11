@@ -14,8 +14,8 @@ use crate::ast::{
     VariantDecl, WhileStmt, WorldDecl,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
+use crate::hashmap::IndexSet;
 use crate::token::Span;
-use indexmap::IndexSet;
 
 const MAX_LINE_WIDTH: usize = 120;
 
@@ -39,7 +39,7 @@ impl<'a> Unparser<'a> {
             comments,
             output: String::new(),
             indent_level: 0,
-            emitted_comments: IndexSet::new(),
+            emitted_comments: IndexSet::default(),
             last_source_line: 0,
         }
     }

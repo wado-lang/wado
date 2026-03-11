@@ -13,7 +13,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
 use crate::project::Project;
@@ -54,7 +54,7 @@ pub fn monomorphize_modules_indexed(
     modules: IndexMap<ModuleSource, TirModule>,
 ) -> IndexMap<ModuleSource, TirModule> {
     // First pass: collect all generic functions from all modules
-    let mut all_generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::new();
+    let mut all_generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
     for (_, module) in &modules {
         for func_rc in &module.functions {
             let func = func_rc.borrow();
@@ -68,7 +68,8 @@ pub fn monomorphize_modules_indexed(
     // (a struct name can appear in multiple modules due to shadowing)
     // This includes private structs as they may be needed for instantiating public structs
     // (e.g., TreeMap uses TreeMapNode internally)
-    let mut all_generic_structs: IndexMap<String, Vec<(ModuleSource, TirStruct)>> = IndexMap::new();
+    let mut all_generic_structs: IndexMap<String, Vec<(ModuleSource, TirStruct)>> =
+        IndexMap::default();
     for (module_source, module) in &modules {
         for tir_struct in &module.structs {
             if !tir_struct.type_params.is_empty() {
@@ -109,7 +110,7 @@ pub fn monomorphize_modules_indexed(
     // Maps function name (e.g., "i32^Stringify::to_str") → module source.
     // This enables correct module resolution when monomorphizing type param
     // receiver calls (e.g., T^Trait::method → ConcreteType^Trait::method).
-    let mut trait_method_locations: IndexMap<String, ModuleSource> = IndexMap::new();
+    let mut trait_method_locations: IndexMap<String, ModuleSource> = IndexMap::default();
     for (module_source, module) in &modules {
         for func_rc in &module.functions {
             let func = func_rc.borrow();
@@ -158,7 +159,7 @@ fn monomorphize_with_externals(
 
     // Find modules whose structs are shadowed by the entry module's definitions
     // This is computed globally, not per-module, because we want consistent shadowing
-    let mut shadowed_modules: IndexSet<ModuleSource> = IndexSet::new();
+    let mut shadowed_modules: IndexSet<ModuleSource> = IndexSet::default();
     for entry_struct_name in entry_generic_struct_names {
         if let Some(sources) = all_generic_structs_with_sources.get(entry_struct_name) {
             // Find external modules that define this struct (not the entry module)
@@ -171,7 +172,7 @@ fn monomorphize_with_externals(
     }
 
     // Build generic structs map based on whether this is the entry module or not
-    let mut all_generic_structs: IndexMap<String, TirStruct> = IndexMap::new();
+    let mut all_generic_structs: IndexMap<String, TirStruct> = IndexMap::default();
 
     if is_entry_module {
         // Entry module: use its own structs + non-shadowed external structs
@@ -259,15 +260,15 @@ impl Monomorphizer {
     fn new(current_module_source: ModuleSource) -> Self {
         Self {
             current_module_source,
-            instantiated: IndexMap::new(),
+            instantiated: IndexMap::default(),
             pending: Vec::new(),
-            type_substitutions: IndexMap::new(),
-            type_to_mangled_name: IndexMap::new(),
-            function_instantiated: IndexMap::new(),
+            type_substitutions: IndexMap::default(),
+            type_to_mangled_name: IndexMap::default(),
+            function_instantiated: IndexMap::default(),
             function_pending: Vec::new(),
-            mangled_struct_to_key: IndexMap::new(),
-            mangled_func_to_key: IndexMap::new(),
-            trait_method_locations: IndexMap::new(),
+            mangled_struct_to_key: IndexMap::default(),
+            mangled_func_to_key: IndexMap::default(),
+            trait_method_locations: IndexMap::default(),
         }
     }
 
@@ -2219,7 +2220,7 @@ impl Monomorphizer {
 
         // Build substitution map: type param index -> concrete type
         // Include both method-level type params AND impl block type params
-        let mut substitution: IndexMap<u32, TypeId> = IndexMap::new();
+        let mut substitution: IndexMap<u32, TypeId> = IndexMap::default();
 
         // Add impl block type params first (e.g., T from impl Counter<T>)
         // Use param.index for lookup so that impls with concrete type args at earlier positions

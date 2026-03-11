@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::fmt::Write as _;
 use std::rc::Rc;
 
-use indexmap::{IndexMap, IndexSet};
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
@@ -86,11 +86,11 @@ impl ClosureLowerer {
             module_source: module_source.clone(),
             collected_closures: Vec::new(),
             functor_infos: Vec::new(),
-            local_to_closure: IndexMap::new(),
-            specializable: IndexSet::new(),
+            local_to_closure: IndexMap::default(),
+            specializable: IndexSet::default(),
             generated_structs: Vec::new(),
             generated_functions: Vec::new(),
-            fn_param_specializations: IndexMap::new(),
+            fn_param_specializations: IndexMap::default(),
         }
     }
 
@@ -800,7 +800,7 @@ impl ClosureLowerer {
                 span: collected.span,
                 local_count,
                 local_types,
-                address_taken_locals: IndexSet::new(),
+                address_taken_locals: IndexSet::default(),
                 is_cm_adapter: false,
                 inline_hint: InlineHint::Auto,
                 comp_features: 0,
@@ -1573,7 +1573,7 @@ impl ClosureLowerer {
         type_table: &mut TypeTable,
     ) {
         // Build a map from function name to function for quick lookup
-        let mut func_by_name: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::new();
+        let mut func_by_name: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
         for func_rc in func_refs {
             let func = func_rc.borrow();
             func_by_name.insert(func.name.clone(), Rc::clone(func_rc));

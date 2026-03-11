@@ -3,6 +3,7 @@
 //! This is the core of the `tir_to_wir` phase, translating each TIR function body
 //! into a sequence of WIR instructions.
 
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
     CallArg, FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
     TirFunction, TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
@@ -12,7 +13,6 @@ use crate::wir::{
     CanonicalIntrinsic, CmFuturePayload, CmScalarType, WirFuncId, WirInstr, WirName, WirType,
     WirTypeDef, WirTypeId,
 };
-use indexmap::{IndexMap, IndexSet};
 
 use super::context::WirContext;
 
@@ -237,7 +237,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
 
         if let Some(ref body) = tir_func.body {
             // Build local name map from params
-            let mut local_names = IndexMap::new();
+            let mut local_names = IndexMap::default();
             for param in &tir_func.params {
                 local_names.insert(param.local_index, param.name.clone());
             }
@@ -255,7 +255,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                     match_counter: 0,
                     local_counter: 0,
                     local_names,
-                    immutable_locals: IndexSet::new(),
+                    immutable_locals: IndexSet::default(),
                 };
                 translator.translate_block(body)
             };
@@ -419,7 +419,7 @@ impl FunctionTranslator<'_, '_> {
     /// Fresh values are newly created and don't alias existing data,
     /// so they can be used directly without copying.
     fn is_fresh_value(expr: &TirExpr) -> bool {
-        Self::is_fresh_in_context(expr, &IndexSet::new())
+        Self::is_fresh_in_context(expr, &IndexSet::default())
     }
 
     /// Check if an expression is fresh, considering locals known to hold fresh values.

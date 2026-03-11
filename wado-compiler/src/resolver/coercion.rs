@@ -2,13 +2,13 @@
 
 use crate::ast::{self, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
+use crate::hashmap::IndexSet;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt,
     TirStmtKind, TypeId, TypeTable,
 };
 use crate::token::Span;
-use indexmap::IndexSet;
 
 use super::Resolver;
 use super::types::{FunctionContext, TypeError};
@@ -559,7 +559,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         );
 
         // Check for duplicate field names
-        let mut seen_fields: IndexSet<&str> = IndexSet::new();
+        let mut seen_fields: IndexSet<&str> = IndexSet::default();
         for field in &struct_lit.fields {
             if !seen_fields.insert(field.name.as_str()) {
                 let _ = self.logger.error(TypeError::DuplicateField {

@@ -15,9 +15,9 @@ use super::postprocess;
 use crate::ast::Type;
 use crate::bundled::wado_bundled_libm_wasm;
 use crate::component_model::{CmInstanceTypeGen, WasiFunctionInfo};
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::project::Project;
 use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmScalarType, WirModule};
-use indexmap::{IndexMap, IndexSet};
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
     ComponentValType, ExportKind, InstanceType, ModuleArg, PrimitiveValType, TypeBounds,
@@ -142,7 +142,7 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
     }
 
     // Collect available WASI functions
-    let mut available_wasi_funcs: IndexSet<String> = IndexSet::new();
+    let mut available_wasi_funcs: IndexSet<String> = IndexSet::default();
     for interface in project.wasi_registry.interfaces() {
         for func in &interface.functions {
             let local_name = func.local_alias_name();
@@ -624,14 +624,14 @@ fn build_scalar_future_types(
     ctx: &mut ComponentModelContext,
     canonical_intrinsics: &[CanonicalIntrinsic],
 ) -> IndexSet<(CmScalarType, u32)> {
-    let mut scalars: IndexSet<CmScalarType> = IndexSet::new();
+    let mut scalars: IndexSet<CmScalarType> = IndexSet::default();
     for intrinsic in canonical_intrinsics {
         if let Some(CmFuturePayload::Scalar(scalar)) = intrinsic.future_payload() {
             scalars.insert(scalar);
         }
     }
 
-    let mut result = IndexSet::new();
+    let mut result = IndexSet::default();
     for scalar in &scalars {
         let prim = cm_scalar_to_primitive(*scalar);
         let type_name = format!("future-{scalar}");
@@ -1064,9 +1064,9 @@ fn generate_wasi_imports(
             let mut instance_type = InstanceType::new();
             let mut local_type_idx = 0u32;
 
-            let mut resource_type_indices: IndexMap<String, u32> = IndexMap::new();
-            let mut own_resource_type_indices: IndexMap<String, u32> = IndexMap::new();
-            let mut borrow_resource_type_indices: IndexMap<String, u32> = IndexMap::new();
+            let mut resource_type_indices: IndexMap<String, u32> = IndexMap::default();
+            let mut own_resource_type_indices: IndexMap<String, u32> = IndexMap::default();
+            let mut borrow_resource_type_indices: IndexMap<String, u32> = IndexMap::default();
             for resource_name in &needed_resources {
                 if let Some(cm_name) = project.wasi_registry.get_resource_cm_name(resource_name) {
                     instance_type.export(
@@ -1137,8 +1137,8 @@ fn generate_wasi_imports(
                 }
             }
 
-            let mut enum_type_indices: IndexMap<String, u32> = IndexMap::new();
-            let mut enum_export_indices: IndexMap<String, u32> = IndexMap::new();
+            let mut enum_type_indices: IndexMap<String, u32> = IndexMap::default();
+            let mut enum_export_indices: IndexMap<String, u32> = IndexMap::default();
             let interface_path = &interface_info.path;
 
             for enum_name in &needed_enums {
@@ -1169,7 +1169,7 @@ fn generate_wasi_imports(
             }
 
             // Emit flags types in the instance type
-            let mut flags_export_indices: IndexMap<String, u32> = IndexMap::new();
+            let mut flags_export_indices: IndexMap<String, u32> = IndexMap::default();
             for flags_name in &needed_flags {
                 if let Some(members) = project.wasi_registry.get_flags_members(flags_name) {
                     instance_type
@@ -1878,7 +1878,7 @@ fn import_interfaces_with_resources(
         .collect();
 
     // Phase 1: Import resource-defining interfaces
-    let mut imported_source_interfaces: IndexSet<String> = IndexSet::new();
+    let mut imported_source_interfaces: IndexSet<String> = IndexSet::default();
     for interface_info in &interfaces_with_resources {
         let Some((resource_wado_name, _resource_cm_name)) = &interface_info.resource_type else {
             continue;
@@ -2085,9 +2085,9 @@ fn import_resource_using_interfaces(
             let mut local_type_idx = 0u32;
 
             // Maps: resource_name -> (alias_local_idx, own_local_idx, borrow_local_idx)
-            let mut resource_alias_indices: IndexMap<String, u32> = IndexMap::new();
-            let mut own_resource_type_indices: IndexMap<String, u32> = IndexMap::new();
-            let mut borrow_resource_type_indices: IndexMap<String, u32> = IndexMap::new();
+            let mut resource_alias_indices: IndexMap<String, u32> = IndexMap::default();
+            let mut own_resource_type_indices: IndexMap<String, u32> = IndexMap::default();
+            let mut borrow_resource_type_indices: IndexMap<String, u32> = IndexMap::default();
 
             for resource_name in &needed_resources {
                 if let Some(cm_name) = project.wasi_registry.get_resource_cm_name(resource_name) {

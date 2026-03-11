@@ -23,11 +23,11 @@
 //! Pass 2 (transform): Single traversal to replace eliminable field accesses
 //!   and remove dead let statements.
 
+use crate::hashmap::IndexMap;
 use crate::project::Project;
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeTable,
 };
-use indexmap::IndexMap;
 
 /// Per-binding analysis state, keyed by the ref local index.
 struct RefInfo {
@@ -460,7 +460,7 @@ fn eliminate_refs_in_function(func: &mut TirFunction, _type_table: &TypeTable) -
     };
 
     // Pass 1: Collect all ref bindings and analyze uses in a single traversal.
-    let mut refs: IndexMap<u32, RefInfo> = IndexMap::new();
+    let mut refs: IndexMap<u32, RefInfo> = IndexMap::default();
     analyze_refs_in_block(body, &mut refs);
 
     // Filter to only eliminable bindings
