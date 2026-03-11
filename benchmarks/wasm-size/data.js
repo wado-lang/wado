@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773232045330,
+  "lastUpdate": 1773236977861,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2480,6 +2480,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/132a665554960866492fb519783120fb294ff316"
         },
         "date": 1773232045115,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2378,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9895,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25163,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d64f557bcdb9ad890d78bf6314a3af5659264739",
+          "message": "Merge pull request #561 from wado-lang/claude/optimize-zlib-interop-dDt2R\n\nMake fuzz tests deterministic with date-based seeding",
+          "timestamp": "2026-03-11T22:47:07+09:00",
+          "tree_id": "ed730a557cac3f3389250b6b97229710c18566b4",
+          "url": "https://github.com/wado-lang/wado/commit/d64f557bcdb9ad890d78bf6314a3af5659264739"
+        },
+        "date": 1773236977644,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
