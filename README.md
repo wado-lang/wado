@@ -254,7 +254,7 @@ Use the provided Makefile task to set up everything automatically:
 make on-task-started  # installs mise and all project tools
 ```
 
-See [.mise.toml](.mise.toml) for the list of managed tools.
+See [mise.toml](mise.toml) for the list of managed tools.
 
 ### Build and Test
 
