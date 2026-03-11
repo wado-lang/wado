@@ -1,0 +1,84 @@
+use { println, Stdout } from "core:cli";
+
+// from array_index_inline_multi.wado
+struct Container<T> {
+    items: Array<T>,
+    markers: Array<bool>,
+}
+
+impl<T> Container<T> {
+    fn get_item(&self, i: i32) -> T {
+        return self.items[i];
+    }
+
+    fn is_flagged(&self, i: i32) -> bool {
+        return self.markers[i];
+    }
+
+    fn count_flagged(&self) -> i32 {
+        let mut count = 0;
+        for let mut i = 0; i < self.markers.len(); i += 1 {
+            if self.markers[i] {
+                count += 1;
+            }
+        }
+        return count;
+    }
+}
+
+// from array_index_inline_nested.wado
+struct Node<K, V> {
+    keys: Array<K>,
+    values: Array<V>,
+    deleted: Array<bool>,
+}
+
+// from array_index_inline_multi.wado
+fn array_index_inline_multi() with Stdout {
+    let c: Container<String> = Container {
+        items: ["apple", "banana", "cherry"],
+        markers: [true, false, true],
+    };
+
+
+    // Multiple method calls that should be inlined
+    let item0 = c.get_item(0);
+    let item1 = c.get_item(1);
+    let item2 = c.get_item(2);
+    let flag0 = c.is_flagged(0);
+    let flag1 = c.is_flagged(1);
+    let count = c.count_flagged();
+
+    println(`items: {item0}, {item1}, {item2}`);
+    println(`flags: {flag0}, {flag1}`);
+    println(`count: {count}`);
+}
+
+// from array_index_inline_nested.wado
+fn array_index_inline_nested() with Stdout {
+    let node: Node<String, i32> = Node {
+        keys: ["apple", "banana", "cherry"],
+        values: [10, 20, 30],
+        deleted: [false, true, false],
+    };
+
+
+    // Access multiple arrays in the same struct
+    let mut sum = 0;
+    for let mut i = 0; i < node.keys.len(); i += 1 {
+        if !node.deleted[i] {
+            sum += node.values[i];
+        }
+    }
+
+    println(`sum (excluding deleted): {sum}`);
+    println(`first key: {node.keys[0]}`);
+}
+
+export fn run() with Stdout {
+    array_index_inline_multi();
+    array_index_inline_nested();
+}
+
+__DATA__
+{"stdout": "items: apple, banana, cherry\nflags: true, false\ncount: 2\nsum (excluding deleted): 40\nfirst key: apple\n"}

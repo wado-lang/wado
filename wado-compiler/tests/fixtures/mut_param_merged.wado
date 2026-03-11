@@ -1,0 +1,165 @@
+use { println, Stdout } from "core:cli";
+
+// from mut_param_basic.wado
+fn increment(mut n: i32) -> i32 {
+    n += 1;
+    return n;
+}
+
+fn double_in_place(mut n: i32) {
+    n = n * 2;
+    // caller's value is unaffected
+}
+
+// from mut_param_string.wado
+fn replace(mut s: String) -> String {
+    s = "new value";
+    return s;
+}
+
+// Appending to a mut string param does not affect the caller's string.
+fn append_bang(mut s: String) -> String {
+    s.append("!");
+    return s;
+}
+
+// Rebinding a mut array param does not affect the caller's binding.
+fn swap_array(mut arr: Array<i32>) -> Array<i32> {
+    arr = [99, 88, 77] as Array<i32>;
+    return arr;
+}
+
+// Mutating an element of a mut array param does not affect the caller's array.
+fn double_first(mut arr: Array<i32>) -> Array<i32> {
+    arr[0] = arr[0] * 2;
+    return arr;
+}
+
+// Appending to a mut array param does not affect the caller's array.
+fn push_zero(mut arr: Array<i32>) -> Array<i32> {
+    arr.append(0);
+    return arr;
+}
+
+// Only the mut param can be reassigned; non-mut param cannot.
+fn compute(mut x: i32, y: i32) -> i32 {
+    x = x * 2;
+    return x + y;
+}
+
+// from mut_param_struct.wado
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+// Rebinding a mut struct param does not affect the caller's binding.
+fn zero_out(mut p: Point) -> Point {
+    p = Point { x: 0, y: 0 };
+    return p;
+}
+
+// In-place field mutation on a mut struct param does not affect the caller.
+fn translate(mut p: Point, dx: i32, dy: i32) -> Point {
+    p.x += dx;
+    p.y += dy;
+    return p;
+}
+
+// In-place field mutation on a non-mut struct param does not affect the caller.
+fn shift(p: Point) -> Point {
+    let mut q = p;
+    q.x += 1;
+    return q;
+}
+
+// from mut_param_basic.wado
+fn mut_param_basic() with Stdout {
+    let x = 5;
+    let result = increment(x);
+    assert result == 6;
+    assert x == 5;
+
+    double_in_place(x);
+    assert x == 5; // still unchanged
+
+    println("ok");
+}
+
+// from mut_param_string.wado
+fn mut_param_string() with Stdout {
+    // String: reassignment does not affect caller.
+    let original = "original";
+    let result = replace(original);
+    assert result == "new value";
+    assert original == "original";
+
+    // String: append does not affect caller (value semantics).
+    let greeting = "hello";
+    let excited = append_bang(greeting);
+    assert excited == "hello!";
+    assert greeting == "hello";
+
+    // Array: rebinding does not affect caller.
+    let a: Array<i32> = [1, 2, 3];
+    let b = swap_array(a);
+    assert b[0] == 99;
+    assert a[0] == 1;
+
+    // Array: element mutation does not affect caller (value semantics).
+    let c: Array<i32> = [10, 20, 30];
+    let d = double_first(c);
+    assert d[0] == 20;
+    assert c[0] == 10; // caller's array is unchanged
+
+    // Array: append does not affect caller's length.
+    let e: Array<i32> = [1, 2, 3];
+    let f = push_zero(e);
+    assert f.len() == 4;
+    assert e.len() == 3; // caller's array is unchanged
+
+    // Mixed mut/non-mut params.
+    let p = 5;
+    let q = 3;
+    assert compute(p, q) == 13; // (5*2) + 3
+    assert p == 5;
+    assert q == 3;
+
+    println("ok");
+}
+
+// from mut_param_struct.wado
+fn mut_param_struct() with Stdout {
+    // Binding rebind does not affect caller.
+    let p = Point { x: 5, y: 10 };
+    let q = zero_out(p);
+    assert q.x == 0;
+    assert q.y == 0;
+    assert p.x == 5;
+    assert p.y == 10;
+
+    // Field mutation in callee does not affect caller (value semantics).
+    let a = Point { x: 1, y: 2 };
+    let b = translate(a, 10, 20);
+    assert b.x == 11;
+    assert b.y == 22;
+    assert a.x == 1; // caller's struct is unchanged
+    assert a.y == 2;
+
+    // Field mutation via local copy in non-mut param does not affect caller.
+    let c = Point { x: 3, y: 4 };
+    let d = shift(c);
+    assert d.x == 4;
+    assert c.x == 3; // caller's struct is unchanged
+
+    println("ok");
+}
+
+export fn run() with Stdout {
+    mut_param_basic();
+    mut_param_string();
+    mut_param_struct();
+}
+
+__DATA__
+{"stdout": "ok\nok\nok\n"}

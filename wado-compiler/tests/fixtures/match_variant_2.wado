@@ -1,0 +1,129 @@
+use { println, Stdout } from "core:cli";
+
+// from match_variant_loop.wado
+variant Align {
+    Left,
+    Center,
+    Right,
+}
+
+struct FormatSpec {
+    align: Align,
+    width: i32,
+    fill: char,
+}
+
+fn apply_padding(s: String, spec: FormatSpec) -> String {
+    let width = spec.width;
+    if width <= 0 || s.len() >= width {
+        return s;
+    }
+
+    let fill = spec.fill;
+    let pad_len = width - s.len();
+
+    let mut result = String::with_capacity(width);
+
+    return match spec.align {
+        Left => {
+            result.append(s);
+            for let mut i = 0; i < pad_len; i += 1 {
+                result.append_char(fill);
+            }
+            result;
+        },
+        Center => {
+            let left_pad = pad_len / 2;
+            let right_pad = pad_len - left_pad;
+            for let mut i = 0; i < left_pad; i += 1 {
+                result.append_char(fill);
+            }
+            result.append(s);
+            for let mut i = 0; i < right_pad; i += 1 {
+                result.append_char(fill);
+            }
+            result;
+        },
+        Right => {
+            for let mut i = 0; i < pad_len; i += 1 {
+                result.append_char(fill);
+            }
+            result.append(s);
+            result;
+        },
+    };
+}
+
+// from match_variant_side_effect.wado
+variant Direction {
+    Left,
+    Center,
+    Right,
+}
+
+// from match_variant_simple.wado
+variant Shape {
+    Circle(f64),
+    Point,
+}
+
+// from match_variant_loop.wado
+fn match_variant_loop() with Stdout {
+    let left = FormatSpec { align: Align::Left, width: 10, fill: '*' };
+    let center = FormatSpec { align: Align::Center, width: 10, fill: '*' };
+    let right = FormatSpec { align: Align::Right, width: 10, fill: '*' };
+
+    println(apply_padding("test", left));
+    println(apply_padding("test", center));
+    println(apply_padding("test", right));
+}
+
+// from match_variant_side_effect.wado
+fn match_variant_side_effect() with Stdout {
+    let dir = Direction::Center;
+
+    // Match used as statement — branches have side effects only (no return value)
+    match dir {
+        Left => {
+            println("go left");
+        },
+        Center => {
+            println("go center");
+        },
+        Right => {
+            println("go right");
+        },
+    };
+
+
+    println("done");
+}
+
+// from match_variant_simple.wado
+fn match_variant_simple() with Stdout {
+    let circle = Shape::Circle(5.0);
+    let point = Shape::Point;
+
+    // Match on Circle
+    let result1 = match circle {
+        Circle(r) => r * r,
+        Point => 0.0,
+    };
+    println(`Circle result: {result1}`);
+
+    // Match on Point
+    let result2 = match point {
+        Circle(r) => r * r,
+        Point => 0.0,
+    };
+    println(`Point result: {result2}`);
+}
+
+export fn run() with Stdout {
+    match_variant_loop();
+    match_variant_side_effect();
+    match_variant_simple();
+}
+
+__DATA__
+{"stdout": "test******\n***test***\n******test\ngo center\ndone\nCircle result: 25\nPoint result: 0\n"}

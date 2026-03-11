@@ -1,7 +1,8 @@
-// Test bitwise operator precedence
-// Shift (<<, >>) > AND (&) > XOR (^) > OR (|)
 
-export fn run() {
+
+
+// from precedence_bitwise.wado
+fn precedence_bitwise() with Stdout {
     // & has higher precedence than |
     // 0b0011 | (0b0100 & 0b0110) = 0b0011 | 0b0100 = 0b0111
     let a = 0b0011 | 0b0100 & 0b0110;
@@ -42,5 +43,65 @@ export fn run() {
     assert h == 0b111;
 }
 
+// from precedence_bitwise_vs_comparison.wado
+fn precedence_bitwise_vs_comparison() with Stdout {
+    // The classic C bug case
+    // bits & MASK == EXPECTED
+    // Wado: (12 & 4) == 4 = 4 == 4 = true
+    // C:    12 & (4 == 4) = 12 & 1 = 0 (would be falsy)
+    let bits = 12;  // 0b1100
+    let mask = 4;  // 0b0100
+    let expected = 4;
+
+    // This should work correctly in Wado (bitwise first, then comparison)
+    let result_and = bits & mask == expected;
+    assert result_and == true;
+
+    // Test with bitwise OR
+    // 1 | 2 == 3 should be (1 | 2) == 3 = 3 == 3 = true
+    let result_or = 1 | 2 == 3;
+    assert result_or == true;
+
+    // Test with bitwise XOR
+    // 5 ^ 3 == 6 should be (5 ^ 3) == 6 = 6 == 6 = true
+    let result_xor = 5 ^ 3 == 6;
+    assert result_xor == true;
+
+    // Test with != comparison
+    // 7 & 3 != 0 should be (7 & 3) != 0 = 3 != 0 = true
+    let result_ne = 7 & 3 != 0;
+    assert result_ne == true;
+
+    // Test with < comparison
+    // 8 & 7 < 10 should be (8 & 7) < 10 = 0 < 10 = true
+    let result_lt = 8 & 7 < 10;
+    assert result_lt == true;
+
+    // Test with > comparison
+    // 15 | 1 > 10 should be (15 | 1) > 10 = 15 > 10 = true
+    let result_gt = 15 | 1 > 10;
+    assert result_gt == true;
+
+    // Test with <= comparison
+    // 6 ^ 2 <= 4 should be (6 ^ 2) <= 4 = 4 <= 4 = true
+    let result_le = 6 ^ 2 <= 4;
+    assert result_le == true;
+
+    // Test with >= comparison
+    // 3 & 7 >= 3 should be (3 & 7) >= 3 = 3 >= 3 = true
+    let result_ge = 3 & 7 >= 3;
+    assert result_ge == true;
+
+    // Complex expression: bitwise, then comparison
+    // 12 & 8 | 4 == 12 should be ((12 & 8) | 4) == 12 = (8 | 4) == 12 = 12 == 12 = true
+    let complex = 12 & 8 | 4 == 12;
+    assert complex == true;
+}
+
+export fn run() with Stdout {
+    precedence_bitwise();
+    precedence_bitwise_vs_comparison();
+}
+
 __DATA__
-{}
+{"stdout": ""}

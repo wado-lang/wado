@@ -1,0 +1,95 @@
+use { println, Stdout } from "core:cli";
+
+
+// from closure_iterator_chain.wado
+fn closure_iterator_chain() with Stdout {
+    let nums: Array<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+    // filter then map: square the even numbers
+    let result = nums.iter().filter(|x: i32| x % 2 == 0).map(|x: i32| x * x).collect();
+    for let x of result {
+        println(`{x}`);
+    }
+    // Expected: 4, 16, 36, 64, 100
+
+    // map then fold: sum of doubled values
+    let sum = nums.iter().map(|x: i32| x * 2).fold(0, |acc: i32, x: i32| acc + x);
+    println(`{sum}`);  // 110
+}
+
+// from closure_iterator_filter.wado
+fn closure_iterator_filter() with Stdout {
+    let nums: Array<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+    // Filter evens
+    let evens = nums.iter().filter(|x: i32| x % 2 == 0).collect();
+    for let x of evens {
+        println(`{x}`);
+    }
+
+    // Filter with captured threshold
+    let threshold = 5;
+    let large = nums.iter().filter(|x: i32| x > threshold).collect();
+    for let x of large {
+        println(`{x}`);
+    }
+}
+
+// from closure_iterator_fold.wado
+fn closure_iterator_fold() with Stdout {
+    let nums: Array<i32> = [1, 2, 3, 4, 5];
+
+    // Sum
+    let sum = nums.iter().fold(0, |acc: i32, x: i32| acc + x);
+    println(`{sum}`);  // 15
+
+    // Product
+    let product = nums.iter().fold(1, |acc: i32, x: i32| acc * x);
+    println(`{product}`);  // 120
+
+    // Maximum
+    let max = nums.iter().fold(i32::MIN, |acc: i32, x: i32| {
+        if x > acc {
+            return x;
+        }
+        return acc;
+    });
+    println(`{max}`);  // 5
+
+    // Count elements greater than 2 (using fold as filter+count)
+    let count = nums.iter().fold(0, |acc: i32, x: i32| {
+        if x > 2 {
+            return acc + 1;
+        }
+        return acc;
+    });
+    println(`{count}`);  // 3
+}
+
+// from closure_iterator_map.wado
+fn closure_iterator_map() with Stdout {
+    let nums: Array<i32> = [1, 2, 3, 4, 5];
+
+    // Basic map: double each element
+    let doubled = nums.iter().map(|x: i32| x * 2).collect();
+    for let x of doubled {
+        println(`{x}`);
+    }
+
+    // Map with capture
+    let factor = 3;
+    let tripled = nums.iter().map(|x: i32| x * factor).collect();
+    for let x of tripled {
+        println(`{x}`);
+    }
+}
+
+export fn run() with Stdout {
+    closure_iterator_chain();
+    closure_iterator_filter();
+    closure_iterator_fold();
+    closure_iterator_map();
+}
+
+__DATA__
+{"stdout": "4\n16\n36\n64\n100\n110\n2\n4\n6\n8\n10\n6\n7\n8\n9\n10\n15\n120\n5\n3\n2\n4\n6\n8\n10\n3\n6\n9\n12\n15\n"}

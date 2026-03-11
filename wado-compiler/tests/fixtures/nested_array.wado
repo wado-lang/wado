@@ -1,0 +1,114 @@
+use { println, Stdout } from "core:cli";
+
+
+// from nested_array_3deep_iterate_test.wado
+fn nested_array_3deep_iterate_test() with Stdout {
+    let deep: Array<Array<Array<i32>>> = [[[1, 2], [3]], [[4, 5, 6]]];
+
+    // Access inner elements
+    println(`{deep[0][0][1]}`);
+    println(`{deep[1][0][2]}`);
+
+    // Nested iteration
+    let mut total = 0;
+    for let plane of deep {
+        for let row of plane {
+            for let val of row {
+                total += val;
+            }
+        }
+    }
+    println(`{total}`);
+
+    println("ok");
+}
+
+// from nested_array_iterate_test.wado
+fn nested_array_iterate_test() with Stdout {
+    let matrix: Array<Array<i32>> = [[10, 20], [30, 40]];
+
+    // Index access on nested array
+    let first_row = matrix[0];
+    println(`{first_row[0]}`);
+
+    // For-of iteration over nested array
+    let mut buf = "";
+    for let row of matrix {
+        for let val of row {
+            buf = String::concat(buf, `{val} `);
+        }
+        buf = String::concat(buf, "\n");
+    }
+    println(buf);
+
+    println("ok");
+}
+
+// from nested_array_method_test.wado
+fn nested_array_method_test() with Stdout {
+    let matrix: Array<Array<i32>> = [[1, 2, 3], [4, 5]];
+
+    // len() on retrieved element
+    let row0 = matrix[0];
+    println(`{row0.len()}`);
+
+    // Direct method chain
+    println(`{matrix[1].len()}`);
+
+    println("ok");
+}
+
+// from nested_array_mutate_test.wado
+fn nested_array_mutate_test() with Stdout {
+    let mut matrix: Array<Array<i32>> = [[1, 2], [3, 4]];
+
+    // Append to inner array
+    let mut row = matrix[0];
+    row.append(99);
+    println(`{row:?}`);
+
+    // Replace inner array
+    let new_row: Array<i32> = [10, 20, 30];
+    matrix[0] = new_row;
+    println(`{matrix:?}`);
+
+    println("ok");
+}
+
+// from nested_array_option_access_test.wado
+fn nested_array_option_access_test() with Stdout {
+    let a: Option<i32> = Option::<i32>::Some(42);
+    let b: Option<i32> = null;
+    let c: Option<i32> = Option::<i32>::Some(99);
+    let arr: Array<Option<i32>> = [a, b, c];
+
+    // Index and pattern match
+    if let Some(x) = arr[0] {
+        println(`first: {x}`);
+    }
+    if let None = arr[1] {
+        println("second: null");
+    }
+
+    // For-of and match
+    for let item of arr {
+        let s = match item {
+            Some(n) => `Some({n})`,
+            None => "None",
+        };
+        println(s);
+    }
+
+    println("ok");
+}
+
+export fn run() with Stdout {
+    nested_array_3deep_iterate_test();
+    nested_array_iterate_test();
+    nested_array_method_test();
+    nested_array_mutate_test();
+    nested_array_option_access_test();
+}
+
+__DATA__
+{"stdout": "2\n6\n21\nok\n10\n10 20 \n30 40 \n\nok\n3\n2\nok\n[1, 2, 99]\n[[10, 20, 30], [3, 4]]\nok\nfirst: 42\nsecond: null\nSome(42)\nNone\nSome(99)\nok\n"}

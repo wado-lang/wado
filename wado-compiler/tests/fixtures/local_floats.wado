@@ -1,8 +1,8 @@
-// Test local floating point variables
-
 use { println, Stdout } from "core:cli";
 
-export fn run() with Stdout {
+
+// from local_floats.wado
+fn local_floats() with Stdout {
     let a = 1.5;
     let b = 2.5;
     let sum = a + b;
@@ -13,5 +13,31 @@ export fn run() with Stdout {
     }
 }
 
+// from local_floats_mut.wado
+fn local_floats_mut() with Stdout {
+    let mut x = 1.0;
+
+    if x == 1.0 {
+        println("x is 1.0");
+    }
+
+    x = 2.5;
+
+    if x == 2.5 {
+        println("x is 2.5");
+    }
+
+    x = x + 0.5;
+
+    if x == 3.0 {
+        println("x is 3.0");
+    }
+}
+
+export fn run() with Stdout {
+    local_floats();
+    local_floats_mut();
+}
+
 __DATA__
-{"stdout": "floats work\n"}
+{"stdout": "floats work\nx is 1.0\nx is 2.5\nx is 3.0\n"}

@@ -1,0 +1,57 @@
+use { println, Stdout } from "core:cli";
+
+// from associated_type_basic.wado
+trait Container {
+    type Item;
+
+    fn get(&self) -> Self::Item;
+}
+
+struct IntBox {
+    value: i32,
+}
+
+impl Container for IntBox {
+    type Item = i32;
+
+    fn get(&self) -> Self::Item {
+        return self.value;
+    }
+}
+
+// from associated_type_index_assign.wado
+struct MutableBox {
+    value: i32,
+}
+
+// Implement IndexAssign trait
+impl<i32> IndexAssign<i32> for MutableBox {
+    type Input = i32;
+
+    fn index_assign(&mut self, _index: i32, value: Self::Input) {
+        self.value = value;
+    }
+}
+
+// from associated_type_basic.wado
+fn associated_type_basic() with Stdout {
+    let box = IntBox { value: 42 };
+    let val = box.get();
+    println(`Value: {val}`);
+}
+
+// from associated_type_index_assign.wado
+fn associated_type_index_assign() with Stdout {
+    let mut box = MutableBox { value: 0 };
+    // Call index_assign explicitly
+    box.index_assign(0, 42);
+    println(`Value: {box.value}`);
+}
+
+export fn run() with Stdout {
+    associated_type_basic();
+    associated_type_index_assign();
+}
+
+__DATA__
+{"stdout": "Value: 42\nValue: 42\n"}

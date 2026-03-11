@@ -1,0 +1,109 @@
+use { println, Stdout } from "core:cli";
+
+
+// from integer_u64_basic.wado
+fn integer_u64_basic() with Stdout {
+    // Basic assignment
+    let a: u64 = 1000000000000 as u64;
+    let b: u64 = 300000000000 as u64;
+
+    // Arithmetic operations
+    let sum = a + b;
+    println(`sum: {sum}`);
+
+    let diff = a - b;
+    println(`diff: {diff}`);
+
+    let prod: u64 = 1000000 as u64 * 1000000 as u64;
+    println(`prod: {prod}`);
+
+    let quot = a / b;
+    println(`quot: {quot}`);
+
+    let rem = a % b;
+    println(`rem: {rem}`);
+}
+
+// from integer_u64_comparison.wado
+fn integer_u64_comparison() with Stdout {
+    let small: u64 = 100 as u64;
+    // 10000000000000000000 is above i64 max, would be negative if signed
+    let large: u64 = 10000000000000000000 as u64;
+    let zero: u64 = 0 as u64;
+
+    // Critical test: large > small must be true
+    // With signed comparison: negative < 100 (wrong!)
+    // With unsigned comparison: 10000000000000000000 > 100 (correct!)
+    if large > small {
+        println("large > small: true");
+    } else {
+        println("large > small: false");
+    }
+
+    if large >= small {
+        println("large >= small: true");
+    } else {
+        println("large >= small: false");
+    }
+
+    if small < large {
+        println("small < large: true");
+    } else {
+        println("small < large: false");
+    }
+
+    if small <= large {
+        println("small <= large: true");
+    } else {
+        println("small <= large: false");
+    }
+
+    // Comparison with zero
+    if large > zero {
+        println("large > zero: true");
+    } else {
+        println("large > zero: false");
+    }
+
+    // Equality
+    let another_large: u64 = 10000000000000000000 as u64;
+    if large == another_large {
+        println("large == another_large: true");
+    }
+    if large != small {
+        println("large != small: true");
+    }
+}
+
+// from integer_u64_edge.wado
+fn integer_u64_edge() with Stdout {
+    // Max value: 18446744073709551615 (2^64 - 1)
+    let max: u64 = 18446744073709551615 as u64;
+    println(`max: {max}`);
+
+    // Min value: 0
+    let min: u64 = 0 as u64;
+    println(`min: {min}`);
+
+    // Large value above i64 max (9223372036854775807)
+    let large: u64 = 10000000000000000000 as u64;
+    println(`large: {large}`);
+
+    // Division with large unsigned value
+    // 10000000000000000000 / 2 = 5000000000000000000 (correct)
+    let div_result = large / 2 as u64;
+    println(`10000000000000000000 / 2: {div_result}`);
+
+    // Modulo with large unsigned value
+    let mod_result = large % 7 as u64;
+    println(`10000000000000000000 % 7: {mod_result}`);
+}
+
+export fn run() with Stdout {
+    integer_u64_basic();
+    integer_u64_comparison();
+    integer_u64_edge();
+}
+
+__DATA__
+{"stdout": "sum: 1300000000000\ndiff: 700000000000\nprod: 1000000000000\nquot: 3\nrem: 100000000000\nlarge > small: true\nlarge >= small: true\nsmall < large: true\nsmall <= large: true\nlarge > zero: true\nlarge == another_large: true\nlarge != small: true\nmax: 18446744073709551615\nmin: 0\nlarge: 10000000000000000000\n10000000000000000000 / 2: 5000000000000000000\n10000000000000000000 % 7: 3\n"}

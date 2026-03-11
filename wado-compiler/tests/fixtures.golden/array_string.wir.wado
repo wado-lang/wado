@@ -67,6 +67,14 @@ type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
+type "functype/join_names" = fn(ref Array<String>) -> ref String;
+
+type "functype/array_string" = fn();
+
+type "functype/array_string_cast" = fn();
+
+type "functype/array_string_param" = fn();
+
 type "functype/run" = fn();
 
 type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
@@ -144,47 +152,115 @@ import fn waitable-set-drop from "wasi/waitable-set-drop";
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
-fn run() with Stdout {
+fn join_names(names) {
+    let __local_1: ref String;
+    return __tmpl: block -> ref String {
+        __local_1 = String { repr: builtin::array_new<u8>(37), used: 0 };
+        String::append(__local_1, __inline_Array_String__IndexValue__index_value_1: block -> ref String {
+            if 0 >= names.used {
+                "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                unreachable;
+            };
+            break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref String>(names.repr, 0);
+        });
+        String::append(__local_1, String { repr: array.new_data<u8>(" and "), used: 5 });
+        String::append(__local_1, __inline_Array_String__IndexValue__index_value_2: block -> ref String {
+            if 1 >= names.used {
+                "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                unreachable;
+            };
+            break __inline_Array_String__IndexValue__index_value_2: builtin::array_get<ref String>(names.repr, 1);
+        });
+        break __tmpl: __local_1;
+    };
+}
+
+fn array_string() with Stdout {
     let __local_0: ref Array<String>;
     let names: ref Array<String>;
     let __local_2: ref String;
-    __inline___initialize_modules_0: block {
-        if __modules_initialized {
-            break __inline___initialize_modules_0;
-        };
-        __modules_initialized = 1;
-    };
     names = __seq_lit: block -> ref Array<String> {
         __local_0 = Array<String> { repr: array.new_fixed<ref String>(String { repr: array.new_data<u8>("Alice"), used: 5 }, String { repr: array.new_data<u8>("Bob"), used: 3 }, String { repr: array.new_data<u8>("Charlie"), used: 7 }), used: 3 };
         break __seq_lit: __local_0;
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(52), used: 0 };
-        String::append(__local_2, __inline_Array_String__IndexValue__index_value_9: block -> ref String {
+        String::append(__local_2, __inline_Array_String__IndexValue__index_value_7: block -> ref String {
             if 0 >= names.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
-            break __inline_Array_String__IndexValue__index_value_9: builtin::array_get<ref String>(names.repr, 0);
+            break __inline_Array_String__IndexValue__index_value_7: builtin::array_get<ref String>(names.repr, 0);
         });
         String::append(__local_2, String { repr: array.new_data<u8>(", "), used: 2 });
-        String::append(__local_2, __inline_Array_String__IndexValue__index_value_10: block -> ref String {
+        String::append(__local_2, __inline_Array_String__IndexValue__index_value_8: block -> ref String {
             if 1 >= names.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
-            break __inline_Array_String__IndexValue__index_value_10: builtin::array_get<ref String>(names.repr, 1);
+            break __inline_Array_String__IndexValue__index_value_8: builtin::array_get<ref String>(names.repr, 1);
         });
         String::append(__local_2, String { repr: array.new_data<u8>(", "), used: 2 });
-        String::append(__local_2, __inline_Array_String__IndexValue__index_value_11: block -> ref String {
+        String::append(__local_2, __inline_Array_String__IndexValue__index_value_9: block -> ref String {
             if 2 >= names.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
-            break __inline_Array_String__IndexValue__index_value_11: builtin::array_get<ref String>(names.repr, 2);
+            break __inline_Array_String__IndexValue__index_value_9: builtin::array_get<ref String>(names.repr, 2);
         });
         break __tmpl: __local_2;
     });
+}
+
+fn array_string_cast() with Stdout {
+    let __local_0: ref Array<String>;
+    let names: ref Array<String>;
+    let __local_2: ref String;
+    names = __seq_lit: block -> ref Array<String> {
+        __local_0 = Array<String> { repr: array.new_fixed<ref String>(String { repr: array.new_data<u8>("Hello"), used: 5 }, String { repr: array.new_data<u8>("World"), used: 5 }), used: 2 };
+        break __seq_lit: __local_0;
+    };
+    "core:cli/println"(__tmpl: block -> ref String {
+        __local_2 = String { repr: builtin::array_new<u8>(33), used: 0 };
+        String::append(__local_2, __inline_Array_String__IndexValue__index_value_6: block -> ref String {
+            if 0 >= names.used {
+                "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                unreachable;
+            };
+            break __inline_Array_String__IndexValue__index_value_6: builtin::array_get<ref String>(names.repr, 0);
+        });
+        String::append(__local_2, String { repr: array.new_data<u8>(" "), used: 1 });
+        String::append(__local_2, __inline_Array_String__IndexValue__index_value_7: block -> ref String {
+            if 1 >= names.used {
+                "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                unreachable;
+            };
+            break __inline_Array_String__IndexValue__index_value_7: builtin::array_get<ref String>(names.repr, 1);
+        });
+        break __tmpl: __local_2;
+    });
+}
+
+fn array_string_param() with Stdout {
+    let __local_0: ref Array<String>;
+    let result: ref String;
+    result = join_names(__seq_lit: block -> ref Array<String> {
+        __local_0 = Array<String> { repr: array.new_fixed<ref String>(String { repr: array.new_data<u8>("Alice"), used: 5 }, String { repr: array.new_data<u8>("Bob"), used: 3 }), used: 2 };
+        break __seq_lit: __local_0;
+    });
+    "core:cli/println"(result);
+}
+
+fn run() with Stdout {
+    __inline___initialize_modules_0: block {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        };
+        __modules_initialized = 1;
+    };
+    array_string();
+    array_string_cast();
+    array_string_param();
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
@@ -270,8 +346,8 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         __local_11 = StrUtf8ByteIter { repr: ref.as_non_null(message.repr), used: message.used, index: 0 };
         break __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: __local_11;
     };
-    b12: block {
-        l13: loop {
+    b16: block {
+        l17: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: u8;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(__iter_0);
@@ -279,9 +355,9 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
                 b = __sroa___pattern_temp_0_payload_0;
                 "core:cli/Array<u8>::append"(arr, b);
             } else {
-                break b12;
+                break b16;
             };
-            continue l13;
+            continue l17;
         };
     };
     if add_newline {
@@ -329,13 +405,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l18: loop {
+            l22: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l18;
+                continue l22;
             };
         };
     };
@@ -359,8 +435,8 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         __local_11 = StrUtf8ByteIter { repr: ref.as_non_null(message.repr), used: message.used, index: 0 };
         break __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: __local_11;
     };
-    b21: block {
-        l22: loop {
+    b25: block {
+        l26: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: u8;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(__iter_2);
@@ -368,9 +444,9 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
                 b = __sroa___pattern_temp_0_payload_0;
                 "core:internal/Array<u8>::append"(arr, b);
             } else {
-                break b21;
+                break b25;
             };
-            continue l22;
+            continue l26;
         };
     };
     if add_newline {

@@ -6,6 +6,14 @@ struct Box<i32> {  // from core:internal  // Box<T> with T=i32
     mut value: i32,
 }
 
+struct Box<i64> {  // from core:internal  // Box<T> with T=i64
+    mut value: i64,
+}
+
+struct Box<u64> {  // from core:internal  // Box<T> with T=u64
+    mut value: u64,
+}
+
 array array<u8> (mut u8);
 
 struct String {
@@ -37,6 +45,10 @@ type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
 type "functype/wasi/task-return" = fn(i32);
 
+type "functype/bitwise_shift" = fn();
+
+type "functype/bitwise_shift_i64_by_i32" = fn();
+
 type "functype/run" = fn();
 
 type "functype/__cm_export__run" = fn();
@@ -54,22 +66,25 @@ import memory (1) from "mem/memory";
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
-fn run() {
+fn bitwise_shift() with Stdout {
+}
+
+fn bitwise_shift_i64_by_i32() with Stdout {
+}
+
+fn run() with Stdout {
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
         };
         __modules_initialized = 1;
     };
+    bitwise_shift();
+    bitwise_shift_i64_by_i32();
 }
 
 fn __cm_export__run() {
-    __inline___initialize_modules_0: block {
-        if __modules_initialized {
-            break __inline___initialize_modules_0;
-        };
-        __modules_initialized = 1;
-    };
+    run();
     "wasi/task-return"(0);
 }
 

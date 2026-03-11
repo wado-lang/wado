@@ -1,11 +1,18 @@
 use { println, Stdout } from "core:cli";
 
+// from inspect_struct.wado
 struct Point {
     x: i32,
     y: i32,
 }
 
-export fn run() with Stdout {
+// from inspect_struct_option_field.wado
+struct Wrapper {
+    value: Option<i32>,
+}
+
+// from inspect_struct.wado
+fn inspect_struct() with Stdout {
     let p = Point { x: 10, y: 20 };
     println(`{p:?}`);
 
@@ -13,5 +20,19 @@ export fn run() with Stdout {
     println(`{origin:?}`);
 }
 
+// from inspect_struct_option_field.wado
+fn inspect_struct_option_field() with Stdout {
+    let w1 = Wrapper { value: Option::<i32>::Some(42) };
+    println(`{w1:?}`);
+
+    let w2 = Wrapper { value: null };
+    println(`{w2:?}`);
+}
+
+export fn run() with Stdout {
+    inspect_struct();
+    inspect_struct_option_field();
+}
+
 __DATA__
-{"stdout": "Point { x: 10, y: 20 }\nPoint { x: 0, y: 0 }\n"}
+{"stdout": "Point { x: 10, y: 20 }\nPoint { x: 0, y: 0 }\nWrapper { value: Option::Some(42) }\nWrapper { value: Option::None }\n"}

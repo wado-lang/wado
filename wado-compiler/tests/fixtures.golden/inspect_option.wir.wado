@@ -10,7 +10,29 @@ struct Box<Option<i32>> {  // from core:internal  // Box<T> with T=Option<i32>
     mut value: ref Option<i32>,
 }
 
+struct Box<Option<Option<Option<i32>>>> {  // from core:internal  // Box<T> with T=Option<Option<Option<i32>>>
+    mut value: ref Option<Option<Option<i32>>>,
+}
+
+struct Box<Option<Option<i32>>> {  // from core:internal  // Box<T> with T=Option<Option<i32>>
+    mut value: ref Option<Option<i32>>,
+}
+
+struct Box<Option<Option<String>>> {  // from core:internal  // Box<T> with T=Option<Option<String>>
+    mut value: ref Option<Option<String>>,
+}
+
+struct Box<Option<String>> {  // from core:internal  // Box<T> with T=Option<String>
+    mut value: ref Option<String>,
+}
+
 array array<u8> (mut u8);
+
+struct StrCharIter {
+    mut repr: ref array<u8>,
+    mut used: i32,
+    mut byte_index: i32,
+}
 
 struct StrUtf8ByteIter {
     mut repr: ref array<u8>,
@@ -45,6 +67,16 @@ struct [Stream<u8>, StreamWritable<u8>] {
     mut 1: i32,
 }
 
+variant Option<String> {
+    Some(ref String),
+    None,
+}
+
+struct Option<String>::Some {
+    discriminant: i32,
+    payload_0: ref String,
+}
+
 variant Option<u8> {
     Some(u8),
     None,
@@ -55,6 +87,16 @@ struct Option<u8>::Some {
     payload_0: u8,
 }
 
+variant Option<char> {
+    Some(char),
+    None,
+}
+
+struct Option<char>::Some {
+    discriminant: i32,
+    payload_0: char,
+}
+
 variant Option<i32> {
     Some(i32),
     None,
@@ -63,6 +105,36 @@ variant Option<i32> {
 struct Option<i32>::Some {
     discriminant: i32,
     payload_0: i32,
+}
+
+variant Option<Option<i32>> {
+    Some(ref Option<i32>),
+    None,
+}
+
+struct Option<Option<i32>>::Some {
+    discriminant: i32,
+    payload_0: ref Option<i32>,
+}
+
+variant Option<Option<String>> {
+    Some(ref Option<String>),
+    None,
+}
+
+struct Option<Option<String>>::Some {
+    discriminant: i32,
+    payload_0: ref Option<String>,
+}
+
+variant Option<Option<Option<i32>>> {
+    Some(ref Option<Option<i32>>),
+    None,
+}
+
+struct Option<Option<Option<i32>>>::Some {
+    discriminant: i32,
+    payload_0: ref Option<Option<i32>>,
 }
 
 struct Array<u8> {  // Array<T> with T=u8
@@ -84,6 +156,14 @@ type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 type "functype/wasi/task-return" = fn(i32);
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
+
+type "functype/inspect_option" = fn();
+
+type "functype/inspect_option_deeply_nested" = fn();
+
+type "functype/inspect_option_nested" = fn();
+
+type "functype/inspect_option_of_string" = fn();
 
 type "functype/run" = fn();
 
@@ -125,13 +205,25 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> ref Option<u8>;
 
+type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<char>;
+
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/Option<Option<String>>^Inspect::inspect" = fn(ref "core:internal/Box<Option<Option<String>>>", ref Formatter);
+
+type "functype/Option<String>^Inspect::inspect" = fn(ref "core:internal/Box<Option<String>>", ref Formatter);
+
+type "functype/Option<Option<i32>>^Inspect::inspect" = fn(ref "core:internal/Box<Option<Option<i32>>>", ref Formatter);
+
+type "functype/Option<Option<Option<i32>>>^Inspect::inspect" = fn(ref "core:internal/Box<Option<Option<Option<i32>>>>", ref Formatter);
 
 type "functype/Option<i32>^Inspect::inspect" = fn(ref "core:internal/Box<Option<i32>>", ref Formatter);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
+
+type "functype/String^Inspect::inspect" = fn(ref String, ref Formatter);
 
 type "functype/wasi/stream-write" = fn(i32, i32, i32) -> i32;
 
@@ -151,7 +243,17 @@ type "functype/wasi/waitable-set-drop" = fn(i32);
 
 type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> [i32, u8];
 
+type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
+
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
+
+type "functype/Option<Option<String>>^Inspect::inspect" = fn(ref Option<Option<String>>, ref Formatter);
+
+type "functype/Option<String>^Inspect::inspect" = fn(ref Option<String>, ref Formatter);
+
+type "functype/Option<Option<i32>>^Inspect::inspect" = fn(ref Option<Option<i32>>, ref Formatter);
+
+type "functype/Option<Option<Option<i32>>>^Inspect::inspect" = fn(ref Option<Option<Option<i32>>>, ref Formatter);
 
 type "functype/Option<i32>^Inspect::inspect" = fn(ref Option<i32>, ref Formatter);
 
@@ -171,27 +273,21 @@ import fn waitable-set-drop from "wasi/waitable-set-drop";
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
-fn run() with Stdout {
+fn inspect_option() with Stdout {
     let some_val: ref Option<i32>;
     let none_val: ref Option<i32>;
     let __local_2: ref String;
     let __local_3: ref Formatter;
     let __local_4: ref String;
     let __local_5: ref Formatter;
-    let __local_8: ref String;
-    let __local_10: ref String;
-    __inline___initialize_modules_0: block {
-        if __modules_initialized {
-            break __inline___initialize_modules_0;
-        };
-        __modules_initialized = 1;
-    };
+    let __local_7: ref String;
+    let __local_9: ref String;
     some_val = Option<i32>::Some { discriminant: 0, payload_0: 42 };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = __inline_Formatter__new_3: block -> ref Formatter {
-            __local_8 = __local_2;
-            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_8) };
+        __local_3 = __inline_Formatter__new_1: block -> ref Formatter {
+            __local_7 = __local_2;
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_7) };
         };
         Option<i32>^Inspect::inspect(ref.as_non_null(some_val), __local_3);
         break __tmpl: __local_2;
@@ -199,13 +295,161 @@ fn run() with Stdout {
     none_val = Option<i32> { 1 };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_5 = __inline_Formatter__new_5: block -> ref Formatter {
-            __local_10 = __local_4;
-            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_10) };
+        __local_5 = __inline_Formatter__new_3: block -> ref Formatter {
+            __local_9 = __local_4;
+            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_9) };
         };
         Option<i32>^Inspect::inspect(ref.as_non_null(none_val), __local_5);
         break __tmpl: __local_4;
     });
+}
+
+fn inspect_option_deeply_nested() with Stdout {
+    let deep: ref Option<Option<Option<i32>>>;
+    let mid_null: ref Option<Option<Option<i32>>>;
+    let outer_null: ref Option<Option<Option<i32>>>;
+    let __local_3: ref String;
+    let __local_4: ref Formatter;
+    let __local_5: ref String;
+    let __local_6: ref Formatter;
+    let __local_7: ref String;
+    let __local_8: ref Formatter;
+    let __local_10: ref String;
+    let __local_12: ref String;
+    let __local_14: ref String;
+    deep = Option<Option<Option<i32>>>::Some { discriminant: 0, payload_0: Option<Option<i32>>::Some { discriminant: 0, payload_0: Option<i32>::Some { discriminant: 0, payload_0: 7 } } };
+    "core:cli/println"(__tmpl: block -> ref String {
+        __local_3 = String { repr: builtin::array_new<u8>(16), used: 0 };
+        __local_4 = __inline_Formatter__new_1: block -> ref Formatter {
+            __local_10 = __local_3;
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_10) };
+        };
+        Option<Option<Option<i32>>>^Inspect::inspect(ref.as_non_null(deep), __local_4);
+        break __tmpl: __local_3;
+    });
+    mid_null = Option<Option<Option<i32>>>::Some { discriminant: 0, payload_0: Option<Option<i32>>::Some { discriminant: 0, payload_0: Option<i32> { 1 } } };
+    "core:cli/println"(__tmpl: block -> ref String {
+        __local_5 = String { repr: builtin::array_new<u8>(16), used: 0 };
+        __local_6 = __inline_Formatter__new_3: block -> ref Formatter {
+            __local_12 = __local_5;
+            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+        };
+        Option<Option<Option<i32>>>^Inspect::inspect(ref.as_non_null(mid_null), __local_6);
+        break __tmpl: __local_5;
+    });
+    outer_null = Option<Option<Option<i32>>> { 1 };
+    "core:cli/println"(__tmpl: block -> ref String {
+        __local_7 = String { repr: builtin::array_new<u8>(16), used: 0 };
+        __local_8 = __inline_Formatter__new_5: block -> ref Formatter {
+            __local_14 = __local_7;
+            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_14) };
+        };
+        Option<Option<Option<i32>>>^Inspect::inspect(ref.as_non_null(outer_null), __local_8);
+        break __tmpl: __local_7;
+    });
+}
+
+fn inspect_option_nested() with Stdout {
+    let some_some: ref Option<Option<i32>>;
+    let some_none: ref Option<Option<i32>>;
+    let none: ref Option<Option<i32>>;
+    let __local_3: ref String;
+    let __local_4: ref Formatter;
+    let __local_5: ref String;
+    let __local_6: ref Formatter;
+    let __local_7: ref String;
+    let __local_8: ref Formatter;
+    let __local_10: ref String;
+    let __local_12: ref String;
+    let __local_14: ref String;
+    some_some = Option<Option<i32>>::Some { discriminant: 0, payload_0: Option<i32>::Some { discriminant: 0, payload_0: 42 } };
+    "core:cli/println"(__tmpl: block -> ref String {
+        __local_3 = String { repr: builtin::array_new<u8>(16), used: 0 };
+        __local_4 = __inline_Formatter__new_1: block -> ref Formatter {
+            __local_10 = __local_3;
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_10) };
+        };
+        Option<Option<i32>>^Inspect::inspect(ref.as_non_null(some_some), __local_4);
+        break __tmpl: __local_3;
+    });
+    some_none = Option<Option<i32>>::Some { discriminant: 0, payload_0: Option<i32> { 1 } };
+    "core:cli/println"(__tmpl: block -> ref String {
+        __local_5 = String { repr: builtin::array_new<u8>(16), used: 0 };
+        __local_6 = __inline_Formatter__new_3: block -> ref Formatter {
+            __local_12 = __local_5;
+            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+        };
+        Option<Option<i32>>^Inspect::inspect(ref.as_non_null(some_none), __local_6);
+        break __tmpl: __local_5;
+    });
+    none = Option<Option<i32>> { 1 };
+    "core:cli/println"(__tmpl: block -> ref String {
+        __local_7 = String { repr: builtin::array_new<u8>(16), used: 0 };
+        __local_8 = __inline_Formatter__new_5: block -> ref Formatter {
+            __local_14 = __local_7;
+            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_14) };
+        };
+        Option<Option<i32>>^Inspect::inspect(ref.as_non_null(none), __local_8);
+        break __tmpl: __local_7;
+    });
+}
+
+fn inspect_option_of_string() with Stdout {
+    let some_some: ref Option<Option<String>>;
+    let some_none: ref Option<Option<String>>;
+    let none: ref Option<Option<String>>;
+    let __local_3: ref String;
+    let __local_4: ref Formatter;
+    let __local_5: ref String;
+    let __local_6: ref Formatter;
+    let __local_7: ref String;
+    let __local_8: ref Formatter;
+    let __local_10: ref String;
+    let __local_12: ref String;
+    let __local_14: ref String;
+    some_some = Option<Option<String>>::Some { discriminant: 0, payload_0: Option<String>::Some { discriminant: 0, payload_0: String { repr: array.new_data<u8>("hello"), used: 5 } } };
+    "core:cli/println"(__tmpl: block -> ref String {
+        __local_3 = String { repr: builtin::array_new<u8>(16), used: 0 };
+        __local_4 = __inline_Formatter__new_1: block -> ref Formatter {
+            __local_10 = __local_3;
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_10) };
+        };
+        Option<Option<String>>^Inspect::inspect(ref.as_non_null(some_some), __local_4);
+        break __tmpl: __local_3;
+    });
+    some_none = Option<Option<String>>::Some { discriminant: 0, payload_0: Option<String> { 1 } };
+    "core:cli/println"(__tmpl: block -> ref String {
+        __local_5 = String { repr: builtin::array_new<u8>(16), used: 0 };
+        __local_6 = __inline_Formatter__new_3: block -> ref Formatter {
+            __local_12 = __local_5;
+            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_12) };
+        };
+        Option<Option<String>>^Inspect::inspect(ref.as_non_null(some_none), __local_6);
+        break __tmpl: __local_5;
+    });
+    none = Option<Option<String>> { 1 };
+    "core:cli/println"(__tmpl: block -> ref String {
+        __local_7 = String { repr: builtin::array_new<u8>(16), used: 0 };
+        __local_8 = __inline_Formatter__new_5: block -> ref Formatter {
+            __local_14 = __local_7;
+            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_14) };
+        };
+        Option<Option<String>>^Inspect::inspect(ref.as_non_null(none), __local_8);
+        break __tmpl: __local_7;
+    });
+}
+
+fn run() with Stdout {
+    __inline___initialize_modules_0: block {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        };
+        __modules_initialized = 1;
+    };
+    inspect_option();
+    inspect_option_deeply_nested();
+    inspect_option_nested();
+    inspect_option_of_string();
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
@@ -539,6 +783,62 @@ fn StrUtf8ByteIter^Iterator::next(self) {
     return 0; byte;
 }
 
+fn StrCharIter^Iterator::next(self) {
+    let b0: u8;
+    let b1_2: u8;
+    let code_3: u8;
+    let b1_4: u8;
+    let b2_5: u8;
+    let code_6: u8;
+    let b1_7: u8;
+    let b2_8: u8;
+    let b3: u8;
+    let code_10: u8;
+    let __local_11: u32;
+    let __local_12: u32;
+    let __local_13: u32;
+    let __local_14: u32;
+    if self.byte_index >= self.used {
+        return 1; 0;
+    };
+    b0 = builtin::array_get_u8(self.repr, self.byte_index);
+    self.byte_index = self.byte_index + 1;
+    if b0 <u 128 {
+        return 0; __inline_char__from_u32_unchecked_0: block -> char {
+            __local_11 = b0;
+            break __inline_char__from_u32_unchecked_0: __local_11;
+        };
+    };
+    if b0 <u 224 {
+        b1_2 = builtin::array_get_u8(self.repr, self.byte_index);
+        self.byte_index = self.byte_index + 1;
+        code_3 = ((b0 & 31) << 6) | (b1_2 & 63);
+        return 0; __inline_char__from_u32_unchecked_1: block -> char {
+            __local_12 = code_3;
+            break __inline_char__from_u32_unchecked_1: __local_12;
+        };
+    };
+    if b0 <u 240 {
+        b1_4 = builtin::array_get_u8(self.repr, self.byte_index);
+        b2_5 = builtin::array_get_u8(self.repr, self.byte_index + 1);
+        self.byte_index = self.byte_index + 2;
+        code_6 = (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63);
+        return 0; __inline_char__from_u32_unchecked_2: block -> char {
+            __local_13 = code_6;
+            break __inline_char__from_u32_unchecked_2: __local_13;
+        };
+    };
+    b1_7 = builtin::array_get_u8(self.repr, self.byte_index);
+    b2_8 = builtin::array_get_u8(self.repr, self.byte_index + 1);
+    b3 = builtin::array_get_u8(self.repr, self.byte_index + 2);
+    self.byte_index = self.byte_index + 3;
+    code_10 = ((((b0 & 7) << 18) | ((b1_7 & 63) << 12)) | ((b2_8 & 63) << 6)) | (b3 & 63);
+    return 0; __inline_char__from_u32_unchecked_3: block -> char {
+        __local_14 = code_10;
+        break __inline_char__from_u32_unchecked_3: __local_14;
+    };
+}
+
 fn String::append_char(self, c) {
     let code: u32;
     code = c;
@@ -566,6 +866,70 @@ fn String::append_char(self, c) {
     };
 }
 
+fn Option<Option<String>>^Inspect::inspect(self, f) {
+    let __local_3: ref String;
+    let __local_5: ref String;
+    let __local_7: ref String;
+    if ref.test Option<Option<String>>::Some(self) {
+        __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
+        String::append(f.buf, __local_3);
+        Option<String>^Inspect::inspect(ref.as_non_null(ref.cast Option<Option<String>>::Some(self).payload_0), f);
+        __local_5 = String { repr: array.new_data<u8>(")"), used: 1 };
+        String::append(f.buf, __local_5);
+    } else if self.discriminant == 1 {
+        __local_7 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
+        String::append(f.buf, __local_7);
+    };
+}
+
+fn Option<String>^Inspect::inspect(self, f) {
+    let __local_3: ref String;
+    let __local_5: ref String;
+    let __local_7: ref String;
+    if ref.test Option<String>::Some(self) {
+        __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
+        String::append(f.buf, __local_3);
+        String^Inspect::inspect(ref.cast Option<String>::Some(self).payload_0, f);
+        __local_5 = String { repr: array.new_data<u8>(")"), used: 1 };
+        String::append(f.buf, __local_5);
+    } else if self.discriminant == 1 {
+        __local_7 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
+        String::append(f.buf, __local_7);
+    };
+}
+
+fn Option<Option<i32>>^Inspect::inspect(self, f) {
+    let __local_3: ref String;
+    let __local_5: ref String;
+    let __local_7: ref String;
+    if ref.test Option<Option<i32>>::Some(self) {
+        __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
+        String::append(f.buf, __local_3);
+        Option<i32>^Inspect::inspect(ref.as_non_null(ref.cast Option<Option<i32>>::Some(self).payload_0), f);
+        __local_5 = String { repr: array.new_data<u8>(")"), used: 1 };
+        String::append(f.buf, __local_5);
+    } else if self.discriminant == 1 {
+        __local_7 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
+        String::append(f.buf, __local_7);
+    };
+}
+
+fn Option<Option<Option<i32>>>^Inspect::inspect(self, f) {
+    let __local_3: ref String;
+    let __local_5: ref String;
+    let __local_7: ref String;
+    if ref.test Option<Option<Option<i32>>>::Some(self) {
+        __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
+        String::append(f.buf, __local_3);
+        Option<Option<i32>>^Inspect::inspect(ref.as_non_null(ref.cast Option<Option<Option<i32>>>::Some(self).payload_0), f);
+        __local_5 = String { repr: array.new_data<u8>(")"), used: 1 };
+        String::append(f.buf, __local_5);
+    } else if self.discriminant == 1 {
+        __local_7 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
+        String::append(f.buf, __local_7);
+    };
+}
+
 fn Option<i32>^Inspect::inspect(self, f) {
     let __local_3: ref String;
     let __local_9: ref String;
@@ -589,13 +953,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l40: loop {
+            l52: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l40;
+                continue l52;
             };
         };
     };
@@ -679,6 +1043,55 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         };
         return String::internal_reserve_uninit(self.buf, digit_count);
     };
+}
+
+fn String^Inspect::inspect(self, f) {
+    let __iter_4: ref StrCharIter;
+    let c: char;
+    let __local_7: ref StrCharIter;
+    let __local_8: ref String;
+    let _licm_buf_33: ref String;
+    String::append_char(f.buf, 34);
+    __iter_4 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
+        __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
+            __local_8 = self;
+            break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
+        };
+        break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
+    };
+    _licm_buf_33 = f.buf;
+    b71: block {
+        l72: loop {
+            let __sroa___pattern_temp_0_discriminant: i32;
+            let __sroa___pattern_temp_0_payload_0: char;
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_4);
+            if __sroa___pattern_temp_0_discriminant == 0 {
+                c = __sroa___pattern_temp_0_payload_0;
+                if c == 34 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 34);
+                } else if c == 92 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 92);
+                } else if c == 10 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 110);
+                } else if c == 13 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 114);
+                } else if c == 9 {
+                    String::append_char(_licm_buf_33, 92);
+                    String::append_char(_licm_buf_33, 116);
+                } else {
+                    String::append_char(_licm_buf_33, c);
+                };
+            } else {
+                break b71;
+            };
+            continue l72;
+        };
+    };
+    String::append_char(f.buf, 34);
 }
 
 export fn __cm_export__run as "run"

@@ -1,11 +1,13 @@
 use { println, Stdout } from "core:cli";
 
+// from inspect_array.wado
 struct Point {
     x: i32,
     y: i32,
 }
 
-export fn run() with Stdout {
+// from inspect_array.wado
+fn inspect_array() with Stdout {
     let arr: Array<i32> = [1, 2, 3];
     println(`{arr:?}`);
 
@@ -24,5 +26,16 @@ export fn run() with Stdout {
     println(`{points}`);
 }
 
+// from inspect_array_option.wado
+fn inspect_array_option() with Stdout {
+    let arr: Array<Option<i32>> = [Option::<i32>::Some(1), null, Option::<i32>::Some(3)];
+    println(`{arr:?}`);
+}
+
+export fn run() with Stdout {
+    inspect_array();
+    inspect_array_option();
+}
+
 __DATA__
-{"stdout": "[1, 2, 3]\n[]\n[42]\n[1, 2, 3]\n[]\n[Point { x: 1, y: 2 }, Point { x: 3, y: 4 }]\n"}
+{"stdout": "[1, 2, 3]\n[]\n[42]\n[1, 2, 3]\n[]\n[Point { x: 1, y: 2 }, Point { x: 3, y: 4 }]\n[Option::Some(1), Option::None, Option::Some(3)]\n"}

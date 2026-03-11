@@ -1,0 +1,93 @@
+use { println, Stdout } from "core:cli";
+
+
+// from integer_u8_basic.wado
+fn integer_u8_basic() with Stdout {
+    // Basic assignment
+    let a: u8 = 10 as u8;
+    let b: u8 = 3 as u8;
+
+    // Arithmetic operations
+    let sum = a + b;
+    println(`sum: {sum}`);
+
+    let diff = a - b;
+    println(`diff: {diff}`);
+
+    let prod = a * b;
+    println(`prod: {prod}`);
+
+    let quot = a / b;
+    println(`quot: {quot}`);
+
+    let rem = a % b;
+    println(`rem: {rem}`);
+}
+
+// from integer_u8_comparison.wado
+fn integer_u8_comparison() with Stdout {
+    let a: u8 = 10 as u8;
+    let b: u8 = 200 as u8;
+    let c: u8 = 0 as u8;
+
+    // Basic comparisons
+    if a < b {
+        println("a < b: true");
+    }
+    if a <= b {
+        println("a <= b: true");
+    }
+    if b > a {
+        println("b > a: true");
+    }
+    if b >= a {
+        println("b >= a: true");
+    }
+
+    // Comparison with zero
+    if c < a {
+        println("c < a: true");
+    }
+    if a > c {
+        println("a > c: true");
+    }
+
+    // Equality
+    let d: u8 = 10 as u8;
+    if a == d {
+        println("a == d: true");
+    }
+    if a != b {
+        println("a != b: true");
+    }
+}
+
+// from integer_u8_edge.wado
+fn integer_u8_edge() with Stdout {
+    // Max value: 255
+    let max: u8 = 255 as u8;
+    println(`max: {max}`);
+
+    // Min value: 0
+    let min: u8 = 0 as u8;
+    println(`min: {min}`);
+
+    // Division with unsigned semantics
+    let a: u8 = 200 as u8;
+    let b: u8 = 3 as u8;
+    let div_result = a / b;
+    println(`200 / 3: {div_result}`);
+
+    // Modulo with unsigned semantics
+    let mod_result = a % b;
+    println(`200 % 3: {mod_result}`);
+}
+
+export fn run() with Stdout {
+    integer_u8_basic();
+    integer_u8_comparison();
+    integer_u8_edge();
+}
+
+__DATA__
+{"stdout": "sum: 13\ndiff: 7\nprod: 30\nquot: 3\nrem: 1\na < b: true\na <= b: true\nb > a: true\nb >= a: true\nc < a: true\na > c: true\na == d: true\na != b: true\nmax: 255\nmin: 0\n200 / 3: 66\n200 % 3: 2\n"}

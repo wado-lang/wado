@@ -1,0 +1,144 @@
+use { println, Stdout } from "core:cli";
+
+
+// from labeled_block_basic.wado
+fn labeled_block_basic() with Stdout {
+    let x = 10;
+
+    // Labeled block creates a new scope with shadowing
+    scope: {
+        let x = 20;  // shadows outer x
+        println(`x in scope: {x}`);
+    }
+
+    // Outer x is unchanged
+    println(`x after scope: {x}`);
+
+    // Nested labeled blocks
+    outer: {
+        let a = 1;
+        inner: {
+            let b = 2;
+            let sum = a + b;
+            println(`a + b = {sum}`);
+        }
+        // b is not visible here
+        println(`a = {a}`);
+    }
+
+    println("labeled block tests passed");
+}
+
+// from labeled_block_break_label.wado
+fn labeled_block_break_label() with Stdout {
+    let mut count = 0;
+    outer: {
+        count = 1;
+        if count == 1 {
+            break outer;
+        }
+        count = 2;  // Should not reach here
+    }
+    assert count == 1;
+    println("ok");
+}
+
+// from labeled_block_expr_nested.wado
+fn labeled_block_expr_nested() with Stdout {
+    let result = outer: {
+        let x = inner: {
+            break inner: 10;
+        };
+        break outer: x * 2;
+    };
+
+
+    // x is 10, now break outer with x * 2
+
+
+    assert result == 20;
+    println("ok");
+}
+
+// from labeled_block_expr_simple.wado
+fn labeled_block_expr_simple() with Stdout {
+    let result = compute: {
+        let a = 10;
+        let b = 20;
+        if a < b {
+            break compute: a + b;
+        }
+        break compute: 0;
+    };
+
+
+    assert result == 30;
+    println("ok");
+}
+
+// from labeled_block_expr_value.wado
+fn labeled_block_expr_value() with Stdout {
+    let x = foo: {
+        for let item of [5, 6, 7] as Array<i32> {
+            if item % 2 == 0 {
+                break foo: item;
+            }
+        }
+        break foo: -1;
+    };
+
+
+    // fallback if no even number found
+
+    println(`x={x}`);
+}
+
+// from labeled_block_in_loop.wado
+fn labeled_block_in_loop() with Stdout {
+    let mut sum = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        search: {
+            if i == 1 {
+                break search;  // Skip this iteration's search block
+            }
+            sum += i * 10;
+        }
+        sum += 1;
+    }
+    // i=0: sum = 0 + 0*10 + 1 = 1
+    // i=1: sum = 1 + 1 = 2 (search block skipped)
+    // i=2: sum = 2 + 2*10 + 1 = 23
+    assert sum == 23;
+    println("ok");
+}
+
+// from labeled_block_nested.wado
+fn labeled_block_nested() with Stdout {
+    let mut result = 0;
+    outer: {
+        result = 1;
+        inner: {
+            result = 2;
+            if result == 2 {
+                break outer;  // Break out of both blocks
+            }
+            result = 3;  // Should not reach here
+        }
+        result = 4;  // Should not reach here
+    }
+    assert result == 2;
+    println("ok");
+}
+
+export fn run() with Stdout {
+    labeled_block_basic();
+    labeled_block_break_label();
+    labeled_block_expr_nested();
+    labeled_block_expr_simple();
+    labeled_block_expr_value();
+    labeled_block_in_loop();
+    labeled_block_nested();
+}
+
+__DATA__
+{"stdout": "x in scope: 20\nx after scope: 10\na + b = 3\na = 1\nlabeled block tests passed\nok\nok\nok\nx=6\nok\nok\n"}

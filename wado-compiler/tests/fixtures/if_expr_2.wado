@@ -1,0 +1,43 @@
+use { println, Stdout } from "core:cli";
+
+// from if_expr_nested_let.wado
+variant Mode {
+    A,
+    B,
+}
+
+fn compute(mode: Mode, x: i32) -> i32 {
+    let n = if mode matches { A } {
+        let a = x * 2;
+        a;
+    } else {
+        x + 1;
+    };
+    return n;
+}
+
+// from if_expr_nested_let.wado
+fn if_expr_nested_let() with Stdout {
+    println(`{compute(Mode::A, 5)}`);
+    println(`{compute(Mode::B, 5)}`);
+}
+
+// from if_expr_no_trailing_semi.wado
+fn if_expr_no_trailing_semi() with Stdout {
+    let x = if true {
+        42;
+    } else {
+        0;
+    };
+
+
+    println(`{x}`);
+}
+
+export fn run() with Stdout {
+    if_expr_nested_let();
+    if_expr_no_trailing_semi();
+}
+
+__DATA__
+{"stdout": "10\n6\n42\n"}

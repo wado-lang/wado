@@ -1,0 +1,75 @@
+use { println, Stdout } from "core:cli";
+
+// from generic_function_nested_calls.wado
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+// from generic_function_returns_struct.wado
+struct Box<T> {
+    value: T,
+}
+
+fn make_box_i32(v: i32) -> Box<i32> {
+    return Box { value: v };
+}
+
+fn make_box_i64(v: i64) -> Box<i64> {
+    return Box { value: v };
+}
+
+// from generic_function_two_params_swap.wado
+fn first<T, U>(a: T, b: U) -> T {
+    return a;
+}
+
+fn second<T, U>(a: T, b: U) -> U {
+    return b;
+}
+
+// from generic_function_with_ref.wado
+fn get_value<T>(r: &T) -> T {
+    return *r;
+}
+
+// from generic_function_nested_calls.wado
+fn generic_function_nested_calls() with Stdout {
+    // Nested calls: identity(identity(identity(42)))
+    let result = identity::<i32>(identity::<i32>(identity::<i32>(42)));
+    println(`result: {result}`);
+}
+
+// from generic_function_returns_struct.wado
+fn generic_function_returns_struct() with Stdout {
+    let b1 = make_box_i32(42);
+    let b2 = make_box_i64(100 as i64);
+    println(`b1: {b1.value}`);
+    println(`b2: {b2.value}`);
+}
+
+// from generic_function_two_params_swap.wado
+fn generic_function_two_params_swap() with Stdout {
+    let x = first::<i32, i64>(10, 20 as i64);
+    let y = second::<i32, i64>(10, 20 as i64);
+    let z = first::<String, i32>("hello", 42);
+    println(`x: {x}, y: {y}, z: {z}`);
+}
+
+// from generic_function_with_ref.wado
+fn generic_function_with_ref() with Stdout {
+    let x = 42;
+    let y = 100 as i64;
+    let a = get_value::<i32>(&x);
+    let b = get_value::<i64>(&y);
+    println(`a: {a}, b: {b}`);
+}
+
+export fn run() with Stdout {
+    generic_function_nested_calls();
+    generic_function_returns_struct();
+    generic_function_two_params_swap();
+    generic_function_with_ref();
+}
+
+__DATA__
+{"stdout": "result: 42\nb1: 42\nb2: 100\nx: 10, y: 20, z: hello\na: 42, b: 100\n"}

@@ -1,0 +1,104 @@
+use { println } from "core:cli";
+
+// from struct_impl_basic.wado
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    pub fn sum(&self) -> i32 {
+        return self.x + self.y;
+    }
+}
+
+// from struct_impl_f64_fields.wado
+struct Circle {
+    radius: f64,
+}
+
+struct Vector2D {
+    x: f64,
+    y: f64,
+}
+
+impl Circle {
+    pub fn diameter(&self) -> f64 {
+        return self.radius * 2.0;
+    }
+
+    pub fn circumference(&self) -> f64 {
+        // Using 3.14159 instead of PI to avoid clippy approx_constant
+        return 2.0 * 3.14159 * self.radius;
+    }
+}
+
+impl Vector2D {
+    pub fn length_squared(&self) -> f64 {
+        return self.x * self.x + self.y * self.y;
+    }
+
+    pub fn dot(&self, other_x: f64, other_y: f64) -> f64 {
+        return self.x * other_x + self.y * other_y;
+    }
+}
+
+// from struct_impl_multiple_methods.wado
+struct Counter {
+    value: i32,
+    step: i32,
+}
+
+impl Counter {
+    pub fn get(&self) -> i32 {
+        return self.value;
+    }
+
+    pub fn get_step(&self) -> i32 {
+        return self.step;
+    }
+
+    pub fn double(&self) -> i32 {
+        return self.value * 2;
+    }
+
+    pub fn add_step(&self) -> i32 {
+        return self.value + self.step;
+    }
+}
+
+// from struct_impl_basic.wado
+fn struct_impl_basic() with Stdout {
+    let p = Point { x: 10, y: 20 };
+    let s = p.sum();
+    println(`sum: {s}`);
+}
+
+// from struct_impl_f64_fields.wado
+fn struct_impl_f64_fields() with Stdout {
+    let c = Circle { radius: 5.0 };
+    println(`diameter: {c.diameter()}`);
+    println(`circumference: {c.circumference()}`);
+
+    let v = Vector2D { x: 3.0, y: 4.0 };
+    println(`length_squared: {v.length_squared()}`);
+    println(`dot(1,2): {v.dot(1.0, 2.0)}`);
+}
+
+// from struct_impl_multiple_methods.wado
+fn struct_impl_multiple_methods() with Stdout {
+    let c = Counter { value: 10, step: 3 };
+    println(`value: {c.get()}`);
+    println(`step: {c.get_step()}`);
+    println(`double: {c.double()}`);
+    println(`add_step: {c.add_step()}`);
+}
+
+export fn run() with Stdout {
+    struct_impl_basic();
+    struct_impl_f64_fields();
+    struct_impl_multiple_methods();
+}
+
+__DATA__
+{"stdout": "sum: 30\ndiameter: 10\ncircumference: 31.4159\nlength_squared: 25\ndot(1,2): 11\nvalue: 10\nstep: 3\ndouble: 20\nadd_step: 13\n"}

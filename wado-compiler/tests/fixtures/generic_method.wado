@@ -1,0 +1,77 @@
+use { println, Stdout } from "core:cli";
+
+// from generic_method_multi_params.wado
+struct Pair {
+    first: i32,
+    second: i32,
+}
+
+impl Pair {
+    fn combine<T, U>(&self, a: T, b: U) -> T {
+        return a;
+    }
+
+    fn swap<T, U>(&self, a: T, b: U) -> U {
+        return b;
+    }
+}
+
+// from generic_method_on_generic_struct.wado
+struct Wrapper {
+    value: i32,
+}
+
+impl Wrapper {
+    fn convert<U>(&self, other: U) -> U {
+        return other;
+    }
+}
+
+// from generic_method_returns_self_field.wado
+struct Holder {
+    base: i32,
+}
+
+impl Holder {
+    fn add_to<T>(&self, x: T) -> T {
+        return x;
+    }
+
+    fn get_base(&self) -> i32 {
+        return self.base;
+    }
+}
+
+// from generic_method_multi_params.wado
+fn generic_method_multi_params() with Stdout {
+    let p = Pair { first: 1, second: 2 };
+    let x = p.combine::<i32, i64>(10, 20 as i64);
+    let y = p.swap::<i32, i64>(30, 40 as i64);
+    println(`x: {x}`);
+    println(`y: {y}`);
+}
+
+// from generic_method_on_generic_struct.wado
+fn generic_method_on_generic_struct() with Stdout {
+    let w = Wrapper { value: 42 };
+    let x = w.convert::<i64>(100 as i64);
+    let y = w.convert::<f64>(3.14);
+    println(`x: {x}, y: {y}`);
+}
+
+// from generic_method_returns_self_field.wado
+fn generic_method_returns_self_field() with Stdout {
+    let h = Holder { base: 10 };
+    let x = h.add_to::<i32>(5);
+    let b = h.get_base();
+    println(`x: {x}, base: {b}`);
+}
+
+export fn run() with Stdout {
+    generic_method_multi_params();
+    generic_method_on_generic_struct();
+    generic_method_returns_self_field();
+}
+
+__DATA__
+{"stdout": "x: 10\ny: 40\nx: 100, y: 3.14\nx: 5, base: 10\n"}

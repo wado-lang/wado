@@ -1,0 +1,65 @@
+use { println, Stdout } from "core:cli";
+
+// from associated_type_index_mut.wado
+struct Counter {
+    value: i32,
+}
+
+impl Counter {
+    fn increment(&mut self) {
+        self.value = self.value + 1;
+    }
+}
+
+struct Container {
+    item: Counter,
+}
+
+// Implement IndexMut trait for mutable access
+impl<i32> IndexMut<i32> for Container {
+    type Output = Counter;
+
+    fn index_mut(&mut self, _index: i32) -> &mut Self::Output {
+        return &mut self.item;
+    }
+}
+
+// from associated_type_index_trait.wado
+struct MyContainer {
+    data: i32,
+}
+
+// Implement Index trait
+impl<i32> Index<i32> for MyContainer {
+    type Output = i32;
+
+    fn index(&self, _index: i32) -> &Self::Output {
+        return &self.data;
+    }
+}
+
+// from associated_type_index_mut.wado
+fn associated_type_index_mut() with Stdout {
+    let mut c = Container { item: Counter { value: 0 } };
+    // Call index_mut explicitly and mutate
+    c.index_mut(0).increment();
+    c.index_mut(0).increment();
+    println(`Value: {c.item.value}`);
+}
+
+// from associated_type_index_trait.wado
+fn associated_type_index_trait() with Stdout {
+    let container = MyContainer { data: 42 };
+    // Call the index method explicitly (not via [] syntax yet)
+    let val_ref = container.index(0);
+    let val = *val_ref;
+    println(`Value: {val}`);
+}
+
+export fn run() with Stdout {
+    associated_type_index_mut();
+    associated_type_index_trait();
+}
+
+__DATA__
+{"stdout": "Value: 2\nValue: 42\n"}

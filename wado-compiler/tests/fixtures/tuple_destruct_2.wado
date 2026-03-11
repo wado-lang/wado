@@ -1,0 +1,76 @@
+use { println, Stdout } from "core:cli";
+
+// from tuple_destruct_mut.wado
+fn make_pair() -> [i32, i32] {
+    return [10, 20];
+}
+
+// from tuple_destruct_nested.wado
+fn make_nested() -> [[i32, i32], String] {
+    return [[1, 2], "nested"];
+}
+
+// from tuple_destruct_wildcard.wado
+fn make_triple() -> [i32, i32, i32] {
+    return [1, 2, 3];
+}
+
+// from tuple_destruct_matches.wado
+fn tuple_destruct_matches() with Stdout {
+    let pair = [10, 20];
+
+    // matches with tuple pattern and guard
+    if pair matches { [x, y] && x + y > 25 } {
+        println("large pair");
+    }
+
+    // matches with wildcard
+    if pair matches { [_, y] && y == 20 } {
+        println("y is 20");
+    }
+
+    // matches evaluates to bool
+    let is_small = pair matches { [x, y] && x + y < 5 };
+    if is_small {
+        println("small");
+    } else {
+        println("not small");
+    }
+
+    // matches with variant containing tuple
+    let opt: Option<[i32, i32]> = Option::<[i32, i32]>::Some([1, 2]);
+    if opt matches { Some([a, b]) && a + b == 3 } {
+        println("sum is 3");
+    }
+}
+
+// from tuple_destruct_mut.wado
+fn tuple_destruct_mut() with Stdout {
+    let mut [a, b] = make_pair();
+    println(`before: {a}, {b}`);
+    a = 100;
+    b = 200;
+    println(`after: {a}, {b}`);
+}
+
+// from tuple_destruct_nested.wado
+fn tuple_destruct_nested() with Stdout {
+    let [[a, b], c] = make_nested();
+    println(`{a}, {b}, {c}`);
+}
+
+// from tuple_destruct_wildcard.wado
+fn tuple_destruct_wildcard() with Stdout {
+    let [first, _, third] = make_triple();
+    println(`{first}, {third}`);
+}
+
+export fn run() with Stdout {
+    tuple_destruct_matches();
+    tuple_destruct_mut();
+    tuple_destruct_nested();
+    tuple_destruct_wildcard();
+}
+
+__DATA__
+{"stdout": "large pair\ny is 20\nnot small\nsum is 3\nbefore: 10, 20\nafter: 100, 200\n1, 2, nested\n1, 3\n"}

@@ -1,0 +1,65 @@
+use { println, Stdout } from "core:cli";
+
+// from trait_bound_propagation.wado
+struct Pair<T> {
+    first: T,
+    second: T,
+}
+
+// Pair<T> implements Eq only when T: Eq
+impl<T: Eq> Eq for Pair<T> {
+    fn eq(&self, other: &Self) -> bool {
+        return self.first == other.first && self.second == other.second;
+    }
+}
+
+// Container requires T: Eq
+struct EqContainer<T: Eq> {
+    item: T,
+}
+
+// from trait_bound_ref_mut.wado
+trait Resettable {
+    fn reset(&mut self);
+}
+
+struct Counter {
+    count: i32,
+}
+
+impl Resettable for Counter {
+    fn reset(&mut self) {
+        self.count = 0;
+    }
+}
+
+fn reset_it<T: Resettable>(item: &mut T) {
+    item.reset();
+}
+
+// from trait_bound_propagation.wado
+fn trait_bound_propagation() with Stdout {
+    // Pair<i32> implements Eq because i32 implements Eq, so this should work
+    let c = EqContainer { item: Pair { first: 1, second: 2 } };
+    let other = Pair { first: 1, second: 2 };
+    if c.item == other {
+        println("equal");
+    } else {
+        println("not equal");
+    }
+}
+
+// from trait_bound_ref_mut.wado
+fn trait_bound_ref_mut() with Stdout {
+    let mut c = Counter { count: 42 };
+    reset_it::<Counter>(&mut c);
+    println(`{c.count}`);
+}
+
+export fn run() with Stdout {
+    trait_bound_propagation();
+    trait_bound_ref_mut();
+}
+
+__DATA__
+{"stdout": "equal\n0\n"}

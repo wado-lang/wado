@@ -1,0 +1,110 @@
+use { println, Stdout } from "core:cli";
+use { MonotonicClock, Mark, Duration } from "wasi:clocks";
+
+// from newtype_wasi_chained.wado
+type Timestamp = Mark;
+
+// Create a double-chained newtype
+type EventTime = Timestamp;
+
+// from newtype_wasi_chained.wado
+fn newtype_wasi_chained() with Stdout {
+    // Get time as Mark
+    let t1: Mark = MonotonicClock::now();
+
+    // Cast to our Timestamp newtype
+    let ts: Timestamp = t1 as Timestamp;
+
+    // Cast to EventTime (double-chained)
+    let evt: EventTime = t1 as EventTime;
+
+    // All should compare as u64 values
+    let t1_u64 = t1 as u64;
+    let ts_u64 = ts as u64;
+    let evt_u64 = evt as u64;
+
+    if t1_u64 == ts_u64 && ts_u64 == evt_u64 {
+        println("all casts produce same u64 value");
+    } else {
+        println("FAILED: values differ");
+    }
+
+    // Arithmetic should work on chained newtypes
+    let t2: Mark = MonotonicClock::now();
+    let ts2: Timestamp = t2 as Timestamp;
+
+    // Subtraction on Timestamp
+    let diff = ts2 - ts;
+    if diff >= 0 {
+        println("timestamp arithmetic works");
+    }
+
+    println("chained newtype tests passed");
+}
+
+// from newtype_wasi_duration.wado
+fn newtype_wasi_duration() with Stdout {
+    // get_resolution returns Duration (newtype of u64)
+    let res: Duration = MonotonicClock::get_resolution();
+
+    // Duration should be a positive value (nanoseconds per tick)
+    if res > 0 {
+        println("resolution is positive");
+    } else {
+        println("resolution is zero or negative");
+    }
+
+    // Arithmetic on Duration newtype
+    let double_res = res * 2;
+    if double_res >= res {
+        println("double is >= original");
+    }
+
+    // Cast Duration to u64
+    let as_u64 = res as u64;
+    if as_u64 > 0 {
+        println("cast to u64 works");
+    }
+
+    println("duration tests passed");
+}
+
+// from newtype_wasi_multiple.wado
+fn newtype_wasi_multiple() with Stdout {
+    // Get both newtypes from WASI
+    let start: Mark = MonotonicClock::now();
+    let res: Duration = MonotonicClock::get_resolution();
+
+    // Both should be positive u64 values
+    if start > 0 && res > 0 {
+        println("both newtypes have positive values");
+    }
+
+    // Get another time reading
+    let end: Mark = MonotonicClock::now();
+
+    // Calculate elapsed time
+    let elapsed: Mark = end - start;
+
+    // Compare elapsed to resolution
+    // Elapsed should be at least 0
+    if elapsed >= 0 {
+        println("elapsed time is non-negative");
+    }
+
+    // Cast both to u64 for comparison
+    let elapsed_u64 = elapsed as u64;
+    let res_u64 = res as u64;
+
+    // Print some values (they'll vary by system)
+    println("multiple wasi newtype tests passed");
+}
+
+export fn run() with Stdout {
+    newtype_wasi_chained();
+    newtype_wasi_duration();
+    newtype_wasi_multiple();
+}
+
+__DATA__
+{"stdout": "all casts produce same u64 value\ntimestamp arithmetic works\nchained newtype tests passed\nresolution is positive\ndouble is >= original\ncast to u64 works\nduration tests passed\nboth newtypes have positive values\nelapsed time is non-negative\nmultiple wasi newtype tests passed\n"}

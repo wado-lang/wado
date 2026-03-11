@@ -1,0 +1,74 @@
+use { println, Stdout } from "core:cli";
+
+// from for_of_generic_method.wado
+struct Container<T> {
+    items: Array<T>,
+}
+
+impl<T> Container<T> {
+    fn process(&mut self) {
+        for let item of self.items {
+            // Just iterate - the test is that type resolution works
+        }
+    }
+}
+
+// from for_of_basic.wado
+fn for_of_basic() with Stdout {
+    let numbers: Array<i32> = [1, 2, 3, 4, 5];
+    let mut sum = 0;
+    for let n of numbers {
+        sum = sum + n;
+    }
+    println(`sum = {sum}`);
+}
+
+// from for_of_break.wado
+fn for_of_break() with Stdout {
+    let numbers: Array<i32> = [1, 2, 3, 4, 5];
+    for let n of numbers {
+        if n == 3 {
+            break;
+        }
+        println(`{n}`);
+    }
+    println("done");
+}
+
+// from for_of_continue.wado
+fn for_of_continue() with Stdout {
+    let numbers: Array<i32> = [1, 2, 3, 4, 5];
+    for let n of numbers {
+        if n == 3 {
+            continue;
+        }
+        println(`{n}`);
+    }
+}
+
+// from for_of_empty.wado
+fn for_of_empty() with Stdout {
+    let empty: Array<i32> = [];
+    for let item of empty {
+        println(`should not print: {item}`);
+    }
+    println("done");
+}
+
+// from for_of_generic_method.wado
+fn for_of_generic_method() with Stdout {
+    let mut c: Container<i32> = Container { items: [1, 2, 3] };
+    c.process();
+    println("ok");
+}
+
+export fn run() with Stdout {
+    for_of_basic();
+    for_of_break();
+    for_of_continue();
+    for_of_empty();
+    for_of_generic_method();
+}
+
+__DATA__
+{"stdout": "sum = 15\n1\n2\ndone\n1\n2\n4\n5\ndone\nok\n"}

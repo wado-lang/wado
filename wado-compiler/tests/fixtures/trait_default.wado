@@ -1,0 +1,136 @@
+use { println, Stdout } from "core:cli";
+
+// from trait_default_basic.wado
+trait Greet {
+    fn name(&self) -> String;
+    fn greet(&self) -> String {
+        return `Hello, {self.name()}!`;
+    }
+}
+
+struct Person {
+    name: String,
+}
+
+impl Greet for Person {
+    fn greet(&self) -> String {
+        return `Hi, {self.name()}!`;
+    }
+
+    fn name(&self) -> String {
+        return self.name;
+    }
+}
+
+struct Robot {
+    id: i32,
+}
+
+// Robot uses the default greet() method
+impl Greet for Robot {
+    fn name(&self) -> String {
+        return `Robot-{self.id}`;
+    }
+}
+
+// from trait_default_calls_default.wado
+trait Describable {
+    fn label(&self) -> String;
+    fn short_desc(&self) -> String {
+        return `[{self.label()}]`;
+    }
+    fn full_desc(&self) -> String {
+        return `Description: {self.short_desc()}`;
+    }
+}
+
+struct Item {
+    name: String,
+}
+
+// Only provides label(), both short_desc() and full_desc() are defaults
+impl Describable for Item {
+    fn label(&self) -> String {
+        return self.name;
+    }
+}
+
+// from trait_default_override.wado
+trait Summary {
+    fn title(&self) -> String;
+    fn summary(&self) -> String {
+        return `Title: {self.title()}`;
+    }
+}
+
+struct Article {
+    headline: String,
+    content: String,
+}
+
+// Override the default summary()
+impl Summary for Article {
+    fn title(&self) -> String {
+        return self.headline;
+    }
+
+    fn summary(&self) -> String {
+        return `{self.headline} - {self.content}`;
+    }
+}
+
+struct Tweet {
+    text: String,
+}
+
+// Use the default summary()
+impl Summary for Tweet {
+    fn title(&self) -> String {
+        return self.text;
+    }
+}
+
+// from trait_default_basic.wado
+fn trait_default_basic() with Stdout {
+    let p = Person { name: "Alice" };
+    println(p.greet());
+
+    let r = Robot { id: 42 };
+    println(r.greet());
+}
+
+// from trait_default_calls_default.wado
+fn trait_default_calls_default() with Stdout {
+    let item = Item { name: "Widget" };
+    println(item.label());
+    println(item.short_desc());
+    println(item.full_desc());
+}
+
+// from trait_default_count.wado
+fn trait_default_count() with Stdout {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    let mut iter = arr.iter();
+    iter.next();
+    let remaining = iter.count();
+    println(`{remaining}`);
+}
+
+// from trait_default_override.wado
+fn trait_default_override() with Stdout {
+    let a = Article { headline: "Breaking News", content: "Something happened" };
+    println(a.summary());
+
+    let t = Tweet { text: "Hello world" };
+    println(t.summary());
+}
+
+export fn run() with Stdout {
+    trait_default_basic();
+    trait_default_calls_default();
+    trait_default_count();
+    trait_default_override();
+}
+
+__DATA__
+{"stdout": "Hi, Alice!\nHello, Robot-42!\nWidget\n[Widget]\nDescription: [Widget]\n4\nBreaking News - Something happened\nTitle: Hello world\n"}

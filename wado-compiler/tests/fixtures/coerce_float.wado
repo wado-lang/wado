@@ -1,0 +1,24 @@
+use { println, Stdout } from "core:cli";
+
+
+// from coerce_float_literal_f32_binary.wado
+fn coerce_float_literal_f32_binary() with Stdout {
+    let inf: f32 = 1.0 / 0.0;
+    let neg_inf: f32 = -1.0 / 0.0;
+    println(`{inf}`);
+    println(`{neg_inf}`);
+}
+
+// from coerce_float_literal_f32_const.wado
+fn coerce_float_literal_f32_const() with Stdout {
+    let pi = f32::PI;
+    println(`f32 PI: {pi}`);
+}
+
+export fn run() with Stdout {
+    coerce_float_literal_f32_binary();
+    coerce_float_literal_f32_const();
+}
+
+__DATA__
+{"stdout": "inf\n-inf\nf32 PI: 3.1415927\n"}

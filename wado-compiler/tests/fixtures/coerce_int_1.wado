@@ -1,0 +1,172 @@
+use { println, Stdout } from "core:cli";
+
+// from coerce_int_literal_args.wado
+fn take_i64(x: i64) -> i64 {
+    return x;
+}
+
+fn take_u64(x: u64) -> u64 {
+    return x;
+}
+
+fn take_i8(x: i8) -> i8 {
+    return x;
+}
+
+fn take_u8(x: u8) -> u8 {
+    return x;
+}
+
+// from coerce_int_literal_binary_i128.wado
+fn check(cond: bool, label: String) {
+    if !cond {
+        panic(label);
+    }
+}
+
+// from coerce_int_literal_args.wado
+fn coerce_int_literal_args() with Stdout {
+    // Integer literals should coerce to the parameter type
+    let a = take_i64(42);
+    let b = take_u64(100);
+    let c = take_i8(10);
+    let d = take_u8(200);
+
+    println(`i64: {a}`);
+    println(`u64: {b}`);
+    println(`i8: {c}`);
+    println(`u8: {d}`);
+}
+
+// from coerce_int_literal_binary.wado
+fn coerce_int_literal_binary() with Stdout {
+    let x: i64 = 1000000000000;
+    let y: u64 = 10000000000000000000;
+
+    // Literals on right side coerce to left operand type
+    let a = x + 42;
+    let b = y * 2;
+
+    // Literals on left side coerce to right operand type
+    let c = 100 + x;
+    let d = 3 * y;
+
+    assert a == 1000000000042 as i64;
+    assert b == 1553255926290448384 as u64;
+    assert c == 1000000000100 as i64;
+    assert d == 11553255926290448384 as u64;
+
+    println(`i64 + 42: {a}`);
+    println(`u64 * 2: {b}`);
+    println(`100 + i64: {c}`);
+    println(`3 * u64: {d}`);
+}
+
+// from coerce_int_literal_binary_i128.wado
+fn coerce_int_literal_binary_i128() with Stdout {
+    let x_u128: u128 = 1000;
+    let x_i128: i128 = -500;
+
+    // + with literal on both sides
+    let a1 = x_u128 + 42;
+    check(a1 == 1042 as u128, "+ u128 rhs");
+    let a2 = 42 + x_u128;
+    check(a2 == 1042 as u128, "+ lhs u128");
+    let a3 = x_i128 + 100;
+    check(a3 == -400 as i128, "+ i128 rhs");
+    let a4 = 100 + x_i128;
+    check(a4 == -400 as i128, "+ lhs i128");
+
+    // - with literal on both sides
+    let b1 = x_u128 - 100;
+    check(b1 == 900 as u128, "- u128 rhs");
+    let b2 = 2000 - x_u128;
+    check(b2 == 1000 as u128, "- lhs u128");
+    let b3 = x_i128 - 100;
+    check(b3 == -600 as i128, "- i128 rhs");
+    let b4 = 100 - x_i128;
+    check(b4 == 600 as i128, "- lhs i128");
+
+    // * with literal on both sides
+    let c1 = x_u128 * 3;
+    check(c1 == 3000 as u128, "* u128 rhs");
+    let c2 = 3 * x_u128;
+    check(c2 == 3000 as u128, "* lhs u128");
+    let c3 = x_i128 * 2;
+    check(c3 == -1000 as i128, "* i128 rhs");
+    let c4 = 2 * x_i128;
+    check(c4 == -1000 as i128, "* lhs i128");
+
+    println("ok");
+}
+
+// from coerce_int_literal_bitwise.wado
+fn coerce_int_literal_bitwise() with Stdout {
+    let x_u64: u64 = 0xFF00;
+    let x_i64: i64 = 0xFF;
+    let x_u8: u8 = 0xAB;
+    let x_i8: i8 = 0x7F;
+
+    // & with literal on rhs
+    let a1 = x_u64 & 0xFF;
+    assert a1 == 0 as u64;
+    let a2 = x_i64 & 0x0F;
+    assert a2 == 0x0F as i64;
+    let a3 = x_u8 & 0x0F;
+    assert a3 == 0x0B as u8;
+    let a4 = x_i8 & 0x70;
+    assert a4 == 0x70 as i8;
+
+    // & with literal on lhs
+    let b1 = 0xFF & x_u64;
+    assert b1 == 0 as u64;
+    let b2 = 0x0F & x_i64;
+    assert b2 == 0x0F as i64;
+    let b3 = 0x0F & x_u8;
+    assert b3 == 0x0B as u8;
+    let b4 = 0x70 & x_i8;
+    assert b4 == 0x70 as i8;
+
+    // | with literal on rhs
+    let c1 = x_u64 | 0xFF;
+    assert c1 == 0xFFFF as u64;
+    let c2 = x_i64 | 0x100;
+    assert c2 == 0x1FF as i64;
+
+    // | with literal on lhs
+    let d1 = 0xFF | x_u64;
+    assert d1 == 0xFFFF as u64;
+    let d2 = 0x100 | x_i64;
+    assert d2 == 0x1FF as i64;
+
+    // ^ with literal on rhs
+    let e1 = x_u64 ^ 0xFFFF;
+    assert e1 == 0x00FF as u64;
+    let e2 = x_i64 ^ 0xFF;
+    assert e2 == 0 as i64;
+
+    // ^ with literal on lhs
+    let f1 = 0xFFFF ^ x_u64;
+    assert f1 == 0x00FF as u64;
+    let f2 = 0xFF ^ x_i64;
+    assert f2 == 0 as i64;
+
+    // Large hex values for u64
+    let mask: u64 = 0x8000000000000000;
+    let high = mask & 0x8000000000000000;
+    assert high == 0x8000000000000000 as u64;
+    let high2 = 0x8000000000000000 & mask;
+    assert high2 == 0x8000000000000000 as u64;
+
+    println("ok");
+}
+
+export fn run() with Stdout {
+    coerce_int_literal_args();
+    coerce_int_literal_binary();
+    coerce_int_literal_binary_i128();
+    coerce_int_literal_bitwise();
+}
+
+__DATA__
+{"stdout": "i64: 42\nu64: 100\ni8: 10\nu8: 200\ni64 + 42: 1000000000042\nu64 * 2: 1553255926290448384\n100 + i64: 1000000000100\n3 * u64: 11553255926290448384\nok\nok\n"}

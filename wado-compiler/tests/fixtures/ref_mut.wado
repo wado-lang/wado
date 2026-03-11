@@ -1,0 +1,56 @@
+use { println, Stdout } from "core:cli";
+
+// from ref_mut_array_ops.wado
+fn append_elements(arr: &mut Array<i32>) {
+    arr.append(4);
+    arr.append(5);
+}
+
+fn double_all(arr: &mut Array<i32>) {
+    for let mut i = 0; i < arr.len(); i += 1 {
+        arr[i] = arr[i] * 2;
+    }
+}
+
+// from ref_mut_string.wado
+fn append_world(s: &mut String) {
+    s.append(", World!");
+}
+
+fn append_twice(s: &mut String, suffix: String) {
+    s.append(suffix);
+    s.append(suffix);
+}
+
+// from ref_mut_array_ops.wado
+fn ref_mut_array_ops() with Stdout {
+    let mut nums: Array<i32> = [1, 2, 3];
+    println(`len: {nums.len()}`);
+
+    append_elements(&mut nums);
+    println(`len: {nums.len()}`);
+
+    double_all(&mut nums);
+    for let mut i = 0; i < nums.len(); i += 1 {
+        println(`{nums[i]}`);
+    }
+}
+
+// from ref_mut_string.wado
+fn ref_mut_string() with Stdout {
+    let mut msg = "Hello";
+    append_world(&mut msg);
+    println(msg);
+
+    let mut s = "a";
+    append_twice(&mut s, "b");
+    println(s);
+}
+
+export fn run() with Stdout {
+    ref_mut_array_ops();
+    ref_mut_string();
+}
+
+__DATA__
+{"stdout": "len: 3\nlen: 5\n2\n4\n6\n8\n10\nHello, World!\nabb\n"}

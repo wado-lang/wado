@@ -1,0 +1,77 @@
+use { println, Stdout } from "core:cli";
+
+// from ref_struct_mut.wado
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn move_point(p: &mut Point) {
+    p.x = p.x + 10;
+    p.y = p.y + 20;
+}
+
+// from ref_struct_nested.wado
+struct Inner {
+    value: i32,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+fn get_inner_value(o: &Outer) -> i32 {
+    return o.inner.value;
+}
+
+fn set_inner_value(o: &mut Outer, v: i32) {
+    o.inner.value = v;
+}
+
+// from ref_struct_string_field.wado
+struct User {
+    name: String,
+    age: i32,
+}
+
+fn rename(user: &mut User, new_name: String) {
+    user.name = new_name;
+}
+
+fn birthday(user: &mut User) {
+    user.age = user.age + 1;
+}
+
+// from ref_struct_mut.wado
+fn ref_struct_mut() with Stdout {
+    let mut p = Point { x: 1, y: 2 };
+    move_point(&mut p);
+    println(`{p.x},{p.y}`);
+}
+
+// from ref_struct_nested.wado
+fn ref_struct_nested() with Stdout {
+    let mut o = Outer { inner: Inner { value: 42 } };
+    println(`{get_inner_value(&o)}`);
+    set_inner_value(&mut o, 100);
+    println(`{get_inner_value(&o)}`);
+}
+
+// from ref_struct_string_field.wado
+fn ref_struct_string_field() with Stdout {
+    let mut u = User { name: "Alice", age: 30 };
+    println(`{u.name}, {u.age}`);
+
+    rename(&mut u, "Bob");
+    birthday(&mut u);
+    println(`{u.name}, {u.age}`);
+}
+
+export fn run() with Stdout {
+    ref_struct_mut();
+    ref_struct_nested();
+    ref_struct_string_field();
+}
+
+__DATA__
+{"stdout": "11,22\n42\n100\nAlice, 30\nBob, 31\n"}

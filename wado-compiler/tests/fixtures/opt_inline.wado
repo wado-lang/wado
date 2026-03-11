@@ -1,0 +1,154 @@
+use { println, Stdout } from "core:cli";
+
+// from opt_inline_array.wado
+fn test(n: i32) -> i32 {
+    let arr = Array::<i32>::with_capacity(n);
+    return arr.len();
+}
+
+// from opt_inline_attr.wado
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+// #[inline(never)] - should NOT be inlined even though it's small
+
+
+#[inline("never")]
+fn never_inline_add(x: i32, y: i32) -> i32 {
+    return x + y;
+}
+
+// #[inline(always)] - should be inlined even if large
+
+
+#[inline("always")]
+fn always_inline_compute(x: i32) -> i32 {
+    let a = x + 1;
+    let b = a * 2;
+    let c = b - 3;
+    let d = c + 4;
+    let e = d * 5;
+    let f = e - 6;
+    let g = f + 7;
+    let h = g * 8;
+    let i = h - 9;
+    let j = i + 10;
+    let k = j * 11;
+    return k;
+}
+
+// #[inline] - hint to inline with raised threshold
+
+
+#[inline]
+fn hint_inline_sum(p: Pair) -> i32 {
+    let x = p.a;
+    let y = p.b;
+    let sum = x + y;
+    let doubled = sum * 2;
+    let halved = doubled / 2;
+    return halved;
+}
+
+// No attribute - normal heuristic
+fn normal_add(x: i32, y: i32) -> i32 {
+    return x + y;
+}
+
+// from opt_inline_multireturn.wado
+fn abs(x: i32) -> i32 {
+    if x < 0 {
+        return -x;
+    }
+    return x;
+}
+
+// from opt_inline_nested.wado
+fn square(x: i32) -> i32 {
+    return x * x;
+}
+
+fn sum_of_squares(a: i32, b: i32) -> i32 {
+    return square(a) + square(b);
+}
+
+// from opt_inline_recursive.wado
+fn factorial(n: i32) -> i32 {
+    if n <= 1 {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+// from opt_inline_simple.wado
+fn double(x: i32) -> i32 {
+    return x * 2;
+}
+
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+// from opt_inline_array.wado
+fn opt_inline_array() with Stdout {
+    let x = test(10);
+    println(`{x}`);
+}
+
+// from opt_inline_attr.wado
+fn opt_inline_attr() with Stdout {
+    let a = never_inline_add(10, 20);
+    assert a == 30;
+
+    let b = always_inline_compute(1);
+    assert b == 2299;
+
+    let p = Pair { a: 5, b: 15 };
+    let c = hint_inline_sum(p);
+    assert c == 20;
+
+    let d = normal_add(3, 7);
+    assert d == 10;
+}
+
+// from opt_inline_multireturn.wado
+fn opt_inline_multireturn() with Stdout {
+    let a = abs(5);
+    let b = abs(-5);
+    assert a == 5;
+    assert b == 5;
+}
+
+// from opt_inline_nested.wado
+fn opt_inline_nested() with Stdout {
+    let result = sum_of_squares(3, 4);
+    assert result == 25;  // 9 + 16
+}
+
+// from opt_inline_recursive.wado
+fn opt_inline_recursive() with Stdout {
+    let result = factorial(5);
+    assert result == 120;
+}
+
+// from opt_inline_simple.wado
+fn opt_inline_simple() with Stdout {
+    let a = 5;
+    let b = double(a);  // Should inline: b = a * 2
+    let c = add(b, 3);  // Should inline: c = b + 3
+    assert c == 13;
+}
+
+export fn run() with Stdout {
+    opt_inline_array();
+    opt_inline_attr();
+    opt_inline_multireturn();
+    opt_inline_nested();
+    opt_inline_recursive();
+    opt_inline_simple();
+}
+
+__DATA__
+{"stdout": "0\n"}

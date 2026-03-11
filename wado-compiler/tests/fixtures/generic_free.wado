@@ -1,0 +1,93 @@
+use { println, Stdout } from "core:cli";
+
+// from generic_free_func_basic.wado
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+// Function with multiple type params
+fn first<T, U>(a: T, b: U) -> T {
+    let _ = b;
+    return a;
+}
+
+fn second<T, U>(a: T, b: U) -> U {
+    let _ = a;
+    return b;
+}
+
+// from generic_free_func_with_struct.wado
+struct Box<T> {
+    value: T,
+}
+
+impl<T> Box<T> {
+    pub fn new(value: T) -> Box<T> {
+        return Box { value };
+    }
+
+    pub fn get(&self) -> T {
+        return self.value;
+    }
+}
+
+// Generic function that creates a Box
+fn make_box<T>(value: T) -> Box<T> {
+    return Box::<T>::new(value);
+}
+
+// Generic function that unwraps a Box
+fn unwrap_box<T>(b: Box<T>) -> T {
+    return b.get();
+}
+
+// Generic function that takes and returns Box
+fn transform_box<T>(b: Box<T>) -> Box<T> {
+    let v = b.get();
+    return Box::<T>::new(v);
+}
+
+// from generic_free_func_basic.wado
+fn generic_free_func_basic() with Stdout {
+    // Single type param
+    let a = identity::<i32>(42);
+    println(`identity i32: {a}`);
+
+    let b = identity::<i64>(100 as i64);
+    println(`identity i64: {b}`);
+
+    // Multiple type params
+    let c = first::<i32, i64>(10, 20 as i64);
+    println(`first: {c}`);
+
+    let d = second::<i32, i64>(10, 20 as i64);
+    println(`second: {d}`);
+
+    // Nested calls
+    let e = identity::<i32>(identity::<i32>(99));
+    println(`nested identity: {e}`);
+}
+
+// from generic_free_func_with_struct.wado
+fn generic_free_func_with_struct() with Stdout {
+    // Create box via generic function
+    let b1 = make_box::<i32>(42);
+    println(`make_box: {b1.get()}`);
+
+    // Unwrap box via generic function
+    let v = unwrap_box::<i32>(b1);
+    println(`unwrap_box: {v}`);
+
+    // Transform box
+    let b2 = make_box::<i64>(100 as i64);
+    let b3 = transform_box::<i64>(b2);
+    println(`transform_box: {b3.get()}`);
+}
+
+export fn run() with Stdout {
+    generic_free_func_basic();
+    generic_free_func_with_struct();
+}
+
+__DATA__
+{"stdout": "identity i32: 42\nidentity i64: 100\nfirst: 10\nsecond: 20\nnested identity: 99\nmake_box: 42\nunwrap_box: 42\ntransform_box: 100\n"}

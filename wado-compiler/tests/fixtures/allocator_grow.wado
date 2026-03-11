@@ -1,0 +1,28 @@
+use { println } from "core:cli";
+
+
+// from allocator_grow_large.wado
+fn allocator_grow_large() with Stdout {
+    let thirty_two_mb = 32 * 1024 * 1024;
+    let ptr = builtin::realloc(0, 0, 1, thirty_two_mb);
+    assert ptr >= 0;
+    println("ok");
+}
+
+// from allocator_grow_repeated.wado
+fn allocator_grow_repeated() with Stdout {
+    let one_mb = 1024 * 1024;
+    for let mut i = 0; i < 32; i += 1 {
+        let ptr = builtin::realloc(0, 0, 1, one_mb);
+        assert ptr >= 0;
+    }
+    println("ok");
+}
+
+export fn run() with Stdout {
+    allocator_grow_large();
+    allocator_grow_repeated();
+}
+
+__DATA__
+{"stdout": "ok\nok\n"}

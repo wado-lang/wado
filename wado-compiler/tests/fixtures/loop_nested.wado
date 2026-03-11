@@ -1,0 +1,77 @@
+use { println, Stdout } from "core:cli";
+
+
+// from loop_nested_deep.wado
+fn loop_nested_deep() with Stdout {
+    for let mut i = 0; i < 2; i = i + 1 {
+        let mut j = 0;
+        while j < 2 {
+            j = j + 1;
+            let mut k = 0;
+            loop {
+                k = k + 1;
+                for let mut l = 0; l < 2; l = l + 1 {
+                    println(`{i}-{j}-{k}-{l}`);
+                }
+                if k >= 2 {
+                    break;
+                }
+            }
+        }
+    }
+    println("done");
+}
+
+// from loop_nested_loop.wado
+fn loop_nested_loop() with Stdout {
+    let mut outer = 0;
+    loop {
+        outer = outer + 1;
+        let mut inner = 0;
+        loop {
+            inner = inner + 1;
+            println(`outer:{outer} inner:{inner}`);
+            if inner >= 2 {
+                break;
+            }
+        }
+        if outer >= 2 {
+            break;
+        }
+    }
+    println("done");
+}
+
+// from loop_nested_mixed.wado
+fn loop_nested_mixed() with Stdout {
+    let mut a = 0;
+    loop {
+        a = a + 1;
+        let mut b = 0;
+        while b < 2 {
+            b = b + 1;
+            for let mut c = 0; c < 2; c = c + 1 {
+                println(`a:{a} b:{b} c:{c}`);
+                if c == 0 {
+                    continue;
+                }
+            }
+            if b == 1 {
+                continue;
+            }
+        }
+        if a >= 2 {
+            break;
+        }
+    }
+    println("done");
+}
+
+export fn run() with Stdout {
+    loop_nested_deep();
+    loop_nested_loop();
+    loop_nested_mixed();
+}
+
+__DATA__
+{"stdout": "0-1-1-0\n0-1-1-1\n0-1-2-0\n0-1-2-1\n0-2-1-0\n0-2-1-1\n0-2-2-0\n0-2-2-1\n1-1-1-0\n1-1-1-1\n1-1-2-0\n1-1-2-1\n1-2-1-0\n1-2-1-1\n1-2-2-0\n1-2-2-1\ndone\nouter:1 inner:1\nouter:1 inner:2\nouter:2 inner:1\nouter:2 inner:2\ndone\na:1 b:1 c:0\na:1 b:1 c:1\na:1 b:2 c:0\na:1 b:2 c:1\na:2 b:1 c:0\na:2 b:1 c:1\na:2 b:2 c:0\na:2 b:2 c:1\ndone\n"}

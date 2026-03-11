@@ -1,0 +1,34 @@
+use { println, Stdout } from "core:cli";
+
+
+// from option_construct_none.wado
+fn option_construct_none() with Stdout {
+    let opt: Option<String> = Option::<String>::None();
+    // Note: We can't print the option value yet since we don't have pattern matching
+    // This test just verifies that Option::None compiles correctly
+    println("done");
+}
+
+// from option_construct_null.wado
+fn option_construct_null() with Stdout {
+    let opt: Option<String> = null;
+    // null is equivalent to Option::None
+    println("done");
+}
+
+// from option_construct_some_string.wado
+fn option_construct_some_string() with Stdout {
+    let opt: Option<String> = Option::<String>::Some("hello");
+    // Note: We can't print the option value yet since we don't have pattern matching
+    // This test just verifies that Option::Some compiles correctly
+    println("done");
+}
+
+export fn run() with Stdout {
+    option_construct_none();
+    option_construct_null();
+    option_construct_some_string();
+}
+
+__DATA__
+{"stdout": "done\ndone\ndone\n"}

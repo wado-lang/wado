@@ -1,0 +1,93 @@
+use { println, Stdout } from "core:cli";
+
+// from trait_bound_fn.wado
+fn max<T: Ord>(a: T, b: T) -> T {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+// from trait_bound_generic_return.wado
+fn smaller<T: Ord>(a: T, b: T) -> T {
+    if a < b {
+        return a;
+    }
+    return b;
+}
+
+// from trait_bound_impl_block.wado
+struct Wrapper<T> {
+    value: T,
+}
+
+// Available for all Wrapper<T>
+impl<T> Wrapper<T> {
+    fn get(&self) -> T {
+        return self.value;
+    }
+}
+
+// Only available when T: Ord
+impl<T: Ord> Wrapper<T> {
+    fn is_greater_than(&self, other: &Wrapper<T>) -> bool {
+        return self.value > other.value;
+    }
+}
+
+// from trait_bound_method_on_type_param.wado
+trait Stringify {
+    fn to_str(&self) -> String;
+}
+
+impl Stringify for i32 {
+    fn to_str(&self) -> String {
+        return `{*self}`;
+    }
+}
+
+fn print_it<T: Stringify>(x: T) with Stdout {
+    // Calling trait method on type parameter T
+    println(x.to_str());
+}
+
+// from trait_bound_fn.wado
+fn trait_bound_fn() with Stdout {
+    let result = max::<i32>(3, 7);
+    println(`{result}`);
+}
+
+// from trait_bound_generic_return.wado
+fn trait_bound_generic_return() with Stdout {
+    let result = smaller::<i32>(10, 5);
+    println(`{result}`);
+    let s = smaller::<String>("apple", "banana");
+    println(s);
+}
+
+// from trait_bound_impl_block.wado
+fn trait_bound_impl_block() with Stdout {
+    let a = Wrapper { value: 10 };
+    let b = Wrapper { value: 20 };
+    // get() works for all T
+    println(`{a.get()}`);
+    // is_greater_than works because i32: Ord
+    if b.is_greater_than(&a) {
+        println("b is greater");
+    }
+}
+
+// from trait_bound_method_on_type_param.wado
+fn trait_bound_method_on_type_param() with Stdout {
+    print_it::<i32>(42);
+}
+
+export fn run() with Stdout {
+    trait_bound_fn();
+    trait_bound_generic_return();
+    trait_bound_impl_block();
+    trait_bound_method_on_type_param();
+}
+
+__DATA__
+{"stdout": "7\n5\napple\n10\nb is greater\n42\n"}

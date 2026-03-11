@@ -1,0 +1,79 @@
+use { println, Stdout } from "core:cli";
+
+// from ref_primitive_read.wado
+fn read_value(x: &i32) -> i32 {
+    return *x;
+}
+
+// from ref_primitive_semantic.wado
+fn get_and_modify(x: &mut i32) -> i32 {
+    let original = *x;
+    *x = 999;
+    return original;
+}
+
+// from ref_primitive_types.wado
+fn set_i64(r: &mut i64, v: i64) {
+    *r = v;
+}
+
+fn set_f64(r: &mut f64, v: f64) {
+    *r = v;
+}
+
+fn set_bool(r: &mut bool, v: bool) {
+    *r = v;
+}
+
+fn read_i64(r: &i64) -> i64 {
+    return *r;
+}
+
+fn read_f64(r: &f64) -> f64 {
+    return *r;
+}
+
+fn read_bool(r: &bool) -> bool {
+    return *r;
+}
+
+// from ref_primitive_read.wado
+fn ref_primitive_read() with Stdout {
+    let a = 42;
+    println(`{read_value(&a)}`);
+}
+
+// from ref_primitive_semantic.wado
+fn ref_primitive_semantic() with Stdout {
+    let mut a = 42;
+    let result = get_and_modify(&mut a);
+    println(`original={result}`);
+    println(`modified={a}`);  // Should be 999 if true reference semantics
+}
+
+// from ref_primitive_types.wado
+fn ref_primitive_types() with Stdout {
+    let mut a: i64 = 100 as i64;
+    println(`i64: {read_i64(&a)}`);
+    set_i64(&mut a, 200 as i64);
+    println(`i64: {a}`);
+
+    let mut b: f64 = 3.14;
+    println(`f64: {read_f64(&b)}`);
+    set_f64(&mut b, 2.718);
+    println(`f64: {b}`);
+
+    let mut c = true;
+    println(`bool: {read_bool(&c)}`);
+    set_bool(&mut c, false);
+    println(`bool: {c}`);
+}
+
+export fn run() with Stdout {
+    ref_primitive_read();
+    ref_primitive_semantic();
+    ref_primitive_types();
+}
+
+__DATA__
+{"stdout": "42\noriginal=42\nmodified=999\ni64: 100\ni64: 200\nf64: 3.14\nf64: 2.718\nbool: true\nbool: false\n"}

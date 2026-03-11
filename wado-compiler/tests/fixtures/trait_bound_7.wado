@@ -1,0 +1,78 @@
+use { println, Stdout } from "core:cli";
+
+// from trait_bound_ref_type.wado
+trait Measurable {
+    fn measure(&self) -> i32;
+}
+
+struct Size {
+    width: i32,
+    height: i32,
+}
+
+impl Measurable for Size {
+    fn measure(&self) -> i32 {
+        return self.width * self.height;
+    }
+}
+
+fn measure_ref<T: Measurable>(item: &T) -> i32 {
+    return item.measure();
+}
+
+// from trait_bound_struct_field_bounded.wado
+struct Holder<T> {
+    items: Array<T>,
+}
+
+impl Holder<T: Ord> {
+    fn min(&self) -> T {
+        let mut m = self.items[0];
+        for let mut i = 1; i < self.items.len(); i += 1 {
+            if self.items[i] < m {
+                m = self.items[i];
+            }
+        }
+        return m;
+    }
+}
+
+// from trait_bound_ref_type.wado
+fn trait_bound_ref_type() with Stdout {
+    let s = Size { width: 3, height: 4 };
+    let result = measure_ref::<Size>(&s);
+    println(`{result}`);
+}
+
+// from trait_bound_result_eq.wado
+fn trait_bound_result_eq() with Stdout {
+    let a: Result<i32, String> = Result::<i32, String>::Ok(42);
+    let b: Result<i32, String> = Result::<i32, String>::Ok(42);
+    let c: Result<i32, String> = Result::<i32, String>::Err("fail");
+    let d: Result<i32, String> = Result::<i32, String>::Err("fail");
+
+    if a == b {
+        println("Ok == Ok");
+    }
+    if a != c {
+        println("Ok != Err");
+    }
+    if c == d {
+        println("Err == Err");
+    }
+}
+
+// from trait_bound_struct_field_bounded.wado
+fn trait_bound_struct_field_bounded() with Stdout {
+    let h = Holder { items: [5, 3, 8, 1, 4] as Array<i32> };
+    println(`{h.min()}`);
+}
+
+export fn run() with Stdout {
+    trait_bound_ref_type();
+    trait_bound_result_eq();
+    trait_bound_struct_field_bounded();
+}
+
+__DATA__
+{"stdout": "12\nOk == Ok\nOk != Err\nErr == Err\n1\n"}
