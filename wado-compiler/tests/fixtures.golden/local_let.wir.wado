@@ -58,6 +58,10 @@ type "functype/wasi/task-return" = fn(i32);
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
+type "functype/local_let" = fn();
+
+type "functype/local_let_mut" = fn();
+
 type "functype/run" = fn();
 
 type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
@@ -120,16 +124,29 @@ import fn waitable-set-drop from "wasi/waitable-set-drop";
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
-fn run() with Stdout {
+fn local_let() with Stdout {
     let msg: ref String;
+    msg = String { repr: array.new_data<u8>("Hello from let!"), used: 15 };
+    "core:cli/println"(msg);
+}
+
+fn local_let_mut() with Stdout {
+    let msg: ref String;
+    msg = String { repr: array.new_data<u8>("First message"), used: 13 };
+    "core:cli/println"(msg);
+    msg = String { repr: array.new_data<u8>("Second message"), used: 14 };
+    "core:cli/println"(msg);
+}
+
+fn run() with Stdout {
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
         };
         __modules_initialized = 1;
     };
-    msg = String { repr: array.new_data<u8>("Hello from let!"), used: 15 };
-    "core:cli/println"(msg);
+    local_let();
+    local_let_mut();
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {

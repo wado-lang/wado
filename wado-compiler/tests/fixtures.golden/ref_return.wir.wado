@@ -80,6 +80,10 @@ type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
+type "functype/ref_return" = fn();
+
+type "functype/ref_return_local" = fn();
+
 type "functype/run" = fn();
 
 type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
@@ -173,41 +177,69 @@ import fn waitable-set-drop from "wasi/waitable-set-drop";
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
-fn run() with Stdout {
+fn ref_return() with Stdout {
     let __local_0: ref Array<i32>;
     let nums: ref Array<i32>;
     let __local_3: ref String;
     let __local_4: ref Formatter;
-    let __local_19: ref String;
-    let __local_21: ref Formatter;
+    let __local_18: ref String;
+    let __local_20: ref Formatter;
     let __sroa_first_value: i32;
+    nums = __seq_lit: block -> ref Array<i32> {
+        __local_0 = Array<i32> { repr: array.new_fixed<i32>(42, 99, 7), used: 3 };
+        break __seq_lit: __local_0;
+    };
+    __sroa_first_value = __inline_Array_i32__IndexValue__index_value_7: block -> i32 {
+        if 0 {
+            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+            unreachable;
+        };
+        break __inline_Array_i32__IndexValue__index_value_7: builtin::array_get<i32>(nums.repr, 0);
+    };
+    "core:cli/println"(__tmpl: block -> ref String {
+        __local_3 = String { repr: builtin::array_new<u8>(16), used: 0 };
+        __local_4 = __inline_Formatter__new_9: block -> ref Formatter {
+            __local_18 = __local_3;
+            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_18) };
+        };
+        __local_20 = __local_4;
+        i32::fmt_decimal(__sroa_first_value, __local_20);
+        break __tmpl: __local_3;
+    });
+}
+
+fn ref_return_local() with Stdout {
+    let r: ref "core:internal/Box<i32>";
+    let __local_1: ref String;
+    let __local_2: ref Formatter;
+    let __local_3: ref "core:internal/Box<i32>";
+    let __local_5: ref String;
+    let __local_7: ref Formatter;
+    r = __inline_make_ref_0: block -> ref "core:internal/Box<i32>" {
+        __local_3 = "core:internal/Box<i32>" { value: 42 };
+        break __inline_make_ref_0: __local_3;
+    };
+    "core:cli/println"(__tmpl: block -> ref String {
+        __local_1 = String { repr: builtin::array_new<u8>(16), used: 0 };
+        __local_2 = __inline_Formatter__new_2: block -> ref Formatter {
+            __local_5 = __local_1;
+            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_5) };
+        };
+        __local_7 = __local_2;
+        i32::fmt_decimal(r.value, __local_7);
+        break __tmpl: __local_1;
+    });
+}
+
+fn run() with Stdout {
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
         };
         __modules_initialized = 1;
     };
-    nums = __seq_lit: block -> ref Array<i32> {
-        __local_0 = Array<i32> { repr: array.new_fixed<i32>(42, 99, 7), used: 3 };
-        break __seq_lit: __local_0;
-    };
-    __sroa_first_value = __inline_Array_i32__IndexValue__index_value_9: block -> i32 {
-        if 0 {
-            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        };
-        break __inline_Array_i32__IndexValue__index_value_9: builtin::array_get<i32>(nums.repr, 0);
-    };
-    "core:cli/println"(__tmpl: block -> ref String {
-        __local_3 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_4 = __inline_Formatter__new_11: block -> ref Formatter {
-            __local_19 = __local_3;
-            break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_19) };
-        };
-        __local_21 = __local_4;
-        i32::fmt_decimal(__sroa_first_value, __local_21);
-        break __tmpl: __local_3;
-    });
+    ref_return();
+    ref_return_local();
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {

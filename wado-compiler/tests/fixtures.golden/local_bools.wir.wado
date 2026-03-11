@@ -58,6 +58,10 @@ type "functype/wasi/task-return" = fn(i32);
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
+type "functype/local_bools" = fn();
+
+type "functype/local_bools_mut" = fn();
+
 type "functype/run" = fn();
 
 type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
@@ -120,6 +124,19 @@ import fn waitable-set-drop from "wasi/waitable-set-drop";
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
+fn local_bools() with Stdout {
+    "core:cli/println"(String { repr: array.new_data<u8>("t is true"), used: 9 });
+    "core:cli/println"(String { repr: array.new_data<u8>("f is false"), used: 10 });
+}
+
+fn local_bools_mut() with Stdout {
+    let flag: bool;
+    flag = 0;
+    "core:cli/println"(String { repr: array.new_data<u8>("flag is false"), used: 13 });
+    flag = 1;
+    "core:cli/println"(String { repr: array.new_data<u8>("flag is true"), used: 12 });
+}
+
 fn run() with Stdout {
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -127,8 +144,8 @@ fn run() with Stdout {
         };
         __modules_initialized = 1;
     };
-    "core:cli/println"(String { repr: array.new_data<u8>("t is true"), used: 9 });
-    "core:cli/println"(String { repr: array.new_data<u8>("f is false"), used: 10 });
+    local_bools();
+    local_bools_mut();
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
