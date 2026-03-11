@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773263080502,
+  "lastUpdate": 1773267584216,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2558,6 +2558,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/baff624c01ce64dfb961cdf978472786125612c0"
         },
         "date": 1773263080302,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2378,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9895,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25163,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f7dacbce90f6dbeed8067777b3c412c90593e12d",
+          "message": "Merge pull request #563 from wado-lang/claude/wado-compiler-test-coverage-Axk2M\n\nConsolidate test fixtures by merging single-test files",
+          "timestamp": "2026-03-12T07:17:12+09:00",
+          "tree_id": "ea59c8795af23429e1a95a3d2be63aa580aa1a82",
+          "url": "https://github.com/wado-lang/wado/commit/f7dacbce90f6dbeed8067777b3c412c90593e12d"
+        },
+        "date": 1773267584145,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
