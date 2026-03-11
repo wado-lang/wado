@@ -10,7 +10,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Resolver;
-use super::types::FunctionContext;
+use super::types::{FunctionContext, TypeError};
 use indexmap::IndexMap;
 
 impl<H: CompilerHost> Resolver<'_, H> {
@@ -107,8 +107,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .collect();
 
         // Step 7: Determine return type
+        // For block bodies, only explicit `return` counts; expression bodies use their type
         let return_type = if let TirExprKind::Block(ref block) = body.kind {
-            Self::find_return_type_in_block(block).unwrap_or(body.type_id)
+            if let Some(t) = Self::find_return_type_in_block(block) {
+                t
+            } else {
+                // Error if block has a trailing non-unit expression without `return`
+                if body.type_id != TypeTable::UNIT && body.type_id != TypeTable::NEVER {
+                    let _ = self.logger.error(TypeError::MissingReturn {
+                        return_type: self.type_table.borrow().type_name(body.type_id),
+                        span: closure.span,
+                    });
+                }
+                TypeTable::UNIT
+            }
         } else {
             body.type_id
         };
@@ -186,10 +198,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .collect();
 
         // Determine return type:
-        // - For block bodies, check for return statements
-        // - Fall back to the body expression's type
+        // - For block bodies, only explicit `return` counts
+        // - For expression bodies, use the expression's type
         let return_type = if let TirExprKind::Block(ref block) = body.kind {
-            Self::find_return_type_in_block(block).unwrap_or(body.type_id)
+            if let Some(t) = Self::find_return_type_in_block(block) {
+                t
+            } else {
+                // Error if block has a trailing non-unit expression without `return`
+                if body.type_id != TypeTable::UNIT && body.type_id != TypeTable::NEVER {
+                    let _ = self.logger.error(TypeError::MissingReturn {
+                        return_type: self.type_table.borrow().type_name(body.type_id),
+                        span: closure.span,
+                    });
+                }
+                TypeTable::UNIT
+            }
         } else {
             body.type_id
         };

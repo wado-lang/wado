@@ -146,6 +146,9 @@ pub enum TypeError {
 
     /// Duplicate field name in struct literal
     DuplicateField { name: String, span: Span },
+
+    /// Function/method/closure with return type but no return statement
+    MissingReturn { return_type: String, span: Span },
 }
 
 impl std::fmt::Display for TypeError {
@@ -256,6 +259,13 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, name
                 )
             }
+            TypeError::MissingReturn { return_type, span } => {
+                write!(
+                    f,
+                    "{}:{}: function with return type '{}' must use explicit `return`",
+                    span.line, span.column, return_type
+                )
+            }
         }
     }
 }
@@ -349,6 +359,11 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
             TypeError::DuplicateField { name, span } => (
                 Code::DuplicateDefinition,
                 format!("duplicate field '{name}' in struct literal"),
+                *span,
+            ),
+            TypeError::MissingReturn { return_type, span } => (
+                Code::TypeMismatch,
+                format!("function with return type '{return_type}' must use explicit `return`"),
                 *span,
             ),
         };

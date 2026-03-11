@@ -1678,6 +1678,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
                 None
             }
+            TirStmtKind::IfPattern {
+                then_block,
+                else_block,
+                ..
+            } => {
+                if let Some(t) = Self::find_return_type_in_block(then_block) {
+                    return Some(t);
+                }
+                if let Some(else_blk) = else_block
+                    && let Some(t) = Self::find_return_type_in_block(else_blk)
+                {
+                    return Some(t);
+                }
+                None
+            }
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 Self::find_return_type_in_block(body)
             }
