@@ -1,0 +1,68 @@
+use { println, Stdout } from "core:cli";
+
+// from trait_bound_nested_wrapper.wado
+trait Describable {
+    fn describe(&self) -> String;
+}
+
+struct Wrapper<T: Describable> {
+    inner: T,
+}
+
+impl Describable for i32 {
+    fn describe(&self) -> String {
+        return `{*self}`;
+    }
+}
+
+// Wrapper<T: Describable> itself implements Describable
+impl<T: Describable> Describable for Wrapper<T> {
+    fn describe(&self) -> String {
+        return `Wrapper({self.inner.describe()})`;
+    }
+}
+
+// from trait_bound_nested_wrapper.wado
+fn trait_bound_nested_wrapper() with Stdout {
+    // Wrapper<i32> is valid because i32: Describable
+    let w1 = Wrapper { inner: 42 };
+    // Wrapper<Wrapper<i32>> is valid because Wrapper<i32>: Describable
+    let w2 = Wrapper { inner: w1 };
+    println(w2.inner.describe());
+}
+
+// from trait_bound_option_eq_none.wado
+fn trait_bound_option_eq_none() with Stdout {
+    let a: Option<i32> = null;
+    let b: Option<i32> = null;
+    if a == b {
+        println("None == None");
+    }
+    let c: Option<i32> = Option::<i32>::Some(1);
+    let d: Option<i32> = Option::<i32>::Some(2);
+    if c != d {
+        println("Some(1) != Some(2)");
+    }
+}
+
+// from trait_bound_option_propagation.wado
+fn trait_bound_option_propagation() with Stdout {
+    let a: Option<i32> = Option::<i32>::Some(42);
+    let b: Option<i32> = Option::<i32>::Some(42);
+    let c: Option<i32> = null;
+    if a == b {
+        println("a == b");
+    }
+    if a != c {
+        println("a != c");
+    }
+}
+
+export fn run() with Stdout {
+    trait_bound_nested_wrapper();
+    trait_bound_option_eq_none();
+    trait_bound_option_propagation();
+}
+
+__DATA__
+{"stdout": "Wrapper(42)\nNone == None\nSome(1) != Some(2)\na == b\na != c\n"}

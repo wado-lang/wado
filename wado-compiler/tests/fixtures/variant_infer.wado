@@ -1,0 +1,40 @@
+
+
+
+// from variant_infer_option_none.wado
+fn variant_infer_option_none() with Stdout {
+    // Option::None with annotation provides T = i32
+    let a: Option<i32> = Option::None;
+    assert a matches { None };
+}
+
+// from variant_infer_option_some.wado
+fn variant_infer_option_some() with Stdout {
+    // Infer Option<String> from string payload
+    let a = Option::Some("hello");
+    assert a matches { Some(s) && s == "hello" };
+
+    // Infer Option<i32> from integer payload
+    let b = Option::Some(42);
+    assert b matches { Some(n) && n == 42 };
+}
+
+// from variant_infer_result_annotated.wado
+fn variant_infer_result_annotated() with Stdout {
+    // Result::Ok with annotation provides E = String
+    let a: Result<i32, String> = Result::Ok(42);
+    assert a matches { Ok(n) && n == 42 };
+
+    // Result::Err with annotation provides T = i32
+    let b: Result<i32, String> = Result::Err("fail");
+    assert b matches { Err(e) && e == "fail" };
+}
+
+export fn run() with Stdout {
+    variant_infer_option_none();
+    variant_infer_option_some();
+    variant_infer_result_annotated();
+}
+
+__DATA__
+{"stdout": ""}

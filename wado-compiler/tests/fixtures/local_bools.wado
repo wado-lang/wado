@@ -1,8 +1,8 @@
-// Test local boolean variables
-
 use { println, Stdout } from "core:cli";
 
-export fn run() with Stdout {
+
+// from local_bools.wado
+fn local_bools() with Stdout {
     let t = true;
     let f = false;
 
@@ -17,5 +17,29 @@ export fn run() with Stdout {
     }
 }
 
+// from local_bools_mut.wado
+fn local_bools_mut() with Stdout {
+    let mut flag = false;
+
+    if flag {
+        println("flag is true");
+    } else {
+        println("flag is false");
+    }
+
+    flag = true;
+
+    if flag {
+        println("flag is true");
+    } else {
+        println("flag is false");
+    }
+}
+
+export fn run() with Stdout {
+    local_bools();
+    local_bools_mut();
+}
+
 __DATA__
-{"stdout": "t is true\nf is false\n"}
+{"stdout": "t is true\nf is false\nflag is false\nflag is true\n"}

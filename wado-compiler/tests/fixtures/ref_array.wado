@@ -1,0 +1,38 @@
+use { println, Stdout } from "core:cli";
+
+// from ref_array_basic.wado
+fn modify_array(arr: &mut Array<i32>) {
+    arr[0] = 100;
+}
+
+// from ref_array_basic.wado
+fn ref_array_basic() with Stdout {
+    let mut nums: Array<i32> = [1, 2, 3];
+    let before = nums[0];
+    println(`before: {before}`);
+    modify_array(&mut nums);
+    let after = nums[0];
+    println(`after: {after}`);
+}
+
+// from ref_array_ref_element.wado
+fn ref_array_ref_element() with Stdout {
+    let mut arr: Array<i32> = [10, 20, 30];
+
+    // Take reference to element (returns a copy reference, not alias to slot)
+    let r = &arr[1];
+    println(`ref element: {*r}`);
+
+    // Modify array directly; ref should still hold old value (value semantics)
+    arr[1] = 999;
+    println(`arr[1]: {arr[1]}`);
+    println(`ref still: {*r}`);
+}
+
+export fn run() with Stdout {
+    ref_array_basic();
+    ref_array_ref_element();
+}
+
+__DATA__
+{"stdout": "before: 1\nafter: 100\nref element: 20\narr[1]: 999\nref still: 20\n"}

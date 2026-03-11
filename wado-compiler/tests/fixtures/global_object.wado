@@ -1,0 +1,46 @@
+use { println, Stdout } from "core:cli";
+
+// from global_object_array.wado
+global mut ITEMS: Array<i32> = [1, 2, 3];
+
+// from global_object_string.wado
+global mut MESSAGE: String = "Hello, World!";
+
+// from global_object_struct.wado
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+global mut ORIGIN: Point = Point { x: 0, y: 0 };
+
+// from global_object_array.wado
+fn global_object_array() with Stdout {
+    println(`len={ITEMS.len()}`);
+    println(`item0={ITEMS[0]}`);
+    ITEMS.append(4);
+    println(`after append len={ITEMS.len()}`);
+}
+
+// from global_object_string.wado
+fn global_object_string() with Stdout {
+    println(MESSAGE);
+    MESSAGE = "Updated!";
+    println(MESSAGE);
+}
+
+// from global_object_struct.wado
+fn global_object_struct() with Stdout {
+    println(`x={ORIGIN.x} y={ORIGIN.y}`);
+    ORIGIN = Point { x: 10, y: 20 };
+    println(`x={ORIGIN.x} y={ORIGIN.y}`);
+}
+
+export fn run() with Stdout {
+    global_object_array();
+    global_object_string();
+    global_object_struct();
+}
+
+__DATA__
+{"stdout": "len=3\nitem0=1\nafter append len=4\nHello, World!\nUpdated!\nx=0 y=0\nx=10 y=20\n"}

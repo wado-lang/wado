@@ -1,0 +1,150 @@
+use { println, Stdout } from "core:cli";
+
+// from array_index_inline_btree.wado
+struct Node<K> {
+    keys: Array<K>,
+    deleted: Array<bool>,
+}
+
+impl<K> Node<K> {
+    fn count_active(&self) -> i32 {
+        let mut count = 0;
+        for let mut i = 0; i < self.keys.len(); i += 1 {
+            if !self.deleted[i] {
+                count += 1;
+            }
+        }
+        return count;
+    }
+
+    fn is_full(&self, max_keys: i32) -> bool {
+        let mut count = 0;
+        for let mut i = 0; i < self.keys.len(); i += 1 {
+            if !self.deleted[i] {
+                count += 1;
+            }
+        }
+        return count >= max_keys;
+    }
+
+    fn find_index(&self, key: &K) -> i32 {
+        let mut i = 0;
+        while i < self.keys.len() && self.keys[i] < *key {
+            i += 1;
+        }
+        return i;
+    }
+}
+
+struct Tree<K> {
+    root: Node<K>,
+    max_keys: i32,
+}
+
+impl<K> Tree<K> {
+    fn check(&self) -> i32 {
+        // Multiple calls to methods that should be inlined
+        let active = self.root.count_active();
+        let full = self.root.is_full(self.max_keys);
+        let idx = self.root.find_index(&"cherry");
+
+        if full {
+            return active + 100;
+        }
+        return active + idx;
+    }
+}
+
+// from array_index_inline_compare.wado
+fn find_key_index(keys: &Array<String>, key: &String) -> i32 {
+    let mut i = 0;
+    while i < keys.len() && keys[i] < *key {
+        i += 1;
+    }
+    return i;
+}
+
+// from array_index_inline_generic.wado
+struct Container<T> {
+    items: Array<T>,
+}
+
+// from array_index_inline.wado
+fn array_index_inline() with Stdout {
+    let mut arr: Array<i32> = [10, 20, 30];
+
+    // Read via IndexValue trait (arr[i])
+    let first = arr[0];
+    let second = arr[1];
+
+    // Write via IndexAssign trait (arr[i] = value)
+    arr[2] = 100;
+
+    println(`{first}, {second}, {arr[2]}`);
+}
+
+// from array_index_inline_btree.wado
+fn array_index_inline_btree() with Stdout {
+    let tree: Tree<String> = Tree {
+        root: Node {
+            keys: ["apple", "banana", "cherry", "date"],
+            deleted: [false, true, false, false],
+        },
+        max_keys: 5,
+    };
+
+
+    let result = tree.check();
+    println(`result: {result}`);
+}
+
+// from array_index_inline_compare.wado
+fn array_index_inline_compare() with Stdout {
+    let keys: Array<String> = ["apple", "banana", "cherry", "date"];
+    let result = find_key_index(&keys, &"cherry");
+    println(`index: {result}`);
+}
+
+// from array_index_inline_generic.wado
+fn array_index_inline_generic() with Stdout {
+    let c: Container<i32> = Container { items: [10, 20, 30] };
+
+    // Direct array access through generic struct field
+    let first = c.items[0];
+    let second = c.items[1];
+    let third = c.items[2];
+
+    println(`{first}, {second}, {third}`);
+}
+
+// from array_index_inline_loop.wado
+fn array_index_inline_loop() with Stdout {
+    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let mut sum = 0;
+
+    // Loop with array read
+    for let mut i = 0; i < arr.len(); i += 1 {
+        sum += arr[i];
+    }
+
+    println(`sum: {sum}`);
+
+    // Loop with array write
+    let mut arr2: Array<i32> = [0, 0, 0];
+    for let mut i = 0; i < 3; i += 1 {
+        arr2[i] = i * 10;
+    }
+
+    println(`{arr2[0]}, {arr2[1]}, {arr2[2]}`);
+}
+
+export fn run() with Stdout {
+    array_index_inline();
+    array_index_inline_btree();
+    array_index_inline_compare();
+    array_index_inline_generic();
+    array_index_inline_loop();
+}
+
+__DATA__
+{"stdout": "10, 20, 100\nresult: 5\nindex: 2\n10, 20, 30\nsum: 150\n0, 10, 20\n"}

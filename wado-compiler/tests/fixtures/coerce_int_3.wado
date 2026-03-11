@@ -1,0 +1,135 @@
+use { println, Stdout } from "core:cli";
+
+// from coerce_int_literal_comparison_i128.wado
+fn check(cond: bool, label: String) {
+    if !cond {
+        panic(label);
+    }
+}
+
+// from coerce_int_literal_if_branch.wado
+fn select(cond: bool) -> i64 {
+    let x: i64 = if cond {
+        -1;
+    } else {
+        0;
+    };
+    return x;
+}
+
+// from coerce_int_literal_instance_method_arg.wado
+struct Counter {
+    value: u64,
+}
+
+impl Counter {
+    fn new(initial: u64) -> Counter {
+        return Counter { value: initial };
+    }
+
+    fn add(&self, amount: u64) -> Counter {
+        return Counter { value: self.value + amount };
+    }
+
+    fn get(&self) -> u64 {
+        return self.value;
+    }
+}
+
+// from coerce_int_literal_comparison_i128.wado
+fn coerce_int_literal_comparison_i128() with Stdout {
+    let x_u128: u128 = 1000;
+    let x_i128: i128 = -500;
+
+    // == with literal on both sides
+    check(x_u128 == 1000, "u128 == rhs");
+    check(1000 == x_u128, "lhs == u128");
+    check(x_i128 == -500, "i128 == rhs");
+    check(-500 == x_i128, "lhs == i128");
+
+    // != with literal on both sides
+    check(x_u128 != 999, "u128 != rhs");
+    check(999 != x_u128, "lhs != u128");
+    check(x_i128 != 0, "i128 != rhs");
+    check(0 != x_i128, "lhs != i128");
+
+    // < with literal on both sides
+    check(x_u128 < 1001, "u128 < rhs");
+    check(999 < x_u128, "lhs < u128");
+    check(x_i128 < 0, "i128 < rhs");
+    check(-501 < x_i128, "lhs < i128");
+
+    // > with literal on both sides
+    check(x_u128 > 999, "u128 > rhs");
+    check(1001 > x_u128, "lhs > u128");
+    check(x_i128 > -501, "i128 > rhs");
+    check(0 > x_i128, "lhs > i128");
+
+    // <= with literal on both sides
+    check(x_u128 <= 1000, "u128 <= rhs");
+    check(1000 <= x_u128, "lhs <= u128");
+    check(x_i128 <= -500, "i128 <= rhs");
+    check(-500 <= x_i128, "lhs <= i128");
+
+    // >= with literal on both sides
+    check(x_u128 >= 1000, "u128 >= rhs");
+    check(1000 >= x_u128, "lhs >= u128");
+    check(x_i128 >= -500, "i128 >= rhs");
+    check(-500 >= x_i128, "lhs >= i128");
+
+    println("ok");
+}
+
+// from coerce_int_literal_const_i64.wado
+fn coerce_int_literal_const_i64() with Stdout {
+    println(`i64 MAX: {i64::MAX}`);
+    println(`i64 MIN: {i64::MIN}`);
+    println(`u64 MAX: {u64::MAX}`);
+    println(`u64 MIN: {u64::MIN}`);
+}
+
+// from coerce_int_literal_if_branch.wado
+fn coerce_int_literal_if_branch() with Stdout {
+    println(`true: {select(true)}`);
+    println(`false: {select(false)}`);
+}
+
+// from coerce_int_literal_instance_method_arg.wado
+fn coerce_int_literal_instance_method_arg() with Stdout {
+    let c = Counter::new(0);
+    let c2 = c.add(10);
+    println(`value: {c2.get()}`);
+}
+
+// from coerce_int_literal_let.wado
+fn coerce_int_literal_let() with Stdout {
+    // Integer literals should coerce to any integer type
+    let a: i8 = 42;
+    let b: i16 = 1000;
+    let c: i32 = 100000;
+    let d: i64 = 10000000000;
+    let e: u8 = 200;
+    let f: u16 = 50000;
+    let g: u32 = 3000000000;
+    let h: u64 = 10000000000000000000;
+
+    println(`i8: {a}`);
+    println(`i16: {b}`);
+    println(`i32: {c}`);
+    println(`i64: {d}`);
+    println(`u8: {e}`);
+    println(`u16: {f}`);
+    println(`u32: {g}`);
+    println(`u64: {h}`);
+}
+
+export fn run() with Stdout {
+    coerce_int_literal_comparison_i128();
+    coerce_int_literal_const_i64();
+    coerce_int_literal_if_branch();
+    coerce_int_literal_instance_method_arg();
+    coerce_int_literal_let();
+}
+
+__DATA__
+{"stdout": "ok\ni64 MAX: 9223372036854775807\ni64 MIN: -9223372036854775808\nu64 MAX: 18446744073709551615\nu64 MIN: 0\ntrue: -1\nfalse: 0\nvalue: 10\ni8: 42\ni16: 1000\ni32: 100000\ni64: 10000000000\nu8: 200\nu16: 50000\nu32: 3000000000\nu64: 10000000000000000000\n"}

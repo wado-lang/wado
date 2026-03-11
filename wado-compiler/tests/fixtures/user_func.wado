@@ -1,0 +1,34 @@
+use { println, Stdout } from "core:cli";
+
+// from user_func_return_f32.wado
+fn compute_f32(a: f32, b: f32) -> f32 {
+    // f32 literals use the same syntax as f64, type is inferred from context
+    return a * b + 1.5 as f32;
+}
+
+// from user_func_return_f64.wado
+fn compute_f64(a: f64, b: f64) -> f64 {
+    return a * b + 1.5;
+}
+
+// from user_func_return_f32.wado
+fn user_func_return_f32() with Stdout {
+    let a: f32 = 2.0 as f32;
+    let b: f32 = 3.0 as f32;
+    let result = compute_f32(a, b);
+    println(`result = {result}`);
+}
+
+// from user_func_return_f64.wado
+fn user_func_return_f64() with Stdout {
+    let result = compute_f64(2.0, 3.0);
+    println(`result = {result}`);
+}
+
+export fn run() with Stdout {
+    user_func_return_f32();
+    user_func_return_f64();
+}
+
+__DATA__
+{"stdout": "result = 7.5\nresult = 7.5\n"}

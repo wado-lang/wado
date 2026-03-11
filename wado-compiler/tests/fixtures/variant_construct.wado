@@ -1,0 +1,86 @@
+use { println, Stdout } from "core:cli";
+
+// from variant_construct_literal_coercion.wado
+fn return_empty() -> Option<Array<u8>> {
+    return Option::<Array<u8>>::Some([]);
+}
+
+fn return_non_empty() -> Option<Array<u8>> {
+    return Option::<Array<u8>>::Some([1 as u8, 2 as u8, 3 as u8]);
+}
+
+fn return_result_array() -> Result<Array<i32>, String> {
+    return Result::<Array<i32>, String>::Ok([10, 20, 30]);
+}
+
+fn return_result_empty() -> Result<Array<i32>, String> {
+    return Result::<Array<i32>, String>::Ok([]);
+}
+
+// from variant_construct_simple.wado
+variant Color {
+    Red,
+    Green,
+    Blue,
+}
+
+// from variant_construct_literal_coercion.wado
+fn variant_construct_literal_coercion() with Stdout {
+    // Empty array in Option
+    if let Some(arr) = return_empty() {
+        assert arr.len() == 0;
+    } else {
+        panic("expected Some");
+    }
+
+    // Non-empty array in Option
+    if let Some(arr) = return_non_empty() {
+        assert arr.len() == 3;
+        assert arr[0] == 1 as u8;
+    } else {
+        panic("expected Some");
+    }
+
+    // Non-empty array in Result
+    if let Ok(arr) = return_result_array() {
+        assert arr.len() == 3;
+        assert arr[0] == 10;
+    } else {
+        panic("expected Ok");
+    }
+
+    // Empty array in Result
+    if let Ok(arr) = return_result_empty() {
+        assert arr.len() == 0;
+    } else {
+        panic("expected Ok");
+    }
+
+    // Multiple Option instantiations in the same file
+    let opt_i32: Option<i32> = Option::<i32>::Some(42);
+    let opt_arr: Option<Array<u8>> = Option::<Array<u8>>::Some([1 as u8, 2 as u8]);
+    assert opt_i32 matches { Some(n) && n == 42 };
+    assert opt_arr matches { Some(a) && a.len() == 2 };
+
+    println("ok");
+}
+
+// from variant_construct_simple.wado
+fn variant_construct_simple() with Stdout {
+    // Construct each variant case
+    let r = Color::Red;
+    let g = Color::Green;
+    let b = Color::Blue;
+
+    // We can't print variants yet (no pattern matching),
+    // but we can verify construction works
+    println("variant construction works");
+}
+
+export fn run() with Stdout {
+    variant_construct_literal_coercion();
+    variant_construct_simple();
+}
+
+__DATA__
+{"stdout": "ok\nvariant construction works\n"}

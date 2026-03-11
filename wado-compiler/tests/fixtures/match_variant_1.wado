@@ -1,0 +1,67 @@
+use { println, Stdout } from "core:cli";
+
+// from match_variant_basic.wado
+variant Shape {
+    Circle(f64),
+    Point,
+}
+
+// from match_variant_block.wado
+variant Align {
+    Left,
+    Center,
+    Right,
+}
+
+fn apply_align(align: Align) -> String {
+    let mut result = "";
+    return match align {
+        Left => {
+            result = "left";
+            result;
+        },
+        Center => {
+            result = "center";
+            result;
+        },
+        Right => {
+            result = "right";
+            result;
+        },
+    };
+}
+
+// from match_variant_basic.wado
+fn match_variant_basic() with Stdout {
+    let circle = Shape::Circle(5.0);
+    let point = Shape::Point;
+
+    // Match on Circle
+    let area1 = match circle {
+        Circle(r) => 3.14159 * r * r,
+        Point => 0.0,
+    };
+    println(`Circle area: {area1}`);
+
+    // Match on Point
+    let area2 = match point {
+        Circle(r) => 3.14159 * r * r,
+        Point => 0.0,
+    };
+    println(`Point area: {area2}`);
+}
+
+// from match_variant_block.wado
+fn match_variant_block() with Stdout {
+    println(apply_align(Align::Left));
+    println(apply_align(Align::Center));
+    println(apply_align(Align::Right));
+}
+
+export fn run() with Stdout {
+    match_variant_basic();
+    match_variant_block();
+}
+
+__DATA__
+{"stdout": "Circle area: 78.53975\nPoint area: 0\nleft\ncenter\nright\n"}

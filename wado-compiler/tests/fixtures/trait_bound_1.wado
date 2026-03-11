@@ -1,0 +1,80 @@
+use { println, Stdout } from "core:cli";
+
+// from trait_bound_bounded_impl_for_trait.wado
+struct Pair<T> {
+    first: T,
+    second: T,
+}
+
+impl<T: Eq> Eq for Pair<T> {
+    fn eq(&self, other: &Self) -> bool {
+        return self.first == other.first && self.second == other.second;
+    }
+}
+
+impl<T: Ord> Ord for Pair<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let c = self.first.cmp(&other.first);
+        if let Equal = c {
+            return self.second.cmp(&other.second);
+        }
+        return c;
+    }
+}
+
+// from trait_bound_check.wado
+trait Printable {
+    fn print(&self) -> String;
+}
+
+struct StringWrapper {
+    value: String,
+}
+
+impl Printable for StringWrapper {
+    fn print(&self) -> String {
+        return self.value;
+    }
+}
+
+// Container requires T to implement Printable
+struct Container<T: Printable> {
+    item: T,
+}
+
+// from trait_bound_array_of_ref.wado
+fn trait_bound_array_of_ref() with Stdout {
+    let a = 10;
+    let b = 20;
+    let arr: Array<&i32> = [&a, &b];
+    println(`{*arr[0]}`);
+    println(`{*arr[1]}`);
+}
+
+// from trait_bound_bounded_impl_for_trait.wado
+fn trait_bound_bounded_impl_for_trait() with Stdout {
+    let a = Pair { first: 1, second: 2 };
+    let b = Pair { first: 1, second: 3 };
+    if a < b {
+        println("a < b");
+    }
+    if a == a {
+        println("a == a");
+    }
+}
+
+// from trait_bound_check.wado
+fn trait_bound_check() with Stdout {
+    // This should work: StringWrapper implements Printable
+    let c = Container { item: StringWrapper { value: "hello" } };
+    println(c.item.print());
+}
+
+export fn run() with Stdout {
+    trait_bound_array_of_ref();
+    trait_bound_bounded_impl_for_trait();
+    trait_bound_check();
+}
+
+__DATA__
+{"stdout": "10\n20\na < b\na == a\nhello\n"}

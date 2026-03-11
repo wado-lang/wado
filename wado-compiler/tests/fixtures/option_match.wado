@@ -1,0 +1,45 @@
+use { println, Stdout } from "core:cli";
+
+
+// from option_match_else.wado
+fn option_match_else() with Stdout {
+    let opt: Option<String> = Option::<String>::Some("value");
+
+    // Try to match None, should go to else
+    if let None = opt {
+        println("matched none");
+    } else {
+        println("not none");
+    }
+}
+
+// from option_match_none.wado
+fn option_match_none() with Stdout {
+    let opt: Option<String> = null;
+
+    if let None = opt {
+        println("matched none");
+    } else {
+        println("has value");
+    }
+}
+
+// from option_match_some.wado
+fn option_match_some() with Stdout {
+    let opt: Option<String> = Option::<String>::Some("hello");
+
+    if let Some(x) = opt {
+        println(x);
+    } else {
+        println("none");
+    }
+}
+
+export fn run() with Stdout {
+    option_match_else();
+    option_match_none();
+    option_match_some();
+}
+
+__DATA__
+{"stdout": "not none\nmatched none\nhello\n"}

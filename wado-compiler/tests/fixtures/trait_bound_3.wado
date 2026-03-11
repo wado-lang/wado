@@ -1,0 +1,75 @@
+use { println, Stdout } from "core:cli";
+
+// from trait_bound_method_on_type_param_chain.wado
+trait ToNum {
+    fn to_num(&self) -> i32;
+}
+
+impl ToNum for i32 {
+    fn to_num(&self) -> i32 {
+        return *self;
+    }
+}
+
+impl ToNum for bool {
+    fn to_num(&self) -> i32 {
+        if *self {
+            return 1;
+        }
+        return 0;
+    }
+}
+
+fn sum_nums<T: ToNum>(a: T, b: T) -> i32 {
+    return a.to_num() + b.to_num();
+}
+
+// from trait_bound_method_on_type_param_multi.wado
+trait Named {
+    fn name(&self) -> String;
+}
+
+trait Scored {
+    fn score(&self) -> i32;
+}
+
+struct Player {
+    player_name: String,
+    player_score: i32,
+}
+
+impl Named for Player {
+    fn name(&self) -> String {
+        return self.player_name;
+    }
+}
+
+impl Scored for Player {
+    fn score(&self) -> i32 {
+        return self.player_score;
+    }
+}
+
+fn describe<T: Named + Scored>(x: &T) -> String {
+    return `{x.name()}: {x.score()}`;
+}
+
+// from trait_bound_method_on_type_param_chain.wado
+fn trait_bound_method_on_type_param_chain() with Stdout {
+    println(`{sum_nums::<i32>(10, 20)}`);
+    println(`{sum_nums::<bool>(true, false)}`);
+}
+
+// from trait_bound_method_on_type_param_multi.wado
+fn trait_bound_method_on_type_param_multi() with Stdout {
+    let p = Player { player_name: "Alice", player_score: 100 };
+    println(describe::<Player>(&p));
+}
+
+export fn run() with Stdout {
+    trait_bound_method_on_type_param_chain();
+    trait_bound_method_on_type_param_multi();
+}
+
+__DATA__
+{"stdout": "30\n1\nAlice: 100\n"}

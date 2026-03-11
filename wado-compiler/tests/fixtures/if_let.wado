@@ -1,0 +1,35 @@
+use { println, Stdout } from "core:cli";
+
+
+// from if_let_init_basic.wado
+fn if_let_init_basic() with Stdout {
+    if let x = 10; x > 5 {
+        println(`x = {x}`);
+    }
+}
+
+// from if_let_init_else.wado
+fn if_let_init_else() with Stdout {
+    if let x = 3; x > 5 {
+        println("big");
+    } else {
+        println(`small: {x}`);
+    }
+}
+
+// from if_let_init_mutable.wado
+fn if_let_init_mutable() with Stdout {
+    if let mut x = 5; x > 0 {
+        x = x + 1;
+        println(`{x}`);
+    }
+}
+
+export fn run() with Stdout {
+    if_let_init_basic();
+    if_let_init_else();
+    if_let_init_mutable();
+}
+
+__DATA__
+{"stdout": "x = 10\nsmall: 3\n6\n"}

@@ -1,0 +1,80 @@
+use { println, Stdout } from "core:cli";
+
+
+// from const_fold_f32_comparison.wado
+fn const_fold_f32_comparison() with Stdout {
+    // f32::PI * 2.0 should equal f32::TAU
+    assert f32::TAU == f32::PI * 2.0;
+    assert f32::FRAC_PI_2 == f32::PI / 2.0;
+    assert f32::FRAC_PI_4 == f32::PI / 4.0;
+
+    // f32 variable arithmetic comparison
+    let x: f32 = 3.14;
+    let y: f32 = x * 2.0;
+    let z: f32 = 6.28;
+    assert y == z;
+
+    println("ok");
+}
+
+// from const_fold_int_basic.wado
+fn const_fold_int_basic() with Stdout {
+    // Basic arithmetic
+    let a = 21 * 2;
+    println(`a={a}`);
+
+    let b = 100 + 23;
+    println(`b={b}`);
+
+    let c = 50 - 8;
+    println(`c={c}`);
+
+    let d = 84 / 2;
+    println(`d={d}`);
+
+    let e = 10 % 3;
+    println(`e={e}`);
+
+    // Chained operations (should fold step by step)
+    let f = 2 + 3 + 4;
+    println(`f={f}`);
+
+    let g = 10 * 2 + 5;
+    println(`g={g}`);
+}
+
+// from const_fold_int_types.wado
+fn const_fold_int_types() with Stdout {
+    // i64
+    let a = 1000000 as i64 * 1000000 as i64;
+    println(`a={a}`);
+
+    // u32
+    let b = 100 as u32 + 200 as u32;
+    println(`b={b}`);
+
+    // Division
+    let c = 100 / 3;
+    println(`c={c}`);
+
+    // Subtraction producing zero
+    let d = 42 - 42;
+    println(`d={d}`);
+
+    // Multiplication by zero
+    let e = 999 * 0;
+    println(`e={e}`);
+
+    // Modulo
+    let f = 17 % 5;
+    println(`f={f}`);
+}
+
+export fn run() with Stdout {
+    const_fold_f32_comparison();
+    const_fold_int_basic();
+    const_fold_int_types();
+}
+
+__DATA__
+{"stdout": "ok\na=42\nb=123\nc=42\nd=42\ne=1\nf=9\ng=25\na=1000000000000\nb=300\nc=33\nd=0\ne=0\nf=2\n"}

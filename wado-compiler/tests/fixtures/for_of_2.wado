@@ -1,0 +1,112 @@
+use { println, Stdout } from "core:cli";
+
+// from for_of_generic_tuple.wado
+struct Holder<K, V> {
+    items: Array<[K, V]>,
+}
+
+impl<K, V> Holder<K, V> {
+    fn process(&self) {
+        for let pair of self.items {
+            // iteration test
+        }
+    }
+}
+
+// from for_of_side_effect.wado
+fn get_numbers() -> Array<i32> with Stdout {
+    println("getting numbers");
+    return [1, 2, 3];
+}
+
+// from for_of_structs.wado
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+// from for_of_generic_tuple.wado
+fn for_of_generic_tuple() with Stdout {
+    let h: Holder<String, i32> = Holder { items: [["a", 1], ["b", 2]] };
+    h.process();
+    println("ok");
+}
+
+// from for_of_mut.wado
+fn for_of_mut() with Stdout {
+    let numbers: Array<i32> = [1, 2, 3];
+    for let mut n of numbers {
+        n = n * 2;
+        println(`{n}`);
+    }
+}
+
+// from for_of_nested.wado
+fn for_of_nested() with Stdout {
+    let outer: Array<i32> = [1, 2, 3];
+    let inner: Array<i32> = [10, 20];
+    for let i of outer {
+        for let j of inner {
+            println(`{i},{j}`);
+        }
+    }
+}
+
+// from for_of_side_effect.wado
+fn for_of_side_effect() with Stdout {
+    for let n of get_numbers() {
+        println(`{n}`);
+    }
+    println("done");
+}
+
+// from for_of_strings.wado
+fn for_of_strings() with Stdout {
+    let names: Array<String> = ["Alice", "Bob", "Charlie"];
+    for let name of names {
+        println(`Hello, {name}!`);
+    }
+}
+
+// from for_of_structs.wado
+fn for_of_structs() with Stdout {
+    let p1 = Point { x: 1, y: 2 };
+    let p2 = Point { x: 3, y: 4 };
+    let points: Array<Point> = [p1, p2];
+    for let p of points {
+        println(`{p.x},{p.y}`);
+    }
+}
+
+// from for_of_tuple_array.wado
+fn for_of_tuple_array() with Stdout {
+    let items: Array<[String, i32]> = [["a", 1], ["b", 2]];
+    for let pair of items {
+        println(pair.0);
+    }
+    println("done");
+}
+
+// from for_of_tuples.wado
+fn for_of_tuples() with Stdout {
+    let t1: [i32, i32] = [1, 2];
+    let t2: [i32, i32] = [3, 4];
+    let pairs: Array<[i32, i32]> = [t1, t2];
+    for let p of pairs {
+        println(`{p.0},{p.1}`);
+    }
+}
+
+export fn run() with Stdout {
+    for_of_generic_tuple();
+    for_of_mut();
+    for_of_nested();
+    for_of_side_effect();
+    for_of_strings();
+    for_of_structs();
+    for_of_tuple_array();
+    for_of_tuples();
+}
+
+__DATA__
+{"stdout": "ok\n2\n4\n6\n1,10\n1,20\n2,10\n2,20\n3,10\n3,20\ngetting numbers\n1\n2\n3\ndone\nHello, Alice!\nHello, Bob!\nHello, Charlie!\n1,2\n3,4\na\nb\ndone\n1,2\n3,4\n"}

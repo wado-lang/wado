@@ -1,0 +1,78 @@
+use { println, Stdout } from "core:cli";
+
+// from match_ergonomics_match.wado
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+// from match_ergonomics_if_let.wado
+fn match_ergonomics_if_let() with Stdout {
+    // if let on &Option<T>: x binds as &i32
+    let opt: Option<i32> = Option::<i32>::Some(42);
+    let ro = &opt;
+    if let Some(x) = ro {
+        // x is &i32 — dereference to use
+        assert *x == 42;
+        println(`got: {*x}`);
+    }
+
+    // if let None on &Option<T>
+    let none_opt: Option<i32> = null;
+    let rn = &none_opt;
+    if let None = rn {
+        println("got none");
+    }
+
+    // matches on &Option<T>
+    let is_some = ro matches { Some(_) };
+    assert is_some == true;
+
+    let is_none = rn matches { Some(_) };
+    assert is_none == false;
+
+    println("ok");
+}
+
+// from match_ergonomics_match.wado
+fn match_ergonomics_match() with Stdout {
+    // Match on &enum — enum patterns have no bindings, works directly
+    let c = Color::Red;
+    let rc = &c;
+    let name = match rc {
+        Red => "red",
+        Green => "green",
+        Blue => "blue",
+    };
+    assert name == "red";
+
+    // Match on &Option<T> — x binds as &i32
+    let opt: Option<i32> = Option::<i32>::Some(42);
+    let ro = &opt;
+    let val = match ro {
+        Some(x) => *x,
+        None => 0,
+    };
+    assert val == 42;
+
+    // Match on &i32 with guards
+    let x = 50;
+    let rx = &x;
+    let label = match rx {
+        _ && *rx > 100 => "large",
+        _ && *rx > 10 => "medium",
+        _ => "small",
+    };
+    assert label == "medium";
+
+    println("ok");
+}
+
+export fn run() with Stdout {
+    match_ergonomics_if_let();
+    match_ergonomics_match();
+}
+
+__DATA__
+{"stdout": "got: 42\ngot none\nok\nok\n"}

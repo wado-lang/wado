@@ -1,0 +1,71 @@
+use { println, Stdout } from "core:cli";
+
+// from coerce_int_literal_method_arg.wado
+struct Counter {
+    value: u64,
+}
+
+impl Counter {
+    fn new(initial: u64) -> Counter {
+        return Counter { value: initial };
+    }
+
+    fn get(&self) -> u64 {
+        return self.value;
+    }
+}
+
+// from coerce_int_literal_return.wado
+fn get_i64() -> i64 {
+    return 42;
+}
+
+fn get_u64() -> u64 {
+    return 100;
+}
+
+fn get_i8() -> i8 {
+    return 10;
+}
+
+fn get_u8() -> u8 {
+    return 200;
+}
+
+// from coerce_int_literal_u64_comparison.wado
+fn is_zero(x: u64) -> bool {
+    return x == 0;
+}
+
+// from coerce_int_literal_method_arg.wado
+fn coerce_int_literal_method_arg() with Stdout {
+    // Integer literal should coerce to u64 for static method argument
+    let counter = Counter::new(0);
+    println(`value: {counter.get()}`);
+
+    let counter2 = Counter::new(42);
+    println(`value: {counter2.get()}`);
+}
+
+// from coerce_int_literal_return.wado
+fn coerce_int_literal_return() with Stdout {
+    println(`i64: {get_i64()}`);
+    println(`u64: {get_u64()}`);
+    println(`i8: {get_i8()}`);
+    println(`u8: {get_u8()}`);
+}
+
+// from coerce_int_literal_u64_comparison.wado
+fn coerce_int_literal_u64_comparison() with Stdout {
+    println(`0 is zero: {is_zero(0)}`);
+    println(`1 is zero: {is_zero(1)}`);
+}
+
+export fn run() with Stdout {
+    coerce_int_literal_method_arg();
+    coerce_int_literal_return();
+    coerce_int_literal_u64_comparison();
+}
+
+__DATA__
+{"stdout": "value: 0\nvalue: 42\ni64: 42\nu64: 100\ni8: 10\nu8: 200\n0 is zero: true\n1 is zero: false\n"}

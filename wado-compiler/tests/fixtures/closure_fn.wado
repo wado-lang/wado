@@ -1,0 +1,85 @@
+use { println, Stdout } from "core:cli";
+
+// from closure_fn_param_capture.wado
+struct Box<T> {
+    value: T,
+}
+
+impl<T> Box<T> {
+    fn apply(&self, f: fn(T) -> T) -> T {
+        return f(self.value);
+    }
+}
+
+// from closure_fn_param_effectful.wado
+fn for_each(items: Array<i32>, f: fn(i32) -> () with Stdout) with Stdout {
+    for let item of items {
+        f(item);
+    }
+}
+
+// from closure_fn_param_multiple.wado
+fn combine(x: i32, f: fn(i32) -> i32, g: fn(i32) -> i32) -> i32 {
+    return g(f(x));
+}
+
+// from closure_fn_param_no_args.wado
+fn call_twice(f: fn() -> i32) -> i32 {
+    return f() + f();
+}
+
+fn call_and_get_bool(f: fn() -> bool) -> bool {
+    return f();
+}
+
+fn run_and_check(label: String, f: fn() -> i32) with Stdout {
+    let result = f();
+    println(`{label}: {result}`);
+}
+
+// from closure_fn_param_capture.wado
+fn closure_fn_param_capture() with Stdout {
+    let b = Box { value: 5 };
+    let multiplier = 3;
+    let result = b.apply(|x: i32| x * multiplier);
+    println(`result: {result}`);
+}
+
+// from closure_fn_param_effectful.wado
+fn closure_fn_param_effectful() with Stdout {
+    let items: Array<i32> = [1, 2, 3];
+    for_each(items, |x: i32| {
+        println(`item: {x}`);
+    });
+}
+
+// from closure_fn_param_multiple.wado
+fn closure_fn_param_multiple() with Stdout {
+    // Two different closures passed to the same function
+    let result = combine(5, |x: i32| x + 1, |x: i32| x * 2);
+    println(`result: {result}`);  // (5 + 1) * 2 = 12
+}
+
+// from closure_fn_param_no_args.wado
+fn closure_fn_param_no_args() with Stdout {
+    let value = 21;
+    let result = call_twice(|| value);
+    println(`{result}`);  // 42
+
+    let flag = true;
+    let b = call_and_get_bool(|| flag);
+    println(`{b}`);  // true
+
+    let x = 100;
+    run_and_check("x", || x);  // x: 100
+}
+
+export fn run() with Stdout {
+    closure_fn_param_capture();
+    closure_fn_param_effectful();
+    closure_fn_param_multiple();
+    closure_fn_param_no_args();
+}
+
+__DATA__
+{"stdout": "result: 15\nitem: 1\nitem: 2\nitem: 3\nresult: 12\n42\ntrue\nx: 100\n"}

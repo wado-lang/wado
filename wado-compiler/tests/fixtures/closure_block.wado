@@ -1,0 +1,125 @@
+use { println, Stdout } from "core:cli";
+
+
+// from closure_block_body.wado
+fn closure_block_body() with Stdout {
+    let compute = |x: i32| {
+        let doubled = x * 2;
+        let tripled = x * 3;
+        return doubled + tripled;
+    };
+
+
+    println(`{compute(3)}`);  // (3 * 2) + (3 * 3) = 15
+    println(`{compute(4)}`);  // (4 * 2) + (4 * 3) = 20
+    println(`{compute(5)}`);  // (5 * 2) + (5 * 3) = 25
+}
+
+// from closure_block_for.wado
+fn closure_block_for() with Stdout {
+    let factorial = |n: i32| {
+        let mut result = 1;
+        for let mut i = 1; i <= n; i = i + 1 {
+            result = result * i;
+        }
+        return result;
+    };
+
+
+    println(`{factorial(5)}`);  // 120
+    println(`{factorial(3)}`);  // 6
+    println(`{factorial(4)}`);  // 24
+}
+
+// from closure_block_if.wado
+fn closure_block_if() with Stdout {
+    let max_of_three = |a: i32, b: i32, c: i32| {
+        let max_ab = if a > b {
+            a;
+        } else {
+            b;
+        };
+        let result = if max_ab > c {
+            max_ab;
+        } else {
+            c;
+        };
+        return result;
+    };
+
+
+    println(`{max_of_three(1, 5, 3)}`);  // 5
+    println(`{max_of_three(10, 2, 8)}`);  // 10
+    println(`{max_of_three(4, 7, 9)}`);  // 9
+}
+
+// from closure_block_multi_types.wado
+fn closure_block_multi_types() with Stdout {
+    let mixed = |n: i32| {
+        let a: i64 = n as i64 * 1000000000 as i64;
+        let b: f64 = n as f64 * 1.5;
+        let c: bool = n > 0;
+        let d: i32 = if c {
+            n * 2;
+        } else {
+            0;
+        };
+        return d;
+    };
+
+
+    println(`{mixed(5)}`);  // 10
+    println(`{mixed(-3)}`);  // 0
+    println(`{mixed(7)}`);  // 14
+}
+
+// from closure_block_nested.wado
+fn closure_block_nested() with Stdout {
+    let compute = |x: i32| {
+        let a = x * 2;
+        scope: {
+            let b = a + 1;
+            let c = b * 3;
+            scope: {
+                let d = c - 5;
+                return d;
+            }
+        }
+    };
+
+
+    // x=3: a=6, b=7, c=21, d=16
+    println(`{compute(3)}`);
+    // x=5: a=10, b=11, c=33, d=28
+    println(`{compute(5)}`);
+}
+
+// from closure_block_while.wado
+fn closure_block_while() with Stdout {
+    let sum_to_n = |n: i32| {
+        let mut sum = 0;
+        let mut i = 1;
+        while i <= n {
+            sum = sum + i;
+            i = i + 1;
+        }
+        return sum;
+    };
+
+
+    println(`{sum_to_n(5)}`);  // 1+2+3+4+5 = 15
+    println(`{sum_to_n(10)}`);  // 1+...+10 = 55
+    println(`{sum_to_n(3)}`);  // 1+2+3 = 6
+}
+
+export fn run() with Stdout {
+    closure_block_body();
+    closure_block_for();
+    closure_block_if();
+    closure_block_multi_types();
+    closure_block_nested();
+    closure_block_while();
+}
+
+__DATA__
+{"stdout": "15\n20\n25\n120\n6\n24\n5\n10\n9\n10\n0\n14\n16\n28\n15\n55\n6\n"}

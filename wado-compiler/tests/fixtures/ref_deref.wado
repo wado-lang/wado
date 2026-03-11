@@ -1,0 +1,87 @@
+use { println, Stdout } from "core:cli";
+
+// from ref_deref_assign_string.wado
+fn replace(s: &mut String) {
+    *s = "goodbye";
+}
+
+// from ref_deref_assign_struct.wado
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn reset(p: &mut Point) {
+    *p = Point { x: 0, y: 0 };
+}
+
+// from ref_deref_assign_variant.wado
+fn maybe_read(r: &Option<i32>) -> String {
+    if let Some(v) = *r {
+        return `some({v})`;
+    }
+    return "none";
+}
+
+// from ref_deref_assign_string.wado
+fn ref_deref_assign_string() with Stdout {
+    let mut greeting = "hello";
+    println(greeting);
+
+    replace(&mut greeting);
+    println(greeting);
+}
+
+// from ref_deref_assign_struct.wado
+fn ref_deref_assign_struct() with Stdout {
+    let mut p = Point { x: 10, y: 20 };
+    println(`{p.x},{p.y}`);
+
+    reset(&mut p);
+    println(`{p.x},{p.y}`);
+}
+
+// from ref_deref_assign_variant.wado
+fn ref_deref_assign_variant() with Stdout {
+    let a: Option<i32> = Option::<i32>::Some(42);
+    let b: Option<i32> = null;
+
+    println(maybe_read(&a));
+    println(maybe_read(&b));
+
+    // Mutable reference to Option: change Some to None
+    let mut c: Option<i32> = Option::<i32>::Some(10);
+    println(maybe_read(&c));
+
+    let cr = &mut c;
+    *cr = null;
+    println(maybe_read(&c));
+}
+
+// from ref_deref_reassign.wado
+fn ref_deref_reassign() with Stdout {
+    let mut original = 42;
+    let r = &mut original;
+
+    // Read through ref, compute, write back
+    let val = *r;
+    *r = val * 2 + 1;
+    println(`modified: {original}`);
+
+    // Take reference to result of dereference (creates independent copy)
+    let val2 = *r;
+    let r2 = &val2;
+    *r = 0;
+    println(`original: {original}`);
+    println(`copy: {*r2}`);
+}
+
+export fn run() with Stdout {
+    ref_deref_assign_string();
+    ref_deref_assign_struct();
+    ref_deref_assign_variant();
+    ref_deref_reassign();
+}
+
+__DATA__
+{"stdout": "hello\ngoodbye\n10,20\n0,0\nsome(42)\nnone\nsome(10)\nnone\nmodified: 85\noriginal: 0\ncopy: 85\n"}

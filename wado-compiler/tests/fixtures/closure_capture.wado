@@ -1,0 +1,135 @@
+use { println, Stdout } from "core:cli";
+
+// from closure_capture_fn_param.wado
+fn apply_with_offset(x: i32, offset: i32) -> i32 {
+    let add_offset = |v: i32| v + offset;
+    return add_offset(x);
+}
+
+fn clamp(value: i32, min_val: i32, max_val: i32) -> i32 {
+    let is_above_min = |v: i32| v >= min_val;
+    let is_below_max = |v: i32| v <= max_val;
+    if !is_above_min(value) {
+        return min_val;
+    }
+    if !is_below_max(value) {
+        return max_val;
+    }
+    return value;
+}
+
+fn scale_and_add(items: Array<i32>, scale: i32, base: i32) -> i32 {
+    let mut total = 0;
+    let transform = |x: i32| x * scale + base;
+    for let item of items {
+        total += transform(item);
+    }
+    return total;
+}
+
+// from closure_capture_struct.wado
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+// from closure_capture_fn_param.wado
+fn closure_capture_fn_param() with Stdout {
+    let r1 = apply_with_offset(5, 10);
+    println(`{r1}`);  // 15
+
+    let r2 = clamp(15, 0, 10);
+    println(`{r2}`);  // 10
+
+    let r3 = clamp(5, 0, 10);
+    println(`{r3}`);  // 5
+
+    let r4 = clamp(-5, 0, 10);
+    println(`{r4}`);  // 0
+
+    let items: Array<i32> = [1, 2, 3];
+    let r5 = scale_and_add(items, 2, 1);
+    println(`{r5}`);  // (1*2+1) + (2*2+1) + (3*2+1) = 3+5+7 = 15
+}
+
+// from closure_capture_multiple.wado
+fn closure_capture_multiple() with Stdout {
+    // Capture three integer variables
+    let a = 10;
+    let b = 20;
+    let c = 30;
+    let sum = || a + b + c;
+    println(`{sum()}`);  // 60
+
+    // Capture variables used in a template string
+    let first = 1;
+    let second = 2;
+    let third = 3;
+    let format_all = || `{first},{second},{third}`;
+    println(format_all());  // 1,2,3
+
+    // Each closure captures different subsets
+    let x = 100;
+    let y = 200;
+    let get_x = || x;
+    let get_y = || y;
+    let get_sum = || x + y;
+    println(`{get_x()}`);  // 100
+    println(`{get_y()}`);  // 200
+    println(`{get_sum()}`);  // 300
+}
+
+// from closure_capture_string.wado
+fn closure_capture_string() with Stdout {
+    // Capture a String literal
+    let greeting = "Hello";
+    let get_greeting = || greeting;
+    println(get_greeting());  // Hello
+
+    // Capture multiple strings
+    let name = "world";
+    let make_msg = || `{greeting}, {name}!`;
+    println(make_msg());  // Hello, world!
+
+    // Capture a String and use it in a condition
+    let status = "ok";
+    let is_ok = || status == "ok";
+    println(`{is_ok()}`);  // true
+}
+
+// from closure_capture_struct.wado
+fn closure_capture_struct() with Stdout {
+    let p = Point { x: 3, y: 4 };
+
+    // Capture a struct and access its fields
+    let get_x = || p.x;
+    let get_y = || p.y;
+    let sum_coords = || p.x + p.y;
+    let manhattan = || {
+        let dx = p.x;
+        let dy = p.y;
+        return dx + dy;
+    };
+
+
+    println(`{get_x()}`);  // 3
+    println(`{get_y()}`);  // 4
+    println(`{sum_coords()}`);  // 7
+    println(`{manhattan()}`);  // 7
+
+    // Two closures capturing the same struct
+    let q = Point { x: 10, y: 20 };
+    let get_qx = || q.x;
+    let get_qy = || q.y;
+    println(`{get_qx()},{get_qy()}`);  // 10,20
+}
+
+export fn run() with Stdout {
+    closure_capture_fn_param();
+    closure_capture_multiple();
+    closure_capture_string();
+    closure_capture_struct();
+}
+
+__DATA__
+{"stdout": "15\n10\n5\n0\n15\n60\n1,2,3\n100\n200\n300\nHello\nHello, world!\ntrue\n3\n4\n7\n7\n10,20\n"}

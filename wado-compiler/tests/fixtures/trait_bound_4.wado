@@ -1,0 +1,91 @@
+use { println, Stdout } from "core:cli";
+
+// from trait_bound_method_on_type_param_value.wado
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Describe for Point {
+    fn describe(&self) -> String {
+        return `({self.x}, {self.y})`;
+    }
+}
+
+impl Describe for i32 {
+    fn describe(&self) -> String {
+        return `int:{*self}`;
+    }
+}
+
+fn show<T: Describe>(x: T) -> String {
+    return x.describe();
+}
+
+// from trait_bound_multi_satisfied.wado
+trait Drawable {
+    fn draw(&self) -> String;
+}
+
+trait Clickable {
+    fn on_click(&self) -> String;
+}
+
+struct Button {
+    label: String,
+}
+
+impl Drawable for Button {
+    fn draw(&self) -> String {
+        return `[{self.label}]`;
+    }
+}
+
+impl Clickable for Button {
+    fn on_click(&self) -> String {
+        return `clicked {self.label}`;
+    }
+}
+
+struct Widget<T: Drawable + Clickable> {
+    item: T,
+}
+
+// from trait_bound_method_on_type_param_value.wado
+fn trait_bound_method_on_type_param_value() with Stdout {
+    println(show::<Point>(Point { x: 1, y: 2 }));
+    println(show::<i32>(42));
+}
+
+// from trait_bound_multi_satisfied.wado
+fn trait_bound_multi_satisfied() with Stdout {
+    let w = Widget { item: Button { label: "OK" } };
+    println(w.item.draw());
+    println(w.item.on_click());
+}
+
+// from trait_bound_nested_generic.wado
+fn trait_bound_nested_generic() with Stdout {
+    // Array<i32> implements Eq (because i32: Eq),
+    // so Array<Array<i32>> should also implement Eq
+    let a: Array<Array<i32>> = [[1, 2], [3, 4]];
+    let b: Array<Array<i32>> = [[1, 2], [3, 4]];
+    if a == b {
+        println("equal");
+    } else {
+        println("not equal");
+    }
+}
+
+export fn run() with Stdout {
+    trait_bound_method_on_type_param_value();
+    trait_bound_multi_satisfied();
+    trait_bound_nested_generic();
+}
+
+__DATA__
+{"stdout": "(1, 2)\nint:42\n[OK]\nclicked OK\nequal\n"}
