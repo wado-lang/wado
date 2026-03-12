@@ -1315,7 +1315,7 @@ impl FunctionTranslator<'_, '_> {
                 }
 
                 // Static method: canonical dispatch (e.g., Stream::new, WaitableSet::new)
-                if let Some(canonical) = func.method_info.clone().and_then(|m| m.canonical_name)
+                if let Some(canonical) = func.method_info.clone().and_then(|m| m.cm_name)
                     && let Some(instr) = self.try_translate_canonical_static_method(
                         &canonical,
                         func,
@@ -4129,7 +4129,7 @@ impl FunctionTranslator<'_, '_> {
         CmFuturePayload::Trailers
     }
 
-    /// Dispatch canonical resource methods based on `#[canonical("...")]` attribute.
+    /// Dispatch canonical resource methods based on `#[cm("...")]` attribute.
     /// Returns `Some(WirInstr)` if the method has a canonical name and was handled.
     fn try_translate_canonical_method(
         &mut self,
@@ -4138,9 +4138,9 @@ impl FunctionTranslator<'_, '_> {
         args: &[CallArg],
         result_type_id: TypeId,
     ) -> Option<WirInstr> {
-        let canonical_name = func.method_info.clone()?.canonical_name.as_ref()?.clone();
+        let cm_name = func.method_info.clone()?.cm_name.as_ref()?.clone();
         let handle = self.translate_expr(receiver);
-        match canonical_name.as_str() {
+        match cm_name.as_str() {
             // === Stream instance methods ===
             "stream-read" => {
                 let max_arg = self.translate_expr(&args[0].expr);

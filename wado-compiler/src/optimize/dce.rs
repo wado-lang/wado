@@ -590,15 +590,15 @@ fn analyze_expr(
         } => {
             // Collect canonical resource method names for builtin import injection.
             if let Some(info) = func.method_info.clone()
-                && let Some(canonical_name) = &info.canonical_name
+                && let Some(cm_name) = &info.cm_name
             {
-                analysis.canonical_methods.insert(canonical_name.clone());
+                analysis.canonical_methods.insert(cm_name.clone());
 
                 // WIR synthesis for certain canonical methods calls internal functions
                 // at WIR level, which are not visible in the TIR call graph. Add
                 // dependency edges here so DCE discovers them through normal
                 // reachability analysis.
-                match canonical_name.as_str() {
+                match cm_name.as_str() {
                     "stream-write" => {
                         analysis
                             .callees

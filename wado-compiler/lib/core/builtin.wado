@@ -353,6 +353,191 @@ fn i32_reinterpret_f32(f: f32) -> i32;
 fn f32_reinterpret_i32(i: i32) -> f32;
 /// Traps unconditionally, marking unreachable code.
 fn unreachable() -> !;
+
+// =========================================================================
+// CM canonical intrinsics (raw flat ABI signatures)
+//
+// These are the low-level canonical built-in functions imported from the
+// Component Model runtime.  Each maps 1:1 to a `canon` instruction.
+// Higher-level Wado APIs (Stream, Future, WaitableSet, …) are implemented
+// as adapter functions in core:internal that call these builtins.
+// =========================================================================
+
+// --- Stream ---
+
+/// Create a new stream pair.  Returns packed (readable | writable << 32).
+#[canonical("wasi", "stream-new")]
+fn stream_new() -> i64;
+
+/// Read up to `max` bytes from a readable stream into linear memory at `ptr`.
+/// Returns packed (count << 4 | status), or -1 if BLOCKED.
+#[canonical("wasi", "stream-read")]
+fn stream_read(handle: i32, ptr: i32, max: i32) -> i32;
+
+/// Write `len` bytes from linear memory at `ptr` to a writable stream.
+/// Returns packed status, or -1 if BLOCKED.
+#[canonical("wasi", "stream-write")]
+fn stream_write(handle: i32, ptr: i32, len: i32) -> i32;
+
+/// Cancel an in-progress read on a readable stream.
+#[canonical("wasi", "stream-cancel-read")]
+fn stream_cancel_read(handle: i32) -> i32;
+
+/// Cancel an in-progress write on a writable stream.
+#[canonical("wasi", "stream-cancel-write")]
+fn stream_cancel_write(handle: i32) -> i32;
+
+/// Drop a readable stream handle.
+#[canonical("wasi", "stream-drop-readable")]
+fn stream_drop_readable(handle: i32);
+
+/// Drop a writable stream handle.
+#[canonical("wasi", "stream-drop-writable")]
+fn stream_drop_writable(handle: i32);
+
+// --- Future ---
+
+/// Create a new future pair.  Returns packed (readable | writable << 32).
+/// Import name is parameterised by payload type (e.g. "future-new:s32").
+#[canonical("wasi", "future-new")]
+fn future_new() -> i64;
+
+/// Read the value from a future.  `ptr` points to an output buffer.
+/// Returns packed status, or -1 if BLOCKED.
+#[canonical("wasi", "future-read")]
+fn future_read(handle: i32, ptr: i32) -> i32;
+
+/// Write a value into a future.  `ptr` points to the value in linear memory.
+/// Returns packed status, or -1 if BLOCKED.
+#[canonical("wasi", "future-write")]
+fn future_write(handle: i32, ptr: i32) -> i32;
+
+/// Cancel an in-progress read on a future.
+#[canonical("wasi", "future-cancel-read")]
+fn future_cancel_read(handle: i32) -> i32;
+
+/// Cancel an in-progress write on a future.
+#[canonical("wasi", "future-cancel-write")]
+fn future_cancel_write(handle: i32) -> i32;
+
+/// Drop a readable future handle.
+#[canonical("wasi", "future-drop-readable")]
+fn future_drop_readable(handle: i32);
+
+/// Drop a writable future handle.
+#[canonical("wasi", "future-drop-writable")]
+fn future_drop_writable(handle: i32);
+
+// --- WaitableSet ---
+
+/// Create a new waitable set.  Returns a handle (i32).
+#[canonical("wasi", "waitable-set-new")]
+fn waitable_set_new() -> i32;
+
+/// Block until an event fires.  Writes (handle, payload) to `outptr`.
+/// Returns the event code (i32).
+#[canonical("wasi", "waitable-set-wait")]
+fn waitable_set_wait(ws: i32, outptr: i32) -> i32;
+
+/// Non-blocking poll.  Writes (handle, payload) to `outptr`.
+/// Returns the event code, or 0 if no event is ready.
+#[canonical("wasi", "waitable-set-poll")]
+fn waitable_set_poll(ws: i32, outptr: i32) -> i32;
+
+/// Drop a waitable set.
+#[canonical("wasi", "waitable-set-drop")]
+fn waitable_set_drop(ws: i32);
+
+// --- Subtask / Waitable ---
+
+/// Drop a completed subtask.
+#[canonical("wasi", "subtask-drop")]
+fn subtask_drop(handle: i32);
+
+/// Cancel an in-progress subtask.
+#[canonical("wasi", "subtask-cancel")]
+fn subtask_cancel(handle: i32);
+
+/// Join a waitable (subtask/stream/future) to a waitable set.
+/// Returns a Waitable token.  The canonical returns void; we return
+/// the original handle so callers can use it as the Waitable identity.
+#[canonical("wasi", "waitable-join")]
+fn waitable_join(handle: i32, ws: i32);
+
+// --- ErrorContext ---
+
+/// Create a new error context from a string in linear memory.
+#[canonical("wasi", "error-context-new")]
+fn error_context_new(ptr: i32, len: i32) -> i32;
+
+/// Read the debug message into an (ptr, len) pair at `outptr`.
+#[canonical("wasi", "error-context-debug-message")]
+fn error_context_debug_message(handle: i32, outptr: i32);
+
+/// Drop an error context handle.
+#[canonical("wasi", "error-context-drop")]
+fn error_context_drop(handle: i32);
+
+// --- Backpressure ---
+
+/// Increment the backpressure counter.
+#[canonical("wasi", "backpressure-inc")]
+fn backpressure_inc();
+
+/// Decrement the backpressure counter.
+#[canonical("wasi", "backpressure-dec")]
+fn backpressure_dec();
+
+// --- Context ---
+
+/// Get the value of a task-local context slot.
+#[canonical("wasi", "context-get")]
+fn context_get(slot: i32) -> i32;
+
+/// Set the value of a task-local context slot.
+#[canonical("wasi", "context-set")]
+fn context_set(slot: i32, value: i32);
+
+// --- Task ---
+
+/// Acknowledge cancellation of the current task.
+#[canonical("wasi", "task-cancel")]
+fn task_cancel();
+
+// --- Thread ---
+
+/// Yield control to other threads.
+#[canonical("wasi", "thread-yield")]
+fn thread_yield(cancellable: i32);
+
+/// Returns the index of the current thread.
+#[canonical("wasi", "thread-index")]
+fn thread_index() -> i32;
+
+/// Create a new thread via indirect call.
+#[canonical("wasi", "thread-new-indirect")]
+fn thread_new_indirect(func_type_index: i32, table_index: i32);
+
+/// Suspend and switch to a suspended thread.
+#[canonical("wasi", "thread-suspend-to-suspended")]
+fn thread_suspend_to_suspended(target: i32, cancellable: i32);
+
+/// Suspend the current thread.
+#[canonical("wasi", "thread-suspend")]
+fn thread_suspend(cancellable: i32) -> i32;
+
+/// Suspend and switch to another thread.
+#[canonical("wasi", "thread-suspend-to")]
+fn thread_suspend_to(target: i32, cancellable: i32) -> i32;
+
+/// Schedule a suspended thread to resume.
+#[canonical("wasi", "thread-unsuspend")]
+fn thread_unsuspend(target: i32);
+
+/// Yield to a suspended thread and resume when done.
+#[canonical("wasi", "thread-yield-to-suspended")]
+fn thread_yield_to_suspended(target: i32, cancellable: i32);
+
 /// Calls stdout's write_via_stream indirectly (ambient, no effect required).
 /// Returns the subtask handle for the async operation.
 /// Internal only: used by core:internal for ambient logging (panic, assert).
