@@ -31,6 +31,7 @@ cargo llvm-cov --json -p wado-compiler 2>/dev/null \
 ```
 
 Focus on files with:
+
 - High absolute uncovered lines (biggest bang for buck)
 - Low percentage but meaningful code (not just error paths)
 
@@ -38,13 +39,13 @@ Focus on files with:
 
 For each low-coverage file, classify gaps into categories:
 
-| Category | Action | Coverage Impact |
-|----------|--------|----------------|
-| **Dead code** | Delete it | Immediate improvement, no test needed |
-| **Untested language features** | Add e2e test fixtures | Medium effort, high impact |
-| **Error handling paths** | Add `compile_error` test fixtures | Low effort |
-| **Optimizer-specific paths** | Add `wir_expect`/`wir_not_expect` tests | Medium effort |
-| **Edge cases in codegen** | Add targeted e2e tests | Varies |
+| Category                       | Action                                  | Coverage Impact                       |
+| ------------------------------ | --------------------------------------- | ------------------------------------- |
+| **Dead code**                  | Delete it                               | Immediate improvement, no test needed |
+| **Untested language features** | Add e2e test fixtures                   | Medium effort, high impact            |
+| **Error handling paths**       | Add `compile_error` test fixtures       | Low effort                            |
+| **Optimizer-specific paths**   | Add `wir_expect`/`wir_not_expect` tests | Medium effort                         |
+| **Edge cases in codegen**      | Add targeted e2e tests                  | Varies                                |
 
 ### Step 4: Analyze a Specific File
 
@@ -71,12 +72,14 @@ rg 'function_name' wado-compiler/src/ --type rust
 E2E tests are `.wado` files in `wado-compiler/tests/fixtures/`. Each file has a `__DATA__` section with JSON expectations.
 
 **Guidelines for test files:**
+
 - Name files based on **language features**, not compiler components (e.g., `closure_nested.wado` not `codegen_closure.wado`)
 - Prefer adding test cases to existing fixture files when the feature group matches
 - Each fixture group shares a filename prefix (e.g., `closure_*`, `global_*`, `match_*`)
 - After adding new files: `touch wado-compiler/tests/e2e.rs` to trigger rediscovery
 
 **Test patterns that maximize coverage:**
+
 - `test "..." { ... }` with `{"test": {}}` — exercises codegen without needing stdout
 - `compile_error` tests — exercise error reporting paths
 - `wir_expect:O2` / `wir_not_expect:O2` — exercise optimizer paths
