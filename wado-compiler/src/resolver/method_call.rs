@@ -885,11 +885,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         .with_struct_type_args(&impl_type_arg_names);
 
         // Propagate #[cm("...")] from resource static methods for CM adapter synthesis.
-        method_info.cm_name = self.lookup_resource_static_cm(
-            &struct_name,
-            &struct_module,
-            &static_call.method,
-        );
+        method_info.cm_name =
+            self.lookup_resource_static_cm(&struct_name, &struct_module, &static_call.method);
 
         TirExpr::new(
             TirExprKind::Call {

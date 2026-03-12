@@ -68,7 +68,17 @@ enum Alignment { Left = 0, Center = 1, Right = 2 };
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
+type "functype/wasi/stream-write" = fn(i32, i32, i32) -> i32;
+
 type "functype/wasi/task-return" = fn(i32);
+
+type "functype/wasi/waitable-join" = fn(i32, i32);
+
+type "functype/wasi/waitable-set-drop" = fn(i32);
+
+type "functype/wasi/waitable-set-new" = fn() -> i32;
+
+type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
 
@@ -101,6 +111,12 @@ type "functype/core:internal/log_stderr" = fn(ref String);
 type "functype/core:internal/panic" = fn(ref String);
 
 type "functype/core:internal/cm_lower_list_u8" = fn(ref array<u8>, i32) -> i64;
+
+type "functype/core:internal/wait_for_blocked" = fn(i32) -> i32;
+
+type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i32);
+
+type "functype/core:internal/cm_waitable_set_wait" = fn(i32) -> ref WaitEvent;
 
 type "functype/count_digits_i64" = fn(i64) -> i32;
 
@@ -150,39 +166,29 @@ type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
 
-type "functype/wasi/stream-write" = fn(i32, i32, i32) -> i32;
-
-type "functype/wasi/waitable-set-new" = fn() -> i32;
-
-type "functype/wasi/waitable-join" = fn(i32, i32);
-
-type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
-
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/wasi/waitable-set-drop" = fn(i32);
-
 type "functype/i128::sub" = fn(ref i128, ref i128) -> [u64, i64];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 import fn realloc from "mem/realloc";
+import fn stream-write from "wasi/stream-write";
 import fn task-return from "wasi/task-return";
+import fn waitable-join from "wasi/waitable-join";
+import fn waitable-set-drop from "wasi/waitable-set-drop";
+import fn waitable-set-new from "wasi/waitable-set-new";
+import fn waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
 import fn wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
-import fn stream-write from "wasi/stream-write";
-import fn waitable-set-new from "wasi/waitable-set-new";
-import fn waitable-join from "wasi/waitable-join";
-import fn waitable-set-wait from "wasi/waitable-set-wait";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
-import fn waitable-set-drop from "wasi/waitable-set-drop";
 
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
@@ -4329,45 +4335,9 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         new_repr = builtin::array_new<u8>(len + 1);
         builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
-        let __swr_handle_1: i32;
-        let __swr_ptr_1: i32;
-        let __swr_len_1: i32;
-        let __swr_result_1: i32;
-        let __swr_packed_1: i64;
-        __swr_handle_1 = tx;
-        __swr_packed_1 = "core:internal/cm_lower_list_u8"(new_repr, len + 1);
-        __swr_ptr_1 = builtin::i32_wrap_i64(__swr_packed_1);
-        __swr_len_1 = builtin::i32_wrap_i64(__swr_packed_1 >>u 32_i64);
-        __swr_result_1 = "wasi/stream-write"(__swr_handle_1, __swr_ptr_1, __swr_len_1);
-        if __swr_result_1 == -1 {
-            let __swr_evt_1: i32;
-            __swr_result_1 = "wasi/waitable-set-new"();
-            "wasi/waitable-join"(__swr_handle_1, __swr_result_1);
-            __swr_evt_1 = "mem/realloc"(0, 0, 4, 8);
-            drop("wasi/waitable-set-wait"(__swr_result_1, __swr_evt_1));
-            drop("mem/realloc"(__swr_evt_1, 8, 4, 0));
-        };
-        drop("mem/realloc"(__swr_ptr_1, __swr_len_1, 1, 0));
+        "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        let __swr_handle_2: i32;
-        let __swr_ptr_2: i32;
-        let __swr_len_2: i32;
-        let __swr_result_2: i32;
-        let __swr_packed_2: i64;
-        __swr_handle_2 = tx;
-        __swr_packed_2 = "core:internal/cm_lower_list_u8"(bytes, len);
-        __swr_ptr_2 = builtin::i32_wrap_i64(__swr_packed_2);
-        __swr_len_2 = builtin::i32_wrap_i64(__swr_packed_2 >>u 32_i64);
-        __swr_result_2 = "wasi/stream-write"(__swr_handle_2, __swr_ptr_2, __swr_len_2);
-        if __swr_result_2 == -1 {
-            let __swr_evt_2: i32;
-            __swr_result_2 = "wasi/waitable-set-new"();
-            "wasi/waitable-join"(__swr_handle_2, __swr_result_2);
-            __swr_evt_2 = "mem/realloc"(0, 0, 4, 8);
-            drop("wasi/waitable-set-wait"(__swr_result_2, __swr_evt_2));
-            drop("mem/realloc"(__swr_evt_2, 8, 4, 0));
-        };
-        drop("mem/realloc"(__swr_ptr_2, __swr_len_2, 1, 0));
+        "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
     };
     "wasi/stream-drop-writable"(tx);
 }
@@ -4392,13 +4362,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l103: loop {
+            l101: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l103;
+                continue l101;
             };
         };
     };
@@ -4414,45 +4384,9 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         new_repr = builtin::array_new<u8>(len + 1);
         builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
-        let __swr_handle_1: i32;
-        let __swr_ptr_1: i32;
-        let __swr_len_1: i32;
-        let __swr_result_1: i32;
-        let __swr_packed_1: i64;
-        __swr_handle_1 = tx;
-        __swr_packed_1 = "core:internal/cm_lower_list_u8"(new_repr, len + 1);
-        __swr_ptr_1 = builtin::i32_wrap_i64(__swr_packed_1);
-        __swr_len_1 = builtin::i32_wrap_i64(__swr_packed_1 >>u 32_i64);
-        __swr_result_1 = "wasi/stream-write"(__swr_handle_1, __swr_ptr_1, __swr_len_1);
-        if __swr_result_1 == -1 {
-            let __swr_evt_1: i32;
-            __swr_result_1 = "wasi/waitable-set-new"();
-            "wasi/waitable-join"(__swr_handle_1, __swr_result_1);
-            __swr_evt_1 = "mem/realloc"(0, 0, 4, 8);
-            drop("wasi/waitable-set-wait"(__swr_result_1, __swr_evt_1));
-            drop("mem/realloc"(__swr_evt_1, 8, 4, 0));
-        };
-        drop("mem/realloc"(__swr_ptr_1, __swr_len_1, 1, 0));
+        "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
-        let __swr_handle_2: i32;
-        let __swr_ptr_2: i32;
-        let __swr_len_2: i32;
-        let __swr_result_2: i32;
-        let __swr_packed_2: i64;
-        __swr_handle_2 = tx;
-        __swr_packed_2 = "core:internal/cm_lower_list_u8"(bytes, len);
-        __swr_ptr_2 = builtin::i32_wrap_i64(__swr_packed_2);
-        __swr_len_2 = builtin::i32_wrap_i64(__swr_packed_2 >>u 32_i64);
-        __swr_result_2 = "wasi/stream-write"(__swr_handle_2, __swr_ptr_2, __swr_len_2);
-        if __swr_result_2 == -1 {
-            let __swr_evt_2: i32;
-            __swr_result_2 = "wasi/waitable-set-new"();
-            "wasi/waitable-join"(__swr_handle_2, __swr_result_2);
-            __swr_evt_2 = "mem/realloc"(0, 0, 4, 8);
-            drop("wasi/waitable-set-wait"(__swr_result_2, __swr_evt_2));
-            drop("mem/realloc"(__swr_evt_2, 8, 4, 0));
-        };
-        drop("mem/realloc"(__swr_ptr_2, __swr_len_2, 1, 0));
+        "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
     };
     "wasi/stream-drop-writable"(tx);
 }
@@ -4461,12 +4395,19 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
     let handle: i32;
     let subtask: i32;
     let ws: i32;
+    let __local_4: i32;
+    let __local_5: i32;
     handle = packed >> 4;
     if handle != 0 {
         subtask = handle;
         ws = "wasi/waitable-set-new"();
-        drop(let __wj_handle_1: i32; __wj_handle_1 = subtask; "wasi/waitable-join"(__wj_handle_1, ws); __wj_handle_1);
-        drop(let __wsw_ws_2: i32; let __wsw_outptr_2: i32; let __wsw_code_2: i32; __wsw_ws_2 = ws; __wsw_outptr_2 = "mem/realloc"(0, 0, 4, 8); __wsw_code_2 = "wasi/waitable-set-wait"(__wsw_ws_2, __wsw_outptr_2); let __wsw_handle_2: i32; let __wsw_payload_2: i32; __wsw_handle_2 = builtin::load_i32(__wsw_outptr_2); __wsw_payload_2 = builtin::load_i32[4](__wsw_outptr_2); drop("mem/realloc"(__wsw_outptr_2, 8, 4, 0)); WaitEvent { code: __wsw_code_2, handle: __wsw_handle_2, payload: __wsw_payload_2 });
+        drop(__inline_cm_waitable_join_0: block -> i32 {
+            __local_4 = subtask;
+            __local_5 = ws;
+            "wasi/waitable-join"(__local_4, __local_5);
+            break __inline_cm_waitable_join_0: __local_4;
+        });
+        drop("core:internal/cm_waitable_set_wait"(ws));
         "wasi/subtask-drop"(subtask);
         "wasi/waitable-set-drop"(ws);
     };
@@ -4499,6 +4440,53 @@ fn "core:internal/cm_lower_list_u8"(data, len) {  // from core:internal
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
+fn "core:internal/wait_for_blocked"(handle) {  // from core:internal
+    let ws: i32;
+    let evt_ptr: i32;
+    let code: i32;
+    let payload: i32;
+    let freed: i32;
+    ws = "wasi/waitable-set-new"();
+    "wasi/waitable-join"(handle, ws);
+    evt_ptr = "mem/realloc"(0, 0, 4, 8);
+    code = "wasi/waitable-set-wait"(ws, evt_ptr);
+    payload = builtin::load_i32(evt_ptr + 4);
+    freed = "mem/realloc"(evt_ptr, 8, 4, 0);
+    "wasi/waitable-set-drop"(ws);
+    return payload;
+}
+
+fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:internal
+    let packed: i64;
+    let ptr: i32;
+    let raw_len: i32;
+    let result: i32;
+    let payload: i32;
+    let freed: i32;
+    packed = "core:internal/cm_lower_list_u8"(data, len);
+    ptr = builtin::i32_wrap_i64(packed);
+    raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
+    result = "wasi/stream-write"(handle, ptr, raw_len);
+    if result == -1 {
+        payload = "core:internal/wait_for_blocked"(handle);
+    };
+    freed = "mem/realloc"(ptr, raw_len, 1, 0);
+}
+
+fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
+    let out_ptr: i32;
+    let code: i32;
+    let evt_handle: i32;
+    let payload: i32;
+    let freed: i32;
+    out_ptr = "mem/realloc"(0, 0, 4, 8);
+    code = "wasi/waitable-set-wait"(ws, out_ptr);
+    evt_handle = builtin::load_i32(out_ptr);
+    payload = builtin::load_i32(out_ptr + 4);
+    freed = "mem/realloc"(out_ptr, 8, 4, 0);
+    return WaitEvent { code: code, handle: evt_handle, payload: payload };
+}
+
 fn count_digits_i64(val) {
     let n: i32;
     let t: i64;
@@ -4509,13 +4497,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l111: loop {
+            l108: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l111;
+                continue l108;
             };
         };
     };
@@ -4532,14 +4520,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l115: loop {
+                l112: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l115;
+                    continue l112;
                 };
             };
         };
@@ -4570,10 +4558,10 @@ fn u128::div_rem(self, divisor) {
     remainder = u128 { low: 0_i64, high: 0_i64 };
     one = u128 { low: 1_i64, high: 0_i64 };
     i = 127;
-    b121: block {
-        l122: loop {
+    b118: block {
+        l119: loop {
             if (i >= 0) == 0 {
-                break b121;
+                break b118;
             };
             remainder = u128^Shl::shl(remainder, 1);
             bit = u128::get_bit(self, i);
@@ -4585,7 +4573,7 @@ fn u128::div_rem(self, divisor) {
                 quotient = u128::set_bit(quotient, i);
             };
             i = i - 1;
-            continue l122;
+            continue l119;
         };
     };
     return "tuple/[u128, u128]" { 0: ref.as_non_null(quotient), 1: ref.as_non_null(remainder) };
@@ -4654,7 +4642,7 @@ fn u128::fmt_decimal(self, f) {
     __for_0: block {
         temp_7 = value_copy u128(self);
         block {
-            l130: loop {
+            l127: loop {
                 if (u128^Ord::cmp(temp_7, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_0;
                 };
@@ -4665,7 +4653,7 @@ fn u128::fmt_decimal(self, f) {
                     __local_19 = u128::div_rem(__local_17, __local_18);
                     break __inline_u128_Div__div_4: __local_19.0;
                 };
-                continue l130;
+                continue l127;
             };
         };
     };
@@ -4678,7 +4666,7 @@ fn u128::fmt_decimal(self, f) {
     __for_1: block {
         temp_11 = value_copy u128(self);
         block {
-            l133: loop {
+            l130: loop {
                 if (u128^Ord::cmp(temp_11, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_1;
                 };
@@ -4699,7 +4687,7 @@ fn u128::fmt_decimal(self, f) {
                     __local_28 = u128::div_rem(__local_26, __local_27);
                     break __inline_u128_Div__div_9: __local_28.0;
                 };
-                continue l133;
+                continue l130;
             };
         };
     };
@@ -4758,32 +4746,32 @@ fn u128::fmt_base(self, f, base, upper) {
         __local_10 = self.low;
         if __local_9 != 0_i64 {
             __local_12 = 63;
-            b143: block {
-                l144: loop {
+            b140: block {
+                l141: loop {
                     if (__local_12 >= 0) == 0 {
-                        break b143;
+                        break b140;
                     };
                     if ((__local_9 >> builtin::i64_extend_i32_s(__local_12)) & 1_i64) != 0_i64 {
                         __local_8 = 64 + __local_12;
-                        break b143;
+                        break b140;
                     };
                     __local_12 = __local_12 - 1;
-                    continue l144;
+                    continue l141;
                 };
             };
         } else {
             __local_14 = 63;
-            b147: block {
-                l148: loop {
+            b144: block {
+                l145: loop {
                     if (__local_14 >= 0) == 0 {
-                        break b147;
+                        break b144;
                     };
                     if ((__local_10 >> builtin::i64_extend_i32_s(__local_14)) & 1_i64) != 0_i64 {
                         __local_8 = __local_14;
-                        break b147;
+                        break b144;
                     };
                     __local_14 = __local_14 - 1;
-                    continue l148;
+                    continue l145;
                 };
             };
         };
@@ -4801,14 +4789,14 @@ fn u128::fmt_base(self, f, base, upper) {
         lo = self.low;
         hi = self.high;
         shift_u64 = builtin::i64_extend_i32_s(bits_per_digit);
-        b152: block {
-            l153: loop {
+        b149: block {
+            l150: loop {
                 if if lo != 0_i64 -> i32 {
                     1;
                 } else {
                     hi != 0_i64;
                 } == 0 {
-                    break b152;
+                    break b149;
                 };
                 pos = pos - 1;
                 digit = builtin::i32_wrap_i64(lo & mask);
@@ -4823,7 +4811,7 @@ fn u128::fmt_base(self, f, base, upper) {
                 hi_bits = hi << (64_i64 - shift_u64);
                 lo = (lo >>u shift_u64) | hi_bits;
                 hi = hi >>u shift_u64;
-                continue l153;
+                continue l150;
             };
         };
     };
@@ -4949,7 +4937,7 @@ fn i128::fmt_decimal(self, f) {
     __for_2: block {
         temp_9 = value_copy u128(abs_val);
         block {
-            l170: loop {
+            l167: loop {
                 if (u128^Ord::cmp(temp_9, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_2;
                 };
@@ -4960,7 +4948,7 @@ fn i128::fmt_decimal(self, f) {
                     __local_21 = u128::div_rem(__local_19, __local_20);
                     break __inline_u128_Div__div_4: __local_21.0;
                 };
-                continue l170;
+                continue l167;
             };
         };
     };
@@ -4974,7 +4962,7 @@ fn i128::fmt_decimal(self, f) {
     __for_3: block {
         temp_13 = value_copy u128(abs_val);
         block {
-            l173: loop {
+            l170: loop {
                 if (u128^Ord::cmp(temp_13, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_3;
                 };
@@ -4995,7 +4983,7 @@ fn i128::fmt_decimal(self, f) {
                     __local_30 = u128::div_rem(__local_28, __local_29);
                     break __inline_u128_Div__div_9: __local_30.0;
                 };
-                continue l173;
+                continue l170;
             };
         };
     };
@@ -5054,32 +5042,32 @@ fn i128::fmt_base(self, f, base, upper) {
         __local_12 = abs_val.low;
         if __local_11 != 0_i64 {
             __local_13 = 63;
-            b182: block {
-                l183: loop {
+            b179: block {
+                l180: loop {
                     if (__local_13 >= 0) == 0 {
-                        break b182;
+                        break b179;
                     };
                     if ((__local_11 >> builtin::i64_extend_i32_s(__local_13)) & 1_i64) != 0_i64 {
                         __local_10 = 64 + __local_13;
-                        break b182;
+                        break b179;
                     };
                     __local_13 = __local_13 - 1;
-                    continue l183;
+                    continue l180;
                 };
             };
         } else {
             __local_15 = 63;
-            b186: block {
-                l187: loop {
+            b183: block {
+                l184: loop {
                     if (__local_15 >= 0) == 0 {
-                        break b186;
+                        break b183;
                     };
                     if ((__local_12 >> builtin::i64_extend_i32_s(__local_15)) & 1_i64) != 0_i64 {
                         __local_10 = __local_15;
-                        break b186;
+                        break b183;
                     };
                     __local_15 = __local_15 - 1;
-                    continue l187;
+                    continue l184;
                 };
             };
         };
@@ -5097,14 +5085,14 @@ fn i128::fmt_base(self, f, base, upper) {
         lo = abs_val.low;
         hi = abs_val.high;
         shift_u64 = builtin::i64_extend_i32_s(bits_per_digit);
-        b191: block {
-            l192: loop {
+        b188: block {
+            l189: loop {
                 if if lo != 0_i64 -> i32 {
                     1;
                 } else {
                     hi != 0_i64;
                 } == 0 {
-                    break b191;
+                    break b188;
                 };
                 pos = pos - 1;
                 digit = builtin::i32_wrap_i64(lo & mask);
@@ -5119,7 +5107,7 @@ fn i128::fmt_base(self, f, base, upper) {
                 hi_bits = hi << (64_i64 - shift_u64);
                 lo = (lo >>u shift_u64) | hi_bits;
                 hi = hi >>u shift_u64;
-                continue l192;
+                continue l189;
             };
         };
     };
@@ -5210,7 +5198,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l204: loop {
+            l201: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -5218,7 +5206,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l204;
+                continue l201;
             };
         };
     };
@@ -5259,13 +5247,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l212: loop {
+            l209: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l212;
+                continue l209;
             };
         };
     };

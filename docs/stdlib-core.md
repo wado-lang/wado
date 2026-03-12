@@ -1071,6 +1071,8 @@ _Fields are private._
 
 ##### `pub fn internal_raw_data(&self) -> builtin::array<T>`
 
+##### `pub fn internal_from_raw(repr: builtin::array<T>, used: i32) -> Array<T>`
+
 ##### `pub fn append(&mut self, value: T)`
 
 ##### `pub fn get(&self, index: i32) -> Option<T>`

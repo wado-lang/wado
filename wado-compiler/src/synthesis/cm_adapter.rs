@@ -4867,7 +4867,7 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
 /// Determine the internal adapter function name for a CM resource method.
 /// Returns `Some(("internal" | "builtin", function_name))` or `None` if not handled.
 /// Maps CM method names to their adapter dispatch.
-/// - `"raw"`: direct CmRawCall to canonical Wasm import (for simple void operations)
+/// - `"raw"`: direct `CmRawCall` to canonical Wasm import (for simple void operations)
 /// - `"internal"`: call to internal.wado adapter function (for complex operations)
 fn cm_adapter_function(cm_name: &str) -> Option<(&'static str, &'static str)> {
     match cm_name {
@@ -4989,9 +4989,7 @@ fn rewrite_cm_methods_in_expr(expr: &mut TirExpr, tt: &TypeTable) {
                 rewrite_cm_methods_in_expr(&mut arg.expr, tt);
             }
         }
-        TirExprKind::MethodCall {
-            receiver, args, ..
-        } => {
+        TirExprKind::MethodCall { receiver, args, .. } => {
             rewrite_cm_methods_in_expr(receiver, tt);
             for arg in args.iter_mut() {
                 rewrite_cm_methods_in_expr(&mut arg.expr, tt);
@@ -5061,14 +5059,10 @@ fn rewrite_cm_methods_in_expr(expr: &mut TirExpr, tt: &TypeTable) {
 
     // Now check if this expression is a CM resource method call
     let cm_name = match &expr.kind {
-        TirExprKind::MethodCall { func, .. } => func
-            .method_info
-            .as_ref()
-            .and_then(|m| m.cm_name.clone()),
-        TirExprKind::Call { func, .. } => func
-            .method_info
-            .as_ref()
-            .and_then(|m| m.cm_name.clone()),
+        TirExprKind::MethodCall { func, .. } => {
+            func.method_info.as_ref().and_then(|m| m.cm_name.clone())
+        }
+        TirExprKind::Call { func, .. } => func.method_info.as_ref().and_then(|m| m.cm_name.clone()),
         _ => None,
     };
 
@@ -5102,10 +5096,7 @@ fn rewrite_cm_methods_in_expr(expr: &mut TirExpr, tt: &TypeTable) {
 /// Rewrite a CM instance method call (receiver.method(args)) to a builtin/internal call.
 /// The receiver is cast to i32 (resource handle) and passed as the first argument.
 fn rewrite_cm_instance_method(expr: &mut TirExpr, kind: &str, func_name: &str) {
-    let TirExprKind::MethodCall {
-        receiver, args, ..
-    } = &mut expr.kind
-    else {
+    let TirExprKind::MethodCall { receiver, args, .. } = &mut expr.kind else {
         return;
     };
 
@@ -5114,10 +5105,7 @@ fn rewrite_cm_instance_method(expr: &mut TirExpr, kind: &str, func_name: &str) {
         receiver.as_mut(),
         TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
     );
-    let taken_args: Vec<TirExpr> = std::mem::take(args)
-        .into_iter()
-        .map(|a| a.expr)
-        .collect();
+    let taken_args: Vec<TirExpr> = std::mem::take(args).into_iter().map(|a| a.expr).collect();
 
     // Cast receiver to i32 (resource handle)
     let handle = cast(taken_receiver, TypeTable::I32);
@@ -5136,16 +5124,13 @@ fn rewrite_cm_instance_method(expr: &mut TirExpr, kind: &str, func_name: &str) {
     *expr = new_expr;
 }
 
-/// Rewrite a CM static method call (Type::method(args)) to a raw/internal call.
+/// Rewrite a CM static method call (`Type::method(args)`) to a raw/internal call.
 fn rewrite_cm_static_method(expr: &mut TirExpr, kind: &str, func_name: &str) {
     let TirExprKind::Call { args, .. } = &mut expr.kind else {
         return;
     };
 
-    let taken_args: Vec<TirExpr> = std::mem::take(args)
-        .into_iter()
-        .map(|a| a.expr)
-        .collect();
+    let taken_args: Vec<TirExpr> = std::mem::take(args).into_iter().map(|a| a.expr).collect();
 
     let new_expr = match kind {
         "raw" => cm_raw_call(func_name, taken_args, expr.type_id),
@@ -5155,7 +5140,6 @@ fn rewrite_cm_static_method(expr: &mut TirExpr, kind: &str, func_name: &str) {
 
     *expr = new_expr;
 }
-
 
 /// Recursively replace WASI-derived types with user types in the adapter.
 /// Given a WASI AST `Type` and the user's `TypeId`, compute the WASI-derived `TypeId`

@@ -423,6 +423,80 @@ fn f32_reinterpret_i32(i: i32) -> f32;
 
 fn unreachable() -> !;
 
+fn stream_new() -> i64;
+
+fn stream_read(handle: i32, ptr: i32, max: i32) -> i32;
+
+fn stream_write(handle: i32, ptr: i32, len: i32) -> i32;
+
+fn stream_cancel_read(handle: i32) -> i32;
+
+fn stream_cancel_write(handle: i32) -> i32;
+
+fn stream_drop_readable(handle: i32);
+
+fn stream_drop_writable(handle: i32);
+
+fn future_new() -> i64;
+
+fn future_read(handle: i32, ptr: i32) -> i32;
+
+fn future_write(handle: i32, ptr: i32) -> i32;
+
+fn future_cancel_read(handle: i32) -> i32;
+
+fn future_cancel_write(handle: i32) -> i32;
+
+fn future_drop_readable(handle: i32);
+
+fn future_drop_writable(handle: i32);
+
+fn waitable_set_new() -> i32;
+
+fn waitable_set_wait(ws: i32, outptr: i32) -> i32;
+
+fn waitable_set_poll(ws: i32, outptr: i32) -> i32;
+
+fn waitable_set_drop(ws: i32);
+
+fn subtask_drop(handle: i32);
+
+fn subtask_cancel(handle: i32);
+
+fn waitable_join(handle: i32, ws: i32);
+
+fn error_context_new(ptr: i32, len: i32) -> i32;
+
+fn error_context_debug_message(handle: i32, outptr: i32);
+
+fn error_context_drop(handle: i32);
+
+fn backpressure_inc();
+
+fn backpressure_dec();
+
+fn context_get(slot: i32) -> i32;
+
+fn context_set(slot: i32, value: i32);
+
+fn task_cancel();
+
+fn thread_yield(cancellable: i32);
+
+fn thread_index() -> i32;
+
+fn thread_new_indirect(func_type_index: i32, table_index: i32);
+
+fn thread_suspend_to_suspended(target: i32, cancellable: i32);
+
+fn thread_suspend(cancellable: i32) -> i32;
+
+fn thread_suspend_to(target: i32, cancellable: i32) -> i32;
+
+fn thread_unsuspend(target: i32);
+
+fn thread_yield_to_suspended(target: i32, cancellable: i32);
+
 fn call_indirect_stdout_write_via_stream(rx: i32) -> i32;
 
 fn call_indirect_stderr_write_via_stream(rx: i32) -> i32;
@@ -1140,11 +1214,11 @@ pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: boo
         let new_repr: builtin::array<u8> = "core::cli::array_new<u8>"((len + 1));
         "core::cli::array_copy<u8>"(new_repr, 0, bytes, 0, len);
         core::builtin::array_set_u8(new_repr, len, 10);
-        tx."StreamWritable<u8>::write_raw"(new_repr, (len + 1));
+        core::internal::cm_stream_write_raw_u8(&tx as i32, new_repr, (len + 1));
     } else {
-        tx."StreamWritable<u8>::write_raw"(bytes, len);
+        core::internal::cm_stream_write_raw_u8(&tx as i32, bytes, len);
     }
-    tx."StreamWritable<u8>::drop"();
+    cm_raw_call stream-drop-writable(&tx as i32);
 }
 
 pub fn println(message: String) with Stdout {
@@ -1188,8 +1262,8 @@ pub fn print_bytes(data: Array<u8>) with Stdout {
     let rx: Stream<u8> = __pattern_temp_0.0;
     let tx: StreamWritable<u8> = __pattern_temp_0.1;
     let subtask: i32 = __cm_adapter__Stdout_write_via_stream(rx as i32);
-    tx."StreamWritable<u8>::write"(data);
-    tx."StreamWritable<u8>::drop"();
+    core::internal::cm_stream_write_u8(&tx as i32, data);
+    cm_raw_call stream-drop-writable(&tx as i32);
     core::internal::wait_for_subtask(subtask);
 }
 
@@ -1527,22 +1601,22 @@ pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newli
         let new_repr: builtin::array<u8> = "core::internal::array_new<u8>"((len + 1));
         "core::internal::array_copy<u8>"(new_repr, 0, bytes, 0, len);
         core::builtin::array_set_u8(new_repr, len, 10);
-        tx."StreamWritable<u8>::write_raw"(new_repr, (len + 1));
+        core::internal::cm_stream_write_raw_u8(&tx as i32, new_repr, (len + 1));
     } else {
-        tx."StreamWritable<u8>::write_raw"(bytes, len);
+        core::internal::cm_stream_write_raw_u8(&tx as i32, bytes, len);
     }
-    tx."StreamWritable<u8>::drop"();
+    cm_raw_call stream-drop-writable(&tx as i32);
 }
 
 pub fn wait_for_subtask(packed: i32) {
     let handle: i32 = (packed >> 4);
     if (handle != 0) {
         let subtask: Subtask = handle as Subtask;
-        let ws: WaitableSet = "core::prelude/types.wado::WaitableSet::new"();
-        subtask.Subtask::join(&ws);
-        ws.WaitableSet::wait();
-        subtask.Subtask::drop();
-        ws.WaitableSet::drop();
+        let ws: WaitableSet = cm_raw_call waitable-set-new();
+        core::internal::cm_waitable_join(&subtask as i32, &ws);
+        core::internal::cm_waitable_set_wait(&ws as i32);
+        cm_raw_call subtask-drop(&subtask as i32);
+        cm_raw_call waitable-set-drop(&ws as i32);
     }
 }
 
@@ -1614,6 +1688,98 @@ pub fn write_escaped_string(s: String, f: &mut Formatter) {
             }
         }
     }
+}
+
+pub fn wait_for_blocked(handle: i32) -> i32 {
+    let ws: i32 = core::builtin::waitable_set_new();
+    core::builtin::waitable_join(handle, ws);
+    let evt_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    let code: i32 = core::builtin::waitable_set_wait(ws, evt_ptr);
+    let payload: i32 = core::builtin::i32_load((evt_ptr + 4));
+    let freed: i32 = core::builtin::realloc(evt_ptr, 8, 4, 0);
+    core::builtin::waitable_set_drop(ws);
+    return payload;
+}
+
+pub fn cm_stream_read_u8(handle: i32, max: i32) -> Array<u8> {
+    let ptr: i32 = core::builtin::realloc(0, 0, 1, max);
+    let mut result: i32 = core::builtin::stream_read(handle, ptr, max);
+    if (result == -1) {
+        result = core::internal::wait_for_blocked(handle);
+    }
+    let count: i32 = (result >> 4);
+    let arr: builtin::array<u8> = core::internal::memory_to_gc_array(ptr, count);
+    let freed: i32 = core::builtin::realloc(ptr, max, 1, 0);
+    return "core::internal::Array<u8>::internal_from_raw"(arr, count);
+}
+
+pub fn cm_stream_write_u8(handle: i32, data: Array<u8>) {
+    let packed: i64 = core::internal::cm_lower_array_u8(data);
+    let ptr: i32 = packed as i32;
+    let len: i32 = (packed >> 32) as i32;
+    let result: i32 = core::builtin::stream_write(handle, ptr, len);
+    if (result == -1) {
+        let payload: i32 = core::internal::wait_for_blocked(handle);
+    }
+    let freed: i32 = core::builtin::realloc(ptr, len, 1, 0);
+}
+
+pub fn cm_stream_write_raw_u8(handle: i32, data: builtin::array<u8>, len: i32) {
+    let packed: i64 = core::internal::cm_lower_list_u8(data, len);
+    let ptr: i32 = packed as i32;
+    let raw_len: i32 = (packed >> 32) as i32;
+    let result: i32 = core::builtin::stream_write(handle, ptr, raw_len);
+    if (result == -1) {
+        let payload: i32 = core::internal::wait_for_blocked(handle);
+    }
+    let freed: i32 = core::builtin::realloc(ptr, raw_len, 1, 0);
+}
+
+pub fn cm_error_context_new(msg: String) -> i32 {
+    let packed: i64 = core::internal::cm_lower_string(msg);
+    let ptr: i32 = packed as i32;
+    let len: i32 = (packed >> 32) as i32;
+    let handle: i32 = core::builtin::error_context_new(ptr, len);
+    let freed: i32 = core::builtin::realloc(ptr, len, 1, 0);
+    return handle;
+}
+
+pub fn cm_error_context_debug_message(handle: i32) -> String {
+    let out_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    core::builtin::error_context_debug_message(handle, out_ptr);
+    let ptr: i32 = core::builtin::i32_load(out_ptr);
+    let len: i32 = core::builtin::i32_load((out_ptr + 4));
+    let freed_out: i32 = core::builtin::realloc(out_ptr, 8, 4, 0);
+    let result: String = core::internal::memory_to_gc_string(ptr, len);
+    let freed_data: i32 = core::builtin::realloc(ptr, len, 1, 0);
+    return result;
+}
+
+pub fn cm_waitable_set_wait(ws: i32) -> WaitEvent {
+    let out_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    let code: i32 = core::builtin::waitable_set_wait(ws, out_ptr);
+    let evt_handle: i32 = core::builtin::i32_load(out_ptr);
+    let payload: i32 = core::builtin::i32_load((out_ptr + 4));
+    let freed: i32 = core::builtin::realloc(out_ptr, 8, 4, 0);
+    return WaitEvent { code: code, handle: evt_handle, payload: payload };
+}
+
+pub fn cm_waitable_join(handle: i32, ws: i32) -> i32 {
+    core::builtin::waitable_join(handle, ws);
+    return handle;
+}
+
+pub fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
+    let out_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    let code: i32 = core::builtin::waitable_set_poll(ws, out_ptr);
+    if (code == 0) {
+        let freed: i32 = core::builtin::realloc(out_ptr, 8, 4, 0);
+        return null;
+    }
+    let evt_handle: i32 = core::builtin::i32_load(out_ptr);
+    let payload: i32 = core::builtin::i32_load((out_ptr + 4));
+    let freed: i32 = core::builtin::realloc(out_ptr, 8, 4, 0);
+    return Option<WaitEvent>::Some(WaitEvent { code: code, handle: evt_handle, payload: payload });
 }
 
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
@@ -1816,6 +1982,10 @@ pub fn "Tuple<i32,i32>^Display::fmt"(self: &[i32, i32], f: &mut Formatter) {
 
 pub fn "Tuple<i32,i32,i32>^Display::fmt"(self: &[i32, i32, i32], f: &mut Formatter) {
     self."Tuple<i32,i32,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Array<u8>::internal_from_raw"(repr: builtin::array<u8>, used: i32) -> Array<u8> {
+    return Array<u8> { repr: repr, used: used };
 }
 
 fn "StrCharIter^IntoIterator::into_iter"(self: &StrCharIter) -> StrCharIter {

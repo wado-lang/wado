@@ -27,7 +27,6 @@ type CallGraph = IndexMap<FunctionId, IndexSet<FunctionId>>;
 /// Effect usage: function ID -> set of (`effect_name`, `operation_name`) pairs
 type EffectUsageMap = IndexMap<FunctionId, IndexSet<(String, String)>>;
 
-
 /// Analysis results for a single function
 #[derive(Debug, Clone, Default)]
 struct FunctionAnalysis {

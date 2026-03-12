@@ -4132,7 +4132,7 @@ impl FunctionTranslator<'_, '_> {
     /// Dispatch canonical resource methods based on `#[cm("...")]` attribute.
     /// Returns `Some(WirInstr)` if the method has a canonical name and was handled.
     ///
-    /// Most CM methods are now handled by synthesis (rewritten to CmRawCall or
+    /// Most CM methods are now handled by synthesis (rewritten to `CmRawCall` or
     /// internal adapter calls). Only future operations remain here because they
     /// require payload-parameterized canonical imports.
     fn try_translate_canonical_method(
