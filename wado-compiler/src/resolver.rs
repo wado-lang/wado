@@ -135,9 +135,11 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Cached flat set of all known type names for fast `is_known_type_name` lookups.
     known_type_names_cache: IndexSet<String>,
     /// Cache for `find_indexing_trait_impl` results.
-    /// Key: (struct_name, base_type_id, trait_base_name, method_name, assoc_type_name)
-    indexing_trait_cache:
-        IndexMap<(String, TypeId, String, String, String), Option<(TypeId, ast::SelfKind, String, ModuleSource)>>,
+    /// Key: (`struct_name`, `base_type_id`, `trait_base_name`, `method_name`, `assoc_type_name`)
+    indexing_trait_cache: IndexMap<
+        (String, TypeId, String, String, String),
+        Option<(TypeId, ast::SelfKind, String, ModuleSource)>,
+    >,
 }
 
 impl<'a, H: CompilerHost> Resolver<'a, H> {

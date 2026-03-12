@@ -37,12 +37,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     _ => unreachable!("ImplBlockRef::Loaded points to non-impl item"),
                 }
             }
-            ImplBlockRef::CurrentModule(item_idx) => {
-                match &self.current_module_items[*item_idx] {
-                    Item::Impl(impl_block) => impl_block,
-                    _ => unreachable!("ImplBlockRef::CurrentModule points to non-impl item"),
-                }
-            }
+            ImplBlockRef::CurrentModule(item_idx) => match &self.current_module_items[*item_idx] {
+                Item::Impl(impl_block) => impl_block,
+                _ => unreachable!("ImplBlockRef::CurrentModule points to non-impl item"),
+            },
         }
     }
 
@@ -1242,8 +1240,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let impl_struct_name = self.get_type_name(&impl_block.ty);
             // Accept if the type matches by name, or if it's a blanket impl type parameter
             // (blanket impls already had their bounds checked before being added).
-            let is_blanket_type_param =
-                matches!(&impl_block.ty, Type::Named(named) if !self.is_known_type_name(&named.name));
+            let is_blanket_type_param = matches!(&impl_block.ty, Type::Named(named) if !self.is_known_type_name(&named.name));
             if !names_to_check.contains(&impl_struct_name) && !is_blanket_type_param {
                 continue;
             }
@@ -1294,19 +1291,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
 
             // For blanket impls where impl_ty is a free type parameter
-            if let Some(ref name) = blanket_name {
-                if !self.current_type_params.contains_key(name)
-                    && !self.is_known_type_name(name)
-                {
-                    if let Some(recv_id) = receiver_type_id {
-                        self.current_type_params.insert(name.clone(), (0, recv_id));
-                    } else {
-                        let type_id = self
-                            .type_table
-                            .borrow_mut()
-                            .make_type_param(name.clone(), 0);
-                        self.current_type_params.insert(name.clone(), (0, type_id));
-                    }
+            if let Some(ref name) = blanket_name
+                && !self.current_type_params.contains_key(name)
+                && !self.is_known_type_name(name)
+            {
+                if let Some(recv_id) = receiver_type_id {
+                    self.current_type_params.insert(name.clone(), (0, recv_id));
+                } else {
+                    let type_id = self
+                        .type_table
+                        .borrow_mut()
+                        .make_type_param(name.clone(), 0);
+                    self.current_type_params.insert(name.clone(), (0, type_id));
                 }
             }
 
@@ -2408,8 +2404,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Set up associated type bindings
                 let old_bindings = std::mem::take(&mut self.current_associated_type_bindings);
                 for (name, ty) in &assoc_bindings {
-                    let type_id =
-                        self.resolve_type_with_param_mapping(ty, &type_param_mapping);
+                    let type_id = self.resolve_type_with_param_mapping(ty, &type_param_mapping);
                     self.current_associated_type_bindings
                         .insert(name.clone(), type_id);
                 }
