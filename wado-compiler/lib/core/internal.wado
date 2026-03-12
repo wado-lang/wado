@@ -34,17 +34,20 @@ pub fn gc_array_to_memory(arr: builtin::array<u8>, ptr: i32, len: i32) {
 
 /// Writes a string to a StreamWritable<u8> with an optional newline, then drops it.
 /// Internal helper for log_stdout and log_stderr.
+///
+/// Uses write_raw to pass String's internal GC array directly to the stream,
+/// avoiding the intermediate String → Array<u8> byte-by-byte copy.
 pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
+    let bytes = message.internal_raw_bytes();
     let len = message.len();
-    let alloc_size = if add_newline { len + 1 } else { len };
-    let mut arr = Array::<u8>::with_capacity(alloc_size);
-    for let b of message.bytes() {
-        arr.append(b);
-    }
     if add_newline {
-        arr.append('\n' as u8);
+        let new_repr = builtin::array_new::<u8>(len + 1);
+        builtin::array_copy::<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_set_u8(new_repr, len, 10);
+        tx.write_raw(new_repr, len + 1);
+    } else {
+        tx.write_raw(bytes, len);
     }
-    tx.write(arr);
     tx.drop();
 }
 

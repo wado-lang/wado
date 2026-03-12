@@ -143,6 +143,11 @@ pub resource StreamWritable<T> {
     #[canonical("stream-write")]
     fn write(&self, data: Array<T>);
 
+    /// Write raw GC array directly to the stream.
+    /// `len` is the number of valid elements (may be less than array capacity).
+    #[canonical("stream-write-raw")]
+    fn write_raw(&self, data: builtin::array<T>, len: i32);
+
     /// Cancel an in-progress write. Blocks until cancellation completes.
     #[canonical("stream-cancel-write")]
     fn cancel_write(&self);

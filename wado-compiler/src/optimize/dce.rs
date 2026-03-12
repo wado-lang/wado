@@ -607,6 +607,14 @@ fn analyze_expr(
                                 "cm_lower_array_u8",
                             )));
                     }
+                    "stream-write-raw" => {
+                        analysis
+                            .callees
+                            .insert(FunctionId::Free(FreeFunctionName::from_strs(
+                                &["core", "internal"],
+                                "cm_lower_list_u8",
+                            )));
+                    }
                     "error-context-new" => {
                         analysis
                             .callees
