@@ -1,0 +1,36 @@
+use { println, Stdout } from "core:cli";
+
+// Regression test: LICM must not hoist field accesses on &mut GenericInstance
+// parameters (e.g., &mut Array<u8>) because method calls like append() modify
+// those fields (used, repr) inside the loop.
+fn process(arr: &mut Array<u8>, input: &Array<u8>, count: i32) {
+    let mut i = 0;
+    while i < count {
+        let val = input[i];
+        if val < 128 {
+            arr.append(val);
+        } else {
+            let dist = (val - 128) as i32;
+            let src = arr.len() - dist;
+            arr.append(arr[src]);
+            arr.append(arr[src + 1]);
+        }
+        i += 1;
+    }
+}
+
+export fn run() with Stdout {
+    let mut out: Array<u8> = [];
+    let input: Array<u8> = [65, 66, 67, 130];
+    process(&mut out, &input, 4);
+    println(`len: {out.len()}`);
+    for let mut i = 0; i < out.len(); i += 1 {
+        println(`{out[i]}`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "len: 5\n65\n66\n67\n66\n67\n",
+    "wir_not_expect:O2": ["_licm_used = arr.used", "_licm_repr = arr.repr"]
+}

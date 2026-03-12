@@ -272,7 +272,7 @@ fn mark_gc_local_as_fully_modified(
 /// Check if a type is a GC heap type whose fields can be mutated by a callee.
 fn is_gc_heap_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
-        ResolvedType::Struct { .. } => true,
+        ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
             is_gc_heap_type(*inner, type_table)
         }
