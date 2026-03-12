@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773285761274,
+  "lastUpdate": 1773307747985,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2675,6 +2675,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9cc1d63677f03a290064378de8e7d633e245ae33"
         },
         "date": 1773285761081,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2378,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9895,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 23175,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4102d0959d02a89ced3fc90fc1c30fe0cdfb096e",
+          "message": "Merge pull request #566 from wado-lang/claude/profile-compiler-performance-uhmmJ\n\nRefactor impl block handling to use lightweight references",
+          "timestamp": "2026-03-12T18:23:08+09:00",
+          "tree_id": "2ec6331c86b94f7326fd4d01e5bee4f97d2645f7",
+          "url": "https://github.com/wado-lang/wado/commit/4102d0959d02a89ced3fc90fc1c30fe0cdfb096e"
+        },
+        "date": 1773307747812,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
