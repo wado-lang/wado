@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773268368770,
+  "lastUpdate": 1773285761274,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2636,6 +2636,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1c4794b8e875b7c6e933bd914e77ecb582cda813"
         },
         "date": 1773268368580,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2378,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9895,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 23175,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9cc1d63677f03a290064378de8e7d633e245ae33",
+          "message": "Merge pull request #565 from wado-lang/claude/improve-test-coverage-zblYO\n\nAdd bitwise compound assignment operators and remove inspect synthesis",
+          "timestamp": "2026-03-12T12:20:21+09:00",
+          "tree_id": "a1dab7cabfb4626d0504b6f1d58b152a06c1b904",
+          "url": "https://github.com/wado-lang/wado/commit/9cc1d63677f03a290064378de8e7d633e245ae33"
+        },
+        "date": 1773285761081,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
