@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773316019551,
+  "lastUpdate": 1773317587274,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2768,6 +2768,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 23095,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "49d0d9068d75aeb32bc52e2ec02b92e080bbabe6",
+          "message": "Merge pull request #568 from wado-lang/claude/optimize-wasm-size-pcCXT\n\nAdd stream-write-raw builtin and remove unused StrUtf8ByteIter",
+          "timestamp": "2026-03-12T21:07:07+09:00",
+          "tree_id": "1d3468a0269b6d266d82c5df3c0831098f805108",
+          "url": "https://github.com/wado-lang/wado/commit/49d0d9068d75aeb32bc52e2ec02b92e080bbabe6"
+        },
+        "date": 1773317587086,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1994,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9444,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22811,
             "unit": "bytes"
           }
         ]
