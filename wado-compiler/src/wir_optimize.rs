@@ -192,10 +192,10 @@ pub fn dce_unreachable_functions(module: &mut WirModule) {
 
     // Remap exports
     for export in &mut module.exports {
-        if let WirExportDesc::Func { func_id } = &mut export.desc {
-            if let Some(&new) = remap.get(&func_id.index()) {
-                *func_id = WirFuncId::new(new, Rc::from(func_id.fq()));
-            }
+        if let WirExportDesc::Func { func_id } = &mut export.desc
+            && let Some(&new) = remap.get(&func_id.index())
+        {
+            *func_id = WirFuncId::new(new, Rc::from(func_id.fq()));
         }
     }
 

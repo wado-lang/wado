@@ -1043,29 +1043,16 @@ pub fn gc_array_to_memory(arr: builtin::array<u8>, ptr: i32, len: i32) {
 }
 
 pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
+    let bytes: builtin::array<u8> = message.String::internal_raw_bytes();
     let len: i32 = message.String::len();
-    let alloc_size: i32 = if add_newline {
-        (len + 1);
-    } else {
-        len;
-    };
-    let mut arr: Array<u8> = "core::internal::Array<u8>::with_capacity"(alloc_size);
-    __for_of_2: {
-        let mut __iter_2: StrUtf8ByteIter = message.String::bytes()."StrUtf8ByteIter^IntoIterator::into_iter"();
-        loop {
-            let __pattern_temp_0: Option<u8> = __iter_2."StrUtf8ByteIter^Iterator::next"();
-            if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                let b: u8 = __variant_payload(__pattern_temp_0, case=0);
-                arr."Array<u8>::append"(b);
-            } else {
-                break;
-            }
-        }
-    }
     if add_newline {
-        arr."Array<u8>::append"('\n' as u8);
+        let new_repr: builtin::array<u8> = "core::internal::array_new<u8>"((len + 1));
+        "core::internal::array_copy<u8>"(new_repr, 0, bytes, 0, len);
+        core::builtin::array_set_u8(new_repr, len, 10);
+        tx."StreamWritable<u8>::write_raw"(new_repr, (len + 1));
+    } else {
+        tx."StreamWritable<u8>::write_raw"(bytes, len);
     }
-    tx."StreamWritable<u8>::write"(arr);
     tx."StreamWritable<u8>::drop"();
 }
 
@@ -1129,10 +1116,10 @@ pub fn cm_lower_array_u8(arr: Array<u8>) -> i64 {
 }
 
 pub fn write_escaped_string(s: String, f: &mut Formatter) {
-    __for_of_3: {
-        let mut __iter_3: StrCharIter = s.String::chars()."StrCharIter^IntoIterator::into_iter"();
+    __for_of_2: {
+        let mut __iter_2: StrCharIter = s.String::chars()."StrCharIter^IntoIterator::into_iter"();
         loop {
-            let __pattern_temp_0: Option<char> = __iter_3."StrCharIter^Iterator::next"();
+            let __pattern_temp_0: Option<char> = __iter_2."StrCharIter^Iterator::next"();
             if __variant_test(__pattern_temp_0, case=0, name=Some) {
                 let c: char = __variant_payload(__pattern_temp_0, case=0);
                 match c {
@@ -1273,26 +1260,7 @@ pub fn "Array<u8>::internal_raw_data"(self: &Array<u8>) -> builtin::array<u8> {
     return self.repr;
 }
 
-pub fn "Array<u8>::append"(self: &mut Array<u8>, value: u8) {
-    let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
-        let new_capacity: i32 = "core::prelude/array.wado::i32_max"((capacity * 2), 4);
-        let new_repr: builtin::array<u8> = "core::internal::array_new<u8>"(new_capacity);
-        core::builtin::array_copy::<u8>(new_repr, 0, self.repr, 0, used);
-        self.repr = new_repr;
-    }
-    core::builtin::array_set::<u8>(self.repr, used, value);
-    self.used = (used + 1);
-}
-
-fn "StrUtf8ByteIter^IntoIterator::into_iter"(self: &StrUtf8ByteIter) -> StrUtf8ByteIter {
-    return *self;
-}
-
-pub fn "Array<u8>::with_capacity"(capacity: i32) -> Array<u8> {
-    return Array<u8> { repr: "core::internal::array_new<u8>"(capacity), used: 0 };
-}
+fn "array_copy<u8>"(dst: builtin::array<u8>, dst_offset: i32, src: builtin::array<u8>, src_offset: i32, len: i32);
 
 fn "array_new<u8>"(len: i32) -> builtin::array<u8>;
 

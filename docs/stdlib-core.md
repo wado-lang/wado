@@ -119,6 +119,11 @@ Opaque i32 handle managed by the runtime.
 
 Write a chunk of data to the stream.
 
+##### `fn write_raw(&self, data: builtin::array<T>, len: i32)`
+
+Write raw GC array directly to the stream.
+`len` is the number of valid elements (may be less than array capacity).
+
 ##### `fn cancel_write(&self)`
 
 Cancel an in-progress write. Blocks until cancellation completes.
@@ -2153,6 +2158,9 @@ dropped and this function will return an error-code.
 
 Writes a string to a StreamWritable<u8> with an optional newline, then drops it.
 Called AFTER the consumer (write_via_stream) has been started.
+
+Uses write_raw to pass String's internal GC array directly to the stream,
+avoiding the intermediate String → Array<u8> byte-by-byte copy.
 
 #### `pub fn println(message: String) with Stdout`
 

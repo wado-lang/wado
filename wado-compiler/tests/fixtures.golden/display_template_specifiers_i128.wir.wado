@@ -18,12 +18,6 @@ struct u128 {
 
 array array<u8> (mut u8);
 
-struct StrUtf8ByteIter {
-    mut repr: ref array<u8>,
-    mut used: i32,
-    mut index: i32,
-}
-
 struct String {
     mut repr: ref array<u8>,
     mut used: i32,
@@ -59,21 +53,6 @@ struct [Stream<u8>, StreamWritable<u8>] {
 struct [u128, u128] {
     mut 0: ref u128,
     mut 1: ref u128,
-}
-
-variant Option<u8> {
-    Some(u8),
-    None,
-}
-
-struct Option<u8>::Some {
-    discriminant: i32,
-    payload_0: u8,
-}
-
-struct Array<u8> {  // Array<T> with T=u8
-    mut repr: ref array<u8>,
-    mut used: i32,
 }
 
 array array<u64> (mut u64);
@@ -123,15 +102,9 @@ type "functype/core:internal/panic" = fn(ref String);
 
 type "functype/core:internal/cm_lower_list_u8" = fn(ref array<u8>, i32) -> i64;
 
-type "functype/core:internal/cm_lower_array_u8" = fn(ref Array<u8>) -> i64;
-
 type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
-
-type "functype/core:cli/Array<u8>::append" = fn(ref Array<u8>, u8);
-
-type "functype/core:internal/Array<u8>::append" = fn(ref Array<u8>, u8);
 
 type "functype/u128::div_rem" = fn(ref u128, ref u128) -> ref "tuple/[u128, u128]";
 
@@ -171,8 +144,6 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
-type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> ref Option<u8>;
-
 type "functype/String::append_char" = fn(ref String, char);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
@@ -196,8 +167,6 @@ type "functype/wasi/subtask-drop" = fn(i32);
 type "functype/wasi/waitable-set-drop" = fn(i32);
 
 type "functype/i128::sub" = fn(ref i128, ref i128) -> [u64, i64];
-
-type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> [i32, u8];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -4351,59 +4320,55 @@ fn "core:allocator/debug_realloc"(oldptr, oldsize, align, newsize) {  // from co
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
+    let bytes: ref array<u8>;
     let len: i32;
-    let alloc_size: i32;
-    let arr: ref Array<u8>;
-    let __iter_0: ref StrUtf8ByteIter;
-    let b: u8;
-    let __local_11: ref StrUtf8ByteIter;
+    let new_repr: ref array<u8>;
+    bytes = message.repr;
     len = message.used;
-    alloc_size = if add_newline -> i32 {
-        len + 1;
-    } else {
-        len;
-    };
-    arr = Array<u8> { repr: builtin::array_new<u8>(alloc_size), used: 0 };
-    __iter_0 = __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: block -> ref StrUtf8ByteIter {
-        __local_11 = StrUtf8ByteIter { repr: ref.as_non_null(message.repr), used: message.used, index: 0 };
-        break __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: __local_11;
-    };
-    b100: block {
-        l101: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: u8;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(__iter_0);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                b = __sroa___pattern_temp_0_payload_0;
-                "core:cli/Array<u8>::append"(arr, b);
-            } else {
-                break b100;
-            };
-            continue l101;
-        };
-    };
     if add_newline {
-        "core:cli/Array<u8>::append"(arr, 10);
+        new_repr = builtin::array_new<u8>(len + 1);
+        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_set_u8(new_repr, len, 10);
+        let __swr_handle_1: i32;
+        let __swr_ptr_1: i32;
+        let __swr_len_1: i32;
+        let __swr_result_1: i32;
+        let __swr_packed_1: i64;
+        __swr_handle_1 = tx;
+        __swr_packed_1 = "core:internal/cm_lower_list_u8"(new_repr, len + 1);
+        __swr_ptr_1 = builtin::i32_wrap_i64(__swr_packed_1);
+        __swr_len_1 = builtin::i32_wrap_i64(__swr_packed_1 >>u 32_i64);
+        __swr_result_1 = "wasi/stream-write"(__swr_handle_1, __swr_ptr_1, __swr_len_1);
+        if __swr_result_1 == -1 {
+            let __swr_evt_1: i32;
+            __swr_result_1 = "wasi/waitable-set-new"();
+            "wasi/waitable-join"(__swr_handle_1, __swr_result_1);
+            __swr_evt_1 = "mem/realloc"(0, 0, 4, 8);
+            drop("wasi/waitable-set-wait"(__swr_result_1, __swr_evt_1));
+            drop("mem/realloc"(__swr_evt_1, 8, 4, 0));
+        };
+        drop("mem/realloc"(__swr_ptr_1, __swr_len_1, 1, 0));
+    } else {
+        let __swr_handle_2: i32;
+        let __swr_ptr_2: i32;
+        let __swr_len_2: i32;
+        let __swr_result_2: i32;
+        let __swr_packed_2: i64;
+        __swr_handle_2 = tx;
+        __swr_packed_2 = "core:internal/cm_lower_list_u8"(bytes, len);
+        __swr_ptr_2 = builtin::i32_wrap_i64(__swr_packed_2);
+        __swr_len_2 = builtin::i32_wrap_i64(__swr_packed_2 >>u 32_i64);
+        __swr_result_2 = "wasi/stream-write"(__swr_handle_2, __swr_ptr_2, __swr_len_2);
+        if __swr_result_2 == -1 {
+            let __swr_evt_2: i32;
+            __swr_result_2 = "wasi/waitable-set-new"();
+            "wasi/waitable-join"(__swr_handle_2, __swr_result_2);
+            __swr_evt_2 = "mem/realloc"(0, 0, 4, 8);
+            drop("wasi/waitable-set-wait"(__swr_result_2, __swr_evt_2));
+            drop("mem/realloc"(__swr_evt_2, 8, 4, 0));
+        };
+        drop("mem/realloc"(__swr_ptr_2, __swr_len_2, 1, 0));
     };
-    let __sw_handle_1: i32;
-    let __sw_ptr_1: i32;
-    let __sw_len_1: i32;
-    let __sw_result_1: i32;
-    let __sw_packed_1: i64;
-    __sw_handle_1 = tx;
-    __sw_packed_1 = "core:internal/cm_lower_array_u8"(arr);
-    __sw_ptr_1 = builtin::i32_wrap_i64(__sw_packed_1);
-    __sw_len_1 = builtin::i32_wrap_i64(__sw_packed_1 >>u 32_i64);
-    __sw_result_1 = "wasi/stream-write"(__sw_handle_1, __sw_ptr_1, __sw_len_1);
-    if __sw_result_1 == -1 {
-        let __sw_evt_1: i32;
-        __sw_result_1 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(__sw_handle_1, __sw_result_1);
-        __sw_evt_1 = "mem/realloc"(0, 0, 4, 8);
-        drop("wasi/waitable-set-wait"(__sw_result_1, __sw_evt_1));
-        drop("mem/realloc"(__sw_evt_1, 8, 4, 0));
-    };
-    drop("mem/realloc"(__sw_ptr_1, __sw_len_1, 1, 0));
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -4427,72 +4392,68 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l106: loop {
+            l103: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l106;
+                continue l103;
             };
         };
     };
 }
 
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from core:internal
+    let bytes: ref array<u8>;
     let len: i32;
-    let alloc_size: i32;
-    let arr: ref Array<u8>;
-    let __iter_2: ref StrUtf8ByteIter;
-    let b: u8;
-    let __local_11: ref StrUtf8ByteIter;
+    let new_repr: ref array<u8>;
+    bytes = message.repr;
     len = message.used;
-    alloc_size = if add_newline -> i32 {
-        len + 1;
-    } else {
-        len;
-    };
-    arr = Array<u8> { repr: builtin::array_new<u8>(alloc_size), used: 0 };
-    __iter_2 = __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: block -> ref StrUtf8ByteIter {
-        __local_11 = StrUtf8ByteIter { repr: ref.as_non_null(message.repr), used: message.used, index: 0 };
-        break __inline_StrUtf8ByteIter_IntoIterator__into_iter_2: __local_11;
-    };
-    b109: block {
-        l110: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: u8;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(__iter_2);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                b = __sroa___pattern_temp_0_payload_0;
-                "core:internal/Array<u8>::append"(arr, b);
-            } else {
-                break b109;
-            };
-            continue l110;
-        };
-    };
     if add_newline {
-        "core:internal/Array<u8>::append"(arr, 10);
+        new_repr = builtin::array_new<u8>(len + 1);
+        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_set_u8(new_repr, len, 10);
+        let __swr_handle_1: i32;
+        let __swr_ptr_1: i32;
+        let __swr_len_1: i32;
+        let __swr_result_1: i32;
+        let __swr_packed_1: i64;
+        __swr_handle_1 = tx;
+        __swr_packed_1 = "core:internal/cm_lower_list_u8"(new_repr, len + 1);
+        __swr_ptr_1 = builtin::i32_wrap_i64(__swr_packed_1);
+        __swr_len_1 = builtin::i32_wrap_i64(__swr_packed_1 >>u 32_i64);
+        __swr_result_1 = "wasi/stream-write"(__swr_handle_1, __swr_ptr_1, __swr_len_1);
+        if __swr_result_1 == -1 {
+            let __swr_evt_1: i32;
+            __swr_result_1 = "wasi/waitable-set-new"();
+            "wasi/waitable-join"(__swr_handle_1, __swr_result_1);
+            __swr_evt_1 = "mem/realloc"(0, 0, 4, 8);
+            drop("wasi/waitable-set-wait"(__swr_result_1, __swr_evt_1));
+            drop("mem/realloc"(__swr_evt_1, 8, 4, 0));
+        };
+        drop("mem/realloc"(__swr_ptr_1, __swr_len_1, 1, 0));
+    } else {
+        let __swr_handle_2: i32;
+        let __swr_ptr_2: i32;
+        let __swr_len_2: i32;
+        let __swr_result_2: i32;
+        let __swr_packed_2: i64;
+        __swr_handle_2 = tx;
+        __swr_packed_2 = "core:internal/cm_lower_list_u8"(bytes, len);
+        __swr_ptr_2 = builtin::i32_wrap_i64(__swr_packed_2);
+        __swr_len_2 = builtin::i32_wrap_i64(__swr_packed_2 >>u 32_i64);
+        __swr_result_2 = "wasi/stream-write"(__swr_handle_2, __swr_ptr_2, __swr_len_2);
+        if __swr_result_2 == -1 {
+            let __swr_evt_2: i32;
+            __swr_result_2 = "wasi/waitable-set-new"();
+            "wasi/waitable-join"(__swr_handle_2, __swr_result_2);
+            __swr_evt_2 = "mem/realloc"(0, 0, 4, 8);
+            drop("wasi/waitable-set-wait"(__swr_result_2, __swr_evt_2));
+            drop("mem/realloc"(__swr_evt_2, 8, 4, 0));
+        };
+        drop("mem/realloc"(__swr_ptr_2, __swr_len_2, 1, 0));
     };
-    let __sw_handle_1: i32;
-    let __sw_ptr_1: i32;
-    let __sw_len_1: i32;
-    let __sw_result_1: i32;
-    let __sw_packed_1: i64;
-    __sw_handle_1 = tx;
-    __sw_packed_1 = "core:internal/cm_lower_array_u8"(arr);
-    __sw_ptr_1 = builtin::i32_wrap_i64(__sw_packed_1);
-    __sw_len_1 = builtin::i32_wrap_i64(__sw_packed_1 >>u 32_i64);
-    __sw_result_1 = "wasi/stream-write"(__sw_handle_1, __sw_ptr_1, __sw_len_1);
-    if __sw_result_1 == -1 {
-        let __sw_evt_1: i32;
-        __sw_result_1 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(__sw_handle_1, __sw_result_1);
-        __sw_evt_1 = "mem/realloc"(0, 0, 4, 8);
-        drop("wasi/waitable-set-wait"(__sw_result_1, __sw_evt_1));
-        drop("mem/realloc"(__sw_evt_1, 8, 4, 0));
-    };
-    drop("mem/realloc"(__sw_ptr_1, __sw_len_1, 1, 0));
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -4538,14 +4499,6 @@ fn "core:internal/cm_lower_list_u8"(data, len) {  // from core:internal
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
-fn "core:internal/cm_lower_array_u8"(arr) {  // from core:internal
-    let data: ref array<u8>;
-    let len: i32;
-    data = arr.repr;
-    len = arr.used;
-    return "core:internal/cm_lower_list_u8"(data, len);
-}
-
 fn count_digits_i64(val) {
     let n: i32;
     let t: i64;
@@ -4556,13 +4509,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l117: loop {
+            l111: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l117;
+                continue l111;
             };
         };
     };
@@ -4579,60 +4532,18 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l121: loop {
+                l115: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l121;
+                    continue l115;
                 };
             };
         };
     };
-}
-
-fn "core:cli/Array<u8>::append"(self, value) {  // from core:cli
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<u8>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<u8>(new_capacity);
-        builtin::array_copy<u8>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set_u8(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:internal/Array<u8>::append"(self, value) {  // from core:internal
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<u8>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<u8>(new_capacity);
-        builtin::array_copy<u8>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set_u8(self.repr, used, value);
-    self.used = used + 1;
 }
 
 fn u128::div_rem(self, divisor) {
@@ -4659,10 +4570,10 @@ fn u128::div_rem(self, divisor) {
     remainder = u128 { low: 0_i64, high: 0_i64 };
     one = u128 { low: 1_i64, high: 0_i64 };
     i = 127;
-    b129: block {
-        l130: loop {
+    b121: block {
+        l122: loop {
             if (i >= 0) == 0 {
-                break b129;
+                break b121;
             };
             remainder = u128^Shl::shl(remainder, 1);
             bit = u128::get_bit(self, i);
@@ -4674,7 +4585,7 @@ fn u128::div_rem(self, divisor) {
                 quotient = u128::set_bit(quotient, i);
             };
             i = i - 1;
-            continue l130;
+            continue l122;
         };
     };
     return "tuple/[u128, u128]" { 0: ref.as_non_null(quotient), 1: ref.as_non_null(remainder) };
@@ -4743,7 +4654,7 @@ fn u128::fmt_decimal(self, f) {
     __for_0: block {
         temp_7 = value_copy u128(self);
         block {
-            l138: loop {
+            l130: loop {
                 if (u128^Ord::cmp(temp_7, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_0;
                 };
@@ -4754,7 +4665,7 @@ fn u128::fmt_decimal(self, f) {
                     __local_19 = u128::div_rem(__local_17, __local_18);
                     break __inline_u128_Div__div_4: __local_19.0;
                 };
-                continue l138;
+                continue l130;
             };
         };
     };
@@ -4767,7 +4678,7 @@ fn u128::fmt_decimal(self, f) {
     __for_1: block {
         temp_11 = value_copy u128(self);
         block {
-            l141: loop {
+            l133: loop {
                 if (u128^Ord::cmp(temp_11, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_1;
                 };
@@ -4788,7 +4699,7 @@ fn u128::fmt_decimal(self, f) {
                     __local_28 = u128::div_rem(__local_26, __local_27);
                     break __inline_u128_Div__div_9: __local_28.0;
                 };
-                continue l141;
+                continue l133;
             };
         };
     };
@@ -4847,32 +4758,32 @@ fn u128::fmt_base(self, f, base, upper) {
         __local_10 = self.low;
         if __local_9 != 0_i64 {
             __local_12 = 63;
-            b151: block {
-                l152: loop {
+            b143: block {
+                l144: loop {
                     if (__local_12 >= 0) == 0 {
-                        break b151;
+                        break b143;
                     };
                     if ((__local_9 >> builtin::i64_extend_i32_s(__local_12)) & 1_i64) != 0_i64 {
                         __local_8 = 64 + __local_12;
-                        break b151;
+                        break b143;
                     };
                     __local_12 = __local_12 - 1;
-                    continue l152;
+                    continue l144;
                 };
             };
         } else {
             __local_14 = 63;
-            b155: block {
-                l156: loop {
+            b147: block {
+                l148: loop {
                     if (__local_14 >= 0) == 0 {
-                        break b155;
+                        break b147;
                     };
                     if ((__local_10 >> builtin::i64_extend_i32_s(__local_14)) & 1_i64) != 0_i64 {
                         __local_8 = __local_14;
-                        break b155;
+                        break b147;
                     };
                     __local_14 = __local_14 - 1;
-                    continue l156;
+                    continue l148;
                 };
             };
         };
@@ -4890,14 +4801,14 @@ fn u128::fmt_base(self, f, base, upper) {
         lo = self.low;
         hi = self.high;
         shift_u64 = builtin::i64_extend_i32_s(bits_per_digit);
-        b160: block {
-            l161: loop {
+        b152: block {
+            l153: loop {
                 if if lo != 0_i64 -> i32 {
                     1;
                 } else {
                     hi != 0_i64;
                 } == 0 {
-                    break b160;
+                    break b152;
                 };
                 pos = pos - 1;
                 digit = builtin::i32_wrap_i64(lo & mask);
@@ -4912,7 +4823,7 @@ fn u128::fmt_base(self, f, base, upper) {
                 hi_bits = hi << (64_i64 - shift_u64);
                 lo = (lo >>u shift_u64) | hi_bits;
                 hi = hi >>u shift_u64;
-                continue l161;
+                continue l153;
             };
         };
     };
@@ -5038,7 +4949,7 @@ fn i128::fmt_decimal(self, f) {
     __for_2: block {
         temp_9 = value_copy u128(abs_val);
         block {
-            l178: loop {
+            l170: loop {
                 if (u128^Ord::cmp(temp_9, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_2;
                 };
@@ -5049,7 +4960,7 @@ fn i128::fmt_decimal(self, f) {
                     __local_21 = u128::div_rem(__local_19, __local_20);
                     break __inline_u128_Div__div_4: __local_21.0;
                 };
-                continue l178;
+                continue l170;
             };
         };
     };
@@ -5063,7 +4974,7 @@ fn i128::fmt_decimal(self, f) {
     __for_3: block {
         temp_13 = value_copy u128(abs_val);
         block {
-            l181: loop {
+            l173: loop {
                 if (u128^Ord::cmp(temp_13, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_3;
                 };
@@ -5084,7 +4995,7 @@ fn i128::fmt_decimal(self, f) {
                     __local_30 = u128::div_rem(__local_28, __local_29);
                     break __inline_u128_Div__div_9: __local_30.0;
                 };
-                continue l181;
+                continue l173;
             };
         };
     };
@@ -5143,32 +5054,32 @@ fn i128::fmt_base(self, f, base, upper) {
         __local_12 = abs_val.low;
         if __local_11 != 0_i64 {
             __local_13 = 63;
-            b190: block {
-                l191: loop {
+            b182: block {
+                l183: loop {
                     if (__local_13 >= 0) == 0 {
-                        break b190;
+                        break b182;
                     };
                     if ((__local_11 >> builtin::i64_extend_i32_s(__local_13)) & 1_i64) != 0_i64 {
                         __local_10 = 64 + __local_13;
-                        break b190;
+                        break b182;
                     };
                     __local_13 = __local_13 - 1;
-                    continue l191;
+                    continue l183;
                 };
             };
         } else {
             __local_15 = 63;
-            b194: block {
-                l195: loop {
+            b186: block {
+                l187: loop {
                     if (__local_15 >= 0) == 0 {
-                        break b194;
+                        break b186;
                     };
                     if ((__local_12 >> builtin::i64_extend_i32_s(__local_15)) & 1_i64) != 0_i64 {
                         __local_10 = __local_15;
-                        break b194;
+                        break b186;
                     };
                     __local_15 = __local_15 - 1;
-                    continue l195;
+                    continue l187;
                 };
             };
         };
@@ -5186,14 +5097,14 @@ fn i128::fmt_base(self, f, base, upper) {
         lo = abs_val.low;
         hi = abs_val.high;
         shift_u64 = builtin::i64_extend_i32_s(bits_per_digit);
-        b199: block {
-            l200: loop {
+        b191: block {
+            l192: loop {
                 if if lo != 0_i64 -> i32 {
                     1;
                 } else {
                     hi != 0_i64;
                 } == 0 {
-                    break b199;
+                    break b191;
                 };
                 pos = pos - 1;
                 digit = builtin::i32_wrap_i64(lo & mask);
@@ -5208,7 +5119,7 @@ fn i128::fmt_base(self, f, base, upper) {
                 hi_bits = hi << (64_i64 - shift_u64);
                 lo = (lo >>u shift_u64) | hi_bits;
                 hi = hi >>u shift_u64;
-                continue l200;
+                continue l192;
             };
         };
     };
@@ -5299,7 +5210,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l212: loop {
+            l204: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -5307,21 +5218,11 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l212;
+                continue l204;
             };
         };
     };
     return 1;
-}
-
-fn StrUtf8ByteIter^Iterator::next(self) {
-    let byte: u8;
-    if self.index >= self.used {
-        return 1; 0;
-    };
-    byte = builtin::array_get_u8(self.repr, self.index);
-    self.index = self.index + 1;
-    return 0; byte;
 }
 
 fn String::append_char(self, c) {
@@ -5358,13 +5259,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l221: loop {
+            l212: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l221;
+                continue l212;
             };
         };
     };
