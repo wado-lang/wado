@@ -1270,17 +1270,13 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                         // rest from output
                         if copy > 0 {
                             let src_start = output.len() - state.offset;
-                            for let mut i = 0; i < copy; i += 1 {
-                                output.append(output[src_start + i]);
-                            }
+                            output.copy_within_append(src_start, copy);
                         }
                     }
                 } else {
                     // copy from output
                     let src_start = out_pos - state.offset;
-                    for let mut i = 0; i < copy; i += 1 {
-                        output.append(output[src_start + i]);
-                    }
+                    output.copy_within_append(src_start, copy);
                 }
                 if state.mode != InflateMode::Bad {
                     // update window

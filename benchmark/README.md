@@ -154,8 +154,8 @@ All implementations produce the same result: 664,579 primes.
 
 | Runtime               | Compress (ms) | Decompress (ms) | Relative |
 | --------------------- | ------------- | --------------- | -------- |
-| zlib-rs (native Rust) | 0.9           | 0.2             | 1.00x    |
-| **Wado** (pure Wado)  | 49            | 748             | 769x     |
+| zlib-rs (native Rust) | 1.0           | 0.2             | 1.00x    |
+| **Wado** (pure Wado)  | 57            | 886             | 786x     |
 
 Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significant overhead is expected compared to native.
 

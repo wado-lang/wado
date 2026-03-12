@@ -220,8 +220,6 @@ fn partition(arr, low, high, cmp) {
     let __local_14: i32;
     let __local_16: i32;
     let __local_18: i32;
-    let _licm_used_21: i32;
-    let _licm_repr_22: ref array<i32>;
     pivot = "core:internal/Box<i32>" { value: __inline_Array_i32__IndexValue__index_value_0: block -> i32 {
         if high >= arr.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -232,8 +230,6 @@ fn partition(arr, low, high, cmp) {
     i = low - 1;
     __for_0: block {
         j = low;
-        _licm_used_21 = arr.used;
-        _licm_repr_22 = arr.repr;
         block {
             l2: loop {
                 if (j < high) == 0 {
@@ -244,29 +240,29 @@ fn partition(arr, low, high, cmp) {
                     __indirect_call_0 = ref.cast "canonical/CanonicalClosure_0"(cmp);
                     call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, "core:internal/Box<i32>" { value: __inline_Array_i32__IndexValue__index_value_1: block -> i32 {
                         __local_12 = j;
-                        if __local_12 >= _licm_used_21 {
+                        if __local_12 >= arr.used {
                             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         };
-                        break __inline_Array_i32__IndexValue__index_value_1: builtin::array_get<i32>(_licm_repr_22, __local_12);
+                        break __inline_Array_i32__IndexValue__index_value_1: builtin::array_get<i32>(arr.repr, __local_12);
                     } }, pivot);
                 } {
                     i = i + 1;
                     tmp_7 = __inline_Array_i32__IndexValue__index_value_2: block -> i32 {
                         __local_14 = i;
-                        if __local_14 >= _licm_used_21 {
+                        if __local_14 >= arr.used {
                             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         };
-                        break __inline_Array_i32__IndexValue__index_value_2: builtin::array_get<i32>(_licm_repr_22, __local_14);
+                        break __inline_Array_i32__IndexValue__index_value_2: builtin::array_get<i32>(arr.repr, __local_14);
                     };
                     Array<i32>^IndexAssign::index_assign(arr, i, __inline_Array_i32__IndexValue__index_value_3: block -> i32 {
                         __local_16 = j;
-                        if __local_16 >= _licm_used_21 {
+                        if __local_16 >= arr.used {
                             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         };
-                        break __inline_Array_i32__IndexValue__index_value_3: builtin::array_get<i32>(_licm_repr_22, __local_16);
+                        break __inline_Array_i32__IndexValue__index_value_3: builtin::array_get<i32>(arr.repr, __local_16);
                     });
                     Array<i32>^IndexAssign::index_assign(arr, j, tmp_7);
                 };
