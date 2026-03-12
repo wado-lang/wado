@@ -250,7 +250,12 @@ impl<'a> Lexer<'a> {
                     }
                     Some('<') => {
                         self.advance();
-                        TokenKind::LtLt
+                        if self.peek_char() == Some('=') {
+                            self.advance();
+                            TokenKind::ShlEq
+                        } else {
+                            TokenKind::LtLt
+                        }
                     }
                     _ => TokenKind::Lt,
                 }
@@ -264,14 +269,24 @@ impl<'a> Lexer<'a> {
                     }
                     Some('>') => {
                         self.advance();
-                        TokenKind::GtGt
+                        if self.peek_char() == Some('=') {
+                            self.advance();
+                            TokenKind::ShrEq
+                        } else {
+                            TokenKind::GtGt
+                        }
                     }
                     _ => TokenKind::Gt,
                 }
             }
             '^' => {
                 self.advance();
-                TokenKind::Caret
+                if self.peek_char() == Some('=') {
+                    self.advance();
+                    TokenKind::CaretEq
+                } else {
+                    TokenKind::Caret
+                }
             }
             '~' => {
                 self.advance();
@@ -315,20 +330,30 @@ impl<'a> Lexer<'a> {
             }
             '|' => {
                 self.advance();
-                if self.peek_char() == Some('|') {
-                    self.advance();
-                    TokenKind::Or
-                } else {
-                    TokenKind::Pipe
+                match self.peek_char() {
+                    Some('|') => {
+                        self.advance();
+                        TokenKind::Or
+                    }
+                    Some('=') => {
+                        self.advance();
+                        TokenKind::PipeEq
+                    }
+                    _ => TokenKind::Pipe,
                 }
             }
             '&' => {
                 self.advance();
-                if self.peek_char() == Some('&') {
-                    self.advance();
-                    TokenKind::And
-                } else {
-                    TokenKind::Ampersand
+                match self.peek_char() {
+                    Some('&') => {
+                        self.advance();
+                        TokenKind::And
+                    }
+                    Some('=') => {
+                        self.advance();
+                        TokenKind::AmpEq
+                    }
+                    _ => TokenKind::Ampersand,
                 }
             }
             '#' => {

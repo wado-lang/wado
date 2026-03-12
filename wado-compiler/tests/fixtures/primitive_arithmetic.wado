@@ -1,0 +1,105 @@
+// Test arithmetic operations on various primitive types, compound assignments, and type conversions
+use { println, Stdout } from "core:cli";
+
+fn arithmetic_i32() with Stdout {
+    let a = 42;
+    let b = 13;
+    println(`add={a + b}`);     // 55
+    println(`sub={a - b}`);     // 29
+    println(`mul={a * b}`);     // 546
+    println(`div={a / b}`);     // 3
+    println(`mod={a % b}`);     // 3
+}
+
+fn arithmetic_i64() with Stdout {
+    let a: i64 = 1000000000;
+    let b: i64 = 3;
+    println(`mul={a * b}`);     // 3000000000
+    println(`div={a / b}`);     // 333333333
+}
+
+fn arithmetic_f64() with Stdout {
+    let a = 3.14;
+    let b = 2.0;
+    println(`add={a + b}`);     // 5.140000000000001
+    println(`mul={a * b}`);     // 6.28
+    println(`div={a / b}`);     // 1.57
+}
+
+fn compound_assignments() with Stdout {
+    let mut x = 10;
+    x += 5;
+    println(`+= {x}`);   // 15
+    x -= 3;
+    println(`-= {x}`);   // 12
+    x *= 2;
+    println(`*= {x}`);   // 24
+    x /= 4;
+    println(`/= {x}`);   // 6
+    x %= 4;
+    println(`%= {x}`);    // 2
+}
+
+fn compound_bitwise() with Stdout {
+    let mut x = 0xFF;
+    x &= 0x0F;
+    println(`&= {x}`);   // 15
+    x |= 0xF0;
+    println(`|= {x}`);   // 255
+    x ^= 0xFF;
+    println(`^= {x}`);   // 0
+    let mut y = 1;
+    y <<= 4;
+    println(`<<= {y}`);  // 16
+    y >>= 2;
+    println(`>>= {y}`);  // 4
+}
+
+fn chained_comparison() with Stdout {
+    let a = 1;
+    let b = 2;
+    let c = 3;
+    println(`1<2<3: {a < b < c}`);   // true
+    println(`1<2: {a < b}`);         // true
+    println(`2>3: {b > c}`);         // false
+    println(`1<=1: {a <= a}`);       // true
+    println(`3>=3: {c >= c}`);       // true
+}
+
+fn negation_and_not() with Stdout {
+    let x = 42;
+    println(`neg={-x}`);          // -42
+    let b = true;
+    println(`not={!b}`);          // false
+    let bits = 0xF0;
+    println(`bitnot={~bits}`);    // -241
+}
+
+fn type_conversions() with Stdout {
+    let i = 42;
+    let f = i as f64;
+    println(`i32->f64: {f}`);        // 42
+    let f2 = 3.99;
+    let i2 = f2 as i32;
+    println(`f64->i32: {i2}`);       // 3
+    let small: i8 = 127;
+    let big = small as i32;
+    println(`i8->i32: {big}`);       // 127
+    let u: u32 = 255;
+    let s = u as i64;
+    println(`u32->i64: {s}`);        // 255
+}
+
+export fn run() with Stdout {
+    arithmetic_i32();
+    arithmetic_i64();
+    arithmetic_f64();
+    compound_assignments();
+    compound_bitwise();
+    chained_comparison();
+    negation_and_not();
+    type_conversions();
+}
+
+__DATA__
+{"stdout": "add=55\nsub=29\nmul=546\ndiv=3\nmod=3\nmul=3000000000\ndiv=333333333\nadd=5.140000000000001\nmul=6.28\ndiv=1.57\n+= 15\n-= 12\n*= 24\n/= 6\n%= 2\n&= 15\n|= 255\n^= 0\n<<= 16\n>>= 4\n1<2<3: true\n1<2: true\n2>3: false\n1<=1: true\n3>=3: true\nneg=-42\nnot=false\nbitnot=-241\ni32->f64: 42\nf64->i32: 3\ni8->i32: 127\nu32->i64: 255\n"}

@@ -1065,6 +1065,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             ast::CompoundAssignOp::Mul => TirBinaryOp::Mul,
             ast::CompoundAssignOp::Div => TirBinaryOp::Div,
             ast::CompoundAssignOp::Mod => TirBinaryOp::Mod,
+            ast::CompoundAssignOp::BitAnd => TirBinaryOp::BitAnd,
+            ast::CompoundAssignOp::BitOr => TirBinaryOp::BitOr,
+            ast::CompoundAssignOp::BitXor => TirBinaryOp::BitXor,
+            ast::CompoundAssignOp::Shl => TirBinaryOp::Shl,
+            ast::CompoundAssignOp::Shr => TirBinaryOp::Shr,
         };
 
         // target = target op value

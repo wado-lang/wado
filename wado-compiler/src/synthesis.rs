@@ -12,7 +12,6 @@
 
 pub mod cm_adapter;
 pub mod common;
-pub mod inspect;
 pub mod serde_synth;
 pub mod template;
 pub mod traits;
