@@ -2477,6 +2477,11 @@ fn compound_op_str(op: CompoundAssignOp) -> &'static str {
         CompoundAssignOp::Mul => "*=",
         CompoundAssignOp::Div => "/=",
         CompoundAssignOp::Mod => "%=",
+        CompoundAssignOp::BitAnd => "&=",
+        CompoundAssignOp::BitOr => "|=",
+        CompoundAssignOp::BitXor => "^=",
+        CompoundAssignOp::Shl => "<<=",
+        CompoundAssignOp::Shr => ">>=",
     }
 }
 
@@ -2698,6 +2703,11 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
                 CompoundAssignOp::Mul => " *= ",
                 CompoundAssignOp::Div => " /= ",
                 CompoundAssignOp::Mod => " %= ",
+                CompoundAssignOp::BitAnd => " &= ",
+                CompoundAssignOp::BitOr => " |= ",
+                CompoundAssignOp::BitXor => " ^= ",
+                CompoundAssignOp::Shl => " <<= ",
+                CompoundAssignOp::Shr => " >>= ",
             });
             unparse_expr_into(&ca.value, output, false);
         }

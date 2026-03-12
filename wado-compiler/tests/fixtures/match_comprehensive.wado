@@ -1,0 +1,119 @@
+// Test comprehensive pattern matching: nested patterns, match with structs,
+// if-let chains, matches operator, and pattern matching in loops
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+variant Tree {
+    Leaf(i32),
+    Node([i32, i32]),  // left value, right value
+    Empty,
+}
+
+fn match_with_struct() with Stdout {
+    let p = Point { x: 5, y: 10 };
+    let { x, y } = p;
+    println(`destruct: {x},{y}`); // 5,10
+
+    let { x: a, y: b } = p;
+    println(`rename: {a},{b}`); // 5,10
+}
+
+fn match_option_chained() with Stdout {
+    let val = Option::Some(42);
+    if let Some(n) = val {
+        println(`got: {n}`); // 42
+    }
+
+    let none_val: Option<i32> = null;
+    if let Some(_n) = none_val {
+        println("should not print");
+    } else {
+        println("is null"); // is null
+    }
+
+    // Match on Option with guard
+    let big = Option::Some(100);
+    let desc = match big {
+        Some(n) && n > 50 => "big",
+        Some(_) => "small",
+        None => "none",
+    };
+    println(`desc: {desc}`);
+}
+
+fn match_variant_comprehensive() with Stdout {
+    let trees: Array<Tree> = [
+        Tree::Leaf(1),
+        Tree::Node([10, 20]),
+        Tree::Empty,
+        Tree::Leaf(99),
+    ];
+    for let tree of trees {
+        let desc = match tree {
+            Leaf(n) && n < 10 => `small leaf({n})`,
+            Leaf(n) => `leaf({n})`,
+            Node(pair) => `node({pair.0},{pair.1})`,
+            Empty => "empty",
+        };
+        println(desc);
+    }
+}
+
+fn match_in_loop() with Stdout {
+    let items: Array<Option<i32>> = [
+        Option::Some(1),
+        null,
+        Option::Some(3),
+        null,
+        Option::Some(5),
+    ];
+    let mut sum = 0;
+    for let item of items {
+        match item {
+            Some(n) => { sum += n; },
+            None => {},
+        };
+    }
+    println(`sum={sum}`); // 9
+}
+
+fn matches_operator() with Stdout {
+    let val = Option::Some(42);
+    println(`is_some: {val matches { Some(_) }}`); // true
+    println(`is_none: {val matches { None }}`);     // false
+
+    let big = Option::Some(100);
+    println(`is_big: {big matches { Some(n) && n > 50 }}`); // true
+    println(`is_small: {big matches { Some(n) && n < 50 }}`); // false
+
+    let tree = Tree::Leaf(5);
+    println(`is_leaf: {tree matches { Leaf(_) }}`);   // true
+    println(`is_empty: {tree matches { Empty }}`);     // false
+}
+
+fn if_let_with_else() with Stdout {
+    let values: Array<Option<i32>> = [Option::Some(10), null, Option::Some(30)];
+    for let v of values {
+        if let Some(n) = v {
+            println(`got {n}`);
+        } else {
+            println("nothing");
+        }
+    }
+}
+
+export fn run() with Stdout {
+    match_with_struct();
+    match_option_chained();
+    match_variant_comprehensive();
+    match_in_loop();
+    matches_operator();
+    if_let_with_else();
+}
+
+__DATA__
+{"stdout": "destruct: 5,10\nrename: 5,10\ngot: 42\nis null\ndesc: big\nsmall leaf(1)\nnode(10,20)\nempty\nleaf(99)\nsum=9\nis_some: true\nis_none: false\nis_big: true\nis_small: false\nis_leaf: true\nis_empty: false\ngot 10\nnothing\ngot 30\n"}

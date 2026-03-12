@@ -1786,6 +1786,11 @@ impl Parser {
             TokenKind::StarEq => Some(CompoundAssignOp::Mul),
             TokenKind::SlashEq => Some(CompoundAssignOp::Div),
             TokenKind::PercentEq => Some(CompoundAssignOp::Mod),
+            TokenKind::AmpEq => Some(CompoundAssignOp::BitAnd),
+            TokenKind::PipeEq => Some(CompoundAssignOp::BitOr),
+            TokenKind::CaretEq => Some(CompoundAssignOp::BitXor),
+            TokenKind::ShlEq => Some(CompoundAssignOp::Shl),
+            TokenKind::ShrEq => Some(CompoundAssignOp::Shr),
             _ => None,
         };
 

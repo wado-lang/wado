@@ -719,11 +719,16 @@ pub struct AssignExpr {
 /// Compound assignment operators
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CompoundAssignOp {
-    Add, // +=
-    Sub, // -=
-    Mul, // *=
-    Div, // /=
-    Mod, // %=
+    Add,    // +=
+    Sub,    // -=
+    Mul,    // *=
+    Div,    // /=
+    Mod,    // %=
+    BitAnd, // &=
+    BitOr,  // |=
+    BitXor, // ^=
+    Shl,    // <<=
+    Shr,    // >>=
 }
 
 /// Compound assignment expression: `x += value`

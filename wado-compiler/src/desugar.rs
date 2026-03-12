@@ -540,6 +540,11 @@ fn desugar_compound_assign(ca: &CompoundAssignExpr) -> Expr {
         CompoundAssignOp::Mul => BinaryOp::Mul,
         CompoundAssignOp::Div => BinaryOp::Div,
         CompoundAssignOp::Mod => BinaryOp::Mod,
+        CompoundAssignOp::BitAnd => BinaryOp::BitAnd,
+        CompoundAssignOp::BitOr => BinaryOp::BitOr,
+        CompoundAssignOp::BitXor => BinaryOp::BitXor,
+        CompoundAssignOp::Shl => BinaryOp::Shl,
+        CompoundAssignOp::Shr => BinaryOp::Shr,
     };
 
     let binary_expr = Expr::Binary(Box::new(BinaryExpr {
