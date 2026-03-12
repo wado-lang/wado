@@ -563,6 +563,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 blanket_trait_impl_index: Arc::clone(&blanket_trait_impl_index),
                 included_files,
                 known_type_names_cache: IndexSet::default(),
+                indexing_trait_cache: IndexMap::default(),
             };
             resolver.rebuild_known_type_names_cache();
 

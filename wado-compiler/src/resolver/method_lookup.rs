@@ -2,7 +2,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, BinaryOp, Expr, Function, Item, Literal, Type, UnaryOp};
+use crate::ast::{self, BinaryOp, Expr, Item, Literal, Type, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
@@ -17,7 +17,114 @@ use super::types::{
     IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, SequenceLiteralTraitInfo, TypeError,
 };
 
+/// Lightweight reference to an impl block, avoiding deep clones.
+/// Stores just enough info to re-access the impl block's fields on demand.
+enum ImplBlockRef {
+    /// From `loaded_modules[module_source].items[item_idx]`
+    Loaded(ModuleSource, usize),
+    /// From `current_module_items[item_idx]`, with the current module source
+    CurrentModule(usize),
+}
+
 impl<H: CompilerHost> Resolver<'_, H> {
+    /// Get a reference to the `ImplBlock` from an `ImplBlockRef`.
+    fn get_impl_block<'b>(&'b self, r: &ImplBlockRef) -> &'b ast::ImplBlock {
+        match r {
+            ImplBlockRef::Loaded(module_src, item_idx) => {
+                let module = &self.loaded_modules[module_src];
+                match &module.items[*item_idx] {
+                    Item::Impl(impl_block) => impl_block,
+                    _ => unreachable!("ImplBlockRef::Loaded points to non-impl item"),
+                }
+            }
+            ImplBlockRef::CurrentModule(item_idx) => match &self.current_module_items[*item_idx] {
+                Item::Impl(impl_block) => impl_block,
+                _ => unreachable!("ImplBlockRef::CurrentModule points to non-impl item"),
+            },
+        }
+    }
+
+    /// Get the module source for an `ImplBlockRef`.
+    fn impl_block_module_source(&self, r: &ImplBlockRef) -> ModuleSource {
+        match r {
+            ImplBlockRef::Loaded(module_src, _) => module_src.clone(),
+            ImplBlockRef::CurrentModule(_) => self.current_module_source.clone(),
+        }
+    }
+
+    /// Collect trait impl block references for a given type name.
+    /// Returns lightweight `ImplBlockRef` values instead of cloning impl block data.
+    fn collect_trait_impl_refs(&self, type_name: &str) -> Vec<ImplBlockRef> {
+        let mut refs = Vec::new();
+        if let Some(entries) = self.trait_impl_index.get(type_name) {
+            for (module_src, item_idx) in entries {
+                let module = &self.loaded_modules[module_src];
+                if let Item::Impl(impl_block) = &module.items[*item_idx]
+                    && impl_block.trait_type.is_some()
+                {
+                    refs.push(ImplBlockRef::Loaded(module_src.clone(), *item_idx));
+                }
+            }
+        }
+        for (idx, item) in self.current_module_items.iter().enumerate() {
+            if let Item::Impl(impl_block) = item
+                && impl_block.trait_type.is_some()
+                && Self::get_type_name_static(&impl_block.ty) == type_name
+            {
+                refs.push(ImplBlockRef::CurrentModule(idx));
+            }
+        }
+        refs
+    }
+
+    /// Collect trait impl block references for multiple type names.
+    fn collect_trait_impl_refs_multi(&self, type_names: &[String]) -> Vec<ImplBlockRef> {
+        let mut refs = Vec::new();
+        for name in type_names {
+            if let Some(entries) = self.trait_impl_index.get(name.as_str()) {
+                for (module_src, item_idx) in entries {
+                    let module = &self.loaded_modules[module_src];
+                    if let Item::Impl(impl_block) = &module.items[*item_idx]
+                        && impl_block.trait_type.is_some()
+                    {
+                        refs.push(ImplBlockRef::Loaded(module_src.clone(), *item_idx));
+                    }
+                }
+            }
+        }
+        for (idx, item) in self.current_module_items.iter().enumerate() {
+            if let Item::Impl(impl_block) = item
+                && impl_block.trait_type.is_some()
+            {
+                let impl_struct_name = Self::get_type_name_static(&impl_block.ty);
+                if type_names.contains(&impl_struct_name) {
+                    refs.push(ImplBlockRef::CurrentModule(idx));
+                }
+            }
+        }
+        refs
+    }
+
+    /// Build declared type params for an impl block, filtering out known type names.
+    fn build_declared_type_params(&self, impl_block: &ast::ImplBlock) -> IndexSet<String> {
+        let mut declared: IndexSet<String> = impl_block
+            .type_params
+            .iter()
+            .map(|p| p.name.clone())
+            .filter(|name| !self.is_known_type_name(name))
+            .collect();
+        if let Type::Generic(g) = &impl_block.ty {
+            for arg in &g.args {
+                if let Type::Named(n) = arg
+                    && !self.is_known_type_name(&n.name)
+                {
+                    declared.insert(n.name.clone());
+                }
+            }
+        }
+        declared
+    }
+
     pub(super) fn operator_trait_method(op: &BinaryOp) -> Option<(&'static str, &'static str)> {
         match op {
             BinaryOp::Add => Some(("Add", "add")),
@@ -1094,54 +1201,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             names
         };
 
-        // Collect impl blocks to check (avoiding borrow issues with &mut self).
-        // Use the pre-built index to look up only impl blocks for the matching type names —
-        // O(1) per name instead of scanning every item in every loaded module.
-        let mut impl_blocks_to_check: Vec<(
-            Type,
-            Type,
-            Vec<Function>,
-            Vec<crate::ast::AssociatedTypeBinding>,
-            ModuleSource,
-        )> = Vec::new();
-
-        for name in &names_to_check {
-            if let Some(entries) = self.trait_impl_index.get(name.as_str()) {
-                for (module_src, item_idx) in entries {
-                    let module = &self.loaded_modules[module_src];
-                    if let Item::Impl(impl_block) = &module.items[*item_idx]
-                        && let Some(trait_type) = &impl_block.trait_type
-                    {
-                        impl_blocks_to_check.push((
-                            impl_block.ty.clone(),
-                            trait_type.clone(),
-                            impl_block.methods.clone(),
-                            impl_block.associated_types.clone(),
-                            module_src.clone(),
-                        ));
-                    }
-                }
-            }
-        }
-
-        // Also check current module items (not covered by the index, which only indexes
-        // loaded_modules captured before per-module resolution began).
-        for item in &self.current_module_items {
-            if let Item::Impl(impl_block) = item
-                && let Some(trait_type) = &impl_block.trait_type
-            {
-                let impl_struct_name = Self::get_type_name_static(&impl_block.ty);
-                if names_to_check.contains(&impl_struct_name) {
-                    impl_blocks_to_check.push((
-                        impl_block.ty.clone(),
-                        trait_type.clone(),
-                        impl_block.methods.clone(),
-                        impl_block.associated_types.clone(),
-                        self.current_module_source.clone(),
-                    ));
-                }
-            }
-        }
+        // Collect lightweight impl block references (avoiding deep clones).
+        let mut impl_refs = self.collect_trait_impl_refs_multi(&names_to_check);
 
         // Blanket impl fallback: check `impl<T: Bound> Trait for T` where the receiver
         // type satisfies the bound.  e.g., `impl<I: Iterator> IntoIterator for I` matches
@@ -1149,7 +1210,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         for (module_src, item_idx) in self.blanket_trait_impl_index.as_ref() {
             let module = &self.loaded_modules[module_src];
             if let Item::Impl(impl_block) = &module.items[*item_idx]
-                && let Some(trait_type) = &impl_block.trait_type
+                && impl_block.trait_type.is_some()
             {
                 // Find the type param that is the impl target
                 let impl_type_name = Self::get_type_name_static(&impl_block.ty);
@@ -1166,167 +1227,193 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .any(|name| self.find_trait_impl_for_type(name, bound_trait_name))
                     });
                     if bounds_satisfied {
-                        impl_blocks_to_check.push((
-                            impl_block.ty.clone(),
-                            trait_type.clone(),
-                            impl_block.methods.clone(),
-                            impl_block.associated_types.clone(),
-                            module_src.clone(),
-                        ));
+                        impl_refs.push(ImplBlockRef::Loaded(module_src.clone(), *item_idx));
                     }
                 }
             }
         }
 
-        // Now process the collected impl blocks with mutable access
-        for (impl_ty, trait_type, methods, associated_types, impl_module_source) in
-            impl_blocks_to_check
-        {
-            let impl_struct_name = self.get_type_name(&impl_ty);
+        // Now process the collected impl blocks with mutable access.
+        // Re-access impl block fields via index to avoid cloning.
+        for impl_ref in &impl_refs {
+            let impl_block = self.get_impl_block(impl_ref);
+            let impl_struct_name = self.get_type_name(&impl_block.ty);
             // Accept if the type matches by name, or if it's a blanket impl type parameter
             // (blanket impls already had their bounds checked before being added).
-            let is_blanket_type_param =
-                matches!(&impl_ty, Type::Named(named) if !self.is_known_type_name(&named.name));
-            if names_to_check.contains(&impl_struct_name) || is_blanket_type_param {
-                // Set up type parameters for resolving generic associated types
-                // e.g., for `impl Container for Box_<T>` called on `Box_<i32>`,
-                // we need to map T -> i32 so `type Item = T` resolves to i32
-                let old_type_params = std::mem::take(&mut self.current_type_params);
-                if let Some(type_args) = receiver_type_args
-                    && let Type::Generic(generic) = &impl_ty
-                {
-                    for (i, arg) in generic.args.iter().enumerate() {
-                        if let Type::Named(named) = arg
-                            && i < type_args.len()
-                        {
-                            // Map type param name to concrete type from receiver
-                            self.current_type_params
-                                .insert(named.name.clone(), (i as u32, type_args[i]));
-                        }
-                    }
-                }
-
-                // For blanket impls where impl_ty is a free type parameter
-                // (e.g., `impl<I: Iterator> IntoIterator for I`):
-                // If we have the receiver's concrete type ID, map the type param to it
-                // so associated types like `type Iter = I` resolve to the receiver type.
-                // Otherwise, register as a TypeParam for AssocTypeProjection resolution.
-                if let Type::Named(named) = &impl_ty {
-                    let name = &named.name;
-                    if !self.current_type_params.contains_key(name)
-                        && !self.is_known_type_name(name)
-                    {
-                        if let Some(recv_id) = receiver_type_id {
-                            self.current_type_params.insert(name.clone(), (0, recv_id));
-                        } else {
-                            let type_id = self
-                                .type_table
-                                .borrow_mut()
-                                .make_type_param(name.clone(), 0);
-                            self.current_type_params.insert(name.clone(), (0, type_id));
-                        }
-                    }
-                }
-
-                // Set up associated type bindings for resolving Self::* types
-                let old_associated_type_bindings =
-                    std::mem::take(&mut self.current_associated_type_bindings);
-                for binding in &associated_types {
-                    let type_id = self.resolve_type(&binding.ty);
-                    self.current_associated_type_bindings
-                        .insert(binding.name.clone(), type_id);
-                }
-
-                let blanket_type_param = if is_blanket_type_param {
-                    Some(impl_struct_name.clone())
-                } else {
-                    None
-                };
-
-                let mut method_found = false;
-                for method in &methods {
-                    if method.name == method_name {
-                        let trait_name = self.get_type_name(&trait_type);
-                        let return_type = method
-                            .return_type
-                            .as_ref()
-                            .map(|t| self.resolve_type(t))
-                            .unwrap_or(TypeTable::UNIT);
-                        let self_kind = method
-                            .params
-                            .first()
-                            .map(|p| p.self_kind)
-                            .unwrap_or(ast::SelfKind::None);
-                        let param_types = self.extract_param_types(&method.params);
-                        let param_is_mut: Vec<bool> = method
-                            .params
-                            .iter()
-                            .filter(|p| p.name != "self")
-                            .map(|p| p.is_mut)
-                            .collect();
-                        found_traits.push(TraitMethodMatch {
-                            trait_name,
-                            method_info: MethodInfo {
-                                return_type,
-                                self_kind,
-                                param_types,
-                                param_is_mut,
-                                inherited_from_base: None,
-                                canonical_name: None,
-                            },
-                            impl_module_source: impl_module_source.clone(),
-                            blanket_type_param: blanket_type_param.clone(),
-                        });
-                        method_found = true;
-                    }
-                }
-
-                // If the method wasn't found in the impl block, check the trait
-                // declaration for a default method with that name
-                if !method_found {
-                    let trait_name_str = self.get_type_name(&trait_type);
-                    if let Some(trait_methods) = self.find_trait_decl_methods(&trait_name_str) {
-                        for default_method in &trait_methods {
-                            if default_method.name == method_name && default_method.body.is_some() {
-                                let return_type = default_method
-                                    .return_type
-                                    .as_ref()
-                                    .map(|t| self.resolve_type(t))
-                                    .unwrap_or(TypeTable::UNIT);
-                                let self_kind = default_method
-                                    .params
-                                    .first()
-                                    .map(|p| p.self_kind)
-                                    .unwrap_or(ast::SelfKind::None);
-                                let param_types = self.extract_param_types(&default_method.params);
-                                let param_is_mut: Vec<bool> = default_method
-                                    .params
-                                    .iter()
-                                    .filter(|p| p.name != "self")
-                                    .map(|p| p.is_mut)
-                                    .collect();
-                                found_traits.push(TraitMethodMatch {
-                                    trait_name: trait_name_str.clone(),
-                                    method_info: MethodInfo {
-                                        return_type,
-                                        self_kind,
-                                        param_types,
-                                        param_is_mut,
-                                        inherited_from_base: None,
-                                        canonical_name: None,
-                                    },
-                                    impl_module_source: impl_module_source.clone(),
-                                    blanket_type_param: blanket_type_param.clone(),
-                                });
-                            }
-                        }
-                    }
-                }
-
-                // Restore associated type bindings and type params
-                self.current_associated_type_bindings = old_associated_type_bindings;
-                self.current_type_params = old_type_params;
+            let is_blanket_type_param = matches!(&impl_block.ty, Type::Named(named) if !self.is_known_type_name(&named.name));
+            if !names_to_check.contains(&impl_struct_name) && !is_blanket_type_param {
+                continue;
             }
+
+            // Extract type param mappings from the impl block before mutating self.
+            let impl_block = self.get_impl_block(impl_ref);
+            let type_param_entries: Vec<(String, u32)> =
+                if let Type::Generic(generic) = &impl_block.ty {
+                    generic
+                        .args
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, arg)| {
+                            if let Type::Named(named) = arg {
+                                Some((named.name.clone(), i as u32))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+            // Extract blanket type param info
+            let blanket_name = if let Type::Named(named) = &impl_block.ty {
+                Some(named.name.clone())
+            } else {
+                None
+            };
+            // Extract associated type bindings (lightweight: just name+type, not methods)
+            let assoc_bindings: Vec<(String, ast::Type)> = impl_block
+                .associated_types
+                .iter()
+                .map(|b| (b.name.clone(), b.ty.clone()))
+                .collect();
+            let impl_module_source = self.impl_block_module_source(impl_ref);
+
+            // Set up type parameters for resolving generic associated types
+            let old_type_params = std::mem::take(&mut self.current_type_params);
+            if let Some(type_args) = receiver_type_args {
+                for (name, idx) in &type_param_entries {
+                    let i = *idx as usize;
+                    if i < type_args.len() {
+                        self.current_type_params
+                            .insert(name.clone(), (*idx, type_args[i]));
+                    }
+                }
+            }
+
+            // For blanket impls where impl_ty is a free type parameter
+            if let Some(ref name) = blanket_name
+                && !self.current_type_params.contains_key(name)
+                && !self.is_known_type_name(name)
+            {
+                if let Some(recv_id) = receiver_type_id {
+                    self.current_type_params.insert(name.clone(), (0, recv_id));
+                } else {
+                    let type_id = self
+                        .type_table
+                        .borrow_mut()
+                        .make_type_param(name.clone(), 0);
+                    self.current_type_params.insert(name.clone(), (0, type_id));
+                }
+            }
+
+            // Set up associated type bindings for resolving Self::* types
+            let old_associated_type_bindings =
+                std::mem::take(&mut self.current_associated_type_bindings);
+            for (name, ty) in &assoc_bindings {
+                let type_id = self.resolve_type(ty);
+                self.current_associated_type_bindings
+                    .insert(name.clone(), type_id);
+            }
+
+            let blanket_type_param = if is_blanket_type_param {
+                Some(impl_struct_name.clone())
+            } else {
+                None
+            };
+
+            // Extract method info from impl block before calling &mut self methods
+            let impl_block = self.get_impl_block(impl_ref);
+            let method_data: Option<(Option<ast::Type>, ast::SelfKind, Vec<ast::Param>)> =
+                impl_block
+                    .methods
+                    .iter()
+                    .find(|m| m.name == method_name)
+                    .map(|m| {
+                        (
+                            m.return_type.clone(),
+                            m.params
+                                .first()
+                                .map(|p| p.self_kind)
+                                .unwrap_or(ast::SelfKind::None),
+                            m.params.clone(),
+                        )
+                    });
+            let trait_type_for_name = impl_block.trait_type.as_ref().unwrap().clone();
+
+            let mut method_found = false;
+            if let Some((return_type_ast, self_kind, params)) = method_data {
+                let trait_name = self.get_type_name(&trait_type_for_name);
+                let return_type = return_type_ast
+                    .as_ref()
+                    .map(|t| self.resolve_type(t))
+                    .unwrap_or(TypeTable::UNIT);
+                let param_types = self.extract_param_types(&params);
+                let param_is_mut: Vec<bool> = params
+                    .iter()
+                    .filter(|p| p.name != "self")
+                    .map(|p| p.is_mut)
+                    .collect();
+                found_traits.push(TraitMethodMatch {
+                    trait_name,
+                    method_info: MethodInfo {
+                        return_type,
+                        self_kind,
+                        param_types,
+                        param_is_mut,
+                        inherited_from_base: None,
+                        canonical_name: None,
+                    },
+                    impl_module_source: impl_module_source.clone(),
+                    blanket_type_param: blanket_type_param.clone(),
+                });
+                method_found = true;
+            }
+
+            // If the method wasn't found in the impl block, check the trait
+            // declaration for a default method with that name
+            if !method_found {
+                let trait_name_str = self.get_type_name(&trait_type_for_name);
+                if let Some(trait_methods) = self.find_trait_decl_methods(&trait_name_str) {
+                    for default_method in &trait_methods {
+                        if default_method.name == method_name && default_method.body.is_some() {
+                            let return_type = default_method
+                                .return_type
+                                .as_ref()
+                                .map(|t| self.resolve_type(t))
+                                .unwrap_or(TypeTable::UNIT);
+                            let self_kind = default_method
+                                .params
+                                .first()
+                                .map(|p| p.self_kind)
+                                .unwrap_or(ast::SelfKind::None);
+                            let param_types = self.extract_param_types(&default_method.params);
+                            let param_is_mut: Vec<bool> = default_method
+                                .params
+                                .iter()
+                                .filter(|p| p.name != "self")
+                                .map(|p| p.is_mut)
+                                .collect();
+                            found_traits.push(TraitMethodMatch {
+                                trait_name: trait_name_str.clone(),
+                                method_info: MethodInfo {
+                                    return_type,
+                                    self_kind,
+                                    param_types,
+                                    param_is_mut,
+                                    inherited_from_base: None,
+                                    canonical_name: None,
+                                },
+                                impl_module_source: impl_module_source.clone(),
+                                blanket_type_param: blanket_type_param.clone(),
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Restore associated type bindings and type params
+            self.current_associated_type_bindings = old_associated_type_bindings;
+            self.current_type_params = old_type_params;
         }
 
         // Remove duplicates
@@ -1459,79 +1546,39 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 Vec::new()
             };
 
-        let mut impls_to_check: Vec<(
-            crate::ast::Type,
-            crate::ast::Type,
-            Vec<crate::ast::AssociatedTypeBinding>,
-            Vec<crate::ast::GenericParam>,
-        )> = Vec::new();
+        let impl_refs = self.collect_trait_impl_refs(struct_name);
 
-        if let Some(entries) = self.trait_impl_index.get(struct_name) {
-            for (module_src, item_idx) in entries {
-                let module = &self.loaded_modules[module_src];
-                if let Item::Impl(impl_block) = &module.items[*item_idx]
-                    && let Some(trait_type) = &impl_block.trait_type
-                {
-                    impls_to_check.push((
-                        impl_block.ty.clone(),
-                        trait_type.clone(),
-                        impl_block.associated_types.clone(),
-                        impl_block.type_params.clone(),
-                    ));
-                }
-            }
-        }
-        for item in &self.current_module_items {
-            if let Item::Impl(impl_block) = item
-                && let Some(trait_type) = &impl_block.trait_type
-                && Self::get_type_name_static(&impl_block.ty) == struct_name
-            {
-                impls_to_check.push((
-                    impl_block.ty.clone(),
-                    trait_type.clone(),
-                    impl_block.associated_types.clone(),
-                    impl_block.type_params.clone(),
-                ));
-            }
-        }
-
-        for (impl_ty, trait_type, associated_types, impl_type_params) in impls_to_check {
-            let trait_name = self.get_type_name(&trait_type);
+        for impl_ref in &impl_refs {
+            let impl_block = self.get_impl_block(impl_ref);
+            let trait_type = impl_block.trait_type.as_ref().unwrap();
+            let trait_name = self.get_type_name(trait_type);
             if !trait_name.starts_with(trait_base_name) {
                 continue;
             }
-            let binding = match associated_types.iter().find(|b| b.name == assoc_name) {
-                Some(b) => b.clone(),
+            let impl_block = self.get_impl_block(impl_ref);
+            let binding_ty = match impl_block
+                .associated_types
+                .iter()
+                .find(|b| b.name == assoc_name)
+            {
+                Some(b) => b.ty.clone(),
                 None => continue,
             };
-            let mut declared_type_params: IndexSet<String> = impl_type_params
-                .iter()
-                .map(|p| p.name.clone())
-                .filter(|name| !self.is_known_type_name(name))
-                .collect();
-            if let Type::Generic(g) = &impl_ty {
-                for arg in &g.args {
-                    if let Type::Named(n) = arg
-                        && !self.is_known_type_name(&n.name)
-                    {
-                        declared_type_params.insert(n.name.clone());
-                    }
-                }
-            }
+            let declared_type_params = self.build_declared_type_params(impl_block);
             let type_param_mapping = Self::build_type_param_mapping(
-                &impl_ty,
+                &impl_block.ty,
                 &concrete_type_args,
                 &declared_type_params,
             );
             if !Self::verify_impl_type_compatibility(
-                &impl_ty,
+                &impl_block.ty,
                 &concrete_type_args,
                 &declared_type_params,
                 &self.type_table,
             ) {
                 continue;
             }
-            return Some(self.resolve_type_with_param_mapping(&binding.ty, &type_param_mapping));
+            return Some(self.resolve_type_with_param_mapping(&binding_ty, &type_param_mapping));
         }
         None
     }
@@ -1717,64 +1764,29 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 Vec::new()
             };
 
-        // Collect impl blocks to check — use pre-built index for O(1) lookup by type name.
-        let mut impl_blocks_to_check: Vec<(
-            Type,
-            Type,
-            Vec<Function>,
-            Vec<crate::ast::AssociatedTypeBinding>,
-            Vec<crate::ast::GenericParam>,
-        )> = Vec::new();
+        let impl_refs = self.collect_trait_impl_refs(struct_name);
 
-        if let Some(entries) = self.trait_impl_index.get(struct_name) {
-            for (module_src, item_idx) in entries {
-                let module = &self.loaded_modules[module_src];
-                if let Item::Impl(impl_block) = &module.items[*item_idx]
-                    && let Some(trait_type) = &impl_block.trait_type
-                {
-                    impl_blocks_to_check.push((
-                        impl_block.ty.clone(),
-                        trait_type.clone(),
-                        impl_block.methods.clone(),
-                        impl_block.associated_types.clone(),
-                        impl_block.type_params.clone(),
-                    ));
-                }
-            }
-        }
-
-        // Also check current module items (not covered by the index).
-        for item in &self.current_module_items {
-            if let Item::Impl(impl_block) = item
-                && let Some(trait_type) = &impl_block.trait_type
-                && Self::get_type_name_static(&impl_block.ty) == struct_name
-            {
-                impl_blocks_to_check.push((
-                    impl_block.ty.clone(),
-                    trait_type.clone(),
-                    impl_block.methods.clone(),
-                    impl_block.associated_types.clone(),
-                    impl_block.type_params.clone(),
-                ));
-            }
-        }
-
-        // Process collected impl blocks
-        for (impl_ty, trait_type, methods, associated_types, type_params) in impl_blocks_to_check {
-            let impl_struct_name = self.get_type_name(&impl_ty);
+        for impl_ref in &impl_refs {
+            let impl_block = self.get_impl_block(impl_ref);
+            let impl_struct_name = self.get_type_name(&impl_block.ty);
             if impl_struct_name != struct_name {
                 continue;
             }
 
             // Check if this is the target trait
-            let found_trait_name = self.get_type_name(&trait_type);
+            let impl_block = self.get_impl_block(impl_ref);
+            let found_trait_name = self.get_type_name(impl_block.trait_type.as_ref().unwrap());
             if found_trait_name != trait_name {
                 continue;
             }
 
             // Check trait bounds on type parameters (e.g., impl<T: Eq> Eq for Array<T>)
-            if !type_params.iter().all(|p| p.bounds.is_empty()) && !concrete_type_args.is_empty() {
-                let bounds_map: IndexMap<&str, Vec<String>> = type_params
+            let impl_block = self.get_impl_block(impl_ref);
+            if !impl_block.type_params.iter().all(|p| p.bounds.is_empty())
+                && !concrete_type_args.is_empty()
+            {
+                let bounds_map: IndexMap<&str, Vec<String>> = impl_block
+                    .type_params
                     .iter()
                     .filter(|p| !p.bounds.is_empty())
                     .map(|p| {
@@ -1786,7 +1798,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .collect();
 
                 let mut bounds_satisfied = true;
-                if let ast::Type::Generic(generic) = &impl_ty {
+                if let ast::Type::Generic(generic) = &impl_block.ty {
                     for (i, arg) in generic.args.iter().enumerate() {
                         if let ast::Type::Named(named) = arg
                             && let Some(bounds) = bounds_map.get(named.name.as_str())
@@ -1816,50 +1828,62 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
 
             // Build type parameter mapping from impl_ty to concrete types
-            let mut type_param_mapping =
-                Self::build_type_param_mapping(&impl_ty, &concrete_type_args, &IndexSet::default());
+            let impl_block = self.get_impl_block(impl_ref);
+            let mut type_param_mapping = Self::build_type_param_mapping(
+                &impl_block.ty,
+                &concrete_type_args,
+                &IndexSet::default(),
+            );
             // Map `Self` to the concrete base type so `&Self` parameters resolve correctly
             type_param_mapping.insert("Self".to_string(), base_type_id);
 
             // Find the method
-            for method in &methods {
-                if method.name == method_name {
-                    // Set up associated type bindings
-                    let mut assoc_type_map: IndexMap<String, TypeId> = IndexMap::default();
+            let impl_block = self.get_impl_block(impl_ref);
+            if let Some(method) = impl_block.methods.iter().find(|m| m.name == method_name) {
+                // Set up associated type bindings
+                let mut assoc_type_map: IndexMap<String, TypeId> = IndexMap::default();
 
-                    // Process associated types (e.g., `type Output = Self`)
-                    for assoc in &associated_types {
-                        let resolved_type =
-                            self.resolve_type_with_param_mapping(&assoc.ty, &type_param_mapping);
-                        assoc_type_map.insert(assoc.name.clone(), resolved_type);
-                    }
+                // Process associated types (e.g., `type Output = Self`)
+                // Clone just the associated type info we need (small, not methods)
+                let assoc_types: Vec<(String, ast::Type)> = impl_block
+                    .associated_types
+                    .iter()
+                    .map(|a| (a.name.clone(), a.ty.clone()))
+                    .collect();
+                let self_kind = method
+                    .params
+                    .first()
+                    .map(|p| p.self_kind)
+                    .unwrap_or(ast::SelfKind::None);
+                let rhs_param_ty = method
+                    .params
+                    .iter()
+                    .find(|p| p.self_kind == ast::SelfKind::None)
+                    .map(|p| p.ty.clone());
 
-                    // Get the output type from associated types
-                    let output_type = assoc_type_map
-                        .get("Output")
-                        .copied()
-                        .unwrap_or(base_type_id);
-
-                    let self_kind = method
-                        .params
-                        .first()
-                        .map(|p| p.self_kind)
-                        .unwrap_or(ast::SelfKind::None);
-
-                    // Resolve the rhs parameter type (first non-self parameter)
-                    let rhs_type = method
-                        .params
-                        .iter()
-                        .find(|p| p.self_kind == ast::SelfKind::None)
-                        .map(|p| self.resolve_type_with_param_mapping(&p.ty, &type_param_mapping));
-
-                    return Some(ArithmeticTraitInfo {
-                        output_type,
-                        self_kind,
-                        trait_name: trait_name.to_string(),
-                        rhs_type,
-                    });
+                for (name, ty) in &assoc_types {
+                    let resolved_type =
+                        self.resolve_type_with_param_mapping(ty, &type_param_mapping);
+                    assoc_type_map.insert(name.clone(), resolved_type);
                 }
+
+                // Get the output type from associated types
+                let output_type = assoc_type_map
+                    .get("Output")
+                    .copied()
+                    .unwrap_or(base_type_id);
+
+                // Resolve the rhs parameter type (first non-self parameter)
+                let rhs_type = rhs_param_ty
+                    .as_ref()
+                    .map(|ty| self.resolve_type_with_param_mapping(ty, &type_param_mapping));
+
+                return Some(ArithmeticTraitInfo {
+                    output_type,
+                    self_kind,
+                    trait_name: trait_name.to_string(),
+                    rhs_type,
+                });
             }
         }
 
@@ -2302,6 +2326,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
         method_name: &str,
         assoc_type_name: &str,
     ) -> Option<(TypeId, ast::SelfKind, String, crate::name::ModuleSource)> {
+        // Check cache first
+        let cache_key = (
+            struct_name.to_string(),
+            base_type_id,
+            trait_base_name.to_string(),
+            method_name.to_string(),
+            assoc_type_name.to_string(),
+        );
+        if let Some(cached) = self.indexing_trait_cache.get(&cache_key) {
+            return cached.clone();
+        }
+
         // Get concrete type arguments from the base type (for generic instances like Triple<i32>)
         let concrete_type_args: Vec<TypeId> =
             if let ResolvedType::GenericInstance { type_args, .. } =
@@ -2311,100 +2347,37 @@ impl<H: CompilerHost> Resolver<'_, H> {
             } else {
                 Vec::new()
             };
-        // Collect impl blocks to check — use pre-built index for O(1) lookup by type name.
-        let mut impl_blocks_to_check: Vec<(
-            Type,
-            Type,
-            Vec<Function>,
-            Vec<crate::ast::AssociatedTypeBinding>,
-            Vec<crate::ast::GenericParam>,
-            crate::name::ModuleSource,
-        )> = Vec::new();
 
-        if let Some(entries) = self.trait_impl_index.get(struct_name) {
-            for (module_src, item_idx) in entries {
-                let module = &self.loaded_modules[module_src];
-                if let Item::Impl(impl_block) = &module.items[*item_idx]
-                    && let Some(trait_type) = &impl_block.trait_type
-                {
-                    impl_blocks_to_check.push((
-                        impl_block.ty.clone(),
-                        trait_type.clone(),
-                        impl_block.methods.clone(),
-                        impl_block.associated_types.clone(),
-                        impl_block.type_params.clone(),
-                        module_src.clone(),
-                    ));
-                }
-            }
-        }
+        let impl_refs = self.collect_trait_impl_refs(struct_name);
 
-        // Also check current module items (not covered by the index).
-        for item in &self.current_module_items {
-            if let Item::Impl(impl_block) = item
-                && let Some(trait_type) = &impl_block.trait_type
-                && Self::get_type_name_static(&impl_block.ty) == struct_name
-            {
-                impl_blocks_to_check.push((
-                    impl_block.ty.clone(),
-                    trait_type.clone(),
-                    impl_block.methods.clone(),
-                    impl_block.associated_types.clone(),
-                    impl_block.type_params.clone(),
-                    self.current_module_source.clone(),
-                ));
-            }
-        }
-
-        // Process collected impl blocks
-        for (impl_ty, trait_type, methods, associated_types, impl_type_params, impl_source) in
-            impl_blocks_to_check
-        {
-            let impl_struct_name = self.get_type_name(&impl_ty);
+        for impl_ref in &impl_refs {
+            let impl_block = self.get_impl_block(impl_ref);
+            let impl_struct_name = self.get_type_name(&impl_block.ty);
             if impl_struct_name != struct_name {
                 continue;
             }
 
             // Check if this is the target trait (Index or IndexAssign)
-            // Use base trait name (e.g., "Index" not "Index<i32>") for method mangling
-            let trait_name = self.get_type_name(&trait_type);
+            let impl_block = self.get_impl_block(impl_ref);
+            let trait_name = self.get_type_name(impl_block.trait_type.as_ref().unwrap());
             if !trait_name.starts_with(trait_base_name) {
                 continue;
             }
 
-            // Collect declared type parameter names for this impl block.
-            // The parser treats all args in `<String, V>` as type params,
-            // so filter out names that are known types (structs, primitives).
-            let mut declared_type_params: IndexSet<String> = impl_type_params
-                .iter()
-                .map(|p| p.name.clone())
-                .filter(|name| !self.is_known_type_name(name))
-                .collect();
-            // Also infer type params from impl type args when no explicit type params clause.
-            // e.g., for `impl Foo for TreeMap<String, V>`, infer V (not String) as a type param.
-            if let Type::Generic(g) = &impl_ty {
-                for arg in &g.args {
-                    if let Type::Named(n) = arg
-                        && !self.is_known_type_name(&n.name)
-                    {
-                        declared_type_params.insert(n.name.clone());
-                    }
-                }
-            }
+            let impl_block = self.get_impl_block(impl_ref);
+            let declared_type_params = self.build_declared_type_params(impl_block);
 
-            // Build type parameter mapping from impl_ty to concrete types
-            // e.g., for `impl IndexValue<i32> for Triple<T>` with concrete type `Triple<i32>`
-            // we build the mapping: {"T" -> i32}
-            // Only map names that are actual type parameters (not concrete types like String)
+            let impl_block = self.get_impl_block(impl_ref);
             let type_param_mapping = Self::build_type_param_mapping(
-                &impl_ty,
+                &impl_block.ty,
                 &concrete_type_args,
                 &declared_type_params,
             );
 
             // Verify non-type-parameter positions match the concrete type args
+            let impl_block = self.get_impl_block(impl_ref);
             if !Self::verify_impl_type_compatibility(
-                &impl_ty,
+                &impl_block.ty,
                 &concrete_type_args,
                 &declared_type_params,
                 &self.type_table,
@@ -2413,40 +2386,46 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
 
             // Find the method
-            for method in &methods {
-                if method.name == method_name {
-                    // Set up associated type bindings
-                    let old_bindings = std::mem::take(&mut self.current_associated_type_bindings);
-                    for binding in &associated_types {
-                        // Resolve the associated type, substituting type parameters
-                        let type_id =
-                            self.resolve_type_with_param_mapping(&binding.ty, &type_param_mapping);
-                        self.current_associated_type_bindings
-                            .insert(binding.name.clone(), type_id);
-                    }
+            let impl_block = self.get_impl_block(impl_ref);
+            if let Some(method) = impl_block.methods.iter().find(|m| m.name == method_name) {
+                let self_kind = method
+                    .params
+                    .first()
+                    .map(|p| p.self_kind)
+                    .unwrap_or(ast::SelfKind::None);
+                // Clone just the lightweight associated type bindings (not methods)
+                let assoc_bindings: Vec<(String, ast::Type)> = impl_block
+                    .associated_types
+                    .iter()
+                    .map(|b| (b.name.clone(), b.ty.clone()))
+                    .collect();
+                let impl_source = self.impl_block_module_source(impl_ref);
 
-                    // Get the associated type (Output or Input)
-                    let assoc_type = self
-                        .current_associated_type_bindings
-                        .get(assoc_type_name)
-                        .copied()
-                        .unwrap_or(TypeTable::UNKNOWN);
-
-                    let self_kind = method
-                        .params
-                        .first()
-                        .map(|p| p.self_kind)
-                        .unwrap_or(ast::SelfKind::None);
-
-                    // Restore associated type bindings
-                    self.current_associated_type_bindings = old_bindings;
-
-                    // trait_name is already base name (get_type_name returns name without type args)
-                    return Some((assoc_type, self_kind, trait_name, impl_source));
+                // Set up associated type bindings
+                let old_bindings = std::mem::take(&mut self.current_associated_type_bindings);
+                for (name, ty) in &assoc_bindings {
+                    let type_id = self.resolve_type_with_param_mapping(ty, &type_param_mapping);
+                    self.current_associated_type_bindings
+                        .insert(name.clone(), type_id);
                 }
+
+                // Get the associated type (Output or Input)
+                let assoc_type = self
+                    .current_associated_type_bindings
+                    .get(assoc_type_name)
+                    .copied()
+                    .unwrap_or(TypeTable::UNKNOWN);
+
+                // Restore associated type bindings
+                self.current_associated_type_bindings = old_bindings;
+
+                let result = Some((assoc_type, self_kind, trait_name, impl_source));
+                self.indexing_trait_cache.insert(cache_key, result.clone());
+                return result;
             }
         }
 
+        self.indexing_trait_cache.insert(cache_key, None);
         None
     }
 
@@ -2656,68 +2635,28 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 Vec::new()
             };
 
-        let mut impls_to_check: Vec<(
-            crate::ast::Type,
-            Vec<crate::ast::AssociatedTypeBinding>,
-            Vec<crate::ast::GenericParam>,
-        )> = Vec::new();
+        let impl_refs = self.collect_trait_impl_refs(&struct_name);
 
-        if let Some(entries) = self.trait_impl_index.get(&struct_name) {
-            for (module_src, item_idx) in entries {
-                let module = &self.loaded_modules[module_src];
-                if let crate::ast::Item::Impl(impl_block) = &module.items[*item_idx]
-                    && impl_block.trait_type.is_some()
-                {
-                    impls_to_check.push((
-                        impl_block.ty.clone(),
-                        impl_block.associated_types.clone(),
-                        impl_block.type_params.clone(),
-                    ));
-                }
-            }
-        }
-        for item in &self.current_module_items {
-            if let crate::ast::Item::Impl(impl_block) = item
-                && impl_block.trait_type.is_some()
-                && Self::get_type_name_static(&impl_block.ty) == struct_name
+        for impl_ref in &impl_refs {
+            let impl_block = self.get_impl_block(impl_ref);
+            let binding_ty = match impl_block
+                .associated_types
+                .iter()
+                .find(|b| b.name == assoc_name)
             {
-                impls_to_check.push((
-                    impl_block.ty.clone(),
-                    impl_block.associated_types.clone(),
-                    impl_block.type_params.clone(),
-                ));
-            }
-        }
-
-        for (impl_ty, associated_types, impl_type_params) in impls_to_check {
-            let binding = match associated_types.iter().find(|b| b.name == assoc_name) {
-                Some(b) => b.clone(),
+                Some(b) => b.ty.clone(),
                 None => continue,
             };
 
-            let mut declared_type_params: crate::hashmap::IndexSet<String> = impl_type_params
-                .iter()
-                .map(|p| p.name.clone())
-                .filter(|name| !self.is_known_type_name(name))
-                .collect();
-            if let Type::Generic(g) = &impl_ty {
-                for arg in &g.args {
-                    if let Type::Named(n) = arg
-                        && !self.is_known_type_name(&n.name)
-                    {
-                        declared_type_params.insert(n.name.clone());
-                    }
-                }
-            }
-
+            let declared_type_params = self.build_declared_type_params(impl_block);
             let type_param_mapping = Self::build_type_param_mapping(
-                &impl_ty,
+                &impl_block.ty,
                 &concrete_type_args,
                 &declared_type_params,
             );
 
             if !Self::verify_impl_type_compatibility(
-                &impl_ty,
+                &impl_block.ty,
                 &concrete_type_args,
                 &declared_type_params,
                 &self.type_table,
@@ -2725,7 +2664,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 continue;
             }
 
-            return Some(self.resolve_type_with_param_mapping(&binding.ty, &type_param_mapping));
+            return Some(self.resolve_type_with_param_mapping(&binding_ty, &type_param_mapping));
         }
 
         None
