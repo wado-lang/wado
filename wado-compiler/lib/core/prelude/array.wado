@@ -45,12 +45,6 @@ impl Array<T> {
         return self.repr;
     }
 
-    /// Internal: Create Array from raw GC array and length (stdlib use only).
-    /// The caller must ensure `len <= array_len(data)`.
-    pub fn internal_from_raw_parts(data: builtin::array<T>, len: i32) -> Array<T> {
-        return Array { repr: data, used: len };
-    }
-
     #[comp_feature("array_append")]
     pub fn append(&mut self, value: T) {
         let used = self.used;
