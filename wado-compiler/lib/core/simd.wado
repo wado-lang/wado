@@ -1122,31 +1122,6 @@ impl u8x16 {
         return v;
     }
 
-    /// Load 16 bytes from an Array<u8> at the given offset into a u8x16.
-    /// The caller must ensure `offset + 16 <= arr.len()`.
-    pub fn from_array(arr: &Array<u8>, offset: i32) -> u8x16 {
-        let raw = arr.internal_raw_data();
-        let v: u8x16 = [
-            builtin::array_get_u8(raw, offset) as i32,
-            builtin::array_get_u8(raw, offset + 1) as i32,
-            builtin::array_get_u8(raw, offset + 2) as i32,
-            builtin::array_get_u8(raw, offset + 3) as i32,
-            builtin::array_get_u8(raw, offset + 4) as i32,
-            builtin::array_get_u8(raw, offset + 5) as i32,
-            builtin::array_get_u8(raw, offset + 6) as i32,
-            builtin::array_get_u8(raw, offset + 7) as i32,
-            builtin::array_get_u8(raw, offset + 8) as i32,
-            builtin::array_get_u8(raw, offset + 9) as i32,
-            builtin::array_get_u8(raw, offset + 10) as i32,
-            builtin::array_get_u8(raw, offset + 11) as i32,
-            builtin::array_get_u8(raw, offset + 12) as i32,
-            builtin::array_get_u8(raw, offset + 13) as i32,
-            builtin::array_get_u8(raw, offset + 14) as i32,
-            builtin::array_get_u8(raw, offset + 15) as i32,
-        ];
-        return v;
-    }
-
     /// Append 16 bytes from this u8x16 to a String.
     pub fn store_to_string(&self, s: &mut String) {
         let base = s.internal_reserve_uninit(16);

@@ -26,7 +26,6 @@
 //!   let decompressed = inflate_zlib(&compressed);
 //!   let decompressed_gz = inflate_gzip(&gzipped_data);
 
-use { i8x16, i16x8, i32x4, u8x16 } from "core:simd";
 
 /// Error type for zlib/gzip decompression operations.
 pub enum ZlibError {
@@ -96,7 +95,6 @@ pub global MAX_WBITS: i32 = 15;
 
 
 /// Computes an Adler-32 checksum over `buf[offset..offset+len]`, starting from `adler`.
-/// Uses SIMD to process 16 bytes at a time for improved throughput.
 pub fn adler32(adler: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32 {
     let base: u32 = 65521;
     let nmax = 5552;
@@ -109,44 +107,14 @@ pub fn adler32(adler: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32 {
         return s1 | s2 << 16;
     }
 
-    // SIMD weights for weighted sum: [16, 15, 14, ..., 1]
-    let weights: i8x16 = [16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
-
     while remaining > 0 {
         let k = i32::min(remaining, nmax);
         remaining -= k;
-        let mut inner = k;
-
-        // Process 16 bytes at a time with SIMD
-        while inner >= 16 {
-            let bytes = u8x16::from_array(buf, pos);
-
-            // Byte sum for s1
-            let pairs = i16x8::extadd_pairwise_i8x16_u(bytes as i8x16);
-            let quads = i32x4::extadd_pairwise_i16x8_s(pairs);
-            let byte_sum = quads.extract_lane(0) + quads.extract_lane(1) + quads.extract_lane(2) + quads.extract_lane(3);
-
-            // Weighted sum for s2: 16*b[0] + 15*b[1] + ... + 1*b[15]
-            let prod_lo = (bytes as i16x8).extmul_low_i8x16_u(&(weights as i16x8));
-            let prod_hi = (bytes as i16x8).extmul_high_i8x16_u(&(weights as i16x8));
-            let sum_lo = i32x4::extadd_pairwise_i16x8_s(prod_lo);
-            let sum_hi = i32x4::extadd_pairwise_i16x8_s(prod_hi);
-            let weighted_sum = sum_lo.extract_lane(0) + sum_lo.extract_lane(1) + sum_lo.extract_lane(2) + sum_lo.extract_lane(3) + sum_hi.extract_lane(0) + sum_hi.extract_lane(1) + sum_hi.extract_lane(2) + sum_hi.extract_lane(3);
-
-            s2 += s1 * 16 + weighted_sum as u32;
-            s1 += byte_sum as u32;
-            pos += 16;
-            inner -= 16;
-        }
-
-        // Remaining bytes with scalar loop
-        while inner > 0 {
+        for let mut i = 0; i < k; i += 1 {
             s1 += buf[pos] as u32;
             s2 += s1;
             pos += 1;
-            inner -= 1;
         }
-
         s1 = s1 % base;
         s2 = s2 % base;
     }
@@ -759,8 +727,7 @@ impl InflateState {
 // Decompress raw deflate data from a slice of input (no zlib/gzip header)
 fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [Array<u8>, i32] {
     let mut state = InflateState::new(true);
-    // Pre-allocate output (compressed data typically expands 4-10x)
-    let mut output = Array::<u8>::with_capacity(i32::max(input_length * 4, 4096));
+    let mut output: Array<u8> = [];
 
     let mut inp = input_offset;
     let mut have = input_length;
@@ -1096,176 +1063,42 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                 }
             },
             Len => {
-                // Fast path: tight inner loop when enough input remains.
-                // Avoids mode-machine overhead by decoding len/dist/match inline.
-                // Requires >= 7 input bytes margin (max per symbol: 2 len + 1 lenext + 2 dist + 2 distext).
-                if have >= 7 {
-                    let mut hold = state.hold;
-                    let mut bits = state.bits;
-                    let in_end = inp + have - 6; // safe read limit (leave 6 bytes margin)
-                    let lenbits_mask = (1 as u32 << state.lenbits as u32) - 1;
-                    let distbits_mask = (1 as u32 << state.distbits as u32) - 1;
-                    let in_raw = input.internal_raw_data();
-
-                    while inp < in_end {
-                        // Ensure at least 15 bits for length code
-                        if bits < 15 {
-                            hold = hold | builtin::array_get_u8(in_raw, inp) as u32 << bits as u32;
-                            bits += 8;
-                            inp += 1;
-                            hold = hold | builtin::array_get_u8(in_raw, inp) as u32 << bits as u32;
-                            bits += 8;
-                            inp += 1;
-                            have -= 2;
-                        }
-
-                        let len_idx = state.lencode_off + (hold & lenbits_mask) as i32;
-                        let mut here_op = state.codes[len_idx].op;
-                        let mut here_bits = state.codes[len_idx].bits;
-                        let mut here_val = state.codes[len_idx].val;
-                        hold = hold >> here_bits as u32;
-                        bits -= here_bits as i32;
-
-                        // Handle 2nd-level length code
-                        if here_op != 0 && here_op & 0xF0 == 0 {
-                            let last_val = here_val;
-                            let last_op = here_op;
-                            let len_idx2 = state.lencode_off + last_val as i32 + (hold & (1 as u32 << last_op as u32) - 1) as i32;
-                            here_op = state.codes[len_idx2].op;
-                            here_bits = state.codes[len_idx2].bits;
-                            here_val = state.codes[len_idx2].val;
-                            hold = hold >> here_bits as u32;
-                            bits -= here_bits as i32;
-                        }
-
-                        if here_op as i32 == 0 {
-                            // Literal byte
-                            output.append(here_val as u8);
-                        } else if here_op & 32 != 0 {
-                            // End of block
-                            state.back = -1;
-                            state.mode = InflateMode::TypeDo;
-                            break;
-                        } else if here_op & 64 != 0 {
-                            state.mode = InflateMode::Bad;
-                            break;
-                        } else {
-                            // Length code
-                            let mut length = here_val as i32;
-                            let extra = (here_op & 15) as i32;
-                            if extra > 0 {
-                                if bits < extra {
-                                    hold = hold | builtin::array_get_u8(in_raw, inp) as u32 << bits as u32;
-                                    bits += 8;
-                                    inp += 1;
-                                    have -= 1;
-                                }
-                                length += (hold & (1 as u32 << extra as u32) - 1) as i32;
-                                hold = hold >> extra as u32;
-                                bits -= extra;
-                            }
-
-                            // Ensure at least 15 bits for distance code
-                            if bits < 15 {
-                                hold = hold | builtin::array_get_u8(in_raw, inp) as u32 << bits as u32;
-                                bits += 8;
-                                inp += 1;
-                                hold = hold | builtin::array_get_u8(in_raw, inp) as u32 << bits as u32;
-                                bits += 8;
-                                inp += 1;
-                                have -= 2;
-                            }
-
-                            let dist_idx = state.distcode_off + (hold & distbits_mask) as i32;
-                            let mut dhere_op = state.codes[dist_idx].op;
-                            let mut dhere_bits = state.codes[dist_idx].bits;
-                            let mut dhere_val = state.codes[dist_idx].val;
-                            hold = hold >> dhere_bits as u32;
-                            bits -= dhere_bits as i32;
-
-                            // Handle 2nd-level distance code
-                            if dhere_op & 0xF0 == 0 {
-                                let dlast_val = dhere_val;
-                                let dlast_op = dhere_op;
-                                let dist_idx2 = state.distcode_off + dlast_val as i32 + (hold & (1 as u32 << dlast_op as u32) - 1) as i32;
-                                dhere_op = state.codes[dist_idx2].op;
-                                dhere_bits = state.codes[dist_idx2].bits;
-                                dhere_val = state.codes[dist_idx2].val;
-                                hold = hold >> dhere_bits as u32;
-                                bits -= dhere_bits as i32;
-                            }
-
-                            if dhere_op & 64 != 0 {
-                                state.mode = InflateMode::Bad;
-                                break;
-                            }
-
-                            let mut dist = dhere_val as i32;
-                            let dextra = (dhere_op & 15) as i32;
-                            if dextra > 0 {
-                                if bits < dextra {
-                                    hold = hold | builtin::array_get_u8(in_raw, inp) as u32 << bits as u32;
-                                    bits += 8;
-                                    inp += 1;
-                                    have -= 1;
-                                    if bits < dextra {
-                                        hold = hold | builtin::array_get_u8(in_raw, inp) as u32 << bits as u32;
-                                        bits += 8;
-                                        inp += 1;
-                                        have -= 1;
-                                    }
-                                }
-                                dist += (hold & (1 as u32 << dextra as u32) - 1) as i32;
-                                hold = hold >> dextra as u32;
-                                bits -= dextra;
-                            }
-
-                            // Copy match
-                            let out_pos = output.len();
-                            if dist > out_pos {
-                                // Need window
-                                let mut win_copy = dist - out_pos;
-                                if win_copy > state.whave {
-                                    state.mode = InflateMode::Bad;
-                                    break;
-                                }
-                                let mut from_win = 0;
-                                if state.wnext >= win_copy {
-                                    from_win = state.wnext - win_copy;
-                                } else {
-                                    from_win = state.wsize - (win_copy - state.wnext);
-                                }
-                                if win_copy > length {
-                                    win_copy = length;
-                                }
-                                for let mut i = 0; i < win_copy; i += 1 {
-                                    output.append(state.window[(from_win + i) % state.wsize]);
-                                }
-                                let rest = length - win_copy;
-                                if rest > 0 {
-                                    let src_start = output.len() - dist;
-                                    output.copy_within_append(src_start, rest);
-                                }
-                            } else {
-                                let src_start = out_pos - dist;
-                                output.copy_within_append(src_start, length);
-                            }
-                        }
+                // decode literal/length code
+                loop {
+                    let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
+                    let here = &state.codes[idx];
+                    if here.bits as i32 <= state.bits {
+                        break;
                     }
-
-                    // Write back cached locals
-                    state.hold = hold;
-                    state.bits = bits;
-                    have = input_length - (inp - input_offset);
+                    if have == 0 {
+                        leave = true;
+                        break;
+                    }
+                    state.hold = state.hold | input[inp] as u32 << state.bits as u32;
+                    state.bits += 8;
+                    inp += 1;
+                    have -= 1;
+                }
+                if leave {
+                    break;
                 }
 
-                // Slow path: only if still in Len mode
-                if state.mode == InflateMode::Len {
-                    // decode literal/length code
+                let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
+                let mut here_op = state.codes[idx].op;
+                let mut here_bits = state.codes[idx].bits;
+                let mut here_val = state.codes[idx].val;
+
+                // handle 2nd level length code
+                if here_op != 0 && here_op & 0xF0 == 0 {
+                    let last_bits = here_bits;
+                    let last_op = here_op;
+                    let last_val = here_val;
                     loop {
-                        let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
-                        let here = &state.codes[idx];
-                        if here.bits as i32 <= state.bits {
+                        let idx2 = state.lencode_off + last_val as i32 + ((state.hold & (1 as u32 << last_bits as u32 + last_op as u32) - 1) >> last_bits as u32) as i32;
+                        here_op = state.codes[idx2].op;
+                        here_bits = state.codes[idx2].bits;
+                        here_val = state.codes[idx2].val;
+                        if last_bits as i32 + here_bits as i32 <= state.bits {
                             break;
                         }
                         if have == 0 {
@@ -1277,64 +1110,29 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                         inp += 1;
                         have -= 1;
                     }
-                    if !leave {
-                        let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
-                        let mut here_op = state.codes[idx].op;
-                        let mut here_bits = state.codes[idx].bits;
-                        let mut here_val = state.codes[idx].val;
-
-                        // handle 2nd level length code
-                        if here_op != 0 && here_op & 0xF0 == 0 {
-                            let last_bits = here_bits;
-                            let last_op = here_op;
-                            let last_val = here_val;
-                            loop {
-                                let idx2 = state.lencode_off + last_val as i32 + ((state.hold & (1 as u32 << last_bits as u32 + last_op as u32) - 1) >> last_bits as u32) as i32;
-                                here_op = state.codes[idx2].op;
-                                here_bits = state.codes[idx2].bits;
-                                here_val = state.codes[idx2].val;
-                                if last_bits as i32 + here_bits as i32 <= state.bits {
-                                    break;
-                                }
-                                if have == 0 {
-                                    leave = true;
-                                    break;
-                                }
-                                state.hold = state.hold | input[inp] as u32 << state.bits as u32;
-                                state.bits += 8;
-                                inp += 1;
-                                have -= 1;
-                            }
-                            if !leave {
-                                state.hold = state.hold >> last_bits as u32;
-                                state.bits -= last_bits as i32;
-                            }
-                        }
-
-                        if !leave {
-                            state.hold = state.hold >> here_bits as u32;
-                            state.bits -= here_bits as i32;
-                            state.length = here_val as i32;
-
-                            if here_op as i32 == 0 {
-                                // literal
-                                state.mode = InflateMode::Lit;
-                            } else if here_op & 32 != 0 {
-                                // end of block
-                                state.back = -1;
-                                state.mode = InflateMode::TypeDo;
-                            } else if here_op & 64 != 0 {
-                                state.mode = InflateMode::Bad;
-                            } else {
-                                state.extra = (here_op & 15) as i32;
-                                state.mode = InflateMode::LenExt;
-                            }
-                        }
-                    }
-
                     if leave {
                         break;
                     }
+                    state.hold = state.hold >> last_bits as u32;
+                    state.bits -= last_bits as i32;
+                }
+
+                state.hold = state.hold >> here_bits as u32;
+                state.bits -= here_bits as i32;
+                state.length = here_val as i32;
+
+                if here_op as i32 == 0 {
+                    // literal
+                    state.mode = InflateMode::Lit;
+                } else if here_op & 32 != 0 {
+                    // end of block
+                    state.back = -1;
+                    state.mode = InflateMode::TypeDo;
+                } else if here_op & 64 != 0 {
+                    state.mode = InflateMode::Bad;
+                } else {
+                    state.extra = (here_op & 15) as i32;
+                    state.mode = InflateMode::LenExt;
                 }
             },
             LenExt => {
@@ -1476,16 +1274,23 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                         }
                     }
                 } else {
-                    // copy from output (cached raw array for performance)
+                    // copy from output
                     let src_start = out_pos - state.offset;
                     output.copy_within_append(src_start, copy);
                 }
                 if state.mode != InflateMode::Bad {
+                    // update window
+                    state.update_window(&output, output.len(), state.length);
                     state.mode = InflateMode::Len;
                 }
             },
             Lit => {
                 output.append(state.length as u8);
+                // update window periodically
+                if output.len() % 32768 == 0 {
+                    let wlen = if output.len() > 32768 { 32768 } else { output.len() };
+                    state.update_window(&output, output.len(), wlen);
+                }
                 state.mode = InflateMode::Len;
             },
             Check => {
@@ -1521,6 +1326,12 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                 leave = true;
             },
         };
+    }
+
+    // final window update
+    if output.len() > 0 {
+        let wlen = if output.len() > 32768 { 32768 } else { output.len() };
+        state.update_window(&output, output.len(), wlen);
     }
 
     // Return bytes consumed from input
