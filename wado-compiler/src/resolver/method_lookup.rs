@@ -400,7 +400,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     param_types,
                     param_is_mut,
                     inherited_from_base: None,
-                    canonical_name: None,
+                    cm_name: None,
                 });
             }
             // If find_local_method_info returned None, the method either doesn't exist
@@ -532,7 +532,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         param_types,
                                         param_is_mut,
                                         inherited_from_base: None,
-                                        canonical_name: None,
+                                        cm_name: None,
                                     });
                                 }
                             }
@@ -621,7 +621,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         param_types,
                                         param_is_mut,
                                         inherited_from_base: None,
-                                        canonical_name: None,
+                                        cm_name: None,
                                     });
                                 }
                             }
@@ -734,11 +734,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             self.current_type_params = old_type_params;
 
-            // Extract canonical builtin name from #[canonical("...")] attribute
-            let canonical_name = method
+            // Extract CM canonical name from #[cm("...")] attribute
+            let cm_name = method
                 .attrs
                 .iter()
-                .find(|a| a.name == "canonical")
+                .find(|a| a.name == "cm")
                 .and_then(|a| a.args.first().cloned());
 
             return Some(MethodInfo {
@@ -747,7 +747,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 param_types,
                 param_is_mut,
                 inherited_from_base: None,
-                canonical_name,
+                cm_name,
             });
         }
         None
@@ -1361,7 +1361,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         param_types,
                         param_is_mut,
                         inherited_from_base: None,
-                        canonical_name: None,
+                        cm_name: None,
                     },
                     impl_module_source: impl_module_source.clone(),
                     blanket_type_param: blanket_type_param.clone(),
@@ -1401,7 +1401,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     param_types,
                                     param_is_mut,
                                     inherited_from_base: None,
-                                    canonical_name: None,
+                                    cm_name: None,
                                 },
                                 impl_module_source: impl_module_source.clone(),
                                 blanket_type_param: blanket_type_param.clone(),
@@ -2144,7 +2144,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         param_types,
                         param_is_mut,
                         inherited_from_base: None,
-                        canonical_name: None,
+                        cm_name: None,
                     },
                 ));
             }
@@ -2774,7 +2774,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             param_types,
             param_is_mut: method_param_is_mut,
             inherited_from_base: _,
-            canonical_name: _,
+            cm_name: _,
         } = method_info?;
 
         // Only use IndexMut if the method requires &mut self

@@ -168,7 +168,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             param_types,
             param_is_mut: _,
             inherited_from_base,
-            canonical_name,
+            cm_name,
         } = if let Some(info) = method_info {
             info
         } else {
@@ -188,7 +188,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 param_types: vec![],
                 param_is_mut: vec![],
                 inherited_from_base: None,
-                canonical_name: None,
+                cm_name: None,
             }
         };
 
@@ -378,7 +378,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )
         .with_type_args(&impl_type_arg_names, &method_type_arg_names);
         method_info.is_type_param_receiver = is_type_param_receiver;
-        method_info.canonical_name = canonical_name;
+        method_info.cm_name = cm_name;
 
         // Use trait impl module source if this is a trait method,
         // otherwise use the struct's module (where inherent methods are defined)
@@ -884,13 +884,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )
         .with_struct_type_args(&impl_type_arg_names);
 
-        // Propagate #[canonical("...")] from resource static methods so the WIR translator
-        // can intercept canonical operations (e.g., stream-new, waitable-set-new).
-        method_info.canonical_name = self.lookup_resource_static_canonical(
-            &struct_name,
-            &struct_module,
-            &static_call.method,
-        );
+        // Propagate #[cm("...")] from resource static methods for CM adapter synthesis.
+        method_info.cm_name =
+            self.lookup_resource_static_cm(&struct_name, &struct_module, &static_call.method);
 
         TirExpr::new(
             TirExprKind::Call {
@@ -913,8 +909,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )
     }
 
-    /// Look up `#[canonical("...")]` for a static (no-self) method on a resource type in a module.
-    fn lookup_resource_static_canonical(
+    /// Look up `#[cm("...")]` for a static (no-self) method on a resource type in a module.
+    fn lookup_resource_static_cm(
         &self,
         struct_name: &str,
         struct_module: &ModuleSource,
@@ -935,7 +931,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         return method
                             .attrs
                             .iter()
-                            .find(|a| a.name == "canonical")
+                            .find(|a| a.name == "cm")
                             .and_then(|a| a.args.first().cloned());
                     }
                 }
@@ -1550,9 +1546,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         let param_is_mut = self.lookup_static_method_param_is_mut(&actual_struct_name, method_name);
 
-        // Propagate #[canonical("...")] from resource static methods
-        let canonical_name =
-            self.lookup_resource_static_canonical(&actual_struct_name, &struct_module, method_name);
+        // Propagate #[cm("...")] from resource static methods
+        let cm_name =
+            self.lookup_resource_static_cm(&actual_struct_name, &struct_module, method_name);
 
         TirExpr::new(
             TirExprKind::Call {
@@ -1566,7 +1562,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             trait_name_opt,
                             method_name.to_string(),
                         );
-                        m.canonical_name = canonical_name;
+                        m.cm_name = cm_name;
                         m
                     }),
                     is_cm_adapter: false,

@@ -79,20 +79,20 @@ impl Default for Option<T> {
 /// The readable end is passed to consumers; the writable end fulfills the future.
 pub resource Future<T> {
     /// Create a new future pair: [Future<T>, FutureWritable<T>].
-    #[canonical("future-new")]
+    #[cm("future-new")]
     fn new() -> [Future<T>, FutureWritable<T>];
 
     /// Read the value from the future.
     /// Returns Some(value) when fulfilled, None if the writer dropped without writing.
-    #[canonical("future-read")]
+    #[cm("future-read")]
     fn read(&self) -> Option<T>;
 
     /// Cancel an in-progress read. Blocks until cancellation completes.
-    #[canonical("future-cancel-read")]
+    #[cm("future-cancel-read")]
     fn cancel_read(&self);
 
     /// Drop the readable end of the future.
-    #[canonical("future-drop-readable")]
+    #[cm("future-drop-readable")]
     fn drop(&self);
 }
 
@@ -100,15 +100,15 @@ pub resource Future<T> {
 /// Opaque i32 handle managed by the runtime.
 pub resource FutureWritable<T> {
     /// Fulfill the future with a value.
-    #[canonical("future-write")]
+    #[cm("future-write")]
     fn write(&self, value: T);
 
     /// Cancel an in-progress write. Blocks until cancellation completes.
-    #[canonical("future-cancel-write")]
+    #[cm("future-cancel-write")]
     fn cancel_write(&self);
 
     /// Drop this writable end handle. Traps if no value has been written yet.
-    #[canonical("future-drop-writable")]
+    #[cm("future-drop-writable")]
     fn drop(&self);
 }
 
@@ -118,21 +118,21 @@ pub resource FutureWritable<T> {
 /// Use `Stream::<T>::new()` to create a `[Stream<T>, StreamWritable<T>]` pair.
 pub resource Stream<T> {
     /// Create a new stream pair: [Stream<T>, StreamWritable<T>].
-    #[canonical("stream-new")]
+    #[cm("stream-new")]
     fn new() -> [Stream<T>, StreamWritable<T>];
 
     /// Read up to `max` elements from the stream.
     /// Blocks until data is available or the writer drops.
     /// Returns an empty array on end-of-stream.
-    #[canonical("stream-read")]
+    #[cm("stream-read")]
     fn read(&self, max: i32) -> Array<T>;
 
     /// Cancel an in-progress read. Blocks until cancellation completes.
-    #[canonical("stream-cancel-read")]
+    #[cm("stream-cancel-read")]
     fn cancel_read(&self);
 
     /// Drop the readable end of the stream.
-    #[canonical("stream-drop-readable")]
+    #[cm("stream-drop-readable")]
     fn drop(&self);
 }
 
@@ -140,20 +140,20 @@ pub resource Stream<T> {
 /// Opaque i32 handle managed by the runtime.
 pub resource StreamWritable<T> {
     /// Write a chunk of data to the stream.
-    #[canonical("stream-write")]
+    #[cm("stream-write")]
     fn write(&self, data: Array<T>);
 
     /// Write raw GC array directly to the stream.
     /// `len` is the number of valid elements (may be less than array capacity).
-    #[canonical("stream-write-raw")]
+    #[cm("stream-write-raw")]
     fn write_raw(&self, data: builtin::array<T>, len: i32);
 
     /// Cancel an in-progress write. Blocks until cancellation completes.
-    #[canonical("stream-cancel-write")]
+    #[cm("stream-cancel-write")]
     fn cancel_write(&self);
 
     /// Drop the writable end, signaling end-of-stream.
-    #[canonical("stream-drop-writable")]
+    #[cm("stream-drop-writable")]
     fn drop(&self);
 }
 
@@ -187,19 +187,19 @@ pub struct WaitEvent {
 /// drop subtasks before dropping the set.
 pub resource WaitableSet {
     /// Create a new waitable set.
-    #[canonical("waitable-set-new")]
+    #[cm("waitable-set-new")]
     fn new() -> WaitableSet;
 
     /// Block until an event occurs. Returns the event details.
-    #[canonical("waitable-set-wait")]
+    #[cm("waitable-set-wait")]
     fn wait(&self) -> WaitEvent;
 
     /// Non-blocking poll. Returns Some(event) if ready, None otherwise.
-    #[canonical("waitable-set-poll")]
+    #[cm("waitable-set-poll")]
     fn poll(&self) -> Option<WaitEvent>;
 
     /// Drop the waitable set. Traps if waitables are still joined to this set.
-    #[canonical("waitable-set-drop")]
+    #[cm("waitable-set-drop")]
     fn drop(&self);
 }
 
@@ -218,31 +218,31 @@ pub resource WaitableSet {
 pub resource Subtask {
     /// Drop a completed subtask. Automatically unjoins from its WaitableSet.
     /// Traps if the subtask has not yet resolved.
-    #[canonical("subtask-drop")]
+    #[cm("subtask-drop")]
     fn drop(&self);
 
     /// Cancel this in-progress subtask. Blocks until cancellation completes.
-    #[canonical("subtask-cancel")]
+    #[cm("subtask-cancel")]
     fn cancel(&self);
 
     /// Join this subtask to a waitable set for monitoring.
     /// Returns a Waitable token identifying this subtask in wait results.
-    #[canonical("waitable-join")]
+    #[cm("waitable-join")]
     fn join(&self, set: &WaitableSet) -> Waitable;
 }
 
 /// An error context carrying a debug message across component boundaries.
 pub resource ErrorContext {
     /// Create a new error context with the given message.
-    #[canonical("error-context-new")]
+    #[cm("error-context-new")]
     fn new(message: String) -> ErrorContext;
 
     /// Get the debug message from this error context.
-    #[canonical("error-context-debug-message")]
+    #[cm("error-context-debug-message")]
     fn debug_message(&self) -> String;
 
     /// Drop the error context.
-    #[canonical("error-context-drop")]
+    #[cm("error-context-drop")]
     fn drop(&self);
 }
 
@@ -254,11 +254,11 @@ pub resource ErrorContext {
 pub resource Backpressure {
     /// Increment the backpressure counter by 1.
     /// The host applies backpressure when the counter is non-zero.
-    #[canonical("backpressure-inc")]
+    #[cm("backpressure-inc")]
     fn inc();
 
     /// Decrement the backpressure counter by 1.
-    #[canonical("backpressure-dec")]
+    #[cm("backpressure-dec")]
     fn dec();
 }
 
@@ -270,12 +270,12 @@ pub resource Backpressure {
 pub resource Context {
     /// Get the value of task-local context slot `slot`.
     /// `slot` must be a compile-time constant.
-    #[canonical("context-get")]
+    #[cm("context-get")]
     fn get(slot: u32) -> u32;
 
     /// Set the value of task-local context slot `slot` to `value`.
     /// `slot` must be a compile-time constant.
-    #[canonical("context-set")]
+    #[cm("context-set")]
     fn set(slot: u32, value: u32);
 }
 
@@ -288,7 +288,7 @@ pub resource Task {
     /// Call this in response to a cancellation signal (e.g. after receiving
     /// `WaitEvent { code: 6 }` from `WaitableSet::wait`). Signals to the CM
     /// runtime that the task accepts being cancelled and will clean up.
-    #[canonical("task-cancel")]
+    #[cm("task-cancel")]
     fn cancel();
 }
 
@@ -303,39 +303,39 @@ pub resource SuspendedThread;
 pub resource Thread {
     /// Yield control to allow other threads to make progress.
     /// If `cancellable` is true, may return early if the current task is being cancelled.
-    #[canonical("thread-yield")]
+    #[cm("thread-yield")]
     fn yield_(cancellable: bool);
 
     /// Returns the index of the current thread within its thread group.
-    #[canonical("thread-index")]
+    #[cm("thread-index")]
     fn index() -> u32;
 
     /// Create a new thread via indirect call through a shared function table.
     /// Both `func_type_index` and `table_index` must be compile-time constants.
-    #[canonical("thread-new-indirect")]
+    #[cm("thread-new-indirect")]
     fn new_indirect(func_type_index: u32, table_index: u32);
 
     /// Suspend the current thread and immediately switch to the given suspended thread.
     /// If `cancellable` is true, suspension can be interrupted by cancellation.
-    #[canonical("thread-suspend-to-suspended")]
+    #[cm("thread-suspend-to-suspended")]
     fn suspend_to_suspended(target: &SuspendedThread, cancellable: bool);
 
     /// Suspend the current thread, yielding to the transitive async-lowered calling component.
     /// If `cancellable` is true, suspension can be interrupted by cancellation.
-    #[canonical("thread-suspend")]
+    #[cm("thread-suspend")]
     fn suspend(cancellable: bool) -> SuspendedThread;
 
     /// Suspend the current thread and switch to another thread.
     /// If `cancellable` is true, suspension can be interrupted by cancellation.
-    #[canonical("thread-suspend-to")]
+    #[cm("thread-suspend-to")]
     fn suspend_to(target: &SuspendedThread, cancellable: bool) -> SuspendedThread;
 
     /// Schedule the given suspended thread to be resumed later.
-    #[canonical("thread-unsuspend")]
+    #[cm("thread-unsuspend")]
     fn unsuspend(target: &SuspendedThread);
 
     /// Yield to the given suspended thread, then resume this thread when done.
     /// If `cancellable` is true, the yield can be interrupted by cancellation.
-    #[canonical("thread-yield-to-suspended")]
+    #[cm("thread-yield-to-suspended")]
     fn yield_to_suspended(target: &SuspendedThread, cancellable: bool);
 }

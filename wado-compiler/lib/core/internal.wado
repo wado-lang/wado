@@ -147,3 +147,117 @@ pub fn write_escaped_string(s: String, f: &mut Formatter) {
         };
     }
 }
+
+// === CM Resource Method Adapters ===
+//
+// These functions implement the Component Model ABI for resource operations.
+// Synthesis rewrites #[cm("...")] method calls to call these adapters.
+
+/// Waits for a BLOCKED stream/future handle to become ready.
+/// When a canonical stream/future operation returns BLOCKED (0xFFFF_FFFF),
+/// this creates a temporary WaitableSet, joins the handle, and waits.
+/// Returns the event payload (same format as the original return value).
+pub fn wait_for_blocked(handle: i32) -> i32 {
+    let ws = builtin::waitable_set_new();
+    builtin::waitable_join(handle, ws);
+    let evt_ptr = builtin::realloc(0, 0, 4, 8);
+    let code = builtin::waitable_set_wait(ws, evt_ptr);
+    let payload = builtin::i32_load(evt_ptr + 4);
+    let freed = builtin::realloc(evt_ptr, 8, 4, 0);
+    builtin::waitable_set_drop(ws);
+    return payload;
+}
+
+/// CM adapter for stream.read(max) on Stream<u8>.
+/// Allocates linear memory, calls stream-read, handles BLOCKED,
+/// lifts bytes to GC array, constructs Array<u8>.
+pub fn cm_stream_read_u8(handle: i32, max: i32) -> Array<u8> {
+    let ptr = builtin::realloc(0, 0, 1, max);
+    let mut result = builtin::stream_read(handle, ptr, max);
+    if result == -1 {
+        result = wait_for_blocked(handle);
+    }
+    let count = result >> 4;
+    let arr = memory_to_gc_array(ptr, count);
+    let freed = builtin::realloc(ptr, max, 1, 0);
+    return Array::<u8>::internal_from_raw(arr, count);
+}
+
+/// CM adapter for stream.write(data) on Stream<u8>.
+/// Lowers Array<u8> to linear memory, calls stream-write, handles BLOCKED.
+pub fn cm_stream_write_u8(handle: i32, data: Array<u8>) {
+    let packed = cm_lower_array_u8(data);
+    let ptr = packed as i32;
+    let len = (packed >> 32) as i32;
+    let result = builtin::stream_write(handle, ptr, len);
+    if result == -1 {
+        let payload = wait_for_blocked(handle);
+    }
+    let freed = builtin::realloc(ptr, len, 1, 0);
+}
+
+/// CM adapter for stream.write_raw(data, len) on Stream<u8>.
+/// Lowers raw GC array to linear memory, calls stream-write, handles BLOCKED.
+pub fn cm_stream_write_raw_u8(handle: i32, data: builtin::array<u8>, len: i32) {
+    let packed = cm_lower_list_u8(data, len);
+    let ptr = packed as i32;
+    let raw_len = (packed >> 32) as i32;
+    let result = builtin::stream_write(handle, ptr, raw_len);
+    if result == -1 {
+        let payload = wait_for_blocked(handle);
+    }
+    let freed = builtin::realloc(ptr, raw_len, 1, 0);
+}
+
+/// CM adapter for ErrorContext::new(msg).
+/// Lowers String to linear memory, calls error-context-new, frees buffer.
+pub fn cm_error_context_new(msg: String) -> i32 {
+    let packed = cm_lower_string(msg);
+    let ptr = packed as i32;
+    let len = (packed >> 32) as i32;
+    let handle = builtin::error_context_new(ptr, len);
+    let freed = builtin::realloc(ptr, len, 1, 0);
+    return handle;
+}
+
+/// CM adapter for error_context.debug_message().
+/// Calls error-context-debug-message, lifts result from linear memory to String.
+pub fn cm_error_context_debug_message(handle: i32) -> String {
+    let out_ptr = builtin::realloc(0, 0, 4, 8);
+    builtin::error_context_debug_message(handle, out_ptr);
+    let ptr = builtin::i32_load(out_ptr);
+    let len = builtin::i32_load(out_ptr + 4);
+    let freed_out = builtin::realloc(out_ptr, 8, 4, 0);
+    let result = memory_to_gc_string(ptr, len);
+    let freed_data = builtin::realloc(ptr, len, 1, 0);
+    return result;
+}
+
+/// CM adapter for waitable_set.wait().
+/// Allocates output buffer, calls waitable-set-wait, constructs WaitEvent.
+pub fn cm_waitable_set_wait(ws: i32) -> WaitEvent {
+    let out_ptr = builtin::realloc(0, 0, 4, 8);
+    let code = builtin::waitable_set_wait(ws, out_ptr);
+    let evt_handle = builtin::i32_load(out_ptr);
+    let payload = builtin::i32_load(out_ptr + 4);
+    let freed = builtin::realloc(out_ptr, 8, 4, 0);
+    return WaitEvent { code, handle: evt_handle, payload };
+}
+
+pub fn cm_waitable_join(handle: i32, ws: i32) -> i32 {
+    builtin::waitable_join(handle, ws);
+    return handle;
+}
+
+pub fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
+    let out_ptr = builtin::realloc(0, 0, 4, 8);
+    let code = builtin::waitable_set_poll(ws, out_ptr);
+    if code == 0 {
+        let freed = builtin::realloc(out_ptr, 8, 4, 0);
+        return null;
+    }
+    let evt_handle = builtin::i32_load(out_ptr);
+    let payload = builtin::i32_load(out_ptr + 4);
+    let freed = builtin::realloc(out_ptr, 8, 4, 0);
+    return Option::Some(WaitEvent { code, handle: evt_handle, payload });
+}
