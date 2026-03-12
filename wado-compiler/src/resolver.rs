@@ -134,6 +134,10 @@ pub struct Resolver<'a, H: CompilerHost> {
     included_files: &'a IndexMap<[String; 2], Vec<u8>>,
     /// Cached flat set of all known type names for fast `is_known_type_name` lookups.
     known_type_names_cache: IndexSet<String>,
+    /// Cache for `find_indexing_trait_impl` results.
+    /// Key: (struct_name, base_type_id, trait_base_name, method_name, assoc_type_name)
+    indexing_trait_cache:
+        IndexMap<(String, TypeId, String, String, String), Option<(TypeId, ast::SelfKind, String, ModuleSource)>>,
 }
 
 impl<'a, H: CompilerHost> Resolver<'a, H> {
@@ -187,6 +191,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             blanket_trait_impl_index,
             included_files,
             known_type_names_cache: IndexSet::default(),
+            indexing_trait_cache: IndexMap::default(),
         }
     }
 
@@ -249,6 +254,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         self.current_module_source = module_source.clone();
         // Store current module items for local function parameter lookup
         self.current_module_items = module.items.clone();
+        // Clear trait lookup caches (current_module_items changed)
+        self.indexing_trait_cache.clear();
 
         // First pass: collect type definitions
         self.collect_types(module);
