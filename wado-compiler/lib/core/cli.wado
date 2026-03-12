@@ -21,17 +21,20 @@ use { wait_for_subtask } from "core:internal";
 pub use { Stdout, Stderr, Environment, Exit } from "wasi:cli";
 /// Writes a string to a StreamWritable<u8> with an optional newline, then drops it.
 /// Called AFTER the consumer (write_via_stream) has been started.
+///
+/// Optimized to avoid byte-by-byte iteration: uses the String's internal
+/// array<u8> directly (zero-copy for no-newline case, bulk array_copy for newline).
 pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
+    let bytes = message.internal_raw_bytes();
     let len = message.len();
-    let alloc_size = if add_newline { len + 1 } else { len };
-    let mut arr = Array::<u8>::with_capacity(alloc_size);
-    for let b of message.bytes() {
-        arr.append(b);
-    }
     if add_newline {
-        arr.append('\n' as u8);
+        let new_repr = builtin::array_new::<u8>(len + 1);
+        builtin::array_copy::<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_set_u8(new_repr, len, 10);
+        tx.write(Array::<u8>::internal_from_raw_parts(new_repr, len + 1));
+    } else {
+        tx.write(Array::<u8>::internal_from_raw_parts(bytes, len));
     }
-    tx.write(arr);
     tx.drop();
 }
 /// Prints a line to stdout (adds newline).

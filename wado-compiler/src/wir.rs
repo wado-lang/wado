@@ -105,14 +105,62 @@ pub struct WasmModuleFunc {
 }
 
 impl WasmModuleInfo {
+    /// Compute the set of function indices (by position in `self.functions`) that are
+    /// reachable from exported functions. Used to eliminate dead functions from the
+    /// wasm module (e.g., `debug_realloc` when bump allocator is selected).
+    fn reachable_function_indices(&self) -> IndexSet<usize> {
+        // Build call graph: for each function (by position), collect callee positions
+        let orig_to_pos: IndexMap<u32, usize> = self
+            .functions
+            .iter()
+            .enumerate()
+            .map(|(pos, f)| (f.original_func_index, pos))
+            .collect();
+
+        let mut callees_of: Vec<Vec<usize>> = Vec::with_capacity(self.functions.len());
+        for func in &self.functions {
+            let mut callees = Vec::new();
+            collect_callee_positions_from_body(&func.body, &orig_to_pos, &mut callees);
+            callees_of.push(callees);
+        }
+
+        // BFS from exported functions
+        let mut reachable: IndexSet<usize> = IndexSet::default();
+        let mut queue = std::collections::VecDeque::new();
+        for (pos, func) in self.functions.iter().enumerate() {
+            if func.is_exported {
+                if reachable.insert(pos) {
+                    queue.push_back(pos);
+                }
+            }
+        }
+        while let Some(pos) = queue.pop_front() {
+            for &callee in &callees_of[pos] {
+                if reachable.insert(callee) {
+                    queue.push_back(callee);
+                }
+            }
+        }
+        reachable
+    }
+
     /// Convert this extracted module info into a standalone `WirModule`
     /// that can be emitted via `emit_core_module`.
     pub fn to_wir_module(&self, strip_names: bool, memory: WirMemory) -> WirModule {
         let mut wir = WirModule::empty();
 
-        // Build func index remap: original global index → local module index
-        let func_index_remap: IndexMap<u32, u32> = self
+        // DCE: only include functions reachable from exports
+        let reachable = self.reachable_function_indices();
+        let live_functions: Vec<&WasmModuleFunc> = self
             .functions
+            .iter()
+            .enumerate()
+            .filter(|(pos, _)| reachable.contains(pos))
+            .map(|(_, f)| f)
+            .collect();
+
+        // Build func index remap: original global index → local module index
+        let func_index_remap: IndexMap<u32, u32> = live_functions
             .iter()
             .enumerate()
             .map(|(local_idx, func)| (func.original_func_index, u32::try_from(local_idx).unwrap()))
@@ -122,7 +170,7 @@ impl WasmModuleInfo {
         wir.memories.push(memory);
 
         // One func type per function
-        for (i, func) in self.functions.iter().enumerate() {
+        for (i, func) in live_functions.iter().enumerate() {
             let fq: Rc<str> = Rc::from(format!("__wasm_mod_type_{i}"));
             wir.types.push(WirTypeDef::Func(WirFuncType {
                 name: WirName {
@@ -135,7 +183,7 @@ impl WasmModuleInfo {
         }
 
         // Functions (with remapped call targets)
-        for (i, func) in self.functions.iter().enumerate() {
+        for (i, func) in live_functions.iter().enumerate() {
             let type_id = WirTypeId::new(
                 u32::try_from(i).unwrap(),
                 Rc::from(format!("__wasm_mod_type_{i}")),
@@ -189,7 +237,7 @@ impl WasmModuleInfo {
 
         // Names
         if !strip_names {
-            for (i, func) in self.functions.iter().enumerate() {
+            for (i, func) in live_functions.iter().enumerate() {
                 wir.names
                     .function_names
                     .push((u32::try_from(i).unwrap(), func.export_name.clone()));
@@ -198,6 +246,40 @@ impl WasmModuleInfo {
 
         wir
     }
+}
+
+/// Collect callee function positions from an instruction tree using mutable traversal.
+fn collect_callee_positions_from_body(
+    body: &[WirInstr],
+    orig_to_pos: &IndexMap<u32, usize>,
+    out: &mut Vec<usize>,
+) {
+    for instr in body {
+        collect_callee_positions_recursive(&mut instr.clone(), orig_to_pos, out);
+    }
+}
+
+fn collect_callee_positions_recursive(
+    instr: &mut WirInstr,
+    orig_to_pos: &IndexMap<u32, usize>,
+    out: &mut Vec<usize>,
+) {
+    match instr {
+        WirInstr::Call { func_id, .. } => {
+            if let Some(&pos) = orig_to_pos.get(&func_id.index()) {
+                out.push(pos);
+            }
+        }
+        WirInstr::RefFunc { func_id } => {
+            if let Some(&pos) = orig_to_pos.get(&func_id.index()) {
+                out.push(pos);
+            }
+        }
+        _ => {}
+    }
+    instr.for_each_boxed_child_mut(&mut |child| {
+        collect_callee_positions_recursive(child, orig_to_pos, out);
+    });
 }
 
 /// Recursively remap `WirFuncId` indices in a `WirInstr` tree.
