@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773317587274,
+  "lastUpdate": 1773355693078,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2807,6 +2807,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 22811,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f7a46fb48cb5800ce118026f44745cefcdb8b32b",
+          "message": "Merge pull request #569 from wado-lang/claude/refactor-cm-adapter-synthesis-ADUPG\n\nRefactor CM resource method adapters and add WASI function types",
+          "timestamp": "2026-03-13T07:42:21+09:00",
+          "tree_id": "b8609a99e0adbe34d16f11ff2fae35fccdbaac4a",
+          "url": "https://github.com/wado-lang/wado/commit/f7a46fb48cb5800ce118026f44745cefcdb8b32b"
+        },
+        "date": 1773355692887,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9236,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22767,
             "unit": "bytes"
           }
         ]
