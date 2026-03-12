@@ -511,7 +511,7 @@ fn Array<i32>^Eq::eq(self, other) {
     if self.used != other.used {
         return 0;
     };
-    __for_0: block {
+    __for_1: block {
         i = 0;
         _licm_used_3 = self.used;
         _licm_repr_4 = self.repr;
@@ -519,7 +519,7 @@ fn Array<i32>^Eq::eq(self, other) {
         block {
             l46: loop {
                 if (i < _licm_used_3) == 0 {
-                    break __for_0;
+                    break __for_1;
                 };
                 if builtin::array_get<i32>(_licm_repr_4, i) != builtin::array_get<i32>(_licm_repr_5, i) {
                     return 0;
@@ -546,14 +546,14 @@ fn Array<i32>^Ord::cmp(self, other) {
         __local_7 = other.used;
         break __inline_i32_min_0: select i32(__local_6 < __local_7, __local_6, __local_7);
     };
-    __for_1: block {
+    __for_2: block {
         i = 0;
         _licm_repr_8 = self.repr;
         _licm_repr_9 = other.repr;
         block {
             l50: loop {
                 if (i < min_len) == 0 {
-                    break __for_1;
+                    break __for_2;
                 };
                 a = builtin::array_get<i32>(_licm_repr_8, i);
                 b = builtin::array_get<i32>(_licm_repr_9, i);

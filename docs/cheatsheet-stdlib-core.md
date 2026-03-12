@@ -555,6 +555,7 @@ impl Array {
     pub fn internal_raw_data(&self) -> builtin::array<T>;
     pub fn append(&mut self, value: T);
     pub fn get(&self, index: i32) -> Option<T>;
+    pub fn copy_within_append(&mut self, src_start: i32, count: i32);
     pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T>;
     pub fn iter(&self) -> ArrayIter<T>;
     pub fn sort_by(&mut self, cmp: Fn(&T, &T) -> Ordering);
