@@ -244,18 +244,6 @@ pub fn cm_waitable_set_wait(ws: i32) -> WaitEvent {
     return WaitEvent { code, handle: evt_handle, payload };
 }
 
-/// CM adapter for waitable_set.poll().
-/// Allocates output buffer, calls waitable-set-poll, returns Option<WaitEvent>.
-pub fn cm_stream_new() -> [i32, i32] {
-    let packed = builtin::stream_new();
-    return [packed as i32, (packed >> 32) as i32];
-}
-
-pub fn cm_future_new() -> [i32, i32] {
-    let packed = builtin::future_new();
-    return [packed as i32, (packed >> 32) as i32];
-}
-
 pub fn cm_waitable_join(handle: i32, ws: i32) -> i32 {
     builtin::waitable_join(handle, ws);
     return handle;
