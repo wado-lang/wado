@@ -4150,6 +4150,11 @@ impl FunctionTranslator<'_, '_> {
                 let data_arg = self.translate_expr(&args[0].expr);
                 Some(self.emit_stream_write(handle, data_arg))
             }
+            "stream-write-raw" => {
+                let data_arg = self.translate_expr(&args[0].expr);
+                let len_arg = self.translate_expr(&args[1].expr);
+                Some(self.emit_stream_write_raw(handle, data_arg, len_arg))
+            }
             "stream-drop-readable" => {
                 Some(self.emit_drop_handle(CanonicalIntrinsic::StreamDropReadable, handle))
             }
@@ -6100,6 +6105,217 @@ impl FunctionTranslator<'_, '_> {
             value: Box::new(WirInstr::Call {
                 func_id: cm_lower_id,
                 args: vec![data_arg],
+            }),
+        });
+
+        // ptr = packed as i32
+        instrs.push(WirInstr::LocalSet {
+            name: ptr_name.clone(),
+            value: Box::new(WirInstr::I32WrapI64(Box::new(WirInstr::LocalGet {
+                name: packed_name.clone(),
+            }))),
+        });
+        // len = (packed >> 32) as i32
+        instrs.push(WirInstr::LocalSet {
+            name: len_name.clone(),
+            value: Box::new(WirInstr::I32WrapI64(Box::new(WirInstr::I64ShrU(
+                Box::new(WirInstr::LocalGet {
+                    name: packed_name.clone(),
+                }),
+                Box::new(WirInstr::I64Const(32)),
+            )))),
+        });
+
+        // result = stream_write(handle, ptr, len)
+        instrs.push(WirInstr::LocalSet {
+            name: result_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: stream_write_id,
+                args: vec![
+                    WirInstr::LocalGet {
+                        name: handle_name.clone(),
+                    },
+                    WirInstr::LocalGet {
+                        name: ptr_name.clone(),
+                    },
+                    WirInstr::LocalGet {
+                        name: len_name.clone(),
+                    },
+                ],
+            }),
+        });
+
+        // If result == BLOCKED (-1), wait via waitable-set
+        instrs.push(WirInstr::If {
+            condition: Box::new(WirInstr::I32Eq(
+                Box::new(WirInstr::LocalGet {
+                    name: result_name.clone(),
+                }),
+                Box::new(WirInstr::I32Const(-1)),
+            )),
+            result: None,
+            then_body: vec![
+                WirInstr::DeclareLocal {
+                    name: evt_name.clone(),
+                    ty: WirType::I32,
+                },
+                WirInstr::LocalSet {
+                    name: result_name.clone(),
+                    value: Box::new(WirInstr::Call {
+                        func_id: ws_new_id,
+                        args: vec![],
+                    }),
+                },
+                WirInstr::Call {
+                    func_id: w_join_id,
+                    args: vec![
+                        WirInstr::LocalGet {
+                            name: handle_name.clone(),
+                        },
+                        WirInstr::LocalGet {
+                            name: result_name.clone(),
+                        },
+                    ],
+                },
+                WirInstr::LocalSet {
+                    name: evt_name.clone(),
+                    value: Box::new(WirInstr::Call {
+                        func_id: realloc_id.clone(),
+                        args: vec![
+                            WirInstr::I32Const(0),
+                            WirInstr::I32Const(0),
+                            WirInstr::I32Const(4),
+                            WirInstr::I32Const(8),
+                        ],
+                    }),
+                },
+                WirInstr::Drop(Box::new(WirInstr::Call {
+                    func_id: ws_wait_id,
+                    args: vec![
+                        WirInstr::LocalGet {
+                            name: result_name.clone(),
+                        },
+                        WirInstr::LocalGet {
+                            name: evt_name.clone(),
+                        },
+                    ],
+                })),
+                WirInstr::Drop(Box::new(WirInstr::Call {
+                    func_id: realloc_id.clone(),
+                    args: vec![
+                        WirInstr::LocalGet {
+                            name: evt_name.clone(),
+                        },
+                        WirInstr::I32Const(8),
+                        WirInstr::I32Const(4),
+                        WirInstr::I32Const(0),
+                    ],
+                })),
+            ],
+            else_body: None,
+        });
+
+        // Free the linear memory buffer after stream.write completes.
+        instrs.push(WirInstr::Drop(Box::new(WirInstr::Call {
+            func_id: realloc_id,
+            args: vec![
+                WirInstr::LocalGet {
+                    name: ptr_name.clone(),
+                },
+                WirInstr::LocalGet {
+                    name: len_name.clone(),
+                },
+                WirInstr::I32Const(1),
+                WirInstr::I32Const(0),
+            ],
+        })));
+
+        WirInstr::Seq(instrs)
+    }
+
+    /// Emit WIR for `StreamWritable<T>::write_raw(data: builtin::array<T>, len: i32)`.
+    ///
+    /// Like `emit_stream_write` but takes a raw GC array + length directly,
+    /// bypassing the `Array<T>` wrapper. Uses `cm_lower_list_u8` instead of
+    /// `cm_lower_array_u8` to avoid an intermediate GC struct allocation.
+    fn emit_stream_write_raw(
+        &mut self,
+        handle: WirInstr,
+        data_arg: WirInstr,
+        len_arg: WirInstr,
+    ) -> WirInstr {
+        let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
+            return WirInstr::Unreachable;
+        };
+        let stream_write_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::StreamWrite,
+            vec![WirType::I32, WirType::I32, WirType::I32],
+            vec![WirType::I32],
+        );
+        let Some(cm_lower_id) = self
+            .ctx
+            .func_map
+            .get("core:internal/cm_lower_list_u8")
+            .cloned()
+        else {
+            return WirInstr::Unreachable;
+        };
+        let ws_new_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableSetNew,
+            vec![],
+            vec![WirType::I32],
+        );
+        let w_join_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableJoin,
+            vec![WirType::I32, WirType::I32],
+            vec![],
+        );
+        let ws_wait_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableSetWait,
+            vec![WirType::I32, WirType::I32],
+            vec![WirType::I32],
+        );
+
+        self.local_counter += 1;
+        let suffix = self.local_counter;
+        let handle_name = format!("__swr_handle_{suffix}");
+        let packed_name = format!("__swr_packed_{suffix}");
+        let ptr_name = format!("__swr_ptr_{suffix}");
+        let len_name = format!("__swr_len_{suffix}");
+        let result_name = format!("__swr_result_{suffix}");
+        let evt_name = format!("__swr_evt_{suffix}");
+
+        let mut instrs = vec![];
+
+        // Declare locals
+        for (name, ty) in [
+            (&handle_name, WirType::I32),
+            (&ptr_name, WirType::I32),
+            (&len_name, WirType::I32),
+            (&result_name, WirType::I32),
+        ] {
+            instrs.push(WirInstr::DeclareLocal {
+                name: name.clone(),
+                ty,
+            });
+        }
+        instrs.push(WirInstr::DeclareLocal {
+            name: packed_name.clone(),
+            ty: WirType::I64,
+        });
+
+        // Save handle
+        instrs.push(WirInstr::LocalSet {
+            name: handle_name.clone(),
+            value: Box::new(handle),
+        });
+
+        // packed = cm_lower_list_u8(data, len) → i64 (ptr | (len << 32))
+        instrs.push(WirInstr::LocalSet {
+            name: packed_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: cm_lower_id,
+                args: vec![data_arg, len_arg],
             }),
         });
 

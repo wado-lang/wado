@@ -56,6 +56,7 @@ pub resource Stream<T> {
 ```wado
 pub resource StreamWritable<T> {
     fn write(&self, data: Array<T>);
+    fn write_raw(&self, data: builtin::array<T>, len: i32);
     fn cancel_write(&self);
     fn drop(&self);
 }
