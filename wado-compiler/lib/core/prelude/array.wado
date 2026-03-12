@@ -45,6 +45,10 @@ impl Array<T> {
         return self.repr;
     }
 
+    pub fn internal_from_raw(repr: builtin::array<T>, used: i32) -> Array<T> {
+        return Array { repr, used };
+    }
+
     #[comp_feature("array_append")]
     pub fn append(&mut self, value: T) {
         let used = self.used;

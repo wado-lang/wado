@@ -4855,8 +4855,307 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
         }
     }
 
+    // ---- CM Resource Method Adapters ----
+    // Rewrite #[cm("...")] resource method calls to target internal/builtin adapter functions.
+    // This replaces the inline WIR emission in wir_build/translate.rs with pre-monomorphization
+    // synthesis, so the adapter functions go through the normal compilation pipeline.
+    rewrite_cm_resource_methods(&mut project);
+
     Ok(project)
 }
+
+/// Determine the internal adapter function name for a CM resource method.
+/// Returns `Some(("internal" | "builtin", function_name))` or `None` if not handled.
+/// Maps CM method names to their adapter dispatch.
+/// - `"raw"`: direct CmRawCall to canonical Wasm import (for simple void operations)
+/// - `"internal"`: call to internal.wado adapter function (for complex operations)
+fn cm_adapter_function(cm_name: &str) -> Option<(&'static str, &'static str)> {
+    match cm_name {
+        // Simple drops → direct CmRawCall (non-parameterized)
+        "stream-drop-readable" => Some(("raw", "stream-drop-readable")),
+        "stream-drop-writable" => Some(("raw", "stream-drop-writable")),
+        "waitable-set-drop" => Some(("raw", "waitable-set-drop")),
+        "subtask-drop" => Some(("raw", "subtask-drop")),
+        "error-context-drop" => Some(("raw", "error-context-drop")),
+
+        // Simple cancel → direct CmRawCall (non-parameterized)
+        "stream-cancel-read" => Some(("raw", "stream-cancel-read")),
+        "stream-cancel-write" => Some(("raw", "stream-cancel-write")),
+        "subtask-cancel" => Some(("raw", "subtask-cancel")),
+
+        // Future drops/cancels are parameterized by payload type — leave for WIR translate
+
+        // waitable-join: void canonical, returns the handle as Waitable
+        "waitable-join" => Some(("internal", "cm_waitable_join")),
+
+        // Simple constructors → direct CmRawCall (returns i32 handle)
+        "waitable-set-new" => Some(("raw", "waitable-set-new")),
+
+        // Complex operations → internal adapter functions
+        "stream-read" => Some(("internal", "cm_stream_read_u8")),
+        "stream-write" => Some(("internal", "cm_stream_write_u8")),
+        "stream-write-raw" => Some(("internal", "cm_stream_write_raw_u8")),
+        "error-context-new" => Some(("internal", "cm_error_context_new")),
+        "error-context-debug-message" => Some(("internal", "cm_error_context_debug_message")),
+        "waitable-set-wait" => Some(("internal", "cm_waitable_set_wait")),
+        "waitable-set-poll" => Some(("internal", "cm_waitable_set_poll")),
+
+        _ => None,
+    }
+}
+
+/// Rewrite all #[cm("...")] resource method calls in the project.
+fn rewrite_cm_resource_methods(project: &mut Project) {
+    for module in project.tir_modules.values() {
+        let type_table = module.type_table.clone();
+        for func_rc in &module.functions {
+            let mut func = func_rc.borrow_mut();
+            if let Some(body) = &mut func.body {
+                rewrite_cm_methods_in_block(body, &type_table.borrow());
+            }
+        }
+    }
+}
+
+fn rewrite_cm_methods_in_block(block: &mut TirBlock, tt: &TypeTable) {
+    for stmt in &mut block.stmts {
+        rewrite_cm_methods_in_stmt(stmt, tt);
+    }
+}
+
+fn rewrite_cm_methods_in_stmt(stmt: &mut TirStmt, tt: &TypeTable) {
+    match &mut stmt.kind {
+        TirStmtKind::Let { value, type_id, .. } => {
+            let old_type = value.type_id;
+            rewrite_cm_methods_in_expr(value, tt);
+            if value.type_id != old_type {
+                *type_id = value.type_id;
+            }
+        }
+        TirStmtKind::Expr(value) => {
+            rewrite_cm_methods_in_expr(value, tt);
+        }
+        TirStmtKind::Return { value } => {
+            if let Some(v) = value {
+                rewrite_cm_methods_in_expr(v, tt);
+            }
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            rewrite_cm_methods_in_expr(condition, tt);
+            rewrite_cm_methods_in_block(then_block, tt);
+            if let Some(blk) = else_block {
+                rewrite_cm_methods_in_block(blk, tt);
+            }
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            rewrite_cm_methods_in_block(body, tt);
+        }
+        TirStmtKind::IfPattern {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            rewrite_cm_methods_in_expr(scrutinee, tt);
+            rewrite_cm_methods_in_block(then_block, tt);
+            if let Some(blk) = else_block {
+                rewrite_cm_methods_in_block(blk, tt);
+            }
+        }
+        TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                rewrite_cm_methods_in_expr(v, tt);
+            }
+        }
+        TirStmtKind::LetPattern { value, .. } => {
+            rewrite_cm_methods_in_expr(value, tt);
+        }
+        TirStmtKind::Continue => {}
+        TirStmtKind::TaskReturn { value } => {
+            rewrite_cm_methods_in_expr(value, tt);
+        }
+    }
+}
+
+fn rewrite_cm_methods_in_expr(expr: &mut TirExpr, tt: &TypeTable) {
+    // First, recurse into sub-expressions
+    match &mut expr.kind {
+        TirExprKind::Call { args, .. } => {
+            for arg in args.iter_mut() {
+                rewrite_cm_methods_in_expr(&mut arg.expr, tt);
+            }
+        }
+        TirExprKind::MethodCall {
+            receiver, args, ..
+        } => {
+            rewrite_cm_methods_in_expr(receiver, tt);
+            for arg in args.iter_mut() {
+                rewrite_cm_methods_in_expr(&mut arg.expr, tt);
+            }
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            rewrite_cm_methods_in_expr(left, tt);
+            rewrite_cm_methods_in_expr(right, tt);
+        }
+        TirExprKind::Unary { expr: inner, .. } => {
+            rewrite_cm_methods_in_expr(inner, tt);
+        }
+        TirExprKind::Cast { expr: inner, .. } => {
+            rewrite_cm_methods_in_expr(inner, tt);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            rewrite_cm_methods_in_expr(condition, tt);
+            rewrite_cm_methods_in_block(then_branch, tt);
+            if let Some(blk) = else_branch {
+                rewrite_cm_methods_in_block(blk, tt);
+            }
+        }
+        TirExprKind::Match { expr, arms } => {
+            rewrite_cm_methods_in_expr(expr, tt);
+            for arm in arms {
+                rewrite_cm_methods_in_expr(&mut arm.body, tt);
+                if let Some(guard) = &mut arm.guard {
+                    rewrite_cm_methods_in_expr(guard, tt);
+                }
+            }
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for f in fields {
+                rewrite_cm_methods_in_expr(&mut f.value, tt);
+            }
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for e in elements {
+                rewrite_cm_methods_in_expr(e, tt);
+            }
+        }
+        TirExprKind::FieldAccess { expr, .. } => {
+            rewrite_cm_methods_in_expr(expr, tt);
+        }
+        TirExprKind::Index { expr, index, .. } => {
+            rewrite_cm_methods_in_expr(expr, tt);
+            rewrite_cm_methods_in_expr(index, tt);
+        }
+        TirExprKind::Assign { target, value } => {
+            rewrite_cm_methods_in_expr(target, tt);
+            rewrite_cm_methods_in_expr(value, tt);
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                rewrite_cm_methods_in_expr(p, tt);
+            }
+        }
+        TirExprKind::Block(block) => {
+            rewrite_cm_methods_in_block(block, tt);
+        }
+        _ => {}
+    }
+
+    // Now check if this expression is a CM resource method call
+    let cm_name = match &expr.kind {
+        TirExprKind::MethodCall { func, .. } => func
+            .method_info
+            .as_ref()
+            .and_then(|m| m.cm_name.clone()),
+        TirExprKind::Call { func, .. } => func
+            .method_info
+            .as_ref()
+            .and_then(|m| m.cm_name.clone()),
+        _ => None,
+    };
+
+    let Some(cm_name) = cm_name else {
+        return;
+    };
+
+    // stream-new / future-new remain handled by WIR translate for now,
+    // because they require i64→tuple splitting with proper GC type casting.
+    if matches!(cm_name.as_str(), "stream-new" | "future-new") {
+        return;
+    }
+
+    // Look up the adapter function
+    let Some((kind, func_name)) = cm_adapter_function(&cm_name) else {
+        // Not handled by synthesis yet — will fall through to WIR translate
+        return;
+    };
+
+    match &mut expr.kind {
+        TirExprKind::MethodCall { .. } => {
+            rewrite_cm_instance_method(expr, kind, func_name);
+        }
+        TirExprKind::Call { .. } => {
+            rewrite_cm_static_method(expr, kind, func_name);
+        }
+        _ => {}
+    }
+}
+
+/// Rewrite a CM instance method call (receiver.method(args)) to a builtin/internal call.
+/// The receiver is cast to i32 (resource handle) and passed as the first argument.
+fn rewrite_cm_instance_method(expr: &mut TirExpr, kind: &str, func_name: &str) {
+    let TirExprKind::MethodCall {
+        receiver, args, ..
+    } = &mut expr.kind
+    else {
+        return;
+    };
+
+    // Take ownership of receiver and args
+    let taken_receiver = std::mem::replace(
+        receiver.as_mut(),
+        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
+    );
+    let taken_args: Vec<TirExpr> = std::mem::take(args)
+        .into_iter()
+        .map(|a| a.expr)
+        .collect();
+
+    // Cast receiver to i32 (resource handle)
+    let handle = cast(taken_receiver, TypeTable::I32);
+
+    // Build argument list: handle first, then the rest
+    let mut all_args = vec![handle];
+    all_args.extend(taken_args);
+
+    // Create the replacement call
+    let new_expr = match kind {
+        "raw" => cm_raw_call(func_name, all_args, expr.type_id),
+        "internal" => internal_call(func_name, all_args, expr.type_id),
+        _ => unreachable!(),
+    };
+
+    *expr = new_expr;
+}
+
+/// Rewrite a CM static method call (Type::method(args)) to a raw/internal call.
+fn rewrite_cm_static_method(expr: &mut TirExpr, kind: &str, func_name: &str) {
+    let TirExprKind::Call { args, .. } = &mut expr.kind else {
+        return;
+    };
+
+    let taken_args: Vec<TirExpr> = std::mem::take(args)
+        .into_iter()
+        .map(|a| a.expr)
+        .collect();
+
+    let new_expr = match kind {
+        "raw" => cm_raw_call(func_name, taken_args, expr.type_id),
+        "internal" => internal_call(func_name, taken_args, expr.type_id),
+        _ => unreachable!(),
+    };
+
+    *expr = new_expr;
+}
+
 
 /// Recursively replace WASI-derived types with user types in the adapter.
 /// Given a WASI AST `Type` and the user's `TypeId`, compute the WASI-derived `TypeId`
