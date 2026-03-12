@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773307747985,
+  "lastUpdate": 1773316019551,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2729,6 +2729,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 23175,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bd74c0f49c52e06941f13470f656ce92c22d4a59",
+          "message": "Merge pull request #567 from wado-lang/claude/optimize-zlib-simd-ItGX5\n\nFix LICM hoisting of field accesses on &mut generic parameters",
+          "timestamp": "2026-03-12T20:41:00+09:00",
+          "tree_id": "56e626d9bbe4a1f51f975491dda255f9f238dd1f",
+          "url": "https://github.com/wado-lang/wado/commit/bd74c0f49c52e06941f13470f656ce92c22d4a59"
+        },
+        "date": 1773316019357,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2378,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9895,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 23095,
             "unit": "bytes"
           }
         ]
