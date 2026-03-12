@@ -27,8 +27,6 @@ type CallGraph = IndexMap<FunctionId, IndexSet<FunctionId>>;
 /// Effect usage: function ID -> set of (`effect_name`, `operation_name`) pairs
 type EffectUsageMap = IndexMap<FunctionId, IndexSet<(String, String)>>;
 
-/// Canonical method usage: function ID -> set of canonical builtin names
-type CanonicalMethodUsageMap = IndexMap<FunctionId, IndexSet<String>>;
 
 /// Analysis results for a single function
 #[derive(Debug, Clone, Default)]
@@ -37,9 +35,6 @@ struct FunctionAnalysis {
     callees: IndexSet<FunctionId>,
     /// Effect calls: (`effect_name`, `op_name`)
     effect_calls: IndexSet<(String, String)>,
-    /// Canonical resource method names from `#[canonical("...")]` attributes
-    /// e.g., `stream_drop_readable`, `stream_write`
-    canonical_methods: IndexSet<String>,
 }
 
 /// Analyze the project and populate its usage fields with DCE analysis results.
@@ -49,8 +44,7 @@ struct FunctionAnalysis {
 /// fields, and the entry module's `imports` list.
 pub fn analyze_project(project: &mut Project) {
     // Build call graph and effect usage from all modules
-    let (call_graph, effect_usage, _canonical_method_usage) =
-        build_analysis_graph(&project.tir_modules);
+    let (call_graph, effect_usage) = build_analysis_graph(&project.tir_modules);
 
     // Determine entry functions from world exports.
     // For the test world, test functions are the sole entry points; world exports
@@ -313,13 +307,11 @@ pub fn analyze_project(project: &mut Project) {
 }
 
 /// Build call graph and effect usage from all TIR modules
-/// Returns (`call_graph`, `effect_usage`, `canonical_method_usage`)
 fn build_analysis_graph(
     modules: &IndexMap<ModuleSource, TirModule>,
-) -> (CallGraph, EffectUsageMap, CanonicalMethodUsageMap) {
+) -> (CallGraph, EffectUsageMap) {
     let mut call_graph: CallGraph = IndexMap::default();
     let mut effect_usage: EffectUsageMap = IndexMap::default();
-    let mut canonical_method_usage: CanonicalMethodUsageMap = IndexMap::default();
 
     for (module_source, module) in modules {
         let type_table = &*module.type_table.borrow();
@@ -368,9 +360,6 @@ fn build_analysis_graph(
             if !analysis.effect_calls.is_empty() {
                 effect_usage.insert(func_id.clone(), analysis.effect_calls);
             }
-            if !analysis.canonical_methods.is_empty() {
-                canonical_method_usage.insert(func_id, analysis.canonical_methods);
-            }
         }
 
         // Note: impl_block.methods is empty because resolver adds methods to functions
@@ -393,14 +382,11 @@ fn build_analysis_graph(
                 if !analysis.effect_calls.is_empty() {
                     effect_usage.insert(method_id.clone(), analysis.effect_calls);
                 }
-                if !analysis.canonical_methods.is_empty() {
-                    canonical_method_usage.insert(method_id, analysis.canonical_methods);
-                }
             }
         }
     }
 
-    (call_graph, effect_usage, canonical_method_usage)
+    (call_graph, effect_usage)
 }
 
 /// Analyze a TIR function for callees and effect usage
@@ -588,53 +574,6 @@ fn analyze_expr(
             args,
             ..
         } => {
-            // Collect canonical resource method names for builtin import injection.
-            if let Some(info) = func.method_info.clone()
-                && let Some(cm_name) = &info.cm_name
-            {
-                analysis.canonical_methods.insert(cm_name.clone());
-
-                // WIR synthesis for certain canonical methods calls internal functions
-                // at WIR level, which are not visible in the TIR call graph. Add
-                // dependency edges here so DCE discovers them through normal
-                // reachability analysis.
-                match cm_name.as_str() {
-                    "stream-write" => {
-                        analysis
-                            .callees
-                            .insert(FunctionId::Free(FreeFunctionName::from_strs(
-                                &["core", "internal"],
-                                "cm_lower_array_u8",
-                            )));
-                    }
-                    "stream-write-raw" => {
-                        analysis
-                            .callees
-                            .insert(FunctionId::Free(FreeFunctionName::from_strs(
-                                &["core", "internal"],
-                                "cm_lower_list_u8",
-                            )));
-                    }
-                    "error-context-new" => {
-                        analysis
-                            .callees
-                            .insert(FunctionId::Free(FreeFunctionName::from_strs(
-                                &["core", "internal"],
-                                "cm_lower_string",
-                            )));
-                    }
-                    "error-context-debug-message" => {
-                        analysis
-                            .callees
-                            .insert(FunctionId::Free(FreeFunctionName::from_strs(
-                                &["core", "internal"],
-                                "memory_to_gc_string",
-                            )));
-                    }
-                    _ => {}
-                }
-            }
-
             // Use the func reference directly - it already has the correct mangled name
             // and monomorph_info from lowering phase
             let func_name = func.name.clone();
