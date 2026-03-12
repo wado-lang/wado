@@ -503,7 +503,8 @@ fn build_memory_module(
         min: min_pages,
         max: None,
     };
-    let wir = wasm_mod.to_wir_module(strip_names, memory);
+    let mut wir = wasm_mod.to_wir_module(strip_names, memory);
+    crate::wir_optimize::dce_unreachable_functions(&mut wir);
     super::emit::emit_core_module(&wir, strip_names)
 }
 

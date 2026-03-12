@@ -19,6 +19,8 @@
 //! - **Cleanup**: removes redundant `RefAsNonNull`, `Nop`, and dead code after
 //!   `Unreachable`, normalizing WIR so that codegen can emit it as-is.
 
+use std::rc::Rc;
+
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::optimize::OptLevel;
@@ -85,6 +87,204 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
     // Final cleanup pass: normalize the WIR so that codegen can emit it as-is.
     // Removes nops, redundant ref.as_non_null, and dead code after unreachable.
     cleanup_wir(module);
+}
+
+/// Remove functions unreachable from exports via call-graph analysis.
+///
+/// Performs BFS from exported functions and element-referenced functions,
+/// removing any function not transitively called. Remaps all `WirFuncId`
+/// indices so the surviving functions are contiguously numbered.
+///
+/// This is a standalone pass that works on any `WirModule` (GC module or
+/// memory module). It is separate from `optimize_wir` because it should
+/// also run on modules that skip the main optimization pipeline (e.g.,
+/// the linear-memory module built by `WasmModuleInfo::to_wir_module`).
+pub fn dce_unreachable_functions(module: &mut WirModule) {
+    let num_funcs = module.functions.len();
+    if num_funcs == 0 {
+        return;
+    }
+
+    // Collect root function indices: exported + element-referenced
+    let mut roots: IndexSet<u32> = IndexSet::default();
+    for export in &module.exports {
+        if let WirExportDesc::Func { func_id } = &export.desc {
+            roots.insert(func_id.index());
+        }
+    }
+    for elem in &module.elements {
+        for fid in &elem.func_ids {
+            roots.insert(fid.index());
+        }
+    }
+
+    // Build call graph: function index → set of callee indices
+    let mut callees_of: Vec<IndexSet<u32>> = Vec::with_capacity(num_funcs);
+    for func in &module.functions {
+        let mut callees = IndexSet::default();
+        if let Some(body) = &func.body {
+            collect_func_refs_from_body(body, &mut callees);
+        }
+        callees_of.push(callees);
+    }
+
+    // BFS from roots
+    let mut reachable: IndexSet<u32> = IndexSet::default();
+    let mut queue = std::collections::VecDeque::new();
+    for &root in &roots {
+        if reachable.insert(root) {
+            queue.push_back(root);
+        }
+    }
+    while let Some(idx) = queue.pop_front() {
+        if let Some(callees) = callees_of.get(idx as usize) {
+            for &callee in callees {
+                if reachable.insert(callee) {
+                    queue.push_back(callee);
+                }
+            }
+        }
+    }
+
+    if reachable.len() == num_funcs {
+        return; // nothing to remove
+    }
+
+    // Build old→new index remap
+    let mut remap: IndexMap<u32, u32> = IndexMap::default();
+    let mut new_idx = 0u32;
+    for old_idx in 0..num_funcs as u32 {
+        if reachable.contains(&old_idx) {
+            remap.insert(old_idx, new_idx);
+            new_idx += 1;
+        }
+    }
+
+    // Filter functions and types (1:1 correspondence)
+    let mut new_functions = Vec::with_capacity(reachable.len());
+    let mut new_types = Vec::with_capacity(reachable.len());
+    for (i, (func, type_def)) in module
+        .functions
+        .drain(..)
+        .zip(module.types.drain(..))
+        .enumerate()
+    {
+        if reachable.contains(&(i as u32)) {
+            new_functions.push(func);
+            new_types.push(type_def);
+        }
+    }
+    module.functions = new_functions;
+    module.types = new_types;
+
+    // Remap func IDs in function bodies
+    for func in &mut module.functions {
+        if let Some(body) = &mut func.body {
+            for instr in body {
+                remap_func_ids(instr, &remap);
+            }
+        }
+        // Remap type_id (same indexing as functions for mem-module)
+        if let Some(&new) = remap.get(&func.type_id.index()) {
+            func.type_id = WirTypeId::new(new, Rc::from(func.type_id.fq()));
+        }
+    }
+
+    // Remap exports
+    for export in &mut module.exports {
+        if let WirExportDesc::Func { func_id } = &mut export.desc {
+            if let Some(&new) = remap.get(&func_id.index()) {
+                *func_id = WirFuncId::new(new, Rc::from(func_id.fq()));
+            }
+        }
+    }
+
+    // Remap elements
+    for elem in &mut module.elements {
+        for fid in &mut elem.func_ids {
+            if let Some(&new) = remap.get(&fid.index()) {
+                *fid = WirFuncId::new(new, Rc::from(fid.fq()));
+            }
+        }
+    }
+
+    // Remap name section
+    module.names.function_names.retain_mut(|(idx, _)| {
+        if let Some(&new) = remap.get(idx) {
+            *idx = new;
+            true
+        } else {
+            false
+        }
+    });
+}
+
+fn collect_func_refs_from_body(body: &[WirInstr], out: &mut IndexSet<u32>) {
+    for instr in body {
+        collect_func_refs_recursive(instr, out);
+    }
+}
+
+fn collect_func_refs_recursive(instr: &WirInstr, out: &mut IndexSet<u32>) {
+    match instr {
+        WirInstr::Call { func_id, args } => {
+            out.insert(func_id.index());
+            for arg in args {
+                collect_func_refs_recursive(arg, out);
+            }
+            return;
+        }
+        WirInstr::RefFunc { func_id } => {
+            out.insert(func_id.index());
+            return;
+        }
+        _ => {}
+    }
+    // For other variants, clone to use the mutable child traversal.
+    // This is acceptable for the mem-module which has small function bodies.
+    let mut clone = instr.clone();
+    clone.for_each_boxed_child_mut(&mut |child| {
+        collect_func_refs_recursive_mut(child, out);
+    });
+}
+
+fn collect_func_refs_recursive_mut(instr: &mut WirInstr, out: &mut IndexSet<u32>) {
+    match instr {
+        WirInstr::Call { func_id, args } => {
+            out.insert(func_id.index());
+            for arg in args {
+                collect_func_refs_recursive_mut(arg, out);
+            }
+            return;
+        }
+        WirInstr::RefFunc { func_id } => {
+            out.insert(func_id.index());
+            return;
+        }
+        _ => {}
+    }
+    instr.for_each_boxed_child_mut(&mut |child| {
+        collect_func_refs_recursive_mut(child, out);
+    });
+}
+
+fn remap_func_ids(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
+    match instr {
+        WirInstr::Call { func_id, .. } => {
+            if let Some(&new) = remap.get(&func_id.index()) {
+                *func_id = WirFuncId::new(new, Rc::from(func_id.fq()));
+            }
+        }
+        WirInstr::RefFunc { func_id } => {
+            if let Some(&new) = remap.get(&func_id.index()) {
+                *func_id = WirFuncId::new(new, Rc::from(func_id.fq()));
+            }
+        }
+        _ => {}
+    }
+    instr.for_each_boxed_child_mut(&mut |child| {
+        remap_func_ids(child, remap);
+    });
 }
 
 /// Multi-value return SROA (Scalar Replacement of Aggregates).
