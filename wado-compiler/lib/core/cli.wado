@@ -83,8 +83,16 @@ pub fn print_bytes(data: Array<u8>) with Stdout {
 }
 
 /// Returns the value of an environment variable by name.
-/// TODO: Implement when for-in loops are supported.
-pub fn env(name: String) -> Option<String> with Environment;
+pub fn env(name: String) -> Option<String> with Environment {
+    let vars = Environment::get_environment();
+    for let mut i = 0; i < vars.len(); i += 1 {
+        let pair = vars[i];
+        if pair.0 == name {
+            return Option::<String>::Some(pair.1);
+        }
+    }
+    return null;
+}
 
 /// Returns all command-line arguments.
 pub fn args() -> Array<String> with Environment {

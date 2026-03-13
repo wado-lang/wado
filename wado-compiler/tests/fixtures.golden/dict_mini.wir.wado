@@ -56,15 +56,15 @@ struct Option<String>::Some {
     payload_0: ref String,
 }
 
+struct Array<Tuple<String,String>> {  // Array<T> with T=Tuple<String,String>
+    mut repr: ref array<Tuple<String,String>>,
+    mut used: i32,
+}
+
 array array<u64> (mut u64);
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
-    mut used: i32,
-}
-
-struct Array<Tuple<String,String>> {  // Array<T> with T=Tuple<String,String>
-    mut repr: ref array<Tuple<String,String>>,
     mut used: i32,
 }
 
@@ -142,13 +142,13 @@ type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
 type "functype/String::append_char" = fn(ref String, char);
 
+type "functype/Array<Tuple<String,String>>::append" = fn(ref Array<Tuple<String,String>>, ref "tuple/[String, String]");
+
 type "functype/MiniDict<String,String>::has" = fn(ref MiniDict<String,String>, ref String) -> bool;
 
 type "functype/MiniDict<String,String>::get" = fn(ref MiniDict<String,String>, ref String) -> ref Option<String>;
 
 type "functype/MiniDict<String,String>::set" = fn(ref MiniDict<String,String>, ref String, ref String);
-
-type "functype/Array<Tuple<String,String>>::append" = fn(ref Array<Tuple<String,String>>, ref "tuple/[String, String]");
 
 type "functype/Array<Tuple<String,String>>^IndexAssign::index_assign" = fn(ref Array<Tuple<String,String>>, i32, ref "tuple/[String, String]");
 
@@ -731,109 +731,6 @@ fn String::append_char(self, c) {
     };
 }
 
-fn MiniDict<String,String>::has(self, key) {
-    let i: i32;
-    let __local_5: i32;
-    let _licm_entries_6: ref Array<Tuple<String,String>>;
-    let _licm_used_7: i32;
-    let _licm_repr_8: ref array<Tuple<String,String>>;
-    __for_2: block {
-        i = 0;
-        _licm_entries_6 = self;
-        _licm_used_7 = _licm_entries_6.used;
-        _licm_repr_8 = _licm_entries_6.repr;
-        block {
-            l44: loop {
-                if (i < _licm_used_7) == 0 {
-                    break __for_2;
-                };
-                if String^Eq::eq(__inline_Array_Tuple_String_String___IndexValue__index_value_1: block -> ref "tuple/[String, String]" {
-                    __local_5 = i;
-                    if __local_5 >= _licm_used_7 {
-                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    };
-                    break __inline_Array_Tuple_String_String___IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_8, __local_5);
-                }.0, key) {
-                    return 1;
-                };
-                i = i + 1;
-                continue l44;
-            };
-        };
-    };
-    return 0;
-}
-
-fn MiniDict<String,String>::get(self, key) {
-    let i: i32;
-    let __local_5: i32;
-    let __local_7: i32;
-    let _licm_entries_8: ref Array<Tuple<String,String>>;
-    let _licm_used_9: i32;
-    let _licm_repr_10: ref array<Tuple<String,String>>;
-    __for_1: block {
-        i = 0;
-        _licm_entries_8 = self;
-        _licm_used_9 = _licm_entries_8.used;
-        _licm_repr_10 = _licm_entries_8.repr;
-        block {
-            l49: loop {
-                if (i < _licm_used_9) == 0 {
-                    break __for_1;
-                };
-                if String^Eq::eq(__inline_Array_Tuple_String_String___IndexValue__index_value_1: block -> ref "tuple/[String, String]" {
-                    __local_5 = i;
-                    if __local_5 >= _licm_used_9 {
-                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    };
-                    break __inline_Array_Tuple_String_String___IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_10, __local_5);
-                }.0, key) {
-                    return Option<String>::Some { discriminant: 0, payload_0: ref.as_non_null(__inline_Array_Tuple_String_String___IndexValue__index_value_2: block -> ref "tuple/[String, String]" {
-                        __local_7 = i;
-                        break __inline_Array_Tuple_String_String___IndexValue__index_value_2: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_10, __local_7);
-                    }.1) };
-                };
-                i = i + 1;
-                continue l49;
-            };
-        };
-    };
-    return Option<String> { 1 };
-}
-
-fn MiniDict<String,String>::set(self, key, value) {
-    let i: i32;
-    let __local_6: i32;
-    let _licm_entries_7: ref Array<Tuple<String,String>>;
-    __for_0: block {
-        i = 0;
-        _licm_entries_7 = self;
-        block {
-            l54: loop {
-                if (i < _licm_entries_7.used) == 0 {
-                    break __for_0;
-                };
-                if String^Eq::eq(__inline_Array_Tuple_String_String___IndexValue__index_value_1: block -> ref "tuple/[String, String]" {
-                    __local_6 = i;
-                    if __local_6 >= _licm_entries_7.used {
-                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    };
-                    break __inline_Array_Tuple_String_String___IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, String]">(_licm_entries_7.repr, __local_6);
-                }.0, key) {
-                    Array<Tuple<String,String>>^IndexAssign::index_assign(_licm_entries_7, i, "tuple/[String, String]" { 0: ref.as_non_null(key), 1: ref.as_non_null(value) });
-                    return;
-                };
-                i = i + 1;
-                continue l54;
-            };
-        };
-    };
-    Array<Tuple<String,String>>::append(self, "tuple/[String, String]" { 0: ref.as_non_null(key), 1: ref.as_non_null(value) });
-}
-
 fn Array<Tuple<String,String>>::append(self, value) {
     let used: i32;
     let capacity: i32;
@@ -853,6 +750,109 @@ fn Array<Tuple<String,String>>::append(self, value) {
     };
     builtin::array_set<ref "tuple/[String, String]">(self.repr, used, value);
     self.used = used + 1;
+}
+
+fn MiniDict<String,String>::has(self, key) {
+    let i: i32;
+    let __local_5: i32;
+    let _licm_entries_6: ref Array<Tuple<String,String>>;
+    let _licm_used_7: i32;
+    let _licm_repr_8: ref array<Tuple<String,String>>;
+    __for_2: block {
+        i = 0;
+        _licm_entries_6 = self;
+        _licm_used_7 = _licm_entries_6.used;
+        _licm_repr_8 = _licm_entries_6.repr;
+        block {
+            l45: loop {
+                if (i < _licm_used_7) == 0 {
+                    break __for_2;
+                };
+                if String^Eq::eq(__inline_Array_Tuple_String_String___IndexValue__index_value_1: block -> ref "tuple/[String, String]" {
+                    __local_5 = i;
+                    if __local_5 >= _licm_used_7 {
+                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    };
+                    break __inline_Array_Tuple_String_String___IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_8, __local_5);
+                }.0, key) {
+                    return 1;
+                };
+                i = i + 1;
+                continue l45;
+            };
+        };
+    };
+    return 0;
+}
+
+fn MiniDict<String,String>::get(self, key) {
+    let i: i32;
+    let __local_5: i32;
+    let __local_7: i32;
+    let _licm_entries_8: ref Array<Tuple<String,String>>;
+    let _licm_used_9: i32;
+    let _licm_repr_10: ref array<Tuple<String,String>>;
+    __for_1: block {
+        i = 0;
+        _licm_entries_8 = self;
+        _licm_used_9 = _licm_entries_8.used;
+        _licm_repr_10 = _licm_entries_8.repr;
+        block {
+            l50: loop {
+                if (i < _licm_used_9) == 0 {
+                    break __for_1;
+                };
+                if String^Eq::eq(__inline_Array_Tuple_String_String___IndexValue__index_value_1: block -> ref "tuple/[String, String]" {
+                    __local_5 = i;
+                    if __local_5 >= _licm_used_9 {
+                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    };
+                    break __inline_Array_Tuple_String_String___IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_10, __local_5);
+                }.0, key) {
+                    return Option<String>::Some { discriminant: 0, payload_0: ref.as_non_null(__inline_Array_Tuple_String_String___IndexValue__index_value_2: block -> ref "tuple/[String, String]" {
+                        __local_7 = i;
+                        break __inline_Array_Tuple_String_String___IndexValue__index_value_2: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_10, __local_7);
+                    }.1) };
+                };
+                i = i + 1;
+                continue l50;
+            };
+        };
+    };
+    return Option<String> { 1 };
+}
+
+fn MiniDict<String,String>::set(self, key, value) {
+    let i: i32;
+    let __local_6: i32;
+    let _licm_entries_7: ref Array<Tuple<String,String>>;
+    __for_0: block {
+        i = 0;
+        _licm_entries_7 = self;
+        block {
+            l55: loop {
+                if (i < _licm_entries_7.used) == 0 {
+                    break __for_0;
+                };
+                if String^Eq::eq(__inline_Array_Tuple_String_String___IndexValue__index_value_1: block -> ref "tuple/[String, String]" {
+                    __local_6 = i;
+                    if __local_6 >= _licm_entries_7.used {
+                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    };
+                    break __inline_Array_Tuple_String_String___IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, String]">(_licm_entries_7.repr, __local_6);
+                }.0, key) {
+                    Array<Tuple<String,String>>^IndexAssign::index_assign(_licm_entries_7, i, "tuple/[String, String]" { 0: ref.as_non_null(key), 1: ref.as_non_null(value) });
+                    return;
+                };
+                i = i + 1;
+                continue l55;
+            };
+        };
+    };
+    Array<Tuple<String,String>>::append(self, "tuple/[String, String]" { 0: ref.as_non_null(key), 1: ref.as_non_null(value) });
 }
 
 fn Array<Tuple<String,String>>^IndexAssign::index_assign(self, index, value) {
