@@ -2,7 +2,12 @@
 # https://mise.jdx.dev/
 #
 # Run `mise install` to install managed tools.
-# C compiler (cc) is expected from the system.
+# C compiler (cc) is expected from the system for native C benchmarks.
+#
+# Optional: wasi-sdk (clang + wasi-sysroot) for the C zlib Wasm benchmark.
+# Install via wasm-size/ (`mise install` there) or apt (Ubuntu/Debian):
+#   apt install wasi-libc libclang-rt-18-dev-wasm32
+# The zlib task skips the C Wasm step gracefully if neither is available.
 
 [tools]
 node = "latest"
@@ -83,8 +88,43 @@ set -e
 echo "=== Compiling zlib-rs benchmark ==="
 cargo build --release --manifest-path zlib/Cargo.toml --quiet
 
+echo "=== Compiling C zlib Wasm benchmark ==="
+ZLIB_SRC="../wasm-size/zlib/zlib-1.3.1"
+WASM_CLANG=""
+
+# 1. wasi-sdk: clang with co-located wasi-sysroot
+if command -v clang >/dev/null 2>&1; then
+    SDK_DIR="$(cd "$(dirname "$(command -v clang)")/.." 2>/dev/null && pwd)"
+    if [ -d "$SDK_DIR/share/wasi-sysroot" ]; then
+        WASM_CLANG="clang --target=wasm32-wasi --sysroot=$SDK_DIR/share/wasi-sysroot"
+        WASI_CRT1=""
+        WASI_LIBC="-lc"
+    fi
+fi
+
+# 2. System clang + apt wasi-libc (Ubuntu/Debian)
+if [ -z "$WASM_CLANG" ] && command -v clang >/dev/null 2>&1 && command -v wasm-ld >/dev/null 2>&1 && [ -f "/usr/lib/wasm32-wasi/crt1.o" ]; then
+    WASM_CLANG="clang --target=wasm32-wasi -nostdlib -I/usr/include/wasm32-wasi"
+    WASI_CRT1="/usr/lib/wasm32-wasi/crt1.o"
+    WASI_LIBC="-L/usr/lib/wasm32-wasi -lc"
+fi
+
+if [ -n "$WASM_CLANG" ]; then
+    ZLIB_SRCS="$ZLIB_SRC/adler32.c $ZLIB_SRC/compress.c $ZLIB_SRC/crc32.c $ZLIB_SRC/deflate.c $ZLIB_SRC/inffast.c $ZLIB_SRC/inflate.c $ZLIB_SRC/inftrees.c $ZLIB_SRC/trees.c $ZLIB_SRC/uncompr.c $ZLIB_SRC/zutil.c"
+    eval $WASM_CLANG -O3 -I$ZLIB_SRC -o zlib/zlib_c.wasm zlib/zlib_c.c $ZLIB_SRCS $WASI_CRT1 $WASI_LIBC
+    HAVE_C_WASM=1
+else
+    echo "SKIP: C Wasm (install wasi-sdk or apt install wasi-libc libclang-rt-dev-wasm32)"
+    HAVE_C_WASM=0
+fi
+
 echo "=== zlib-rs (native Rust) ==="
 ./zlib/target/release/zlib_rs_bench
+
+if [ "$HAVE_C_WASM" -eq 1 ]; then
+    echo "=== C zlib (Wasm/wasmtime) ==="
+    wasmtime zlib/zlib_c.wasm
+fi
 
 echo "=== Wado ==="
 cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 zlib/zlib_bench.wado
@@ -186,7 +226,7 @@ MISE_JOBS=1 mise run json-catalog
 [tasks.clean]
 description = "Clean benchmark artifacts"
 run = """
-rm -f count_prime/*.wasm mandelbrot/*.wasm sieve/*.wasm
+rm -f count_prime/*.wasm mandelbrot/*.wasm sieve/*.wasm zlib/zlib_c.wasm
 rm -f count_prime/count_prime_c mandelbrot/mandelbrot_c sieve/sieve_c
 rm -f fts/fts_c fts/fts_rs fts/fts_zig fts/fts_zig.o
 rm -rf zlib/target json_twitter/target json_canada/target json_catalog/target

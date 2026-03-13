@@ -46,7 +46,7 @@ Compresses and decompresses 100KB of patterned data (bytes `i % 256`) for 10 ite
 
 - **Use case**: Compression library performance, byte array throughput
 - **Operations**: zlib compress/decompress, large byte array manipulation
-- **Comparison**: Wado (`core:zlib`, pure Wado implementation) vs zlib-rs (native Rust)
+- **Comparison**: Wado (`core:zlib`, pure Wado) vs C zlib-1.3.1 (Wasm/wasmtime) vs zlib-rs (native Rust)
 
 ```bash
 make benchmark-zlib
@@ -150,14 +150,23 @@ All implementations produce the same result: 664,579 primes.
 
 All implementations produce the same result: 664,579 primes.
 
-### zlib Compression (100KB x 10 iterations)
+### zlib Compress (100KB x 10 iterations)
 
-| Runtime               | Compress (ms) | Decompress (ms) | Relative |
-| --------------------- | ------------- | --------------- | -------- |
-| zlib-rs (native Rust) | 1.0           | 0.2             | 1.00x    |
-| **Wado** (pure Wado)  | 57            | 886             | 786x     |
+| Runtime               | Time (ms) | Relative |
+| --------------------- | --------- | -------- |
+| zlib-rs (native Rust) | 1.0       | 1.00x    |
+| C (Wasm/wasmtime)     | 5.3       | 5.1x     |
+| **Wado** (pure Wado)  | 59        | 57x      |
 
-Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significant overhead is expected compared to native.
+### zlib Decompress (100KB x 10 iterations)
+
+| Runtime               | Time (ms) | Relative |
+| --------------------- | --------- | -------- |
+| zlib-rs (native Rust) | 0.18      | 1.00x    |
+| C (Wasm/wasmtime)     | 0.97      | 5.4x     |
+| **Wado** (pure Wado)  | 888       | 4,933x   |
+
+zlib-rs runs natively; C zlib-1.3.1 and Wado are both compiled to Wasm and run on wasmtime. Wado's `core:zlib` is a pure Wado implementation, so significant overhead is expected.
 
 ### Float-to-String (500,000 conversions, 6 decimal places)
 
@@ -292,7 +301,7 @@ samply record wado run --profile perfmap benchmark/count_prime/count_prime.wado
 - Times include program initialization overhead
 - Wado CLI is built with `--release` for fair comparison with natively-compiled competitors
 - Wado benchmarks use `MonotonicClock::now()` from `wasi:clocks` for timing
-- zlib benchmark compares Wado's pure Wado zlib against native zlib-rs (Rust)
+- zlib benchmark compares Wado's pure Wado zlib, C zlib-1.3.1 (Wasm/wasmtime), and native zlib-rs (Rust)
 - fts benchmark compares Wado, C (`snprintf`), Rust (`write!`), and Zig (`std.fmt`)
 - Rust benchmarks use `rustc -O` (release optimization)
 - Zig benchmarks use `-OReleaseFast`
@@ -311,5 +320,5 @@ benchmark/
 ├── json_twitter/{json_twitter.wado,serde_json.rs,twitter.json}
 ├── mandelbrot/mandelbrot.{wado,c,js}
 ├── sieve/sieve.{wado,c,js}
-└── zlib/{zlib_bench.wado,zlib_rs.rs}
+└── zlib/{zlib_bench.wado,zlib_rs.rs,zlib_c.c}
 ```
