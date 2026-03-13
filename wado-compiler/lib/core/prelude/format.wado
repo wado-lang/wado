@@ -314,7 +314,7 @@ impl<T: Inspect> Inspect for &T {
 }
 
 impl<T: Inspect> Inspect for &mut T {
-    pub fn inspect(&self, f: &mut Formatter) {
+    pub fn inspect(&mut self, f: &mut Formatter) {
         f.write_str("&mut ");
         let inner: &mut T = *self;
         (*inner).inspect(f);
