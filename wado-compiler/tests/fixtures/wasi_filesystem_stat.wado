@@ -38,7 +38,8 @@ export fn run() with Stdout, Stderr, Preopens {
         if stat.size == 14 as Filesize {
             println("stat_at: size is correct (14 bytes)");
         } else {
-            eprintln(`stat_at: unexpected size: {stat.size}`);
+            let size_u64 = stat.size as u64;
+            eprintln(`stat_at: unexpected size: {size_u64}`);
         }
 
         println("stat_at: test passed");
@@ -78,7 +79,6 @@ export fn run() with Stdout, Stderr, Preopens {
 
 __DATA__
 {
-    "TODO": true,
     "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
     "stdout_contains": [
         "stat_at: type is RegularFile (correct)",
