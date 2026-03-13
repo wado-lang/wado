@@ -297,32 +297,14 @@ impl WasiRegistry {
         let mut registry = Self::new();
         let mut world_registry = WorldRegistry::new();
 
-        // Parse and register wasi:cli
-        let wasi_cli = parse_module(stdlib::WASI_CLI);
-        registry.register_module(&wasi_cli, &mut world_registry);
-
-        // Parse and register wasi:clocks
-        let wasi_clocks = parse_module(stdlib::WASI_CLOCKS);
-        registry.register_module(&wasi_clocks, &mut world_registry);
-
-        // Parse and register wasi:random
-        let wasi_random = parse_module(stdlib::WASI_RANDOM);
-        registry.register_module(&wasi_random, &mut world_registry);
-
-        // Parse and register wasi:sockets
-        let wasi_sockets = parse_module(stdlib::WASI_SOCKETS);
-        registry.register_module(&wasi_sockets, &mut world_registry);
-
-        // Parse and register wasi:filesystem
-        let wasi_filesystem = parse_module(stdlib::WASI_FILESYSTEM);
-        registry.register_module(&wasi_filesystem, &mut world_registry);
-
-        // Parse and register wasi:http
+        // Parse and register all WASI interface modules.
         // HTTP resource methods (Fields, Request, Response) are registered in the
         // wasi_registry for type resolution and codegen lookup. CM imports for HTTP
         // types are handled specially in import_http_types_for_service().
-        let wasi_http = parse_module(stdlib::WASI_HTTP);
-        registry.register_module(&wasi_http, &mut world_registry);
+        for (_path, source) in stdlib::ALL_WASI_MODULES {
+            let module = parse_module(source);
+            registry.register_module(&module, &mut world_registry);
+        }
 
         (registry, world_registry)
     }

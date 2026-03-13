@@ -67,6 +67,15 @@ impl WadoCodeGenerator {
         }
 
         self.writeln("");
+
+        // Cross-interface use imports
+        for import in &module.imports {
+            let names = import.type_names.join(", ");
+            self.writeln(&format!("use {{ {names} }} from \"{}\";", import.from_path));
+        }
+        if !module.imports.is_empty() {
+            self.writeln("");
+        }
     }
 
     fn write_type_def(&mut self, type_def: &WadoTypeDef) {
