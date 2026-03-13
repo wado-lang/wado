@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773399488003,
+  "lastUpdate": 1773439307921,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2870,6 +2870,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ff0eefd7c86c428458932938d9d3b30761ed6284"
         },
         "date": 1773399487814,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9236,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22767,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3923e4f25f21cb02581debb08a25901fb08c14e1",
+          "message": "Merge pull request #571 from wado-lang/claude/fix-wasi-filesystem-stat-URaAF\n\nImplement filesystem stats",
+          "timestamp": "2026-03-14T06:59:14+09:00",
+          "tree_id": "700465c870c644641a3eb5a528cd5a3f9f45e924",
+          "url": "https://github.com/wado-lang/wado/commit/3923e4f25f21cb02581debb08a25901fb08c14e1"
+        },
+        "date": 1773439307732,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
