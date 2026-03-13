@@ -1,6 +1,4 @@
-// Tests: Descriptor::write_via_stream + Descriptor::read_via_stream round-trip
-// Writes "Hello, Stream!\n" to a file using write_via_stream, then reads it back
-// using read_via_stream and pipes to stdout.
+// Tests: Descriptor::write_via_stream writes data to a file via stream.
 //
 // WASI P3 spec (vendor/wasmtime/crates/wasi/src/p3/wit/deps/filesystem.wit):
 //
@@ -10,40 +8,30 @@
 //     - Is async: returns a subtask handle (i32) from the CM lowered call.
 //     - Completes once all data is written or an error occurs.
 //
-//   read-via-stream: func(offset: filesize) -> tuple<stream<u8>, future<result<_, error-code>>>;
-//     - Returns a readable stream + a future for error info.
-//     - Is sync: returns immediately with the stream handles.
-//     - Data is produced by the runtime when the stream consumer pulls.
+// WASI P3 async streams require specific ordering in sync context:
+//   1. Create stream pair [readable, writable].
+//   2. Start consumer (write_via_stream) with the readable end FIRST.
+//   3. Write data bytes to the writable end.
+//   4. Drop writable end (signals EOF).
+//   5. Wait for consumer subtask to complete.
 //
-// Test flow:
-//   1. Create a stream pair [readable, writable].
-//   2. Write data bytes to the writable end, then drop it (signals EOF).
-//   3. Pass the readable end to file.write_via_stream(readable, offset=0).
-//      This is an async subtask — wait_for_subtask blocks until it completes.
-//   4. Call file.read_via_stream(offset=0) to get a new readable stream from the file.
-//   5. Pipe that stream to Stdout::write_via_stream (another async subtask).
+// This is the same ordering used by core:cli/println for Stdout::write_via_stream.
 //
-// Compiler bug: write_via_stream is a streaming async resource method (MethodCall),
-// but the adapter rewrite in cm_adapter.rs only handles streaming async for effect
-// calls (Call), not for resource MethodCalls. The MethodCall path at line ~6182
-// overwrites the adapter's correct i32 return type with the declared Result type,
-// causing a Wasm validation error: "expected i32, found (ref $type)".
-// Compare with the Call path at line ~6090 which correctly checks is_streaming.
+// After writing, the file is read back via read_via_stream and piped to stdout
+// to verify the round-trip.
 
-use { println, Stdout, Stderr } from "core:cli";
+use { Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use { wait_for_subtask } from "core:internal";
 
 export fn run() with Stdout, Stderr, Preopens {
     let dirs = Preopens::get_directories();
     if dirs.len() == 0 {
-        println("no preopened dirs");
         return;
     }
 
     let dir = dirs[0].0;
 
-    // Create and open a file for writing
     let write_result = dir.open_at(
         PathFlags::none(),
         "test_output.txt",
@@ -52,27 +40,23 @@ export fn run() with Stdout, Stderr, Preopens {
     );
 
     if let Ok(file) = write_result {
-        // Write data via stream
+        // Write "Hello, Stream!\n" via stream (consumer-first ordering)
         let [write_rx, write_tx] = Stream::<u8>::new();
-        // "Hello, Stream!\n" as bytes
+        let subtask1 = file.write_via_stream(write_rx, 0 as Filesize);
         let data: Array<u8> = [72, 101, 108, 108, 111, 44, 32, 83, 116, 114, 101, 97, 109, 33, 10];
         write_tx.write(data);
         write_tx.drop();
-        let subtask1 = file.write_via_stream(write_rx, 0 as Filesize);
         wait_for_subtask(subtask1);
 
-        // Read back via stream
+        // Read back via stream and pipe to stdout to verify round-trip
         let [read_stream, _done] = file.read_via_stream(0 as Filesize);
         let subtask2 = Stdout::write_via_stream(read_stream);
         wait_for_subtask(subtask2);
-    } else {
-        println("failed to open file for writing");
     }
 }
 
 __DATA__
 {
-    "TODO": true,
     "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
     "stdout": "Hello, Stream!\n"
 }

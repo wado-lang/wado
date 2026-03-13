@@ -1,0 +1,74 @@
+// Tests: Read a file via stream, transform to uppercase, write to stdout.
+//
+// WASI P3 spec (vendor/wasmtime/crates/wasi/src/p3/wit/deps/filesystem.wit):
+//
+//   read-via-stream: func(offset: filesize) -> tuple<stream<u8>, future<result<_, error-code>>>;
+//     - Returns a readable stream + a future for error info.
+//     - Is sync: returns immediately with the stream handles.
+//     - Data is produced by the runtime when the consumer pulls.
+//
+// Flow:
+//   1. Open hello.txt for reading.
+//   2. Get a readable stream from read_via_stream(0).
+//   3. Read chunks from the file stream via stream.read().
+//   4. Uppercase ASCII bytes (a-z → A-Z).
+//   5. Write transformed bytes to stdout via a new stream.
+
+use { Stdout, Stderr } from "core:cli";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { wait_for_subtask } from "core:internal";
+
+fn to_upper(data: Array<u8>) -> Array<u8> {
+    let mut result: Array<u8> = [];
+    for let mut i = 0; i < data.len(); i += 1 {
+        let b = data[i];
+        if b >= 97 && b <= 122 {
+            result.append(b - 32);
+        } else {
+            result.append(b);
+        }
+    }
+    return result;
+}
+
+export fn run() with Stdout, Stderr, Preopens {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        return;
+    }
+
+    let dir = dirs[0].0;
+
+    let open_result = dir.open_at(
+        PathFlags::none(),
+        "hello.txt",
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    );
+
+    if let Ok(file) = open_result {
+        let [file_rx, _done] = file.read_via_stream(0 as Filesize);
+
+        // Set up stdout output stream (consumer-first ordering)
+        let [out_rx, out_tx] = Stream::<u8>::new();
+        let subtask = Stdout::write_via_stream(out_rx);
+
+        // Read from file stream, uppercase, write to stdout stream
+        loop {
+            let chunk = file_rx.read(4096);
+            if chunk.len() == 0 {
+                break;
+            }
+            out_tx.write(to_upper(chunk));
+        }
+        file_rx.drop();
+        out_tx.drop();
+        wait_for_subtask(subtask);
+    }
+}
+
+__DATA__
+{
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "stdout": "HELLO, WORLD!\n"
+}
