@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773355693078,
+  "lastUpdate": 1773399488003,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2831,6 +2831,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f7a46fb48cb5800ce118026f44745cefcdb8b32b"
         },
         "date": 1773355692887,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9236,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22767,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ff0eefd7c86c428458932938d9d3b30761ed6284",
+          "message": "Merge pull request #570 from wado-lang/claude/add-zlib-wasm-benchmark-mqn1R\n\nAdd C zlib Wasm benchmark for compression comparison",
+          "timestamp": "2026-03-13T19:55:34+09:00",
+          "tree_id": "b25149c122da7f6b0237679215a3fb757efe26dd",
+          "url": "https://github.com/wado-lang/wado/commit/ff0eefd7c86c428458932938d9d3b30761ed6284"
+        },
+        "date": 1773399487814,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
