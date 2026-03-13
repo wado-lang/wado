@@ -46,11 +46,13 @@ struct Array<u64> {  // Array<T> with T=u64
     mut used: i32,
 }
 
-enum ErrorCode { Io = 0, IllegalByteSequence = 1, Pipe = 2 };  // from wasi:cli
+enum ErrorCode { Io = 0, IllegalByteSequence = 1, Pipe = 2 };  // from wasi:cli/types.wado
 
-enum ErrorCode { Unknown = 0, AccessDenied = 1, NotSupported = 2, InvalidArgument = 3, OutOfMemory = 4, Timeout = 5, InvalidState = 6, AddressNotBindable = 7, AddressInUse = 8, RemoteUnreachable = 9, ConnectionRefused = 10, ConnectionReset = 11, ConnectionAborted = 12, DatagramTooLarge = 13 };  // from wasi:sockets
+enum ErrorCode { Unknown = 0, AccessDenied = 1, InvalidArgument = 2, NameUnresolvable = 3, TemporaryResolverFailure = 4, PermanentResolverFailure = 5 };  // from wasi:sockets/ip-name-lookup.wado
 
-enum IpAddressFamily { Ipv4 = 0, Ipv6 = 1 };  // from wasi:sockets
+enum ErrorCode { Unknown = 0, AccessDenied = 1, NotSupported = 2, InvalidArgument = 3, OutOfMemory = 4, Timeout = 5, InvalidState = 6, AddressNotBindable = 7, AddressInUse = 8, RemoteUnreachable = 9, ConnectionRefused = 10, ConnectionReset = 11, ConnectionAborted = 12, DatagramTooLarge = 13 };  // from wasi:sockets/types.wado
+
+enum IpAddressFamily { Ipv4 = 0, Ipv6 = 1 };  // from wasi:sockets/types.wado
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
@@ -124,7 +126,7 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let family: "wasi:sockets/enum:IpAddressFamily";
+    let family: "wasi:sockets/types.wado/enum:IpAddressFamily";
     let result: ref Result<TcpSocket,ErrorCode>;
     let socket: i32;
     __inline___initialize_modules_0: block {
@@ -145,7 +147,7 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
     let __async_outptr: i32;
-    __async_outptr = "mem/realloc"(0, 0, 4, 8);
+    __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 

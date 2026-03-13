@@ -7,7 +7,7 @@
 //! ## Namespace Structure
 //!
 //! - `core:*` - High-level Wado standard library (e.g., `println()`, `read_file()`)
-//! - `wasi:*` - Raw WASI packages (low-level interfaces like `Stdout`, `FileSystem`)
+//! - `wasi:*` - Raw WASI packages, organized by interface (e.g., `wasi:cli/stdout`)
 //!
 //! ## Usage in Wado code
 //!
@@ -15,9 +15,10 @@
 //! // High-level helpers
 //! use {println, eprintln} from "core:cli";
 //!
-//! // Raw WASI interfaces
-//! use {Stdout, Stdout::{write_via_stream}} from "wasi:cli";
-//! use {Preopens, Descriptor} from "wasi:filesystem";
+//! // Raw WASI interfaces (use the specific interface path)
+//! use {Stdout} from "wasi:cli/stdout";
+//! use {Descriptor, Filesize} from "wasi:filesystem/types";
+//! use {Preopens} from "wasi:filesystem/preopens";
 //! ```
 
 pub const CORE_PRELUDE: &str = include_str!("../lib/core/prelude.wado");
@@ -40,6 +41,8 @@ pub const CORE_SERDE: &str = include_str!("../lib/core/serde.wado");
 pub const CORE_JSON: &str = include_str!("../lib/core/json.wado");
 pub const CORE_JSON_NSD: &str = include_str!("../lib/core/json_nsd.wado");
 pub const CORE_SIMD: &str = include_str!("../lib/core/simd.wado");
+
+// WASI flat package files — re-export from all sub-interfaces (backward compat)
 pub const WASI_CLI: &str = include_str!("../lib/wasi/cli.wado");
 pub const WASI_FILESYSTEM: &str = include_str!("../lib/wasi/filesystem.wado");
 pub const WASI_CLOCKS: &str = include_str!("../lib/wasi/clocks.wado");
@@ -47,10 +50,104 @@ pub const WASI_RANDOM: &str = include_str!("../lib/wasi/random.wado");
 pub const WASI_SOCKETS: &str = include_str!("../lib/wasi/sockets.wado");
 pub const WASI_HTTP: &str = include_str!("../lib/wasi/http.wado");
 
+// WASI interfaces — one constant per interface
+pub const WASI_CLI_ENVIRONMENT: &str = include_str!("../lib/wasi/cli/environment.wado");
+pub const WASI_CLI_EXIT: &str = include_str!("../lib/wasi/cli/exit.wado");
+pub const WASI_CLI_RUN: &str = include_str!("../lib/wasi/cli/run.wado");
+pub const WASI_CLI_TYPES: &str = include_str!("../lib/wasi/cli/types.wado");
+pub const WASI_CLI_STDIN: &str = include_str!("../lib/wasi/cli/stdin.wado");
+pub const WASI_CLI_STDOUT: &str = include_str!("../lib/wasi/cli/stdout.wado");
+pub const WASI_CLI_STDERR: &str = include_str!("../lib/wasi/cli/stderr.wado");
+pub const WASI_CLI_TERMINAL_INPUT: &str = include_str!("../lib/wasi/cli/terminal-input.wado");
+pub const WASI_CLI_TERMINAL_OUTPUT: &str = include_str!("../lib/wasi/cli/terminal-output.wado");
+pub const WASI_CLI_TERMINAL_STDIN: &str = include_str!("../lib/wasi/cli/terminal-stdin.wado");
+pub const WASI_CLI_TERMINAL_STDOUT: &str = include_str!("../lib/wasi/cli/terminal-stdout.wado");
+pub const WASI_CLI_TERMINAL_STDERR: &str = include_str!("../lib/wasi/cli/terminal-stderr.wado");
+pub const WASI_CLI_WORLDS: &str = include_str!("../lib/wasi/cli/worlds.wado");
+
+pub const WASI_CLOCKS_TYPES: &str = include_str!("../lib/wasi/clocks/types.wado");
+pub const WASI_CLOCKS_MONOTONIC_CLOCK: &str =
+    include_str!("../lib/wasi/clocks/monotonic-clock.wado");
+pub const WASI_CLOCKS_SYSTEM_CLOCK: &str = include_str!("../lib/wasi/clocks/system-clock.wado");
+pub const WASI_CLOCKS_TIMEZONE: &str = include_str!("../lib/wasi/clocks/timezone.wado");
+pub const WASI_CLOCKS_WORLDS: &str = include_str!("../lib/wasi/clocks/worlds.wado");
+
+pub const WASI_FILESYSTEM_TYPES: &str = include_str!("../lib/wasi/filesystem/types.wado");
+pub const WASI_FILESYSTEM_PREOPENS: &str = include_str!("../lib/wasi/filesystem/preopens.wado");
+pub const WASI_FILESYSTEM_WORLDS: &str = include_str!("../lib/wasi/filesystem/worlds.wado");
+
+pub const WASI_HTTP_TYPES: &str = include_str!("../lib/wasi/http/types.wado");
+pub const WASI_HTTP_HANDLER: &str = include_str!("../lib/wasi/http/handler.wado");
+pub const WASI_HTTP_CLIENT: &str = include_str!("../lib/wasi/http/client.wado");
+pub const WASI_HTTP_WORLDS: &str = include_str!("../lib/wasi/http/worlds.wado");
+
+pub const WASI_RANDOM_INSECURE_SEED: &str = include_str!("../lib/wasi/random/insecure-seed.wado");
+pub const WASI_RANDOM_INSECURE: &str = include_str!("../lib/wasi/random/insecure.wado");
+pub const WASI_RANDOM_RANDOM: &str = include_str!("../lib/wasi/random/random.wado");
+pub const WASI_RANDOM_WORLDS: &str = include_str!("../lib/wasi/random/worlds.wado");
+
+pub const WASI_SOCKETS_TYPES: &str = include_str!("../lib/wasi/sockets/types.wado");
+pub const WASI_SOCKETS_IP_NAME_LOOKUP: &str =
+    include_str!("../lib/wasi/sockets/ip-name-lookup.wado");
+pub const WASI_SOCKETS_WORLDS: &str = include_str!("../lib/wasi/sockets/worlds.wado");
+
+/// All WASI interface statics, used for registry building.
+///
+/// Each entry is `(import_path, source)` where `import_path` matches
+/// what users write in `from "wasi:..."` expressions.
+pub const ALL_WASI_MODULES: &[(&str, &str)] = &[
+    // Flat package paths (user-facing, backward compatible)
+    ("wasi:cli", WASI_CLI),
+    ("wasi:filesystem", WASI_FILESYSTEM),
+    ("wasi:clocks", WASI_CLOCKS),
+    ("wasi:random", WASI_RANDOM),
+    ("wasi:sockets", WASI_SOCKETS),
+    ("wasi:http", WASI_HTTP),
+    // Per-interface paths (for specific imports and cross-package references)
+    ("wasi:cli/environment.wado", WASI_CLI_ENVIRONMENT),
+    ("wasi:cli/exit.wado", WASI_CLI_EXIT),
+    ("wasi:cli/run.wado", WASI_CLI_RUN),
+    ("wasi:cli/types.wado", WASI_CLI_TYPES),
+    ("wasi:cli/stdin.wado", WASI_CLI_STDIN),
+    ("wasi:cli/stdout.wado", WASI_CLI_STDOUT),
+    ("wasi:cli/stderr.wado", WASI_CLI_STDERR),
+    ("wasi:cli/terminal-input.wado", WASI_CLI_TERMINAL_INPUT),
+    ("wasi:cli/terminal-output.wado", WASI_CLI_TERMINAL_OUTPUT),
+    ("wasi:cli/terminal-stdin.wado", WASI_CLI_TERMINAL_STDIN),
+    ("wasi:cli/terminal-stdout.wado", WASI_CLI_TERMINAL_STDOUT),
+    ("wasi:cli/terminal-stderr.wado", WASI_CLI_TERMINAL_STDERR),
+    ("wasi:cli/worlds.wado", WASI_CLI_WORLDS),
+    ("wasi:clocks/types.wado", WASI_CLOCKS_TYPES),
+    (
+        "wasi:clocks/monotonic-clock.wado",
+        WASI_CLOCKS_MONOTONIC_CLOCK,
+    ),
+    ("wasi:clocks/system-clock.wado", WASI_CLOCKS_SYSTEM_CLOCK),
+    ("wasi:clocks/timezone.wado", WASI_CLOCKS_TIMEZONE),
+    ("wasi:clocks/worlds.wado", WASI_CLOCKS_WORLDS),
+    ("wasi:filesystem/types.wado", WASI_FILESYSTEM_TYPES),
+    ("wasi:filesystem/preopens.wado", WASI_FILESYSTEM_PREOPENS),
+    ("wasi:filesystem/worlds.wado", WASI_FILESYSTEM_WORLDS),
+    ("wasi:http/types.wado", WASI_HTTP_TYPES),
+    ("wasi:http/handler.wado", WASI_HTTP_HANDLER),
+    ("wasi:http/client.wado", WASI_HTTP_CLIENT),
+    ("wasi:http/worlds.wado", WASI_HTTP_WORLDS),
+    ("wasi:random/insecure-seed.wado", WASI_RANDOM_INSECURE_SEED),
+    ("wasi:random/insecure.wado", WASI_RANDOM_INSECURE),
+    ("wasi:random/random.wado", WASI_RANDOM_RANDOM),
+    ("wasi:random/worlds.wado", WASI_RANDOM_WORLDS),
+    ("wasi:sockets/types.wado", WASI_SOCKETS_TYPES),
+    (
+        "wasi:sockets/ip-name-lookup.wado",
+        WASI_SOCKETS_IP_NAME_LOOKUP,
+    ),
+    ("wasi:sockets/worlds.wado", WASI_SOCKETS_WORLDS),
+];
+
 /// Get embedded module source by import path.
 ///
 /// # Arguments
-/// * `import_path` - Import path string, e.g., `"core:cli"` or `"wasi:filesystem"`
+/// * `import_path` - Import path string, e.g., `"core:cli"` or `"wasi:filesystem/types.wado"`
 ///
 /// # Returns
 /// The source code of the module if found, or `None` if not a standard library module.
@@ -78,15 +175,11 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:json_nsd" => Some(CORE_JSON_NSD),
         "core:simd" => Some(CORE_SIMD),
 
-        // WASI library
-        "wasi:cli" => Some(WASI_CLI),
-        "wasi:filesystem" => Some(WASI_FILESYSTEM),
-        "wasi:clocks" => Some(WASI_CLOCKS),
-        "wasi:random" => Some(WASI_RANDOM),
-        "wasi:sockets" => Some(WASI_SOCKETS),
-        "wasi:http" => Some(WASI_HTTP),
-
-        _ => None,
+        // WASI interfaces
+        _ => ALL_WASI_MODULES
+            .iter()
+            .find(|(path, _)| *path == import_path)
+            .map(|(_, src)| *src),
     }
 }
 
@@ -109,44 +202,68 @@ mod tests {
     }
 
     #[test]
-    fn test_get_wasi_cli() {
+    fn test_get_wasi_cli_stdout() {
+        let source = get_stdlib_module("wasi:cli/stdout.wado");
+        assert!(source.is_some());
+        assert!(source.unwrap().contains("Stdout"));
+    }
+
+    #[test]
+    fn test_get_wasi_filesystem_types() {
+        let source = get_stdlib_module("wasi:filesystem/types.wado");
+        assert!(source.is_some());
+        assert!(source.unwrap().contains("Descriptor"));
+    }
+
+    #[test]
+    fn test_get_wasi_filesystem_preopens() {
+        let source = get_stdlib_module("wasi:filesystem/preopens.wado");
+        assert!(source.is_some());
+        assert!(source.unwrap().contains("Preopens"));
+    }
+
+    #[test]
+    fn test_get_wasi_clocks_monotonic_clock() {
+        let source = get_stdlib_module("wasi:clocks/monotonic-clock.wado");
+        assert!(source.is_some());
+        assert!(source.unwrap().contains("MonotonicClock"));
+    }
+
+    #[test]
+    fn test_get_wasi_random_random() {
+        let source = get_stdlib_module("wasi:random/random.wado");
+        assert!(source.is_some());
+        assert!(source.unwrap().contains("Random"));
+    }
+
+    #[test]
+    fn test_get_wasi_sockets_types() {
+        let source = get_stdlib_module("wasi:sockets/types.wado");
+        assert!(source.is_some());
+        assert!(source.unwrap().contains("TcpSocket"));
+    }
+
+    #[test]
+    fn test_get_wasi_cli_flat() {
         let source = get_stdlib_module("wasi:cli");
         assert!(source.is_some());
         assert!(source.unwrap().contains("Stdout"));
     }
 
     #[test]
-    fn test_get_wasi_filesystem() {
+    fn test_get_wasi_filesystem_flat() {
         let source = get_stdlib_module("wasi:filesystem");
         assert!(source.is_some());
         assert!(source.unwrap().contains("Descriptor"));
     }
 
     #[test]
-    fn test_get_wasi_clocks() {
-        let source = get_stdlib_module("wasi:clocks");
-        assert!(source.is_some());
-        assert!(source.unwrap().contains("MonotonicClock"));
-    }
-
-    #[test]
-    fn test_get_wasi_random() {
-        let source = get_stdlib_module("wasi:random");
-        assert!(source.is_some());
-        assert!(source.unwrap().contains("Random"));
-    }
-
-    #[test]
-    fn test_get_wasi_sockets() {
-        let source = get_stdlib_module("wasi:sockets");
-        assert!(source.is_some());
-        assert!(source.unwrap().contains("TcpSocket"));
-    }
-
-    #[test]
     fn test_unknown_module() {
         assert!(get_stdlib_module("core:unknown").is_none());
         assert!(get_stdlib_module("wasi:unknown").is_none());
+        // Without .wado extension for sub-interface paths
+        assert!(get_stdlib_module("wasi:cli/stdout").is_none());
+        assert!(get_stdlib_module("wasi:filesystem/types").is_none());
     }
 
     #[test]

@@ -1,11 +1,22 @@
 //! Intermediate representation for Wado code generation
 
+/// A cross-interface type import
+#[derive(Debug, Clone)]
+pub struct WadoImport {
+    /// Type names to import (e.g., ["Instant"])
+    pub type_names: Vec<String>,
+    /// Source path (e.g., "wasi:clocks/system-clock")
+    pub from_path: String,
+}
+
 /// A complete Wado module to be generated
 #[derive(Debug, Clone)]
 pub struct WadoModule {
     pub package_name: String,
     pub package_version: String,
     pub source_files: Vec<String>,
+    /// Cross-interface `use` imports (e.g., `use { Instant } from "wasi:clocks/system-clock"`)
+    pub imports: Vec<WadoImport>,
     pub types: Vec<WadoTypeDef>,
     pub resources: Vec<WadoResource>,
     pub effects: Vec<WadoEffect>,
@@ -20,12 +31,46 @@ impl WadoModule {
             package_name,
             package_version,
             source_files: Vec::new(),
+            imports: Vec::new(),
             types: Vec::new(),
             resources: Vec::new(),
             effects: Vec::new(),
             standalone_functions: Vec::new(),
             worlds: Vec::new(),
         }
+    }
+
+    /// Collect all public names exported by this module (types, resources, effects).
+    ///
+    /// Skips self-referential newtypes (e.g., `type Instant = Instant`) which arise
+    /// from WIT's cross-interface `use` statements and are not defined in this interface.
+    #[must_use]
+    pub fn public_names(&self) -> Vec<String> {
+        let mut names = Vec::new();
+        for ty in &self.types {
+            match ty {
+                // Skip self-referential newtypes: they're cross-interface aliases, not definitions
+                WadoTypeDef::Newtype(n) => {
+                    if let WadoType::Named(target) = &n.target
+                        && target == &n.name
+                    {
+                        continue;
+                    }
+                    names.push(n.name.clone());
+                }
+                WadoTypeDef::Enum(e) => names.push(e.name.clone()),
+                WadoTypeDef::Flags(f) => names.push(f.name.clone()),
+                WadoTypeDef::Struct(s) => names.push(s.name.clone()),
+                WadoTypeDef::Variant(v) => names.push(v.name.clone()),
+            }
+        }
+        for r in &self.resources {
+            names.push(r.name.clone());
+        }
+        for e in &self.effects {
+            names.push(e.name.clone());
+        }
+        names
     }
 }
 

@@ -1,6 +1,9 @@
 //! WIT-to-IR transformation
 
+use std::cell::RefCell;
+
 use anyhow::Result;
+use indexmap::IndexMap;
 use wit_parser::{
     Function, FunctionKind, Handle, InterfaceId, Resolve, Type, TypeDefKind, TypeId, TypeOwner,
     WorldId, WorldItem, WorldKey,
@@ -8,19 +11,27 @@ use wit_parser::{
 
 use crate::ir::{
     WadoEffect, WadoEnum, WadoEnumVariant, WadoField, WadoFlagMember, WadoFlags, WadoFunction,
-    WadoModule, WadoNewtype, WadoParam, WadoResource, WadoStruct, WadoType, WadoTypeDef,
-    WadoVariant, WadoVariantCase, WadoWorld, WadoWorldExport, WadoWorldImport,
+    WadoImport, WadoModule, WadoNewtype, WadoParam, WadoResource, WadoStruct, WadoType,
+    WadoTypeDef, WadoVariant, WadoVariantCase, WadoWorld, WadoWorldExport, WadoWorldImport,
 };
 use crate::naming::{to_snake_case, to_upper_camel_case};
 
 pub struct Transformer<'a> {
     resolve: &'a Resolve,
+    /// The interface currently being transformed (for cross-interface import detection)
+    current_interface: RefCell<Option<InterfaceId>>,
+    /// Accumulated foreign-type imports: `type_name` → wasi source path
+    pending_imports: RefCell<IndexMap<String, String>>,
 }
 
 impl<'a> Transformer<'a> {
     #[must_use]
     pub fn new(resolve: &'a Resolve) -> Self {
-        Self { resolve }
+        Self {
+            resolve,
+            current_interface: RefCell::new(None),
+            pending_imports: RefCell::new(IndexMap::new()),
+        }
     }
 
     /// Transform a WIT interface to a Wado module
@@ -33,6 +44,10 @@ impl<'a> Transformer<'a> {
         let (pkg_name, iface_name, version) = self.get_interface_path(iface_id);
 
         let wasi_interface = format!("wasi:{pkg_name}/{iface_name}@{version}");
+
+        // Track current interface for cross-interface import detection
+        *self.current_interface.borrow_mut() = Some(iface_id);
+        self.pending_imports.borrow_mut().clear();
 
         let mut module = WadoModule::new(iface_name.clone(), version.clone());
 
@@ -71,6 +86,22 @@ impl<'a> Transformer<'a> {
                 functions,
             });
         }
+
+        // Collect cross-interface imports grouped by source path
+        let raw_imports = self.pending_imports.borrow().clone();
+        let mut imports_by_path: IndexMap<String, Vec<String>> = IndexMap::new();
+        for (type_name, path) in raw_imports {
+            imports_by_path.entry(path).or_default().push(type_name);
+        }
+        for (from_path, mut type_names) in imports_by_path {
+            type_names.sort();
+            module.imports.push(WadoImport {
+                type_names,
+                from_path,
+            });
+        }
+
+        *self.current_interface.borrow_mut() = None;
 
         Ok(module)
     }
@@ -295,12 +326,37 @@ impl<'a> Transformer<'a> {
         }
     }
 
+    /// Get the wasi import path for an interface (with .wado extension), e.g. "wasi:clocks/system-clock.wado"
+    fn get_wasi_path_for_interface(&self, iface_id: InterfaceId) -> String {
+        let iface = &self.resolve.interfaces[iface_id];
+        let iface_name = iface.name.as_deref().unwrap_or("unknown");
+        if let Some(pkg_id) = iface.package {
+            let pkg = &self.resolve.packages[pkg_id];
+            let namespace = &pkg.name.namespace;
+            let pkg_name = &pkg.name.name;
+            format!("{namespace}:{pkg_name}/{iface_name}.wado")
+        } else {
+            format!("{iface_name}.wado")
+        }
+    }
+
     fn transform_type_id(&self, type_id: TypeId) -> Result<WadoType> {
         let ty = &self.resolve.types[type_id];
 
         // If the type has a name, return it as a named type
         if let Some(name) = &ty.name {
-            return Ok(WadoType::Named(to_upper_camel_case(name)));
+            let wado_name = to_upper_camel_case(name);
+            // Check if this type belongs to a different interface — record as import
+            if let TypeOwner::Interface(owner_iface) = ty.owner {
+                let current = *self.current_interface.borrow();
+                if current != Some(owner_iface) {
+                    let source_path = self.get_wasi_path_for_interface(owner_iface);
+                    self.pending_imports
+                        .borrow_mut()
+                        .insert(wado_name.clone(), source_path);
+                }
+            }
+            return Ok(WadoType::Named(wado_name));
         }
 
         // Anonymous types - inline them

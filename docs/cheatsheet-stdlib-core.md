@@ -1256,35 +1256,6 @@ pub fn unreachable() -> !;
 
 CLI helpers: `println`, `eprintln`, `args`, `env`, `exit`, etc.
 
-### Effects
-
-```wado
-pub effect Environment {
-    fn get_environment() -> Array<[String, String]>;
-    fn get_arguments() -> Array<String>;
-    fn get_initial_cwd() -> Option<String>;
-}
-```
-
-```wado
-pub effect Exit {
-    fn exit(status: Result<(), ()>);
-    fn exit_with_code(status_code: u8);
-}
-```
-
-```wado
-pub effect Stdout {
-    async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
-}
-```
-
-```wado
-pub effect Stderr {
-    async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
-}
-```
-
 ### Functions
 
 ```wado

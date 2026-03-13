@@ -36,7 +36,7 @@ struct Array<u64> {  // Array<T> with T=u64
     mut used: i32,
 }
 
-enum ErrorCode { Io = 0, IllegalByteSequence = 1, Pipe = 2 };  // from wasi:cli
+enum ErrorCode { Io = 0, IllegalByteSequence = 1, Pipe = 2 };  // from wasi:cli/types.wado
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
@@ -111,7 +111,7 @@ fn run() with Stdout, Stdin {
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
     let __async_outptr: i32;
-    __async_outptr = "mem/realloc"(0, 0, 4, 8);
+    __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 

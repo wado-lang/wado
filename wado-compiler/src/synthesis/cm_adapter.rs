@@ -45,6 +45,15 @@ pub struct LiftContext<'a> {
 /// (e.g., `Array::<String>::with_capacity()`). The monomorphizer requires
 /// concrete `TypeId`s in `MonomorphInfo::type_args` to instantiate generic methods.
 pub fn wasi_type_to_type_id(ty: &Type, type_table: &mut TypeTable) -> TypeId {
+    wasi_type_to_type_id_with_registry(ty, type_table, None)
+}
+
+/// Convert a WASI AST `Type` to a `TypeId`, with optional registry access for struct resolution.
+pub fn wasi_type_to_type_id_with_registry(
+    ty: &Type,
+    type_table: &mut TypeTable,
+    registry: Option<&WasiRegistry>,
+) -> TypeId {
     match ty {
         Type::Named(named) => match named.name.as_str() {
             "i8" => TypeTable::I8,
@@ -63,25 +72,42 @@ pub fn wasi_type_to_type_id(ty: &Type, type_table: &mut TypeTable) -> TypeId {
             "()" => TypeTable::UNIT,
             "String" => type_table.make_struct("String".to_string(), ModuleSource::string()),
             // Resource/enum/variant types - look up the already-resolved TypeId if available.
-            // We try resource, enum, then variant to find the most specific match.
+            // We try resource, enum, variant, then struct to find the most specific match.
             _ => type_table
                 .find_resource_type_by_name(named.name.as_str())
                 .or_else(|| type_table.find_enum_type_by_name(named.name.as_str()))
                 .or_else(|| type_table.find_variant_type_by_name(named.name.as_str()))
+                .or_else(|| {
+                    // Check WASI struct registry
+                    if let Some(reg) = registry
+                        && reg.is_struct(&named.name)
+                    {
+                        // Extract package name from the struct's source interface
+                        let package = wasi_struct_package(reg, &named.name);
+                        Some(type_table.make_struct(
+                            named.name.clone(),
+                            ModuleSource::Wasi { interface: package },
+                        ))
+                    } else {
+                        None
+                    }
+                })
                 .unwrap_or(TypeTable::I32),
         },
         Type::Generic(g) => match g.name.as_str() {
             "Array" if g.args.len() == 1 => {
-                let elem_type = wasi_type_to_type_id(&g.args[0], type_table);
+                let elem_type =
+                    wasi_type_to_type_id_with_registry(&g.args[0], type_table, registry);
                 type_table.make_array(elem_type)
             }
             "Option" if g.args.len() == 1 => {
-                let inner_type = wasi_type_to_type_id(&g.args[0], type_table);
+                let inner_type =
+                    wasi_type_to_type_id_with_registry(&g.args[0], type_table, registry);
                 type_table.make_option(inner_type)
             }
             "Result" if g.args.len() == 2 => {
-                let ok_type = wasi_type_to_type_id(&g.args[0], type_table);
-                let err_type = wasi_type_to_type_id(&g.args[1], type_table);
+                let ok_type = wasi_type_to_type_id_with_registry(&g.args[0], type_table, registry);
+                let err_type = wasi_type_to_type_id_with_registry(&g.args[1], type_table, registry);
                 type_table.make_result(ok_type, err_type)
             }
             // Stream/Future/Own/Borrow are handle types represented as i32
@@ -92,12 +118,26 @@ pub fn wasi_type_to_type_id(ty: &Type, type_table: &mut TypeTable) -> TypeId {
         Type::Tuple(types) => {
             let resolved: Vec<TypeId> = types
                 .iter()
-                .map(|t| wasi_type_to_type_id(t, type_table))
+                .map(|t| wasi_type_to_type_id_with_registry(t, type_table, registry))
                 .collect();
             type_table.make_tuple(resolved)
         }
         _ => TypeTable::UNIT,
     }
+}
+
+/// Extract the WASI package name for a struct from the registry.
+/// Returns the package portion (e.g., "filesystem" from "wasi:filesystem/types@...").
+fn wasi_struct_package(registry: &WasiRegistry, name: &str) -> String {
+    if let Some(source) = registry.get_struct_source_interface(name) {
+        // Format: "wasi:filesystem/types@0.3.0-rc-..." -> extract "filesystem"
+        if let Some(after_colon) = source.strip_prefix("wasi:")
+            && let Some(package) = after_colon.split('/').next()
+        {
+            return package.to_string();
+        }
+    }
+    String::new()
 }
 
 /// Create an i32 addition expression.
@@ -228,6 +268,19 @@ fn synthesize_lift_inner(
                 {
                     return lifted;
                 }
+                // Check if this is a WASI struct (record) that needs GC struct construction
+                if let Some(ctx) = ctx
+                    && let Some(lifted) = try_lift_wasi_struct(
+                        &named.name,
+                        addr.clone(),
+                        next_local,
+                        stmts,
+                        local_types,
+                        ctx,
+                    )
+                {
+                    return lifted;
+                }
                 // Default: treat as i32 handles (resources, unknown types)
                 builtin_call("i32_load", vec![addr], TypeTable::I32)
             }
@@ -310,6 +363,113 @@ fn try_lift_wasi_variant_or_enum(
     }
 
     None
+}
+
+/// Try to lift a WASI struct (record) type from linear memory into a GC struct.
+/// Returns `None` if the type is not a known WASI struct.
+#[allow(clippy::cast_possible_wrap)]
+fn try_lift_wasi_struct(
+    name: &str,
+    addr: TirExpr,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    local_types: &mut Vec<TypeId>,
+    ctx: &LiftContext<'_>,
+) -> Option<TirExpr> {
+    let fields = ctx.wasi_registry.get_struct_fields(name)?;
+    let fields = fields.to_vec();
+
+    // Resolve field types through newtypes and compute the record layout
+    let resolved_fields: Vec<(String, Type)> = fields
+        .iter()
+        .map(|(fname, fty)| (fname.clone(), ctx.wasi_registry.resolve_type(fty)))
+        .collect();
+    let field_types: Vec<&Type> = resolved_fields.iter().map(|(_, ty)| ty).collect();
+
+    // Compute field offsets using registry-aware layout
+    let mut offset = 0u32;
+    let mut max_align = 1u32;
+    let mut offsets = Vec::with_capacity(field_types.len());
+    for ft in &field_types {
+        let fa = crate::component_model::cm_align_with_registry(ft, ctx.wasi_registry);
+        let fs = crate::component_model::cm_size_with_registry(ft, ctx.wasi_registry);
+        offset = crate::cm_abi::align_to(offset, fa);
+        offsets.push(offset);
+        offset += fs;
+        max_align = max_align.max(fa);
+    }
+
+    // Create the struct type in the type table using registry-aware resolution
+    let struct_type_id = {
+        let mut tt = ctx.type_table.borrow_mut();
+        let package = wasi_struct_package(ctx.wasi_registry, name);
+        tt.make_struct(name.to_string(), ModuleSource::Wasi { interface: package })
+    };
+
+    // Lift each field
+    let mut tir_fields = Vec::with_capacity(resolved_fields.len());
+    // Get the original Wado field names from the struct definition
+    // The fields in the registry use CM kebab-case names. We need the Wado field names.
+    let wado_fields: Vec<String> = {
+        // Get the original struct definition's fields (Wado names)
+        // by looking at the AST struct fields, which preserve the Wado names
+        // The registry stores (cm_name, field_type) but we need the Wado names
+        // We can get them from the full struct info
+        ctx.wasi_registry
+            .get_struct_fields_with_wado_names(name)
+            .map(|f| f.iter().map(|(wn, _, _)| wn.clone()).collect())
+            .unwrap_or_else(|| {
+                // Fallback: convert CM kebab-case names to Wado snake_case
+                resolved_fields
+                    .iter()
+                    .map(|(cm_name, _)| cm_name.replace('-', "_"))
+                    .collect()
+            })
+    };
+    for (i, (_, field_ty)) in resolved_fields.iter().enumerate() {
+        let field_addr = if offsets[i] == 0 {
+            addr.clone()
+        } else {
+            binary_add(addr.clone(), i32_const(offsets[i] as i32))
+        };
+        let lifted_field = synthesize_lift_inner(
+            field_ty,
+            field_addr,
+            next_local,
+            stmts,
+            local_types,
+            Some(ctx),
+        );
+        let lifted_field = materialize_if_needed(lifted_field, next_local, stmts, local_types);
+        let field_name = &wado_fields[i];
+        tir_fields.push(crate::tir::TirStructField {
+            name: field_name.clone(),
+            value: lifted_field,
+            field_index: i as u32,
+        });
+    }
+
+    // Build the StructLiteral expression
+    let struct_expr = TirExpr::new(
+        TirExprKind::StructLiteral {
+            struct_type: struct_type_id,
+            struct_name: name.to_string(),
+            fields: tir_fields,
+        },
+        struct_type_id,
+        synth_span(),
+    );
+
+    // Materialize the struct into a local
+    let result_local = alloc_local(next_local, local_types, struct_type_id);
+    stmts.push(let_stmt(
+        "__struct_result",
+        result_local,
+        struct_type_id,
+        struct_expr,
+    ));
+
+    Some(local_ref(result_local, "__struct_result", struct_type_id))
 }
 
 /// Lift a WASI variant type (e.g., `Method`) from linear memory.
@@ -452,11 +612,13 @@ fn synthesize_lift_wasi_enum(
     ));
 
     let result_local = alloc_local(next_local, local_types, enum_type);
+    // Enums are represented as i32, so use 0 as the initial value (not null_expr
+    // which emits ref.null for non-Option types).
     stmts.push(let_mut_stmt(
         "__eresult",
         result_local,
         enum_type,
-        null_expr(enum_type),
+        i32_const(0),
     ));
 
     let case_count = case_names.len();
@@ -691,14 +853,19 @@ fn synthesize_lift_option_inner(
     local_types: &mut Vec<TypeId>,
     ctx: Option<&LiftContext<'_>>,
 ) -> TirExpr {
-    let layout = cm_abi::layout_option(inner_ty);
+    let layout = if let Some(c) = ctx {
+        cm_abi::layout_option_with_registry(inner_ty, c.wasi_registry)
+    } else {
+        cm_abi::layout_option(inner_ty)
+    };
     let payload_offset = layout.offsets[1];
 
     // Resolve the concrete Option<T> TypeId so the local and null/some exprs
     // use the correct GC reference type rather than an i32 placeholder.
     let option_type_id = if let Some(c) = ctx {
         let mut tt = c.type_table.borrow_mut();
-        let inner_type_id = wasi_type_to_type_id(inner_ty, &mut tt);
+        let inner_type_id =
+            wasi_type_to_type_id_with_registry(inner_ty, &mut tt, Some(c.wasi_registry));
         tt.make_option(inner_type_id)
     } else {
         TypeTable::I32 // placeholder when no context
@@ -764,7 +931,11 @@ fn synthesize_lift_result_inner(
     local_types: &mut Vec<TypeId>,
     ctx: Option<&LiftContext<'_>>,
 ) -> TirExpr {
-    let layout = cm_abi::layout_result(ok_ty, err_ty);
+    let layout = if let Some(c) = ctx {
+        cm_abi::layout_result_with_registry(ok_ty, err_ty, c.wasi_registry)
+    } else {
+        cm_abi::layout_result(ok_ty, err_ty)
+    };
     let payload_offset = layout.offsets[1];
 
     let disc_local = alloc_local(next_local, local_types, TypeTable::I32);
@@ -1243,7 +1414,7 @@ pub fn flatten_param_type(ty: &Type) -> Vec<TypeId> {
 
 /// Compute the CM Canonical ABI byte size for a flags type given its label count.
 /// Per the CM spec: ≤8 labels → 1 byte, ≤16 → 2 bytes, >16 → ceil(n/32)*4 bytes.
-fn cm_flags_byte_size(count: usize) -> u32 {
+pub fn cm_flags_byte_size(count: usize) -> u32 {
     if count == 0 {
         0
     } else if count <= 8 {
@@ -1256,7 +1427,7 @@ fn cm_flags_byte_size(count: usize) -> u32 {
 }
 
 /// Compute the CM Canonical ABI alignment for a flags type given its label count.
-fn cm_flags_byte_align(count: usize) -> u32 {
+pub fn cm_flags_byte_align(count: usize) -> u32 {
     if count == 0 {
         1
     } else if count <= 8 {
@@ -1270,7 +1441,7 @@ fn cm_flags_byte_align(count: usize) -> u32 {
 
 /// Compute the CM Canonical ABI byte size for an enum type given its variant count.
 /// Per the CM spec `discriminant_type`: ≤256 → 1 byte, ≤65536 → 2 bytes, else 4 bytes.
-fn cm_enum_byte_size(count: usize) -> u32 {
+pub fn cm_enum_byte_size(count: usize) -> u32 {
     if count <= 256 {
         1
     } else if count <= 65536 {
@@ -1280,31 +1451,14 @@ fn cm_enum_byte_size(count: usize) -> u32 {
     }
 }
 
-/// Compute the CM Canonical ABI size for a param type, resolving WASI flags/enum sizes.
+/// Compute the CM Canonical ABI size for a param type, resolving WASI types through the registry.
 fn cm_param_size(ty: &Type, wasi_registry: &crate::component_model::WasiRegistry) -> u32 {
-    if let Type::Named(named) = ty {
-        if let Some(members) = wasi_registry.get_flags_members(&named.name) {
-            return cm_flags_byte_size(members.len());
-        }
-        if let Some(variants) = wasi_registry.get_enum_variants(&named.name) {
-            return cm_enum_byte_size(variants.len());
-        }
-    }
-    cm_abi::cm_size(ty)
+    crate::component_model::cm_size_with_registry(ty, wasi_registry)
 }
 
-/// Compute the CM Canonical ABI alignment for a param type, resolving WASI flags/enum alignments.
+/// Compute the CM Canonical ABI alignment for a param type, resolving WASI types through the registry.
 fn cm_param_align(ty: &Type, wasi_registry: &crate::component_model::WasiRegistry) -> u32 {
-    if let Type::Named(named) = ty {
-        if let Some(members) = wasi_registry.get_flags_members(&named.name) {
-            return cm_flags_byte_align(members.len());
-        }
-        if let Some(variants) = wasi_registry.get_enum_variants(&named.name) {
-            // Enum alignment equals its discriminant size
-            return cm_enum_byte_size(variants.len());
-        }
-    }
-    cm_abi::cm_align(ty)
+    crate::component_model::cm_align_with_registry(ty, wasi_registry)
 }
 
 /// Produce a store plan for writing a param type to memory: list of (`sub_offset`, `store_instruction`).
@@ -1610,7 +1764,11 @@ fn synthesize_adapter(
             {
                 return sa;
             }
-            (crate::cm_abi::cm_size(rt), crate::cm_abi::cm_align(rt))
+            // Use registry-aware size/align for WASI structs and other complex types
+            (
+                crate::component_model::cm_size_with_registry(rt, wasi_registry),
+                crate::component_model::cm_align_with_registry(rt, wasi_registry),
+            )
         })
     } else {
         None
@@ -2018,8 +2176,8 @@ fn synthesize_adapter(
                 sa
             } else {
                 (
-                    crate::cm_abi::cm_size(return_type),
-                    crate::cm_abi::cm_align(return_type),
+                    crate::component_model::cm_size_with_registry(return_type, wasi_registry),
+                    crate::component_model::cm_align_with_registry(return_type, wasi_registry),
                 )
             }
         } else {

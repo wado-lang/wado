@@ -1193,6 +1193,16 @@ fn generate_wasi_imports(
 
             let mut deferred_func_exports: Vec<(String, u32)> = Vec::new();
 
+            // Shared CmInstanceTypeGen for complex ok types across all functions.
+            // Reusing one instance avoids duplicate type definitions and exports.
+            let mut shared_type_gen = CmInstanceTypeGen::new(local_type_idx);
+            for (name, &idx) in &enum_export_indices {
+                shared_type_gen.register_existing(&format!("enum:{name}"), idx);
+            }
+            for (name, &idx) in &flags_export_indices {
+                shared_type_gen.register_existing(&format!("flags:{name}"), idx);
+            }
+
             for func in &supported_functions {
                 let needs_stream_u8 = func
                     .params
@@ -1254,7 +1264,20 @@ fn generate_wasi_imports(
                         {
                             None
                         } else {
-                            None
+                            // Use shared CmInstanceTypeGen for complex ok types (records, options, etc.)
+                            shared_type_gen.set_next_idx(local_type_idx);
+                            let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
+                                .iter()
+                                .map(|(k, &v)| (k.as_str(), v))
+                                .collect();
+                            let ok_val = shared_type_gen.ast_type_to_cm(
+                                &g.args[0],
+                                &mut instance_type,
+                                project.wasi_registry,
+                                &resource_exports,
+                            );
+                            local_type_idx = shared_type_gen.next_idx();
+                            Some(ok_val)
                         }
                     } else {
                         None

@@ -58,9 +58,9 @@ struct Array<Tuple<Descriptor,String>> {  // Array<T> with T=Tuple<Descriptor,St
     mut used: i32,
 }
 
-enum ErrorCode { Io = 0, IllegalByteSequence = 1, Pipe = 2 };  // from wasi:cli
+enum ErrorCode { Io = 0, IllegalByteSequence = 1, Pipe = 2 };  // from wasi:cli/types.wado
 
-enum ErrorCode { Access = 0, Already = 1, BadDescriptor = 2, Busy = 3, Deadlock = 4, Quota = 5, Exist = 6, FileTooLarge = 7, IllegalByteSequence = 8, InProgress = 9, Interrupted = 10, Invalid = 11, Io = 12, IsDirectory = 13, Loop = 14, TooManyLinks = 15, MessageSize = 16, NameTooLong = 17, NoDevice = 18, NoEntry = 19, NoLock = 20, InsufficientMemory = 21, InsufficientSpace = 22, NotDirectory = 23, NotEmpty = 24, NotRecoverable = 25, Unsupported = 26, NoTty = 27, NoSuchDevice = 28, Overflow = 29, NotPermitted = 30, Pipe = 31, ReadOnly = 32, InvalidSeek = 33, TextFileBusy = 34, CrossDevice = 35 };  // from wasi:filesystem
+enum ErrorCode { Access = 0, Already = 1, BadDescriptor = 2, Busy = 3, Deadlock = 4, Quota = 5, Exist = 6, FileTooLarge = 7, IllegalByteSequence = 8, InProgress = 9, Interrupted = 10, Invalid = 11, Io = 12, IsDirectory = 13, Loop = 14, TooManyLinks = 15, MessageSize = 16, NameTooLong = 17, NoDevice = 18, NoEntry = 19, NoLock = 20, InsufficientMemory = 21, InsufficientSpace = 22, NotDirectory = 23, NotEmpty = 24, NotRecoverable = 25, Unsupported = 26, NoTty = 27, NoSuchDevice = 28, Overflow = 29, NotPermitted = 30, Pipe = 31, ReadOnly = 32, InvalidSeek = 33, TextFileBusy = 34, CrossDevice = 35 };  // from wasi:filesystem/types.wado
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
@@ -168,7 +168,7 @@ fn run() with Stdout, Stderr, Preopens {
     let open_result: ref Result<Descriptor,ErrorCode>;
     let _file: i32;
     let missing_result: ref Result<Descriptor,ErrorCode>;
-    let _err: "wasi:filesystem/enum:ErrorCode";
+    let _err: "wasi:filesystem/types.wado/enum:ErrorCode";
     let __local_7: ref String;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -222,13 +222,13 @@ fn run() with Stdout, Stderr, Preopens {
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
     let __async_outptr: i32;
-    __async_outptr = "mem/realloc"(0, 0, 4, 8);
+    __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 
 fn __cm_adapter__Stderr_write_via_stream(data) {
     let __async_outptr: i32;
-    __async_outptr = "mem/realloc"(0, 0, 4, 8);
+    __async_outptr = "mem/realloc"(0, 0, 1, 2);
     return "wasi/wasi:cli/Stderr::write_via_stream"(data, __async_outptr);
 }
 

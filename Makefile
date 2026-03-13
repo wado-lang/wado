@@ -148,14 +148,14 @@ update-vendor:
 
 .PHONY: update-stdlib-wasi
 update-stdlib-wasi:
-	rm -f wado-compiler/lib/wasi/*.wado
+	rm -rf wado-compiler/lib/wasi/
+	mkdir -p wado-compiler/lib/wasi/
 	cargo run -p wado-from-wit -- \
 		--wit-dir vendor/wasmtime/crates/wasi-http/src/p3/wit \
 		--output-dir wado-compiler/lib/wasi
 	cargo run -p wado-from-wit -- \
 		--wit-dir vendor/wasmtime/crates/wasi/src/p3/wit \
 		--output-dir wado-compiler/lib/wasi
-	rm -rf wado-compiler/lib/wasi/wasi-http.wado # a file for bindgen
 
 wado-compiler/lib/builtins/wado-bundled-libm.wat: Cargo.toml Cargo.lock wado-bundled-libm/Cargo.toml wado-bundled-libm/src/lib.rs
 	make update-bundled

@@ -247,9 +247,18 @@ pub struct WasiRegistry {
     variants: IndexMap<String, (String, Vec<(String, Option<Type>)>)>,
 
     /// Struct types collected from WASI modules (e.g., `DnsErrorPayload`)
-    /// Maps Wado struct name -> (CM record name kebab-case, source interface path, fields)
-    /// e.g., "`DnsErrorPayload`" -> ("DNS-error-payload", "wasi:http/types@...", [("rcode", Option<String>), ...])
-    structs: IndexMap<String, (String, String, Vec<(String, Type)>)>,
+    /// Maps Wado struct name -> (CM record name kebab-case, source interface path, fields with CM names, fields with Wado names)
+    /// Fields: Vec<(`cm_field_name`, `field_type`)>
+    /// Wado fields: Vec<(`wado_field_name`, `cm_field_name`, `field_type`)>
+    structs: IndexMap<
+        String,
+        (
+            String,
+            String,
+            Vec<(String, Type)>,
+            Vec<(String, String, Type)>,
+        ),
+    >,
 }
 
 impl WasiRegistry {
@@ -288,32 +297,14 @@ impl WasiRegistry {
         let mut registry = Self::new();
         let mut world_registry = WorldRegistry::new();
 
-        // Parse and register wasi:cli
-        let wasi_cli = parse_module(stdlib::WASI_CLI);
-        registry.register_module(&wasi_cli, &mut world_registry);
-
-        // Parse and register wasi:clocks
-        let wasi_clocks = parse_module(stdlib::WASI_CLOCKS);
-        registry.register_module(&wasi_clocks, &mut world_registry);
-
-        // Parse and register wasi:random
-        let wasi_random = parse_module(stdlib::WASI_RANDOM);
-        registry.register_module(&wasi_random, &mut world_registry);
-
-        // Parse and register wasi:sockets
-        let wasi_sockets = parse_module(stdlib::WASI_SOCKETS);
-        registry.register_module(&wasi_sockets, &mut world_registry);
-
-        // Parse and register wasi:filesystem
-        let wasi_filesystem = parse_module(stdlib::WASI_FILESYSTEM);
-        registry.register_module(&wasi_filesystem, &mut world_registry);
-
-        // Parse and register wasi:http
+        // Parse and register all WASI interface modules.
         // HTTP resource methods (Fields, Request, Response) are registered in the
         // wasi_registry for type resolution and codegen lookup. CM imports for HTTP
         // types are handled specially in import_http_types_for_service().
-        let wasi_http = parse_module(stdlib::WASI_HTTP);
-        registry.register_module(&wasi_http, &mut world_registry);
+        for (_path, source) in stdlib::ALL_WASI_MODULES {
+            let module = parse_module(source);
+            registry.register_module(&module, &mut world_registry);
+        }
 
         (registry, world_registry)
     }
@@ -372,8 +363,21 @@ impl WasiRegistry {
                     .iter()
                     .map(|f| (wasi_attr_cm_name(&f.attrs, &f.name), f.ty.clone()))
                     .collect();
-                self.structs
-                    .insert(struct_def.name.clone(), (cm_name, source_interface, fields));
+                let wado_fields: Vec<(String, String, Type)> = struct_def
+                    .fields
+                    .iter()
+                    .map(|f| {
+                        (
+                            f.name.clone(),
+                            wasi_attr_cm_name(&f.attrs, &f.name),
+                            f.ty.clone(),
+                        )
+                    })
+                    .collect();
+                self.structs.insert(
+                    struct_def.name.clone(),
+                    (cm_name, source_interface, fields, wado_fields),
+                );
             }
         }
 
@@ -687,14 +691,31 @@ impl WasiRegistry {
     pub fn get_struct_cm_name(&self, name: &str) -> Option<&str> {
         self.structs
             .get(name)
-            .map(|(cm_name, _, _)| cm_name.as_str())
+            .map(|(cm_name, _, _, _)| cm_name.as_str())
     }
 
     /// Get the fields of a struct (CM kebab-case field name, field type)
     pub fn get_struct_fields(&self, name: &str) -> Option<&[(String, Type)]> {
         self.structs
             .get(name)
-            .map(|(_, _, fields)| fields.as_slice())
+            .map(|(_, _, fields, _)| fields.as_slice())
+    }
+
+    /// Get the source interface path for a struct
+    pub fn get_struct_source_interface(&self, name: &str) -> Option<&str> {
+        self.structs
+            .get(name)
+            .map(|(_, source, _, _)| source.as_str())
+    }
+
+    /// Get the fields with Wado names (`wado_name`, `cm_name`, `field_type`)
+    pub fn get_struct_fields_with_wado_names(
+        &self,
+        name: &str,
+    ) -> Option<&[(String, String, Type)]> {
+        self.structs
+            .get(name)
+            .map(|(_, _, _, wado_fields)| wado_fields.as_slice())
     }
 
     /// Iterate over all structs from a specific interface (matched by prefix)
@@ -705,7 +726,7 @@ impl WasiRegistry {
     ) -> impl Iterator<Item = (&str, &str, &[(String, Type)])> {
         self.structs
             .iter()
-            .filter_map(move |(name, (cm_name, source, fields))| {
+            .filter_map(move |(name, (cm_name, source, fields, _))| {
                 if source.starts_with(interface_prefix) {
                     Some((name.as_str(), cm_name.as_str(), fields.as_slice()))
                 } else {
@@ -770,6 +791,7 @@ impl WasiRegistry {
             .map(String::as_str)
             .collect();
         let resources: IndexSet<&str> = self.resources.keys().map(String::as_str).collect();
+        let structs: IndexSet<&str> = self.structs.keys().map(String::as_str).collect();
 
         // Check all parameter types
         for (_, _, ty) in &func.params {
@@ -782,7 +804,7 @@ impl WasiRegistry {
         // that need to be resolved to their underlying types for the support check
         if let Some(ret_ty) = &func.return_type {
             let resolved_ret = self.resolve_type(ret_ty);
-            if !is_return_type_supported_with_types(&resolved_ret, &enums, &resources) {
+            if !is_return_type_supported_with_types(&resolved_ret, &enums, &resources, &structs) {
                 return false;
             }
         }
@@ -1104,6 +1126,16 @@ impl CmInstanceTypeGen {
         idx
     }
 
+    /// Returns the next type index that will be allocated.
+    pub fn next_idx(&self) -> u32 {
+        self.next_idx
+    }
+
+    /// Update the next type index (when external code has allocated indices in between calls).
+    pub fn set_next_idx(&mut self, idx: u32) {
+        self.next_idx = idx;
+    }
+
     /// Compute a stable cache key for an AST type (ignoring spans)
     fn type_key(ty: &Type) -> String {
         match ty {
@@ -1393,6 +1425,31 @@ impl CmInstanceTypeGen {
                             wasi_registry,
                             resource_exports,
                         );
+                        ComponentValType::Type(idx)
+                    } else if wasi_registry.is_enum(name) {
+                        let cache_key = format!("enum:{name}");
+                        if let Some(&idx) = self.cache.get(&cache_key) {
+                            return ComponentValType::Type(idx);
+                        }
+                        let variants = wasi_registry.get_enum_variants(name).unwrap().to_vec();
+                        instance_type
+                            .ty()
+                            .defined_type()
+                            .enum_type(variants.iter().map(String::as_str));
+                        let idx = self.alloc_idx();
+                        self.cache.insert(cache_key.clone(), idx);
+
+                        // Export the enum type
+                        if let Some(cm_name) = wasi_registry.get_enum_cm_name(name) {
+                            instance_type.export(
+                                cm_name,
+                                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(idx)),
+                            );
+                            let export_idx = self.alloc_idx();
+                            self.cache.insert(cache_key, export_idx);
+                            return ComponentValType::Type(export_idx);
+                        }
+
                         ComponentValType::Type(idx)
                     } else if wasi_registry.is_flags(name) {
                         let cache_key = format!("flags:{name}");
@@ -1739,11 +1796,12 @@ fn is_return_type_supported_with_types(
     ty: &Type,
     enums: &IndexSet<&str>,
     resources: &IndexSet<&str>,
+    structs: &IndexSet<&str>,
 ) -> bool {
     match ty {
         Type::Named(named) => {
             let name = named.name.as_str();
-            // Check primitives, enums, resources, and unit type
+            // Check primitives, enums, resources, structs, and unit type
             // Unit type () is parsed as Named("()"), not Tuple([])
             matches!(
                 name,
@@ -1761,32 +1819,33 @@ fn is_return_type_supported_with_types(
                     | "()"
             ) || enums.contains(name)
                 || resources.contains(name)
+                || structs.contains(name)
         }
-        Type::Generic(generic) => match generic.name.as_str() {
-            "Stream" | "Future" => true,
-            "Result" => {
-                // Result<T, E> - both T and E must be supported
-                generic
-                    .args
-                    .iter()
-                    .all(|arg| is_return_type_supported_with_types(arg, enums, resources))
+        Type::Generic(generic) => {
+            match generic.name.as_str() {
+                "Stream" | "Future" => true,
+                "Result" => {
+                    // Result<T, E> - both T and E must be supported
+                    generic.args.iter().all(|arg| {
+                        is_return_type_supported_with_types(arg, enums, resources, structs)
+                    })
+                }
+                "Array" | "Option" => {
+                    // Recursively check that inner types are supported primitives
+                    generic
+                        .args
+                        .iter()
+                        .all(|arg| is_primitive_type_supported_with_types(arg, enums, resources))
+                }
+                "Tuple" => {
+                    // All tuple elements must be supported return types
+                    generic.args.iter().all(|arg| {
+                        is_return_type_supported_with_types(arg, enums, resources, structs)
+                    })
+                }
+                _ => false,
             }
-            "Array" | "Option" => {
-                // Recursively check that inner types are supported primitives
-                generic
-                    .args
-                    .iter()
-                    .all(|arg| is_primitive_type_supported_with_types(arg, enums, resources))
-            }
-            "Tuple" => {
-                // All tuple elements must be supported return types
-                generic
-                    .args
-                    .iter()
-                    .all(|arg| is_return_type_supported_with_types(arg, enums, resources))
-            }
-            _ => false,
-        },
+        }
         // Handle [...] tuple syntax
         Type::Tuple(elements) => {
             // Empty tuple () is the unit type, which is always supported
@@ -1795,7 +1854,7 @@ fn is_return_type_supported_with_types(
             }
             elements
                 .iter()
-                .all(|el| is_return_type_supported_with_types(el, enums, resources))
+                .all(|el| is_return_type_supported_with_types(el, enums, resources, structs))
         }
         _ => false,
     }
@@ -1849,9 +1908,14 @@ pub fn is_param_type_supported(ty: &Type) -> bool {
     is_param_type_supported_with_types(ty, &IndexSet::default(), &IndexSet::default())
 }
 
-/// Check if a return type is supported (without enum/resource knowledge)
+/// Check if a return type is supported (without enum/resource/struct knowledge)
 pub fn is_return_type_supported(ty: &Type) -> bool {
-    is_return_type_supported_with_types(ty, &IndexSet::default(), &IndexSet::default())
+    is_return_type_supported_with_types(
+        ty,
+        &IndexSet::default(),
+        &IndexSet::default(),
+        &IndexSet::default(),
+    )
 }
 
 /// Check if all types in a WASI function are supported for Component Model generation
@@ -1915,12 +1979,113 @@ pub fn return_type_requires_outptr(ty: &Type) -> bool {
 /// Generic `cm_flat_types` doesn't know about WASI variant cases; this
 /// registry-aware check fills that gap.
 pub fn wasi_named_type_return_needs_outptr(ty: &Type, registry: &WasiRegistry) -> bool {
-    if let Type::Named(named) = ty
-        && let Some(cases) = registry.get_variant_cases(&named.name)
-    {
-        return cases.iter().any(|(_, payload)| payload.is_some());
+    if let Type::Named(named) = ty {
+        if let Some(cases) = registry.get_variant_cases(&named.name) {
+            return cases.iter().any(|(_, payload)| payload.is_some());
+        }
+        // WASI structs (records) always need outptr — they have multiple fields
+        if registry.get_struct_fields(&named.name).is_some() {
+            return true;
+        }
     }
     false
+}
+
+/// Registry-aware CM canonical ABI size for a type.
+///
+/// Resolves WASI structs (records), enums, flags, and variants through the registry
+/// to compute their true CM layout size, instead of defaulting to 4 (i32 handle).
+pub fn cm_size_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
+    match ty {
+        Type::Named(named) => {
+            // Check newtypes first
+            if let Some(resolved) = registry.get_newtype(&named.name) {
+                return cm_size_with_registry(resolved, registry);
+            }
+            // Check structs (records)
+            if let Some(fields) = registry.get_struct_fields(&named.name) {
+                let resolved_fields: Vec<Type> = fields
+                    .iter()
+                    .map(|(_, ty)| registry.resolve_type(ty))
+                    .collect();
+                let mut offset = 0u32;
+                let mut max_align = 1u32;
+                for field_ty in &resolved_fields {
+                    let fa = cm_align_with_registry(field_ty, registry);
+                    let fs = cm_size_with_registry(field_ty, registry);
+                    offset = crate::cm_abi::align_to(offset, fa);
+                    offset += fs;
+                    max_align = max_align.max(fa);
+                }
+                return crate::cm_abi::align_to(offset, max_align);
+            }
+            // Check enums
+            if let Some(variants) = registry.get_enum_variants(&named.name) {
+                return crate::synthesis::cm_adapter::cm_enum_byte_size(variants.len());
+            }
+            // Check flags
+            if let Some(members) = registry.get_flags_members(&named.name) {
+                return crate::synthesis::cm_adapter::cm_flags_byte_size(members.len());
+            }
+            crate::cm_abi::cm_size(ty)
+        }
+        Type::Generic(g) => match g.name.as_str() {
+            "Option" if g.args.len() == 1 => {
+                let inner = &g.args[0];
+                let payload_align = cm_align_with_registry(inner, registry);
+                let payload_size = cm_size_with_registry(inner, registry);
+                let payload_offset = crate::cm_abi::align_to(1, payload_align);
+                let overall_align = 1u32.max(payload_align);
+                crate::cm_abi::align_to(payload_offset + payload_size, overall_align)
+            }
+            "Result" if g.args.len() == 2 => {
+                let ok_size = cm_size_with_registry(&g.args[0], registry);
+                let err_size = cm_size_with_registry(&g.args[1], registry);
+                let payload_size = ok_size.max(err_size);
+                let payload_align = cm_align_with_registry(&g.args[0], registry)
+                    .max(cm_align_with_registry(&g.args[1], registry));
+                let payload_offset = crate::cm_abi::align_to(1, payload_align);
+                let overall_align = 1u32.max(payload_align);
+                crate::cm_abi::align_to(payload_offset + payload_size, overall_align)
+            }
+            _ => crate::cm_abi::cm_size(ty),
+        },
+        _ => crate::cm_abi::cm_size(ty),
+    }
+}
+
+/// Registry-aware CM canonical ABI alignment for a type.
+pub fn cm_align_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
+    match ty {
+        Type::Named(named) => {
+            if let Some(resolved) = registry.get_newtype(&named.name) {
+                return cm_align_with_registry(resolved, registry);
+            }
+            if let Some(fields) = registry.get_struct_fields(&named.name) {
+                let mut max_align = 1u32;
+                for (_, field_ty) in fields {
+                    let resolved = registry.resolve_type(field_ty);
+                    max_align = max_align.max(cm_align_with_registry(&resolved, registry));
+                }
+                return max_align;
+            }
+            if let Some(variants) = registry.get_enum_variants(&named.name) {
+                return crate::synthesis::cm_adapter::cm_enum_byte_size(variants.len());
+            }
+            if let Some(members) = registry.get_flags_members(&named.name) {
+                return crate::synthesis::cm_adapter::cm_flags_byte_align(members.len());
+            }
+            crate::cm_abi::cm_align(ty)
+        }
+        Type::Generic(g) => match g.name.as_str() {
+            "Option" if g.args.len() == 1 => 1u32.max(cm_align_with_registry(&g.args[0], registry)),
+            "Result" if g.args.len() == 2 => 1u32
+                .max(cm_align_with_registry(&g.args[0], registry))
+                .max(cm_align_with_registry(&g.args[1], registry)),
+            _ => crate::cm_abi::cm_align(ty),
+        },
+        _ => crate::cm_abi::cm_align(ty),
+    }
 }
 
 /// Compute the CM canonical-ABI size and alignment for a WASI variant type.

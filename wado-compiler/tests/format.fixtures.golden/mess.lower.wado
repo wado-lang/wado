@@ -7291,6 +7291,1590 @@ pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
 
 
 // --- Module: wasi:cli ---
+pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i64> { value: *self.1 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("StreamWritable<u8>");
+}
+
+pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("Stream<u8>");
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<T>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<T>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> Ordering");
+}
+
+pub fn "Tuple<u64,i32>^Inspect::inspect"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<u64> { value: *self.0 }."u64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i32> { value: *self.1 }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Inspect::inspect"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<bool> { value: *self.0 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<bool> { value: *self.1 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.2."SpecialKind^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<u128,u128>^Inspect::inspect"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."u128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."u128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."i128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."i128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^Display::fmt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Display::fmt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+
+// --- Module: wasi:cli/environment.wado ---
+pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i64> { value: *self.1 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("StreamWritable<u8>");
+}
+
+pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("Stream<u8>");
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<T>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<T>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> Ordering");
+}
+
+pub fn "Tuple<u64,i32>^Inspect::inspect"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<u64> { value: *self.0 }."u64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i32> { value: *self.1 }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Inspect::inspect"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<bool> { value: *self.0 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<bool> { value: *self.1 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.2."SpecialKind^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<u128,u128>^Inspect::inspect"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."u128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."u128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."i128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."i128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^Display::fmt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Display::fmt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+
+// --- Module: wasi:cli/exit.wado ---
+pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i64> { value: *self.1 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("StreamWritable<u8>");
+}
+
+pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("Stream<u8>");
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<T>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<T>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> Ordering");
+}
+
+pub fn "Tuple<u64,i32>^Inspect::inspect"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<u64> { value: *self.0 }."u64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i32> { value: *self.1 }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Inspect::inspect"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<bool> { value: *self.0 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<bool> { value: *self.1 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.2."SpecialKind^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<u128,u128>^Inspect::inspect"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."u128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."u128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."i128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."i128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^Display::fmt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Display::fmt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+
+// --- Module: wasi:cli/run.wado ---
+pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i64> { value: *self.1 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("StreamWritable<u8>");
+}
+
+pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("Stream<u8>");
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<T>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<T>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> Ordering");
+}
+
+pub fn "Tuple<u64,i32>^Inspect::inspect"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<u64> { value: *self.0 }."u64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i32> { value: *self.1 }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Inspect::inspect"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<bool> { value: *self.0 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<bool> { value: *self.1 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.2."SpecialKind^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<u128,u128>^Inspect::inspect"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."u128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."u128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."i128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."i128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^Display::fmt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Display::fmt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+
+// --- Module: wasi:cli/stderr.wado ---
+pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i64> { value: *self.1 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("StreamWritable<u8>");
+}
+
+pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("Stream<u8>");
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<T>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<T>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> Ordering");
+}
+
+pub fn "Tuple<u64,i32>^Inspect::inspect"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<u64> { value: *self.0 }."u64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i32> { value: *self.1 }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Inspect::inspect"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<bool> { value: *self.0 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<bool> { value: *self.1 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.2."SpecialKind^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<u128,u128>^Inspect::inspect"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."u128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."u128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."i128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."i128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^Display::fmt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Display::fmt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+
+// --- Module: wasi:cli/stdin.wado ---
+pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i64> { value: *self.1 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("StreamWritable<u8>");
+}
+
+pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("Stream<u8>");
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<T>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<T>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> Ordering");
+}
+
+pub fn "Tuple<u64,i32>^Inspect::inspect"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<u64> { value: *self.0 }."u64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i32> { value: *self.1 }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Inspect::inspect"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<bool> { value: *self.0 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<bool> { value: *self.1 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.2."SpecialKind^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<u128,u128>^Inspect::inspect"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."u128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."u128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."i128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."i128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^Display::fmt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Display::fmt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+
+// --- Module: wasi:cli/stdout.wado ---
+pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i64> { value: *self.1 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("StreamWritable<u8>");
+}
+
+pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("Stream<u8>");
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<T>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<T>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> Ordering");
+}
+
+pub fn "Tuple<u64,i32>^Inspect::inspect"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<u64> { value: *self.0 }."u64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i32> { value: *self.1 }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Inspect::inspect"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<bool> { value: *self.0 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<bool> { value: *self.1 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.2."SpecialKind^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<u128,u128>^Inspect::inspect"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."u128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."u128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."i128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."i128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^Display::fmt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Display::fmt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+
+// --- Module: wasi:cli/terminal-input.wado ---
+pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i64> { value: *self.1 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("StreamWritable<u8>");
+}
+
+pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("Stream<u8>");
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<T>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<T>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> Ordering");
+}
+
+pub fn "Tuple<u64,i32>^Inspect::inspect"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<u64> { value: *self.0 }."u64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i32> { value: *self.1 }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Inspect::inspect"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<bool> { value: *self.0 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<bool> { value: *self.1 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.2."SpecialKind^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<u128,u128>^Inspect::inspect"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."u128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."u128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."i128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."i128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^Display::fmt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Display::fmt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+
+// --- Module: wasi:cli/terminal-output.wado ---
+pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i64> { value: *self.1 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("StreamWritable<u8>");
+}
+
+pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("Stream<u8>");
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<T>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<T>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> Ordering");
+}
+
+pub fn "Tuple<u64,i32>^Inspect::inspect"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<u64> { value: *self.0 }."u64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i32> { value: *self.1 }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Inspect::inspect"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<bool> { value: *self.0 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<bool> { value: *self.1 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.2."SpecialKind^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<u128,u128>^Inspect::inspect"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."u128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."u128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."i128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."i128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^Display::fmt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Display::fmt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+
+// --- Module: wasi:cli/terminal-stderr.wado ---
+pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i64> { value: *self.1 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("StreamWritable<u8>");
+}
+
+pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("Stream<u8>");
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<T>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<T>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> Ordering");
+}
+
+pub fn "Tuple<u64,i32>^Inspect::inspect"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<u64> { value: *self.0 }."u64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i32> { value: *self.1 }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Inspect::inspect"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<bool> { value: *self.0 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<bool> { value: *self.1 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.2."SpecialKind^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<u128,u128>^Inspect::inspect"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."u128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."u128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."i128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."i128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^Display::fmt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Display::fmt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+
+// --- Module: wasi:cli/terminal-stdin.wado ---
+pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i64> { value: *self.1 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("StreamWritable<u8>");
+}
+
+pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("Stream<u8>");
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<T>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<T>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> Ordering");
+}
+
+pub fn "Tuple<u64,i32>^Inspect::inspect"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<u64> { value: *self.0 }."u64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i32> { value: *self.1 }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Inspect::inspect"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<bool> { value: *self.0 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<bool> { value: *self.1 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.2."SpecialKind^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<u128,u128>^Inspect::inspect"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."u128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."u128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."i128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."i128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^Display::fmt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Display::fmt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+
+// --- Module: wasi:cli/terminal-stdout.wado ---
+pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i64> { value: *self.1 }."i64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("StreamWritable<u8>");
+}
+
+pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("Stream<u8>");
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<T>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<T>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."Stream<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."StreamWritable<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> Ordering");
+}
+
+pub fn "Tuple<u64,i32>^Inspect::inspect"(self: &[u64, i32], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<u64> { value: *self.0 }."u64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<i32> { value: *self.1 }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Inspect::inspect"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<bool> { value: *self.0 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<bool> { value: *self.1 }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.2."SpecialKind^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<u128,u128>^Inspect::inspect"(self: &[u128, u128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."u128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."u128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."i128^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."i128^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
+    self."Tuple<i64,i64>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, StreamWritable<T>], f: &mut Formatter) {
+    self."Tuple<Stream<T>,StreamWritable<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
+    self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u64,i32>^Display::fmt"(self: &[u64, i32], f: &mut Formatter) {
+    self."Tuple<u64,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<bool,bool,SpecialKind>^Display::fmt"(self: &[bool, bool, SpecialKind], f: &mut Formatter) {
+    self."Tuple<bool,bool,SpecialKind>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
+    self."Tuple<u128,u128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
+    self."Tuple<i128,i128>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+
+// --- Module: wasi:cli/types.wado ---
 pub enum ErrorCode {
     Io,
     IllegalByteSequence,
@@ -7923,12 +9507,12 @@ pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) -> i32 {
-    let __async_outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    let __async_outptr: i32 = core::builtin::realloc(0, 0, 1, 2);
     return cm_raw_call wasi:cli/Stdout::write_via_stream(data, __async_outptr);
 }
 
 fn __cm_adapter__Stderr_write_via_stream(data: i32) -> i32 {
-    let __async_outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    let __async_outptr: i32 = core::builtin::realloc(0, 0, 1, 2);
     return cm_raw_call wasi:cli/Stderr::write_via_stream(data, __async_outptr);
 }
 

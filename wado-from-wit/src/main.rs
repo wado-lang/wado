@@ -199,7 +199,7 @@ fn run_directory_mode(
     fs::create_dir_all(output_dir)
         .with_context(|| format!("Failed to create directory {}", output_dir.display()))?;
 
-    // Process each package
+    // Process each package — generate one file per interface + one worlds file per package
     for (_current_pkg_id, pkg) in &resolve.packages {
         let pkg_name = &pkg.name.name;
 
@@ -214,62 +214,119 @@ fn run_directory_mode(
             .as_ref()
             .map_or_else(|| "0.0.0".to_string(), std::string::ToString::to_string);
 
-        // Create a single combined module for the entire package
-        let mut combined_module = wado_from_wit::WadoModule::new(pkg_name.clone(), version);
+        // Create a subdirectory for this package (e.g., wasi/filesystem/)
+        let pkg_dir = output_dir.join(pkg_name.as_str());
+        fs::create_dir_all(&pkg_dir)
+            .with_context(|| format!("Failed to create directory {}", pkg_dir.display()))?;
 
-        // Collect all source files
-        let mut source_files: IndexSet<String> = IndexSet::new();
+        // Process all interfaces — one sub-file each, and collect re-export info for flat file
+        // flat_reexports: iface_name → list of public names
+        let mut flat_reexports: Vec<(String, Vec<String>)> = Vec::new();
 
-        // Process all interfaces
         for (iface_name, iface_id) in &pkg.interfaces {
-            if let Some(source_file) = iface_to_file.get(iface_name) {
-                source_files.insert(source_file.clone());
-            }
-
-            let module = transformer
+            let mut module = transformer
                 .transform_interface(*iface_id)
                 .with_context(|| format!("Failed to transform interface {iface_name}"))?;
 
-            // Merge module contents
-            combined_module.types.extend(module.types);
-            combined_module.resources.extend(module.resources);
-            combined_module.effects.extend(module.effects);
+            // Skip empty interfaces
+            if module.types.is_empty()
+                && module.resources.is_empty()
+                && module.effects.is_empty()
+                && module.imports.is_empty()
+            {
+                continue;
+            }
+
+            if let Some(source_file) = iface_to_file.get(iface_name) {
+                module.source_files = vec![source_file.clone()];
+            }
+            module.package_name = version.clone();
+
+            let names = module.public_names();
+            if !names.is_empty() {
+                flat_reexports.push((iface_name.clone(), names));
+            }
+
+            let code = generator.generate(&module);
+
+            // Write per-interface file (e.g., wasi/filesystem/types.wado)
+            let output_path = pkg_dir.join(format!("{iface_name}.wado"));
+            fs::write(&output_path, code)
+                .with_context(|| format!("Failed to write {}", output_path.display()))?;
+
+            eprintln!("Generated: {}", output_path.display());
         }
 
-        // Process all worlds
+        // Collect all world source files and emit worlds file
+        let mut worlds_module = wado_from_wit::WadoModule::new(pkg_name.clone(), version.clone());
+        let mut worlds_source_files: IndexSet<String> = IndexSet::new();
+
         for (world_name, world_id) in &pkg.worlds {
             if let Some(source_file) = iface_to_file.get(world_name) {
-                source_files.insert(source_file.clone());
+                worlds_source_files.insert(source_file.clone());
             }
 
             let world = transformer
                 .transform_world(*world_id)
                 .with_context(|| format!("Failed to transform world {world_name}"))?;
-            combined_module.worlds.push(world);
+            worlds_module.worlds.push(world);
         }
 
-        // Skip empty packages (no types, resources, effects, or worlds)
-        if combined_module.types.is_empty()
-            && combined_module.resources.is_empty()
-            && combined_module.effects.is_empty()
-            && combined_module.worlds.is_empty()
-        {
-            continue;
+        if !worlds_module.worlds.is_empty() {
+            let mut source_files: Vec<_> = worlds_source_files.into_iter().collect();
+            source_files.sort();
+            worlds_module.source_files = source_files;
+
+            let code = generator.generate(&worlds_module);
+
+            let output_path = pkg_dir.join("worlds.wado");
+            fs::write(&output_path, code)
+                .with_context(|| format!("Failed to write {}", output_path.display()))?;
+
+            eprintln!("Generated: {}", output_path.display());
         }
 
-        // Sort source files for consistent output
-        let mut source_files: Vec<_> = source_files.into_iter().collect();
-        source_files.sort();
-        combined_module.source_files = source_files;
+        // Generate flat package-level re-exporting file (e.g., wasi/filesystem.wado)
+        // This re-exports all types from all sub-interface files for backward compatibility.
+        if !flat_reexports.is_empty() {
+            let mut flat_code = String::new();
+            flat_code.push_str(
+                "// This file is auto-generated by wado-from-wit. DO NOT EDIT MANUALLY.\n",
+            );
+            flat_code.push('\n');
 
-        let code = generator.generate(&combined_module);
+            // Track already-exported names to avoid duplicate re-exports across interfaces
+            let mut exported_names: IndexSet<String> = IndexSet::new();
+            for (iface_name, names) in &flat_reexports {
+                let new_names: Vec<&String> = names
+                    .iter()
+                    .filter(|n| !exported_names.contains(*n))
+                    .collect();
+                if new_names.is_empty() {
+                    continue;
+                }
+                let names_str = new_names
+                    .iter()
+                    .map(|n| n.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                flat_code.push_str(&format!(
+                    "pub use {{ {names_str} }} from \"wasi:{pkg_name}/{iface_name}.wado\";\n"
+                ));
+                for n in new_names {
+                    exported_names.insert(n.clone());
+                }
+            }
 
-        // Write combined file (e.g., wasi/cli.wado)
-        let output_path = output_dir.join(format!("{pkg_name}.wado"));
-        fs::write(&output_path, code)
-            .with_context(|| format!("Failed to write {}", output_path.display()))?;
+            // Note: worlds are NOT re-exported from the flat file.
+            // The WorldRegistry reads them directly from pkg/worlds.wado via ALL_WASI_MODULES.
 
-        eprintln!("Generated: {}", output_path.display());
+            let output_path = output_dir.join(format!("{pkg_name}.wado"));
+            fs::write(&output_path, flat_code)
+                .with_context(|| format!("Failed to write {}", output_path.display()))?;
+
+            eprintln!("Generated: {}", output_path.display());
+        }
     }
 
     Ok(())

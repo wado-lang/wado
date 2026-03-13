@@ -238,10 +238,10 @@ mod tests {
         use crate::ast::Item;
         use crate::lexer::Lexer;
         use crate::parser::Parser;
-        use crate::stdlib::WASI_CLI;
+        use crate::stdlib::WASI_CLI_WORLDS;
 
-        // Parse the actual cli.wado
-        let mut lexer = Lexer::new(WASI_CLI);
+        // Parse cli/worlds.wado (worlds moved to per-interface sub-files)
+        let mut lexer = Lexer::new(WASI_CLI_WORLDS);
         let tokens = lexer.tokenize().expect("lexer error");
         let mut parser = Parser::new(tokens);
         let module = parser.parse().expect("parser error");
