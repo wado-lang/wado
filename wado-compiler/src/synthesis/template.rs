@@ -17,9 +17,9 @@ use crate::hashmap::IndexMap;
 
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::{
-    CallArg, FunctionRef, ResolvedType, TemplateFormatSpec, TirBlock, TirExpr, TirExprKind,
-    TirModule, TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TirUnaryOp, TypeId,
-    TypeTable,
+    CallArg, FunctionRef, MonomorphInfo, ResolvedType, TemplateFormatSpec, TirBlock, TirExpr,
+    TirExprKind, TirModule, TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TirUnaryOp,
+    TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -848,50 +848,6 @@ fn trait_fmt_call(
 ) -> Vec<TirStmt> {
     let resolved = tt.borrow().get(type_id).clone();
     match resolved {
-        ResolvedType::Ref(inner) => {
-            let mut stmts = Vec::new();
-            stmts.push(write_str_stmt("&", fmt.clone(), tt, span));
-            let deref = TirExpr::new(
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Deref,
-                    expr: Box::new(val),
-                },
-                inner,
-                span,
-            );
-            stmts.extend(trait_fmt_call(
-                inner,
-                deref,
-                fmt,
-                trait_name,
-                method_name,
-                tt,
-                span,
-            ));
-            stmts
-        }
-        ResolvedType::MutRef(inner) => {
-            let mut stmts = Vec::new();
-            stmts.push(write_str_stmt("&mut ", fmt.clone(), tt, span));
-            let deref = TirExpr::new(
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Deref,
-                    expr: Box::new(val),
-                },
-                inner,
-                span,
-            );
-            stmts.extend(trait_fmt_call(
-                inner,
-                deref,
-                fmt,
-                trait_name,
-                method_name,
-                tt,
-                span,
-            ));
-            stmts
-        }
         ResolvedType::Unit => {
             vec![write_str_stmt("()", fmt, tt, span)]
         }
@@ -941,21 +897,34 @@ fn trait_fmt_call(
             let info = method_name_for_type(type_id, trait_name, method_name, tt);
             let mangled = info.to_mangled_name();
 
-            let val_resolved_type = tt.borrow().get(val.type_id).clone();
-            let receiver = match val_resolved_type {
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_) => val,
-                _ => {
-                    let ref_type = tt.borrow_mut().make_ref(type_id);
-                    TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Ref,
-                            expr: Box::new(val),
-                        },
-                        ref_type,
-                        span,
-                    )
+            // For reference types (&T / &mut T), set monomorph_info so the monomorphizer
+            // knows to instantiate the generic Wado impl.
+            let resolved = tt.borrow().get(type_id).clone();
+            let monomorph_info = match &resolved {
+                ResolvedType::Ref(inner_id) | ResolvedType::MutRef(inner_id) => {
+                    let base_info = LocalMethodName::new(
+                        info.base_struct_name.clone(),
+                        Some(trait_name.to_string()),
+                        method_name.to_string(),
+                    );
+                    Some(MonomorphInfo {
+                        generic_name: base_info.to_mangled_name(),
+                        type_args: vec![*inner_id],
+                        is_blanket: true,
+                    })
                 }
+                _ => None,
             };
+
+            let ref_type = tt.borrow_mut().make_ref(type_id);
+            let receiver = TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Ref,
+                    expr: Box::new(val),
+                },
+                ref_type,
+                span,
+            );
 
             let call = TirExpr::new(
                 TirExprKind::MethodCall {
@@ -963,7 +932,7 @@ fn trait_fmt_call(
                     func: FunctionRef {
                         module_source: impl_mod,
                         name: mangled,
-                        monomorph_info: None,
+                        monomorph_info,
                         method_info: Some(info),
                         is_cm_adapter: false,
                     },
@@ -1014,6 +983,24 @@ fn method_name_for_type(
             )
             .with_struct_type_args(&arg_names)
         }
+        ResolvedType::Ref(inner) => {
+            let inner_name = tt_ref.mangle_type_name(inner);
+            LocalMethodName::new(
+                "&".to_string(),
+                Some(trait_name.to_string()),
+                method_name.to_string(),
+            )
+            .with_struct_type_args(&[inner_name])
+        }
+        ResolvedType::MutRef(inner) => {
+            let inner_name = tt_ref.mangle_type_name(inner);
+            LocalMethodName::new(
+                "&mut".to_string(),
+                Some(trait_name.to_string()),
+                method_name.to_string(),
+            )
+            .with_struct_type_args(&[inner_name])
+        }
         _ => {
             let name = tt_ref.mangle_type_name(type_id);
             LocalMethodName::new(name, Some(trait_name.to_string()), method_name.to_string())
@@ -1028,6 +1015,7 @@ fn trait_impl_module(
 ) -> ModuleSource {
     match tt.borrow().get(type_id).clone() {
         ResolvedType::Primitive(_) => ModuleSource::primitive(),
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => ModuleSource::format(),
         ResolvedType::Struct { name, .. } if name == "String" => ModuleSource::format(),
         ResolvedType::Struct { module_source, .. }
         | ResolvedType::Enum { module_source, .. }
