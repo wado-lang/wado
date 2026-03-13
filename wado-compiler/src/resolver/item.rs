@@ -506,6 +506,29 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     index: idx,
                 });
             }
+        } else if let ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) = impl_type {
+            // Reference impl case: `impl<T: Bound> Trait for &T` / `impl<T: Bound> Trait for &mut T`
+            // The inner type T is a type parameter registered by the caller.
+            if let ast::Type::Named(named) = boxed.as_ref()
+                && let Some(&(idx, _)) = old_type_params.get(&named.name)
+            {
+                let type_id = self
+                    .type_table
+                    .borrow_mut()
+                    .make_type_param(named.name.clone(), idx);
+                self.current_type_params
+                    .insert(named.name.clone(), (idx, type_id));
+                let bounds = old_type_param_bounds
+                    .get(&named.name)
+                    .cloned()
+                    .unwrap_or_default();
+                impl_type_params.push(crate::tir::TirTypeParam {
+                    name: named.name.clone(),
+                    bounds,
+                    default: None,
+                    index: idx,
+                });
+            }
         }
 
         // Populate bounds from the impl block's type_params

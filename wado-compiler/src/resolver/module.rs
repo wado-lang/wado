@@ -351,7 +351,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         match ty {
             Type::Named(named) => named.name.clone(),
             Type::Generic(generic) => generic.name.clone(),
-            Type::Reference(inner) | Type::MutReference(inner) => Self::get_type_name_static(inner),
+            Type::Reference(_) => "&".to_string(),
+            Type::MutReference(_) => "&mut".to_string(),
             _ => "Unknown".to_string(),
         }
     }
@@ -407,8 +408,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         match ty {
             Type::Named(named) => named.name.clone(),
             Type::Generic(generic) => generic.name.clone(),
-            Type::Reference(inner) => self.get_type_name(inner),
-            Type::MutReference(inner) => self.get_type_name(inner),
+            Type::Reference(_) => "&".to_string(),
+            Type::MutReference(_) => "&mut".to_string(),
             Type::Function(func_type) => {
                 // Build function type string: "fn(T1, T2) -> R"
                 let param_strs: Vec<String> = func_type

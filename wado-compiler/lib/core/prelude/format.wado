@@ -304,3 +304,19 @@ impl<T: Inspect> Display for Array<T> {
         self.inspect(f);
     }
 }
+
+impl<T: Inspect> Inspect for &T {
+    pub fn inspect(&self, f: &mut Formatter) {
+        f.write_str("&");
+        let inner: &T = *self;
+        (*inner).inspect(f);
+    }
+}
+
+impl<T: Inspect> Inspect for &mut T {
+    pub fn inspect(&mut self, f: &mut Formatter) {
+        f.write_str("&mut ");
+        let inner: &mut T = *self;
+        (*inner).inspect(f);
+    }
+}

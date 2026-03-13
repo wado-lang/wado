@@ -1261,6 +1261,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             }
                         })
                         .collect()
+                } else if let Type::Reference(boxed) | Type::MutReference(boxed) = &impl_block.ty {
+                    if let Type::Named(inner) = boxed.as_ref() {
+                        // impl<T: Bound> Trait for &T / &mut T: T is at position 0
+                        vec![(inner.name.clone(), 0u32)]
+                    } else {
+                        Vec::new()
+                    }
                 } else {
                     Vec::new()
                 };
@@ -1944,9 +1951,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     Some(type_args.clone())
                 },
             ),
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                // For references, check if the inner type implements the trait
-                return self.type_implements_trait(*inner, trait_name);
+            ResolvedType::Ref(inner) => {
+                // Check for a specific impl Trait for &T first (e.g., impl Inspect for &T)
+                let inner_id = *inner;
+                if self.find_trait_impl_for_type_with_args("&", trait_name, Some(&[inner_id])) {
+                    return true;
+                }
+                return self.type_implements_trait(inner_id, trait_name);
+            }
+            ResolvedType::MutRef(inner) => {
+                let inner_id = *inner;
+                if self.find_trait_impl_for_type_with_args("&mut", trait_name, Some(&[inner_id])) {
+                    return true;
+                }
+                return self.type_implements_trait(inner_id, trait_name);
             }
             ResolvedType::Tuple(elems) => {
                 // Tuples implement a trait when all elements implement it
@@ -2184,6 +2202,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .collect();
 
         // Match type params to receiver type args via generic type arg positions
+        let inner_type_name: Option<&str> =
+            if let ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) = &impl_block.ty {
+                if let ast::Type::Named(inner) = boxed.as_ref() {
+                    Some(&inner.name)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
         if let ast::Type::Generic(generic) = &impl_block.ty {
             for (i, arg) in generic.args.iter().enumerate() {
                 if let ast::Type::Named(named) = arg
@@ -2203,6 +2232,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         if !self.type_implements_trait(type_arg, bound) {
                             return false;
                         }
+                    }
+                }
+            }
+        } else if let Some(inner_name) = inner_type_name {
+            // Handle `impl<T: Bound> Trait for &T` / `impl<T: Bound> Trait for &mut T`:
+            // type_args[0] is the inner type T.
+            if let Some(bounds) = bounds_map.get(inner_name)
+                && let Some(&type_arg) = type_args.first()
+                && !matches!(
+                    self.type_table.borrow().get(type_arg),
+                    ResolvedType::TypeParam { .. }
+                )
+            {
+                for bound in bounds {
+                    if !self.type_implements_trait(type_arg, bound) {
+                        return false;
                     }
                 }
             }

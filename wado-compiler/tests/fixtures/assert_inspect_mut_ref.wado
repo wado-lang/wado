@@ -1,0 +1,14 @@
+// Test: Assert inspect output for mutable reference intermediates
+// &mut T should show "&mut value" in assert failure messages
+
+export fn run() with Stdout, Stderr {
+    let mut y = 100;
+    let mr = &mut y;
+    assert *mr == 99;
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["condition: *mr == 99", "mr: &mut 100", "*mr: 100"]
+}

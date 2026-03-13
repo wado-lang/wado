@@ -820,19 +820,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
             UnaryOp::Ref => self.type_table.borrow_mut().make_ref(expr.type_id),
             UnaryOp::MutRef => self.type_table.borrow_mut().make_mut_ref(expr.type_id),
             UnaryOp::Deref => {
-                // Dereference returns the inner type
-                if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
-                    self.type_table.borrow().get(expr.type_id)
-                {
-                    *inner
-                } else {
-                    // Cannot dereference non-reference type
-                    let _ = self.logger.error(TypeError::TypeMismatch {
-                        expected: "reference type".to_string(),
-                        found: self.type_table.borrow().type_name(expr.type_id),
-                        span: unary.span,
-                    });
-                    TypeTable::ERROR
+                let outer = self.type_table.borrow().get(expr.type_id).clone();
+                match outer {
+                    ResolvedType::MutRef(inner) => inner,
+                    ResolvedType::Ref(inner) => {
+                        // Dereffing a shared reference: &(&mut T) yields &T, not &mut T.
+                        // Mutability cannot propagate outward through a shared reference.
+                        let inner_resolved = self.type_table.borrow().get(inner).clone();
+                        if let ResolvedType::MutRef(u) = inner_resolved {
+                            self.type_table.borrow_mut().make_ref(u)
+                        } else {
+                            inner
+                        }
+                    }
+                    _ => {
+                        let _ = self.logger.error(TypeError::TypeMismatch {
+                            expected: "reference type".to_string(),
+                            found: self.type_table.borrow().type_name(expr.type_id),
+                            span: unary.span,
+                        });
+                        TypeTable::ERROR
+                    }
                 }
             }
             _ => expr.type_id,

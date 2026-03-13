@@ -16,8 +16,9 @@ use crate::hashmap::IndexSet;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::project::Project;
 use crate::tir::{
-    InlineHint, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirModule,
-    TirParam, TirStmt, TirStmtKind, TirTypeParam, TirUnaryOp, TypeId, TypeTable,
+    CallArg, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirModule, TirParam, TirStmt, TirStmtKind, TirTypeParam, TirUnaryOp,
+    TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -2048,15 +2049,12 @@ fn inspect_call(
     let ref_type = tt.make_ref(value_type);
     let receiver = ref_expr(value, ref_type, span);
 
-    // Strip references to get the inner type for name mangling.
-    let inner_type = strip_refs(value_type, tt);
-
     // Decompose the type into (base_name, is_type_param, type_arg_names).
     // All parameterized types must be explicitly listed to avoid producing names
     // with `<` that would cause `LocalMethodName::new` to panic.
-    let resolved = tt.get(inner_type).clone();
+    let resolved = tt.get(value_type).clone();
     let (base_name, is_type_param, type_arg_names) =
-        decompose_type_for_method_name(&resolved, inner_type, tt);
+        decompose_type_for_method_name(&resolved, value_type, tt);
 
     let mut info = LocalMethodName::new(
         base_name,
@@ -2074,7 +2072,46 @@ fn inspect_call(
         inspect_impl_module(value_type, tt, module_source)
     };
 
-    trait_method_call(receiver, info, impl_module, vec![fmt], span)
+    // For reference types (&T / &mut T), we need monomorph_info so the monomorphizer
+    // knows to instantiate the generic Wado impl `&^Inspect::inspect` / `&mut^Inspect::inspect`.
+    let monomorph_info = match &resolved {
+        ResolvedType::Ref(inner_id) | ResolvedType::MutRef(inner_id) => {
+            let base_info = LocalMethodName::new(
+                info.base_struct_name.clone(),
+                Some("Inspect".to_string()),
+                "inspect".to_string(),
+            );
+            Some(MonomorphInfo {
+                generic_name: base_info.to_mangled_name(),
+                type_args: vec![*inner_id],
+                is_blanket: true,
+            })
+        }
+        _ => None,
+    };
+
+    if let Some(monomorph) = monomorph_info {
+        let fn_name = info.to_mangled_name();
+        let call = TirExpr::new(
+            TirExprKind::MethodCall {
+                receiver: Box::new(receiver),
+                func: FunctionRef {
+                    module_source: impl_module,
+                    name: fn_name,
+                    monomorph_info: Some(monomorph),
+                    method_info: Some(info),
+                    is_cm_adapter: false,
+                },
+                type_args: vec![],
+                args: vec![CallArg::new(fmt, false)],
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        TirStmt::new(TirStmtKind::Expr(call), span)
+    } else {
+        trait_method_call(receiver, info, impl_module, vec![fmt], span)
+    }
 }
 
 /// Decompose a type into `(base_name, is_type_param, type_arg_names)` for `LocalMethodName`.
@@ -2122,6 +2159,10 @@ fn decompose_type_for_method_name(
             false,
             vec![tt.mangle_type_name(*inner)],
         ),
+        ResolvedType::Ref(inner) => ("&".to_string(), false, vec![tt.mangle_type_name(*inner)]),
+        ResolvedType::MutRef(inner) => {
+            ("&mut".to_string(), false, vec![tt.mangle_type_name(*inner)])
+        }
         _ => {
             let name = tt.mangle_type_name(type_id);
             debug_assert!(
@@ -2133,22 +2174,12 @@ fn decompose_type_for_method_name(
     }
 }
 
-/// Strip all reference wrappers from a type, returning the inner type.
-fn strip_refs(type_id: TypeId, tt: &TypeTable) -> TypeId {
-    let mut current = type_id;
-    loop {
-        match tt.get(current).clone() {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => current = inner,
-            _ => return current,
-        }
-    }
-}
-
 /// Determine the module where an Inspect impl lives for a given type.
 fn inspect_impl_module(type_id: TypeId, tt: &TypeTable, default: &ModuleSource) -> ModuleSource {
     use crate::tir::ResolvedType;
     match tt.get(type_id).clone() {
         ResolvedType::Primitive(_) => ModuleSource::primitive(),
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => ModuleSource::format(),
         ResolvedType::Struct { ref name, .. } if name == "String" => ModuleSource::format(),
         ResolvedType::Struct {
             ref module_source, ..

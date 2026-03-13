@@ -1,0 +1,13 @@
+// Dereffing a shared reference (&) to a mutable reference (&mut T) must not
+// yield &mut T.  The outer & constrains access to read-only, so the result
+// must be &T.  Assigning to &mut T should be a compile error.
+
+export fn run() {
+    let mut x: i32 = 0;
+    let rm: &mut i32 = &mut x;
+    let rs = &rm;            // type: &&mut i32
+    let _bad: &mut i32 = *rs; // compile error: &T cannot coerce to &mut T
+}
+
+__DATA__
+{"compile_error": "type mismatch"}
