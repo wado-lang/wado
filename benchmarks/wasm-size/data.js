@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773446119774,
+  "lastUpdate": 1773446182867,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2987,6 +2987,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/894eb663d58ecce4664f9a4fe833d18cf39ad87a"
         },
         "date": 1773446119588,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9236,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22767,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b5235eeee85f0938ec13b489bb682b94adda85ae",
+          "message": "Merge pull request #574 from wado-lang/claude/resolve-todo-comments-jlB8O\n\nImplement env() function to retrieve environment variables",
+          "timestamp": "2026-03-14T08:53:58+09:00",
+          "tree_id": "1e731749e2233e54efb632429a2992bb518b8f68",
+          "url": "https://github.com/wado-lang/wado/commit/b5235eeee85f0938ec13b489bb682b94adda85ae"
+        },
+        "date": 1773446182676,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
