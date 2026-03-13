@@ -6161,6 +6161,11 @@ fn rewrite_calls_in_expr(
             }
         }
         if let Some(adapter_rc) = adapters.get(&qualified) {
+            // Check if this is a streaming async function
+            let is_streaming = wasi_registry
+                .get_function(&qualified)
+                .is_some_and(|f| f.is_async && f.has_streaming_param());
+
             // Extract receiver and args before replacing
             let (taken_receiver, taken_args) =
                 if let TirExprKind::MethodCall { receiver, args, .. } = &mut expr.kind {
@@ -6179,7 +6184,11 @@ fn rewrite_calls_in_expr(
             // The adapter params include self as the first param
             {
                 let mut adapter = adapter_rc.borrow_mut();
-                if adapter.return_type != expr.type_id {
+                if is_streaming {
+                    // Streaming adapters return i32 (packed subtask handle).
+                    // Fix the call site's type to match.
+                    expr.type_id = TypeTable::I32;
+                } else if adapter.return_type != expr.type_id {
                     let old_return_type = adapter.return_type;
                     adapter.return_type = expr.type_id;
                     fixup_return_type_in_body(&mut adapter, old_return_type, expr.type_id);
@@ -6199,10 +6208,14 @@ fn rewrite_calls_in_expr(
                     if param_idx < adapter.params.len()
                         && adapter.params[param_idx].type_id != arg.expr.type_id
                     {
-                        let local_idx = adapter.params[param_idx].local_index as usize;
-                        adapter.params[param_idx].type_id = arg.expr.type_id;
-                        if local_idx < adapter.local_types.len() {
-                            adapter.local_types[local_idx] = arg.expr.type_id;
+                        if is_streaming && adapter.params[param_idx].type_id == TypeTable::I32 {
+                            // Streaming: keep adapter param as i32, cast the arg instead
+                        } else {
+                            let local_idx = adapter.params[param_idx].local_index as usize;
+                            adapter.params[param_idx].type_id = arg.expr.type_id;
+                            if local_idx < adapter.local_types.len() {
+                                adapter.local_types[local_idx] = arg.expr.type_id;
+                            }
                         }
                     }
                 }
