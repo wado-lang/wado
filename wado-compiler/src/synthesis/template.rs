@@ -830,13 +830,11 @@ fn deref_to_inner(expr: TirExpr, target_type: TypeId, span: Span) -> TirExpr {
 /// Unified format trait dispatch.
 ///
 /// Handles ALL type kinds for both Display and Inspect format traits:
-/// - `Ref(T)` / `MutRef(T)`: writes `&`/`&mut ` prefix, derefs, recurses (Inspect only;
-///   Display callers pass pre-stripped types so these arms are not reached).
 /// - `Unit`: writes `"()"` inline.
 /// - `Tuple`: writes `[elem1, elem2, ...]` with per-element Inspect recursion.
 /// - `Function`: writes the type signature `|params| -> ret` (Inspect only).
-/// - All other types: emits a `TypeName^TraitName::method(&val, &mut f)` call,
-///   delegating to the Wado-level trait implementation.
+/// - All other types (including `Ref(T)` / `MutRef(T)`): emits a trait method call,
+///   delegating to the Wado-level trait implementation (including blanket impls).
 fn trait_fmt_call(
     type_id: TypeId,
     val: TirExpr,
@@ -893,28 +891,12 @@ fn trait_fmt_call(
             vec![write_str_stmt(&sig, fmt, tt, span)]
         }
         _ => {
-            let impl_mod = trait_impl_module(type_id, trait_name, tt);
-            let info = method_name_for_type(type_id, trait_name, method_name, tt);
-            let mangled = info.to_mangled_name();
-
-            // For reference types (&T / &mut T), set monomorph_info so the monomorphizer
-            // knows to instantiate the generic Wado impl.
-            let resolved = tt.borrow().get(type_id).clone();
-            let monomorph_info = match &resolved {
-                ResolvedType::Ref(inner_id) | ResolvedType::MutRef(inner_id) => {
-                    let base_info = LocalMethodName::new(
-                        info.base_struct_name.clone(),
-                        Some(trait_name.to_string()),
-                        method_name.to_string(),
-                    );
-                    Some(MonomorphInfo {
-                        generic_name: base_info.to_mangled_name(),
-                        type_args: vec![*inner_id],
-                        is_blanket: true,
-                    })
-                }
-                _ => None,
-            };
+            let MethodCallInfo {
+                local_name,
+                monomorph_info,
+                impl_module,
+            } = method_call_info_for_type(type_id, trait_name, method_name, tt);
+            let mangled = local_name.to_mangled_name();
 
             let ref_type = tt.borrow_mut().make_ref(type_id);
             let receiver = TirExpr::new(
@@ -930,10 +912,10 @@ fn trait_fmt_call(
                 TirExprKind::MethodCall {
                     receiver: Box::new(receiver),
                     func: FunctionRef {
-                        module_source: impl_mod,
+                        module_source: impl_module,
                         name: mangled,
                         monomorph_info,
-                        method_info: Some(info),
+                        method_info: Some(local_name),
                         is_cm_adapter: false,
                     },
                     type_args: vec![],
@@ -944,6 +926,64 @@ fn trait_fmt_call(
             );
             vec![TirStmt::new(TirStmtKind::Expr(call), span)]
         }
+    }
+}
+
+/// All information needed to build a `FunctionRef` for a trait method call on a given type.
+struct MethodCallInfo {
+    local_name: LocalMethodName,
+    monomorph_info: Option<MonomorphInfo>,
+    impl_module: ModuleSource,
+}
+
+/// Build `MethodCallInfo` for a trait method call on `type_id`.
+///
+/// Combines name mangling, module resolution, and monomorphization metadata into
+/// one place. For `Ref(T)` / `MutRef(T)`, this produces the `MonomorphInfo` needed
+/// to instantiate the generic blanket impl (`impl<T: Trait> Trait for &T`) — no
+/// type-specific logic is needed at the call site.
+fn method_call_info_for_type(
+    type_id: TypeId,
+    trait_name: &str,
+    method_name: &str,
+    tt: &Rc<RefCell<TypeTable>>,
+) -> MethodCallInfo {
+    let resolved = tt.borrow().get(type_id).clone();
+    match resolved {
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+            let struct_name = if matches!(tt.borrow().get(type_id).clone(), ResolvedType::Ref(_)) {
+                "&"
+            } else {
+                "&mut"
+            };
+            let inner_name = tt.borrow().mangle_type_name(inner);
+            let local_name = LocalMethodName::new(
+                struct_name.to_string(),
+                Some(trait_name.to_string()),
+                method_name.to_string(),
+            )
+            .with_struct_type_args(&[inner_name]);
+            let generic_name = LocalMethodName::new(
+                struct_name.to_string(),
+                Some(trait_name.to_string()),
+                method_name.to_string(),
+            )
+            .to_mangled_name();
+            MethodCallInfo {
+                local_name,
+                monomorph_info: Some(MonomorphInfo {
+                    generic_name,
+                    type_args: vec![inner],
+                    is_blanket: true,
+                }),
+                impl_module: ModuleSource::format(),
+            }
+        }
+        _ => MethodCallInfo {
+            local_name: method_name_for_type(type_id, trait_name, method_name, tt),
+            monomorph_info: None,
+            impl_module: trait_impl_module(type_id, trait_name, tt),
+        },
     }
 }
 
@@ -983,24 +1023,6 @@ fn method_name_for_type(
             )
             .with_struct_type_args(&arg_names)
         }
-        ResolvedType::Ref(inner) => {
-            let inner_name = tt_ref.mangle_type_name(inner);
-            LocalMethodName::new(
-                "&".to_string(),
-                Some(trait_name.to_string()),
-                method_name.to_string(),
-            )
-            .with_struct_type_args(&[inner_name])
-        }
-        ResolvedType::MutRef(inner) => {
-            let inner_name = tt_ref.mangle_type_name(inner);
-            LocalMethodName::new(
-                "&mut".to_string(),
-                Some(trait_name.to_string()),
-                method_name.to_string(),
-            )
-            .with_struct_type_args(&[inner_name])
-        }
         _ => {
             let name = tt_ref.mangle_type_name(type_id);
             LocalMethodName::new(name, Some(trait_name.to_string()), method_name.to_string())
@@ -1015,7 +1037,6 @@ fn trait_impl_module(
 ) -> ModuleSource {
     match tt.borrow().get(type_id).clone() {
         ResolvedType::Primitive(_) => ModuleSource::primitive(),
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => ModuleSource::format(),
         ResolvedType::Struct { name, .. } if name == "String" => ModuleSource::format(),
         ResolvedType::Struct { module_source, .. }
         | ResolvedType::Enum { module_source, .. }
