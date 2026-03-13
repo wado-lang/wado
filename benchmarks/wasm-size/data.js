@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773439307921,
+  "lastUpdate": 1773441572736,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2909,6 +2909,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3923e4f25f21cb02581debb08a25901fb08c14e1"
         },
         "date": 1773439307732,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9236,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22767,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c794bf234e7fb1b17726efab748ac30f968dab37",
+          "message": "Merge pull request #572 from wado-lang/claude/inspect-reference-composition-1U5D6\n\nImplement Inspect trait for reference types (&T, &mut T)",
+          "timestamp": "2026-03-14T07:33:35+09:00",
+          "tree_id": "78a347f3eb4b641384273d3084f00936781ba204",
+          "url": "https://github.com/wado-lang/wado/commit/c794bf234e7fb1b17726efab748ac30f968dab37"
+        },
+        "date": 1773441572549,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
