@@ -1,27 +1,37 @@
-// Tests: Descriptor::write_via_stream + Descriptor::read_via_stream round-trip
-// Writes data to a file using write_via_stream, then reads it back using read_via_stream.
+// Tests: Descriptor::write_via_stream writes data to a file via stream.
 //
-// This verifies that:
-// - Descriptor::write_via_stream() accepts Stream<u8> and writes to the file
-// - The written data can be read back and matches the original
+// WASI P3 spec (vendor/wasmtime/crates/wasi/src/p3/wit/deps/filesystem.wit):
 //
-// TODO: Multiple async CM operations (write_via_stream + read_via_stream + write_via_stream)
-// deadlock in synchronous context because the event loop cannot make progress.
+//   write-via-stream: async func(data: stream<u8>, offset: filesize) -> result<_, error-code>;
+//     - Takes the readable end of a stream and a byte offset.
+//     - Writes the full stream contents to the file at the given offset (like pwrite).
+//     - Is async: returns a subtask handle (i32) from the CM lowered call.
+//     - Completes once all data is written or an error occurs.
+//
+// WASI P3 async streams require specific ordering in sync context:
+//   1. Create stream pair [readable, writable].
+//   2. Start consumer (write_via_stream) with the readable end FIRST.
+//   3. Write data bytes to the writable end.
+//   4. Drop writable end (signals EOF).
+//   5. Wait for consumer subtask to complete.
+//
+// This is the same ordering used by core:cli/println for Stdout::write_via_stream.
+//
+// After writing, the file is read back via read_via_stream and piped to stdout
+// to verify the round-trip.
 
-use { println, Stdout, Stderr } from "core:cli";
+use { Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use { wait_for_subtask } from "core:internal";
 
 export fn run() with Stdout, Stderr, Preopens {
     let dirs = Preopens::get_directories();
     if dirs.len() == 0 {
-        println("no preopened dirs");
         return;
     }
 
     let dir = dirs[0].0;
 
-    // Create and open a file for writing
     let write_result = dir.open_at(
         PathFlags::none(),
         "test_output.txt",
@@ -30,27 +40,23 @@ export fn run() with Stdout, Stderr, Preopens {
     );
 
     if let Ok(file) = write_result {
-        // Write data via stream
+        // Write "Hello, Stream!\n" via stream (consumer-first ordering)
         let [write_rx, write_tx] = Stream::<u8>::new();
-        // "Hello, Stream!\n" as bytes
+        let subtask1 = file.write_via_stream(write_rx, 0 as Filesize);
         let data: Array<u8> = [72, 101, 108, 108, 111, 44, 32, 83, 116, 114, 101, 97, 109, 33, 10];
         write_tx.write(data);
         write_tx.drop();
-        let subtask1 = file.write_via_stream(write_rx, 0 as Filesize);
         wait_for_subtask(subtask1);
 
-        // Read back via stream
+        // Read back via stream and pipe to stdout to verify round-trip
         let [read_stream, _done] = file.read_via_stream(0 as Filesize);
         let subtask2 = Stdout::write_via_stream(read_stream);
         wait_for_subtask(subtask2);
-    } else {
-        println("failed to open file for writing");
     }
 }
 
 __DATA__
 {
-    "TODO": true,
     "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
     "stdout": "Hello, Stream!\n"
 }
