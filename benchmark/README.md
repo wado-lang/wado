@@ -160,11 +160,11 @@ All implementations produce the same result: 664,579 primes.
 
 ### zlib Decompress (100KB x 10 iterations)
 
-| Runtime               | Time (ms) | Relative  |
-| --------------------- | --------- | --------- |
-| zlib-rs (native Rust) | 0.18      | 1.00x     |
-| C (Wasm/wasmtime)     | 0.97      | 5.4x      |
-| **Wado** (pure Wado)  | 888       | 4,933x    |
+| Runtime               | Time (ms) | Relative |
+| --------------------- | --------- | -------- |
+| zlib-rs (native Rust) | 0.18      | 1.00x    |
+| C (Wasm/wasmtime)     | 0.97      | 5.4x     |
+| **Wado** (pure Wado)  | 888       | 4,933x   |
 
 zlib-rs runs natively; C zlib-1.3.1 and Wado are both compiled to Wasm and run on wasmtime. Wado's `core:zlib` is a pure Wado implementation, so significant overhead is expected.
 
