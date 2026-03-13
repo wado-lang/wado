@@ -49,15 +49,15 @@ struct Array<String> {  // Array<T> with T=String
     mut used: i32,
 }
 
+struct Array<Tuple<String,String>> {  // Array<T> with T=Tuple<String,String>
+    mut repr: ref array<Tuple<String,String>>,
+    mut used: i32,
+}
+
 array array<u64> (mut u64);
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
-    mut used: i32,
-}
-
-struct Array<Tuple<String,String>> {  // Array<T> with T=Tuple<String,String>
-    mut repr: ref array<Tuple<String,String>>,
     mut used: i32,
 }
 
@@ -91,9 +91,9 @@ type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_adapter__Stderr_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_adapter__Environment_get_arguments" = fn() -> ref Array<String>;
-
 type "functype/__cm_adapter__Environment_get_environment" = fn() -> ref Array<Tuple<String,String>>;
+
+type "functype/__cm_adapter__Environment_get_arguments" = fn() -> ref Array<String>;
 
 type "functype/__cm_export__run" = fn();
 
@@ -137,9 +137,9 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/Array<Tuple<String,String>>::append" = fn(ref Array<Tuple<String,String>>, ref "tuple/[String, String]");
-
 type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
+
+type "functype/Array<Tuple<String,String>>::append" = fn(ref Array<Tuple<String,String>>, ref "tuple/[String, String]");
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -230,46 +230,6 @@ fn __cm_adapter__Stderr_write_via_stream(data) {
     return "wasi/wasi:cli/Stderr::write_via_stream"(data, __async_outptr);
 }
 
-fn __cm_adapter__Environment_get_arguments() {
-    let __outptr: i32;
-    let __base: i32;
-    let __count: i32;
-    let __result: ref Array<String>;
-    let __i: i32;
-    let __elem_addr: i32;
-    let __local_7: i32;
-    let __local_8: i32;
-    let __local_9: ref array<u8>;
-    __outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:cli/Environment::get_arguments"(__outptr);
-    __base = builtin::load_i32(__outptr);
-    __count = builtin::load_i32(__outptr + 4);
-    __result = Array<String> { repr: builtin::array_new<ref String>(__count), used: 0 };
-    __i = 0;
-    b1: block {
-        l2: loop {
-            if __i >= __count {
-                break b1;
-            };
-            __elem_addr = __base + (__i * 8);
-            Array<String>::append(__result, __inline_memory_to_gc_string_1: block -> ref String {
-                __local_7 = builtin::load_i32(__elem_addr);
-                __local_8 = builtin::load_i32(__elem_addr + 4);
-                __local_9 = "core:internal/memory_to_gc_array"(__local_7, __local_8);
-                break __inline_memory_to_gc_string_1: String { repr: ref.as_non_null(__local_9), used: __local_8 };
-            });
-            drop("mem/realloc"(builtin::load_i32(__elem_addr), builtin::load_i32(__elem_addr + 4), 1, 0));
-            __i = __i + 1;
-            continue l2;
-        };
-    };
-    if __count > 0 {
-        drop("mem/realloc"(__base, __count * 8, 4, 0));
-    };
-    drop("mem/realloc"(__outptr, 8, 4, 0));
-    return __result;
-}
-
 fn __cm_adapter__Environment_get_environment() {
     let __outptr: i32;
     let __base: i32;
@@ -291,10 +251,10 @@ fn __cm_adapter__Environment_get_environment() {
     __count = builtin::load_i32(__outptr + 4);
     __result = Array<Tuple<String,String>> { repr: builtin::array_new<ref "tuple/[String, String]">(__count), used: 0 };
     __i = 0;
-    b5: block {
-        l6: loop {
+    b1: block {
+        l2: loop {
             if __i >= __count {
-                break b5;
+                break b1;
             };
             __elem_addr = __base + (__i * 16);
             __lifted_result_6 = __inline_memory_to_gc_string_1: block -> ref String {
@@ -313,11 +273,51 @@ fn __cm_adapter__Environment_get_environment() {
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 0), builtin::load_i32((__elem_addr + 0) + 4), 1, 0));
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 8), builtin::load_i32((__elem_addr + 8) + 4), 1, 0));
             __i = __i + 1;
-            continue l6;
+            continue l2;
         };
     };
     if __count > 0 {
         drop("mem/realloc"(__base, __count * 16, 4, 0));
+    };
+    drop("mem/realloc"(__outptr, 8, 4, 0));
+    return __result;
+}
+
+fn __cm_adapter__Environment_get_arguments() {
+    let __outptr: i32;
+    let __base: i32;
+    let __count: i32;
+    let __result: ref Array<String>;
+    let __i: i32;
+    let __elem_addr: i32;
+    let __local_7: i32;
+    let __local_8: i32;
+    let __local_9: ref array<u8>;
+    __outptr = "mem/realloc"(0, 0, 4, 8);
+    "wasi/wasi:cli/Environment::get_arguments"(__outptr);
+    __base = builtin::load_i32(__outptr);
+    __count = builtin::load_i32(__outptr + 4);
+    __result = Array<String> { repr: builtin::array_new<ref String>(__count), used: 0 };
+    __i = 0;
+    b5: block {
+        l6: loop {
+            if __i >= __count {
+                break b5;
+            };
+            __elem_addr = __base + (__i * 8);
+            Array<String>::append(__result, __inline_memory_to_gc_string_1: block -> ref String {
+                __local_7 = builtin::load_i32(__elem_addr);
+                __local_8 = builtin::load_i32(__elem_addr + 4);
+                __local_9 = "core:internal/memory_to_gc_array"(__local_7, __local_8);
+                break __inline_memory_to_gc_string_1: String { repr: ref.as_non_null(__local_9), used: __local_8 };
+            });
+            drop("mem/realloc"(builtin::load_i32(__elem_addr), builtin::load_i32(__elem_addr + 4), 1, 0));
+            __i = __i + 1;
+            continue l6;
+        };
+    };
+    if __count > 0 {
+        drop("mem/realloc"(__base, __count * 8, 4, 0));
     };
     drop("mem/realloc"(__outptr, 8, 4, 0));
     return __result;
@@ -685,27 +685,6 @@ fn String::append_char(self, c) {
     };
 }
 
-fn Array<Tuple<String,String>>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<Tuple<String,String>>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<ref "tuple/[String, String]">(new_capacity);
-        builtin::array_copy<ref "tuple/[String, String]">(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<ref "tuple/[String, String]">(self.repr, used, value);
-    self.used = used + 1;
-}
-
 fn Array<String>::append(self, value) {
     let used: i32;
     let capacity: i32;
@@ -724,6 +703,27 @@ fn Array<String>::append(self, value) {
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<ref String>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<Tuple<String,String>>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<Tuple<String,String>>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<ref "tuple/[String, String]">(new_capacity);
+        builtin::array_copy<ref "tuple/[String, String]">(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<ref "tuple/[String, String]">(self.repr, used, value);
     self.used = used + 1;
 }
 

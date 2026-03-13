@@ -79,6 +79,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -147,6 +155,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -963,6 +975,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -1031,6 +1051,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -1123,7 +1147,25 @@ pub fn print_bytes(data: Array<u8>) with Stdout {
     core::internal::wait_for_subtask(subtask);
 }
 
-pub fn env(name: String) -> Option<String> with Environment;
+pub fn env(name: String) -> Option<String> with Environment {
+    let vars: Array<[String, String]> = __cm_adapter__Environment_get_environment();
+    __for_0: {
+        let mut i: i32 = 0;
+        loop {
+            if !(i < vars."Array<Tuple<String,String>>::len"()) {
+                break __for_0;
+            }
+            __for_0_body: {
+                let pair: [String, String] = vars."Array<Tuple<String,String>>^IndexValue::index_value"(i);
+                if pair.0."String^Eq::eq"(&name) {
+                    return Option<String>::Some(pair.1);
+                }
+            }
+            i = (i + 1);
+        }
+    }
+    return null;
+}
 
 pub fn args() -> Array<String> with Environment {
     return __cm_adapter__Environment_get_arguments();
@@ -1174,6 +1216,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     *self.0."Stream<u8>^Inspect::inspect"(f);
     f.Formatter::write_str(", ");
     *self.1."StreamWritable<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
     f.Formatter::write_str("]");
 }
 
@@ -1247,6 +1297,10 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, S
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
 }
 
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -1273,6 +1327,17 @@ pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
     self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+fn "Array<Tuple<String,String>>^IndexValue::index_value"(self: &Array<[String, String]>, index: i32) -> [String, String] {
+    if (index >= self.used) {
+        core::internal::panic("index out of bounds");
+    }
+    return core::builtin::array_get::<[String, String]>(self.repr, index);
+}
+
+pub fn "Array<Tuple<String,String>>::len"(self: &Array<[String, String]>) -> i32 {
+    return self.used;
 }
 
 fn "array_copy<u8>"(dst: builtin::array<u8>, dst_offset: i32, src: builtin::array<u8>, src_offset: i32, len: i32);
@@ -1598,6 +1663,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -1666,6 +1739,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -1750,6 +1827,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -1818,6 +1903,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -1890,6 +1979,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -1958,6 +2055,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -3114,6 +3215,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -3198,6 +3307,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -4106,6 +4219,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -4174,6 +4295,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -6055,6 +6180,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -6123,6 +6256,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -6794,6 +6931,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -6870,6 +7015,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -7028,6 +7177,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -7100,6 +7257,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -7187,6 +7348,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -7261,6 +7430,10 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, S
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
 }
 
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -7320,6 +7493,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     *self.0."Stream<u8>^Inspect::inspect"(f);
     f.Formatter::write_str(", ");
     *self.1."StreamWritable<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
     f.Formatter::write_str("]");
 }
 
@@ -7391,6 +7572,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -7455,6 +7640,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -7523,6 +7716,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -7587,6 +7784,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -7655,6 +7860,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -7719,6 +7928,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -7787,6 +8004,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -7851,6 +8072,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -7919,6 +8148,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -7983,6 +8216,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -8051,6 +8292,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -8115,6 +8360,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -8183,6 +8436,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -8247,6 +8504,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -8315,6 +8580,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -8379,6 +8648,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -8447,6 +8724,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -8511,6 +8792,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -8579,6 +8868,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -8643,6 +8936,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -8711,6 +9012,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -8775,6 +9080,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -8843,6 +9156,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -8943,6 +9260,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -9015,6 +9340,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
@@ -9380,6 +9709,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -9478,6 +9815,10 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, S
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
 }
 
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     self."Fn<2,Ordering>^Inspect::inspect"(f);
 }
@@ -9514,6 +9855,32 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) -> i32 {
 fn __cm_adapter__Stderr_write_via_stream(data: i32) -> i32 {
     let __async_outptr: i32 = core::builtin::realloc(0, 0, 1, 2);
     return cm_raw_call wasi:cli/Stderr::write_via_stream(data, __async_outptr);
+}
+
+fn __cm_adapter__Environment_get_environment() -> Array<[String, String]> {
+    let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    cm_raw_call wasi:cli/Environment::get_environment(__outptr);
+    let __base: i32 = core::builtin::i32_load(__outptr);
+    let __count: i32 = core::builtin::i32_load((__outptr + 4));
+    let mut __result: Array<[String, String]> = "Array<Tuple<String,String>>::with_capacity"(__count);
+    let mut __i: i32 = 0;
+    loop {
+        if (__i >= __count) {
+            break;
+        }
+        let __elem_addr: i32 = (__base + (__i * 16));
+        let __lifted_result: String = core::internal::memory_to_gc_string(core::builtin::i32_load((__elem_addr + 0)), core::builtin::i32_load(((__elem_addr + 0) + 4)));
+        let __lifted_result: String = core::internal::memory_to_gc_string(core::builtin::i32_load((__elem_addr + 8)), core::builtin::i32_load(((__elem_addr + 8) + 4)));
+        __result."Array<Tuple<String,String>>::append"([__lifted_result, __lifted_result]);
+        core::builtin::realloc(core::builtin::i32_load((__elem_addr + 0)), core::builtin::i32_load(((__elem_addr + 0) + 4)), 1, 0);
+        core::builtin::realloc(core::builtin::i32_load((__elem_addr + 8)), core::builtin::i32_load(((__elem_addr + 8) + 4)), 1, 0);
+        __i = (__i + 1);
+    }
+    if (__count > 0) {
+        core::builtin::realloc(__base, (__count * 16), 4, 0);
+    }
+    core::builtin::realloc(__outptr, 8, 4, 0);
+    return __result;
 }
 
 fn __cm_adapter__Environment_get_arguments() -> Array<String> {
@@ -9585,6 +9952,23 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
 
 pub fn "Array<String>::with_capacity"(capacity: i32) -> Array<String> {
     return Array<String> { repr: core::builtin::array_new::<String>(capacity), used: 0 };
+}
+
+pub fn "Array<Tuple<String,String>>::append"(self: &mut Array<[String, String]>, value: [String, String]) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = "core::prelude/array.wado::i32_max"((capacity * 2), 4);
+        let new_repr: builtin::array<[String, String]> = core::builtin::array_new::<[String, String]>(new_capacity);
+        core::builtin::array_copy::<[String, String]>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<[String, String]>(self.repr, used, value);
+    self.used = (used + 1);
+}
+
+pub fn "Array<Tuple<String,String>>::with_capacity"(capacity: i32) -> Array<[String, String]> {
+    return Array<Tuple<String,String>> { repr: core::builtin::array_new::<[String, String]>(capacity), used: 0 };
 }
 
 pub fn "Array<i32>::len"(self: &Array<i32>) -> i32 {
@@ -9961,6 +10345,14 @@ pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(self: &[Stream<u8
     f.Formatter::write_str("]");
 }
 
+pub fn "Tuple<String,String>^Inspect::inspect"(self: &[String, String], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    *self.0."String^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    *self.1."String^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
     f.Formatter::write_str("|&T, &T| -> Ordering");
 }
@@ -10033,6 +10425,10 @@ pub fn "Tuple<Stream<T>,StreamWritable<T>>^Display::fmt"(self: &[Stream<T>, Stre
 
 pub fn "Tuple<Stream<u8>,StreamWritable<u8>>^Display::fmt"(self: &[Stream<u8>, StreamWritable<u8>], f: &mut Formatter) {
     self."Tuple<Stream<u8>,StreamWritable<u8>>^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<String,String>^Display::fmt"(self: &[String, String], f: &mut Formatter) {
+    self."Tuple<String,String>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {

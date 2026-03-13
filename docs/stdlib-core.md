@@ -2126,7 +2126,6 @@ Writes raw bytes to stdout.
 #### `pub fn env(name: String) -> Option<String> with Environment`
 
 Returns the value of an environment variable by name.
-TODO: Implement when for-in loops are supported.
 
 #### `pub fn args() -> Array<String> with Environment`
 

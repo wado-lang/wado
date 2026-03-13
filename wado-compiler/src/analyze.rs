@@ -185,7 +185,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         return_type: func.return_type.as_ref().map(|_| "unknown".to_string()),
                         effects: func.effects.clone(),
                         is_builtin,
-                        wasi_import: None, // TODO: extract from attributes
+                        wasi_import: func.attrs.first().and_then(|a| a.wasi_import.clone()),
                     });
 
                     self.symbols
