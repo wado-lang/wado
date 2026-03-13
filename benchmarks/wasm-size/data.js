@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773441572736,
+  "lastUpdate": 1773446119774,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -2948,6 +2948,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c794bf234e7fb1b17726efab748ac30f968dab37"
         },
         "date": 1773441572549,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9236,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22767,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "894eb663d58ecce4664f9a4fe833d18cf39ad87a",
+          "message": "Merge pull request #573 from wado-lang/claude/wasi-write-stream-investigation-Kq4kJ\n\nAdd WASI filesystem streaming support with read/write transform",
+          "timestamp": "2026-03-14T08:52:52+09:00",
+          "tree_id": "516846224d23b5cda85d53277fd6304b96950c08",
+          "url": "https://github.com/wado-lang/wado/commit/894eb663d58ecce4664f9a4fe833d18cf39ad87a"
+        },
+        "date": 1773446119588,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
