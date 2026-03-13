@@ -23,13 +23,9 @@ struct WaitEvent {
     mut payload: u32,
 }
 
-struct DescriptorStat {  // from wasi:filesystem
-    mut type: i32,
-    mut link_count: u64,
-    mut size: u64,
-    mut data_access_timestamp: ref struct,
-    mut data_modification_timestamp: ref struct,
-    mut status_change_timestamp: ref struct,
+struct Instant {  // from wasi:clocks/system-clock.wado
+    mut seconds: i64,
+    mut nanoseconds: u32,
 }
 
 struct Formatter {
@@ -43,6 +39,15 @@ struct Formatter {
     mut buf: ref String,
 }
 
+struct DescriptorStat {  // from wasi:filesystem/types.wado
+    mut type: i32,
+    mut link_count: u64,
+    mut size: u64,
+    mut data_access_timestamp: ref Option<Instant>,
+    mut data_modification_timestamp: ref Option<Instant>,
+    mut status_change_timestamp: ref Option<Instant>,
+}
+
 struct [Stream<u8>, StreamWritable<u8>] {
     mut 0: i32,
     mut 1: i32,
@@ -53,21 +58,26 @@ struct [Descriptor, String] {
     mut 1: ref String,
 }
 
-struct Instant {  // from wasi:clocks
-    mut seconds: i64,
-    mut nanoseconds: u32,
-}
-
 array array<Tuple<Descriptor,String>> (mut ref "tuple/[Descriptor, String]");
 
+variant Option<Instant> {
+    Some(ref "wasi:clocks/system-clock.wado/Instant"),
+    None,
+}
+
+struct Option<Instant>::Some {
+    discriminant: i32,
+    payload_0: ref "wasi:clocks/system-clock.wado/Instant",
+}
+
 variant Result<DescriptorStat,ErrorCode> {
-    Ok(ref "wasi:filesystem/DescriptorStat"),
+    Ok(ref "wasi:filesystem/types.wado/DescriptorStat"),
     Err(i32),
 }
 
 struct Result<DescriptorStat,ErrorCode>::Ok {
     discriminant: i32,
-    payload_0: ref "wasi:filesystem/DescriptorStat",
+    payload_0: ref "wasi:filesystem/types.wado/DescriptorStat",
 }
 
 struct Result<DescriptorStat,ErrorCode>::Err {
@@ -90,16 +100,6 @@ struct Result<Descriptor,ErrorCode>::Err {
     payload_0: i32,
 }
 
-variant Option<Instant> {
-    Some(ref "wasi:clocks/Instant"),
-    None,
-}
-
-struct Option<Instant>::Some {
-    discriminant: i32,
-    payload_0: ref "wasi:clocks/Instant",
-}
-
 array array<u64> (mut u64);
 
 struct Array<u64> {  // Array<T> with T=u64
@@ -112,13 +112,13 @@ struct Array<Tuple<Descriptor,String>> {  // Array<T> with T=Tuple<Descriptor,St
     mut used: i32,
 }
 
-enum ErrorCode { Io = 0, IllegalByteSequence = 1, Pipe = 2 };  // from wasi:cli
-
-enum DescriptorType { Unknown = 0, BlockDevice = 1, CharacterDevice = 2, Directory = 3, Fifo = 4, SymbolicLink = 5, RegularFile = 6, Socket = 7 };  // from wasi:filesystem
-
-enum ErrorCode { Access = 0, Already = 1, BadDescriptor = 2, Busy = 3, Deadlock = 4, Quota = 5, Exist = 6, FileTooLarge = 7, IllegalByteSequence = 8, InProgress = 9, Interrupted = 10, Invalid = 11, Io = 12, IsDirectory = 13, Loop = 14, TooManyLinks = 15, MessageSize = 16, NameTooLong = 17, NoDevice = 18, NoEntry = 19, NoLock = 20, InsufficientMemory = 21, InsufficientSpace = 22, NotDirectory = 23, NotEmpty = 24, NotRecoverable = 25, Unsupported = 26, NoTty = 27, NoSuchDevice = 28, Overflow = 29, NotPermitted = 30, Pipe = 31, ReadOnly = 32, InvalidSeek = 33, TextFileBusy = 34, CrossDevice = 35 };  // from wasi:filesystem
+enum ErrorCode { Io = 0, IllegalByteSequence = 1, Pipe = 2 };  // from wasi:cli/types.wado
 
 enum Alignment { Left = 0, Center = 1, Right = 2 };
+
+enum DescriptorType { Unknown = 0, BlockDevice = 1, CharacterDevice = 2, Directory = 3, Fifo = 4, SymbolicLink = 5, RegularFile = 6, Socket = 7 };  // from wasi:filesystem/types.wado
+
+enum ErrorCode { Access = 0, Already = 1, BadDescriptor = 2, Busy = 3, Deadlock = 4, Quota = 5, Exist = 6, FileTooLarge = 7, IllegalByteSequence = 8, InProgress = 9, Interrupted = 10, Invalid = 11, Io = 12, IsDirectory = 13, Loop = 14, TooManyLinks = 15, MessageSize = 16, NameTooLong = 17, NoDevice = 18, NoEntry = 19, NoLock = 20, InsufficientMemory = 21, InsufficientSpace = 22, NotDirectory = 23, NotEmpty = 24, NotRecoverable = 25, Unsupported = 26, NoTty = 27, NoSuchDevice = 28, Overflow = 29, NotPermitted = 30, Pipe = 31, ReadOnly = 32, InvalidSeek = 33, TextFileBusy = 34, CrossDevice = 35 };  // from wasi:filesystem/types.wado
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
@@ -245,12 +245,12 @@ fn run() with Stdout, Stderr, Preopens {
     let dirs: ref Array<Tuple<Descriptor,String>>;
     let dir: i32;
     let stat_result: ref Result<DescriptorStat,ErrorCode>;
-    let stat: ref "wasi:filesystem/DescriptorStat";
+    let stat: ref "wasi:filesystem/types.wado/DescriptorStat";
     let size_u64: u64;
     let open_result: ref Result<Descriptor,ErrorCode>;
     let file: i32;
     let fstat_result: ref Result<DescriptorStat,ErrorCode>;
-    let fstat: ref "wasi:filesystem/DescriptorStat";
+    let fstat: ref "wasi:filesystem/types.wado/DescriptorStat";
     let __local_9: ref String;
     let __local_10: ref Formatter;
     let __local_19: ref String;
@@ -275,7 +275,7 @@ fn run() with Stdout, Stderr, Preopens {
     }.0;
     stat_result = __cm_adapter__Descriptor_stat_at(dir, 0, String { repr: array.new_data<u8>("hello.txt"), used: 9 });
     if ref.test Result<DescriptorStat,ErrorCode>::Ok(stat_result) {
-        stat = value_copy "wasi:filesystem/DescriptorStat"(ref.cast Result<DescriptorStat,ErrorCode>::Ok(stat_result).payload_0);
+        stat = value_copy "wasi:filesystem/types.wado/DescriptorStat"(ref.cast Result<DescriptorStat,ErrorCode>::Ok(stat_result).payload_0);
         if stat.type == 6 {
             "core:cli/println"(String { repr: array.new_data<u8>("stat_at: type is RegularFile (correct)"), used: 38 });
         } else {
@@ -307,7 +307,7 @@ fn run() with Stdout, Stderr, Preopens {
         file = ref.cast Result<Descriptor,ErrorCode>::Ok(open_result).payload_0;
         fstat_result = __cm_adapter__Descriptor_stat(file);
         if ref.test Result<DescriptorStat,ErrorCode>::Ok(fstat_result) {
-            fstat = value_copy "wasi:filesystem/DescriptorStat"(ref.cast Result<DescriptorStat,ErrorCode>::Ok(fstat_result).payload_0);
+            fstat = value_copy "wasi:filesystem/types.wado/DescriptorStat"(ref.cast Result<DescriptorStat,ErrorCode>::Ok(fstat_result).payload_0);
             if fstat.type == 6 {
                 "core:cli/println"(String { repr: array.new_data<u8>("stat: type is RegularFile (correct)"), used: 35 });
             } else {
@@ -386,25 +386,25 @@ fn __cm_adapter__Descriptor_stat_at(self, path_flags, path) {
     let __disc_6: i32;
     let __result_val: ref Result<DescriptorStat,ErrorCode>;
     let __edisc: i32;
-    let __eresult: "wasi:filesystem/enum:DescriptorType";
+    let __eresult: "wasi:filesystem/types.wado/enum:DescriptorType";
     let __lifted_result_10: i64;
     let __lifted_result_11: i64;
     let __disc_12: i32;
     let __option_result_13: ref Option<Instant>;
     let __lifted_result_14: i64;
     let __lifted_result_15: i32;
-    let __struct_result_16: ref "wasi:clocks/Instant";
+    let __struct_result_16: ref "wasi:clocks/system-clock.wado/Instant";
     let __disc_17: i32;
     let __option_result_18: ref Option<Instant>;
     let __lifted_result_19: i64;
     let __lifted_result_20: i32;
-    let __struct_result_21: ref "wasi:clocks/Instant";
+    let __struct_result_21: ref "wasi:clocks/system-clock.wado/Instant";
     let __disc_22: i32;
     let __option_result_23: ref Option<Instant>;
     let __lifted_result_24: i64;
     let __lifted_result_25: i32;
-    let __struct_result_26: ref "wasi:clocks/Instant";
-    let __struct_result_27: ref "wasi:filesystem/DescriptorStat";
+    let __struct_result_26: ref "wasi:clocks/system-clock.wado/Instant";
+    let __struct_result_27: ref "wasi:filesystem/types.wado/DescriptorStat";
     __path_packed = "core:internal/cm_lower_string"(path);
     __async_outptr = "mem/realloc"(0, 0, 8, 104);
     __subtask = "wasi/wasi:filesystem/Descriptor::stat_at"(self, path_flags, builtin::i32_wrap_i64(__path_packed), builtin::i32_wrap_i64(__path_packed >> 32_i64), __async_outptr);
@@ -438,7 +438,7 @@ fn __cm_adapter__Descriptor_stat_at(self, path_flags, path) {
         if __disc_12 != 0 {
             __lifted_result_14 = builtin::load_i64(((__async_outptr + 8) + 24) + 8);
             __lifted_result_15 = builtin::load_i32((((__async_outptr + 8) + 24) + 8) + 8);
-            __struct_result_16 = "wasi:clocks/Instant" { seconds: __lifted_result_14, nanoseconds: __lifted_result_15 };
+            __struct_result_16 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_14, nanoseconds: __lifted_result_15 };
             __option_result_13 = Option<Instant>::Some { discriminant: 0, payload_0: ref.as_non_null(__struct_result_16) };
         };
         __disc_17 = builtin::load_u8((__async_outptr + 8) + 48);
@@ -446,7 +446,7 @@ fn __cm_adapter__Descriptor_stat_at(self, path_flags, path) {
         if __disc_17 != 0 {
             __lifted_result_19 = builtin::load_i64(((__async_outptr + 8) + 48) + 8);
             __lifted_result_20 = builtin::load_i32((((__async_outptr + 8) + 48) + 8) + 8);
-            __struct_result_21 = "wasi:clocks/Instant" { seconds: __lifted_result_19, nanoseconds: __lifted_result_20 };
+            __struct_result_21 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_19, nanoseconds: __lifted_result_20 };
             __option_result_18 = Option<Instant>::Some { discriminant: 0, payload_0: ref.as_non_null(__struct_result_21) };
         };
         __disc_22 = builtin::load_u8((__async_outptr + 8) + 72);
@@ -454,10 +454,10 @@ fn __cm_adapter__Descriptor_stat_at(self, path_flags, path) {
         if __disc_22 != 0 {
             __lifted_result_24 = builtin::load_i64(((__async_outptr + 8) + 72) + 8);
             __lifted_result_25 = builtin::load_i32((((__async_outptr + 8) + 72) + 8) + 8);
-            __struct_result_26 = "wasi:clocks/Instant" { seconds: __lifted_result_24, nanoseconds: __lifted_result_25 };
+            __struct_result_26 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_24, nanoseconds: __lifted_result_25 };
             __option_result_23 = Option<Instant>::Some { discriminant: 0, payload_0: ref.as_non_null(__struct_result_26) };
         };
-        __struct_result_27 = "wasi:filesystem/DescriptorStat" { type: __eresult, link_count: __lifted_result_10, size: __lifted_result_11, data_access_timestamp: ref.as_non_null(__option_result_13), data_modification_timestamp: ref.as_non_null(__option_result_18), status_change_timestamp: ref.as_non_null(__option_result_23) };
+        __struct_result_27 = "wasi:filesystem/types.wado/DescriptorStat" { type: __eresult, link_count: __lifted_result_10, size: __lifted_result_11, data_access_timestamp: ref.as_non_null(__option_result_13), data_modification_timestamp: ref.as_non_null(__option_result_18), status_change_timestamp: ref.as_non_null(__option_result_23) };
         __result_val = Result<DescriptorStat,ErrorCode>::Ok { discriminant: 0, payload_0: ref.as_non_null(__struct_result_27) };
     } else {
         __result_val = Result<DescriptorStat,ErrorCode>::Err { discriminant: 1, payload_0: builtin::load_i32(__async_outptr + 8) };
@@ -501,25 +501,25 @@ fn __cm_adapter__Descriptor_stat(self) {
     let __disc_3: i32;
     let __result_val: ref Result<DescriptorStat,ErrorCode>;
     let __edisc: i32;
-    let __eresult: "wasi:filesystem/enum:DescriptorType";
+    let __eresult: "wasi:filesystem/types.wado/enum:DescriptorType";
     let __lifted_result_7: i64;
     let __lifted_result_8: i64;
     let __disc_9: i32;
     let __option_result_10: ref Option<Instant>;
     let __lifted_result_11: i64;
     let __lifted_result_12: i32;
-    let __struct_result_13: ref "wasi:clocks/Instant";
+    let __struct_result_13: ref "wasi:clocks/system-clock.wado/Instant";
     let __disc_14: i32;
     let __option_result_15: ref Option<Instant>;
     let __lifted_result_16: i64;
     let __lifted_result_17: i32;
-    let __struct_result_18: ref "wasi:clocks/Instant";
+    let __struct_result_18: ref "wasi:clocks/system-clock.wado/Instant";
     let __disc_19: i32;
     let __option_result_20: ref Option<Instant>;
     let __lifted_result_21: i64;
     let __lifted_result_22: i32;
-    let __struct_result_23: ref "wasi:clocks/Instant";
-    let __struct_result_24: ref "wasi:filesystem/DescriptorStat";
+    let __struct_result_23: ref "wasi:clocks/system-clock.wado/Instant";
+    let __struct_result_24: ref "wasi:filesystem/types.wado/DescriptorStat";
     __async_outptr = "mem/realloc"(0, 0, 8, 104);
     __subtask = "wasi/wasi:filesystem/Descriptor::stat"(self, __async_outptr);
     "core:internal/wait_for_subtask"(__subtask);
@@ -552,7 +552,7 @@ fn __cm_adapter__Descriptor_stat(self) {
         if __disc_9 != 0 {
             __lifted_result_11 = builtin::load_i64(((__async_outptr + 8) + 24) + 8);
             __lifted_result_12 = builtin::load_i32((((__async_outptr + 8) + 24) + 8) + 8);
-            __struct_result_13 = "wasi:clocks/Instant" { seconds: __lifted_result_11, nanoseconds: __lifted_result_12 };
+            __struct_result_13 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_11, nanoseconds: __lifted_result_12 };
             __option_result_10 = Option<Instant>::Some { discriminant: 0, payload_0: ref.as_non_null(__struct_result_13) };
         };
         __disc_14 = builtin::load_u8((__async_outptr + 8) + 48);
@@ -560,7 +560,7 @@ fn __cm_adapter__Descriptor_stat(self) {
         if __disc_14 != 0 {
             __lifted_result_16 = builtin::load_i64(((__async_outptr + 8) + 48) + 8);
             __lifted_result_17 = builtin::load_i32((((__async_outptr + 8) + 48) + 8) + 8);
-            __struct_result_18 = "wasi:clocks/Instant" { seconds: __lifted_result_16, nanoseconds: __lifted_result_17 };
+            __struct_result_18 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_16, nanoseconds: __lifted_result_17 };
             __option_result_15 = Option<Instant>::Some { discriminant: 0, payload_0: ref.as_non_null(__struct_result_18) };
         };
         __disc_19 = builtin::load_u8((__async_outptr + 8) + 72);
@@ -568,10 +568,10 @@ fn __cm_adapter__Descriptor_stat(self) {
         if __disc_19 != 0 {
             __lifted_result_21 = builtin::load_i64(((__async_outptr + 8) + 72) + 8);
             __lifted_result_22 = builtin::load_i32((((__async_outptr + 8) + 72) + 8) + 8);
-            __struct_result_23 = "wasi:clocks/Instant" { seconds: __lifted_result_21, nanoseconds: __lifted_result_22 };
+            __struct_result_23 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_21, nanoseconds: __lifted_result_22 };
             __option_result_20 = Option<Instant>::Some { discriminant: 0, payload_0: ref.as_non_null(__struct_result_23) };
         };
-        __struct_result_24 = "wasi:filesystem/DescriptorStat" { type: __eresult, link_count: __lifted_result_7, size: __lifted_result_8, data_access_timestamp: ref.as_non_null(__option_result_10), data_modification_timestamp: ref.as_non_null(__option_result_15), status_change_timestamp: ref.as_non_null(__option_result_20) };
+        __struct_result_24 = "wasi:filesystem/types.wado/DescriptorStat" { type: __eresult, link_count: __lifted_result_7, size: __lifted_result_8, data_access_timestamp: ref.as_non_null(__option_result_10), data_modification_timestamp: ref.as_non_null(__option_result_15), status_change_timestamp: ref.as_non_null(__option_result_20) };
         __result_val = Result<DescriptorStat,ErrorCode>::Ok { discriminant: 0, payload_0: ref.as_non_null(__struct_result_24) };
     } else {
         __result_val = Result<DescriptorStat,ErrorCode>::Err { discriminant: 1, payload_0: builtin::load_i32(__async_outptr + 8) };

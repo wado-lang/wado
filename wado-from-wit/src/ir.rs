@@ -51,10 +51,10 @@ impl WadoModule {
             match ty {
                 // Skip self-referential newtypes: they're cross-interface aliases, not definitions
                 WadoTypeDef::Newtype(n) => {
-                    if let WadoType::Named(target) = &n.target {
-                        if target == &n.name {
-                            continue;
-                        }
+                    if let WadoType::Named(target) = &n.target
+                        && target == &n.name
+                    {
+                        continue;
                     }
                     names.push(n.name.clone());
                 }

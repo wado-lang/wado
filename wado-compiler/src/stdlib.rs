@@ -118,7 +118,10 @@ pub const ALL_WASI_MODULES: &[(&str, &str)] = &[
     ("wasi:cli/terminal-stderr.wado", WASI_CLI_TERMINAL_STDERR),
     ("wasi:cli/worlds.wado", WASI_CLI_WORLDS),
     ("wasi:clocks/types.wado", WASI_CLOCKS_TYPES),
-    ("wasi:clocks/monotonic-clock.wado", WASI_CLOCKS_MONOTONIC_CLOCK),
+    (
+        "wasi:clocks/monotonic-clock.wado",
+        WASI_CLOCKS_MONOTONIC_CLOCK,
+    ),
     ("wasi:clocks/system-clock.wado", WASI_CLOCKS_SYSTEM_CLOCK),
     ("wasi:clocks/timezone.wado", WASI_CLOCKS_TIMEZONE),
     ("wasi:clocks/worlds.wado", WASI_CLOCKS_WORLDS),
@@ -134,7 +137,10 @@ pub const ALL_WASI_MODULES: &[(&str, &str)] = &[
     ("wasi:random/random.wado", WASI_RANDOM_RANDOM),
     ("wasi:random/worlds.wado", WASI_RANDOM_WORLDS),
     ("wasi:sockets/types.wado", WASI_SOCKETS_TYPES),
-    ("wasi:sockets/ip-name-lookup.wado", WASI_SOCKETS_IP_NAME_LOOKUP),
+    (
+        "wasi:sockets/ip-name-lookup.wado",
+        WASI_SOCKETS_IP_NAME_LOOKUP,
+    ),
     ("wasi:sockets/worlds.wado", WASI_SOCKETS_WORLDS),
 ];
 

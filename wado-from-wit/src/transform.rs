@@ -20,7 +20,7 @@ pub struct Transformer<'a> {
     resolve: &'a Resolve,
     /// The interface currently being transformed (for cross-interface import detection)
     current_interface: RefCell<Option<InterfaceId>>,
-    /// Accumulated foreign-type imports: type_name → wasi source path
+    /// Accumulated foreign-type imports: `type_name` → wasi source path
     pending_imports: RefCell<IndexMap<String, String>>,
 }
 
