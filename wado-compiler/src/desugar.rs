@@ -883,110 +883,18 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
     })
 }
 
-/// Desugar for-of loop to loop with iterator methods.
+/// Pass ForOf through to the resolver phase (which has type information).
 ///
-/// `for let x of items { body }` becomes:
-/// ```text
-/// {
-///     let mut __iter_N = items.into_iter();
-///     loop {
-///         if let Some(x) = __iter_N.next() { body } else { break; }
-///     }
-/// }
-/// ```
+/// The resolver handles two cases:
+/// - **Tuple iterable**: unrolls the loop body once per element (compile-time expansion)
+/// - **Non-tuple iterable**: desugars to `into_iter()` + `next()` iterator pattern
 fn desugar_for_of(f: &ForOfStmt, ctx: &mut DesugarContext) -> Stmt {
-    let span = f.span;
-    let loop_id = ctx.loop_counter;
-    ctx.loop_counter += 1;
-
-    // Save and clear for_loop_labels - breaks inside this for-of loop should
-    // target the generated loop, not an outer for loop
-    let saved_labels = std::mem::take(&mut ctx.for_loop_labels);
-
-    let iter_var = format!("__iter_{loop_id}");
-
-    // let mut __iter_N = items.into_iter();
-    let into_iter_call = Expr::MethodCall(Box::new(MethodCallExpr {
-        receiver: desugar_expr(&f.iterable),
-        method: "into_iter".to_string(),
-        type_args: vec![],
-        args: vec![],
-        has_trailing_comma: false,
-        span,
-    }));
-
-    let iter_let = Stmt::Let(LetStmt {
-        pattern: Pattern::Ident(iter_var.clone()),
-        is_mut: true,
-        is_reactive: false,
-        ty: None,
-        value: into_iter_call,
-        span,
-    });
-
-    // __iter_N.next()
-    let next_call = Expr::MethodCall(Box::new(MethodCallExpr {
-        receiver: Expr::Ident(IdentExpr {
-            name: iter_var,
-            span,
-        }),
-        method: "next".to_string(),
-        type_args: vec![],
-        args: vec![],
-        has_trailing_comma: false,
-        span,
-    }));
-
-    // Pattern: Some(binding)
-    let some_pattern = Pattern::Variant {
-        variant_name: "Some".to_string(),
-        bindings: vec![desugar_pattern(&f.binding)],
-        span,
-    };
-
-    // break;
-    let break_stmt = Stmt::Break(BreakStmt {
-        label: None,
-        value: None,
-        span,
-    });
-
-    // if let Some(x) = __iter_N.next() { body } else { break; }
-    let if_let = Stmt::If(IfStmt {
-        init: None,
-        condition: Condition::Pattern {
-            pattern: some_pattern,
-            expr: next_call,
-            span,
-        },
-        then_block: desugar_block(&f.body, ctx),
-        else_block: Some(Block {
-            stmts: vec![break_stmt],
-            span,
-        }),
-        span,
-    });
-
-    // loop { if let ... }
-    let loop_stmt = Stmt::Loop(LoopStmt {
-        body: Block {
-            stmts: vec![if_let],
-            span,
-        },
-        span,
-    });
-
-    // Restore for_loop_labels
-    ctx.for_loop_labels = saved_labels;
-
-    // Wrap in a labeled block: __for_of_N: { let mut __iter_N = ...; loop { ... } }
-    Stmt::LabeledBlock(LabeledBlockStmt {
-        label: format!("__for_of_{loop_id}"),
-        block: Block {
-            stmts: vec![iter_let, loop_stmt],
-            span,
-        },
-        span,
+    Stmt::ForOf(ForOfStmt {
+        binding: desugar_pattern(&f.binding),
+        is_mut: f.is_mut,
+        iterable: desugar_expr(&f.iterable),
+        body: desugar_block(&f.body, ctx),
+        span: f.span,
     })
 }
 

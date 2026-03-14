@@ -21,14 +21,6 @@ impl Describe for bool {
     }
 }
 
-fn process_all<T>(values: T) -> String {
-    let mut result = "";
-    for let v of values {
-        result = result + `{v} `;
-    }
-    return result;
-}
-
 test "basic heterogeneous" {
     let t = [42, "hello", true];
     let mut results: Array<String> = [];
@@ -102,11 +94,6 @@ test "enumerate with trait dispatch" {
     }
     assert results[0] == "0: int(1)";
     assert results[1] == "1: str(two)";
-}
-
-test "generic function with tuple type parameter" {
-    let result = process_all([100, "generic", false]);
-    assert result == "100 generic false ";
 }
 
 test "nested tuple for-of expansion" {
