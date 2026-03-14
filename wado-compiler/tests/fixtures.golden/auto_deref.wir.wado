@@ -229,13 +229,13 @@ fn auto_deref_for_of() with Stdout {
     let __local_0: ref Array<i32>;
     let arr: ref Array<i32>;
     let sum: i32;
-    let __iter_0: ref "core:allocator/ArrayIter<i32>";
+    let __iter_4: ref "core:allocator/ArrayIter<i32>";
     let x: i32;
     let __v0_6: i32;
     let __cond_7: bool;
     let s: ref String;
     let count: i32;
-    let __iter_1: ref StrCharIter;
+    let __iter_11: ref StrCharIter;
     let c: char;
     let __v0_13: i32;
     let __cond_14: bool;
@@ -257,12 +257,12 @@ fn auto_deref_for_of() with Stdout {
         break __seq_lit: __local_0;
     };
     sum = 0;
-    __iter_0 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(arr.repr), used: 3, index: 0 };
+    __iter_4 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(arr.repr), used: 3, index: 0 };
     b0: block {
         l1: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_0);
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 x = __sroa___pattern_temp_0_payload_0;
                 sum = sum + x;
@@ -312,7 +312,7 @@ condition: sum == 6
     };
     s = String { repr: array.new_data<u8>("abc"), used: 3 };
     count = 0;
-    __iter_1 = __inline_StrCharIter_IntoIterator__into_iter_14: block -> ref StrCharIter {
+    __iter_11 = __inline_StrCharIter_IntoIterator__into_iter_14: block -> ref StrCharIter {
         __local_42 = StrCharIter { repr: ref.as_non_null(s.repr), used: 3, byte_index: 0 };
         break __inline_StrCharIter_IntoIterator__into_iter_14: __local_42;
     };
@@ -320,7 +320,7 @@ condition: sum == 6
         l5: loop {
             let __sroa___pattern_temp_1_discriminant: i32;
             let __sroa___pattern_temp_1_payload_0: char;
-            multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = StrCharIter^Iterator::next(__iter_1);
+            multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = StrCharIter^Iterator::next(__iter_11);
             if __sroa___pattern_temp_1_discriminant == 0 {
                 c = __sroa___pattern_temp_1_payload_0;
                 count = count + 1;

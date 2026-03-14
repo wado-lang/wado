@@ -1,8 +1,8 @@
 //! Statement resolution (let, return, if, loop, break, continue, etc.).
 
 use crate::ast::{
-    self, Block, BreakStmt, ContinueStmt, ExprStmt, IfStmt, LetStmt, Literal, LoopStmt, Pattern,
-    ReturnStmt, Stmt, TaskReturnStmt,
+    self, Block, BreakStmt, Condition, ContinueStmt, Expr, ExprStmt, ForOfStmt, IdentExpr, IfStmt,
+    LetStmt, Literal, LoopStmt, MethodCallExpr, Pattern, ReturnStmt, Stmt, TaskReturnStmt,
 };
 use crate::compiler_host::CompilerHost;
 use crate::tir::{
@@ -49,10 +49,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Stmt::Return(ret_stmt) => vec![self.resolve_return(ret_stmt, ctx)],
             Stmt::TaskReturn(tr_stmt) => vec![self.resolve_task_return(tr_stmt, ctx)],
             Stmt::If(if_stmt) => self.resolve_if_stmt(if_stmt, ctx),
-            // While, For, ForOf are desugared to Loop in the desugar phase
+            // While, For are desugared to Loop in the desugar phase
             Stmt::While(_) => unreachable!("While should be desugared before resolving"),
             Stmt::For(_) => unreachable!("For should be desugared before resolving"),
-            Stmt::ForOf(_) => unreachable!("ForOf should be desugared before resolving"),
+            Stmt::ForOf(for_of) => self.resolve_for_of(for_of, ctx),
             Stmt::Loop(loop_stmt) => vec![self.resolve_loop(loop_stmt, ctx)],
             Stmt::Break(break_stmt) => vec![self.resolve_break(break_stmt, ctx)],
             Stmt::Continue(continue_stmt) => vec![self.resolve_continue(continue_stmt)],
@@ -1052,6 +1052,389 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> TirStmt {
         let body = self.resolve_block(&loop_stmt.body, ctx, None);
         TirStmt::new(TirStmtKind::Loop { body }, loop_stmt.span)
+    }
+
+    /// Resolve a for-of loop.
+    ///
+    /// For tuples: compile-time expansion (one copy of the body per element).
+    /// For non-tuples: iterator pattern via `into_iter()` + `next()`.
+    pub(super) fn resolve_for_of(
+        &mut self,
+        for_of: &ForOfStmt,
+        ctx: &mut FunctionContext,
+    ) -> Vec<TirStmt> {
+        let _span = for_of.span;
+
+        // Check if the iterable is `.enumerate()` on something
+        let (actual_iterable, is_enumerate) = match &for_of.iterable {
+            Expr::MethodCall(mc) if mc.method == "enumerate" && mc.args.is_empty() => {
+                (&mc.receiver, true)
+            }
+            _ => (&for_of.iterable, false),
+        };
+
+        // Resolve the iterable to determine its type
+        let iterable = self.resolve_expr(actual_iterable, ctx, None);
+        let iterable_type_id = iterable.type_id;
+
+        // Check if it's a tuple type
+        let tuple_elems = {
+            let type_table = self.type_table.borrow();
+            match type_table.get(iterable_type_id) {
+                ResolvedType::Tuple(elems) => Some(elems.clone()),
+                _ => None,
+            }
+        };
+
+        if let Some(elems) = tuple_elems {
+            self.resolve_tuple_for_of(for_of, iterable, &elems, is_enumerate, ctx)
+        } else {
+            self.resolve_iterator_for_of(for_of, is_enumerate, ctx)
+        }
+    }
+
+    /// Expand `for let v of tuple { body }` by unrolling the body once per element.
+    ///
+    /// Produces:
+    /// ```text
+    /// __tuple_for_of_N: {
+    ///     let __tuple_N = <iterable>;
+    ///     { let v = __tuple_N.0; body }
+    ///     { let v = __tuple_N.1; body }
+    ///     ...
+    /// }
+    /// ```
+    fn resolve_tuple_for_of(
+        &mut self,
+        for_of: &ForOfStmt,
+        iterable: TirExpr,
+        elems: &[TypeId],
+        is_enumerate: bool,
+        ctx: &mut FunctionContext,
+    ) -> Vec<TirStmt> {
+        let span = for_of.span;
+
+        // Validate: break, continue, and return are not allowed inside tuple for-of
+        // because the loop is expanded at compile time into sequential blocks.
+        if let Some((kind, bad_span)) = Self::find_control_flow_in_block(&for_of.body) {
+            let _ = self.logger.error(TypeError::InvalidPattern {
+                message: format!(
+                    "`{kind}` is not allowed inside a tuple for-of loop (the loop is expanded at compile time)"
+                ),
+                span: bad_span,
+            });
+            return vec![TirStmt::new(TirStmtKind::Expr(iterable), span)];
+        }
+        let unique_id = ctx.next_local;
+
+        // Store iterable in a temp variable to avoid re-evaluation
+        let tuple_type_id = iterable.type_id;
+        let temp_name = format!("__tuple_{unique_id}");
+        let temp_local = ctx.add_local(temp_name.clone(), tuple_type_id, false);
+        let temp_let = TirStmt::new(
+            TirStmtKind::Let {
+                name: temp_name.clone(),
+                local_index: temp_local,
+                is_mut: false,
+                is_reactive: false,
+                type_id: tuple_type_id,
+                value: iterable,
+                skip_value_copy: false,
+            },
+            span,
+        );
+
+        let mut outer_stmts = vec![temp_let];
+
+        for (i, &elem_type) in elems.iter().enumerate() {
+            ctx.enter_scope();
+
+            // Create field access: __tuple_N.i
+            let temp_ref = TirExpr::new(
+                TirExprKind::Local {
+                    index: temp_local,
+                    name: temp_name.clone(),
+                },
+                tuple_type_id,
+                span,
+            );
+            let field_access = TirExpr::new(
+                TirExprKind::FieldAccess {
+                    expr: Box::new(temp_ref),
+                    field_index: i as u32,
+                    field_name: i.to_string(),
+                },
+                elem_type,
+                span,
+            );
+
+            let mut block_stmts = Vec::new();
+
+            if is_enumerate {
+                // For enumerate: binding is typically [idx, val]
+                // Create a synthetic tuple [i32_literal, element] and destructure
+                let i32_type = TypeTable::I32;
+                let index_literal = TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: i as u64,
+                        repr: i.to_string(),
+                    },
+                    i32_type,
+                    span,
+                );
+                let enum_tuple_type = self
+                    .type_table
+                    .borrow_mut()
+                    .make_tuple(vec![i32_type, elem_type]);
+                let enum_tuple = TirExpr::new(
+                    TirExprKind::TupleLiteral {
+                        elements: vec![index_literal, field_access],
+                    },
+                    enum_tuple_type,
+                    span,
+                );
+
+                // Resolve the binding pattern against this [i32, elem_type] tuple
+                let tir_pattern = self.resolve_let_pattern(
+                    &for_of.binding,
+                    enum_tuple_type,
+                    for_of.is_mut,
+                    span,
+                    ctx,
+                );
+                block_stmts.push(TirStmt::new(
+                    TirStmtKind::LetPattern {
+                        pattern: tir_pattern,
+                        is_mut: for_of.is_mut,
+                        value: enum_tuple,
+                    },
+                    span,
+                ));
+            } else {
+                // Simple case: bind element to the pattern
+                match &for_of.binding {
+                    Pattern::Ident(name) | Pattern::MutIdent(name) => {
+                        let is_mut =
+                            for_of.is_mut || matches!(&for_of.binding, Pattern::MutIdent(_));
+                        let local_index = ctx.add_local(name.clone(), elem_type, is_mut);
+                        block_stmts.push(TirStmt::new(
+                            TirStmtKind::Let {
+                                name: name.clone(),
+                                local_index,
+                                is_mut,
+                                is_reactive: false,
+                                type_id: elem_type,
+                                value: field_access,
+                                skip_value_copy: false,
+                            },
+                            span,
+                        ));
+                    }
+                    Pattern::Tuple(_) | Pattern::Struct { .. } => {
+                        let tir_pattern = self.resolve_let_pattern(
+                            &for_of.binding,
+                            elem_type,
+                            for_of.is_mut,
+                            span,
+                            ctx,
+                        );
+                        block_stmts.push(TirStmt::new(
+                            TirStmtKind::LetPattern {
+                                pattern: tir_pattern,
+                                is_mut: for_of.is_mut,
+                                value: field_access,
+                            },
+                            span,
+                        ));
+                    }
+                    Pattern::Wildcard => {
+                        // Discard the element
+                        block_stmts.push(TirStmt::new(TirStmtKind::Expr(field_access), span));
+                    }
+                    _ => {
+                        let _ = self.logger.error(TypeError::InvalidPattern {
+                            message: "invalid binding pattern in for-of loop".to_string(),
+                            span,
+                        });
+                    }
+                }
+            }
+
+            // Resolve the body AST (each expansion gets its own resolution with different types)
+            let body = self.resolve_block(&for_of.body, ctx, None);
+            block_stmts.extend(body.stmts);
+
+            ctx.exit_scope();
+
+            outer_stmts.push(TirStmt::new(
+                TirStmtKind::LabeledBlock {
+                    label: format!("__tuple_iter_{unique_id}_{i}"),
+                    block: TirBlock::new(block_stmts, span),
+                },
+                span,
+            ));
+        }
+
+        // Wrap everything in a labeled block for break support
+        let label = format!("__tuple_for_of_{unique_id}");
+        ctx.active_labels.push(label.clone());
+        let result = vec![TirStmt::new(
+            TirStmtKind::LabeledBlock {
+                label,
+                block: TirBlock::new(outer_stmts, span),
+            },
+            span,
+        )];
+        ctx.active_labels.pop();
+        result
+    }
+
+    /// Desugar `for let v of iterable { body }` to the iterator pattern for non-tuple types.
+    ///
+    /// Constructs AST for the pattern and resolves it:
+    /// ```text
+    /// __for_of_N: {
+    ///     let mut __iter_N = iterable.into_iter();
+    ///     loop {
+    ///         if let Some(v) = __iter_N.next() { body } else { break; }
+    ///     }
+    /// }
+    /// ```
+    fn resolve_iterator_for_of(
+        &mut self,
+        for_of: &ForOfStmt,
+        is_enumerate: bool,
+        ctx: &mut FunctionContext,
+    ) -> Vec<TirStmt> {
+        let span = for_of.span;
+        let unique_id = ctx.next_local;
+        let iter_var = format!("__iter_{unique_id}");
+        let label = format!("__for_of_{unique_id}");
+
+        // Build the iterable: either raw or with .enumerate()
+        let into_iter_receiver = if is_enumerate {
+            // iterable.enumerate().into_iter() — construct enumerate() call AST
+            Expr::MethodCall(Box::new(MethodCallExpr {
+                receiver: for_of.iterable.clone(),
+                method: "enumerate".to_string(),
+                type_args: vec![],
+                args: vec![],
+                has_trailing_comma: false,
+                span,
+            }))
+        } else {
+            for_of.iterable.clone()
+        };
+
+        // let mut __iter_N = receiver.into_iter();
+        let into_iter_let = LetStmt {
+            pattern: Pattern::Ident(iter_var.clone()),
+            is_mut: true,
+            is_reactive: false,
+            ty: None,
+            value: Expr::MethodCall(Box::new(MethodCallExpr {
+                receiver: into_iter_receiver,
+                method: "into_iter".to_string(),
+                type_args: vec![],
+                args: vec![],
+                has_trailing_comma: false,
+                span,
+            })),
+            span,
+        };
+        let iter_let_tir = self.resolve_let(&into_iter_let, ctx);
+
+        // __iter_N.next()
+        let next_call = Expr::MethodCall(Box::new(MethodCallExpr {
+            receiver: Expr::Ident(IdentExpr {
+                name: iter_var,
+                span,
+            }),
+            method: "next".to_string(),
+            type_args: vec![],
+            args: vec![],
+            has_trailing_comma: false,
+            span,
+        }));
+
+        // Pattern: Some(binding)
+        let some_pattern = Pattern::Variant {
+            variant_name: "Some".to_string(),
+            bindings: vec![for_of.binding.clone()],
+            span,
+        };
+
+        // if let Some(v) = __iter_N.next() { body } else { break; }
+        let if_let = IfStmt {
+            init: None,
+            condition: Condition::Pattern {
+                pattern: some_pattern,
+                expr: next_call,
+                span,
+            },
+            then_block: for_of.body.clone(),
+            else_block: Some(Block {
+                stmts: vec![Stmt::Break(BreakStmt {
+                    label: None,
+                    value: None,
+                    span,
+                })],
+                span,
+            }),
+            span,
+        };
+
+        let if_let_tir = self.resolve_if_stmt(&if_let, ctx);
+
+        // loop { if let ... }
+        let loop_body = TirBlock::new(if_let_tir, span);
+        let loop_tir = TirStmt::new(TirStmtKind::Loop { body: loop_body }, span);
+
+        // Wrap in labeled block
+        ctx.active_labels.push(label.clone());
+        let result = vec![TirStmt::new(
+            TirStmtKind::LabeledBlock {
+                label,
+                block: TirBlock::new(vec![iter_let_tir, loop_tir], span),
+            },
+            span,
+        )];
+        ctx.active_labels.pop();
+        result
+    }
+
+    /// Check if a block contains `break`, `continue`, or `return` at the top level
+    /// (not inside nested loops/functions where they would be valid).
+    /// Returns the kind name and span of the first offending statement.
+    fn find_control_flow_in_block(block: &Block) -> Option<(&'static str, Span)> {
+        for stmt in &block.stmts {
+            if let Some(found) = Self::find_control_flow_in_stmt(stmt) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    fn find_control_flow_in_stmt(stmt: &Stmt) -> Option<(&'static str, Span)> {
+        match stmt {
+            Stmt::Break(b) => Some(("break", b.span)),
+            Stmt::Continue(c) => Some(("continue", c.span)),
+            Stmt::Return(r) => Some(("return", r.span)),
+            Stmt::TaskReturn(t) => Some(("task return", t.span)),
+            // Recurse into blocks that don't introduce a new loop/function scope
+            Stmt::If(if_stmt) => {
+                if let Some(found) = Self::find_control_flow_in_block(&if_stmt.then_block) {
+                    return Some(found);
+                }
+                if let Some(else_block) = &if_stmt.else_block {
+                    return Self::find_control_flow_in_block(else_block);
+                }
+                None
+            }
+            Stmt::LabeledBlock(lb) => Self::find_control_flow_in_block(&lb.block),
+            // Don't recurse into loops/closures — break/continue/return there are valid
+            _ => None,
+        }
     }
 
     /// Resolve a break statement

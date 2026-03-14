@@ -1023,6 +1023,10 @@ Returns a new string with trailing Unicode whitespace removed.
 
 Returns a new string with leading and trailing Unicode whitespace removed.
 
+##### `impl Add for String`
+
+###### `pub fn add(&self, other: &Self) -> Self::Output`
+
 ##### `impl Eq for String`
 
 ###### `pub fn eq(&self, other: &Self) -> bool`

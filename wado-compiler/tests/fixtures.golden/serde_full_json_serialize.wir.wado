@@ -2057,7 +2057,7 @@ fn JsonStructSerializer^SerializeStruct::field<Array<String>>(self, name, value)
 fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
     let seq_2: ref Result<JsonSeqSerializer,SerializeError>;
     let seq_3: ref JsonSeqSerializer;
-    let __iter_0: ref ArrayIter<String>;
+    let __iter_4: ref ArrayIter<String>;
     let item: ref String;
     let __local_9: ref Array<String>;
     let __local_11: ref JsonWriter;
@@ -2065,7 +2065,7 @@ fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
     seq_2 = JsonSerializer^Serializer::begin_seq(s, self.used);
     if ref.test Result<JsonSeqSerializer,SerializeError>::Ok(seq_2) {
         seq_3 = value_copy JsonSeqSerializer(ref.cast Result<JsonSeqSerializer,SerializeError>::Ok(seq_2).payload_0);
-        __iter_0 = __inline_Array_String__IntoIterator__into_iter_1: block -> ref ArrayIter<String> {
+        __iter_4 = __inline_Array_String__IntoIterator__into_iter_1: block -> ref ArrayIter<String> {
             __local_9 = self;
             break __inline_Array_String__IntoIterator__into_iter_1: ArrayIter<String> { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
         };
@@ -2073,7 +2073,7 @@ fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
             l159: loop {
                 let __sroa___pattern_temp_1_discriminant: i32;
                 let __sroa___pattern_temp_1_payload_0: ref null String;
-                multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<String>^Iterator::next(__iter_0);
+                multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<String>^Iterator::next(__iter_4);
                 if __sroa___pattern_temp_1_discriminant == 0 {
                     item = ref.as_non_null(__sroa___pattern_temp_1_payload_0);
                     drop(JsonSeqSerializer^SerializeSeq::element<String>(seq_3, item));

@@ -642,6 +642,13 @@ for let item of items {
     println(`{item}`);
 }
 
+// Tuple for-of (compile-time expansion, each element may have a different type)
+let t = [42, "hello", true];
+for let v of t {
+    println(`{v}`);  // body is expanded once per element
+}
+// break, continue, and return are not allowed inside tuple for-of
+
 // Infinite loop
 loop {
     if done { break; }

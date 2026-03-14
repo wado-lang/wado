@@ -1,0 +1,136 @@
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+impl Describe for i32 {
+    fn describe(&self) -> String {
+        return `int({*self})`;
+    }
+}
+
+impl Describe for String {
+    fn describe(&self) -> String {
+        return `str({*self})`;
+    }
+}
+
+impl Describe for bool {
+    fn describe(&self) -> String {
+        if *self { return "yes"; }
+        return "no";
+    }
+}
+
+test "basic heterogeneous" {
+    let t = [42, "hello", true];
+    let mut results: Array<String> = [];
+    for let v of t {
+        results.append(`{v}`);
+    }
+    assert results[0] == "42";
+    assert results[1] == "hello";
+    assert results[2] == "true";
+}
+
+test "enumerate" {
+    let t = [10, "world", false];
+    let mut indices: Array<i32> = [];
+    let mut values: Array<String> = [];
+    for let [i, v] of t.enumerate() {
+        indices.append(i);
+        values.append(`{v}`);
+    }
+    assert indices[0] == 0;
+    assert indices[1] == 1;
+    assert indices[2] == 2;
+    assert values[0] == "10";
+    assert values[1] == "world";
+    assert values[2] == "false";
+}
+
+test "homogeneous tuple" {
+    let t = [1, 2, 3];
+    let mut sum = 0;
+    for let v of t {
+        sum = sum + v;
+    }
+    assert sum == 6;
+}
+
+test "empty tuple" {
+    let t: [] = [];
+    let mut count = 0;
+    for let v of t {
+        count = count + 1;
+    }
+    assert count == 0;
+}
+
+test "single element" {
+    let t = [99];
+    let mut got = 0;
+    for let v of t {
+        got = v;
+    }
+    assert got == 99;
+}
+
+test "trait dispatch per element type" {
+    let t = [42, "wado", true];
+    let mut results: Array<String> = [];
+    for let v of t {
+        results.append(v.describe());
+    }
+    assert results[0] == "int(42)";
+    assert results[1] == "str(wado)";
+    assert results[2] == "yes";
+}
+
+test "enumerate with trait dispatch" {
+    let t = [1, "two"];
+    let mut results: Array<String> = [];
+    for let [i, v] of t.enumerate() {
+        results.append(`{i}: {v.describe()}`);
+    }
+    assert results[0] == "0: int(1)";
+    assert results[1] == "1: str(two)";
+}
+
+test "nested tuple for-of expansion" {
+    let t = [[1, "a"], [true, 3.14]];
+    let mut results: Array<String> = [];
+    for let v of t {
+        for let w of v {
+            results.append(`{w}`);
+        }
+    }
+    assert results[0] == "1";
+    assert results[1] == "a";
+    assert results[2] == "true";
+    assert results[3] == "3.14";
+}
+
+test "mutable binding" {
+    let t = [10, 20, 30];
+    let mut results: Array<i32> = [];
+    for let mut v of t {
+        v = v + 1;
+        results.append(v);
+    }
+    assert results[0] == 11;
+    assert results[1] == 21;
+    assert results[2] == 31;
+}
+
+test "enumerate index as compile-time constant" {
+    let strings: Array<String> = ["a", "b", "c"];
+    let t = [100, "hello"];
+    let mut result = strings[0];
+    for let [i, v] of t.enumerate() {
+        result = result + `{v}` + strings[i + 1];
+    }
+    assert result == "a100bhelloc";
+}
+
+__DATA__
+{"test": {}}
