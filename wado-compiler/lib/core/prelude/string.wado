@@ -509,37 +509,60 @@ impl String {
     /// Returns Ok(String) on success, or Err(String) with an error message on failure.
     ///
     /// Accepts any `IntoIterator` whose item is `u8`: `Array<u8>`, `StrUtf8ByteIter`, etc.
-    pub fn from_bytes<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, String> {
+    pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, String> {
         let mut builder = String::with_capacity(8);
         let mut iter = bytes.into_iter();
-        loop {
-            if let Some(b0) = iter.next() {
-                let mut code: u32 = 0;
-                if b0 < 0x80 {
-                    // 1-byte (ASCII)
-                    code = b0 as u32;
-                } else if b0 < 0xC2 {
-                    // Bare continuation byte (0x80–0xBF) or overlong 2-byte lead (0xC0, 0xC1)
-                    return Result::Err("invalid UTF-8: unexpected byte");
-                } else if b0 < 0xE0 {
-                    // 2-byte sequence: 110xxxxx 10xxxxxx
-                    if let Some(b1) = iter.next() {
+        while let Some(b0) = iter.next() {
+            let mut code: u32 = 0;
+            if b0 < 0x80 {
+                // 1-byte (ASCII)
+                code = b0 as u32;
+            } else if b0 < 0xC2 {
+                // Bare continuation byte (0x80–0xBF) or overlong 2-byte lead (0xC0, 0xC1)
+                return Result::Err("invalid UTF-8: unexpected byte");
+            } else if b0 < 0xE0 {
+                // 2-byte sequence: 110xxxxx 10xxxxxx
+                if let Some(b1) = iter.next() {
+                    if b1 < 0x80 || b1 > 0xBF {
+                        return Result::Err("invalid UTF-8: bad continuation byte");
+                    }
+                    code = ((b0 & 0x1F) << 6 | b1 & 0x3F) as u32;
+                } else {
+                    return Result::Err("invalid UTF-8: truncated sequence");
+                }
+            } else if b0 < 0xF0 {
+                // 3-byte sequence: 1110xxxx 10xxxxxx 10xxxxxx
+                if let Some(b1) = iter.next() {
+                    if let Some(b2) = iter.next() {
+                        if b0 == 0xE0 && b1 < 0xA0 {
+                            return Result::Err("invalid UTF-8: overlong sequence");
+                        }
+                        if b0 == 0xED && b1 >= 0xA0 {
+                            return Result::Err("invalid UTF-8: surrogate codepoint");
+                        }
                         if b1 < 0x80 || b1 > 0xBF {
                             return Result::Err("invalid UTF-8: bad continuation byte");
                         }
-                        code = ((b0 & 0x1F) << 6 | b1 & 0x3F) as u32;
+                        if b2 < 0x80 || b2 > 0xBF {
+                            return Result::Err("invalid UTF-8: bad continuation byte");
+                        }
+                        code = ((b0 & 0x0F) << 12 | (b1 & 0x3F) << 6 | b2 & 0x3F) as u32;
                     } else {
                         return Result::Err("invalid UTF-8: truncated sequence");
                     }
-                } else if b0 < 0xF0 {
-                    // 3-byte sequence: 1110xxxx 10xxxxxx 10xxxxxx
-                    if let Some(b1) = iter.next() {
-                        if let Some(b2) = iter.next() {
-                            if b0 == 0xE0 && b1 < 0xA0 {
+                } else {
+                    return Result::Err("invalid UTF-8: truncated sequence");
+                }
+            } else if b0 < 0xF5 {
+                // 4-byte sequence: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+                if let Some(b1) = iter.next() {
+                    if let Some(b2) = iter.next() {
+                        if let Some(b3) = iter.next() {
+                            if b0 == 0xF0 && b1 < 0x90 {
                                 return Result::Err("invalid UTF-8: overlong sequence");
                             }
-                            if b0 == 0xED && b1 >= 0xA0 {
-                                return Result::Err("invalid UTF-8: surrogate codepoint");
+                            if b0 == 0xF4 && b1 > 0x8F {
+                                return Result::Err("invalid UTF-8: out of Unicode range");
                             }
                             if b1 < 0x80 || b1 > 0xBF {
                                 return Result::Err("invalid UTF-8: bad continuation byte");
@@ -547,37 +570,10 @@ impl String {
                             if b2 < 0x80 || b2 > 0xBF {
                                 return Result::Err("invalid UTF-8: bad continuation byte");
                             }
-                            code = ((b0 & 0x0F) << 12 | (b1 & 0x3F) << 6 | b2 & 0x3F) as u32;
-                        } else {
-                            return Result::Err("invalid UTF-8: truncated sequence");
-                        }
-                    } else {
-                        return Result::Err("invalid UTF-8: truncated sequence");
-                    }
-                } else if b0 < 0xF5 {
-                    // 4-byte sequence: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
-                    if let Some(b1) = iter.next() {
-                        if let Some(b2) = iter.next() {
-                            if let Some(b3) = iter.next() {
-                                if b0 == 0xF0 && b1 < 0x90 {
-                                    return Result::Err("invalid UTF-8: overlong sequence");
-                                }
-                                if b0 == 0xF4 && b1 > 0x8F {
-                                    return Result::Err("invalid UTF-8: out of Unicode range");
-                                }
-                                if b1 < 0x80 || b1 > 0xBF {
-                                    return Result::Err("invalid UTF-8: bad continuation byte");
-                                }
-                                if b2 < 0x80 || b2 > 0xBF {
-                                    return Result::Err("invalid UTF-8: bad continuation byte");
-                                }
-                                if b3 < 0x80 || b3 > 0xBF {
-                                    return Result::Err("invalid UTF-8: bad continuation byte");
-                                }
-                                code = ((b0 & 0x07) << 18 | (b1 & 0x3F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F) as u32;
-                            } else {
-                                return Result::Err("invalid UTF-8: truncated sequence");
+                            if b3 < 0x80 || b3 > 0xBF {
+                                return Result::Err("invalid UTF-8: bad continuation byte");
                             }
+                            code = ((b0 & 0x07) << 18 | (b1 & 0x3F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F) as u32;
                         } else {
                             return Result::Err("invalid UTF-8: truncated sequence");
                         }
@@ -585,14 +581,123 @@ impl String {
                         return Result::Err("invalid UTF-8: truncated sequence");
                     }
                 } else {
-                    // 0xF5–0xFF: always invalid
-                    return Result::Err("invalid UTF-8: byte out of range");
+                    return Result::Err("invalid UTF-8: truncated sequence");
                 }
-                builder.append_char(char::from_u32_unchecked(code));
+            } else {
+                // 0xF5–0xFF: always invalid
+                return Result::Err("invalid UTF-8: byte out of range");
+            }
+            builder.append_char(char::from_u32_unchecked(code));
+        }
+        return Result::Ok(builder);
+    }
+
+    /// Build a String from any iterable of bytes, replacing invalid UTF-8 sequences with U+FFFD.
+    ///
+    /// Accepts any `IntoIterator` whose item is `u8`: `Array<u8>`, `StrUtf8ByteIter`, etc.
+    pub fn from_utf8_lossy<I: IntoIterator<Item = u8>>(bytes: I) -> String {
+        let mut builder = String::with_capacity(8);
+        let mut iter = bytes.into_iter();
+        let mut pending: Option<u8> = null;
+        loop {
+            let b0_opt: Option<u8> = match pending {
+                Some(b) => {
+                    pending = null;
+                    Option::Some(b)
+                }
+                None => iter.next(),
+            };
+            if let Some(b0) = b0_opt {
+                if b0 < 0x80 {
+                    // 1-byte (ASCII)
+                    builder.append_char(char::from_u32_unchecked(b0 as u32));
+                } else if b0 < 0xC2 {
+                    // Bare continuation byte or overlong 2-byte lead: replace
+                    builder.append_char('\uFFFD');
+                } else if b0 < 0xE0 {
+                    // 2-byte sequence: 110xxxxx 10xxxxxx
+                    if let Some(b1) = iter.next() {
+                        if b1 < 0x80 || b1 > 0xBF {
+                            builder.append_char('\uFFFD');
+                            pending = Option::Some(b1);
+                        } else {
+                            let code = ((b0 & 0x1F) << 6 | b1 & 0x3F) as u32;
+                            builder.append_char(char::from_u32_unchecked(code));
+                        }
+                    } else {
+                        builder.append_char('\uFFFD');
+                    }
+                } else if b0 < 0xF0 {
+                    // 3-byte sequence: 1110xxxx 10xxxxxx 10xxxxxx
+                    if let Some(b1) = iter.next() {
+                        if b1 < 0x80 || b1 > 0xBF || (b0 == 0xE0 && b1 < 0xA0) || (b0 == 0xED && b1 >= 0xA0) {
+                            builder.append_char('\uFFFD');
+                            pending = Option::Some(b1);
+                        } else if let Some(b2) = iter.next() {
+                            if b2 < 0x80 || b2 > 0xBF {
+                                builder.append_char('\uFFFD');
+                                pending = Option::Some(b2);
+                            } else {
+                                let code = ((b0 & 0x0F) << 12 | (b1 & 0x3F) << 6 | b2 & 0x3F) as u32;
+                                builder.append_char(char::from_u32_unchecked(code));
+                            }
+                        } else {
+                            builder.append_char('\uFFFD');
+                        }
+                    } else {
+                        builder.append_char('\uFFFD');
+                    }
+                } else if b0 < 0xF5 {
+                    // 4-byte sequence: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+                    if let Some(b1) = iter.next() {
+                        if b1 < 0x80 || b1 > 0xBF || (b0 == 0xF0 && b1 < 0x90) || (b0 == 0xF4 && b1 > 0x8F) {
+                            builder.append_char('\uFFFD');
+                            pending = Option::Some(b1);
+                        } else if let Some(b2) = iter.next() {
+                            if b2 < 0x80 || b2 > 0xBF {
+                                builder.append_char('\uFFFD');
+                                pending = Option::Some(b2);
+                            } else if let Some(b3) = iter.next() {
+                                if b3 < 0x80 || b3 > 0xBF {
+                                    builder.append_char('\uFFFD');
+                                    pending = Option::Some(b3);
+                                } else {
+                                    let code = ((b0 & 0x07) << 18 | (b1 & 0x3F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F) as u32;
+                                    builder.append_char(char::from_u32_unchecked(code));
+                                }
+                            } else {
+                                builder.append_char('\uFFFD');
+                            }
+                        } else {
+                            builder.append_char('\uFFFD');
+                        }
+                    } else {
+                        builder.append_char('\uFFFD');
+                    }
+                } else {
+                    // 0xF5–0xFF: always invalid
+                    builder.append_char('\uFFFD');
+                }
             } else {
                 break;
             }
         }
-        return Result::Ok(builder);
+        return builder;
+    }
+
+    /// Build a String from any iterable of bytes without UTF-8 validation.
+    ///
+    /// Accepts any `IntoIterator` whose item is `u8`: `Array<u8>`, `StrUtf8ByteIter`, etc.
+    ///
+    /// # Safety
+    /// The caller must ensure the bytes form valid UTF-8, otherwise the resulting
+    /// String will contain invalid UTF-8, which may cause undefined behavior.
+    pub fn from_utf8_unchecked<I: IntoIterator<Item = u8>>(bytes: I) -> String {
+        let mut builder = String::with_capacity(8);
+        for let b of bytes {
+            let idx = builder.internal_reserve_uninit(1);
+            builder.set_byte(idx, b);
+        }
+        return builder;
     }
 }

@@ -436,98 +436,189 @@ test "same prefix different suffix" {
     assert "hello1" != "hello2";
 }
 
-test "String::from_bytes empty" {
-    assert String::from_bytes([] as Array<u8>) matches { Ok(s) && s == "" };
+test "String::from_utf8 empty" {
+    assert String::from_utf8([] as Array<u8>) matches { Ok(s) && s == "" };
 }
 
-test "String::from_bytes ASCII" {
-    assert String::from_bytes([72, 101, 108, 108, 111] as Array<u8>) matches { Ok(s) && s == "Hello" };
+test "String::from_utf8 ASCII" {
+    assert String::from_utf8([72, 101, 108, 108, 111] as Array<u8>) matches { Ok(s) && s == "Hello" };
 }
 
-test "String::from_bytes 2-byte UTF-8" {
+test "String::from_utf8 2-byte UTF-8" {
     // ñ = 0xC3 0xB1
-    assert String::from_bytes([0xC3, 0xB1] as Array<u8>) matches { Ok(s) && s == "ñ" };
+    assert String::from_utf8([0xC3, 0xB1] as Array<u8>) matches { Ok(s) && s == "ñ" };
 }
 
-test "String::from_bytes 3-byte UTF-8" {
+test "String::from_utf8 3-byte UTF-8" {
     // 日 = 0xE6 0x97 0xA5
-    assert String::from_bytes([0xE6, 0x97, 0xA5] as Array<u8>) matches { Ok(s) && s == "日" };
+    assert String::from_utf8([0xE6, 0x97, 0xA5] as Array<u8>) matches { Ok(s) && s == "日" };
 }
 
-test "String::from_bytes 4-byte UTF-8" {
+test "String::from_utf8 4-byte UTF-8" {
     // 😀 = 0xF0 0x9F 0x98 0x80
-    assert String::from_bytes([0xF0, 0x9F, 0x98, 0x80] as Array<u8>) matches { Ok(s) && s == "😀" };
+    assert String::from_utf8([0xF0, 0x9F, 0x98, 0x80] as Array<u8>) matches { Ok(s) && s == "😀" };
 }
 
-test "String::from_bytes mixed valid UTF-8" {
+test "String::from_utf8 mixed valid UTF-8" {
     // "Aéï日😀" = 12 bytes
-    assert String::from_bytes([0x41, 0xC3, 0xA9, 0xC3, 0xAF, 0xE6, 0x97, 0xA5, 0xF0, 0x9F, 0x98, 0x80] as Array<u8>) matches { Ok(s) && s == "Aéï日😀" };
+    assert String::from_utf8([0x41, 0xC3, 0xA9, 0xC3, 0xAF, 0xE6, 0x97, 0xA5, 0xF0, 0x9F, 0x98, 0x80] as Array<u8>) matches { Ok(s) && s == "Aéï日😀" };
 }
 
-test "String::from_bytes roundtrip" {
+test "String::from_utf8 roundtrip" {
     let original = "Hello, 世界! 😀";
     let bytes: Array<u8> = original.bytes().collect();
-    assert String::from_bytes(bytes) matches { Ok(s) && s == original };
+    assert String::from_utf8(bytes) matches { Ok(s) && s == original };
 }
 
-test "String::from_bytes from bytes iter" {
+test "String::from_utf8 from bytes iter" {
     // Accepts any IntoIterator<Item = u8>: pass a bytes iterator directly
-    assert String::from_bytes("日本語".bytes()) matches { Ok(s) && s == "日本語" };
+    assert String::from_utf8("日本語".bytes()) matches { Ok(s) && s == "日本語" };
 }
 
-test "String::from_bytes lonely continuation byte" {
-    assert String::from_bytes([0x80] as Array<u8>) matches { Err(_) };
+test "String::from_utf8 lonely continuation byte" {
+    assert String::from_utf8([0x80] as Array<u8>) matches { Err(_) };
 }
 
-test "String::from_bytes overlong 2-byte 0xC0" {
-    assert String::from_bytes([0xC0, 0x80] as Array<u8>) matches { Err(_) };
+test "String::from_utf8 overlong 2-byte 0xC0" {
+    assert String::from_utf8([0xC0, 0x80] as Array<u8>) matches { Err(_) };
 }
 
-test "String::from_bytes overlong 2-byte 0xC1" {
-    assert String::from_bytes([0xC1, 0xBF] as Array<u8>) matches { Err(_) };
+test "String::from_utf8 overlong 2-byte 0xC1" {
+    assert String::from_utf8([0xC1, 0xBF] as Array<u8>) matches { Err(_) };
 }
 
-test "String::from_bytes bad continuation byte in 2-byte" {
+test "String::from_utf8 bad continuation byte in 2-byte" {
     // 0xC3 should be followed by 0x80-0xBF; 0x41 ('A') is invalid
-    assert String::from_bytes([0xC3, 0x41] as Array<u8>) matches { Err(_) };
+    assert String::from_utf8([0xC3, 0x41] as Array<u8>) matches { Err(_) };
 }
 
-test "String::from_bytes truncated 2-byte" {
-    assert String::from_bytes([0xC3] as Array<u8>) matches { Err(_) };
+test "String::from_utf8 truncated 2-byte" {
+    assert String::from_utf8([0xC3] as Array<u8>) matches { Err(_) };
 }
 
-test "String::from_bytes truncated 3-byte" {
-    assert String::from_bytes([0xE6, 0x97] as Array<u8>) matches { Err(_) };
+test "String::from_utf8 truncated 3-byte" {
+    assert String::from_utf8([0xE6, 0x97] as Array<u8>) matches { Err(_) };
 }
 
-test "String::from_bytes truncated 4-byte" {
-    assert String::from_bytes([0xF0, 0x9F, 0x98] as Array<u8>) matches { Err(_) };
+test "String::from_utf8 truncated 4-byte" {
+    assert String::from_utf8([0xF0, 0x9F, 0x98] as Array<u8>) matches { Err(_) };
 }
 
-test "String::from_bytes overlong 3-byte" {
+test "String::from_utf8 overlong 3-byte" {
     // 0xE0 followed by < 0xA0 is overlong
-    assert String::from_bytes([0xE0, 0x80, 0x80] as Array<u8>) matches { Err(_) };
+    assert String::from_utf8([0xE0, 0x80, 0x80] as Array<u8>) matches { Err(_) };
 }
 
-test "String::from_bytes surrogate" {
+test "String::from_utf8 surrogate" {
     // U+D800 encoded as UTF-8: 0xED 0xA0 0x80
-    assert String::from_bytes([0xED, 0xA0, 0x80] as Array<u8>) matches { Err(_) };
+    assert String::from_utf8([0xED, 0xA0, 0x80] as Array<u8>) matches { Err(_) };
 }
 
-test "String::from_bytes overlong 4-byte" {
+test "String::from_utf8 overlong 4-byte" {
     // 0xF0 followed by < 0x90 is overlong
-    assert String::from_bytes([0xF0, 0x80, 0x80, 0x80] as Array<u8>) matches { Err(_) };
+    assert String::from_utf8([0xF0, 0x80, 0x80, 0x80] as Array<u8>) matches { Err(_) };
 }
 
-test "String::from_bytes out of range 4-byte" {
+test "String::from_utf8 out of range 4-byte" {
     // 0xF4 followed by > 0x8F encodes > U+10FFFF
-    assert String::from_bytes([0xF4, 0x90, 0x80, 0x80] as Array<u8>) matches { Err(_) };
+    assert String::from_utf8([0xF4, 0x90, 0x80, 0x80] as Array<u8>) matches { Err(_) };
 }
 
-test "String::from_bytes invalid byte 0xF5" {
-    assert String::from_bytes([0xF5, 0x80, 0x80, 0x80] as Array<u8>) matches { Err(_) };
+test "String::from_utf8 invalid byte 0xF5" {
+    assert String::from_utf8([0xF5, 0x80, 0x80, 0x80] as Array<u8>) matches { Err(_) };
 }
 
-test "String::from_bytes invalid byte 0xFF" {
-    assert String::from_bytes([0xFF] as Array<u8>) matches { Err(_) };
+test "String::from_utf8 invalid byte 0xFF" {
+    assert String::from_utf8([0xFF] as Array<u8>) matches { Err(_) };
+}
+
+test "String::from_utf8_lossy empty" {
+    assert String::from_utf8_lossy([] as Array<u8>) == "";
+}
+
+test "String::from_utf8_lossy ASCII passthrough" {
+    assert String::from_utf8_lossy([72, 101, 108, 108, 111] as Array<u8>) == "Hello";
+}
+
+test "String::from_utf8_lossy valid multibyte passthrough" {
+    // "日" = 0xE6 0x97 0xA5, "😀" = 0xF0 0x9F 0x98 0x80
+    assert String::from_utf8_lossy([0xE6, 0x97, 0xA5, 0xF0, 0x9F, 0x98, 0x80] as Array<u8>) == "日😀";
+}
+
+test "String::from_utf8_lossy lone continuation byte" {
+    // 0x80 → U+FFFD
+    assert String::from_utf8_lossy([0x80] as Array<u8>) == "\uFFFD";
+}
+
+test "String::from_utf8_lossy invalid byte 0xFF" {
+    assert String::from_utf8_lossy([0xFF] as Array<u8>) == "\uFFFD";
+}
+
+test "String::from_utf8_lossy truncated 2-byte" {
+    // 0xC3 alone → U+FFFD
+    assert String::from_utf8_lossy([0xC3] as Array<u8>) == "\uFFFD";
+}
+
+test "String::from_utf8_lossy truncated 3-byte" {
+    // 0xE6 0x97 alone → U+FFFD
+    assert String::from_utf8_lossy([0xE6, 0x97] as Array<u8>) == "\uFFFD";
+}
+
+test "String::from_utf8_lossy truncated 4-byte" {
+    // 0xF0 0x9F 0x98 alone → U+FFFD
+    assert String::from_utf8_lossy([0xF0, 0x9F, 0x98] as Array<u8>) == "\uFFFD";
+}
+
+test "String::from_utf8_lossy bad continuation replaced then ASCII continues" {
+    // 0xC3 (2-byte lead) followed by 0x41 ('A', not a continuation) → FFFD + 'A'
+    assert String::from_utf8_lossy([0xC3, 0x41] as Array<u8>) == "\uFFFDA";
+}
+
+test "String::from_utf8_lossy overlong 2-byte" {
+    // 0xC0, 0x80 → FFFD, FFFD
+    assert String::from_utf8_lossy([0xC0, 0x80] as Array<u8>) == "\uFFFD\uFFFD";
+}
+
+test "String::from_utf8_lossy overlong 3-byte" {
+    // 0xE0, 0x80, 0x80 → FFFD, FFFD, FFFD
+    assert String::from_utf8_lossy([0xE0, 0x80, 0x80] as Array<u8>) == "\uFFFD\uFFFD\uFFFD";
+}
+
+test "String::from_utf8_lossy surrogate" {
+    // U+D800 = 0xED, 0xA0, 0x80 → FFFD, FFFD, FFFD
+    assert String::from_utf8_lossy([0xED, 0xA0, 0x80] as Array<u8>) == "\uFFFD\uFFFD\uFFFD";
+}
+
+test "String::from_utf8_lossy mixed valid and invalid" {
+    // 'A' + 0xFF (invalid) + 'B' → "A" + FFFD + "B"
+    assert String::from_utf8_lossy([0x41, 0xFF, 0x42] as Array<u8>) == "A\uFFFDB";
+}
+
+test "String::from_utf8_lossy roundtrip valid" {
+    let original = "Hello, 世界! 😀";
+    let bytes: Array<u8> = original.bytes().collect();
+    assert String::from_utf8_lossy(bytes) == original;
+}
+
+test "String::from_utf8_unchecked empty" {
+    assert String::from_utf8_unchecked([] as Array<u8>) == "";
+}
+
+test "String::from_utf8_unchecked ASCII" {
+    assert String::from_utf8_unchecked([72, 101, 108, 108, 111] as Array<u8>) == "Hello";
+}
+
+test "String::from_utf8_unchecked multibyte" {
+    // "日" = 0xE6 0x97 0xA5
+    assert String::from_utf8_unchecked([0xE6, 0x97, 0xA5] as Array<u8>) == "日";
+}
+
+test "String::from_utf8_unchecked roundtrip" {
+    let original = "Hello, 世界! 😀";
+    let bytes: Array<u8> = original.bytes().collect();
+    assert String::from_utf8_unchecked(bytes) == original;
+}
+
+test "String::from_utf8_unchecked from bytes iter" {
+    assert String::from_utf8_unchecked("日本語".bytes()) == "日本語";
 }
