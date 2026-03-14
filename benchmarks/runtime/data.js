@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773484281074,
+  "lastUpdate": 1773490027699,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12329,6 +12329,165 @@ window.BENCHMARK_DATA = {
           {
             "name": "json/catalog (-O3)",
             "value": 113,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7275318c152f2a730da1b067b1484268a6afa47f",
+          "message": "Merge pull request #582 from wado-lang/claude/improve-http-server-O8aOD\n\nFix associated type resolution for newtypes in monomorphizer",
+          "timestamp": "2026-03-14T21:04:37+09:00",
+          "tree_id": "bd095a5bb01cbb440cb52222dd2a426ce1002634",
+          "url": "https://github.com/wado-lang/wado/commit/7275318c152f2a730da1b067b1484268a6afa47f"
+        },
+        "date": 1773490027521,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "count_prime (-O1)",
+            "value": 3063,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O1)",
+            "value": 183,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O1)",
+            "value": 158,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O1)",
+            "value": 176,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O1)",
+            "value": 69,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O1)",
+            "value": 746,
+            "unit": "ms"
+          },
+          {
+            "name": "json/twitter (-O1)",
+            "value": 117,
+            "unit": "ms"
+          },
+          {
+            "name": "json/canada (-O1)",
+            "value": 459,
+            "unit": "ms"
+          },
+          {
+            "name": "json/catalog (-O1)",
+            "value": 120,
+            "unit": "ms"
+          },
+          {
+            "name": "count_prime (-O2)",
+            "value": 3071,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O2)",
+            "value": 183,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O2)",
+            "value": 130,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O2)",
+            "value": 171,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O2)",
+            "value": 54,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O2)",
+            "value": 755,
+            "unit": "ms"
+          },
+          {
+            "name": "json/twitter (-O2)",
+            "value": 116,
+            "unit": "ms"
+          },
+          {
+            "name": "json/canada (-O2)",
+            "value": 458,
+            "unit": "ms"
+          },
+          {
+            "name": "json/catalog (-O2)",
+            "value": 121,
+            "unit": "ms"
+          },
+          {
+            "name": "count_prime (-O3)",
+            "value": 3064,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O3)",
+            "value": 183,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O3)",
+            "value": 81,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O3)",
+            "value": 169,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O3)",
+            "value": 48,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O3)",
+            "value": 737,
+            "unit": "ms"
+          },
+          {
+            "name": "json/twitter (-O3)",
+            "value": 118,
+            "unit": "ms"
+          },
+          {
+            "name": "json/canada (-O3)",
+            "value": 456,
+            "unit": "ms"
+          },
+          {
+            "name": "json/catalog (-O3)",
+            "value": 122,
             "unit": "ms"
           }
         ]
