@@ -170,7 +170,7 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     p = Point { x: 10, y: 20 };
-    label = value_copy String(let __match_scrut_0: ref Point; __match_scrut_0 = p; if 1 -> ref String {
+    label = value_copy String(let __match_scrut_0: ref Point; __match_scrut_0 = p; block -> ref String {
         __local_1 = __match_scrut_0.x;
         __local_2 = __match_scrut_0.y;
         if if __local_1 > 0 -> i32 {
@@ -181,30 +181,20 @@ fn run() with Stdout {
             __local_1 = __match_scrut_0.x;
             __local_2 = __match_scrut_0.y;
             String { repr: array.new_data<u8>("positive"), used: 8 };
-        } else if 1 -> ref String {
-            __local_3 = __match_scrut_0.x;
-            if __local_3 > 0 -> ref String {
+        } else {
+            block -> ref String {
                 __local_3 = __match_scrut_0.x;
-                String { repr: array.new_data<u8>("positive x"), used: 10 };
-            } else {
-                String { repr: array.new_data<u8>("other"), used: 5 };
+                if __local_3 > 0 -> ref String {
+                    __local_3 = __match_scrut_0.x;
+                    String { repr: array.new_data<u8>("positive x"), used: 10 };
+                } else {
+                    String { repr: array.new_data<u8>("other"), used: 5 };
+                };
             };
-        } else {
-            String { repr: array.new_data<u8>("other"), used: 5 };
         };
-    } else if 1 -> ref String {
-        __local_3 = __match_scrut_0.x;
-        if __local_3 > 0 -> ref String {
-            __local_3 = __match_scrut_0.x;
-            String { repr: array.new_data<u8>("positive x"), used: 10 };
-        } else {
-            String { repr: array.new_data<u8>("other"), used: 5 };
-        };
-    } else {
-        String { repr: array.new_data<u8>("other"), used: 5 };
     });
     "core:cli/println"(label);
-    label2 = value_copy String(let __match_scrut_1: ref Point; __match_scrut_1 = p; if 1 -> ref String {
+    label2 = value_copy String(let __match_scrut_1: ref Point; __match_scrut_1 = p; block -> ref String {
         __local_5 = __match_scrut_1.x;
         __local_6 = __match_scrut_1.y;
         if (__local_5 + __local_6) > 25 -> ref String {
@@ -216,13 +206,9 @@ fn run() with Stdout {
             __local_8 = __match_scrut_1.y;
             String { repr: array.new_data<u8>("small"), used: 5 };
         };
-    } else {
-        __local_7 = __match_scrut_1.x;
-        __local_8 = __match_scrut_1.y;
-        String { repr: array.new_data<u8>("small"), used: 5 };
     });
     "core:cli/println"(label2);
-    desc = value_copy String(let __match_scrut_2: ref Point; __match_scrut_2 = p; if 1 -> ref String {
+    desc = value_copy String(let __match_scrut_2: ref Point; __match_scrut_2 = p; block -> ref String {
         __local_10 = __match_scrut_2.x;
         __local_11 = __match_scrut_2.y;
         if __local_10 == __local_11 -> ref String {
@@ -268,29 +254,6 @@ fn run() with Stdout {
                 i32::fmt_decimal(__local_33.value, __local_34);
                 break __tmpl: __local_17;
             };
-        };
-    } else {
-        __local_12 = __match_scrut_2.x;
-        __local_13 = __match_scrut_2.y;
-        __tmpl: block -> ref String {
-            __local_17 = String { repr: builtin::array_new<u8>(34), used: 0 };
-            __local_18 = __inline_Formatter__new_7: block -> ref Formatter {
-                __local_27 = __local_17;
-                break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_27) };
-            };
-            __local_28 = "core:internal/Box<i32>" { value: __local_12 };
-            __local_29 = __local_18;
-            i32::fmt_decimal(__local_28.value, __local_29);
-            String::append_char(__local_17, 44);
-            String::append_char(__local_17, 32);
-            __local_18 = __inline_Formatter__new_10: block -> ref Formatter {
-                __local_32 = __local_17;
-                break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_32) };
-            };
-            __local_33 = "core:internal/Box<i32>" { value: __local_13 };
-            __local_34 = __local_18;
-            i32::fmt_decimal(__local_33.value, __local_34);
-            break __tmpl: __local_17;
         };
     });
     "core:cli/println"(desc);
@@ -398,13 +361,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l21: loop {
+            l19: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l21;
+                continue l19;
             };
         };
     };
@@ -496,13 +459,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l27: loop {
+            l25: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l27;
+                continue l25;
             };
         };
     };
@@ -519,14 +482,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l31: loop {
+                l29: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l31;
+                    continue l29;
                 };
             };
         };
@@ -636,13 +599,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l43: loop {
+            l41: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l43;
+                continue l41;
             };
         };
     };

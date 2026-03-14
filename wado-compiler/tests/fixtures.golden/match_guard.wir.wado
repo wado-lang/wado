@@ -132,92 +132,50 @@ fn match_guard_basic() with Stdout {
     let result2: ref String;
     result = value_copy String(let __match_scrut_0: i32; __match_scrut_0 = 15; if __match_scrut_0 == 0 -> ref String {
         String { repr: array.new_data<u8>("zero"), used: 4 };
-    } else if 1 -> ref String {
-        __local_1 = __match_scrut_0;
-        if __local_1 < 10 -> ref String {
-            __local_1 = __match_scrut_0;
-            String { repr: array.new_data<u8>("small"), used: 5 };
-        } else if 1 -> ref String {
-            __local_2 = __match_scrut_0;
-            if __local_2 < 20 -> ref String {
-                __local_2 = __match_scrut_0;
-                String { repr: array.new_data<u8>("medium"), used: 6 };
-            } else {
-                String { repr: array.new_data<u8>("large"), used: 5 };
-            };
-        } else {
-            String { repr: array.new_data<u8>("large"), used: 5 };
-        };
-    } else if 1 -> ref String {
-        __local_2 = __match_scrut_0;
-        if __local_2 < 20 -> ref String {
-            __local_2 = __match_scrut_0;
-            String { repr: array.new_data<u8>("medium"), used: 6 };
-        } else {
-            String { repr: array.new_data<u8>("large"), used: 5 };
-        };
     } else {
-        String { repr: array.new_data<u8>("large"), used: 5 };
+        block -> ref String {
+            __local_1 = __match_scrut_0;
+            if __local_1 < 10 -> ref String {
+                __local_1 = __match_scrut_0;
+                String { repr: array.new_data<u8>("small"), used: 5 };
+            } else {
+                block -> ref String {
+                    __local_2 = __match_scrut_0;
+                    if __local_2 < 20 -> ref String {
+                        __local_2 = __match_scrut_0;
+                        String { repr: array.new_data<u8>("medium"), used: 6 };
+                    } else {
+                        String { repr: array.new_data<u8>("large"), used: 5 };
+                    };
+                };
+            };
+        };
     });
     "core:cli/println"(result);
-    result2 = value_copy String(let __match_scrut_1: i32; __match_scrut_1 = 5; if 1 -> ref String {
+    result2 = value_copy String(let __match_scrut_1: i32; __match_scrut_1 = 5; block -> ref String {
         __local_5 = __match_scrut_1;
         if __local_5 > 100 -> ref String {
             __local_5 = __match_scrut_1;
             String { repr: array.new_data<u8>("huge"), used: 4 };
-        } else if 1 -> ref String {
-            __local_6 = __match_scrut_1;
-            if __local_6 > 50 -> ref String {
+        } else {
+            block -> ref String {
                 __local_6 = __match_scrut_1;
-                String { repr: array.new_data<u8>("big"), used: 3 };
-            } else if 1 -> ref String {
-                __local_7 = __match_scrut_1;
-                if __local_7 > 10 -> ref String {
-                    __local_7 = __match_scrut_1;
-                    String { repr: array.new_data<u8>("medium"), used: 6 };
+                if __local_6 > 50 -> ref String {
+                    __local_6 = __match_scrut_1;
+                    String { repr: array.new_data<u8>("big"), used: 3 };
                 } else {
-                    String { repr: array.new_data<u8>("small"), used: 5 };
+                    block -> ref String {
+                        __local_7 = __match_scrut_1;
+                        if __local_7 > 10 -> ref String {
+                            __local_7 = __match_scrut_1;
+                            String { repr: array.new_data<u8>("medium"), used: 6 };
+                        } else {
+                            String { repr: array.new_data<u8>("small"), used: 5 };
+                        };
+                    };
                 };
-            } else {
-                String { repr: array.new_data<u8>("small"), used: 5 };
             };
-        } else if 1 -> ref String {
-            __local_7 = __match_scrut_1;
-            if __local_7 > 10 -> ref String {
-                __local_7 = __match_scrut_1;
-                String { repr: array.new_data<u8>("medium"), used: 6 };
-            } else {
-                String { repr: array.new_data<u8>("small"), used: 5 };
-            };
-        } else {
-            String { repr: array.new_data<u8>("small"), used: 5 };
         };
-    } else if 1 -> ref String {
-        __local_6 = __match_scrut_1;
-        if __local_6 > 50 -> ref String {
-            __local_6 = __match_scrut_1;
-            String { repr: array.new_data<u8>("big"), used: 3 };
-        } else if 1 -> ref String {
-            __local_7 = __match_scrut_1;
-            if __local_7 > 10 -> ref String {
-                __local_7 = __match_scrut_1;
-                String { repr: array.new_data<u8>("medium"), used: 6 };
-            } else {
-                String { repr: array.new_data<u8>("small"), used: 5 };
-            };
-        } else {
-            String { repr: array.new_data<u8>("small"), used: 5 };
-        };
-    } else if 1 -> ref String {
-        __local_7 = __match_scrut_1;
-        if __local_7 > 10 -> ref String {
-            __local_7 = __match_scrut_1;
-            String { repr: array.new_data<u8>("medium"), used: 6 };
-        } else {
-            String { repr: array.new_data<u8>("small"), used: 5 };
-        };
-    } else {
-        String { repr: array.new_data<u8>("small"), used: 5 };
     });
     "core:cli/println"(result2);
 }
@@ -458,13 +416,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l55: loop {
+            l45: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l55;
+                continue l45;
             };
         };
     };

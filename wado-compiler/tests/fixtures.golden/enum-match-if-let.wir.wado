@@ -139,12 +139,8 @@ fn run() with Stdout {
     "core:cli/println"(label);
     x = 3;
     msg = value_copy String(let __match_scrut_3: enum:Direction; __match_scrut_3 = x; if __match_scrut_3 == 3 -> ref String {
-        if 1 -> ref String {
+        block -> ref String {
             String { repr: array.new_data<u8>("right and big"), used: 13 };
-        } else if __match_scrut_3 == 3 -> ref String {
-            String { repr: array.new_data<u8>("right and small"), used: 15 };
-        } else {
-            String { repr: array.new_data<u8>("other"), used: 5 };
         };
     } else if __match_scrut_3 == 3 -> ref String {
         String { repr: array.new_data<u8>("right and small"), used: 15 };
@@ -256,13 +252,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l20: loop {
+            l19: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l20;
+                continue l19;
             };
         };
     };

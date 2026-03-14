@@ -324,7 +324,7 @@ fn run() with Stdout {
         };
     };
     t = Tagged { label: String { repr: array.new_data<u8>("X"), used: 1 }, coords: "tuple/[i32, i32]" { 0: 100, 1: 200 } };
-    desc = value_copy String(let __match_scrut_0: ref Tagged; __match_scrut_0 = t; if 1 -> ref String {
+    desc = value_copy String(let __match_scrut_0: ref Tagged; __match_scrut_0 = t; block -> ref String {
         let __struct_field_3: ref "tuple/[i32, i32]";
         __struct_field_3 = __match_scrut_0.coords;
         __local_15 = __struct_field_3.0;
@@ -360,31 +360,6 @@ fn run() with Stdout {
                 i32::fmt_decimal(__local_86.value, __local_87);
                 break __tmpl: __local_29;
             };
-        };
-    } else {
-        let __struct_field_1: ref "tuple/[i32, i32]";
-        __struct_field_1 = __match_scrut_0.coords;
-        __local_17 = __struct_field_1.0;
-        __local_18 = __struct_field_1.1;
-        __tmpl: block -> ref String {
-            __local_29 = String { repr: builtin::array_new<u8>(34), used: 0 };
-            __local_30 = __inline_Formatter__new_27: block -> ref Formatter {
-                __local_80 = __local_29;
-                break __inline_Formatter__new_27: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_80) };
-            };
-            __local_81 = "core:internal/Box<i32>" { value: __local_17 };
-            __local_82 = __local_30;
-            i32::fmt_decimal(__local_81.value, __local_82);
-            String::append_char(__local_29, 44);
-            String::append_char(__local_29, 32);
-            __local_30 = __inline_Formatter__new_30: block -> ref Formatter {
-                __local_85 = __local_29;
-                break __inline_Formatter__new_30: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_85) };
-            };
-            __local_86 = "core:internal/Box<i32>" { value: __local_18 };
-            __local_87 = __local_30;
-            i32::fmt_decimal(__local_86.value, __local_87);
-            break __tmpl: __local_29;
         };
     });
     "core:cli/println"(desc);
