@@ -1,4 +1,5 @@
-use { Value } from "core:json";
+use { Value } from "core:json_value";
+use { TreeMap } from "core:collections";
 use { to_string, from_string } from "core:json";
 
 test "Value::Null serialize" {
@@ -68,19 +69,24 @@ test "Value::Array mixed serialize" {
 }
 
 test "Value::Object empty serialize" {
-    let v = Value::Object([]);
+    let v = Value::Object(TreeMap::<String, Value>::new());
     let r = to_string::<Value>(&v);
     assert r matches { Ok(s) && s == "{}" };
 }
 
 test "Value::Object serialize" {
-    let v = Value::Object([["key", Value::String("value")]]);
+    let mut obj = TreeMap::<String, Value>::new();
+    obj["key"] = Value::String("value");
+    let v = Value::Object(obj);
     let r = to_string::<Value>(&v);
     assert r matches { Ok(s) && s == "{\"key\":\"value\"}" };
 }
 
 test "Value::Object multiple keys serialize" {
-    let v = Value::Object([["a", Value::Number(1.0)], ["b", Value::Bool(false)]]);
+    let mut obj = TreeMap::<String, Value>::new();
+    obj["a"] = Value::Number(1.0);
+    obj["b"] = Value::Bool(false);
+    let v = Value::Object(obj);
     let r = to_string::<Value>(&v);
     assert r matches { Ok(s) && s == "{\"a\":1,\"b\":false}" };
 }
@@ -137,21 +143,25 @@ test "Value::Array deserialize" {
 
 test "Value::Object empty deserialize" {
     let r = from_string::<Value>("{}");
-    assert r matches { Ok(v) && v == Value::Object([]) };
+    let expected = Value::Object(TreeMap::<String, Value>::new());
+    assert r matches { Ok(v) && v == expected };
 }
 
 test "Value::Object deserialize" {
     let r = from_string::<Value>("{\"key\":\"value\"}");
-    assert r matches { Ok(v) && v == Value::Object([["key", Value::String("value")]]) };
+    let mut expected_obj = TreeMap::<String, Value>::new();
+    expected_obj["key"] = Value::String("value");
+    let expected = Value::Object(expected_obj);
+    assert r matches { Ok(v) && v == expected };
 }
 
 test "Value nested object with array deserialize" {
     let r = from_string::<Value>("{\"nums\":[1,2],\"flag\":true}");
     if let Ok(v) = r {
-        let expected = Value::Object([
-            ["nums", Value::Array([Value::Number(1.0), Value::Number(2.0)])],
-            ["flag", Value::Bool(true)],
-        ]);
+        let mut expected_obj = TreeMap::<String, Value>::new();
+        expected_obj["nums"] = Value::Array([Value::Number(1.0), Value::Number(2.0)]);
+        expected_obj["flag"] = Value::Bool(true);
+        let expected = Value::Object(expected_obj);
         assert v == expected;
     }
 }
@@ -166,13 +176,13 @@ test "Value round-trip null" {
 }
 
 test "Value round-trip nested" {
-    let original = Value::Object([
-        ["name", Value::String("Alice")],
-        ["age", Value::Number(30.0)],
-        ["tags", Value::Array([Value::String("admin"), Value::String("user")])],
-        ["active", Value::Bool(true)],
-        ["notes", Value::Null],
-    ]);
+    let mut obj = TreeMap::<String, Value>::new();
+    obj["name"] = Value::String("Alice");
+    obj["age"] = Value::Number(30.0);
+    obj["tags"] = Value::Array([Value::String("admin"), Value::String("user")]);
+    obj["active"] = Value::Bool(true);
+    obj["notes"] = Value::Null;
+    let original = Value::Object(obj);
     let json_r = to_string::<Value>(&original);
     if let Ok(json) = json_r {
         let parsed_r = from_string::<Value>(json);
@@ -184,7 +194,10 @@ test "Value round-trip nested" {
 
 test "Value whitespace tolerance" {
     let r = from_string::<Value>("  {  \"x\"  :  1  }  ");
-    assert r matches { Ok(v) && v == Value::Object([["x", Value::Number(1.0)]]) };
+    let mut expected_obj = TreeMap::<String, Value>::new();
+    expected_obj["x"] = Value::Number(1.0);
+    let expected = Value::Object(expected_obj);
+    assert r matches { Ok(v) && v == expected };
 }
 
 test "Value eq null" {
@@ -216,7 +229,19 @@ test "Value eq array" {
 }
 
 test "Value eq object" {
-    assert Value::Object([]) == Value::Object([]);
-    assert Value::Object([["k", Value::Null]]) == Value::Object([["k", Value::Null]]);
-    assert !(Value::Object([["k", Value::Null]]) == Value::Object([["k", Value::Bool(false)]]));
+    let empty1 = Value::Object(TreeMap::<String, Value>::new());
+    let empty2 = Value::Object(TreeMap::<String, Value>::new());
+    assert empty1 == empty2;
+
+    let mut obj1 = TreeMap::<String, Value>::new();
+    obj1["k"] = Value::Null;
+    let mut obj2 = TreeMap::<String, Value>::new();
+    obj2["k"] = Value::Null;
+    assert Value::Object(obj1) == Value::Object(obj2);
+
+    let mut obj3 = TreeMap::<String, Value>::new();
+    obj3["k"] = Value::Null;
+    let mut obj4 = TreeMap::<String, Value>::new();
+    obj4["k"] = Value::Bool(false);
+    assert !(Value::Object(obj3) == Value::Object(obj4));
 }
