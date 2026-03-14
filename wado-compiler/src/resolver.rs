@@ -100,13 +100,13 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Used for substituting type parameters in return types
     generic_function_params: IndexMap<String, Vec<(String, TypeId)>>,
     /// Resolved param types for generic functions (`func_name` -> `param TypeIds`)
-    /// Resolved in the function's own type param scope so TypeParams have correct ids.
+    /// Resolved in the function's own type param scope so `TypeParams` have correct ids.
     generic_function_resolved_param_types: IndexMap<String, Vec<TypeId>>,
     /// Generic method type parameters (`mangled_name` -> `type_params`)
     /// Used for substituting type parameters in method return types
     generic_method_params: IndexMap<String, Vec<(String, TypeId)>>,
     /// Resolved param types for generic methods (`mangled_name` -> `param TypeIds`)
-    /// Resolved in the method's own type param scope so TypeParams have correct ids.
+    /// Resolved in the method's own type param scope so `TypeParams` have correct ids.
     generic_method_resolved_param_types: IndexMap<String, Vec<TypeId>>,
     /// Current associated type bindings in scope (`Self::Name` -> resolved type)
     /// Set when resolving trait implementations

@@ -363,8 +363,8 @@ pub enum ResolvedType {
         assoc_name: String,
         /// Trait bounds on this associated type (from the trait declaration)
         bounds: Vec<String>,
-        /// Resolved associated type bindings (e.g., [("Item", u8_typeid)] for I::Iter
-        /// when I: IntoIterator<Item = u8> and IntoIterator::Iter: Iterator<Item = Self::Item>)
+        /// Resolved associated type bindings (e.g., [("Item", `u8_typeid`)] for `I::Iter`
+        /// when I: `IntoIterator`<Item = u8> and `IntoIterator::Iter`: Iterator<Item = `Self::Item`>)
         assoc_type_bindings: Vec<(String, TypeId)>,
     },
     /// Raw GC array intrinsic (`builtin::array<T>`)

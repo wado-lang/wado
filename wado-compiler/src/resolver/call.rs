@@ -968,18 +968,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
     /// Infer type arguments for a generic function call from the actual argument types.
     /// Uses pre-resolved param types (stored during function resolution in the function's
-    /// own type param scope, so TypeParam ids are correct).
+    /// own type param scope, so `TypeParam` ids are correct).
     /// Returns the inferred type args in declaration order, or empty vec if inference fails.
-    fn infer_type_args_from_args(
-        &self,
-        func_name: &str,
-        args: &[TirExpr],
-    ) -> Vec<TypeId> {
+    fn infer_type_args_from_args(&self, func_name: &str, args: &[TirExpr]) -> Vec<TypeId> {
         let Some(type_param_list) = self.generic_function_params.get(func_name) else {
             return vec![];
         };
-        let Some(resolved_param_types) =
-            self.generic_function_resolved_param_types.get(func_name)
+        let Some(resolved_param_types) = self.generic_function_resolved_param_types.get(func_name)
         else {
             return vec![];
         };
@@ -1022,10 +1017,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     {
                         for method in &impl_block.methods {
                             if method.name == method_name && !method.type_params.is_empty() {
-                                found = Some((
-                                    method.type_params.clone(),
-                                    method.params.clone(),
-                                ));
+                                found = Some((method.type_params.clone(), method.params.clone()));
                                 break 'outer;
                             }
                         }
@@ -1040,10 +1032,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     {
                         for method in &impl_block.methods {
                             if method.name == method_name && !method.type_params.is_empty() {
-                                found = Some((
-                                    method.type_params.clone(),
-                                    method.params.clone(),
-                                ));
+                                found = Some((method.type_params.clone(), method.params.clone()));
                                 break 'outer2;
                             }
                         }
@@ -1061,10 +1050,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let old_type_param_bounds = self.current_type_param_bounds.clone();
         let mut type_param_list: Vec<(String, TypeId)> = vec![];
         for (i, tp) in type_params.iter().enumerate() {
-            let type_id = self.type_table.borrow_mut().make_type_param(tp.name.clone(), i as u32);
-            self.current_type_params.insert(tp.name.clone(), (i as u32, type_id));
+            let type_id = self
+                .type_table
+                .borrow_mut()
+                .make_type_param(tp.name.clone(), i as u32);
+            self.current_type_params
+                .insert(tp.name.clone(), (i as u32, type_id));
             if !tp.bounds.is_empty() {
-                self.current_type_param_bounds.insert(tp.name.clone(), tp.bounds.clone());
+                self.current_type_param_bounds
+                    .insert(tp.name.clone(), tp.bounds.clone());
             }
             type_param_list.push((tp.name.clone(), type_id));
         }
@@ -1262,8 +1256,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         if let Some(bounds) = bounds
             && let Some((found_trait, method_info_result)) = {
-                let bound_names: Vec<String> =
-                    bounds.iter().map(|b| b.name.clone()).collect();
+                let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
                 self.find_method_in_trait_bounds(&bound_names, method_name, type_param_type_id)
             }
         {

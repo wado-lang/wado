@@ -2098,7 +2098,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Also handle AssocTypeProjection self_type: propagate bindings from its bindings
             let resolved = self.type_table.borrow().get(self_type_id).clone();
             if let ResolvedType::AssocTypeProjection {
-                assoc_type_bindings, ..
+                assoc_type_bindings,
+                ..
             } = resolved
             {
                 // Reuse existing bindings from the source projection
@@ -2109,19 +2110,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // For each bound, check its associated type constraints and resolve Self::X
         for bound in assoc_bounds {
             for assoc in &bound.assoc_types.clone() {
-                if let crate::ast::Type::NamespacedGeneric(ns) = &assoc.ty {
-                    if ns.namespace == "Self" {
-                        // Self::ns.name → type_param_name::ns.name
-                        // Look in current_type_param_bounds[type_param_name] for direct binding
-                        if let Some(param_bounds) =
-                            self.current_type_param_bounds.get(type_param_name).cloned()
-                        {
-                            for pb in &param_bounds {
-                                for ab in &pb.assoc_types {
-                                    if ab.name == ns.name {
-                                        let resolved_ty = self.resolve_type(&ab.ty.clone());
-                                        bindings.push((assoc.name.clone(), resolved_ty));
-                                    }
+                if let crate::ast::Type::NamespacedGeneric(ns) = &assoc.ty
+                    && ns.namespace == "Self"
+                {
+                    // Self::ns.name → type_param_name::ns.name
+                    // Look in current_type_param_bounds[type_param_name] for direct binding
+                    if let Some(param_bounds) =
+                        self.current_type_param_bounds.get(type_param_name).cloned()
+                    {
+                        for pb in &param_bounds {
+                            for ab in &pb.assoc_types {
+                                if ab.name == ns.name {
+                                    let resolved_ty = self.resolve_type(&ab.ty.clone());
+                                    bindings.push((assoc.name.clone(), resolved_ty));
                                 }
                             }
                         }
@@ -2223,7 +2224,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let directly_bound = {
                         let resolved = self.type_table.borrow().get(self_type_id).clone();
                         if let ResolvedType::AssocTypeProjection {
-                            assoc_type_bindings, ..
+                            assoc_type_bindings,
+                            ..
                         } = resolved
                         {
                             assoc_type_bindings
@@ -2393,7 +2395,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         for (i, param) in type_params.iter().enumerate() {
             if let Some(&type_arg) = type_args.get(i) {
                 for bound in &param.bounds {
-                    if !self.type_implements_trait(type_arg, &bound.name) {
+                    if self.type_implements_trait(type_arg, &bound.name) {
+                        // Register associated type resolutions so the monomorphizer can
+                        // substitute e.g. I::Iter → ArrayIter<u8> when I = Array<u8>.
+                        self.register_assoc_types_for_concrete_type_and_trait(
+                            type_arg,
+                            &bound.name.clone(),
+                        );
+                    } else {
                         let type_name = self.type_id_to_string(type_arg);
                         let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                             type_name,
@@ -2401,13 +2410,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             param_name: param.name.clone(),
                             span,
                         });
-                    } else {
-                        // Register associated type resolutions so the monomorphizer can
-                        // substitute e.g. I::Iter → ArrayIter<u8> when I = Array<u8>.
-                        self.register_assoc_types_for_concrete_type_and_trait(
-                            type_arg,
-                            &bound.name.clone(),
-                        );
                     }
                 }
             }
@@ -2417,7 +2419,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Register associated type resolutions for a concrete type instantiating a trait.
     /// For example, when `Array<u8>` implements `IntoIterator`, registers:
     /// - (Array<u8>, "Item") → u8
-    /// - (Array<u8>, "Iter") → ArrayIter<u8>
+    /// - (Array<u8>, "Iter") → `ArrayIter`<u8>
     /// This enables the monomorphizer to resolve `I::Iter` → `ArrayIter<u8>` when `I = Array<u8>`.
     pub(super) fn register_assoc_types_for_concrete_type_and_trait(
         &mut self,
@@ -2428,7 +2430,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let (type_name, concrete_type_args) = {
             let tt = self.type_table.borrow();
             match tt.get(concrete_type_id).clone() {
-                ResolvedType::GenericInstance { name, type_args, .. } => (name, type_args),
+                ResolvedType::GenericInstance {
+                    name, type_args, ..
+                } => (name, type_args),
                 ResolvedType::Struct { name, .. } => (name, vec![]),
                 ResolvedType::BuiltinArray(elem) => ("Array".to_string(), vec![elem]),
                 _ => return,
@@ -2540,9 +2544,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .find(|tp| tp.name == impl_type_name && !tp.bounds.is_empty())
                     {
                         // Check if the concrete type satisfies the blanket param's bounds
-                        let bounds_ok = blanket_param.bounds.iter().all(|bound| {
-                            self.type_implements_trait(concrete_type_id, &bound.name)
-                        });
+                        let bounds_ok = blanket_param
+                            .bounds
+                            .iter()
+                            .all(|bound| self.type_implements_trait(concrete_type_id, &bound.name));
                         if bounds_ok {
                             result.push(BlanketImplInfo {
                                 blanket_param_name: blanket_param.name.clone(),

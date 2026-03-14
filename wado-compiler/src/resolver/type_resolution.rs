@@ -73,14 +73,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // where we temporarily bind e.g. I = StrUtf8ByteIter (concrete struct), and
             // I::Item should resolve to u8 via (StrUtf8ByteIter, "Item") → u8.
             let param_is_concrete = !self.type_table.borrow().contains_type_param(param_type_id);
-            if param_is_concrete {
-                if let Some(resolved) = self
+            if param_is_concrete
+                && let Some(resolved) = self
                     .type_table
                     .borrow()
                     .resolve_assoc_type(param_type_id, &namespaced.name)
-                {
-                    return resolved;
-                }
+            {
+                return resolved;
             }
 
             // First, check if the current bounds directly specify this assoc type.
@@ -99,10 +98,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // e.g., IntoIterator::Iter has bound Iterator<Item = Self::Item>.
             // With I: IntoIterator<Item = u8>, Self::Item = I::Item = u8,
             // so I::Iter.assoc_type_bindings = [("Item", u8_typeid)].
-            let assoc_type_bindings = self.compute_assoc_type_bindings(
-                &namespaced.namespace.clone(),
-                &assoc_bounds.clone(),
-            );
+            let assoc_type_bindings = self
+                .compute_assoc_type_bindings(&namespaced.namespace.clone(), &assoc_bounds.clone());
 
             return self.type_table.borrow_mut().make_assoc_type_projection(
                 param_type_id,
@@ -364,7 +361,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     /// Check if type parameter `param_name` has a bound that directly specifies `assoc_name`.
-    /// e.g., I: IntoIterator<Item = u8> → find_direct_assoc_type_binding("I", "Item") = Some(u8)
+    /// e.g., I: `IntoIterator`<Item = u8> → `find_direct_assoc_type_binding("I`", "Item") = Some(u8)
     fn find_direct_assoc_type_binding(
         &mut self,
         param_name: &str,
@@ -381,10 +378,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
         None
     }
 
-    /// Compute assoc_type_bindings for an AssocTypeProjection by resolving Self::X references.
-    /// e.g., IntoIterator::Iter has bound Iterator<Item = Self::Item>.
-    /// With I: IntoIterator<Item = u8>, Self = I, so Self::Item = I::Item = u8.
-    /// Result: [("Item", u8_typeid)].
+    /// Compute `assoc_type_bindings` for an `AssocTypeProjection` by resolving `Self::X` references.
+    /// e.g., `IntoIterator::Iter` has bound Iterator<Item = `Self::Item`>.
+    /// With I: `IntoIterator`<Item = u8>, Self = I, so `Self::Item` = `I::Item` = u8.
+    /// Result: [("Item", `u8_typeid`)].
     fn compute_assoc_type_bindings(
         &mut self,
         source_param_name: &str,
@@ -394,14 +391,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         for bound in assoc_bounds {
             for assoc in &bound.assoc_types.clone() {
                 // Resolve Self::X in the context of source_param: Self = source_param
-                if let crate::ast::Type::NamespacedGeneric(ns) = &assoc.ty {
-                    if ns.namespace == "Self" {
-                        if let Some(direct) =
-                            self.find_direct_assoc_type_binding(source_param_name, &ns.name)
-                        {
-                            bindings.push((assoc.name.clone(), direct));
-                        }
-                    }
+                if let crate::ast::Type::NamespacedGeneric(ns) = &assoc.ty
+                    && ns.namespace == "Self"
+                    && let Some(direct) =
+                        self.find_direct_assoc_type_binding(source_param_name, &ns.name)
+                {
+                    bindings.push((assoc.name.clone(), direct));
                 }
             }
         }

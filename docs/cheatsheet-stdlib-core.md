@@ -508,6 +508,7 @@ impl String {
     pub fn trim_start(&self) -> String;
     pub fn trim_end(&self) -> String;
     pub fn trim(&self) -> String;
+    pub fn from_bytes<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, String>;
 }
 
 impl Eq for String {

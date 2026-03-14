@@ -2791,10 +2791,7 @@ impl Monomorphizer {
                                     ResolvedType::GenericInstance {
                                         type_args: args, ..
                                     } if !args.is_empty()
-                                ) || matches!(
-                                    type_table.get(inner),
-                                    ResolvedType::BuiltinArray(_)
-                                )
+                                ) || matches!(type_table.get(inner), ResolvedType::BuiltinArray(_))
                             };
                             let monomorph_info =
                                 if self.trait_method_locations.contains_key(&new_func_name) {
