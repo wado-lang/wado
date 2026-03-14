@@ -1028,8 +1028,12 @@ fn count_field_accesses_in_stmt(
                 count_field_accesses_in_block(eb, counts, type_table);
             }
         }
-        TirStmtKind::Loop { body } => {
-            count_field_accesses_in_block(body, counts, type_table);
+        TirStmtKind::Loop { body: _ } => {
+            // Do NOT recurse into nested loops. Each loop level is processed
+            // independently by its own scalarize_loop call in scalarize_block.
+            // Recursing here would cause outer-level HFS to hoist fields that
+            // are only accessed inside an inner loop, potentially before the
+            // struct containing them is even initialized.
         }
         TirStmtKind::LabeledBlock { block, .. } => {
             count_field_accesses_in_block(block, counts, type_table);

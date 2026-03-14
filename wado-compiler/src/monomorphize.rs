@@ -1325,11 +1325,20 @@ impl Monomorphizer {
             } => {
                 // Substitute the underlying type param to get the concrete type
                 let concrete_id = self.substitute_type(param_id, substitution, type_table);
-                // If the param resolved to a concrete type, look up the associated type binding
-                if concrete_id != param_id
-                    && let Some(resolved) = type_table.resolve_assoc_type(concrete_id, &assoc_name)
-                {
-                    return resolved;
+                if concrete_id != param_id {
+                    // Direct lookup first
+                    if let Some(resolved) = type_table.resolve_assoc_type(concrete_id, &assoc_name)
+                    {
+                        return resolved;
+                    }
+                    // Newtype fallback: newtypes inherit associated types from their base type.
+                    // e.g. `type MyBytes = Array<u8>` → `MyBytes::Iter` resolves to `ArrayIter<u8>`.
+                    let base_id = type_table.get_ultimate_base_type(concrete_id);
+                    if base_id != concrete_id
+                        && let Some(resolved) = type_table.resolve_assoc_type(base_id, &assoc_name)
+                    {
+                        return resolved;
+                    }
                 }
                 // Fallback: return the original type (projection unresolved)
                 type_id
@@ -2144,6 +2153,9 @@ impl Monomorphizer {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 self.get_struct_info_from_type(*inner, type_table)
             }
+            ResolvedType::Newtype { base_type, .. } => {
+                self.get_struct_info_from_type(*base_type, type_table)
+            }
             _ => None,
         }
     }
@@ -2747,8 +2759,12 @@ impl Monomorphizer {
                         {
                             inner = t;
                         }
-                        let mangled = type_table.mangle_type_name(inner);
-                        let base = type_table.base_type_name(inner);
+                        // Resolve newtypes so e.g. `MyBytes` (= Array<u8>) maps to
+                        // `Array<u8>^IntoIterator::into_iter` instead of
+                        // `MyBytes^IntoIterator::into_iter`.
+                        let resolved = type_table.get_ultimate_base_type(inner);
+                        let mangled = type_table.mangle_type_name_resolving_newtypes(inner);
+                        let base = type_table.base_type_name(resolved);
                         info.with_substituted_struct_name(&mangled, &base)
                     } else if needs_struct_type_args {
                         info.with_struct_type_args(&type_names)
@@ -2796,6 +2812,9 @@ impl Monomorphizer {
                                 {
                                     inner = t;
                                 }
+                                // Follow newtype chain: MyBytes (= Array<u8>) should be
+                                // treated the same as Array<u8> (has type args).
+                                let inner = type_table.get_ultimate_base_type(inner);
                                 matches!(
                                     type_table.get(inner),
                                     ResolvedType::GenericInstance {

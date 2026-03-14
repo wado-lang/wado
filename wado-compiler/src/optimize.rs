@@ -18,6 +18,7 @@ mod copy_prop;
 pub mod dce;
 mod field_scalarize;
 mod inline;
+mod labeled_block_fusion;
 mod licm;
 mod ref_elim;
 mod rewrite;
@@ -35,6 +36,7 @@ use dce::{
 };
 use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
+use labeled_block_fusion::fuse_labeled_blocks;
 use licm::apply_licm;
 use ref_elim::eliminate_unnecessary_refs;
 use sroa::scalar_replace_aggregates;
@@ -135,7 +137,8 @@ pub fn optimize(
         OptLevel::O2 | OptLevel::Os => {
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(10),
-                inline_threshold: inline_threshold.unwrap_or(10),
+                // Threshold 12: allows index_assign (11 expressions) to be inlined
+                inline_threshold: inline_threshold.unwrap_or(12),
             };
             run_dce(&mut project);
             run_optimization_passes(&mut project, &config);
@@ -145,10 +148,9 @@ pub fn optimize(
             }
         }
         OptLevel::O3 => {
-            // Threshold 19: threshold 20 degrades fts benchmark performance
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(100),
-                inline_threshold: inline_threshold.unwrap_or(19),
+                inline_threshold: inline_threshold.unwrap_or(20),
             };
             run_dce(&mut project);
             run_optimization_passes(&mut project, &config);
@@ -190,6 +192,7 @@ fn run_optimization_passes(project: &mut Project, config: &OptConfig) {
     for _ in 0..config.iterations {
         let mut changed = false;
         changed |= inline_functions(project, config.inline_threshold);
+        changed |= fuse_labeled_blocks(project);
         changed |= eliminate_unnecessary_refs(project);
         changed |= scalar_replace_aggregates(project);
         changed |= propagate_copies(project);

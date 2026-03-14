@@ -597,23 +597,22 @@ fn JsonSerializer^Serializer::serialize_bool(self, v) {
 }
 
 fn User^Serialize::serialize<JsonSerializer>(self, s) {
-    let st_2: ref Result<JsonStructSerializer,SerializeError>;
-    let st_3: ref JsonStructSerializer;
-    let __local_6: ref String;
-    st_2 = __inline_JsonSerializer_Serializer__begin_struct_0: block -> ref Result<JsonStructSerializer,SerializeError> {
-        __local_6 = String { repr: array.new_data<u8>("User"), used: 4 };
+    let st: ref JsonStructSerializer;
+    let name: ref String;
+    let __fused_payload_9: ref JsonStructSerializer;
+    __fused___inline_JsonSerializer_Serializer__begin_struct_0: block {
+        name = String { repr: array.new_data<u8>("User"), used: 4 };
         String::append_char(s.buf, 123);
-        break __inline_JsonSerializer_Serializer__begin_struct_0: Result<JsonStructSerializer,SerializeError>::Ok { discriminant: 0, payload_0: JsonStructSerializer { ser: ref.as_non_null(s), count: 0 } };
-    };
-    if ref.test Result<JsonStructSerializer,SerializeError>::Ok(st_2) {
-        st_3 = value_copy JsonStructSerializer(ref.cast Result<JsonStructSerializer,SerializeError>::Ok(st_2).payload_0);
-        drop(JsonStructSerializer^SerializeStruct::field<String>(st_3, String { repr: array.new_data<u8>("userName"), used: 8 }, self.name));
-        drop(JsonStructSerializer^SerializeStruct::field<i32>(st_3, String { repr: array.new_data<u8>("age"), used: 3 }, self.age));
-        drop(JsonStructSerializer^SerializeStruct::field<bool>(st_3, String { repr: array.new_data<u8>("active"), used: 6 }, self.active));
+        __fused_payload_9 = JsonStructSerializer { ser: ref.as_non_null(s), count: 0 };
+        st = __fused_payload_9;
+        drop(JsonStructSerializer^SerializeStruct::field<String>(st, String { repr: array.new_data<u8>("userName"), used: 8 }, self.name));
+        drop(JsonStructSerializer^SerializeStruct::field<i32>(st, String { repr: array.new_data<u8>("age"), used: 3 }, self.age));
+        drop(JsonStructSerializer^SerializeStruct::field<bool>(st, String { repr: array.new_data<u8>("active"), used: 6 }, self.active));
         return __inline_JsonStructSerializer_SerializeStruct__end_1: block -> ref Result<unit,SerializeError> {
-            String::append_char(st_3.ser.buf, 125);
+            String::append_char(st.ser.buf, 125);
             break __inline_JsonStructSerializer_SerializeStruct__end_1: Result<unit,SerializeError> { 0, nop };
         };
+        break __fused___inline_JsonSerializer_Serializer__begin_struct_0;
     };
     return Result<unit,SerializeError>::Err { discriminant: 1, payload_0: SerializeError { message: String { repr: array.new_data<u8>("begin_struct failed"), used: 19 } } };
 }
@@ -691,13 +690,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l37: loop {
+            l36: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l37;
+                continue l36;
             };
         };
     };

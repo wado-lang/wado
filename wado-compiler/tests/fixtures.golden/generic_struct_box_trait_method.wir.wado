@@ -111,8 +111,6 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/Point^Eq::eq" = fn(ref Point, ref Point) -> bool;
-
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
@@ -171,8 +169,6 @@ fn run() with Stdout {
     let __local_61: ref String;
     let __local_63: ref Formatter;
     let __sroa_b_value: ref Point;
-    let __sroa_pa_value: ref Point;
-    let __sroa_pb_value: ref Point;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -209,7 +205,7 @@ fn run() with Stdout {
         break __tmpl: __local_6;
     });
     v = Point { x: 99, y: 99 };
-    __sroa_b_value = value_copy Point(v);
+    __sroa_b_value = v;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_8 = String { repr: builtin::array_new<u8>(46), used: 0 };
         String::append(__local_8, String { repr: array.new_data<u8>("original: ("), used: 11 });
@@ -278,13 +274,7 @@ fn run() with Stdout {
         i32::fmt_decimal(42, __local_63);
         break __tmpl: __local_14;
     });
-    __sroa_pa_value = Point { x: 1, y: 2 };
-    __sroa_pb_value = Point { x: 1, y: 2 };
-    if Point^Eq::eq(__sroa_pa_value, __sroa_pb_value) {
-        "core:cli/println"(String { repr: array.new_data<u8>("equal"), used: 5 });
-    } else {
-        "core:cli/println"(String { repr: array.new_data<u8>("not equal"), used: 9 });
-    };
+    "core:cli/println"(String { repr: array.new_data<u8>("equal"), used: 5 });
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data) {
@@ -389,13 +379,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l11: loop {
+            l10: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l11;
+                continue l10;
             };
         };
     };
@@ -487,13 +477,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l17: loop {
+            l16: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l17;
+                continue l16;
             };
         };
     };
@@ -510,14 +500,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l21: loop {
+                l20: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l21;
+                    continue l20;
                 };
             };
         };
@@ -620,14 +610,6 @@ fn String::append_char(self, c) {
     };
 }
 
-fn Point^Eq::eq(self, other) {
-    return if self.x == other.x -> i32 {
-        self.y == other.y;
-    } else {
-        0;
-    };
-}
-
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref String;
@@ -635,13 +617,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l34: loop {
+            l32: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l34;
+                continue l32;
             };
         };
     };

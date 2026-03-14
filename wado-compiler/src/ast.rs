@@ -401,7 +401,8 @@ pub struct LetStmt {
     pub is_mut: bool,
     pub is_reactive: bool,
     pub ty: Option<Type>,
-    pub value: Expr,
+    /// Initializer expression, or `None` for uninitialized declarations (`let x: i32;`).
+    pub value: Option<Expr>,
     pub span: Span,
 }
 

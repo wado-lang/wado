@@ -30,7 +30,7 @@ fn extract_expr(module: &wado_compiler::ast::Module) -> Option<&wado_compiler::a
     let Stmt::Let(let_stmt) = stmt else {
         return None;
     };
-    Some(&let_stmt.value)
+    let_stmt.value.as_ref()
 }
 
 #[test]

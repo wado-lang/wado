@@ -1183,8 +1183,10 @@ impl<'a> Unparser<'a> {
             self.unparse_type(ty);
         }
 
-        self.output.push_str(" = ");
-        self.unparse_expr(&l.value);
+        if let Some(ref v) = l.value {
+            self.output.push_str(" = ");
+            self.unparse_expr(v);
+        }
         self.output.push_str(";\n");
     }
 
@@ -1226,8 +1228,10 @@ impl<'a> Unparser<'a> {
                 self.output.push_str(": ");
                 self.unparse_type(ty);
             }
-            self.output.push_str(" = ");
-            self.unparse_expr(&init.value);
+            if let Some(ref v) = init.value {
+                self.output.push_str(" = ");
+                self.unparse_expr(v);
+            }
             self.output.push_str("; ");
         }
 
@@ -1277,8 +1281,10 @@ impl<'a> Unparser<'a> {
                 self.output.push_str(": ");
                 self.unparse_type(ty);
             }
-            self.output.push_str(" = ");
-            self.unparse_expr(&init.value);
+            if let Some(ref v) = init.value {
+                self.output.push_str(" = ");
+                self.unparse_expr(v);
+            }
             self.output.push_str("; ");
         }
 
@@ -1401,8 +1407,10 @@ impl<'a> Unparser<'a> {
                     self.output.push_str(": ");
                     self.unparse_type(ty);
                 }
-                self.output.push_str(" = ");
-                self.unparse_expr(&l.value);
+                if let Some(ref v) = l.value {
+                    self.output.push_str(" = ");
+                    self.unparse_expr(v);
+                }
             }
             Stmt::Expr(e) => {
                 self.unparse_expr(&e.expr);
@@ -1875,8 +1883,10 @@ impl<'a> Unparser<'a> {
                 self.output.push_str(": ");
                 self.unparse_type(ty);
             }
-            self.output.push_str(" = ");
-            self.unparse_expr(&init.value);
+            if let Some(ref v) = init.value {
+                self.output.push_str(" = ");
+                self.unparse_expr(v);
+            }
             self.output.push_str("; ");
         }
 
@@ -2838,8 +2848,10 @@ fn unparse_stmt_into(stmt: &Stmt, output: &mut String) {
                 output.push_str(": ");
                 unparse_type_into(ty, output);
             }
-            output.push_str(" = ");
-            unparse_expr_into(&l.value, output, false);
+            if let Some(ref v) = l.value {
+                output.push_str(" = ");
+                unparse_expr_into(v, output, false);
+            }
             output.push(';');
         }
         Stmt::Expr(e) => {
@@ -3017,8 +3029,10 @@ fn unparse_if_expr_into(i: &IfExpr, output: &mut String) {
             output.push_str(": ");
             unparse_type_into(ty, output);
         }
-        output.push_str(" = ");
-        unparse_expr_into(&init.value, output, false);
+        if let Some(ref v) = init.value {
+            output.push_str(" = ");
+            unparse_expr_into(v, output, false);
+        }
         output.push_str("; ");
     }
     unparse_condition_into(&i.condition, output);

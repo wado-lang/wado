@@ -112,7 +112,6 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let __local_3: ref Option<i32>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -120,10 +119,10 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     if __inline_IntBox_Container__has_items_2: block -> bool {
-        __local_3 = Option<i32>::Some { discriminant: 0, payload_0: 42 };
-        if ref.test Option<i32>::Some(__local_3) {
-            drop(ref.cast Option<i32>::Some(__local_3).payload_0);
+        __fused___inline_IntBox_Container__get_first_0: block {
+            drop(42);
             break __inline_IntBox_Container__has_items_2: 1;
+            break __fused___inline_IntBox_Container__get_first_0;
         };
         break __inline_IntBox_Container__has_items_2: 0;
     } {
@@ -233,13 +232,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l12: loop {
+            l11: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l12;
+                continue l11;
             };
         };
     };

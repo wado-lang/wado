@@ -80,10 +80,6 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/classify" = fn(ref Option<i32>) -> ref String;
-
-type "functype/nested" = fn(ref Option<Option<i32>>) -> i32;
-
 type "functype/run" = fn();
 
 type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
@@ -154,38 +150,6 @@ import fn subtask-drop from "wasi/subtask-drop";
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
-fn classify(opt) {
-    let __local_1: i32;
-    let label: ref String;
-    label = value_copy String(if ref.test Option<i32>::Some(opt) -> ref String {
-        __local_1 = ref.cast Option<i32>::Some(opt).payload_0;
-        if __local_1 > 0 -> ref String {
-            String { repr: array.new_data<u8>("positive"), used: 8 };
-        } else {
-            String { repr: array.new_data<u8>("non-positive"), used: 12 };
-        };
-    } else {
-        String { repr: array.new_data<u8>("none"), used: 4 };
-    });
-    return label;
-}
-
-fn nested(outer) {
-    let __local_1: ref Option<i32>;
-    let __local_2: i32;
-    return if ref.test Option<Option<i32>>::Some(outer) -> i32 {
-        __local_1 = value_copy Option<i32>(ref.cast Option<Option<i32>>::Some(outer).payload_0);
-        if ref.test Option<i32>::Some(__local_1) -> i32 {
-            __local_2 = ref.cast Option<i32>::Some(__local_1).payload_0;
-            __local_2;
-        } else {
-            -1;
-        };
-    } else {
-        -2;
-    };
-}
-
 fn run() with Stdout {
     let __local_0: ref String;
     let __local_1: ref Formatter;
@@ -211,7 +175,26 @@ fn run() with Stdout {
     let __local_38: ref String;
     let __local_40: ref Formatter;
     let __local_44: ref String;
+    let __local_45: ref "core:internal/Box<i32>";
     let __local_46: ref Formatter;
+    let __local_49: ref Option<i32>;
+    let __local_50: i32;
+    let __local_51: ref String;
+    let __local_53: ref Option<i32>;
+    let __local_54: i32;
+    let __local_55: ref String;
+    let __local_57: ref Option<i32>;
+    let __local_58: i32;
+    let __local_59: ref String;
+    let __local_61: ref Option<Option<i32>>;
+    let __local_62: ref Option<i32>;
+    let __local_63: i32;
+    let __local_66: ref Option<Option<i32>>;
+    let __local_67: ref Option<i32>;
+    let __local_68: i32;
+    let __local_71: ref Option<Option<i32>>;
+    let __local_72: ref Option<i32>;
+    let __local_73: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -257,9 +240,48 @@ fn run() with Stdout {
         i32::fmt_decimal(__local_23.value, __local_24);
         break __tmpl: __local_2;
     });
-    "core:cli/println"(classify(Option<i32>::Some { discriminant: 0, payload_0: 5 }));
-    "core:cli/println"(classify(Option<i32>::Some { discriminant: 0, payload_0: -3 }));
-    "core:cli/println"(classify(Option<i32> { 1 }));
+    "core:cli/println"(__inline_classify_0: block -> ref String {
+        __local_49 = Option<i32>::Some { discriminant: 0, payload_0: 5 };
+        __local_51 = value_copy String(if ref.test Option<i32>::Some(__local_49) -> ref String {
+            __local_50 = ref.cast Option<i32>::Some(__local_49).payload_0;
+            if __local_50 > 0 -> ref String {
+                String { repr: array.new_data<u8>("positive"), used: 8 };
+            } else {
+                String { repr: array.new_data<u8>("non-positive"), used: 12 };
+            };
+        } else {
+            String { repr: array.new_data<u8>("none"), used: 4 };
+        });
+        break __inline_classify_0: __local_51;
+    });
+    "core:cli/println"(__inline_classify_1: block -> ref String {
+        __local_53 = Option<i32>::Some { discriminant: 0, payload_0: -3 };
+        __local_55 = value_copy String(if ref.test Option<i32>::Some(__local_53) -> ref String {
+            __local_54 = ref.cast Option<i32>::Some(__local_53).payload_0;
+            if __local_54 > 0 -> ref String {
+                String { repr: array.new_data<u8>("positive"), used: 8 };
+            } else {
+                String { repr: array.new_data<u8>("non-positive"), used: 12 };
+            };
+        } else {
+            String { repr: array.new_data<u8>("none"), used: 4 };
+        });
+        break __inline_classify_1: __local_55;
+    });
+    "core:cli/println"(__inline_classify_2: block -> ref String {
+        __local_57 = Option<i32> { 1 };
+        __local_59 = value_copy String(if ref.test Option<i32>::Some(__local_57) -> ref String {
+            __local_58 = ref.cast Option<i32>::Some(__local_57).payload_0;
+            if __local_58 > 0 -> ref String {
+                String { repr: array.new_data<u8>("positive"), used: 8 };
+            } else {
+                String { repr: array.new_data<u8>("non-positive"), used: 12 };
+            };
+        } else {
+            String { repr: array.new_data<u8>("none"), used: 4 };
+        });
+        break __inline_classify_2: __local_59;
+    });
     "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_5 = __inline_Formatter__new_13: block -> ref Formatter {
@@ -267,7 +289,21 @@ fn run() with Stdout {
             break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_32) };
         };
         __local_34 = __local_5;
-        i32::fmt_decimal(nested(Option<Option<i32>>::Some { discriminant: 0, payload_0: Option<i32>::Some { discriminant: 0, payload_0: 7 } }), __local_34);
+        i32::fmt_decimal(__inline_nested_3: block -> i32 {
+            __local_61 = Option<Option<i32>>::Some { discriminant: 0, payload_0: Option<i32>::Some { discriminant: 0, payload_0: 7 } };
+            if ref.test Option<Option<i32>>::Some(__local_61) -> i32 {
+                __local_62 = value_copy Option<i32>(ref.cast Option<Option<i32>>::Some(__local_61).payload_0);
+                if ref.test Option<i32>::Some(__local_62) -> i32 {
+                    __local_63 = ref.cast Option<i32>::Some(__local_62).payload_0;
+                    __local_63;
+                } else {
+                    -1;
+                };
+            } else {
+                -2;
+            };
+            break __inline_nested_3;
+        }, __local_34);
         break __tmpl: __local_4;
     });
     "core:cli/println"(__tmpl: block -> ref String {
@@ -277,7 +313,21 @@ fn run() with Stdout {
             break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_38) };
         };
         __local_40 = __local_7;
-        i32::fmt_decimal(nested(Option<Option<i32>>::Some { discriminant: 0, payload_0: Option<i32> { 1 } }), __local_40);
+        i32::fmt_decimal(__inline_nested_4: block -> i32 {
+            __local_66 = Option<Option<i32>>::Some { discriminant: 0, payload_0: Option<i32> { 1 } };
+            if ref.test Option<Option<i32>>::Some(__local_66) -> i32 {
+                __local_67 = value_copy Option<i32>(ref.cast Option<Option<i32>>::Some(__local_66).payload_0);
+                if ref.test Option<i32>::Some(__local_67) -> i32 {
+                    __local_68 = ref.cast Option<i32>::Some(__local_67).payload_0;
+                    __local_68;
+                } else {
+                    -1;
+                };
+            } else {
+                -2;
+            };
+            break __inline_nested_4;
+        }, __local_40);
         break __tmpl: __local_6;
     });
     "core:cli/println"(__tmpl: block -> ref String {
@@ -286,8 +336,23 @@ fn run() with Stdout {
             __local_44 = __local_8;
             break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_44) };
         };
+        __local_45 = "core:internal/Box<i32>" { value: __inline_nested_5: block -> i32 {
+            __local_71 = Option<Option<i32>> { 1 };
+            if ref.test Option<Option<i32>>::Some(__local_71) -> i32 {
+                __local_72 = value_copy Option<i32>(ref.cast Option<Option<i32>>::Some(__local_71).payload_0);
+                if ref.test Option<i32>::Some(__local_72) -> i32 {
+                    __local_73 = ref.cast Option<i32>::Some(__local_72).payload_0;
+                    __local_73;
+                } else {
+                    -1;
+                };
+            } else {
+                -2;
+            };
+            break __inline_nested_5;
+        } };
         __local_46 = __local_9;
-        i32::fmt_decimal(nested(Option<Option<i32>> { 1 }), __local_46);
+        i32::fmt_decimal(__local_45.value, __local_46);
         break __tmpl: __local_8;
     });
 }
@@ -394,13 +459,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l16: loop {
+            l24: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l16;
+                continue l24;
             };
         };
     };
@@ -492,13 +557,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l22: loop {
+            l30: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l22;
+                continue l30;
             };
         };
     };
@@ -515,14 +580,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l26: loop {
+                l34: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l26;
+                    continue l34;
                 };
             };
         };
@@ -632,13 +697,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l38: loop {
+            l46: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l38;
+                continue l46;
             };
         };
     };

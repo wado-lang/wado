@@ -82,8 +82,6 @@ type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i3
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32) -> ref WaitEvent;
 
-type "functype/Array<i32>^IndexAssign::index_assign" = fn(ref Array<i32>, i32, i32);
-
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
 type "functype/wasi/stream-drop-writable" = fn(i32);
@@ -121,7 +119,11 @@ fn run() {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_0;
     };
-    Array<i32>^IndexAssign::index_assign(arr, 3, 99);
+    if 1 {
+        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
+    };
+    builtin::array_set<i32>(arr.repr, 3, 99);
 }
 
 fn __cm_export__run() {
@@ -188,13 +190,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l9: loop {
+            l10: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l9;
+                continue l10;
             };
         };
     };
@@ -311,14 +313,6 @@ fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
     payload = builtin::load_i32(out_ptr + 4);
     freed = "mem/realloc"(out_ptr, 8, 4, 0);
     return WaitEvent { code: code, handle: evt_handle, payload: payload };
-}
-
-fn Array<i32>^IndexAssign::index_assign(self, index, value) {
-    if index >= self.used {
-        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-        unreachable;
-    };
-    builtin::array_set<i32>(self.repr, index, value);
 }
 
 fn Array<i32>::append(self, value) {

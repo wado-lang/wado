@@ -1458,7 +1458,7 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::Assign { target, value } => {
                 let val = self.translate_expr(value);
                 match &target.kind {
-                    TirExprKind::Local { index, .. } => {
+                    TirExprKind::Local { index, name } => {
                         // Unit-type locals have no Wasm representation
                         if target.type_id == TypeTable::UNIT {
                             return val;
@@ -1476,7 +1476,16 @@ impl FunctionTranslator<'_, '_> {
                             },
                             other => other,
                         };
-                        let val = self.maybe_value_copy(value, val);
+                        // SROA rewrites struct-field writes (`s.field = v`) to local
+                        // writes (`__sroa_s_field = v`). The original StructSet stores
+                        // the GC reference as-is without a defensive copy, so the
+                        // rewritten local write must also skip value_copy to preserve
+                        // the same reference-sharing semantics.
+                        let val = if name.starts_with("__sroa_") {
+                            val
+                        } else {
+                            self.maybe_value_copy(value, val)
+                        };
                         WirInstr::LocalSet {
                             name: self.local_name(*index),
                             value: Box::new(val),
@@ -5501,8 +5510,13 @@ impl FunctionTranslator<'_, '_> {
                     let instr = self.translate_expr(&arm.body);
                     // If the arm body produces a non-unit value (e.g. after inlining
                     // transforms a Block into a bare call), drop it to avoid leaving
-                    // values on the Wasm stack.
-                    if arm.body.type_id != TypeTable::UNIT && arm.body.type_id != TypeTable::NEVER {
+                    // values on the Wasm stack. Guard with `produces_stack_value()` to
+                    // avoid emitting `drop` after instructions that produce no value
+                    // (e.g. `Block{result: None}` from LabeledBlock fusion).
+                    if arm.body.type_id != TypeTable::UNIT
+                        && arm.body.type_id != TypeTable::NEVER
+                        && instr.produces_stack_value()
+                    {
                         WirInstr::Drop(Box::new(instr))
                     } else {
                         instr

@@ -270,8 +270,6 @@ type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:allocator/ArrayI
 
 type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> ref Option<i32>;
 
-type "functype/Holder<String,i32>::process" = fn(ref Holder<String,i32>);
-
 type "functype/Array<Tuple<String,i32>>::append" = fn(ref Array<Tuple<String,i32>>, ref "tuple/[String, i32]");
 
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
@@ -297,8 +295,6 @@ type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:allocator/ArrayI
 type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
-
-type "functype/Holder<String,i32>::process" = fn(ref Array<Tuple<String,i32>>);
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -327,10 +323,27 @@ fn get_numbers() with Stdout {
 
 fn for_of_generic_tuple() with Stdout {
     let __local_0: ref Array<Tuple<String,i32>>;
-    Holder<String,i32>::process(ref.as_non_null(__seq_lit: block -> ref Array<Tuple<String,i32>> {
+    let __iter_1: ref "core:allocator/ArrayIter<Tuple<String,i32>>";
+    let pair: ref "tuple/[String, i32]";
+    let __sroa_h_items: ref Array<Tuple<String,i32>>;
+    __sroa_h_items = __seq_lit: block -> ref Array<Tuple<String,i32>> {
         __local_0 = Array<Tuple<String,i32>> { repr: array.new_fixed<ref "tuple/[String, i32]">("tuple/[String, i32]" { 0: String { repr: array.new_data<u8>("a"), used: 1 }, 1: 1 }, "tuple/[String, i32]" { 0: String { repr: array.new_data<u8>("b"), used: 1 }, 1: 2 }), used: 2 };
         break __seq_lit: __local_0;
-    }));
+    };
+    __iter_1 = "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: ref.as_non_null(__sroa_h_items.repr), used: 2, index: 0 };
+    b0: block {
+        l1: loop {
+            let __sroa___pattern_temp_0_discriminant: i32;
+            let __sroa___pattern_temp_0_payload_0: ref null "tuple/[String, i32]";
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_1);
+            if __sroa___pattern_temp_0_discriminant == 0 {
+                pair = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
+            } else {
+                break b0;
+            };
+            continue l1;
+        };
+    };
     "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
 }
 
@@ -348,8 +361,8 @@ fn for_of_mut() with Stdout {
         break __seq_lit: __local_0;
     };
     __iter_2 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(numbers.repr), used: 3, index: 0 };
-    b0: block {
-        l1: loop {
+    b3: block {
+        l4: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_2);
@@ -367,9 +380,9 @@ fn for_of_mut() with Stdout {
                     break __tmpl: __local_4;
                 });
             } else {
-                break b0;
+                break b3;
             };
-            continue l1;
+            continue l4;
         };
     };
 }
@@ -402,16 +415,16 @@ fn for_of_nested() with Stdout {
     __iter_4 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(outer.repr), used: 3, index: 0 };
     _licm_repr_41 = inner.repr;
     _licm_used_42 = 2;
-    b3: block {
-        l4: loop {
+    b6: block {
+        l7: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 i = __sroa___pattern_temp_0_payload_0;
                 __iter_6 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(_licm_repr_41), used: _licm_used_42, index: 0 };
-                b6: block {
-                    l7: loop {
+                b9: block {
+                    l10: loop {
                         let __sroa___pattern_temp_1_discriminant: i32;
                         let __sroa___pattern_temp_1_payload_0: i32;
                         multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<i32>^Iterator::next(__iter_6);
@@ -435,15 +448,15 @@ fn for_of_nested() with Stdout {
                                 break __tmpl: __local_8;
                             });
                         } else {
-                            break b6;
+                            break b9;
                         };
-                        continue l7;
+                        continue l10;
                     };
                 };
             } else {
-                break b3;
+                break b6;
             };
-            continue l4;
+            continue l7;
         };
     };
 }
@@ -460,8 +473,8 @@ fn for_of_side_effect() with Stdout {
         __local_5 = get_numbers();
         break __inline_Array_i32__IntoIterator__into_iter_0: "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(__local_5.repr), used: __local_5.used, index: 0 };
     };
-    b9: block {
-        l10: loop {
+    b12: block {
+        l13: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_0);
@@ -478,9 +491,9 @@ fn for_of_side_effect() with Stdout {
                     break __tmpl: __local_2;
                 });
             } else {
-                break b9;
+                break b12;
             };
-            continue l10;
+            continue l13;
         };
     };
     "core:cli/println"(String { repr: array.new_data<u8>("done"), used: 4 });
@@ -497,8 +510,8 @@ fn for_of_strings() with Stdout {
         break __seq_lit: __local_0;
     };
     __iter_2 = "core:allocator/ArrayIter<String>" { repr: ref.as_non_null(names.repr), used: 3, index: 0 };
-    b12: block {
-        l13: loop {
+    b15: block {
+        l16: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: ref null String;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<String>^Iterator::next(__iter_2);
@@ -518,9 +531,9 @@ fn for_of_strings() with Stdout {
                     break __tmpl: __local_4;
                 });
             } else {
-                break b12;
+                break b15;
             };
-            continue l13;
+            continue l16;
         };
     };
 }
@@ -545,8 +558,8 @@ fn for_of_structs() with Stdout {
         break __seq_lit: __local_2;
     };
     __iter_4 = "core:allocator/ArrayIter<Point>" { repr: ref.as_non_null(points.repr), used: 2, index: 0 };
-    b15: block {
-        l16: loop {
+    b18: block {
+        l19: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: ref null Point;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<Point>^Iterator::next(__iter_4);
@@ -570,9 +583,9 @@ fn for_of_structs() with Stdout {
                     break __tmpl: __local_6;
                 });
             } else {
-                break b15;
+                break b18;
             };
-            continue l16;
+            continue l19;
         };
     };
 }
@@ -587,8 +600,8 @@ fn for_of_tuple_array() with Stdout {
         break __seq_lit: __local_0;
     };
     __iter_2 = "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: ref.as_non_null(items.repr), used: 2, index: 0 };
-    b18: block {
-        l19: loop {
+    b21: block {
+        l22: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: ref null "tuple/[String, i32]";
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_2);
@@ -596,9 +609,9 @@ fn for_of_tuple_array() with Stdout {
                 pair = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
                 "core:cli/println"(pair.0);
             } else {
-                break b18;
+                break b21;
             };
-            continue l19;
+            continue l22;
         };
     };
     "core:cli/println"(String { repr: array.new_data<u8>("done"), used: 4 });
@@ -624,8 +637,8 @@ fn for_of_tuples() with Stdout {
         break __seq_lit: __local_2;
     };
     __iter_4 = "core:allocator/ArrayIter<Tuple<i32,i32>>" { repr: ref.as_non_null(pairs.repr), used: 2, index: 0 };
-    b21: block {
-        l22: loop {
+    b24: block {
+        l25: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: ref null "tuple/[i32, i32]";
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<Tuple<i32,i32>>^Iterator::next(__iter_4);
@@ -649,9 +662,9 @@ fn for_of_tuples() with Stdout {
                     break __tmpl: __local_6;
                 });
             } else {
-                break b21;
+                break b24;
             };
-            continue l22;
+            continue l25;
         };
     };
 }
@@ -775,13 +788,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l34: loop {
+            l37: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l34;
+                continue l37;
             };
         };
     };
@@ -873,13 +886,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l40: loop {
+            l43: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l40;
+                continue l43;
             };
         };
     };
@@ -896,14 +909,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l44: loop {
+                l47: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l44;
+                    continue l47;
                 };
             };
         };
@@ -1117,29 +1130,6 @@ fn ArrayIter<i32>^Iterator::next(self) {
     item = builtin::array_get<i32>(self.repr, self.index);
     self.index = self.index + 1;
     return 0; item;
-}
-
-fn Holder<String,i32>::process(self) {
-    let __iter_1: ref "core:allocator/ArrayIter<Tuple<String,i32>>";
-    let pair: ref "tuple/[String, i32]";
-    let __local_4: ref Array<Tuple<String,i32>>;
-    __iter_1 = __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: block -> ref "core:allocator/ArrayIter<Tuple<String,i32>>" {
-        __local_4 = self;
-        break __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: ref.as_non_null(__local_4.repr), used: __local_4.used, index: 0 };
-    };
-    b63: block {
-        l64: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: ref null "tuple/[String, i32]";
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_1);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                pair = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
-            } else {
-                break b63;
-            };
-            continue l64;
-        };
-    };
 }
 
 fn Array<Tuple<String,i32>>::append(self, value) {

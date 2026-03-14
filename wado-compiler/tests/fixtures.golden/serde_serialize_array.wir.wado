@@ -690,41 +690,40 @@ fn Array<String>::append(self, value) {
 }
 
 fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
-    let seq_2: ref Result<JsonSeqSerializer,SerializeError>;
-    let seq_3: ref JsonSeqSerializer;
+    let seq: ref JsonSeqSerializer;
     let __iter_4: ref "core:allocator/ArrayIter<String>";
     let item: ref String;
-    let __local_9: i32;
+    let len: i32;
     let __local_11: ref Array<String>;
-    seq_2 = __inline_JsonSerializer_Serializer__begin_seq_0: block -> ref Result<JsonSeqSerializer,SerializeError> {
-        __local_9 = self.used;
+    let __fused_payload_13: ref JsonSeqSerializer;
+    __fused___inline_JsonSerializer_Serializer__begin_seq_0: block {
+        len = self.used;
         String::append_char(s.buf, 91);
-        break __inline_JsonSerializer_Serializer__begin_seq_0: Result<JsonSeqSerializer,SerializeError>::Ok { discriminant: 0, payload_0: JsonSeqSerializer { ser: ref.as_non_null(s), count: 0 } };
-    };
-    if ref.test Result<JsonSeqSerializer,SerializeError>::Ok(seq_2) {
-        seq_3 = value_copy JsonSeqSerializer(ref.cast Result<JsonSeqSerializer,SerializeError>::Ok(seq_2).payload_0);
+        __fused_payload_13 = JsonSeqSerializer { ser: ref.as_non_null(s), count: 0 };
+        seq = __fused_payload_13;
         __iter_4 = __inline_Array_String__IntoIterator__into_iter_2: block -> ref "core:allocator/ArrayIter<String>" {
             __local_11 = self;
             break __inline_Array_String__IntoIterator__into_iter_2: "core:allocator/ArrayIter<String>" { repr: ref.as_non_null(__local_11.repr), used: __local_11.used, index: 0 };
         };
-        b33: block {
-            l34: loop {
+        b32: block {
+            l33: loop {
                 let __sroa___pattern_temp_1_discriminant: i32;
                 let __sroa___pattern_temp_1_payload_0: ref null String;
                 multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<String>^Iterator::next(__iter_4);
                 if __sroa___pattern_temp_1_discriminant == 0 {
                     item = ref.as_non_null(__sroa___pattern_temp_1_payload_0);
-                    drop(JsonSeqSerializer^SerializeSeq::element<String>(seq_3, item));
+                    drop(JsonSeqSerializer^SerializeSeq::element<String>(seq, item));
                 } else {
-                    break b33;
+                    break b32;
                 };
-                continue l34;
+                continue l33;
             };
         };
         return __inline_JsonSeqSerializer_SerializeSeq__end_3: block -> ref Result<unit,SerializeError> {
-            String::append_char(seq_3.ser.buf, 93);
+            String::append_char(seq.ser.buf, 93);
             break __inline_JsonSeqSerializer_SerializeSeq__end_3: Result<unit,SerializeError> { 0, nop };
         };
+        break __fused___inline_JsonSerializer_Serializer__begin_seq_0;
     };
     return Result<unit,SerializeError>::Err { discriminant: 1, payload_0: SerializeError { message: String { repr: array.new_data<u8>("begin_seq failed"), used: 16 } } };
 }
@@ -753,39 +752,38 @@ fn ArrayIter<String>^Iterator::next(self) {
 }
 
 fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
-    let seq_2: ref Result<JsonSeqSerializer,SerializeError>;
-    let seq_3: ref JsonSeqSerializer;
+    let seq: ref JsonSeqSerializer;
     let __iter_4: ref "core:allocator/ArrayIter<i32>";
-    let __local_9: i32;
+    let len: i32;
     let __local_11: ref Array<i32>;
-    seq_2 = __inline_JsonSerializer_Serializer__begin_seq_0: block -> ref Result<JsonSeqSerializer,SerializeError> {
-        __local_9 = self.used;
+    let __fused_payload_13: ref JsonSeqSerializer;
+    __fused___inline_JsonSerializer_Serializer__begin_seq_0: block {
+        len = self.used;
         String::append_char(s.buf, 91);
-        break __inline_JsonSerializer_Serializer__begin_seq_0: Result<JsonSeqSerializer,SerializeError>::Ok { discriminant: 0, payload_0: JsonSeqSerializer { ser: ref.as_non_null(s), count: 0 } };
-    };
-    if ref.test Result<JsonSeqSerializer,SerializeError>::Ok(seq_2) {
-        seq_3 = value_copy JsonSeqSerializer(ref.cast Result<JsonSeqSerializer,SerializeError>::Ok(seq_2).payload_0);
+        __fused_payload_13 = JsonSeqSerializer { ser: ref.as_non_null(s), count: 0 };
+        seq = __fused_payload_13;
         __iter_4 = __inline_Array_i32__IntoIterator__into_iter_2: block -> ref "core:allocator/ArrayIter<i32>" {
             __local_11 = self;
             break __inline_Array_i32__IntoIterator__into_iter_2: "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(__local_11.repr), used: __local_11.used, index: 0 };
         };
-        b39: block {
-            l40: loop {
+        b37: block {
+            l38: loop {
                 let __sroa___pattern_temp_1_discriminant: i32;
                 let __sroa___pattern_temp_1_payload_0: i32;
                 multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
                 if __sroa___pattern_temp_1_discriminant == 0 {
-                    drop(JsonSeqSerializer^SerializeSeq::element<i32>(seq_3, __sroa___pattern_temp_1_payload_0));
+                    drop(JsonSeqSerializer^SerializeSeq::element<i32>(seq, __sroa___pattern_temp_1_payload_0));
                 } else {
-                    break b39;
+                    break b37;
                 };
-                continue l40;
+                continue l38;
             };
         };
         return __inline_JsonSeqSerializer_SerializeSeq__end_3: block -> ref Result<unit,SerializeError> {
-            String::append_char(seq_3.ser.buf, 93);
+            String::append_char(seq.ser.buf, 93);
             break __inline_JsonSeqSerializer_SerializeSeq__end_3: Result<unit,SerializeError> { 0, nop };
         };
+        break __fused___inline_JsonSerializer_Serializer__begin_seq_0;
     };
     return Result<unit,SerializeError>::Err { discriminant: 1, payload_0: SerializeError { message: String { repr: array.new_data<u8>("begin_seq failed"), used: 16 } } };
 }
@@ -841,13 +839,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l46: loop {
+            l44: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l46;
+                continue l44;
             };
         };
     };

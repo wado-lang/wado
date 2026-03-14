@@ -140,8 +140,6 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/Pair<i32>^Eq::eq" = fn(ref Pair<i32>, ref Pair<i32>) -> bool;
-
 type "functype/Pair<i32>^Ord::cmp" = fn(ref Pair<i32>, ref Pair<i32>) -> enum:Ordering;
 
 type "functype/Array<i32>::append" = fn(ref Array<Box<i32>>, ref "core:internal/Box<i32>");
@@ -240,7 +238,11 @@ fn trait_bound_bounded_impl_for_trait() with Stdout {
     if Pair<i32>^Ord::cmp(a, b) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("a < b"), used: 5 });
     };
-    if Pair<i32>^Eq::eq(a, a) {
+    if if a.first == a.first -> i32 {
+        a.second == a.second;
+    } else {
+        0;
+    } {
         "core:cli/println"(String { repr: array.new_data<u8>("a == a"), used: 6 });
     };
 }
@@ -365,13 +367,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l14: loop {
+            l15: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l14;
+                continue l15;
             };
         };
     };
@@ -500,13 +502,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l21: loop {
+            l22: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l21;
+                continue l22;
             };
         };
     };
@@ -523,14 +525,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l25: loop {
+                l26: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l25;
+                    continue l26;
                 };
             };
         };
@@ -640,14 +642,6 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
-    };
-}
-
-fn Pair<i32>^Eq::eq(self, other) {
-    return if self.first == other.first -> i32 {
-        self.second == other.second;
-    } else {
-        0;
     };
 }
 

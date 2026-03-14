@@ -177,8 +177,6 @@ type "functype/unpack64" = fn(f64) -> ref UnpackResult;
 
 type "functype/unpack32" = fn(f32) -> ref UnpackResult;
 
-type "functype/unrounded_round" = fn(u64) -> u64;
-
 type "functype/unrounded_div" = fn(u64, u64) -> u64;
 
 type "functype/pow10_coarse" = fn(i32) -> ref PmHiLo;
@@ -227,13 +225,9 @@ type "functype/write_u64_base_digits" = fn(ref array<u8>, i32, i64, i32, i32, i3
 
 type "functype/fmt_float_special" = fn(ref Formatter, bool, enum:SpecialKind, ref String);
 
-type "functype/fmt_float_sign" = fn(ref Formatter, bool);
-
 type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
 
 type "functype/u128::fmt_base" = fn(ref u128, ref Formatter, i32, bool);
-
-type "functype/u128^Eq::eq" = fn(ref u128, ref u128) -> bool;
 
 type "functype/i128::sub" = fn(ref i128, ref i128) -> ref i128;
 
@@ -318,6 +312,8 @@ type "functype/trim_zeros" = fn(u64, i32) -> [u64, i32];
 type "functype/check_special" = fn(f64) -> [bool, bool, i32];
 
 type "functype/i128::sub" = fn(ref i128, ref i128) -> [u64, i64];
+
+type "functype/i128::abs_u128" = fn(ref i128) -> [u64, u64];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -5975,10 +5971,6 @@ fn unpack32(f) {
     return m_12; e;
 }
 
-fn unrounded_round(u) {
-    return ((u + 1_i64) + ((u >>u 2_i64) & 1_i64)) >>u 2_i64;
-}
-
 fn unrounded_div(u, d) {
     let q: u64;
     let r: u64;
@@ -6293,7 +6285,8 @@ fn fixed_width(f, n) {
     let __local_21: ref String;
     let __local_23: ref Formatter;
     let __local_26: i32;
-    let __local_30: ref Array<u64>;
+    let __local_31: u64;
+    let __local_32: ref Array<u64>;
     __cond = n <= 18;
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -6347,16 +6340,19 @@ condition: n <= 18
     multivalue_bind [__sroa_pm_hi, __sroa_pm_lo] = mul_pow10(p);
     s = 0 - ((e + lp) + 3);
     u = uscale(m, __sroa_pm_hi, __sroa_pm_lo, s);
-    d = unrounded_round(u);
+    d = ((u + 1_i64) + ((u >>u 2_i64) & 1_i64)) >>u 2_i64;
     if d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
-        __local_30 = POW10;
-        if n >= __local_30.used {
+        __local_32 = POW10;
+        if n >= __local_32.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_30.repr, n);
+        break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_32.repr, n);
     } {
-        d = unrounded_round(unrounded_div(u, 10_i64));
+        d = __inline_unrounded_round_12: block -> u64 {
+            __local_31 = unrounded_div(u, 10_i64);
+            break __inline_unrounded_round_12: ((__local_31 + 1_i64) + ((__local_31 >>u 2_i64) & 1_i64)) >>u 2_i64;
+        };
         return d; (0 - p) + 1;
     };
     return d; 0 - p;
@@ -6380,7 +6376,8 @@ fn fixed_width_for_prec(f, precision) {
     let u: u64;
     let d: u64;
     let __local_21: i32;
-    let __local_28: ref Array<u64>;
+    let __local_29: u64;
+    let __local_30: ref Array<u64>;
     let __sroa_unpack_mantissa: u64;
     let __sroa_unpack_exponent: i32;
     multivalue_bind [__sroa_unpack_mantissa, __sroa_unpack_exponent] = unpack64(f);
@@ -6416,16 +6413,19 @@ fn fixed_width_for_prec(f, precision) {
     multivalue_bind [__sroa_pm_hi, __sroa_pm_lo] = mul_pow10(p);
     s = 0 - ((e + lp) + 3);
     u = uscale(m, __sroa_pm_hi, __sroa_pm_lo, s);
-    d = unrounded_round(u);
+    d = ((u + 1_i64) + ((u >>u 2_i64) & 1_i64)) >>u 2_i64;
     if d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
-        __local_28 = POW10;
-        if n >= __local_28.used {
+        __local_30 = POW10;
+        if n >= __local_30.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_28.repr, n);
+        break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_30.repr, n);
     } {
-        d = unrounded_round(unrounded_div(u, 10_i64));
+        d = __inline_unrounded_round_8: block -> u64 {
+            __local_29 = unrounded_div(u, 10_i64);
+            break __inline_unrounded_round_8: ((__local_29 + 1_i64) + ((__local_29 >>u 2_i64) & 1_i64)) >>u 2_i64;
+        };
         return d; (0 - p) + 1;
     };
     return d; 0 - p;
@@ -6458,6 +6458,7 @@ fn short(f) {
     let __local_29: u64;
     let __local_30: u64;
     let __local_31: i32;
+    let __local_32: u64;
     let __sroa_unpack_mantissa: u64;
     let __sroa_unpack_exponent: i32;
     multivalue_bind [__sroa_unpack_mantissa, __sroa_unpack_exponent] = unpack64(f);
@@ -6525,7 +6526,10 @@ fn short(f) {
     };
     d = dmin;
     if dmin <u dmax {
-        d = unrounded_round(uscale(m, __sroa_pm_hi, __sroa_pm_lo, s));
+        d = __inline_unrounded_round_8: block -> u64 {
+            __local_32 = uscale(m, __sroa_pm_hi, __sroa_pm_lo, s);
+            break __inline_unrounded_round_8: ((__local_32 + 1_i64) + ((__local_32 >>u 2_i64) & 1_i64)) >>u 2_i64;
+        };
     };
     return d; 0 - p;
 }
@@ -6557,6 +6561,7 @@ fn short32(f) {
     let __local_29: u64;
     let __local_30: u64;
     let __local_31: i32;
+    let __local_32: u64;
     let __sroa_unpack_mantissa: u64;
     let __sroa_unpack_exponent: i32;
     multivalue_bind [__sroa_unpack_mantissa, __sroa_unpack_exponent] = unpack32(f);
@@ -6624,7 +6629,10 @@ fn short32(f) {
     };
     d = dmin;
     if dmin <u dmax {
-        d = unrounded_round(uscale(m, __sroa_pm_hi, __sroa_pm_lo, s));
+        d = __inline_unrounded_round_8: block -> u64 {
+            __local_32 = uscale(m, __sroa_pm_hi, __sroa_pm_lo, s);
+            break __inline_unrounded_round_8: ((__local_32 + 1_i64) + ((__local_32 >>u 2_i64) & 1_i64)) >>u 2_i64;
+        };
     };
     return d; 0 - p;
 }
@@ -7335,14 +7343,6 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
     Formatter::apply_padding(f, mark);
 }
 
-fn fmt_float_sign(f, is_neg) {
-    if is_neg {
-        String::append_char(f.buf, 45);
-    } else if f.sign_plus {
-        String::append_char(f.buf, 43);
-    };
-}
-
 fn Array<u64>::append(self, value) {
     let used: i32;
     let capacity: i32;
@@ -7417,32 +7417,32 @@ fn u128::fmt_base(self, f, base, upper) {
         __local_10 = self.low;
         if __local_9 != 0_i64 {
             __local_12 = 63;
-            b325: block {
-                l326: loop {
+            b323: block {
+                l324: loop {
                     if (__local_12 >= 0) == 0 {
-                        break b325;
+                        break b323;
                     };
                     if ((__local_9 >> builtin::i64_extend_i32_s(__local_12)) & 1_i64) != 0_i64 {
                         __local_8 = 64 + __local_12;
-                        break b325;
+                        break b323;
                     };
                     __local_12 = __local_12 - 1;
-                    continue l326;
+                    continue l324;
                 };
             };
         } else {
             __local_14 = 63;
-            b329: block {
-                l330: loop {
+            b327: block {
+                l328: loop {
                     if (__local_14 >= 0) == 0 {
-                        break b329;
+                        break b327;
                     };
                     if ((__local_10 >> builtin::i64_extend_i32_s(__local_14)) & 1_i64) != 0_i64 {
                         __local_8 = __local_14;
-                        break b329;
+                        break b327;
                     };
                     __local_14 = __local_14 - 1;
-                    continue l330;
+                    continue l328;
                 };
             };
         };
@@ -7460,14 +7460,14 @@ fn u128::fmt_base(self, f, base, upper) {
         lo = self.low;
         hi = self.high;
         shift_u64 = builtin::i64_extend_i32_s(bits_per_digit);
-        b334: block {
-            l335: loop {
+        b332: block {
+            l333: loop {
                 if if lo != 0_i64 -> i32 {
                     1;
                 } else {
                     hi != 0_i64;
                 } == 0 {
-                    break b334;
+                    break b332;
                 };
                 pos = pos - 1;
                 digit = builtin::i32_wrap_i64(lo & mask);
@@ -7482,17 +7482,9 @@ fn u128::fmt_base(self, f, base, upper) {
                 hi_bits = hi << (64_i64 - shift_u64);
                 lo = (lo >>u shift_u64) | hi_bits;
                 hi = hi >>u shift_u64;
-                continue l335;
+                continue l333;
             };
         };
-    };
-}
-
-fn u128^Eq::eq(self, other) {
-    return if self.low == other.low -> i32 {
-        self.high == other.high;
-    } else {
-        0;
     };
 }
 
@@ -7508,14 +7500,13 @@ fn i128::abs_u128(self) {
         let __sroa_neg_low: u64;
         let __sroa_neg_high: i64;
         multivalue_bind [__sroa_neg_low, __sroa_neg_high] = i128::sub(i128 { low: 0_i64, high: 0_i64 }, self);
-        return u128 { low: __sroa_neg_low, high: __sroa_neg_high };
+        return __sroa_neg_low; __sroa_neg_high;
     };
-    return u128 { low: self.low, high: self.high };
+    return self.low; self.high;
 }
 
 fn i128::fmt_base(self, f, base, upper) {
     let is_neg: bool;
-    let abs_val: ref u128;
     let bits_per_digit: i32;
     let mask: u64;
     let prefix: ref String;
@@ -7535,9 +7526,12 @@ fn i128::fmt_base(self, f, base, upper) {
     let digit: i32;
     let ch: i32;
     let hi_bits: u64;
-    let __local_29: ref String;
+    let __local_29: ref u128;
+    let __local_31: ref String;
     is_neg = self.high < 0_i64;
-    abs_val = i128::abs_u128(self);
+    let __sroa_abs_val_low: u64;
+    let __sroa_abs_val_high: u64;
+    multivalue_bind [__sroa_abs_val_low, __sroa_abs_val_high] = i128::abs_u128(self);
     bits_per_digit = if base == 2 -> i32 {
         1;
     } else {
@@ -7557,66 +7551,74 @@ fn i128::fmt_base(self, f, base, upper) {
     } else {
         String { repr: builtin::array_new<u8>(0), used: 0 };
     });
-    is_zero = u128^Eq::eq(abs_val, u128 { low: 0_i64, high: 0_i64 });
+    is_zero = __inline_u128_Eq__eq_1: block -> bool {
+        __local_29 = u128 { low: 0_i64, high: 0_i64 };
+        if __sroa_abs_val_low == 0_i64 -> i32 {
+            __sroa_abs_val_high == 0_i64;
+        } else {
+            0;
+        };
+        break __inline_u128_Eq__eq_1;
+    };
     digit_count = if is_zero -> i32 {
         1;
     } else {
         __local_10 = 0;
-        __local_11 = abs_val.high;
-        __local_12 = abs_val.low;
+        __local_11 = __sroa_abs_val_high;
+        __local_12 = __sroa_abs_val_low;
         if __local_11 != 0_i64 {
             __local_13 = 63;
-            b349: block {
-                l350: loop {
+            b347: block {
+                l348: loop {
                     if (__local_13 >= 0) == 0 {
-                        break b349;
+                        break b347;
                     };
                     if ((__local_11 >> builtin::i64_extend_i32_s(__local_13)) & 1_i64) != 0_i64 {
                         __local_10 = 64 + __local_13;
-                        break b349;
+                        break b347;
                     };
                     __local_13 = __local_13 - 1;
-                    continue l350;
+                    continue l348;
                 };
             };
         } else {
             __local_15 = 63;
-            b353: block {
-                l354: loop {
+            b351: block {
+                l352: loop {
                     if (__local_15 >= 0) == 0 {
-                        break b353;
+                        break b351;
                     };
                     if ((__local_12 >> builtin::i64_extend_i32_s(__local_15)) & 1_i64) != 0_i64 {
                         __local_10 = __local_15;
-                        break b353;
+                        break b351;
                     };
                     __local_15 = __local_15 - 1;
-                    continue l354;
+                    continue l352;
                 };
             };
         };
         (__local_10 / bits_per_digit) + 1;
     };
     offset = Formatter::prepare_int_write(f, is_neg, prefix, digit_count);
-    arr = __inline_String__internal_raw_bytes_2: block -> ref array<u8> {
-        __local_29 = f.buf;
-        break __inline_String__internal_raw_bytes_2: __local_29.repr;
+    arr = __inline_String__internal_raw_bytes_3: block -> ref array<u8> {
+        __local_31 = f.buf;
+        break __inline_String__internal_raw_bytes_3: __local_31.repr;
     };
     if is_zero {
         builtin::array_set_u8(arr, offset, 48);
     } else {
         pos = offset + digit_count;
-        lo = abs_val.low;
-        hi = abs_val.high;
+        lo = __sroa_abs_val_low;
+        hi = __sroa_abs_val_high;
         shift_u64 = builtin::i64_extend_i32_s(bits_per_digit);
-        b358: block {
-            l359: loop {
+        b356: block {
+            l357: loop {
                 if if lo != 0_i64 -> i32 {
                     1;
                 } else {
                     hi != 0_i64;
                 } == 0 {
-                    break b358;
+                    break b356;
                 };
                 pos = pos - 1;
                 digit = builtin::i32_wrap_i64(lo & mask);
@@ -7631,7 +7633,7 @@ fn i128::fmt_base(self, f, base, upper) {
                 hi_bits = hi << (64_i64 - shift_u64);
                 lo = (lo >>u shift_u64) | hi_bits;
                 hi = hi >>u shift_u64;
-                continue l359;
+                continue l357;
             };
         };
     };
@@ -7774,7 +7776,7 @@ fn f32::fmt_into(self, f) {
     let __local_17: i32;
     let __local_18: i32;
     let __local_22: ref String;
-    let __local_23: ref Array<u64>;
+    let __local_25: ref Array<u64>;
     if f.precision >= 0 {
         precision = f.precision;
         v64 = builtin::f64_promote_f32(self);
@@ -7808,19 +7810,23 @@ fn f32::fmt_into(self, f) {
             break __inline_log10_pow2_2: (__local_18 * 78913) >> 18;
         };
         break __inline_digits_1: __local_17 + (d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
-            __local_23 = POW10;
-            if __local_17 >= __local_23.used {
+            __local_25 = POW10;
+            if __local_17 >= __local_25.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
-            break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_23.repr, __local_17);
+            break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_25.repr, __local_17);
         });
     };
     mark = __inline_String__len_6: block -> i32 {
         __local_22 = f.buf;
         break __inline_String__len_6: __local_22.used;
     };
-    fmt_float_sign(f, is_neg);
+    if is_neg {
+        String::append_char(f.buf, 45);
+    } else if f.sign_plus {
+        String::append_char(f.buf, 43);
+    };
     write_decimal(f.buf, d, p, nd);
     Formatter::apply_padding(f, mark);
 }
@@ -7838,7 +7844,7 @@ fn f64::fmt_into(self, f) {
     let __local_14: i32;
     let __local_15: i32;
     let __local_19: ref String;
-    let __local_20: ref Array<u64>;
+    let __local_22: ref Array<u64>;
     if f.precision >= 0 {
         f64::fmt_fixed(self, f.precision, f);
         return;
@@ -7871,19 +7877,23 @@ fn f64::fmt_into(self, f) {
             break __inline_log10_pow2_1: (__local_15 * 78913) >> 18;
         };
         break __inline_digits_0: __local_14 + (d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
-            __local_20 = POW10;
-            if __local_14 >= __local_20.used {
+            __local_22 = POW10;
+            if __local_14 >= __local_22.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
-            break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_20.repr, __local_14);
+            break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_22.repr, __local_14);
         });
     };
     mark = __inline_String__len_5: block -> i32 {
         __local_19 = f.buf;
         break __inline_String__len_5: __local_19.used;
     };
-    fmt_float_sign(f, is_neg);
+    if is_neg {
+        String::append_char(f.buf, 45);
+    } else if f.sign_plus {
+        String::append_char(f.buf, 43);
+    };
     write_decimal(f.buf, d, p, nd);
     Formatter::apply_padding(f, mark);
 }
@@ -7900,10 +7910,10 @@ fn f64::fmt_fixed(self, precision, f) {
     let nd: i32;
     let mark_13: i32;
     let __local_16: ref String;
-    let __local_18: i32;
-    let __local_19: i32;
-    let __local_23: ref String;
-    let __local_24: ref Array<u64>;
+    let __local_20: i32;
+    let __local_21: i32;
+    let __local_25: ref String;
+    let __local_28: ref Array<u64>;
     value = self;
     let __sroa___pattern_temp_0_0: bool;
     let __sroa___pattern_temp_0_1: bool;
@@ -7935,7 +7945,11 @@ fn f64::fmt_fixed(self, precision, f) {
             __local_16 = f.buf;
             break __inline_String__len_1: __local_16.used;
         };
-        fmt_float_sign(f, is_neg);
+        if is_neg {
+            String::append_char(f.buf, 45);
+        } else if f.sign_plus {
+            String::append_char(f.buf, 43);
+        };
         String::append_char(f.buf, 48);
         if precision > 0 {
             String::append_char(f.buf, 46);
@@ -7954,25 +7968,29 @@ fn f64::fmt_fixed(self, precision, f) {
     multivalue_bind [__sroa_result_digits, __sroa_result_exponent] = fixed_width_for_prec(abs_f, precision);
     d = __sroa_result_digits;
     p = __sroa_result_exponent;
-    nd = __inline_digits_2: block -> i32 {
-        __local_18 = __inline_log10_pow2_3: block -> i32 {
-            __local_19 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d));
-            break __inline_log10_pow2_3: (__local_19 * 78913) >> 18;
+    nd = __inline_digits_3: block -> i32 {
+        __local_20 = __inline_log10_pow2_4: block -> i32 {
+            __local_21 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d));
+            break __inline_log10_pow2_4: (__local_21 * 78913) >> 18;
         };
-        break __inline_digits_2: __local_18 + (d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
-            __local_24 = POW10;
-            if __local_18 >= __local_24.used {
+        break __inline_digits_3: __local_20 + (d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
+            __local_28 = POW10;
+            if __local_20 >= __local_28.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
-            break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_24.repr, __local_18);
+            break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_28.repr, __local_20);
         });
     };
-    mark_13 = __inline_String__len_7: block -> i32 {
-        __local_23 = f.buf;
-        break __inline_String__len_7: __local_23.used;
+    mark_13 = __inline_String__len_8: block -> i32 {
+        __local_25 = f.buf;
+        break __inline_String__len_8: __local_25.used;
     };
-    fmt_float_sign(f, is_neg);
+    if is_neg {
+        String::append_char(f.buf, 45);
+    } else if f.sign_plus {
+        String::append_char(f.buf, 43);
+    };
     write_decimal_prec(f.buf, d, p, nd, precision);
     Formatter::apply_padding(f, mark_13);
 }
@@ -7995,13 +8013,13 @@ fn f64::fmt_exp(self, precision, upper, f) {
     let p_20: i32;
     let nd_21: i32;
     let __local_24: ref String;
-    let __local_26: ref String;
-    let __local_28: i32;
-    let __local_29: i32;
+    let __local_28: ref String;
+    let __local_32: i32;
     let __local_33: i32;
-    let __local_34: i32;
-    let __local_37: ref Array<u64>;
-    let __local_39: ref Array<u64>;
+    let __local_37: i32;
+    let __local_38: i32;
+    let __local_41: ref Array<u64>;
+    let __local_43: ref Array<u64>;
     value = self;
     upper_bool = upper != 0;
     let __sroa___pattern_temp_0_0: bool;
@@ -8034,7 +8052,11 @@ fn f64::fmt_exp(self, precision, upper, f) {
             __local_24 = f.buf;
             break __inline_String__len_1: __local_24.used;
         };
-        fmt_float_sign(f, is_neg);
+        if is_neg {
+            String::append_char(f.buf, 45);
+        } else if f.sign_plus {
+            String::append_char(f.buf, 43);
+        };
         String::append_char(f.buf, 48);
         if precision > 0 {
             String::append_char(f.buf, 46);
@@ -8054,11 +8076,15 @@ fn f64::fmt_exp(self, precision, upper, f) {
     } else {
         value;
     };
-    mark_11 = __inline_String__len_3: block -> i32 {
-        __local_26 = f.buf;
-        break __inline_String__len_3: __local_26.used;
+    mark_11 = __inline_String__len_4: block -> i32 {
+        __local_28 = f.buf;
+        break __inline_String__len_4: __local_28.used;
     };
-    fmt_float_sign(f, is_neg);
+    if is_neg {
+        String::append_char(f.buf, 45);
+    } else if f.sign_plus {
+        String::append_char(f.buf, 43);
+    };
     if precision >= 0 {
         total_digits = precision + 1;
         clamped = if total_digits > 18 -> i32 {
@@ -8071,18 +8097,18 @@ fn f64::fmt_exp(self, precision, upper, f) {
         multivalue_bind [__sroa_result_14_digits, __sroa_result_14_exponent] = fixed_width(abs_f, clamped);
         d_15 = __sroa_result_14_digits;
         p_16 = __sroa_result_14_exponent;
-        nd_17 = __inline_digits_4: block -> i32 {
-            __local_28 = __inline_log10_pow2_5: block -> i32 {
-                __local_29 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d_15));
-                break __inline_log10_pow2_5: (__local_29 * 78913) >> 18;
+        nd_17 = __inline_digits_6: block -> i32 {
+            __local_32 = __inline_log10_pow2_7: block -> i32 {
+                __local_33 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d_15));
+                break __inline_log10_pow2_7: (__local_33 * 78913) >> 18;
             };
-            break __inline_digits_4: __local_28 + (d_15 >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
-                __local_37 = POW10;
-                if __local_28 >= __local_37.used {
+            break __inline_digits_6: __local_32 + (d_15 >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
+                __local_41 = POW10;
+                if __local_32 >= __local_41.used {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_37.repr, __local_28);
+                break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_41.repr, __local_32);
             });
         };
         write_exp_prec(f.buf, d_15, p_16, nd_17, precision, upper_bool);
@@ -8092,18 +8118,18 @@ fn f64::fmt_exp(self, precision, upper, f) {
         multivalue_bind [__sroa_result_18_digits, __sroa_result_18_exponent] = short(abs_f);
         d_19 = __sroa_result_18_digits;
         p_20 = __sroa_result_18_exponent;
-        nd_21 = __inline_digits_8: block -> i32 {
-            __local_33 = __inline_log10_pow2_9: block -> i32 {
-                __local_34 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d_19));
-                break __inline_log10_pow2_9: (__local_34 * 78913) >> 18;
+        nd_21 = __inline_digits_10: block -> i32 {
+            __local_37 = __inline_log10_pow2_11: block -> i32 {
+                __local_38 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d_19));
+                break __inline_log10_pow2_11: (__local_38 * 78913) >> 18;
             };
-            break __inline_digits_8: __local_33 + (d_19 >=u __inline_Array_u64__IndexValue__index_value_1: block -> u64 {
-                __local_39 = POW10;
-                if __local_33 >= __local_39.used {
+            break __inline_digits_10: __local_37 + (d_19 >=u __inline_Array_u64__IndexValue__index_value_1: block -> u64 {
+                __local_43 = POW10;
+                if __local_37 >= __local_43.used {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_u64__IndexValue__index_value_1: builtin::array_get<u64>(__local_39.repr, __local_33);
+                break __inline_Array_u64__IndexValue__index_value_1: builtin::array_get<u64>(__local_43.repr, __local_37);
             });
         };
         write_exp(f.buf, d_19, p_20, nd_21, upper_bool);
@@ -8287,7 +8313,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l420: loop {
+            l430: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -8295,7 +8321,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l420;
+                continue l430;
             };
         };
     };
@@ -8336,13 +8362,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l428: loop {
+            l438: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l428;
+                continue l438;
             };
         };
     };
@@ -8431,10 +8457,10 @@ fn Formatter::apply_padding(self, start_pos) {
         i_8 = content_len - 1;
         _licm_buf_29 = self.buf;
         _licm_repr_33 = _licm_buf_29.repr;
-        b438: block {
-            l439: loop {
+        b448: block {
+            l449: loop {
                 if (i_8 >= 0) == 0 {
-                    break b438;
+                    break b448;
                 };
                 index_14 = (start_pos + left_pad) + i_8;
                 value_15 = __inline_String__get_byte_2: block -> u8 {
@@ -8443,7 +8469,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 };
                 builtin::array_set_u8(_licm_repr_33, index_14, value_15);
                 i_8 = i_8 - 1;
-                continue l439;
+                continue l449;
             };
         };
         __for_1: block {
@@ -8451,14 +8477,14 @@ fn Formatter::apply_padding(self, start_pos) {
             _licm_buf_30 = self.buf;
             _licm_repr_34 = _licm_buf_30.repr;
             block {
-                l442: loop {
+                l452: loop {
                     if (j_9 < left_pad) == 0 {
                         break __for_1;
                     };
                     index_19 = start_pos + j_9;
                     builtin::array_set_u8(_licm_repr_34, index_19, fill_byte);
                     j_9 = j_9 + 1;
-                    continue l442;
+                    continue l452;
                 };
             };
         };
@@ -8468,10 +8494,10 @@ fn Formatter::apply_padding(self, start_pos) {
         i_10 = content_len - 1;
         _licm_buf_31 = self.buf;
         _licm_repr_35 = _licm_buf_31.repr;
-        b444: block {
-            l445: loop {
+        b454: block {
+            l455: loop {
                 if (i_10 >= 0) == 0 {
-                    break b444;
+                    break b454;
                 };
                 index_22 = (start_pos + padding) + i_10;
                 value_23 = __inline_String__get_byte_5: block -> u8 {
@@ -8480,7 +8506,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 };
                 builtin::array_set_u8(_licm_repr_35, index_22, value_23);
                 i_10 = i_10 - 1;
-                continue l445;
+                continue l455;
             };
         };
         __for_2: block {
@@ -8488,14 +8514,14 @@ fn Formatter::apply_padding(self, start_pos) {
             _licm_buf_32 = self.buf;
             _licm_repr_36 = _licm_buf_32.repr;
             block {
-                l448: loop {
+                l458: loop {
                     if (j_11 < padding) == 0 {
                         break __for_2;
                     };
                     index_27 = start_pos + j_11;
                     builtin::array_set_u8(_licm_repr_36, index_27, fill_byte);
                     j_11 = j_11 + 1;
-                    continue l448;
+                    continue l458;
                 };
             };
         };

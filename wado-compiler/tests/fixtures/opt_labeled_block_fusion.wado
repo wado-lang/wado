@@ -1,0 +1,56 @@
+// Test that LabeledBlock+IfVariant fusion eliminates intermediate GC Option allocations.
+//
+// When an inlined function returns Option<T>, TIR generates:
+//   let __tmp = labeled_block { ... break null / break Some(v) };
+//   if VariantTest(__tmp) { ... }
+//
+// The fusion pass detects this pattern and merges them into a single block,
+// eliminating the heap-allocated Option<T> intermediate.
+
+use { println, Stdout } from "core:cli";
+
+fn maybe_double(n: i32) -> Option<i32> {
+    if n > 0 {
+        return Option::Some(n * 2);
+    }
+    return null;
+}
+
+fn first_positive(arr: Array<i32>) -> Option<i32> {
+    for let x of arr {
+        if x > 0 {
+            return Option::Some(x);
+        }
+    }
+    return null;
+}
+
+export fn run() with Stdout {
+    // Basic: inline threshold covers maybe_double (small function)
+    let a = maybe_double(5);
+    if let Some(v) = a {
+        assert v == 10;
+    }
+
+    let b = maybe_double(-3);
+    assert b matches { None };
+
+    // Loop: first_positive uses for-of which inlines iterator methods
+    let arr: Array<i32> = [-1, -2, 3, 4];
+    let c = first_positive(arr);
+    if let Some(v) = c {
+        assert v == 3;
+    }
+
+    let empty: Array<i32> = [];
+    let d = first_positive(empty);
+    assert d matches { None };
+
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_not_expect:O2": ["ref option<i32>"]
+}

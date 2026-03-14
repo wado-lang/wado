@@ -142,8 +142,6 @@ type "functype/String::append_char" = fn(ref String, char);
 
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
-type "functype/Array<i32>^IndexAssign::index_assign" = fn(ref Array<i32>, i32, i32);
-
 type "functype/__Closure_0::__call" = fn(ref __Closure_0, ref "core:internal/Box<i32>", ref "core:internal/Box<i32>") -> bool;
 
 type "functype/__Closure_1::__call" = fn(ref __Closure_1, ref "core:internal/Box<i32>", ref "core:internal/Box<i32>") -> bool;
@@ -193,8 +191,15 @@ fn partition(arr, low, high, cmp) {
     let tmp_8: i32;
     let __local_12: i32;
     let __local_14: i32;
-    let __local_16: i32;
-    let __local_18: i32;
+    let index_16: i32;
+    let value_17: i32;
+    let __local_19: i32;
+    let index_21: i32;
+    let __local_24: i32;
+    let index_26: i32;
+    let value_27: i32;
+    let _licm_used_33: i32;
+    let _licm_repr_34: ref array<i32>;
     pivot = "core:internal/Box<i32>" { value: __inline_Array_i32__IndexValue__index_value_0: block -> i32 {
         if high >= arr.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -205,6 +210,8 @@ fn partition(arr, low, high, cmp) {
     i = low - 1;
     __for_0: block {
         j = low;
+        _licm_used_33 = arr.used;
+        _licm_repr_34 = arr.repr;
         block {
             l2: loop {
                 if (j < high) == 0 {
@@ -215,53 +222,74 @@ fn partition(arr, low, high, cmp) {
                     __indirect_call_0 = ref.cast "canonical/CanonicalClosure_0"(cmp);
                     call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, "core:internal/Box<i32>" { value: __inline_Array_i32__IndexValue__index_value_1: block -> i32 {
                         __local_12 = j;
-                        if __local_12 >= arr.used {
+                        if __local_12 >= _licm_used_33 {
                             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         };
-                        break __inline_Array_i32__IndexValue__index_value_1: builtin::array_get<i32>(arr.repr, __local_12);
+                        break __inline_Array_i32__IndexValue__index_value_1: builtin::array_get<i32>(_licm_repr_34, __local_12);
                     } }, pivot);
                 } {
                     i = i + 1;
                     tmp_7 = __inline_Array_i32__IndexValue__index_value_2: block -> i32 {
                         __local_14 = i;
-                        if __local_14 >= arr.used {
+                        if __local_14 >= _licm_used_33 {
                             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         };
-                        break __inline_Array_i32__IndexValue__index_value_2: builtin::array_get<i32>(arr.repr, __local_14);
+                        break __inline_Array_i32__IndexValue__index_value_2: builtin::array_get<i32>(_licm_repr_34, __local_14);
                     };
-                    Array<i32>^IndexAssign::index_assign(arr, i, __inline_Array_i32__IndexValue__index_value_3: block -> i32 {
-                        __local_16 = j;
-                        if __local_16 >= arr.used {
+                    index_16 = i;
+                    value_17 = __inline_Array_i32__IndexValue__index_value_4: block -> i32 {
+                        __local_19 = j;
+                        if __local_19 >= _licm_used_33 {
                             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         };
-                        break __inline_Array_i32__IndexValue__index_value_3: builtin::array_get<i32>(arr.repr, __local_16);
-                    });
-                    Array<i32>^IndexAssign::index_assign(arr, j, tmp_7);
+                        break __inline_Array_i32__IndexValue__index_value_4: builtin::array_get<i32>(_licm_repr_34, __local_19);
+                    };
+                    if index_16 >= _licm_used_33 {
+                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    };
+                    builtin::array_set<i32>(_licm_repr_34, index_16, value_17);
+                    index_21 = j;
+                    if index_21 >= _licm_used_33 {
+                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    };
+                    builtin::array_set<i32>(_licm_repr_34, index_21, tmp_7);
                 };
                 j = j + 1;
                 continue l2;
             };
         };
     };
-    tmp_8 = __inline_Array_i32__IndexValue__index_value_4: block -> i32 {
-        __local_18 = i + 1;
-        if __local_18 >= arr.used {
+    tmp_8 = __inline_Array_i32__IndexValue__index_value_6: block -> i32 {
+        __local_24 = i + 1;
+        if __local_24 >= arr.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_i32__IndexValue__index_value_4: builtin::array_get<i32>(arr.repr, __local_18);
+        break __inline_Array_i32__IndexValue__index_value_6: builtin::array_get<i32>(arr.repr, __local_24);
     };
-    Array<i32>^IndexAssign::index_assign(arr, i + 1, __inline_Array_i32__IndexValue__index_value_5: block -> i32 {
+    index_26 = i + 1;
+    value_27 = __inline_Array_i32__IndexValue__index_value_8: block -> i32 {
         if high >= arr.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_i32__IndexValue__index_value_5: builtin::array_get<i32>(arr.repr, high);
-    });
-    Array<i32>^IndexAssign::index_assign(arr, high, tmp_8);
+        break __inline_Array_i32__IndexValue__index_value_8: builtin::array_get<i32>(arr.repr, high);
+    };
+    if index_26 >= arr.used {
+        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
+    };
+    builtin::array_set<i32>(arr.repr, index_26, value_27);
+    if high >= arr.used {
+        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
+    };
+    builtin::array_set<i32>(arr.repr, high, tmp_8);
     return i + 1;
 }
 
@@ -288,7 +316,7 @@ fn print_array(arr) with Stdout {
         _licm_used_13 = arr.used;
         _licm_repr_14 = arr.repr;
         block {
-            l13: loop {
+            l17: loop {
                 if (i < _licm_used_13) == 0 {
                     break __for_1;
                 };
@@ -309,7 +337,7 @@ fn print_array(arr) with Stdout {
                     break __tmpl: __local_2;
                 });
                 i = i + 1;
-                continue l13;
+                continue l17;
             };
         };
     };
@@ -470,13 +498,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l28: loop {
+            l32: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l28;
+                continue l32;
             };
         };
     };
@@ -605,13 +633,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l35: loop {
+            l39: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l35;
+                continue l39;
             };
         };
     };
@@ -628,14 +656,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l39: loop {
+                l43: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l39;
+                    continue l43;
                 };
             };
         };
@@ -759,14 +787,6 @@ fn Array<i32>::append(self, value) {
     self.used = used + 1;
 }
 
-fn Array<i32>^IndexAssign::index_assign(self, index, value) {
-    if index >= self.used {
-        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-        unreachable;
-    };
-    builtin::array_set<i32>(self.repr, index, value);
-}
-
 fn __Closure_0::__call(self, a, b) {
     return a < b;
 }
@@ -782,13 +802,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l53: loop {
+            l56: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l53;
+                continue l56;
             };
         };
     };

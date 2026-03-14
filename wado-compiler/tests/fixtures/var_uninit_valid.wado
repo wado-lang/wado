@@ -1,0 +1,111 @@
+// Valid patterns for uninitialized variable declarations.
+// Rule (from Wasm validation): a local get is valid if a set is guaranteed before it.
+// Type annotation is required when there is no initializer.
+
+// Pattern 1: declare then assign then use in sequence
+test "declare, assign, use" {
+    let x: i32;
+    x = 42;
+    assert x == 42;
+}
+
+// Pattern 2: assign in both branches of if-else, then use
+test "if-else both branches assign" {
+    let result: i32;
+    let cond = true;
+    if cond {
+        result = 1;
+    } else {
+        result = 2;
+    }
+    assert result == 1;
+}
+
+// Pattern 3: assign in all arms of match, then use
+test "match all arms assign" {
+    let x: i32;
+    let opt: Option<i32> = Option::Some(10);
+    match opt {
+        Some(v) => { x = v; },
+        None => { x = 0; },
+    };
+    assert x == 10;
+}
+
+// Pattern 4: let mut — declare then assign, then reassign
+test "mut: declare then assign then reassign" {
+    let mut x: i32;
+    x = 1;
+    x = 2;
+    assert x == 2;
+}
+
+// Pattern 5: nested if-else, all paths assign
+test "nested if-else all paths assign" {
+    let x: i32;
+    let a = true;
+    let b = false;
+    if a {
+        if b {
+            x = 1;
+        } else {
+            x = 2;
+        }
+    } else {
+        x = 3;
+    }
+    assert x == 2;
+}
+
+// Pattern 6: assign *before* the loop, then use inside and after the loop.
+// (Assignment inside a loop body does NOT count as guaranteed initialization.)
+test "assign before loop, use inside loop" {
+    let mut x: i32;
+    let mut i = 0;
+    x = 0;  // guaranteed assignment happens before the loop
+    while i < 3 {
+        x = x + 1;
+        i = i + 1;
+    }
+    assert x == 3;
+}
+
+// Pattern 7: f64
+test "f64 uninit then assign" {
+    let y: f64;
+    y = 3.14;
+    assert y > 3.0;
+}
+
+// Pattern 8: bool uninit then assign in if-else
+test "bool uninit assigned in if-else" {
+    let flag: bool;
+    if 1 > 0 {
+        flag = true;
+    } else {
+        flag = false;
+    }
+    assert flag;
+}
+
+// Pattern 9: String uninit then assign
+test "String uninit then assign" {
+    let s: String;
+    s = "hello";
+    assert s.len() == 5;
+}
+
+// Pattern 10: String uninit assigned in if-else
+test "String uninit assigned in if-else" {
+    let greeting: String;
+    let formal = false;
+    if formal {
+        greeting = "Good day.";
+    } else {
+        greeting = "Hi!";
+    }
+    assert greeting.len() == 3;
+}
+
+__DATA__
+{"test": {}}
