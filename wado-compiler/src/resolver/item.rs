@@ -256,18 +256,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
             self.current_type_params
                 .insert(param.name.clone(), (index as u32, type_id));
             if !param.bounds.is_empty() {
-                self.current_type_param_bounds.insert(
-                    param.name.clone(),
-                    param.bounds.iter().map(|b| b.name.clone()).collect(),
-                );
+                self.current_type_param_bounds
+                    .insert(param.name.clone(), param.bounds.clone());
             }
             type_param_list.push((param.name.clone(), type_id));
         }
 
         // Store type parameters for generic functions (for call site substitution)
         if !func.type_params.is_empty() {
+            // Resolve param types now (while type params are in scope) for later type inference.
+            let resolved_param_types: Vec<crate::tir::TypeId> = func
+                .params
+                .iter()
+                .filter(|p| p.self_kind == crate::ast::SelfKind::None)
+                .map(|p| self.resolve_type(&p.ty))
+                .collect();
             self.generic_function_params
                 .insert(func.name.clone(), type_param_list);
+            self.generic_function_resolved_param_types
+                .insert(func.name.clone(), resolved_param_types);
         }
 
         // Resolve return type annotation (used for task_return_type in async fns)
@@ -497,7 +504,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .insert(named.name.clone(), (idx, type_id));
                 let bounds = old_type_param_bounds
                     .get(&named.name)
-                    .cloned()
+                    .map(|bs| bs.iter().map(|b| b.name.clone()).collect())
                     .unwrap_or_default();
                 impl_type_params.push(crate::tir::TirTypeParam {
                     name: named.name.clone(),
@@ -520,7 +527,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .insert(named.name.clone(), (idx, type_id));
                 let bounds = old_type_param_bounds
                     .get(&named.name)
-                    .cloned()
+                    .map(|bs| bs.iter().map(|b| b.name.clone()).collect())
                     .unwrap_or_default();
                 impl_type_params.push(crate::tir::TirTypeParam {
                     name: named.name.clone(),
@@ -552,10 +559,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .insert(param.name.clone(), (idx, type_id));
             type_param_list.push((param.name.clone(), type_id));
             if !param.bounds.is_empty() {
-                self.current_type_param_bounds.insert(
-                    param.name.clone(),
-                    param.bounds.iter().map(|b| b.name.clone()).collect(),
-                );
+                self.current_type_param_bounds
+                    .insert(param.name.clone(), param.bounds.clone());
             }
         }
 
@@ -641,6 +646,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
             })
             .collect();
 
+        // Store resolved param types for generic methods (before restoring type params scope)
+        // so TypeParams have the correct ids for later inference at call sites.
+        let method_resolved_param_types: Vec<crate::tir::TypeId> = if func.type_params.is_empty() {
+            vec![]
+        } else {
+            func.params
+                .iter()
+                .filter(|p| p.self_kind == crate::ast::SelfKind::None)
+                .map(|p| self.resolve_type(&p.ty))
+                .collect()
+        };
+
         // Restore previous type params scope and bounds
         self.current_type_params = old_type_params;
         self.current_type_param_bounds = old_type_param_bounds;
@@ -648,7 +665,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Store type parameters for generic methods (for call site substitution)
         if !func.type_params.is_empty() {
             self.generic_method_params
-                .insert(mangled_name, type_param_list);
+                .insert(mangled_name.clone(), type_param_list);
+            self.generic_method_resolved_param_types
+                .insert(mangled_name, method_resolved_param_types);
         }
 
         // Restore Self type

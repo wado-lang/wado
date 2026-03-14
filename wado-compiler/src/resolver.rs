@@ -89,18 +89,25 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Type parameters currently in scope (name -> (index, `TypeId`))
     /// Set when resolving generic structs or functions
     current_type_params: IndexMap<String, (u32, TypeId)>,
-    /// Trait bounds on type parameters in scope (name -> trait names)
+    /// Trait bounds on type parameters in scope (name -> full bounds with assoc types)
     /// Used for resolving trait methods on type params (e.g., `T.cmp()` when T: Ord)
-    current_type_param_bounds: IndexMap<String, Vec<String>>,
+    /// Full `TraitBound` objects preserve associated type bindings like `I: IntoIterator<Item = u8>`
+    current_type_param_bounds: IndexMap<String, Vec<ast::TraitBound>>,
     /// Generic struct definitions (name -> type param count)
     /// Used to determine if a struct is generic
     generic_struct_names: IndexSet<String>,
     /// Generic function type parameters (`func_name` -> `type_params`)
     /// Used for substituting type parameters in return types
     generic_function_params: IndexMap<String, Vec<(String, TypeId)>>,
+    /// Resolved param types for generic functions (`func_name` -> `param TypeIds`)
+    /// Resolved in the function's own type param scope so `TypeParams` have correct ids.
+    generic_function_resolved_param_types: IndexMap<String, Vec<TypeId>>,
     /// Generic method type parameters (`mangled_name` -> `type_params`)
     /// Used for substituting type parameters in method return types
     generic_method_params: IndexMap<String, Vec<(String, TypeId)>>,
+    /// Resolved param types for generic methods (`mangled_name` -> `param TypeIds`)
+    /// Resolved in the method's own type param scope so `TypeParams` have correct ids.
+    generic_method_resolved_param_types: IndexMap<String, Vec<TypeId>>,
     /// Current associated type bindings in scope (`Self::Name` -> resolved type)
     /// Set when resolving trait implementations
     current_associated_type_bindings: IndexMap<String, TypeId>,
@@ -179,7 +186,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             current_type_param_bounds: IndexMap::default(),
             generic_struct_names: IndexSet::default(),
             generic_function_params: IndexMap::default(),
+            generic_function_resolved_param_types: IndexMap::default(),
             generic_method_params: IndexMap::default(),
+            generic_method_resolved_param_types: IndexMap::default(),
             current_associated_type_bindings: IndexMap::default(),
             current_self_type: None,
             wasi_registry,
@@ -375,7 +384,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 self.current_type_param_bounds
                                     .entry(param.name.clone())
                                     .or_insert_with(Vec::new)
-                                    .extend(param.bounds.iter().map(|b| b.name.clone()));
+                                    .extend(param.bounds.clone());
                             }
                             continue;
                         }
@@ -391,7 +400,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             self.current_type_param_bounds
                                 .entry(param.name.clone())
                                 .or_insert_with(Vec::new)
-                                .extend(param.bounds.iter().map(|b| b.name.clone()));
+                                .extend(param.bounds.clone());
                         }
                         actual_idx += 1;
                     }

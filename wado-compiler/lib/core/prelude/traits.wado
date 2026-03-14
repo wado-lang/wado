@@ -281,7 +281,7 @@ pub trait Iterator {
 /// Types implementing this trait can be used in `for-of` loops directly.
 pub trait IntoIterator {
     type Item;
-    type Iter;
+    type Iter: Iterator<Item = Self::Item>;
 
     /// Creates an iterator from a value.
     /// Note: Uses &self due to parser limitation (self by value not yet supported in traits).

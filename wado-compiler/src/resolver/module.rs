@@ -274,10 +274,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         self.current_type_params
                             .insert(param.name.clone(), (actual_idx, type_id));
                         if !param.bounds.is_empty() {
-                            self.current_type_param_bounds.insert(
-                                param.name.clone(),
-                                param.bounds.iter().map(|b| b.name.clone()).collect(),
-                            );
+                            self.current_type_param_bounds
+                                .insert(param.name.clone(), param.bounds.clone());
                         }
                         actual_idx += 1;
                     }

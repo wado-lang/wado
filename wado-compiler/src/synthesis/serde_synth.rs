@@ -508,6 +508,7 @@ fn generate_struct_serialize(
         s_type_param,
         "StructSerializer".to_string(),
         vec!["SerializeStruct".to_string()],
+        vec![],
     );
     let result_ss_err = tt.make_result(struct_ser_type, ser_error_type);
     let mut_ref_ss = tt.make_mut_ref(struct_ser_type);
@@ -722,6 +723,7 @@ fn generate_struct_deserialize(
         d_type_param,
         "StructAccess".to_string(),
         vec!["DeserializeStruct".to_string()],
+        vec![],
     );
     let result_sa_err = tt.make_result(struct_access_type, deser_error_type);
     let mut_ref_sa = tt.make_mut_ref(struct_access_type);
@@ -1557,6 +1559,7 @@ fn generate_enum_deserialize(
         d_type_param,
         "VariantAccess".to_string(),
         vec!["DeserializeVariant".to_string()],
+        vec![],
     );
     let result_va_err = tt.make_result(variant_access_type, deser_error_type);
     let mut_ref_va = tt.make_mut_ref(variant_access_type);
@@ -1923,6 +1926,7 @@ fn generate_variant_serialize(
         s_type_param,
         "VariantSerializer".to_string(),
         vec!["SerializeVariant".to_string()],
+        vec![],
     );
     let result_vs_err = tt.make_result(variant_ser_type, ser_error_type);
     let mut_ref_vs = tt.make_mut_ref(variant_ser_type);
@@ -2191,6 +2195,7 @@ fn generate_variant_deserialize(
         d_type_param,
         "VariantAccess".to_string(),
         vec!["DeserializeVariant".to_string()],
+        vec![],
     );
     let result_va_err = tt.make_result(variant_access_type, deser_error_type);
     let mut_ref_va = tt.make_mut_ref(variant_access_type);
@@ -2759,6 +2764,7 @@ fn generate_tuple_serialize(
         s_type_param,
         "SeqSerializer".to_string(),
         vec!["SerializeSeq".to_string()],
+        vec![],
     );
     let result_seq_err = tt.make_result(seq_ser_type, ser_error_type);
     let mut_ref_seq = tt.make_mut_ref(seq_ser_type);
@@ -2937,6 +2943,7 @@ fn generate_tuple_deserialize(
         d_type_param,
         "SeqAccess".to_string(),
         vec!["DeserializeSeq".to_string()],
+        vec![],
     );
     let result_seq_err = tt.make_result(seq_access_type, deser_error_type);
     let mut_ref_seq = tt.make_mut_ref(seq_access_type);

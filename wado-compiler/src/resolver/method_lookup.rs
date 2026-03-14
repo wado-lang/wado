@@ -1238,11 +1238,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
         for impl_ref in &impl_refs {
             let impl_block = self.get_impl_block(impl_ref);
             let impl_struct_name = self.get_type_name(&impl_block.ty);
-            // Accept if the type matches by name, or if it's a blanket impl type parameter
-            // (blanket impls already had their bounds checked before being added).
+            // Accept if the type matches by name, or if it's a blanket impl type parameter.
             let is_blanket_type_param = matches!(&impl_block.ty, Type::Named(named) if !self.is_known_type_name(&named.name));
             if !names_to_check.contains(&impl_struct_name) && !is_blanket_type_param {
                 continue;
+            }
+
+            // If this impl block is a blanket impl (its target type is one of its own type params
+            // with bounds), verify the receiver satisfies those bounds. This prevents incorrectly
+            // using e.g. `impl<I: Iterator> IntoIterator for I` for a TypeParam `I: IntoIterator`.
+            {
+                let impl_ty_name = Self::get_type_name_static(&impl_block.ty);
+                let blanket_param = impl_block
+                    .type_params
+                    .iter()
+                    .find(|tp| tp.name == impl_ty_name && !tp.bounds.is_empty());
+                if let Some(param) = blanket_param {
+                    let bounds_ok = param.bounds.iter().all(|bound| {
+                        receiver_type_id
+                            .is_some_and(|rt| self.type_implements_trait(rt, &bound.name))
+                    });
+                    if !bounds_ok {
+                        continue;
+                    }
+                }
             }
 
             // Extract type param mappings from the impl block before mutating self.
@@ -1905,7 +1924,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // means T implements Describable within the scope of that declaration)
         if let ResolvedType::TypeParam { name, .. } = &resolved {
             if let Some(bounds) = self.current_type_param_bounds.get(name) {
-                return bounds.iter().any(|b| b == trait_name);
+                return bounds.iter().any(|b| b.name == trait_name);
             }
             return false;
         }
@@ -1972,6 +1991,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 return elems
                     .iter()
                     .all(|e| self.type_implements_trait(*e, trait_name));
+            }
+            ResolvedType::AssocTypeProjection { bounds, .. } => {
+                // An associated type projection T::Assoc implements a trait if
+                // the trait declaration for Assoc declares that bound.
+                // e.g., I::Iter: Iterator when IntoIterator::Iter: Iterator
+                return bounds.iter().any(|b| b == trait_name);
             }
             _ => return false,
         };
@@ -2054,6 +2079,60 @@ impl<H: CompilerHost> Resolver<'_, H> {
         false
     }
 
+    /// Compute `assoc_type_bindings` for an `AssocTypeProjection` by resolving `Self::X`
+    /// references in the trait bound's associated type constraints.
+    ///
+    /// Example: `IntoIterator::Iter` has bound `Iterator<Item = Self::Item>`.
+    /// With `I: IntoIterator<Item = u8>` and `self_type = I`, `Self::Item = I::Item = u8`.
+    /// Result: `[("Item", u8_typeid)]`, stored in the `I::Iter` projection.
+    ///
+    /// This enables `I::Iter::Item` to resolve to `u8` when `Iterator::next` is called.
+    fn compute_assoc_type_bindings_from_trait_bounds(
+        &mut self,
+        self_type_id: TypeId,
+        self_type_param_name: Option<&str>,
+        assoc_bounds: &[crate::ast::TraitBound],
+    ) -> Vec<(String, TypeId)> {
+        let mut bindings = Vec::new();
+        let Some(type_param_name) = self_type_param_name else {
+            // Also handle AssocTypeProjection self_type: propagate bindings from its bindings
+            let resolved = self.type_table.borrow().get(self_type_id).clone();
+            if let ResolvedType::AssocTypeProjection {
+                assoc_type_bindings,
+                ..
+            } = resolved
+            {
+                // Reuse existing bindings from the source projection
+                return assoc_type_bindings;
+            }
+            return bindings;
+        };
+        // For each bound, check its associated type constraints and resolve Self::X
+        for bound in assoc_bounds {
+            for assoc in &bound.assoc_types.clone() {
+                if let crate::ast::Type::NamespacedGeneric(ns) = &assoc.ty
+                    && ns.namespace == "Self"
+                {
+                    // Self::ns.name → type_param_name::ns.name
+                    // Look in current_type_param_bounds[type_param_name] for direct binding
+                    if let Some(param_bounds) =
+                        self.current_type_param_bounds.get(type_param_name).cloned()
+                    {
+                        for pb in &param_bounds {
+                            for ab in &pb.assoc_types {
+                                if ab.name == ns.name {
+                                    let resolved_ty = self.resolve_type(&ab.ty.clone());
+                                    bindings.push((assoc.name.clone(), resolved_ty));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        bindings
+    }
+
     /// Find a method in the trait declarations given by the bound names.
     /// For example, if T: Ord, look up the "cmp" method in the Ord trait declaration.
     /// Returns (`trait_name`, `MethodInfo`) with the method's return type, `self_kind`, and `param_types`,
@@ -2121,14 +2200,60 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self.current_self_type = Some(self_type_id);
 
                 // Set up associated type bindings as projections so that
-                // Self::AssocType resolves to AssocTypeProjection(self_type_id, "AssocType")
+                // Self::AssocType resolves to AssocTypeProjection(self_type_id, "AssocType").
+                // We also compute assoc_type_bindings to propagate concrete types through
+                // associated type chains. For example:
+                //   self_type = I (TypeParam with bound IntoIterator<Item = u8>)
+                //   Assoc = "Iter" with bound Iterator<Item = Self::Item>
+                //   Self::Item = I::Item = u8
+                //   → I::Iter.assoc_type_bindings = [("Item", u8)]
+                // This allows I::Iter::Item to resolve to u8 when Iterator::next is called.
                 let old_bindings = std::mem::take(&mut self.current_associated_type_bindings);
+                // Determine the TypeParam name for Self, if self_type is a TypeParam.
+                let self_type_param_name = {
+                    let resolved = self.type_table.borrow().get(self_type_id).clone();
+                    if let ResolvedType::TypeParam { name, .. } = resolved {
+                        Some(name)
+                    } else {
+                        None
+                    }
+                };
                 for assoc_decl in &trait_assoc_types {
-                    let projection = self.type_table.borrow_mut().make_assoc_type_projection(
-                        self_type_id,
-                        assoc_decl.name.clone(),
-                        assoc_decl.bounds.clone(),
-                    );
+                    // Check if self_type has a direct assoc_type_binding for this name.
+                    // This handles the case: self_type = I::Iter which has ("Item", u8_typeid).
+                    let directly_bound = {
+                        let resolved = self.type_table.borrow().get(self_type_id).clone();
+                        if let ResolvedType::AssocTypeProjection {
+                            assoc_type_bindings,
+                            ..
+                        } = resolved
+                        {
+                            assoc_type_bindings
+                                .iter()
+                                .find(|(name, _)| *name == assoc_decl.name)
+                                .map(|(_, type_id)| *type_id)
+                        } else {
+                            None
+                        }
+                    };
+                    let projection = directly_bound.unwrap_or_else(|| {
+                        let bound_names: Vec<String> =
+                            assoc_decl.bounds.iter().map(|b| b.name.clone()).collect();
+                        // Compute assoc_type_bindings by resolving Self::X references in the
+                        // assoc type's bounds. e.g., Iterator<Item = Self::Item> with Self = I
+                        // and I: IntoIterator<Item = u8> gives [("Item", u8)].
+                        let atb = self.compute_assoc_type_bindings_from_trait_bounds(
+                            self_type_id,
+                            self_type_param_name.as_deref(),
+                            &assoc_decl.bounds,
+                        );
+                        self.type_table.borrow_mut().make_assoc_type_projection(
+                            self_type_id,
+                            assoc_decl.name.clone(),
+                            bound_names,
+                            atb,
+                        )
+                    });
                     self.current_associated_type_bindings
                         .insert(assoc_decl.name.clone(), projection);
                 }
@@ -2270,7 +2395,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         for (i, param) in type_params.iter().enumerate() {
             if let Some(&type_arg) = type_args.get(i) {
                 for bound in &param.bounds {
-                    if !self.type_implements_trait(type_arg, &bound.name) {
+                    if self.type_implements_trait(type_arg, &bound.name) {
+                        // Register associated type resolutions so the monomorphizer can
+                        // substitute e.g. I::Iter → ArrayIter<u8> when I = Array<u8>.
+                        self.register_assoc_types_for_concrete_type_and_trait(
+                            type_arg,
+                            &bound.name.clone(),
+                        );
+                    } else {
                         let type_name = self.type_id_to_string(type_arg);
                         let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                             type_name,
@@ -2282,6 +2414,216 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
         }
+    }
+
+    /// Register associated type resolutions for a concrete type instantiating a trait.
+    /// For example, when `Array<u8>` implements `IntoIterator`, registers:
+    /// - (Array<u8>, "Item") → u8
+    /// - (Array<u8>, "Iter") → `ArrayIter`<u8>
+    /// This enables the monomorphizer to resolve `I::Iter` → `ArrayIter<u8>` when `I = Array<u8>`.
+    pub(super) fn register_assoc_types_for_concrete_type_and_trait(
+        &mut self,
+        concrete_type_id: TypeId,
+        trait_name: &str,
+    ) {
+        // Get the base type name and concrete type args for impl block lookup
+        let (type_name, concrete_type_args) = {
+            let tt = self.type_table.borrow();
+            match tt.get(concrete_type_id).clone() {
+                ResolvedType::GenericInstance {
+                    name, type_args, ..
+                } => (name, type_args),
+                ResolvedType::Struct { name, .. } => (name, vec![]),
+                ResolvedType::BuiltinArray(elem) => ("Array".to_string(), vec![elem]),
+                _ => return,
+            }
+        };
+
+        // Collect matching impl block info (avoids borrow conflicts during resolution)
+        struct ImplInfo {
+            type_params: Vec<ast::GenericParam>,
+            impl_ty_param_names: Vec<String>,
+            assoc_types: Vec<ast::AssociatedTypeBinding>,
+        }
+        let impl_infos: Vec<ImplInfo> = {
+            let mut result = vec![];
+            if let Some(entries) = self.trait_impl_index.get(&type_name) {
+                let entries = entries.clone();
+                for (module_src, item_idx) in entries {
+                    let module = &self.loaded_modules[&module_src];
+                    if let Item::Impl(impl_block) = &module.items[item_idx]
+                        && let Some(trait_type) = &impl_block.trait_type
+                        && self.get_type_name(trait_type) == trait_name
+                        && !impl_block.associated_types.is_empty()
+                    {
+                        let impl_ty_param_names: Vec<String> = match &impl_block.ty {
+                            ast::Type::Generic(g) => g
+                                .args
+                                .iter()
+                                .filter_map(|arg| {
+                                    if let ast::Type::Named(named) = arg {
+                                        Some(named.name.clone())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect(),
+                            _ => vec![],
+                        };
+                        result.push(ImplInfo {
+                            type_params: impl_block.type_params.clone(),
+                            impl_ty_param_names,
+                            assoc_types: impl_block.associated_types.clone(),
+                        });
+                    }
+                }
+            }
+            result
+        };
+
+        for info in impl_infos {
+            let old_type_params = self.current_type_params.clone();
+            let old_type_param_bounds = self.current_type_param_bounds.clone();
+
+            // Bind impl type params to concrete type args.
+            // For `impl<T> IntoIterator for Array<T>` with Array<u8>:
+            // impl_ty_param_names = ["T"], concrete_type_args = [u8_typeid]
+            // → set current_type_params["T"] = (0, u8_typeid)
+            for (i, tp_name) in info.impl_ty_param_names.iter().enumerate() {
+                if let Some(&concrete_arg) = concrete_type_args.get(i) {
+                    self.current_type_params
+                        .insert(tp_name.clone(), (i as u32, concrete_arg));
+                }
+            }
+            // Add bounds from type param declarations
+            for param in &info.type_params {
+                if !param.bounds.is_empty() {
+                    self.current_type_param_bounds
+                        .entry(param.name.clone())
+                        .or_insert_with(Vec::new)
+                        .extend(param.bounds.clone());
+                }
+            }
+
+            // Resolve and register each associated type in this substituted context
+            for binding in &info.assoc_types {
+                let resolved_id = self.resolve_type(&binding.ty);
+                if !self.type_table.borrow().contains_type_param(resolved_id) {
+                    self.type_table.borrow_mut().register_assoc_type_resolution(
+                        concrete_type_id,
+                        binding.name.clone(),
+                        resolved_id,
+                    );
+                }
+            }
+
+            self.current_type_params = old_type_params;
+            self.current_type_param_bounds = old_type_param_bounds;
+        }
+
+        // Also check blanket impls: `impl<I: Trait> OtherTrait for I`.
+        // For example, `impl<I: Iterator> IntoIterator for I` applies to StrUtf8ByteIter.
+        struct BlanketImplInfo {
+            blanket_param_name: String,
+            blanket_param_bounds: Vec<ast::TraitBound>,
+            assoc_types: Vec<ast::AssociatedTypeBinding>,
+        }
+        let blanket_infos: Vec<BlanketImplInfo> = {
+            let mut result = vec![];
+            for (module_src, item_idx) in self.blanket_trait_impl_index.as_ref() {
+                let module = &self.loaded_modules[module_src];
+                if let Item::Impl(impl_block) = &module.items[*item_idx]
+                    && let Some(trait_type) = &impl_block.trait_type
+                    && self.get_type_name(trait_type) == trait_name
+                    && !impl_block.associated_types.is_empty()
+                {
+                    let impl_type_name = Self::get_type_name_static(&impl_block.ty);
+                    if let Some(blanket_param) = impl_block
+                        .type_params
+                        .iter()
+                        .find(|tp| tp.name == impl_type_name && !tp.bounds.is_empty())
+                    {
+                        // Check if the concrete type satisfies the blanket param's bounds
+                        let bounds_ok = blanket_param
+                            .bounds
+                            .iter()
+                            .all(|bound| self.type_implements_trait(concrete_type_id, &bound.name));
+                        if bounds_ok {
+                            result.push(BlanketImplInfo {
+                                blanket_param_name: blanket_param.name.clone(),
+                                blanket_param_bounds: blanket_param.bounds.clone(),
+                                assoc_types: impl_block.associated_types.clone(),
+                            });
+                        }
+                    }
+                }
+            }
+            result
+        };
+
+        for info in blanket_infos {
+            let old_type_params = self.current_type_params.clone();
+            let old_type_param_bounds = self.current_type_param_bounds.clone();
+
+            // Bind the blanket type param to the concrete type
+            // For `impl<I: Iterator> IntoIterator for I` with StrUtf8ByteIter:
+            // → set current_type_params["I"] = (0, StrUtf8ByteIter_typeid)
+            self.current_type_params
+                .insert(info.blanket_param_name.clone(), (0, concrete_type_id));
+            self.current_type_param_bounds
+                .insert(info.blanket_param_name.clone(), info.blanket_param_bounds);
+
+            // Resolve and register each associated type
+            for binding in &info.assoc_types {
+                let resolved_id = self.resolve_type(&binding.ty);
+                if !self.type_table.borrow().contains_type_param(resolved_id) {
+                    self.type_table.borrow_mut().register_assoc_type_resolution(
+                        concrete_type_id,
+                        binding.name.clone(),
+                        resolved_id,
+                    );
+                }
+            }
+
+            self.current_type_params = old_type_params;
+            self.current_type_param_bounds = old_type_param_bounds;
+        }
+    }
+
+    /// Look up the type parameters of a static method from its AST definition.
+    /// Searches impl blocks in loaded modules for `impl StructName { fn method_name<...> }`.
+    pub(super) fn lookup_static_method_type_params(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+    ) -> Vec<ast::GenericParam> {
+        // Search loaded modules
+        for (_, module) in self.loaded_modules {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item
+                    && Self::get_type_name_static(&impl_block.ty) == struct_name
+                {
+                    for method in &impl_block.methods {
+                        if method.name == method_name && !method.type_params.is_empty() {
+                            return method.type_params.clone();
+                        }
+                    }
+                }
+            }
+        }
+        // Search current module items
+        for item in &self.current_module_items {
+            if let Item::Impl(impl_block) = item
+                && Self::get_type_name_static(&impl_block.ty) == struct_name
+            {
+                for method in &impl_block.methods {
+                    if method.name == method_name && !method.type_params.is_empty() {
+                        return method.type_params.clone();
+                    }
+                }
+            }
+        }
+        vec![]
     }
 
     /// Look up the type parameters of a function from its AST definition.
