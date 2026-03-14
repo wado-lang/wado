@@ -67,6 +67,14 @@ impl DeserializeError {
     }
 }
 
+pub enum ValueKind {
+    Null,
+    Bool,
+    Number,
+    String,
+    Seq,
+    Map,
+}
 
 pub trait SerializeSeq {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
@@ -170,6 +178,7 @@ pub trait Deserializer {
     fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError>;
     fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn(&String, i32, i32) -> Option<i32>) -> Result<Self::StructAccess, DeserializeError>;
     fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError>;
+    fn peek_value_kind(&mut self) -> Result<ValueKind, DeserializeError>;
 }
 
 

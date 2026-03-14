@@ -418,6 +418,11 @@ impl Monomorphizer {
         // Phase 12: Rewrite function calls to use monomorphized names
         self.rewrite_function_calls_in_module(&mut module);
 
+        // Phase 12.5: Desugar comparison operators on non-primitive types in non-generic functions.
+        // (Generic functions are handled during substitute_types_in_expr, but non-generic
+        // functions with variant/struct == never go through that path.)
+        self.desugar_comparisons_in_module(&mut module);
+
         // Phase 13: Second pass of struct instantiation
         // Function monomorphization may have created new GenericInstance types
         // (e.g., BTreeNode<String,i32>) that weren't in the type table during Phase 2.
@@ -593,6 +598,11 @@ impl Monomorphizer {
 
         // Phase 12: Rewrite function calls to use monomorphized names
         self.rewrite_function_calls_in_module(&mut module);
+
+        // Phase 12.5: Desugar comparison operators on non-primitive types in non-generic functions.
+        // (Generic functions are handled during substitute_types_in_expr, but non-generic
+        // functions with variant/struct == never go through that path.)
+        self.desugar_comparisons_in_module(&mut module);
 
         // Phase 13: Second pass of struct instantiation
         // Function monomorphization may have created new GenericInstance types
@@ -3829,16 +3839,17 @@ impl Monomorphizer {
     ) -> Option<TirExprKind> {
         // Get the base struct name and type args from the operand type
         let operand_type = type_table.get(left.type_id);
-        let (base_struct_name, impl_type_args): (String, Vec<String>) = match operand_type {
-            ResolvedType::Struct { name, .. } => (name.clone(), vec![]),
+        let (base_struct_name, impl_type_args, type_module_source): (String, Vec<String>, Option<ModuleSource>) = match operand_type {
+            ResolvedType::Struct { name, module_source, .. } => (name.clone(), vec![], Some(module_source.clone())),
+            ResolvedType::Variant { name, module_source, .. } => (name.clone(), vec![], Some(module_source.clone())),
             ResolvedType::GenericInstance {
-                name, type_args, ..
+                name, type_args, module_source, ..
             } => {
                 let args: Vec<String> = type_args
                     .iter()
                     .map(|&t| type_table.mangle_type_name(t))
                     .collect();
-                (name.clone(), args)
+                (name.clone(), args, Some(module_source.clone()))
             }
             // Primitives don't use trait-based comparison
             _ => return None,
@@ -3875,10 +3886,20 @@ impl Monomorphizer {
                     .with_struct_type_args(&impl_type_args);
             let mangled_name = method_info.to_mangled_name();
 
+            // Resolve the module where the trait impl lives.
+            // First check trait_method_locations (populated during cross-module collection),
+            // then fall back to the type's own module_source (impl is in same module as type).
+            let method_module_source = self
+                .trait_method_locations
+                .get(&mangled_name)
+                .cloned()
+                .or(type_module_source)
+                .unwrap_or_else(|| self.current_module_source.clone());
+
             let method_call = TirExprKind::MethodCall {
                 receiver: Box::new(receiver),
                 func: FunctionRef {
-                    module_source: ModuleSource::prelude(),
+                    module_source: method_module_source,
                     name: mangled_name,
                     monomorph_info: None,
                     method_info: Some(method_info),
@@ -3938,11 +3959,19 @@ impl Monomorphizer {
                     .with_struct_type_args(&impl_type_args);
             let mangled_name = method_info.to_mangled_name();
 
+            // Resolve the module where the trait impl lives.
+            let ord_method_module_source = self
+                .trait_method_locations
+                .get(&mangled_name)
+                .cloned()
+                .or(type_module_source)
+                .unwrap_or_else(|| self.current_module_source.clone());
+
             let cmp_call = TirExpr::new(
                 TirExprKind::MethodCall {
                     receiver: Box::new(receiver),
                     func: FunctionRef {
-                        module_source: ModuleSource::prelude(),
+                        module_source: ord_method_module_source,
                         name: mangled_name,
                         monomorph_info: None,
                         method_info: Some(method_info),
@@ -3987,6 +4016,222 @@ impl Monomorphizer {
         }
 
         None
+    }
+
+    /// Desugar comparison operators on non-primitive types in all functions.
+    ///
+    /// This is needed for non-generic functions (where `substitute_types_in_expr` is
+    /// never called) that use `==`, `!=`, `<`, etc. on struct/variant types.
+    /// Without this pass, those operators fall through to the codegen's I32Eq fallback,
+    /// which is wrong for GC reference types (variants, structs with custom Eq).
+    fn desugar_comparisons_in_module(&self, module: &mut TirModule) {
+        let type_table_rc = module.type_table.clone();
+        for func_rc in &module.functions {
+            let mut func = func_rc.borrow_mut();
+            if let Some(mut body) = func.body.take() {
+                self.desugar_comparisons_in_block(&mut body, &type_table_rc);
+                func.body = Some(body);
+            }
+        }
+    }
+
+    fn desugar_comparisons_in_block(&self, block: &mut TirBlock, type_table: &Rc<RefCell<TypeTable>>) {
+        for stmt in &mut block.stmts {
+            self.desugar_comparisons_in_stmt(stmt, type_table);
+        }
+    }
+
+    fn desugar_comparisons_in_stmt(
+        &self,
+        stmt: &mut TirStmt,
+        type_table: &Rc<RefCell<TypeTable>>,
+    ) {
+        match &mut stmt.kind {
+            TirStmtKind::Let { value, .. } => {
+                self.desugar_comparisons_in_expr(value, type_table);
+            }
+            TirStmtKind::Expr(expr) => self.desugar_comparisons_in_expr(expr, type_table),
+            TirStmtKind::Return { value } => {
+                if let Some(e) = value {
+                    self.desugar_comparisons_in_expr(e, type_table);
+                }
+            }
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                self.desugar_comparisons_in_expr(condition, type_table);
+                self.desugar_comparisons_in_block(then_block, type_table);
+                if let Some(e) = else_block {
+                    self.desugar_comparisons_in_block(e, type_table);
+                }
+            }
+            TirStmtKind::Loop { body } => {
+                self.desugar_comparisons_in_block(body, type_table);
+            }
+            TirStmtKind::Break { value, .. } => {
+                if let Some(v) = value {
+                    self.desugar_comparisons_in_expr(v, type_table);
+                }
+            }
+            TirStmtKind::Continue => {}
+            TirStmtKind::LabeledBlock { block, .. } => {
+                self.desugar_comparisons_in_block(block, type_table);
+            }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.desugar_comparisons_in_expr(scrutinee, type_table);
+                self.desugar_comparisons_in_block(then_block, type_table);
+                if let Some(e) = else_block {
+                    self.desugar_comparisons_in_block(e, type_table);
+                }
+            }
+            TirStmtKind::LetPattern { value, .. } => {
+                self.desugar_comparisons_in_expr(value, type_table);
+            }
+        }
+    }
+
+    fn desugar_comparisons_in_expr(
+        &self,
+        expr: &mut TirExpr,
+        type_table: &Rc<RefCell<TypeTable>>,
+    ) {
+        match &mut expr.kind {
+            TirExprKind::Binary { op, left, right } => {
+                self.desugar_comparisons_in_expr(left, type_table);
+                self.desugar_comparisons_in_expr(right, type_table);
+                if let Some(new_kind) = self.try_desugar_comparison(
+                    expr.span,
+                    *op,
+                    left,
+                    right,
+                    &mut type_table.borrow_mut(),
+                ) {
+                    expr.kind = new_kind;
+                }
+            }
+            TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::GlobalVarSet { value: inner, .. }
+            | TirExprKind::VariantTag { expr: inner }
+            | TirExprKind::VariantTest { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. }
+            | TirExprKind::ClosureToCanonical { functor: inner, .. }
+            | TirExprKind::Closure { body: inner, .. } => {
+                self.desugar_comparisons_in_expr(inner, type_table);
+            }
+            TirExprKind::Call { args, .. } => {
+                for arg in args {
+                    self.desugar_comparisons_in_expr(&mut arg.expr, type_table);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                self.desugar_comparisons_in_expr(receiver, type_table);
+                for arg in args {
+                    self.desugar_comparisons_in_expr(&mut arg.expr, type_table);
+                }
+            }
+            TirExprKind::CmRawCall { args, .. } => {
+                for arg in args {
+                    self.desugar_comparisons_in_expr(arg, type_table);
+                }
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                self.desugar_comparisons_in_expr(callee, type_table);
+                for arg in args {
+                    self.desugar_comparisons_in_expr(arg, type_table);
+                }
+            }
+            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+                self.desugar_comparisons_in_block(block, type_table);
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                self.desugar_comparisons_in_expr(condition, type_table);
+                self.desugar_comparisons_in_block(then_branch, type_table);
+                if let Some(e) = else_branch {
+                    self.desugar_comparisons_in_block(e, type_table);
+                }
+            }
+            TirExprKind::Assign { target, value } => {
+                self.desugar_comparisons_in_expr(target, type_table);
+                self.desugar_comparisons_in_expr(value, type_table);
+            }
+            TirExprKind::Index { expr: array, index } => {
+                self.desugar_comparisons_in_expr(array, type_table);
+                self.desugar_comparisons_in_expr(index, type_table);
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    self.desugar_comparisons_in_expr(&mut field.value, type_table);
+                }
+            }
+            TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    self.desugar_comparisons_in_expr(elem, type_table);
+                }
+            }
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(p) = payload {
+                    self.desugar_comparisons_in_expr(p, type_table);
+                }
+            }
+            TirExprKind::Match { expr: scrutinee, arms } => {
+                self.desugar_comparisons_in_expr(scrutinee, type_table);
+                for arm in arms {
+                    if let Some(guard) = &mut arm.guard {
+                        self.desugar_comparisons_in_expr(guard, type_table);
+                    }
+                    self.desugar_comparisons_in_expr(&mut arm.body, type_table);
+                }
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                self.desugar_comparisons_in_expr(scrutinee, type_table);
+                for arm in arms {
+                    self.desugar_comparisons_in_block(arm, type_table);
+                }
+                self.desugar_comparisons_in_block(default, type_table);
+            }
+            TirExprKind::TemplateString { parts } => {
+                for part in parts {
+                    if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
+                        self.desugar_comparisons_in_expr(inner, type_table);
+                    }
+                }
+            }
+            // Leaf expressions - no sub-expressions to desugar
+            TirExprKind::IntLiteral { .. }
+            | TirExprKind::FloatLiteral { .. }
+            | TirExprKind::BoolLiteral(_)
+            | TirExprKind::CharLiteral(_)
+            | TirExprKind::StringLiteral(_)
+            | TirExprKind::BytesLiteral(_)
+            | TirExprKind::Null
+            | TirExprKind::Unit
+            | TirExprKind::Local { .. }
+            | TirExprKind::Global { .. }
+            | TirExprKind::GlobalVarGet { .. }
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => {}
+        }
     }
 }
 

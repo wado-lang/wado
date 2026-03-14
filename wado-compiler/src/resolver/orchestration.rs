@@ -1141,6 +1141,25 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 }
                 TypeTable::UNKNOWN
             }
+            Type::Tuple(elements) => {
+                let elem_types: Vec<TypeId> = elements
+                    .iter()
+                    .map(|e| {
+                        Self::resolve_type_static_with_params(
+                            e,
+                            type_table,
+                            newtypes,
+                            struct_fields,
+                            resource_types,
+                            enum_cases,
+                            variant_cases,
+                            flags_cases,
+                            type_params,
+                        )
+                    })
+                    .collect();
+                type_table.make_tuple(elem_types)
+            }
             _ => TypeTable::UNKNOWN,
         }
     }

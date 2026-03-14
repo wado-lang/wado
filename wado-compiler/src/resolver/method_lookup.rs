@@ -2258,6 +2258,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .insert(assoc_decl.name.clone(), projection);
                 }
 
+                // Register the method's own type parameters so that they resolve to
+                // TypeParam{index: N} instead of UNKNOWN. This is needed for generic methods
+                // like `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, ...>`
+                // where `T` must be a proper TypeParam to allow substitution at the call site.
+                // We use index 0, 1, ... because find_method_in_trait_bounds is only called
+                // for TypeParam/AssocTypeProjection receivers, where impl_offset = 0.
+                let old_type_params_for_method = self.current_type_params.clone();
+                let old_type_param_bounds_for_method = self.current_type_param_bounds.clone();
+                for (index, param) in method.type_params.iter().enumerate() {
+                    let type_id = self
+                        .type_table
+                        .borrow_mut()
+                        .make_type_param(param.name.clone(), index as u32);
+                    self.current_type_params
+                        .insert(param.name.clone(), (index as u32, type_id));
+                    if !param.bounds.is_empty() {
+                        self.current_type_param_bounds
+                            .insert(param.name.clone(), param.bounds.clone());
+                    }
+                }
+
                 let return_type = method
                     .return_type
                     .as_ref()
@@ -2276,6 +2297,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .map(|p| p.is_mut)
                     .collect();
 
+                self.current_type_params = old_type_params_for_method;
+                self.current_type_param_bounds = old_type_param_bounds_for_method;
                 self.current_associated_type_bindings = old_bindings;
                 self.current_self_type = old_self_type;
 

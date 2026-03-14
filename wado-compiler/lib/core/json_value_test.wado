@@ -1,0 +1,222 @@
+use { Value } from "core:json";
+use { to_string, from_string } from "core:json";
+
+test "Value::Null serialize" {
+    let v = Value::Null;
+    let r = to_string::<Value>(&v);
+    assert r matches { Ok(s) && s == "null" };
+}
+
+test "Value::Bool true serialize" {
+    let v = Value::Bool(true);
+    let r = to_string::<Value>(&v);
+    assert r matches { Ok(s) && s == "true" };
+}
+
+test "Value::Bool false serialize" {
+    let v = Value::Bool(false);
+    let r = to_string::<Value>(&v);
+    assert r matches { Ok(s) && s == "false" };
+}
+
+test "Value::Number integer serialize" {
+    let v = Value::Number(42.0);
+    let r = to_string::<Value>(&v);
+    assert r matches { Ok(s) && s == "42" };
+}
+
+test "Value::Number float serialize" {
+    let v = Value::Number(3.14);
+    let r = to_string::<Value>(&v);
+    assert r matches { Ok(s) && s == "3.14" };
+}
+
+test "Value::Number negative serialize" {
+    let v = Value::Number(-7.0);
+    let r = to_string::<Value>(&v);
+    assert r matches { Ok(s) && s == "-7" };
+}
+
+test "Value::String serialize" {
+    let v = Value::String("hello");
+    let r = to_string::<Value>(&v);
+    assert r matches { Ok(s) && s == `"hello"` };
+}
+
+test "Value::String with escapes serialize" {
+    let v = Value::String("say \"hi\"");
+    let r = to_string::<Value>(&v);
+    assert r matches { Ok(s) && s == `"say \\"hi\\""` };
+}
+
+test "Value::Array empty serialize" {
+    let v = Value::Array([]);
+    let r = to_string::<Value>(&v);
+    assert r matches { Ok(s) && s == "[]" };
+}
+
+test "Value::Array serialize" {
+    let v = Value::Array([Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]);
+    let r = to_string::<Value>(&v);
+    assert r matches { Ok(s) && s == "[1,2,3]" };
+}
+
+test "Value::Array mixed serialize" {
+    let v = Value::Array([Value::Null, Value::Bool(true), Value::String("x")]);
+    let r = to_string::<Value>(&v);
+    assert r matches { Ok(s) && s == `[null,true,"x"]` };
+}
+
+test "Value::Object empty serialize" {
+    let v = Value::Object([]);
+    let r = to_string::<Value>(&v);
+    assert r matches { Ok(s) && s == "{}" };
+}
+
+test "Value::Object serialize" {
+    let v = Value::Object([["key", Value::String("value")]]);
+    let r = to_string::<Value>(&v);
+    assert r matches { Ok(s) && s == "{\"key\":\"value\"}" };
+}
+
+test "Value::Object multiple keys serialize" {
+    let v = Value::Object([["a", Value::Number(1.0)], ["b", Value::Bool(false)]]);
+    let r = to_string::<Value>(&v);
+    assert r matches { Ok(s) && s == "{\"a\":1,\"b\":false}" };
+}
+
+test "Value::Null deserialize" {
+    let r = from_string::<Value>("null");
+    assert r matches { Ok(v) && v == Value::Null };
+}
+
+test "Value::Bool true deserialize" {
+    let r = from_string::<Value>("true");
+    assert r matches { Ok(v) && v == Value::Bool(true) };
+}
+
+test "Value::Bool false deserialize" {
+    let r = from_string::<Value>("false");
+    assert r matches { Ok(v) && v == Value::Bool(false) };
+}
+
+test "Value::Number integer deserialize" {
+    let r = from_string::<Value>("42");
+    assert r matches { Ok(v) && v == Value::Number(42.0) };
+}
+
+test "Value::Number float deserialize" {
+    let r = from_string::<Value>("3.14");
+    assert r matches { Ok(v) && v == Value::Number(3.14) };
+}
+
+test "Value::Number negative deserialize" {
+    let r = from_string::<Value>("-7");
+    assert r matches { Ok(v) && v == Value::Number(-7.0) };
+}
+
+test "Value::String deserialize" {
+    let r = from_string::<Value>(`"hello"`);
+    assert r matches { Ok(v) && v == Value::String("hello") };
+}
+
+test "Value::String with escapes deserialize" {
+    let r = from_string::<Value>(`"line\\nbreak"`);
+    assert r matches { Ok(v) && v == Value::String("line\nbreak") };
+}
+
+test "Value::Array empty deserialize" {
+    let r = from_string::<Value>("[]");
+    assert r matches { Ok(v) && v == Value::Array([]) };
+}
+
+test "Value::Array deserialize" {
+    let r = from_string::<Value>("[1,2,3]");
+    assert r matches { Ok(v) && v == Value::Array([Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]) };
+}
+
+test "Value::Object empty deserialize" {
+    let r = from_string::<Value>("{}");
+    assert r matches { Ok(v) && v == Value::Object([]) };
+}
+
+test "Value::Object deserialize" {
+    let r = from_string::<Value>("{\"key\":\"value\"}");
+    assert r matches { Ok(v) && v == Value::Object([["key", Value::String("value")]]) };
+}
+
+test "Value nested object with array deserialize" {
+    let r = from_string::<Value>("{\"nums\":[1,2],\"flag\":true}");
+    if let Ok(v) = r {
+        let expected = Value::Object([
+            ["nums", Value::Array([Value::Number(1.0), Value::Number(2.0)])],
+            ["flag", Value::Bool(true)],
+        ]);
+        assert v == expected;
+    }
+}
+
+test "Value round-trip null" {
+    let original = Value::Null;
+    let json_r = to_string::<Value>(&original);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<Value>(json);
+        assert parsed_r matches { Ok(v) && v == Value::Null };
+    }
+}
+
+test "Value round-trip nested" {
+    let original = Value::Object([
+        ["name", Value::String("Alice")],
+        ["age", Value::Number(30.0)],
+        ["tags", Value::Array([Value::String("admin"), Value::String("user")])],
+        ["active", Value::Bool(true)],
+        ["notes", Value::Null],
+    ]);
+    let json_r = to_string::<Value>(&original);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<Value>(json);
+        if let Ok(parsed) = parsed_r {
+            assert parsed == original;
+        }
+    }
+}
+
+test "Value whitespace tolerance" {
+    let r = from_string::<Value>("  {  \"x\"  :  1  }  ");
+    assert r matches { Ok(v) && v == Value::Object([["x", Value::Number(1.0)]]) };
+}
+
+test "Value eq null" {
+    assert Value::Null == Value::Null;
+    assert !(Value::Null == Value::Bool(false));
+}
+
+test "Value eq bool" {
+    assert Value::Bool(true) == Value::Bool(true);
+    assert !(Value::Bool(true) == Value::Bool(false));
+    assert !(Value::Bool(true) == Value::Null);
+}
+
+test "Value eq number" {
+    assert Value::Number(1.0) == Value::Number(1.0);
+    assert !(Value::Number(1.0) == Value::Number(2.0));
+}
+
+test "Value eq string" {
+    assert Value::String("a") == Value::String("a");
+    assert !(Value::String("a") == Value::String("b"));
+}
+
+test "Value eq array" {
+    assert Value::Array([]) == Value::Array([]);
+    assert Value::Array([Value::Number(1.0)]) == Value::Array([Value::Number(1.0)]);
+    assert !(Value::Array([Value::Number(1.0)]) == Value::Array([Value::Number(2.0)]));
+    assert !(Value::Array([Value::Number(1.0)]) == Value::Array([]));
+}
+
+test "Value eq object" {
+    assert Value::Object([]) == Value::Object([]);
+    assert Value::Object([["k", Value::Null]]) == Value::Object([["k", Value::Null]]);
+    assert !(Value::Object([["k", Value::Null]]) == Value::Object([["k", Value::Bool(false)]]));
+}

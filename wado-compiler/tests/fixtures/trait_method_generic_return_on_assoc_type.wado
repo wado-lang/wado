@@ -1,0 +1,66 @@
+// Test: generic method on associated type projection receiver where return type uses method type param.
+// Regression test for bug: calling `reader.read_typed::<i32>()` where reader: S::R (AssocTypeProjection)
+// caused T to resolve to `unknown` instead of `i32`.
+
+use { println } from "core:cli";
+
+trait FromI32 {
+    fn from_i32(n: i32) -> Self;
+}
+
+impl FromI32 for i32 {
+    fn from_i32(n: i32) -> i32 { return n; }
+}
+
+impl FromI32 for String {
+    fn from_i32(n: i32) -> String { return `{n}`; }
+}
+
+trait Reader {
+    fn read_typed<T: FromI32>(&mut self) -> T;
+}
+
+trait Source {
+    type R: Reader;
+    fn get_reader(&self) -> Self::R;
+}
+
+struct IntReader {
+    value: i32,
+}
+
+impl Reader for IntReader {
+    fn read_typed<T: FromI32>(&mut self) -> T {
+        return T::from_i32(self.value);
+    }
+}
+
+struct IntSource {
+    value: i32,
+}
+
+impl Source for IntSource {
+    type R = IntReader;
+    fn get_reader(&self) -> IntReader {
+        return IntReader { value: self.value };
+    }
+}
+
+// This function tests that `T` in `reader.read_typed::<i32>()` is correctly
+// resolved when the receiver has associated type projection type S::R.
+fn read_as_i32<S: Source>(source: &S) -> i32 {
+    let mut reader = source.get_reader();
+    // reader has type S::R (AssocTypeProjection), and read_typed<T> returns T.
+    // The turbofish ::<i32> must correctly set the return type to i32.
+    let result: i32 = reader.read_typed::<i32>();
+    return result;
+}
+
+export fn run() with Stdout {
+    let src = IntSource { value: 42 };
+    let n = read_as_i32::<IntSource>(&src);
+    println(`{n}`);
+}
+
+__DATA__
+{"stdout": "42\n"}
