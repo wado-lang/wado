@@ -1441,30 +1441,62 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             // Extract method info from impl block before calling &mut self methods
             let impl_block = self.get_impl_block(impl_ref);
-            let method_data: Option<(Option<ast::Type>, ast::SelfKind, Vec<ast::Param>)> =
-                impl_block
-                    .methods
-                    .iter()
-                    .find(|m| m.name == method_name)
-                    .map(|m| {
-                        (
-                            m.return_type.clone(),
-                            m.params
-                                .first()
-                                .map(|p| p.self_kind)
-                                .unwrap_or(ast::SelfKind::None),
-                            m.params.clone(),
-                        )
-                    });
+            let method_data: Option<(
+                Option<ast::Type>,
+                ast::SelfKind,
+                Vec<ast::Param>,
+                Vec<ast::GenericParam>,
+            )> = impl_block
+                .methods
+                .iter()
+                .find(|m| m.name == method_name)
+                .map(|m| {
+                    (
+                        m.return_type.clone(),
+                        m.params
+                            .first()
+                            .map(|p| p.self_kind)
+                            .unwrap_or(ast::SelfKind::None),
+                        m.params.clone(),
+                        m.type_params.clone(),
+                    )
+                });
             let trait_type_for_name = impl_block.trait_type.as_ref().unwrap().clone();
 
             let mut method_found = false;
-            if let Some((return_type_ast, self_kind, params)) = method_data {
+            if let Some((return_type_ast, self_kind, params, method_type_params)) = method_data {
                 let trait_name = self.get_type_name(&trait_type_for_name);
+
+                // Set up method-level type params (e.g., V in deserialize_any<V: Visitor>)
+                let impl_offset = self.current_type_params.len() as u32;
+                for (i, type_param) in method_type_params.iter().enumerate() {
+                    let index = impl_offset + i as u32;
+                    let type_param_id = self
+                        .type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::TypeParam {
+                            name: type_param.name.clone(),
+                            index,
+                        });
+                    self.current_type_params
+                        .insert(type_param.name.clone(), (index, type_param_id));
+                    if !type_param.bounds.is_empty() {
+                        self.current_type_param_bounds
+                            .insert(type_param.name.clone(), type_param.bounds.clone());
+                    }
+                }
+
                 let return_type = return_type_ast
                     .as_ref()
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNIT);
+
+                // Remove method-level type params from scope
+                for type_param in &method_type_params {
+                    self.current_type_params.shift_remove(&type_param.name);
+                    self.current_type_param_bounds
+                        .shift_remove(&type_param.name);
+                }
                 let param_types = self.extract_param_types(&params);
                 let param_is_mut: Vec<bool> = params
                     .iter()
