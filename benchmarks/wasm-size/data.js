@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773461219534,
+  "lastUpdate": 1773473073590,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3104,6 +3104,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/92c57d0638be5856aa4ce84d58b8473c81da18d3"
         },
         "date": 1773461219365,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9236,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22767,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ef50c127eaccd580912ee99a8918211ada6be61a",
+          "message": "Merge pull request #578 from wado-lang/claude/tuple-for-of-expansion-2PWRk\n\nImplement compile-time tuple for-of loop expansion",
+          "timestamp": "2026-03-14T16:22:13+09:00",
+          "tree_id": "8bba34413dd8a940d715625b1986922817448019",
+          "url": "https://github.com/wado-lang/wado/commit/ef50c127eaccd580912ee99a8918211ada6be61a"
+        },
+        "date": 1773473073399,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
