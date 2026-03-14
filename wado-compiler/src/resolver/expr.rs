@@ -1050,16 +1050,86 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let _init_stmt = self.resolve_let(init, ctx);
         }
 
+        // Handle pattern condition: `if let Some(x) = expr { ... } else { ... }`
+        if let ast::Condition::Pattern {
+            pattern,
+            expr,
+            span,
+        } = &if_expr.condition
+        {
+            let scrutinee = self.resolve_expr(expr, ctx, None);
+            let scrutinee_type = scrutinee.type_id;
+
+            ctx.enter_scope();
+            let tir_pattern = self.resolve_if_pattern(pattern, scrutinee_type, ctx, *span);
+            let then_block = self.resolve_block(&if_expr.then_block, ctx, expected_type);
+            ctx.exit_scope();
+
+            let else_block = if_expr
+                .else_block
+                .as_ref()
+                .map(|b| self.resolve_block(b, ctx, expected_type));
+
+            let type_id = if let Some(ty) = expected_type {
+                ty
+            } else {
+                let then_type = Self::block_result_type(&then_block);
+                let else_type = else_block
+                    .as_ref()
+                    .map_or(TypeTable::UNIT, Self::block_result_type);
+
+                if then_type == else_type {
+                    then_type
+                } else if then_type == TypeTable::NEVER {
+                    else_type
+                } else if else_type == TypeTable::NEVER {
+                    then_type
+                } else if else_block.is_none() {
+                    if then_type != TypeTable::UNIT {
+                        let type_name = self.type_table.borrow().type_name(then_type);
+                        let _ = self.logger.error(TypeError::TypeMismatch {
+                            expected: "()".to_string(),
+                            found: type_name,
+                            span: if_expr.then_block.span,
+                        });
+                    }
+                    TypeTable::UNIT
+                } else {
+                    let then_name = self.type_table.borrow().type_name(then_type);
+                    let else_name = self.type_table.borrow().type_name(else_type);
+                    let _ = self.logger.error(TypeError::TypeMismatch {
+                        expected: then_name,
+                        found: else_name,
+                        span: if_expr.else_block.as_ref().unwrap().span,
+                    });
+                    then_type
+                }
+            };
+
+            let if_pattern_stmt = TirStmt::new(
+                TirStmtKind::IfPattern {
+                    scrutinee,
+                    pattern: tir_pattern,
+                    then_block,
+                    else_block,
+                },
+                if_expr.span,
+            );
+
+            if if_expr.init.is_some() {
+                ctx.exit_scope();
+            }
+
+            return TirExpr::new(
+                TirExprKind::Block(TirBlock::new(vec![if_pattern_stmt], if_expr.span)),
+                type_id,
+                if_expr.span,
+            );
+        }
+
         let condition = match &if_expr.condition {
             ast::Condition::Expr(expr) => self.resolve_expr(expr, ctx, Some(TypeTable::BOOL)),
-            ast::Condition::Pattern { span, .. } => {
-                let _ = self.logger.error(TypeError::NotYetImplemented {
-                    feature: "pattern matching in if expressions (use if statement instead)"
-                        .to_string(),
-                    span: *span,
-                });
-                TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, *span)
-            }
+            ast::Condition::Pattern { .. } => unreachable!("handled above"),
         };
 
         let then_block = self.resolve_block(&if_expr.then_block, ctx, expected_type);
