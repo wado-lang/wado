@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773495424236,
+  "lastUpdate": 1773507795616,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3392,6 +3392,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 23755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "094b7cf0cb57691a246abfb10143a0fd90d45278",
+          "message": "Merge pull request #584 from wado-lang/claude/debug-inline-threshold-issue-U74nh\n\nAdd LabeledBlock-IfVariant fusion optimization pass",
+          "timestamp": "2026-03-15T02:00:44+09:00",
+          "tree_id": "1d11b0859cfef607468ac986596bc5480c5c5663",
+          "url": "https://github.com/wado-lang/wado/commit/094b7cf0cb57691a246abfb10143a0fd90d45278"
+        },
+        "date": 1773507795411,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9355,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21283,
             "unit": "bytes"
           }
         ]
