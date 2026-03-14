@@ -1787,6 +1787,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 Self::find_return_type_in_block(body)
             }
+            TirStmtKind::Expr(expr) => Self::find_return_type_in_expr(expr),
+            _ => None,
+        }
+    }
+
+    fn find_return_type_in_expr(expr: &TirExpr) -> Option<TypeId> {
+        match &expr.kind {
+            TirExprKind::Match { arms, .. } => {
+                for arm in arms {
+                    if let Some(t) = Self::find_return_type_in_expr(&arm.body) {
+                        return Some(t);
+                    }
+                }
+                None
+            }
+            TirExprKind::Block(block) => Self::find_return_type_in_block(block),
             _ => None,
         }
     }

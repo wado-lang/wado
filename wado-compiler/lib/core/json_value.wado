@@ -37,101 +37,94 @@ pub variant Value {
 
 impl Eq for Value {
     fn eq(&self, other: &Value) -> bool {
-        if let Null = self {
-            if let Null = other { return true; }
-            return false;
-        }
-        if let Bool(b1) = self {
-            if let Bool(b2) = other { return *b1 == *b2; }
-            return false;
-        }
-        if let Number(n1) = self {
-            if let Number(n2) = other { return *n1 == *n2; }
-            return false;
-        }
-        if let String(s1) = self {
-            if let String(s2) = other { return *s1 == *s2; }
-            return false;
-        }
-        if let Array(a1) = self {
-            if let Array(a2) = other {
-                if a1.len() != a2.len() { return false; }
-                let mut i = 0;
-                while i < a1.len() {
-                    if !(a1[i] == a2[i]) { return false; }
-                    i += 1;
-                }
-                return true;
-            }
-            return false;
-        }
-        if let Object(m1) = self {
-            if let Object(m2) = other {
-                if m1.len() != m2.len() { return false; }
-                for let [k, v] of m1.entries() {
-                    if let Some(other_v) = m2.get(k) {
-                        if !(v == other_v) { return false; }
-                    } else {
-                        return false;
+        return match self {
+            Null => other matches { Null },
+            Bool(b1) => {
+                if let Bool(b2) = other { return *b1 == *b2; }
+                false
+            },
+            Number(n1) => {
+                if let Number(n2) = other { return *n1 == *n2; }
+                false
+            },
+            String(s1) => {
+                if let String(s2) = other { return *s1 == *s2; }
+                false
+            },
+            Array(a1) => {
+                if let Array(a2) = other {
+                    if a1.len() != a2.len() { return false; }
+                    let mut i = 0;
+                    while i < a1.len() {
+                        if !(a1[i] == a2[i]) { return false; }
+                        i += 1;
                     }
+                    return true;
                 }
-                return true;
-            }
-            return false;
-        }
-        unreachable();
+                false
+            },
+            Object(m1) => {
+                if let Object(m2) = other {
+                    if m1.len() != m2.len() { return false; }
+                    for let [k, v] of m1.entries() {
+                        if let Some(other_v) = m2.get(k) {
+                            if !(v == other_v) { return false; }
+                        } else {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                false
+            },
+        };
     }
 }
 
 impl Serialize for Value {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        if let Null = self {
-            return s.serialize_null();
-        }
-        if let Bool(b) = self {
-            return s.serialize_bool(*b);
-        }
-        if let Number(n) = self {
-            return s.serialize_f64(*n);
-        }
-        if let String(str_val) = self {
-            return s.serialize_string(str_val);
-        }
-        if let Array(arr) = self {
-            let seq_r = s.begin_seq(arr.len());
-            if let Ok(mut seq) = seq_r {
-                for let item of *arr {
-                    let r = seq.element::<Value>(&item);
-                    if let Err(e) = r {
-                        return Result::<(), SerializeError>::Err(e);
+        return match self {
+            Null => s.serialize_null(),
+            Bool(b) => s.serialize_bool(*b),
+            Number(n) => s.serialize_f64(*n),
+            String(str_val) => s.serialize_string(str_val),
+            Array(arr) => {
+                let seq_r = s.begin_seq(arr.len());
+                if let Ok(mut seq) = seq_r {
+                    for let item of *arr {
+                        let r = seq.element::<Value>(&item);
+                        if let Err(e) = r {
+                            return Result::<(), SerializeError>::Err(e);
+                        }
                     }
+                    return seq.end();
                 }
-                return seq.end();
-            }
-            if let Err(e) = seq_r {
-                return Result::<(), SerializeError>::Err(e);
-            }
-        }
-        if let Object(map) = self {
-            let map_r = s.begin_map(map.len());
-            if let Ok(mut m) = map_r {
-                for let [key, val] of map.entries() {
-                    let key_r = m.key::<String>(&key);
-                    if let Err(e) = key_r {
-                        return Result::<(), SerializeError>::Err(e);
-                    }
-                    let val_r = m.value::<Value>(&val);
-                    if let Err(e) = val_r {
-                        return Result::<(), SerializeError>::Err(e);
-                    }
+                if let Err(e) = seq_r {
+                    return Result::<(), SerializeError>::Err(e);
                 }
-                return m.end();
-            }
-            if let Err(e) = map_r {
-                return Result::<(), SerializeError>::Err(e);
-            }
-        }
-        unreachable();
+                unreachable()
+            },
+            Object(map) => {
+                let map_r = s.begin_map(map.len());
+                if let Ok(mut m) = map_r {
+                    for let [key, val] of map.entries() {
+                        let key_r = m.key::<String>(&key);
+                        if let Err(e) = key_r {
+                            return Result::<(), SerializeError>::Err(e);
+                        }
+                        let val_r = m.value::<Value>(&val);
+                        if let Err(e) = val_r {
+                            return Result::<(), SerializeError>::Err(e);
+                        }
+                    }
+                    return m.end();
+                }
+                if let Err(e) = map_r {
+                    return Result::<(), SerializeError>::Err(e);
+                }
+                unreachable()
+            },
+        };
     }
 }
 
@@ -160,20 +153,20 @@ impl Visitor for ValueVisitor {
         let mut items: Array<Value> = [];
         loop {
             let next: Result<Option<Value>, DeserializeError> = seq.next_element::<Value>();
-            if let Ok(opt) = next {
-                if let Some(item) = opt {
-                    items.append(item);
-                } else {
-                    let end_r = seq.end();
-                    if let Err(e) = end_r {
-                        return Result::<Value, DeserializeError>::Err(e);
+            match next {
+                Ok(opt) => {
+                    if let Some(item) = opt {
+                        items.append(item);
+                    } else {
+                        let end_r = seq.end();
+                        if let Err(e) = end_r {
+                            return Result::<Value, DeserializeError>::Err(e);
+                        }
+                        return Result::<Value, DeserializeError>::Ok(Value::Array(items));
                     }
-                    return Result::<Value, DeserializeError>::Ok(Value::Array(items));
-                }
-            }
-            if let Err(e) = next {
-                return Result::<Value, DeserializeError>::Err(e);
-            }
+                },
+                Err(e) => { return Result::<Value, DeserializeError>::Err(e); },
+            };
         }
     }
 
@@ -181,26 +174,24 @@ impl Visitor for ValueVisitor {
         let mut obj = TreeMap::<String, Value>::new();
         loop {
             let key_r: Result<Option<String>, DeserializeError> = map.next_key_string();
-            if let Ok(opt) = key_r {
-                if let Some(key) = opt {
-                    let val_r: Result<Value, DeserializeError> = map.next_value::<Value>();
-                    if let Ok(val) = val_r {
-                        obj[key] = val;
+            match key_r {
+                Ok(opt) => {
+                    if let Some(key) = opt {
+                        let val_r: Result<Value, DeserializeError> = map.next_value::<Value>();
+                        match val_r {
+                            Ok(val) => { obj[key] = val; },
+                            Err(e) => { return Result::<Value, DeserializeError>::Err(e); },
+                        };
+                    } else {
+                        let end_r = map.end();
+                        if let Err(e) = end_r {
+                            return Result::<Value, DeserializeError>::Err(e);
+                        }
+                        return Result::<Value, DeserializeError>::Ok(Value::Object(obj));
                     }
-                    if let Err(e) = val_r {
-                        return Result::<Value, DeserializeError>::Err(e);
-                    }
-                } else {
-                    let end_r = map.end();
-                    if let Err(e) = end_r {
-                        return Result::<Value, DeserializeError>::Err(e);
-                    }
-                    return Result::<Value, DeserializeError>::Ok(Value::Object(obj));
-                }
-            }
-            if let Err(e) = key_r {
-                return Result::<Value, DeserializeError>::Err(e);
-            }
+                },
+                Err(e) => { return Result::<Value, DeserializeError>::Err(e); },
+            };
         }
     }
 }
