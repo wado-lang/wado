@@ -18,6 +18,7 @@ mod copy_prop;
 pub mod dce;
 mod field_scalarize;
 mod inline;
+mod labeled_block_fusion;
 mod licm;
 mod ref_elim;
 mod rewrite;
@@ -35,6 +36,7 @@ use dce::{
 };
 use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
+use labeled_block_fusion::fuse_labeled_blocks;
 use licm::apply_licm;
 use ref_elim::eliminate_unnecessary_refs;
 use sroa::scalar_replace_aggregates;
@@ -190,6 +192,7 @@ fn run_optimization_passes(project: &mut Project, config: &OptConfig) {
     for _ in 0..config.iterations {
         let mut changed = false;
         changed |= inline_functions(project, config.inline_threshold);
+        changed |= fuse_labeled_blocks(project);
         changed |= eliminate_unnecessary_refs(project);
         changed |= scalar_replace_aggregates(project);
         changed |= propagate_copies(project);

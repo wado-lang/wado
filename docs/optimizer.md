@@ -31,9 +31,9 @@ All levels run DCE (Dead Code Elimination) to remove unreachable functions and t
 | Flag            | DCE | Iterations | Inline Threshold |
 | --------------- | --- | ---------- | ---------------- |
 | `-O0`           | Yes | 0          | N/A              |
-| `-O1`           | Yes | 2          | 10               |
+| `-O1`           | Yes | 2          | 5                |
 | `-O2` (default) | Yes | 10         | 10               |
-| `-O3`           | Yes | 100        | 20               |
+| `-O3`           | Yes | 100        | 19               |
 | `-Os`           | Yes | 10         | 10               |
 
 `-Os` additionally strips the Wasm name section. Optimization passes (inlining, ref-elim, etc.) run in a fixed-point loop with early exit on convergence.
@@ -45,19 +45,21 @@ The optimizer runs after lowering and before Wasm emission:
 1. Early DCE: remove unreachable functions/types/globals before optimization (all levels). This significantly reduces the working set for subsequent passes by eliminating stdlib functions and types the program doesn't use.
 2. Fixed-point iteration loop (skipped for `-O0`):
    1. Function Inlining
-   2. Reference Elimination
-   3. SROA (Scalar Replacement of Aggregates)
-   4. Copy Propagation
-   5. Store-to-Load Forwarding
-   6. Constant Propagation
-   7. Constant Folding
-   8. Constant Global Promotion
-   9. Constant Branch Pruning
-   10. Loop-Invariant Code Motion (LICM)
-   11. Template String Buffer Hoisting
-3. Final DCE: clean up code made dead by optimizations (e.g., functions inlined away) (all levels)
-4. Post-optimization rewrites (labeled block simplification, select lowering, move insertion; all levels)
-5. WIR-level optimizations (multi-value SROA, constant array data promotion, large array splitting; see [WIR Optimizations](#wir-optimizations))
+   2. LabeledBlock Fusion
+   3. Reference Elimination
+   4. SROA (Scalar Replacement of Aggregates)
+   5. Copy Propagation
+   6. Store-to-Load Forwarding
+   7. Constant Propagation
+   8. Constant Folding
+   9. Constant Global Promotion
+   10. Constant Branch Pruning
+   11. Loop-Invariant Code Motion (LICM)
+   12. Template String Buffer Hoisting
+3. Hot Field Scalarization (HFS): runs once after the fixed-point loop converges
+4. Final DCE: clean up code made dead by optimizations (e.g., functions inlined away) (all levels)
+5. Post-optimization rewrites (labeled block simplification, select lowering, move insertion; all levels)
+6. WIR-level optimizations (multi-value SROA, constant array data promotion, large array splitting; see [WIR Optimizations](#wir-optimizations))
 
 ## Implemented Optimizations
 
@@ -74,6 +76,33 @@ Inline hints via `#[inline]` attributes override the default heuristics:
 - `#[inline]` — prefer inlining (5x threshold multiplier)
 - `#[inline(always)]` — always inline regardless of size or threshold
 - `#[inline(never)]` — never inline (useful for cold error paths or debugging)
+
+### LabeledBlock Fusion
+
+**Module:** `optimize/labeled_block_fusion.rs`
+
+Eliminates intermediate GC variant allocations that survive function inlining. When an inlined function returns `Option<T>` (or any variant type), TIR generates:
+
+```
+let __tmp = label: { ...break label: null / break label: Some(v)... };
+if VariantTest(__tmp, Some) { let v = VariantPayload(__tmp, Some); THEN } else { ELSE }
+```
+
+The fusion pass detects this `(LabeledBlock → VariantTest)` pattern and merges it into a single labeled block, routing `break null` to the else branch and `break Some(v)` to the then branch. The intermediate variant allocation is eliminated entirely.
+
+Preconditions: (1) the LabeledBlock only breaks with `null` or `VariantConstruct(C, v)` for a single case `C`; (2) the following `if` tests exactly that temp variable for case `C`; (3) the temp variable is not used for any other purpose.
+
+Runs immediately after inlining in the fixed-point loop so that subsequent passes (ref_elim, SROA, copy_prop) can optimize the fused code.
+
+### Hot Field Scalarization (HFS)
+
+**Module:** `optimize/field_scalarize.rs`
+
+Hoists frequently accessed struct fields from GC heap objects to local scalar variables for the duration of a loop. When a GC struct field is read and written more than a threshold number of times inside a loop, the field is loaded into a local before the loop, all accesses inside the loop use the local, and the local is written back to the field after the loop.
+
+Field accesses inside function calls still need to go through the struct (to handle aliasing), so write-backs and re-reads are inserted around call sites when the called function might access the same field.
+
+Runs once after the fixed-point loop converges, not inside the loop, to avoid spurious re-triggering: the write-back/re-read stmts it inserts would otherwise be counted as new field accesses by the next iteration.
 
 ### Reference Elimination
 

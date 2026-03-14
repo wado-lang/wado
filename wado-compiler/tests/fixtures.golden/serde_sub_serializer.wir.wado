@@ -208,16 +208,16 @@ global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let ser: ref TextSerializer;
-    let seq: ref Result<TextSeqSerializer,SerializeError>;
     let s_2: ref TextSeqSerializer;
-    let st: ref Result<TextStructSerializer,SerializeError>;
     let s_7: ref TextStructSerializer;
-    let name: ref String;
+    let name_8: ref String;
     let __local_10: ref String;
     let __local_11: ref String;
-    let __local_15: ref TextSerializer;
-    let __local_19: ref TextSerializer;
-    let __local_20: ref String;
+    let self_15: ref TextSerializer;
+    let self_19: ref TextSerializer;
+    let name_20: ref String;
+    let __fused_payload_24: ref TextSeqSerializer;
+    let __fused_payload_25: ref TextStructSerializer;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -225,13 +225,11 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     ser = TextSerializer { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };
-    seq = __inline_TextSerializer_Serializer__begin_seq_2: block -> ref Result<TextSeqSerializer,SerializeError> {
-        __local_15 = ser;
-        String::append_char(__local_15.buf, 91);
-        break __inline_TextSerializer_Serializer__begin_seq_2: Result<TextSeqSerializer,SerializeError>::Ok { discriminant: 0, payload_0: TextSeqSerializer { parent: ref.as_non_null(__local_15), count: 0 } };
-    };
-    if ref.test Result<TextSeqSerializer,SerializeError>::Ok(seq) {
-        s_2 = value_copy TextSeqSerializer(ref.cast Result<TextSeqSerializer,SerializeError>::Ok(seq).payload_0);
+    __fused___inline_TextSerializer_Serializer__begin_seq_2: block {
+        self_15 = ser;
+        String::append_char(self_15.buf, 91);
+        __fused_payload_24 = TextSeqSerializer { parent: ref.as_non_null(self_15), count: 0 };
+        s_2 = __fused_payload_24;
         drop(TextSeqSerializer^SerializeSeq::element<i32>(s_2, 1));
         drop(TextSeqSerializer^SerializeSeq::element<i32>(s_2, 2));
         drop(TextSeqSerializer^SerializeSeq::element<i32>(s_2, 3));
@@ -239,6 +237,7 @@ fn run() with Stdout {
             String::append_char(s_2.parent.buf, 93);
             break __inline_TextSeqSerializer_SerializeSeq__end_3: Result<unit,SerializeError> { 0, nop };
         });
+        break __fused___inline_TextSerializer_Serializer__begin_seq_2;
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_10 = String { repr: builtin::array_new<u8>(21), used: 0 };
@@ -251,21 +250,20 @@ fn run() with Stdout {
         break __tmpl: __local_10;
     });
     ser.buf = String { repr: builtin::array_new<u8>(0), used: 0 };
-    st = __inline_TextSerializer_Serializer__begin_struct_5: block -> ref Result<TextStructSerializer,SerializeError> {
-        __local_19 = ser;
-        __local_20 = String { repr: array.new_data<u8>("User"), used: 4 };
-        String::append_char(__local_19.buf, 123);
-        break __inline_TextSerializer_Serializer__begin_struct_5: Result<TextStructSerializer,SerializeError>::Ok { discriminant: 0, payload_0: TextStructSerializer { parent: ref.as_non_null(__local_19), count: 0 } };
-    };
-    if ref.test Result<TextStructSerializer,SerializeError>::Ok(st) {
-        s_7 = value_copy TextStructSerializer(ref.cast Result<TextStructSerializer,SerializeError>::Ok(st).payload_0);
-        name = String { repr: array.new_data<u8>("Alice"), used: 5 };
-        drop(TextStructSerializer^SerializeStruct::field<String>(s_7, String { repr: array.new_data<u8>("name"), used: 4 }, name));
+    __fused___inline_TextSerializer_Serializer__begin_struct_5: block {
+        self_19 = ser;
+        name_20 = String { repr: array.new_data<u8>("User"), used: 4 };
+        String::append_char(self_19.buf, 123);
+        __fused_payload_25 = TextStructSerializer { parent: ref.as_non_null(self_19), count: 0 };
+        s_7 = __fused_payload_25;
+        name_8 = String { repr: array.new_data<u8>("Alice"), used: 5 };
+        drop(TextStructSerializer^SerializeStruct::field<String>(s_7, String { repr: array.new_data<u8>("name"), used: 4 }, name_8));
         drop(TextStructSerializer^SerializeStruct::field<i32>(s_7, String { repr: array.new_data<u8>("age"), used: 3 }, 30));
         drop(__inline_TextStructSerializer_SerializeStruct__end_6: block -> ref Result<unit,SerializeError> {
             String::append_char(s_7.parent.buf, 125);
             break __inline_TextStructSerializer_SerializeStruct__end_6: Result<unit,SerializeError> { 0, nop };
         });
+        break __fused___inline_TextSerializer_Serializer__begin_struct_5;
     };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_11 = String { repr: builtin::array_new<u8>(24), used: 0 };
@@ -384,13 +382,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l12: loop {
+            l10: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l12;
+                continue l10;
             };
         };
     };
@@ -482,13 +480,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l18: loop {
+            l16: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l18;
+                continue l16;
             };
         };
     };
@@ -505,14 +503,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l22: loop {
+                l20: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l22;
+                    continue l20;
                 };
             };
         };
@@ -709,13 +707,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l37: loop {
+            l35: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l37;
+                continue l35;
             };
         };
     };
