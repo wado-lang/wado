@@ -506,10 +506,10 @@ impl String {
         let mut iter = bytes.into_iter();
         loop {
             if let Some(b0) = iter.next() {
+                let code: u32;
                 if b0 < 0x80 {
                     // 1-byte (ASCII)
-                    let off = builder.internal_reserve_uninit(1);
-                    builtin::array_set_u8(builder.internal_raw_bytes(), off, b0);
+                    code = b0 as u32;
                 } else if b0 < 0xC2 {
                     // Bare continuation byte (0x80–0xBF) or overlong 2-byte lead (0xC0, 0xC1)
                     return Result::Err("invalid UTF-8: unexpected byte");
@@ -519,10 +519,7 @@ impl String {
                         if b1 < 0x80 || b1 > 0xBF {
                             return Result::Err("invalid UTF-8: bad continuation byte");
                         }
-                        let off = builder.internal_reserve_uninit(2);
-                        let raw = builder.internal_raw_bytes();
-                        builtin::array_set_u8(raw, off, b0);
-                        builtin::array_set_u8(raw, off + 1, b1);
+                        code = ((b0 & 0x1F) << 6 | b1 & 0x3F) as u32;
                     } else {
                         return Result::Err("invalid UTF-8: truncated sequence");
                     }
@@ -542,11 +539,7 @@ impl String {
                             if b2 < 0x80 || b2 > 0xBF {
                                 return Result::Err("invalid UTF-8: bad continuation byte");
                             }
-                            let off = builder.internal_reserve_uninit(3);
-                            let raw = builder.internal_raw_bytes();
-                            builtin::array_set_u8(raw, off, b0);
-                            builtin::array_set_u8(raw, off + 1, b1);
-                            builtin::array_set_u8(raw, off + 2, b2);
+                            code = ((b0 & 0x0F) << 12 | (b1 & 0x3F) << 6 | b2 & 0x3F) as u32;
                         } else {
                             return Result::Err("invalid UTF-8: truncated sequence");
                         }
@@ -573,12 +566,7 @@ impl String {
                                 if b3 < 0x80 || b3 > 0xBF {
                                     return Result::Err("invalid UTF-8: bad continuation byte");
                                 }
-                                let off = builder.internal_reserve_uninit(4);
-                                let raw = builder.internal_raw_bytes();
-                                builtin::array_set_u8(raw, off, b0);
-                                builtin::array_set_u8(raw, off + 1, b1);
-                                builtin::array_set_u8(raw, off + 2, b2);
-                                builtin::array_set_u8(raw, off + 3, b3);
+                                code = ((b0 & 0x07) << 18 | (b1 & 0x3F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F) as u32;
                             } else {
                                 return Result::Err("invalid UTF-8: truncated sequence");
                             }
@@ -592,6 +580,7 @@ impl String {
                     // 0xF5–0xFF: always invalid
                     return Result::Err("invalid UTF-8: byte out of range");
                 }
+                builder.append_char(char::from_u32_unchecked(code));
             } else {
                 break;
             }
