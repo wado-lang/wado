@@ -67,15 +67,6 @@ impl DeserializeError {
     }
 }
 
-pub enum ValueKind {
-    Null,
-    Bool,
-    Number,
-    String,
-    Seq,
-    Map,
-}
-
 pub trait SerializeSeq {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
     fn end(&mut self) -> Result<(), SerializeError>;
@@ -156,6 +147,17 @@ pub trait DeserializeVariant {
 }
 
 
+pub trait Visitor {
+    type Value;
+
+    fn visit_null(&mut self) -> Result<Self::Value, DeserializeError>;
+    fn visit_bool(&mut self, v: bool) -> Result<Self::Value, DeserializeError>;
+    fn visit_f64(&mut self, v: f64) -> Result<Self::Value, DeserializeError>;
+    fn visit_string(&mut self, v: String) -> Result<Self::Value, DeserializeError>;
+    fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<Self::Value, DeserializeError>;
+    fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<Self::Value, DeserializeError>;
+}
+
 pub trait Deserializer {
     type SeqAccess: DeserializeSeq;
     type MapAccess: DeserializeMap;
@@ -178,7 +180,7 @@ pub trait Deserializer {
     fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError>;
     fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn(&String, i32, i32) -> Option<i32>) -> Result<Self::StructAccess, DeserializeError>;
     fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError>;
-    fn peek_value_kind(&mut self) -> Result<ValueKind, DeserializeError>;
+    fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>;
 }
 
 
