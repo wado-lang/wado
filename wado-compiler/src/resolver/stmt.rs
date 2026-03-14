@@ -364,7 +364,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// variable is assigned before any use.
     fn resolve_uninit_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) -> TirStmt {
         // Type annotation is guaranteed by the parser when there is no initializer.
-        let type_id = self.resolve_type(let_stmt.ty.as_ref().expect("parser ensures type annotation for uninit let"));
+        let type_id = self.resolve_type(
+            let_stmt
+                .ty
+                .as_ref()
+                .expect("parser ensures type annotation for uninit let"),
+        );
 
         match &let_stmt.pattern {
             ast::Pattern::Ident(name) | ast::Pattern::MutIdent(name) => {
@@ -373,8 +378,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let local_index = ctx.add_local(name.clone(), type_id, is_mut);
                 // Unit placeholder: WIR builder sees unit type → skips LocalSet.
                 // The local is pre-declared and Wasm zero-initializes it.
-                let placeholder =
-                    TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
+                let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
                 TirStmt::new(
                     TirStmtKind::Let {
                         name: name.clone(),
@@ -390,13 +394,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             _ => {
                 let _ = self.logger.error(TypeError::InvalidPattern {
-                    message:
-                        "only simple variable names are allowed in uninitialized declarations"
-                            .to_string(),
+                    message: "only simple variable names are allowed in uninitialized declarations"
+                        .to_string(),
                     span: let_stmt.span,
                 });
                 TirStmt::new(
-                    TirStmtKind::Expr(TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span)),
+                    TirStmtKind::Expr(TirExpr::new(
+                        TirExprKind::Unit,
+                        TypeTable::UNIT,
+                        let_stmt.span,
+                    )),
                     let_stmt.span,
                 )
             }

@@ -164,7 +164,7 @@ pub struct Binder<'a, H: CompilerHost> {
     local_names_in_function: IndexSet<String>,
     /// Variables declared without an initializer that have not yet been
     /// definitely assigned on all paths reaching the current point.
-    /// Key: (scope_depth, name) — scope_depth disambiguates shadowed vars.
+    /// Key: (`scope_depth`, name) — `scope_depth` disambiguates shadowed vars.
     possibly_uninit: IndexSet<(u32, String)>,
 }
 
@@ -565,12 +565,12 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 // If the target is an uninitialized variable, this is its first
                 // initialization — allow it (skipping the immutability check) and
                 // mark the variable as definitely initialized.
-                if let Expr::Ident(ident) = &assign.target {
-                    if self.is_possibly_uninit(&ident.name) {
-                        self.mark_initialized(&ident.name);
-                        self.bind_expr(&assign.value)?;
-                        return Ok(());
-                    }
+                if let Expr::Ident(ident) = &assign.target
+                    && self.is_possibly_uninit(&ident.name)
+                {
+                    self.mark_initialized(&ident.name);
+                    self.bind_expr(&assign.value)?;
+                    return Ok(());
                 }
 
                 // Normal assignment: check mutability for simple variable assignments

@@ -1101,8 +1101,9 @@ impl Parser {
             if ty.is_none() {
                 let span = self.peek().span;
                 return Err(ParseError {
-                    message: "type annotation required for variable declaration without initializer"
-                        .to_string(),
+                    message:
+                        "type annotation required for variable declaration without initializer"
+                            .to_string(),
                     span,
                 });
             }

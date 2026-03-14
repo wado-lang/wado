@@ -1352,10 +1352,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
             ast::Expr::If(if_expr) => {
-                if let Some(init) = &if_expr.init {
-                    if let Some(ref v) = init.value {
-                        Self::collect_mutated_vars(v, result);
-                    }
+                if let Some(init) = &if_expr.init
+                    && let Some(ref v) = init.value
+                {
+                    Self::collect_mutated_vars(v, result);
                 }
                 if let ast::Condition::Expr(cond) = &if_expr.condition {
                     Self::collect_mutated_vars(cond, result);
@@ -1400,10 +1400,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
             ast::Stmt::If(is) => {
-                if let Some(init) = &is.init {
-                    if let Some(ref v) = init.value {
-                        Self::collect_mutated_vars(v, result);
-                    }
+                if let Some(init) = &is.init
+                    && let Some(ref v) = init.value
+                {
+                    Self::collect_mutated_vars(v, result);
                 }
                 if let ast::Condition::Expr(cond) = &is.condition {
                     Self::collect_mutated_vars(cond, result);
