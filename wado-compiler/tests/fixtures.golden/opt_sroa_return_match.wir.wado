@@ -74,8 +74,6 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/small_match" = fn(i32) -> ref Pair;
-
 type "functype/use_small_match" = fn(i32) -> i32;
 
 type "functype/large_match" = fn(i32) -> ref HiLo;
@@ -136,8 +134,6 @@ type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/wasi/stream-new" = fn() -> i64;
 
-type "functype/small_match" = fn(i32) -> [i32, i32];
-
 type "functype/large_match" = fn(i32) -> [u64, u64];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
@@ -160,23 +156,16 @@ import fn stream-new from "wasi/stream-new";
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
-fn small_match(x) {
-    let __match_scrut_0: i32;
-    __match_scrut_0 = x;
-    if __match_scrut_0 == 0 {
-        return 10; 20;
-    } else if __match_scrut_0 == 1 {
-        return 30; 40;
-    } else {
-        return 50; 60;
-    };
-}
-
 fn use_small_match(x) {
-    let __sroa_p_a: i32;
-    let __sroa_p_b: i32;
-    multivalue_bind [__sroa_p_a, __sroa_p_b] = small_match(x);
-    return __sroa_p_a + __sroa_p_b;
+    let p: ref Pair;
+    p = value_copy Pair(let __match_scrut_0: i32; __match_scrut_0 = x; if __match_scrut_0 == 0 -> ref Pair {
+        Pair { a: 10, b: 20 };
+    } else if __match_scrut_0 == 1 -> ref Pair {
+        Pair { a: 30, b: 40 };
+    } else {
+        Pair { a: 50, b: 60 };
+    });
+    return p.a + p.b;
 }
 
 fn large_match(i) {

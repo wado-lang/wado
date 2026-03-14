@@ -154,11 +154,7 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/u128^Eq::eq" = fn(ref u128, ref u128) -> bool;
-
 type "functype/u128^Ord::cmp" = fn(ref u128, ref u128) -> enum:Ordering;
-
-type "functype/i128^Eq::eq" = fn(ref i128, ref i128) -> bool;
 
 type "functype/i128^Ord::cmp" = fn(ref i128, ref i128) -> enum:Ordering;
 
@@ -218,196 +214,268 @@ fn coerce_int_literal_comparison_i128() with Stdout {
     let x_i128: ref i128;
     let cond_5: bool;
     let label_6: ref String;
-    let cond_8: bool;
-    let label_9: ref String;
-    let cond_11: bool;
-    let label_12: ref String;
+    let __local_8: ref u128;
+    let cond_10: bool;
+    let label_11: ref String;
+    let __local_12: ref u128;
     let cond_15: bool;
     let label_16: ref String;
-    let cond_19: bool;
-    let label_20: ref String;
-    let cond_22: bool;
-    let label_23: ref String;
-    let cond_25: bool;
-    let label_26: ref String;
-    let cond_29: bool;
-    let label_30: ref String;
-    let cond_33: bool;
-    let label_34: ref String;
-    let cond_36: bool;
-    let label_37: ref String;
-    let cond_39: bool;
-    let label_40: ref String;
+    let __local_18: ref i128;
+    let cond_21: bool;
+    let label_22: ref String;
+    let __local_23: ref i128;
+    let cond_27: bool;
+    let label_28: ref String;
+    let __local_31: ref u128;
+    let cond_32: bool;
+    let label_33: ref String;
+    let __local_35: ref u128;
+    let cond_37: bool;
+    let label_38: ref String;
+    let __local_42: ref i128;
     let cond_43: bool;
     let label_44: ref String;
-    let cond_47: bool;
-    let label_48: ref String;
-    let cond_50: bool;
-    let label_51: ref String;
-    let cond_53: bool;
-    let label_54: ref String;
-    let cond_57: bool;
-    let label_58: ref String;
-    let cond_61: bool;
-    let label_62: ref String;
-    let cond_64: bool;
-    let label_65: ref String;
-    let cond_67: bool;
-    let label_68: ref String;
-    let cond_71: bool;
-    let label_72: ref String;
-    let cond_75: bool;
-    let label_76: ref String;
-    let cond_78: bool;
-    let label_79: ref String;
-    let cond_81: bool;
-    let label_82: ref String;
-    let cond_85: bool;
-    let label_86: ref String;
+    let __local_47: ref i128;
+    let cond_49: bool;
+    let label_50: ref String;
+    let cond_52: bool;
+    let label_53: ref String;
+    let cond_55: bool;
+    let label_56: ref String;
+    let cond_59: bool;
+    let label_60: ref String;
+    let cond_63: bool;
+    let label_64: ref String;
+    let cond_66: bool;
+    let label_67: ref String;
+    let cond_69: bool;
+    let label_70: ref String;
+    let cond_73: bool;
+    let label_74: ref String;
+    let cond_77: bool;
+    let label_78: ref String;
+    let cond_80: bool;
+    let label_81: ref String;
+    let cond_83: bool;
+    let label_84: ref String;
+    let cond_87: bool;
+    let label_88: ref String;
+    let cond_91: bool;
+    let label_92: ref String;
+    let cond_94: bool;
+    let label_95: ref String;
+    let cond_97: bool;
+    let label_98: ref String;
+    let cond_101: bool;
+    let label_102: ref String;
     x_u128 = u128 { low: 1000_i64, high: 0_i64 };
     x_i128 = i128 { low: -500_i64, high: -1_i64 };
-    cond_5 = u128^Eq::eq(x_u128, u128 { low: 1000_i64, high: 0_i64 });
+    cond_5 = __inline_u128_Eq__eq_3: block -> bool {
+        __local_8 = u128 { low: 1000_i64, high: 0_i64 };
+        if x_u128.low == 1000_i64 -> i32 {
+            x_u128.high == 0_i64;
+        } else {
+            0;
+        };
+        break __inline_u128_Eq__eq_3;
+    };
     label_6 = String { repr: array.new_data<u8>("u128 == rhs"), used: 11 };
     if cond_5 == 0 {
         "core:internal/panic"(label_6);
         unreachable;
     };
-    cond_8 = u128^Eq::eq(u128 { low: 1000_i64, high: 0_i64 }, x_u128);
-    label_9 = String { repr: array.new_data<u8>("lhs == u128"), used: 11 };
-    if cond_8 == 0 {
-        "core:internal/panic"(label_9);
+    cond_10 = __inline_u128_Eq__eq_6: block -> bool {
+        __local_12 = u128 { low: 1000_i64, high: 0_i64 };
+        if 1000_i64 == x_u128.low -> i32 {
+            0_i64 == x_u128.high;
+        } else {
+            0;
+        };
+        break __inline_u128_Eq__eq_6;
+    };
+    label_11 = String { repr: array.new_data<u8>("lhs == u128"), used: 11 };
+    if cond_10 == 0 {
+        "core:internal/panic"(label_11);
         unreachable;
     };
-    cond_11 = i128^Eq::eq(x_i128, i128 { low: -500_i64, high: -1_i64 });
-    label_12 = String { repr: array.new_data<u8>("i128 == rhs"), used: 11 };
-    if cond_11 == 0 {
-        "core:internal/panic"(label_12);
-        unreachable;
+    cond_15 = __inline_i128_Eq__eq_9: block -> bool {
+        __local_18 = i128 { low: -500_i64, high: -1_i64 };
+        if x_i128.low == -500_i64 -> i32 {
+            x_i128.high == -1_i64;
+        } else {
+            0;
+        };
+        break __inline_i128_Eq__eq_9;
     };
-    cond_15 = i128^Eq::eq(i128 { low: -500_i64, high: -1_i64 }, x_i128);
-    label_16 = String { repr: array.new_data<u8>("lhs == i128"), used: 11 };
+    label_16 = String { repr: array.new_data<u8>("i128 == rhs"), used: 11 };
     if cond_15 == 0 {
         "core:internal/panic"(label_16);
         unreachable;
     };
-    cond_19 = u128^Eq::eq(x_u128, u128 { low: 999_i64, high: 0_i64 }) == 0;
-    label_20 = String { repr: array.new_data<u8>("u128 != rhs"), used: 11 };
-    if cond_19 == 0 {
-        "core:internal/panic"(label_20);
+    cond_21 = __inline_i128_Eq__eq_12: block -> bool {
+        __local_23 = i128 { low: -500_i64, high: -1_i64 };
+        if -500_i64 == x_i128.low -> i32 {
+            -1_i64 == x_i128.high;
+        } else {
+            0;
+        };
+        break __inline_i128_Eq__eq_12;
+    };
+    label_22 = String { repr: array.new_data<u8>("lhs == i128"), used: 11 };
+    if cond_21 == 0 {
+        "core:internal/panic"(label_22);
         unreachable;
     };
-    cond_22 = u128^Eq::eq(u128 { low: 999_i64, high: 0_i64 }, x_u128) == 0;
-    label_23 = String { repr: array.new_data<u8>("lhs != u128"), used: 11 };
-    if cond_22 == 0 {
-        "core:internal/panic"(label_23);
+    cond_27 = __inline_u128_Eq__eq_16: block -> bool {
+        __local_31 = u128 { low: 999_i64, high: 0_i64 };
+        if x_u128.low == 999_i64 -> i32 {
+            x_u128.high == 0_i64;
+        } else {
+            0;
+        };
+        break __inline_u128_Eq__eq_16;
+    } == 0;
+    label_28 = String { repr: array.new_data<u8>("u128 != rhs"), used: 11 };
+    if cond_27 == 0 {
+        "core:internal/panic"(label_28);
         unreachable;
     };
-    cond_25 = i128^Eq::eq(x_i128, i128 { low: 0_i64, high: 0_i64 }) == 0;
-    label_26 = String { repr: array.new_data<u8>("i128 != rhs"), used: 11 };
-    if cond_25 == 0 {
-        "core:internal/panic"(label_26);
+    cond_32 = __inline_u128_Eq__eq_19: block -> bool {
+        __local_35 = u128 { low: 999_i64, high: 0_i64 };
+        if 999_i64 == x_u128.low -> i32 {
+            0_i64 == x_u128.high;
+        } else {
+            0;
+        };
+        break __inline_u128_Eq__eq_19;
+    } == 0;
+    label_33 = String { repr: array.new_data<u8>("lhs != u128"), used: 11 };
+    if cond_32 == 0 {
+        "core:internal/panic"(label_33);
         unreachable;
     };
-    cond_29 = i128^Eq::eq(i128 { low: 0_i64, high: 0_i64 }, x_i128) == 0;
-    label_30 = String { repr: array.new_data<u8>("lhs != i128"), used: 11 };
-    if cond_29 == 0 {
-        "core:internal/panic"(label_30);
+    cond_37 = __inline_i128_Eq__eq_22: block -> bool {
+        __local_42 = i128 { low: 0_i64, high: 0_i64 };
+        if x_i128.low == 0_i64 -> i32 {
+            x_i128.high == 0_i64;
+        } else {
+            0;
+        };
+        break __inline_i128_Eq__eq_22;
+    } == 0;
+    label_38 = String { repr: array.new_data<u8>("i128 != rhs"), used: 11 };
+    if cond_37 == 0 {
+        "core:internal/panic"(label_38);
         unreachable;
     };
-    cond_33 = u128^Ord::cmp(x_u128, u128 { low: 1001_i64, high: 0_i64 }) == 0;
-    label_34 = String { repr: array.new_data<u8>("u128 < rhs"), used: 10 };
-    if cond_33 == 0 {
-        "core:internal/panic"(label_34);
-        unreachable;
-    };
-    cond_36 = u128^Ord::cmp(u128 { low: 999_i64, high: 0_i64 }, x_u128) == 0;
-    label_37 = String { repr: array.new_data<u8>("lhs < u128"), used: 10 };
-    if cond_36 == 0 {
-        "core:internal/panic"(label_37);
-        unreachable;
-    };
-    cond_39 = i128^Ord::cmp(x_i128, i128 { low: 0_i64, high: 0_i64 }) == 0;
-    label_40 = String { repr: array.new_data<u8>("i128 < rhs"), used: 10 };
-    if cond_39 == 0 {
-        "core:internal/panic"(label_40);
-        unreachable;
-    };
-    cond_43 = i128^Ord::cmp(i128 { low: -501_i64, high: -1_i64 }, x_i128) == 0;
-    label_44 = String { repr: array.new_data<u8>("lhs < i128"), used: 10 };
+    cond_43 = __inline_i128_Eq__eq_25: block -> bool {
+        __local_47 = i128 { low: 0_i64, high: 0_i64 };
+        if 0_i64 == x_i128.low -> i32 {
+            0_i64 == x_i128.high;
+        } else {
+            0;
+        };
+        break __inline_i128_Eq__eq_25;
+    } == 0;
+    label_44 = String { repr: array.new_data<u8>("lhs != i128"), used: 11 };
     if cond_43 == 0 {
         "core:internal/panic"(label_44);
         unreachable;
     };
-    cond_47 = u128^Ord::cmp(x_u128, u128 { low: 999_i64, high: 0_i64 }) == 2;
-    label_48 = String { repr: array.new_data<u8>("u128 > rhs"), used: 10 };
-    if cond_47 == 0 {
-        "core:internal/panic"(label_48);
+    cond_49 = u128^Ord::cmp(x_u128, u128 { low: 1001_i64, high: 0_i64 }) == 0;
+    label_50 = String { repr: array.new_data<u8>("u128 < rhs"), used: 10 };
+    if cond_49 == 0 {
+        "core:internal/panic"(label_50);
         unreachable;
     };
-    cond_50 = u128^Ord::cmp(u128 { low: 1001_i64, high: 0_i64 }, x_u128) == 2;
-    label_51 = String { repr: array.new_data<u8>("lhs > u128"), used: 10 };
-    if cond_50 == 0 {
-        "core:internal/panic"(label_51);
+    cond_52 = u128^Ord::cmp(u128 { low: 999_i64, high: 0_i64 }, x_u128) == 0;
+    label_53 = String { repr: array.new_data<u8>("lhs < u128"), used: 10 };
+    if cond_52 == 0 {
+        "core:internal/panic"(label_53);
         unreachable;
     };
-    cond_53 = i128^Ord::cmp(x_i128, i128 { low: -501_i64, high: -1_i64 }) == 2;
-    label_54 = String { repr: array.new_data<u8>("i128 > rhs"), used: 10 };
-    if cond_53 == 0 {
-        "core:internal/panic"(label_54);
+    cond_55 = i128^Ord::cmp(x_i128, i128 { low: 0_i64, high: 0_i64 }) == 0;
+    label_56 = String { repr: array.new_data<u8>("i128 < rhs"), used: 10 };
+    if cond_55 == 0 {
+        "core:internal/panic"(label_56);
         unreachable;
     };
-    cond_57 = i128^Ord::cmp(i128 { low: 0_i64, high: 0_i64 }, x_i128) == 2;
-    label_58 = String { repr: array.new_data<u8>("lhs > i128"), used: 10 };
-    if cond_57 == 0 {
-        "core:internal/panic"(label_58);
+    cond_59 = i128^Ord::cmp(i128 { low: -501_i64, high: -1_i64 }, x_i128) == 0;
+    label_60 = String { repr: array.new_data<u8>("lhs < i128"), used: 10 };
+    if cond_59 == 0 {
+        "core:internal/panic"(label_60);
         unreachable;
     };
-    cond_61 = u128^Ord::cmp(x_u128, u128 { low: 1000_i64, high: 0_i64 }) != 2;
-    label_62 = String { repr: array.new_data<u8>("u128 <= rhs"), used: 11 };
-    if cond_61 == 0 {
-        "core:internal/panic"(label_62);
+    cond_63 = u128^Ord::cmp(x_u128, u128 { low: 999_i64, high: 0_i64 }) == 2;
+    label_64 = String { repr: array.new_data<u8>("u128 > rhs"), used: 10 };
+    if cond_63 == 0 {
+        "core:internal/panic"(label_64);
         unreachable;
     };
-    cond_64 = u128^Ord::cmp(u128 { low: 1000_i64, high: 0_i64 }, x_u128) != 2;
-    label_65 = String { repr: array.new_data<u8>("lhs <= u128"), used: 11 };
-    if cond_64 == 0 {
-        "core:internal/panic"(label_65);
+    cond_66 = u128^Ord::cmp(u128 { low: 1001_i64, high: 0_i64 }, x_u128) == 2;
+    label_67 = String { repr: array.new_data<u8>("lhs > u128"), used: 10 };
+    if cond_66 == 0 {
+        "core:internal/panic"(label_67);
         unreachable;
     };
-    cond_67 = i128^Ord::cmp(x_i128, i128 { low: -500_i64, high: -1_i64 }) != 2;
-    label_68 = String { repr: array.new_data<u8>("i128 <= rhs"), used: 11 };
-    if cond_67 == 0 {
-        "core:internal/panic"(label_68);
+    cond_69 = i128^Ord::cmp(x_i128, i128 { low: -501_i64, high: -1_i64 }) == 2;
+    label_70 = String { repr: array.new_data<u8>("i128 > rhs"), used: 10 };
+    if cond_69 == 0 {
+        "core:internal/panic"(label_70);
         unreachable;
     };
-    cond_71 = i128^Ord::cmp(i128 { low: -500_i64, high: -1_i64 }, x_i128) != 2;
-    label_72 = String { repr: array.new_data<u8>("lhs <= i128"), used: 11 };
-    if cond_71 == 0 {
-        "core:internal/panic"(label_72);
+    cond_73 = i128^Ord::cmp(i128 { low: 0_i64, high: 0_i64 }, x_i128) == 2;
+    label_74 = String { repr: array.new_data<u8>("lhs > i128"), used: 10 };
+    if cond_73 == 0 {
+        "core:internal/panic"(label_74);
         unreachable;
     };
-    cond_75 = u128^Ord::cmp(x_u128, u128 { low: 1000_i64, high: 0_i64 }) != 0;
-    label_76 = String { repr: array.new_data<u8>("u128 >= rhs"), used: 11 };
-    if cond_75 == 0 {
-        "core:internal/panic"(label_76);
+    cond_77 = u128^Ord::cmp(x_u128, u128 { low: 1000_i64, high: 0_i64 }) != 2;
+    label_78 = String { repr: array.new_data<u8>("u128 <= rhs"), used: 11 };
+    if cond_77 == 0 {
+        "core:internal/panic"(label_78);
         unreachable;
     };
-    cond_78 = u128^Ord::cmp(u128 { low: 1000_i64, high: 0_i64 }, x_u128) != 0;
-    label_79 = String { repr: array.new_data<u8>("lhs >= u128"), used: 11 };
-    if cond_78 == 0 {
-        "core:internal/panic"(label_79);
+    cond_80 = u128^Ord::cmp(u128 { low: 1000_i64, high: 0_i64 }, x_u128) != 2;
+    label_81 = String { repr: array.new_data<u8>("lhs <= u128"), used: 11 };
+    if cond_80 == 0 {
+        "core:internal/panic"(label_81);
         unreachable;
     };
-    cond_81 = i128^Ord::cmp(x_i128, i128 { low: -500_i64, high: -1_i64 }) != 0;
-    label_82 = String { repr: array.new_data<u8>("i128 >= rhs"), used: 11 };
-    if cond_81 == 0 {
-        "core:internal/panic"(label_82);
+    cond_83 = i128^Ord::cmp(x_i128, i128 { low: -500_i64, high: -1_i64 }) != 2;
+    label_84 = String { repr: array.new_data<u8>("i128 <= rhs"), used: 11 };
+    if cond_83 == 0 {
+        "core:internal/panic"(label_84);
         unreachable;
     };
-    cond_85 = i128^Ord::cmp(i128 { low: -500_i64, high: -1_i64 }, x_i128) != 0;
-    label_86 = String { repr: array.new_data<u8>("lhs >= i128"), used: 11 };
-    if cond_85 == 0 {
-        "core:internal/panic"(label_86);
+    cond_87 = i128^Ord::cmp(i128 { low: -500_i64, high: -1_i64 }, x_i128) != 2;
+    label_88 = String { repr: array.new_data<u8>("lhs <= i128"), used: 11 };
+    if cond_87 == 0 {
+        "core:internal/panic"(label_88);
+        unreachable;
+    };
+    cond_91 = u128^Ord::cmp(x_u128, u128 { low: 1000_i64, high: 0_i64 }) != 0;
+    label_92 = String { repr: array.new_data<u8>("u128 >= rhs"), used: 11 };
+    if cond_91 == 0 {
+        "core:internal/panic"(label_92);
+        unreachable;
+    };
+    cond_94 = u128^Ord::cmp(u128 { low: 1000_i64, high: 0_i64 }, x_u128) != 0;
+    label_95 = String { repr: array.new_data<u8>("lhs >= u128"), used: 11 };
+    if cond_94 == 0 {
+        "core:internal/panic"(label_95);
+        unreachable;
+    };
+    cond_97 = i128^Ord::cmp(x_i128, i128 { low: -500_i64, high: -1_i64 }) != 0;
+    label_98 = String { repr: array.new_data<u8>("i128 >= rhs"), used: 11 };
+    if cond_97 == 0 {
+        "core:internal/panic"(label_98);
+        unreachable;
+    };
+    cond_101 = i128^Ord::cmp(i128 { low: -500_i64, high: -1_i64 }, x_i128) != 0;
+    label_102 = String { repr: array.new_data<u8>("lhs >= i128"), used: 11 };
+    if cond_101 == 0 {
+        "core:internal/panic"(label_102);
         unreachable;
     };
     "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
@@ -813,13 +881,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l34: loop {
+            l42: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l34;
+                continue l42;
             };
         };
     };
@@ -948,13 +1016,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l41: loop {
+            l49: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l41;
+                continue l49;
             };
         };
     };
@@ -971,25 +1039,17 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l45: loop {
+                l53: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l45;
+                    continue l53;
                 };
             };
         };
-    };
-}
-
-fn u128^Eq::eq(self, other) {
-    return if self.low == other.low -> i32 {
-        self.high == other.high;
-    } else {
-        0;
     };
 }
 
@@ -1007,14 +1067,6 @@ fn u128^Ord::cmp(self, other) {
         return 2;
     };
     return 1;
-}
-
-fn i128^Eq::eq(self, other) {
-    return if self.low == other.low -> i32 {
-        self.high == other.high;
-    } else {
-        0;
-    };
 }
 
 fn i128^Ord::cmp(self, other) {
@@ -1142,10 +1194,10 @@ fn u64::fmt_decimal(self, f) {
     };
     digit_count = 0;
     temp = val_i64;
-    b62: block {
-        l63: loop {
+    b68: block {
+        l69: loop {
             if (temp != 0_i64) == 0 {
-                break b62;
+                break b68;
             };
             digit_count = digit_count + 1;
             if temp >= 0_i64 {
@@ -1160,7 +1212,7 @@ fn u64::fmt_decimal(self, f) {
                 };
                 temp = (signed_quot_9 + 1844674407370955161_i64) + carry_10;
             };
-            continue l63;
+            continue l69;
         };
     };
     offset_11 = Formatter::prepare_int_write(f, 0, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
@@ -1170,10 +1222,10 @@ fn u64::fmt_decimal(self, f) {
     };
     pos = offset_11 + digit_count;
     temp = val_i64;
-    b67: block {
-        l68: loop {
+    b73: block {
+        l74: loop {
             if (temp != 0_i64) == 0 {
-                break b67;
+                break b73;
             };
             pos = pos - 1;
             digit = 0;
@@ -1196,7 +1248,7 @@ fn u64::fmt_decimal(self, f) {
                 temp = (signed_quot_17 + 1844674407370955161_i64) + carry_18;
             };
             builtin::array_set_u8(repr, pos, (48 + digit) & 255);
-            continue l68;
+            continue l74;
         };
     };
 }
@@ -1284,13 +1336,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l82: loop {
+            l88: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l82;
+                continue l88;
             };
         };
     };

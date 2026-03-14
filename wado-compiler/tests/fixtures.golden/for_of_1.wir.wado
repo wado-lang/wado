@@ -139,8 +139,6 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/Container<i32>::process" = fn(ref Container<i32>);
-
 type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> ref Option<i32>;
 
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
@@ -158,8 +156,6 @@ type "functype/wasi/subtask-drop" = fn(i32);
 type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
-
-type "functype/Container<i32>::process" = fn(ref Array<i32>);
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -353,10 +349,27 @@ fn for_of_empty() with Stdout {
 
 fn for_of_generic_method() with Stdout {
     let __local_0: ref Array<i32>;
-    Container<i32>::process(ref.as_non_null(__seq_lit: block -> ref Array<i32> {
+    let __iter_1: ref "core:allocator/ArrayIter<i32>";
+    let item: i32;
+    let __sroa_c_items: ref Array<i32>;
+    __sroa_c_items = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_0;
-    }));
+    };
+    __iter_1 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(__sroa_c_items.repr), used: 3, index: 0 };
+    b14: block {
+        l15: loop {
+            let __sroa___pattern_temp_0_discriminant: i32;
+            let __sroa___pattern_temp_0_payload_0: i32;
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_1);
+            if __sroa___pattern_temp_0_discriminant == 0 {
+                item = __sroa___pattern_temp_0_payload_0;
+            } else {
+                break b14;
+            };
+            continue l15;
+        };
+    };
     "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
 }
 
@@ -476,13 +489,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l24: loop {
+            l27: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l24;
+                continue l27;
             };
         };
     };
@@ -574,13 +587,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l30: loop {
+            l33: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l30;
+                continue l33;
             };
         };
     };
@@ -597,14 +610,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l34: loop {
+                l37: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l34;
+                    continue l37;
                 };
             };
         };
@@ -704,29 +717,6 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
-    };
-}
-
-fn Container<i32>::process(self) {
-    let __iter_1: ref "core:allocator/ArrayIter<i32>";
-    let item: i32;
-    let __local_4: ref Array<i32>;
-    __iter_1 = __inline_Array_i32__IntoIterator__into_iter_0: block -> ref "core:allocator/ArrayIter<i32>" {
-        __local_4 = self;
-        break __inline_Array_i32__IntoIterator__into_iter_0: "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(__local_4.repr), used: __local_4.used, index: 0 };
-    };
-    b45: block {
-        l46: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: i32;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_1);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                item = __sroa___pattern_temp_0_payload_0;
-            } else {
-                break b45;
-            };
-            continue l46;
-        };
     };
 }
 

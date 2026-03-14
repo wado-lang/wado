@@ -131,13 +131,9 @@ type "functype/u128::set_bit" = fn(ref u128, i32) -> ref u128;
 
 type "functype/u128::fmt_decimal" = fn(ref u128, ref Formatter);
 
-type "functype/u128^Eq::eq" = fn(ref u128, ref u128) -> bool;
-
 type "functype/u128^Ord::cmp" = fn(ref u128, ref u128) -> enum:Ordering;
 
 type "functype/u128^Sub::sub" = fn(ref u128, ref u128) -> ref u128;
-
-type "functype/u128^BitOr::bitor" = fn(ref u128, ref u128) -> ref u128;
 
 type "functype/u128^Shl::shl" = fn(ref u128, u32) -> ref u128;
 
@@ -503,9 +499,10 @@ fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
 fn u128::div_rem(self, divisor) {
     let quotient: ref u128;
     let remainder: ref u128;
-    let one: ref u128;
     let i: i32;
     let bit: bool;
+    let __local_7: ref u128;
+    let __local_8: ref u128;
     if if divisor.low == 0_i64 -> i32 {
         divisor.high == 0_i64;
     } else {
@@ -517,29 +514,37 @@ fn u128::div_rem(self, divisor) {
     if u128^Ord::cmp(self, divisor) == 0 {
         return "tuple/[u128, u128]" { 0: u128 { low: 0_i64, high: 0_i64 }, 1: ref.as_non_null(self) };
     };
-    if u128^Eq::eq(self, divisor) {
+    if __inline_u128_Eq__eq_1: block -> bool {
+        __local_7 = self;
+        __local_8 = divisor;
+        if __local_7.low == __local_8.low -> i32 {
+            __local_7.high == __local_8.high;
+        } else {
+            0;
+        };
+        break __inline_u128_Eq__eq_1;
+    } {
         return "tuple/[u128, u128]" { 0: u128 { low: 1_i64, high: 0_i64 }, 1: u128 { low: 0_i64, high: 0_i64 } };
     };
     quotient = u128 { low: 0_i64, high: 0_i64 };
     remainder = u128 { low: 0_i64, high: 0_i64 };
-    one = u128 { low: 1_i64, high: 0_i64 };
     i = 127;
-    b19: block {
-        l20: loop {
+    b20: block {
+        l21: loop {
             if (i >= 0) == 0 {
-                break b19;
+                break b20;
             };
             remainder = u128^Shl::shl(remainder, 1);
             bit = u128::get_bit(self, i);
             if bit {
-                remainder = u128^BitOr::bitor(remainder, one);
+                remainder = u128 { low: remainder.low | 1_i64, high: remainder.high | 0_i64 };
             };
             if u128^Ord::cmp(remainder, divisor) != 0 {
                 remainder = u128^Sub::sub(remainder, divisor);
                 quotient = u128::set_bit(quotient, i);
             };
             i = i - 1;
-            continue l20;
+            continue l21;
         };
     };
     return "tuple/[u128, u128]" { 0: ref.as_non_null(quotient), 1: ref.as_non_null(remainder) };
@@ -581,23 +586,34 @@ fn u128::fmt_decimal(self, f) {
     let pos: i32;
     let temp_11: ref u128;
     let digit: i32;
-    let __local_14: ref String;
-    let __local_17: ref u128;
-    let __local_18: ref u128;
-    let __local_19: ref "tuple/[u128, u128]";
-    let __local_20: ref String;
-    let __local_22: ref u128;
-    let __local_23: ref u128;
-    let __local_24: ref "tuple/[u128, u128]";
+    let __local_14: ref u128;
+    let __local_15: ref u128;
+    let __local_16: ref String;
+    let __local_19: ref u128;
+    let __local_20: ref u128;
+    let __local_21: ref "tuple/[u128, u128]";
+    let __local_22: ref String;
+    let __local_24: ref u128;
     let __local_25: ref u128;
-    let __local_26: ref u128;
+    let __local_26: ref "tuple/[u128, u128]";
     let __local_27: ref u128;
-    let __local_28: ref "tuple/[u128, u128]";
-    if u128^Eq::eq(self, u128 { low: 0_i64, high: 0_i64 }) {
+    let __local_28: ref u128;
+    let __local_29: ref u128;
+    let __local_30: ref "tuple/[u128, u128]";
+    if __inline_u128_Eq__eq_1: block -> bool {
+        __local_14 = self;
+        __local_15 = u128 { low: 0_i64, high: 0_i64 };
+        if __local_14.low == 0_i64 -> i32 {
+            __local_14.high == 0_i64;
+        } else {
+            0;
+        };
+        break __inline_u128_Eq__eq_1;
+    } {
         offset_2 = Formatter::prepare_int_write(f, 0, String { repr: builtin::array_new<u8>(0), used: 0 }, 1);
-        arr_3 = __inline_String__internal_raw_bytes_1: block -> ref array<u8> {
-            __local_14 = f.buf;
-            break __inline_String__internal_raw_bytes_1: __local_14.repr;
+        arr_3 = __inline_String__internal_raw_bytes_2: block -> ref array<u8> {
+            __local_16 = f.buf;
+            break __inline_String__internal_raw_bytes_2: __local_16.repr;
         };
         builtin::array_set_u8(arr_3, offset_2, 48);
         return;
@@ -608,62 +624,54 @@ fn u128::fmt_decimal(self, f) {
     __for_0: block {
         temp_7 = value_copy u128(self);
         block {
-            l28: loop {
+            l30: loop {
                 if (u128^Ord::cmp(temp_7, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_0;
                 };
                 digit_count = digit_count + 1;
-                temp_7 = __inline_u128_Div__div_4: block -> ref u128 {
-                    __local_17 = temp_7;
-                    __local_18 = ten;
-                    __local_19 = u128::div_rem(__local_17, __local_18);
-                    break __inline_u128_Div__div_4: __local_19.0;
+                temp_7 = __inline_u128_Div__div_5: block -> ref u128 {
+                    __local_19 = temp_7;
+                    __local_20 = ten;
+                    __local_21 = u128::div_rem(__local_19, __local_20);
+                    break __inline_u128_Div__div_5: __local_21.0;
                 };
-                continue l28;
+                continue l30;
             };
         };
     };
     offset_8 = Formatter::prepare_int_write(f, 0, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    arr_9 = __inline_String__internal_raw_bytes_5: block -> ref array<u8> {
-        __local_20 = f.buf;
-        break __inline_String__internal_raw_bytes_5: __local_20.repr;
+    arr_9 = __inline_String__internal_raw_bytes_6: block -> ref array<u8> {
+        __local_22 = f.buf;
+        break __inline_String__internal_raw_bytes_6: __local_22.repr;
     };
     pos = offset_8 + digit_count;
     __for_1: block {
         temp_11 = value_copy u128(self);
         block {
-            l31: loop {
+            l33: loop {
                 if (u128^Ord::cmp(temp_11, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_1;
                 };
                 pos = pos - 1;
-                digit = builtin::i32_wrap_i64(__inline_u128__low_8: block -> u64 {
-                    __local_25 = __inline_u128_Rem__rem_7: block -> ref u128 {
-                        __local_22 = temp_11;
-                        __local_23 = ten;
-                        __local_24 = u128::div_rem(__local_22, __local_23);
-                        break __inline_u128_Rem__rem_7: __local_24.1;
+                digit = builtin::i32_wrap_i64(__inline_u128__low_9: block -> u64 {
+                    __local_27 = __inline_u128_Rem__rem_8: block -> ref u128 {
+                        __local_24 = temp_11;
+                        __local_25 = ten;
+                        __local_26 = u128::div_rem(__local_24, __local_25);
+                        break __inline_u128_Rem__rem_8: __local_26.1;
                     };
-                    break __inline_u128__low_8: __local_25.low;
+                    break __inline_u128__low_9: __local_27.low;
                 });
                 builtin::array_set_u8(arr_9, pos, (48 + digit) & 255);
-                temp_11 = __inline_u128_Div__div_9: block -> ref u128 {
-                    __local_26 = temp_11;
-                    __local_27 = ten;
-                    __local_28 = u128::div_rem(__local_26, __local_27);
-                    break __inline_u128_Div__div_9: __local_28.0;
+                temp_11 = __inline_u128_Div__div_10: block -> ref u128 {
+                    __local_28 = temp_11;
+                    __local_29 = ten;
+                    __local_30 = u128::div_rem(__local_28, __local_29);
+                    break __inline_u128_Div__div_10: __local_30.0;
                 };
-                continue l31;
+                continue l33;
             };
         };
-    };
-}
-
-fn u128^Eq::eq(self, other) {
-    return if self.low == other.low -> i32 {
-        self.high == other.high;
-    } else {
-        0;
     };
 }
 
@@ -688,10 +696,6 @@ fn u128^Sub::sub(self, other) {
     let __local_3: i64;
     multivalue_bind [__local_2, __local_3] = i64.sub128(self.low, self.high, other.low, other.high);
     return u128 { low: __local_2, high: __local_3 };
-}
-
-fn u128^BitOr::bitor(self, other) {
-    return u128 { low: self.low | other.low, high: self.high | other.high };
 }
 
 fn u128^Shl::shl(self, rhs) {
@@ -779,7 +783,7 @@ fn i128::fmt_decimal(self, f) {
     __for_2: block {
         temp_9 = value_copy u128(abs_val);
         block {
-            l45: loop {
+            l46: loop {
                 if (u128^Ord::cmp(temp_9, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_2;
                 };
@@ -790,7 +794,7 @@ fn i128::fmt_decimal(self, f) {
                     __local_21 = u128::div_rem(__local_19, __local_20);
                     break __inline_u128_Div__div_4: __local_21.0;
                 };
-                continue l45;
+                continue l46;
             };
         };
     };
@@ -804,7 +808,7 @@ fn i128::fmt_decimal(self, f) {
     __for_3: block {
         temp_13 = value_copy u128(abs_val);
         block {
-            l48: loop {
+            l49: loop {
                 if (u128^Ord::cmp(temp_13, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_3;
                 };
@@ -825,7 +829,7 @@ fn i128::fmt_decimal(self, f) {
                     __local_30 = u128::div_rem(__local_28, __local_29);
                     break __inline_u128_Div__div_9: __local_30.0;
                 };
-                continue l48;
+                continue l49;
             };
         };
     };
@@ -914,13 +918,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l59: loop {
+            l60: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l59;
+                continue l60;
             };
         };
     };

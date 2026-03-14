@@ -137,7 +137,8 @@ pub fn optimize(
         OptLevel::O2 | OptLevel::Os => {
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(10),
-                inline_threshold: inline_threshold.unwrap_or(10),
+                // Threshold 12: allows index_assign (11 expressions) to be inlined
+                inline_threshold: inline_threshold.unwrap_or(12),
             };
             run_dce(&mut project);
             run_optimization_passes(&mut project, &config);
