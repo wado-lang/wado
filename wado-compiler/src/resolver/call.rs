@@ -167,6 +167,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     if !variant_type_args.is_empty() {
                         payload_type =
                             self.substitute_type_params(payload_type, &variant_type_args);
+                    } else if let Some(expected) = expected_type {
+                        // Infer type args from expected type (e.g. Option::Some(null) expecting Option<Option<i32>>)
+                        let expected_resolved = self.type_table.borrow().get(expected).clone();
+                        if let ResolvedType::GenericInstance {
+                            name: expected_name,
+                            type_args: expected_args,
+                            ..
+                        } = expected_resolved
+                            && expected_name == prefix
+                            && expected_args.len() == variant_info.type_param_type_ids.len()
+                        {
+                            payload_type =
+                                self.substitute_type_params(payload_type, &expected_args);
+                        }
                     }
                     param_types.push(payload_type);
                 }
