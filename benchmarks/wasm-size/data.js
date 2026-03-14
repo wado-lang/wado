@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773507795616,
+  "lastUpdate": 1773530159346,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3426,6 +3426,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "pi_approx",
             "value": 9355,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21283,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "086063c93c36f5a635b1cc9e05d4a3bb6cf2581b",
+          "message": "Merge pull request #585 from wado-lang/claude/implement-json-value-Z5YaU\n\nAdd match statement support and improve type inference",
+          "timestamp": "2026-03-15T08:13:33+09:00",
+          "tree_id": "68a8f28775455403dd521fda39ba20a41955a656",
+          "url": "https://github.com/wado-lang/wado/commit/086063c93c36f5a635b1cc9e05d4a3bb6cf2581b"
+        },
+        "date": 1773530159223,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9285,
             "unit": "bytes"
           },
           {
