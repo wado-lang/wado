@@ -3,11 +3,13 @@
 use indexmap::{IndexMap, IndexSet};
 use std::fs;
 use std::io::{self, Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process;
 
 use anyhow::{Context, Result};
+use glob::glob;
 use lexopt::Arg::Long;
+use toml::Table;
 use wit_parser::Resolve;
 
 use wado_from_wit::{Transformer, WadoCodeGenerator};
@@ -43,7 +45,7 @@ fn require_path(parser: &mut lexopt::Parser) -> PathBuf {
 }
 
 struct Cli {
-    wit_dir: Option<PathBuf>,
+    wit_dirs: Vec<PathBuf>,
     output_dir: Option<PathBuf>,
     package: Option<String>,
     package_name: String,
@@ -75,9 +77,25 @@ fn print_usage() {
     eprintln!("  --help                    Show this help message");
 }
 
+fn expand_wit_dir_glob(pattern: &str) -> Vec<PathBuf> {
+    // Try glob expansion first
+    let matches: Vec<PathBuf> = match glob(pattern) {
+        Ok(paths) => paths
+            .filter_map(|p| p.ok())
+            .filter(|p| p.is_dir())
+            .collect(),
+        Err(_) => vec![],
+    };
+    if !matches.is_empty() {
+        return matches;
+    }
+    // Fall back to treating it as a literal path
+    vec![PathBuf::from(pattern)]
+}
+
 fn parse_args() -> Cli {
     let mut cli = Cli {
-        wit_dir: None,
+        wit_dirs: vec![],
         output_dir: None,
         package: None,
         package_name: "wasi".to_string(),
@@ -93,12 +111,23 @@ fn parse_args() -> Cli {
                 print_usage();
                 process::exit(0);
             }
-            Long("wit-dir") => cli.wit_dir = Some(require_path(&mut parser)),
+            Long("wit-dir") => {
+                let pattern = require_string(&mut parser);
+                let mut dirs = expand_wit_dir_glob(&pattern);
+                if dirs.is_empty() {
+                    dirs.push(PathBuf::from(&pattern));
+                }
+                cli.wit_dirs.extend(dirs);
+            }
             Long("output-dir") => cli.output_dir = Some(require_path(&mut parser)),
             Long("package") => cli.package = Some(require_string(&mut parser)),
             Long("package-name") => cli.package_name = require_string(&mut parser),
             Long("package-version") => cli.package_version = require_string(&mut parser),
             Long("skip-unstable") => cli.skip_unstable = true,
+            // Bare positional args are treated as extra wit-dir paths (from shell glob expansion)
+            lexopt::Arg::Value(v) => {
+                cli.wit_dirs.push(PathBuf::from(v));
+            }
             _ => {
                 eprintln!("Error: unexpected argument");
                 print_usage();
@@ -113,18 +142,13 @@ fn parse_args() -> Cli {
 fn main() -> Result<()> {
     let cli = parse_args();
 
-    if let Some(ref wit_dir) = cli.wit_dir {
+    if !cli.wit_dirs.is_empty() {
         // Directory mode
         let output_dir = cli
             .output_dir
             .as_ref()
             .context("--output-dir is required when using --wit-dir")?;
-        run_directory_mode(
-            wit_dir,
-            output_dir,
-            cli.package.as_deref(),
-            cli.skip_unstable,
-        )
+        run_directory_mode(&cli.wit_dirs, output_dir, cli.package.as_deref(), cli.skip_unstable)
     } else {
         // Filter mode: stdin -> stdout
         run_filter_mode(&cli.package_name, &cli.package_version, cli.skip_unstable)
@@ -173,24 +197,117 @@ fn run_filter_mode(package_name: &str, package_version: &str, skip_unstable: boo
     Ok(())
 }
 
+/// Parse a simple `deps.toml` file (key = "relative/path" lines) and return
+/// the canonical absolute paths of declared dependency directories.
+fn read_deps_toml(wit_dir: &Path) -> Result<Vec<PathBuf>> {
+    let deps_toml = wit_dir.join("deps.toml");
+    if !deps_toml.exists() {
+        return Ok(vec![]);
+    }
+    let content = fs::read_to_string(&deps_toml)
+        .with_context(|| format!("Failed to read {}", deps_toml.display()))?;
+    let table: Table = content
+        .parse()
+        .with_context(|| format!("Failed to parse {}", deps_toml.display()))?;
+    let mut deps = Vec::new();
+    for (_key, val) in &table {
+        if let Some(rel) = val.as_str() {
+            let abs = wit_dir.join(rel);
+            let canon = abs
+                .canonicalize()
+                .with_context(|| format!("Cannot resolve dep path: {}", abs.display()))?;
+            deps.push(canon);
+        }
+    }
+    Ok(deps)
+}
+
+/// Topologically sort `dirs` so each directory comes after its deps.toml dependencies.
+fn topo_sort_wit_dirs(dirs: &[PathBuf]) -> Result<Vec<PathBuf>> {
+    // Canonicalize all input dirs
+    let canon_dirs: Vec<PathBuf> = dirs
+        .iter()
+        .map(|d| d.canonicalize().unwrap_or_else(|_| d.clone()))
+        .collect();
+    let dir_set: IndexSet<PathBuf> = canon_dirs.iter().cloned().collect();
+
+    // Build adjacency: dir → deps that are also in dir_set
+    let mut deps_of: IndexMap<PathBuf, Vec<PathBuf>> = IndexMap::new();
+    for dir in &canon_dirs {
+        let dep_paths = read_deps_toml(dir)?;
+        let known_deps: Vec<PathBuf> = dep_paths
+            .into_iter()
+            .filter(|d| dir_set.contains(d))
+            .collect();
+        deps_of.insert(dir.clone(), known_deps);
+    }
+
+    // Kahn's algorithm
+    let mut in_degree: IndexMap<PathBuf, usize> = canon_dirs
+        .iter()
+        .map(|d| (d.clone(), 0))
+        .collect();
+    let mut rdeps: IndexMap<PathBuf, Vec<PathBuf>> = IndexMap::new(); // dep → dirs that depend on it
+    for (dir, deps) in &deps_of {
+        for dep in deps {
+            *in_degree.get_mut(dir).unwrap() += 1;
+            rdeps.entry(dep.clone()).or_default().push(dir.clone());
+        }
+    }
+
+    let mut queue: Vec<PathBuf> = in_degree
+        .iter()
+        .filter(|&(_, &deg)| deg == 0)
+        .map(|(d, _)| d.clone())
+        .collect();
+    let mut sorted = Vec::new();
+    while let Some(dir) = queue.pop() {
+        sorted.push(dir.clone());
+        if let Some(dependents) = rdeps.get(&dir) {
+            for dep in dependents {
+                let deg = in_degree.get_mut(dep).unwrap();
+                *deg -= 1;
+                if *deg == 0 {
+                    queue.push(dep.clone());
+                }
+            }
+        }
+    }
+
+    if sorted.len() != dirs.len() {
+        anyhow::bail!("Cyclic dependencies detected among WIT directories");
+    }
+    Ok(sorted)
+}
+
 fn run_directory_mode(
-    wit_dir: &PathBuf,
+    wit_dirs: &[PathBuf],
     output_dir: &PathBuf,
     package_filter: Option<&str>,
     skip_unstable: bool,
 ) -> Result<()> {
-    // Parse WIT files from directory
+    // Sort directories so dependencies are loaded before dependents
+    let sorted_dirs = topo_sort_wit_dirs(wit_dirs)?;
+
+    // Parse WIT files from all directories into one shared Resolve so that
+    // cross-package dependencies (e.g. wasi:cli depends on wasi:clocks) resolve.
     // Include @unstable items by default (unless --skip-unstable is specified)
     let mut resolve = Resolve {
         all_features: !skip_unstable,
         ..Default::default()
     };
-    let (_pkg_id, _) = resolve
-        .push_dir(wit_dir)
-        .with_context(|| format!("Failed to parse WIT files from {}", wit_dir.display()))?;
+    for wit_dir in &sorted_dirs {
+        resolve
+            .push_dir(wit_dir)
+            .with_context(|| format!("Failed to parse WIT files from {}", wit_dir.display()))?;
+    }
 
-    // Build a map from interface/world name to source WIT file
-    let iface_to_file = build_interface_to_file_map(wit_dir)?;
+    // Build a combined map from interface/world name to source WIT file
+    let mut iface_to_file: IndexMap<String, String> = IndexMap::new();
+    for wit_dir in &sorted_dirs {
+        let map = build_interface_to_file_map(wit_dir)?;
+        iface_to_file.extend(map);
+    }
 
     let transformer = Transformer::new(&resolve);
     let mut generator = WadoCodeGenerator::new();
@@ -333,7 +450,7 @@ fn run_directory_mode(
 }
 
 /// Build a map from interface/world name to the WIT file that defines it
-fn build_interface_to_file_map(dir: &PathBuf) -> Result<IndexMap<String, String>> {
+fn build_interface_to_file_map(dir: &Path) -> Result<IndexMap<String, String>> {
     let mut map = IndexMap::new();
     let base_dir = std::env::current_dir()?;
     build_interface_map_recursive(dir, &base_dir, &mut map)?;
@@ -341,8 +458,8 @@ fn build_interface_to_file_map(dir: &PathBuf) -> Result<IndexMap<String, String>
 }
 
 fn build_interface_map_recursive(
-    dir: &PathBuf,
-    base_dir: &PathBuf,
+    dir: &Path,
+    base_dir: &Path,
     map: &mut IndexMap<String, String>,
 ) -> Result<()> {
     if dir.is_dir() {
