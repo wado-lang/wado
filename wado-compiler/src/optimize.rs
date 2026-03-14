@@ -147,10 +147,9 @@ pub fn optimize(
             }
         }
         OptLevel::O3 => {
-            // Threshold 19: threshold 20 degrades fts benchmark performance
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(100),
-                inline_threshold: inline_threshold.unwrap_or(19),
+                inline_threshold: inline_threshold.unwrap_or(30),
             };
             run_dce(&mut project);
             run_optimization_passes(&mut project, &config);
