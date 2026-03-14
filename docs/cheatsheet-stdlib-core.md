@@ -508,7 +508,9 @@ impl String {
     pub fn trim_start(&self) -> String;
     pub fn trim_end(&self) -> String;
     pub fn trim(&self) -> String;
-    pub fn from_bytes<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, String>;
+    pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, String>;
+    pub fn from_utf8_lossy<I: IntoIterator<Item = u8>>(bytes: I) -> String;
+    pub fn from_utf8_unchecked<I: IntoIterator<Item = u8>>(bytes: I) -> String;
 }
 
 impl Add for String {

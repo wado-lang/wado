@@ -1023,12 +1023,29 @@ Returns a new string with trailing Unicode whitespace removed.
 
 Returns a new string with leading and trailing Unicode whitespace removed.
 
-##### `pub fn from_bytes<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, String>`
+##### `pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, String>`
 
 Build a String from any iterable of bytes, validating that they form valid UTF-8.
 Returns Ok(String) on success, or Err(String) with an error message on failure.
 
 Accepts any `IntoIterator` whose item is `u8`: `Array<u8>`, `StrUtf8ByteIter`, etc.
+
+##### `pub fn from_utf8_lossy<I: IntoIterator<Item = u8>>(bytes: I) -> String`
+
+Build a String from any iterable of bytes, replacing invalid UTF-8 sequences with U+FFFD.
+
+Accepts any `IntoIterator` whose item is `u8`: `Array<u8>`, `StrUtf8ByteIter`, etc.
+
+##### `pub fn from_utf8_unchecked<I: IntoIterator<Item = u8>>(bytes: I) -> String`
+
+Build a String from any iterable of bytes without UTF-8 validation.
+
+Accepts any `IntoIterator` whose item is `u8`: `Array<u8>`, `StrUtf8ByteIter`, etc.
+
+# Safety
+
+The caller must ensure the bytes form valid UTF-8, otherwise the resulting
+String will contain invalid UTF-8, which may cause undefined behavior.
 
 ##### `impl Add for String`
 
