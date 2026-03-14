@@ -1,0 +1,54 @@
+// Test: type parameters that appear only in the return type should be
+// inferred from the LHS type annotation.
+//
+// Regression test for bug: calling `conv.convert()` where T appears
+// only in the return type `T` failed to infer T from
+// a `let result: i32 = conv.convert();` annotation.
+
+use { println } from "core:cli";
+
+trait FromI32 {
+    fn from_i32(n: i32) -> Self;
+}
+
+impl FromI32 for i32 {
+    fn from_i32(n: i32) -> i32 { return n; }
+}
+
+impl FromI32 for String {
+    fn from_i32(n: i32) -> String { return `{n}`; }
+}
+
+struct NumberConverter {
+    value: i32,
+}
+
+impl NumberConverter {
+    fn convert<T: FromI32>(&self) -> T {
+        return T::from_i32(self.value);
+    }
+}
+
+fn test_infer_i32() -> i32 {
+    let conv = NumberConverter { value: 42 };
+    // T appears only in return type; should be inferred as i32 from annotation
+    let result: i32 = conv.convert();
+    return result;
+}
+
+fn test_infer_string() -> String {
+    let conv = NumberConverter { value: 7 };
+    // T should be inferred as String from annotation
+    let result: String = conv.convert();
+    return result;
+}
+
+export fn run() with Stdout {
+    let n = test_infer_i32();
+    println(`{n}`);
+    let s = test_infer_string();
+    println(`{s}`);
+}
+
+__DATA__
+{"stdout": "42\n7\n"}

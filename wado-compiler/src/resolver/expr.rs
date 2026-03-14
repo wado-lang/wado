@@ -38,7 +38,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Expr::Unary(unary) => self.resolve_unary(unary, ctx),
             Expr::Assign(assign) => self.resolve_assign(assign, ctx),
             Expr::Call(call) => self.resolve_call(call, ctx, expected_type),
-            Expr::MethodCall(method_call) => self.resolve_method_call(method_call, ctx),
+            Expr::MethodCall(method_call) => {
+                self.resolve_method_call(method_call, ctx, expected_type)
+            }
             Expr::StaticMethodCall(static_call) => {
                 self.resolve_static_method_call(static_call, ctx)
             }

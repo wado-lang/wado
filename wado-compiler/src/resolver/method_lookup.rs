@@ -918,12 +918,85 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Infer method type arguments from actual argument types.
     /// Returns a list of inferred type args matching the method's type params order.
     /// Uses the position of type params in parameter types to map actual arg types.
+    /// Recursively match an AST return type against a resolved expected TypeId,
+    /// filling in `bindings[i]` for each type_param_names[i] found in the return type.
+    fn match_return_type_against_expected(
+        return_ty: &ast::Type,
+        type_param_names: &[String],
+        expected: TypeId,
+        type_table: &TypeTable,
+        bindings: &mut [TypeId],
+    ) {
+        match return_ty {
+            // Direct type param reference: T, U, etc.
+            ast::Type::Named(named) => {
+                if let Some(idx) = type_param_names.iter().position(|n| *n == named.name) {
+                    if bindings[idx] == TypeTable::UNKNOWN {
+                        bindings[idx] = expected;
+                    }
+                }
+            }
+            // Generic type like Option<T>, Result<T, E>, Array<T>
+            ast::Type::Generic(generic) => {
+                let expected_resolved = type_table.get(expected).clone();
+                let (expected_name, expected_type_args) = match &expected_resolved {
+                    ResolvedType::GenericInstance { name, type_args, .. } => {
+                        (name.clone(), type_args.clone())
+                    }
+                    _ => return,
+                };
+                if expected_name == generic.name
+                    && generic.args.len() == expected_type_args.len()
+                {
+                    for (ast_arg, &resolved_arg) in
+                        generic.args.iter().zip(expected_type_args.iter())
+                    {
+                        Self::match_return_type_against_expected(
+                            ast_arg,
+                            type_param_names,
+                            resolved_arg,
+                            type_table,
+                            bindings,
+                        );
+                    }
+                }
+            }
+            // Reference types
+            ast::Type::Reference(inner) => {
+                let expected_resolved = type_table.get(expected).clone();
+                if let ResolvedType::Ref(inner_expected) = expected_resolved {
+                    Self::match_return_type_against_expected(
+                        inner,
+                        type_param_names,
+                        inner_expected,
+                        type_table,
+                        bindings,
+                    );
+                }
+            }
+            ast::Type::MutReference(inner) => {
+                let expected_resolved = type_table.get(expected).clone();
+                if let ResolvedType::MutRef(inner_expected) = expected_resolved {
+                    Self::match_return_type_against_expected(
+                        inner,
+                        type_param_names,
+                        inner_expected,
+                        type_table,
+                        bindings,
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+
     pub(super) fn infer_method_type_args(
         &self,
         receiver_type: TypeId,
         method_name: &str,
         args: &[TirExpr],
         impl_offset: u32,
+        expected_return_type: Option<TypeId>,
     ) -> Vec<TypeId> {
         let base_type_id = self.get_base_type(receiver_type);
         let base_type = self.type_table.borrow().get(base_type_id).clone();
@@ -945,25 +1018,28 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Search for the method in loaded modules
         let mut method_type_params: Vec<String> = Vec::new();
         let mut param_type_strs: Vec<String> = Vec::new();
+        let mut method_return_type: Option<ast::Type> = None;
 
         // Helper function to extract param info from method
-        let extract_method_info = |method: &crate::ast::Function| -> (Vec<String>, Vec<String>) {
-            let type_params: Vec<String> =
-                method.type_params.iter().map(|p| p.name.clone()).collect();
-            let params: Vec<String> = method
-                .params
-                .iter()
-                // Skip self parameter (has SelfKind::Ref/MutRef and name "self")
-                .filter(|p| {
-                    !(matches!(
-                        p.self_kind,
-                        ast::SelfKind::Ref | ast::SelfKind::MutRef | ast::SelfKind::None
-                    ) && p.name == "self")
-                })
-                .map(|p| self.get_type_name(&p.ty))
-                .collect();
-            (type_params, params)
-        };
+        let extract_method_info =
+            |method: &crate::ast::Function| -> (Vec<String>, Vec<String>, Option<ast::Type>) {
+                let type_params: Vec<String> =
+                    method.type_params.iter().map(|p| p.name.clone()).collect();
+                let params: Vec<String> = method
+                    .params
+                    .iter()
+                    // Skip self parameter (has SelfKind::Ref/MutRef and name "self")
+                    .filter(|p| {
+                        !(matches!(
+                            p.self_kind,
+                            ast::SelfKind::Ref | ast::SelfKind::MutRef | ast::SelfKind::None
+                        ) && p.name == "self")
+                    })
+                    .map(|p| self.get_type_name(&p.ty))
+                    .collect();
+                let return_ty = method.return_type.clone();
+                (type_params, params, return_ty)
+            };
 
         // Check specific module first
         if let Some(ref module_source) = struct_module_source
@@ -981,9 +1057,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     if impl_type_name == struct_name || impl_base_name == struct_name {
                         for method in &impl_block.methods {
                             if method.name == method_name && !method.type_params.is_empty() {
-                                let (tp, pp) = extract_method_info(method);
+                                let (tp, pp, rt) = extract_method_info(method);
                                 method_type_params = tp;
                                 param_type_strs = pp;
+                                method_return_type = rt;
                                 break;
                             }
                         }
@@ -1005,9 +1082,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         if impl_type_name == struct_name || impl_base_name == struct_name {
                             for method in &impl_block.methods {
                                 if method.name == method_name && !method.type_params.is_empty() {
-                                    let (tp, pp) = extract_method_info(method);
+                                    let (tp, pp, rt) = extract_method_info(method);
                                     method_type_params = tp;
                                     param_type_strs = pp;
+                                    method_return_type = rt;
                                     break;
                                 }
                             }
@@ -1062,6 +1140,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 }
             }
+        }
+
+        // If there are still unknown type params and we have an expected return type,
+        // try to infer them by matching the method's return type against the expected type.
+        if let Some(expected) = expected_return_type
+            && let Some(ref return_ty) = method_return_type
+            && inferred.iter().any(|&t| t == TypeTable::UNKNOWN)
+        {
+            let type_table = self.type_table.borrow();
+            Self::match_return_type_against_expected(
+                return_ty,
+                &method_type_params,
+                expected,
+                &type_table,
+                &mut inferred,
+            );
         }
 
         // Return only if we found at least some type args

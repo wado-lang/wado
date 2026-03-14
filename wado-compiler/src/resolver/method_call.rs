@@ -17,6 +17,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         &mut self,
         method_call: &ast::MethodCallExpr,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> TirExpr {
         // Check for IndexMut desugaring: container[i].method() where method needs &mut self
         // We need to detect this BEFORE resolving the receiver, because resolve_index
@@ -292,8 +293,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Then add method-level type args with the correct offset
         // If no explicit type args, try to infer from arguments
         let method_type_args = if type_args.is_empty() {
-            // Try to infer method type args from actual arguments
-            self.infer_method_type_args(receiver.type_id, &method_call.method, &args, impl_offset)
+            // Try to infer method type args from actual arguments and expected return type
+            self.infer_method_type_args(
+                receiver.type_id,
+                &method_call.method,
+                &args,
+                impl_offset,
+                expected_type,
+            )
         } else {
             type_args.clone()
         };
