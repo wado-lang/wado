@@ -250,8 +250,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // Set up the function's own type parameters before resolving the return type,
                     // so that associated type projections like `V::Output` can be resolved.
                     let old_type_params = std::mem::take(&mut self.current_type_params);
-                    let old_type_param_bounds =
-                        std::mem::take(&mut self.current_type_param_bounds);
+                    let old_type_param_bounds = std::mem::take(&mut self.current_type_param_bounds);
                     for (i, param) in func.type_params.iter().enumerate() {
                         let type_id = self
                             .type_table

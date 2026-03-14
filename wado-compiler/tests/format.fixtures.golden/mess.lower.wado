@@ -47,6 +47,14 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
     return aligned;
 }
 
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -125,16 +133,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -179,10 +183,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -943,6 +943,14 @@ fn i16x8_relaxed_dot_i8x16_i7x16_s(a: v128, b: v128) -> v128;
 
 fn i32x4_relaxed_dot_i8x16_i7x16_add_s(a: v128, b: v128, c: v128) -> v128;
 
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -1021,16 +1029,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -1075,10 +1079,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -1187,6 +1187,14 @@ pub fn exit(code: u8) -> ! with Exit {
     __cm_adapter__Exit_exit_with_code(code);
 }
 
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -1265,16 +1273,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -1319,10 +1323,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -1631,6 +1631,14 @@ pub fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
     return Option<WaitEvent>::Some(WaitEvent { code: code, handle: evt_handle, payload: payload });
 }
 
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -1709,16 +1717,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -1763,10 +1767,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -1795,6 +1795,14 @@ fn "array_new<u8>"(len: i32) -> builtin::array<u8>;
 
 
 // --- Module: core:prelude ---
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -1873,16 +1881,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -1927,10 +1931,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -1947,6 +1947,14 @@ fn i32_max(a: i32, b: i32) -> i32 {
     return "core::prelude/array.wado::select<i32>"((a > b), a, b);
 }
 
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -2025,16 +2033,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -2079,10 +2083,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -3183,6 +3183,14 @@ pub fn "FormatResult^Inspect::inspect"(self: &FormatResult, f: &mut Formatter) {
     f.Formatter::write_str(" }");
 }
 
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -3261,14 +3269,6 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
 }
@@ -3287,6 +3287,10 @@ pub fn "PmHiLo^Display::fmt"(self: &PmHiLo, f: &mut Formatter) {
 
 pub fn "FormatResult^Display::fmt"(self: &FormatResult, f: &mut Formatter) {
     self."FormatResult^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -3331,10 +3335,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -4187,6 +4187,14 @@ pub fn "i128^Default::default"() -> i128 {
     return "core::prelude/int128.wado::i128::from_i64"(0);
 }
 
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -4265,16 +4273,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -4319,10 +4323,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -6148,6 +6148,14 @@ pub fn "char^Default::default"() -> char {
     return '\0';
 }
 
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -6226,16 +6234,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -6280,10 +6284,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -6903,6 +6903,14 @@ pub fn "StrCharIter^Inspect::inspect"(self: &StrCharIter, f: &mut Formatter) {
     f.Formatter::write_str(" }");
 }
 
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -6981,14 +6989,6 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
 }
@@ -6999,6 +6999,10 @@ pub fn "StrUtf8ByteIter^Display::fmt"(self: &StrUtf8ByteIter, f: &mut Formatter)
 
 pub fn "StrCharIter^Display::fmt"(self: &StrCharIter, f: &mut Formatter) {
     self."StrCharIter^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -7043,10 +7047,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -7149,6 +7149,14 @@ pub fn "Ordering^Inspect::inspect"(self: &Ordering, f: &mut Formatter) {
     };
 }
 
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -7227,20 +7235,16 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
 }
 
 pub fn "Ordering^Display::fmt"(self: &Ordering, f: &mut Formatter) {
     self."Ordering^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -7285,10 +7289,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -7320,6 +7320,14 @@ pub fn "WaitEvent^Inspect::inspect"(self: &WaitEvent, f: &mut Formatter) {
     f.Formatter::write_str(" }");
 }
 
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -7395,14 +7403,6 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     *self.0."i128^Inspect::inspect"(f);
     f.Formatter::write_str(", ");
     *self.1."i128^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
     f.Formatter::write_str("]");
 }
 
@@ -7414,6 +7414,10 @@ pub fn "WaitEvent^Display::fmt"(self: &WaitEvent, f: &mut Formatter) {
     self."WaitEvent^Inspect::inspect"(f);
 }
 
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
+}
+
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
     self."Tuple<i64,i64>^Inspect::inspect"(f);
 }
@@ -7456,10 +7460,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -7468,6 +7468,14 @@ pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
 
 
 // --- Module: wasi:cli ---
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -7546,16 +7554,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -7600,10 +7604,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -7612,6 +7612,14 @@ pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
 
 
 // --- Module: wasi:cli/environment.wado ---
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -7690,16 +7698,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -7744,10 +7748,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -7756,6 +7756,14 @@ pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
 
 
 // --- Module: wasi:cli/exit.wado ---
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -7834,16 +7842,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -7888,10 +7892,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -7900,6 +7900,14 @@ pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
 
 
 // --- Module: wasi:cli/run.wado ---
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -7978,16 +7986,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -8032,10 +8036,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -8044,6 +8044,14 @@ pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
 
 
 // --- Module: wasi:cli/stderr.wado ---
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -8122,16 +8130,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -8176,10 +8180,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -8188,6 +8188,14 @@ pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
 
 
 // --- Module: wasi:cli/stdin.wado ---
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -8266,16 +8274,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -8320,10 +8324,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -8332,6 +8332,14 @@ pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
 
 
 // --- Module: wasi:cli/stdout.wado ---
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -8410,16 +8418,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -8464,10 +8468,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -8476,6 +8476,14 @@ pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
 
 
 // --- Module: wasi:cli/terminal-input.wado ---
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -8554,16 +8562,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -8608,10 +8612,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -8620,6 +8620,14 @@ pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
 
 
 // --- Module: wasi:cli/terminal-output.wado ---
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -8698,16 +8706,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -8752,10 +8756,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -8764,6 +8764,14 @@ pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
 
 
 // --- Module: wasi:cli/terminal-stderr.wado ---
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -8842,16 +8850,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -8896,10 +8900,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -8908,6 +8908,14 @@ pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
 
 
 // --- Module: wasi:cli/terminal-stdin.wado ---
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -8986,16 +8994,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -9040,10 +9044,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -9052,6 +9052,14 @@ pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
 
 
 // --- Module: wasi:cli/terminal-stdout.wado ---
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -9130,16 +9138,12 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -9184,10 +9188,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -9232,6 +9232,14 @@ pub fn "ErrorCode^Inspect::inspect"(self: &ErrorCode, f: &mut Formatter) {
     };
 }
 
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -9310,20 +9318,16 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
 }
 
 pub fn "ErrorCode^Display::fmt"(self: &ErrorCode, f: &mut Formatter) {
     self."ErrorCode^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -9368,10 +9372,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -9681,6 +9681,14 @@ pub fn "Access^Inspect::inspect"(self: Box<u32>, f: &mut Formatter) {
     };
 }
 
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -9759,14 +9767,6 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
 }
@@ -9797,6 +9797,10 @@ pub fn "Shape^Display::fmt"(self: Box<Shape>, f: &mut Formatter) {
 
 pub fn "Access^Display::fmt"(self: Box<u32>, f: &mut Formatter) {
     self."Access^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -9841,10 +9845,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
@@ -10317,6 +10317,14 @@ pub fn "Alignment^Inspect::inspect"(self: &Alignment, f: &mut Formatter) {
     };
 }
 
+pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+    f.Formatter::write_str("[");
+    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str(", ");
+    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
+    f.Formatter::write_str("]");
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -10395,20 +10403,16 @@ pub fn "Tuple<i128,i128>^Inspect::inspect"(self: &[i128, i128], f: &mut Formatte
     f.Formatter::write_str("]");
 }
 
-pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
-    f.Formatter::write_str("[");
-    Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str(", ");
-    Box<f64> { value: *self.1 }."f64^Inspect::inspect"(f);
-    f.Formatter::write_str("]");
-}
-
 pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
     f.Formatter::write_str("|i32| -> i32");
 }
 
 pub fn "Alignment^Display::fmt"(self: &Alignment, f: &mut Formatter) {
     self."Alignment^Inspect::inspect"(f);
+}
+
+pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
+    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Tuple<i64,i64>^Display::fmt"(self: &[i64, i64], f: &mut Formatter) {
@@ -10453,10 +10457,6 @@ pub fn "Tuple<u128,u128>^Display::fmt"(self: &[u128, u128], f: &mut Formatter) {
 
 pub fn "Tuple<i128,i128>^Display::fmt"(self: &[i128, i128], f: &mut Formatter) {
     self."Tuple<i128,i128>^Inspect::inspect"(f);
-}
-
-pub fn "Tuple<f64,f64>^Display::fmt"(self: &[f64, f64], f: &mut Formatter) {
-    self."Tuple<f64,f64>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {

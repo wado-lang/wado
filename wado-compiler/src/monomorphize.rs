@@ -3839,11 +3839,26 @@ impl Monomorphizer {
     ) -> Option<TirExprKind> {
         // Get the base struct name and type args from the operand type
         let operand_type = type_table.get(left.type_id);
-        let (base_struct_name, impl_type_args, type_module_source): (String, Vec<String>, Option<ModuleSource>) = match operand_type {
-            ResolvedType::Struct { name, module_source, .. } => (name.clone(), vec![], Some(module_source.clone())),
-            ResolvedType::Variant { name, module_source, .. } => (name.clone(), vec![], Some(module_source.clone())),
+        let (base_struct_name, impl_type_args, type_module_source): (
+            String,
+            Vec<String>,
+            Option<ModuleSource>,
+        ) = match operand_type {
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => (name.clone(), vec![], Some(module_source.clone())),
+            ResolvedType::Variant {
+                name,
+                module_source,
+                ..
+            } => (name.clone(), vec![], Some(module_source.clone())),
             ResolvedType::GenericInstance {
-                name, type_args, module_source, ..
+                name,
+                type_args,
+                module_source,
+                ..
             } => {
                 let args: Vec<String> = type_args
                     .iter()
@@ -4022,7 +4037,7 @@ impl Monomorphizer {
     ///
     /// This is needed for non-generic functions (where `substitute_types_in_expr` is
     /// never called) that use `==`, `!=`, `<`, etc. on struct/variant types.
-    /// Without this pass, those operators fall through to the codegen's I32Eq fallback,
+    /// Without this pass, those operators fall through to the codegen's `I32Eq` fallback,
     /// which is wrong for GC reference types (variants, structs with custom Eq).
     fn desugar_comparisons_in_module(&self, module: &mut TirModule) {
         let type_table_rc = module.type_table.clone();
@@ -4035,17 +4050,17 @@ impl Monomorphizer {
         }
     }
 
-    fn desugar_comparisons_in_block(&self, block: &mut TirBlock, type_table: &Rc<RefCell<TypeTable>>) {
+    fn desugar_comparisons_in_block(
+        &self,
+        block: &mut TirBlock,
+        type_table: &Rc<RefCell<TypeTable>>,
+    ) {
         for stmt in &mut block.stmts {
             self.desugar_comparisons_in_stmt(stmt, type_table);
         }
     }
 
-    fn desugar_comparisons_in_stmt(
-        &self,
-        stmt: &mut TirStmt,
-        type_table: &Rc<RefCell<TypeTable>>,
-    ) {
+    fn desugar_comparisons_in_stmt(&self, stmt: &mut TirStmt, type_table: &Rc<RefCell<TypeTable>>) {
         match &mut stmt.kind {
             TirStmtKind::Let { value, .. } => {
                 self.desugar_comparisons_in_expr(value, type_table);
@@ -4100,11 +4115,7 @@ impl Monomorphizer {
         }
     }
 
-    fn desugar_comparisons_in_expr(
-        &self,
-        expr: &mut TirExpr,
-        type_table: &Rc<RefCell<TypeTable>>,
-    ) {
+    fn desugar_comparisons_in_expr(&self, expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>>) {
         match &mut expr.kind {
             TirExprKind::Binary { op, left, right } => {
                 self.desugar_comparisons_in_expr(left, type_table);
@@ -4189,7 +4200,10 @@ impl Monomorphizer {
                     self.desugar_comparisons_in_expr(p, type_table);
                 }
             }
-            TirExprKind::Match { expr: scrutinee, arms } => {
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
                 self.desugar_comparisons_in_expr(scrutinee, type_table);
                 for arm in arms {
                     if let Some(guard) = &mut arm.guard {

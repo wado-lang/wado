@@ -918,8 +918,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Infer method type arguments from actual argument types.
     /// Returns a list of inferred type args matching the method's type params order.
     /// Uses the position of type params in parameter types to map actual arg types.
-    /// Recursively match an AST return type against a resolved expected TypeId,
-    /// filling in `bindings[i]` for each type_param_names[i] found in the return type.
+    /// Recursively match an AST return type against a resolved expected `TypeId`,
+    /// filling in `bindings[i]` for each `type_param_names`[i] found in the return type.
     fn match_return_type_against_expected(
         return_ty: &ast::Type,
         type_param_names: &[String],
@@ -930,24 +930,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
         match return_ty {
             // Direct type param reference: T, U, etc.
             ast::Type::Named(named) => {
-                if let Some(idx) = type_param_names.iter().position(|n| *n == named.name) {
-                    if bindings[idx] == TypeTable::UNKNOWN {
-                        bindings[idx] = expected;
-                    }
+                if let Some(idx) = type_param_names.iter().position(|n| *n == named.name)
+                    && bindings[idx] == TypeTable::UNKNOWN
+                {
+                    bindings[idx] = expected;
                 }
             }
             // Generic type like Option<T>, Result<T, E>, Array<T>
             ast::Type::Generic(generic) => {
                 let expected_resolved = type_table.get(expected).clone();
                 let (expected_name, expected_type_args) = match &expected_resolved {
-                    ResolvedType::GenericInstance { name, type_args, .. } => {
-                        (name.clone(), type_args.clone())
-                    }
+                    ResolvedType::GenericInstance {
+                        name, type_args, ..
+                    } => (name.clone(), type_args.clone()),
                     _ => return,
                 };
-                if expected_name == generic.name
-                    && generic.args.len() == expected_type_args.len()
-                {
+                if expected_name == generic.name && generic.args.len() == expected_type_args.len() {
                     for (ast_arg, &resolved_arg) in
                         generic.args.iter().zip(expected_type_args.iter())
                     {
@@ -1146,7 +1144,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // try to infer them by matching the method's return type against the expected type.
         if let Some(expected) = expected_return_type
             && let Some(ref return_ty) = method_return_type
-            && inferred.iter().any(|&t| t == TypeTable::UNKNOWN)
+            && inferred.contains(&TypeTable::UNKNOWN)
         {
             let type_table = self.type_table.borrow();
             Self::match_return_type_against_expected(
