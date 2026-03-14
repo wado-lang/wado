@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773490028724,
+  "lastUpdate": 1773495424236,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3353,6 +3353,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 22767,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "344cf8382c142dd76d9c14c17e6c6802d716e74b",
+          "message": "Merge pull request #583 from wado-lang/claude/benchmark-sieve-optimization-Nmzfa\n\nRemove unused function type declarations from generated code",
+          "timestamp": "2026-03-14T22:34:39+09:00",
+          "tree_id": "af19a132a250d0a4932ae71a983d5830e9ced5cd",
+          "url": "https://github.com/wado-lang/wado/commit/344cf8382c142dd76d9c14c17e6c6802d716e74b"
+        },
+        "date": 1773495424036,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9355,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 23755,
             "unit": "bytes"
           }
         ]
