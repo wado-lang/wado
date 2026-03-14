@@ -1975,33 +1975,32 @@ fn Array<String>::append(self, value) {
 }
 
 fn User^Serialize::serialize<JsonSerializer>(self, s) {
-    let st_2: ref Result<JsonStructSerializer,SerializeError>;
-    let st_3: ref JsonStructSerializer;
-    let __local_6: ref String;
-    let __local_8: ref JsonWriter;
-    let __local_9: ref String;
+    let st: ref JsonStructSerializer;
+    let name: ref String;
+    let self_8: ref JsonWriter;
+    let s_9: ref String;
     let __local_11: ref JsonWriter;
     let __local_12: ref String;
-    st_2 = __inline_JsonSerializer_Serializer__begin_struct_0: block -> ref Result<JsonStructSerializer,SerializeError> {
-        __local_6 = String { repr: array.new_data<u8>("User"), used: 4 };
-        __local_8 = s;
-        __local_9 = String { repr: array.new_data<u8>("{"), used: 1 };
-        String::append(__local_8.buf, __local_9);
-        break __inline_JsonSerializer_Serializer__begin_struct_0: Result<JsonStructSerializer,SerializeError>::Ok { discriminant: 0, payload_0: JsonStructSerializer { w: ref.as_non_null(s), count: 0 } };
-    };
-    if ref.test Result<JsonStructSerializer,SerializeError>::Ok(st_2) {
-        st_3 = value_copy JsonStructSerializer(ref.cast Result<JsonStructSerializer,SerializeError>::Ok(st_2).payload_0);
-        drop(JsonStructSerializer^SerializeStruct::field<String>(st_3, String { repr: array.new_data<u8>("name"), used: 4 }, self.name));
-        drop(JsonStructSerializer^SerializeStruct::field<i32>(st_3, String { repr: array.new_data<u8>("age"), used: 3 }, self.age));
-        drop(JsonStructSerializer^SerializeStruct::field<bool>(st_3, String { repr: array.new_data<u8>("active"), used: 6 }, self.active));
-        drop(JsonStructSerializer^SerializeStruct::field<Option<Point>>(st_3, String { repr: array.new_data<u8>("location"), used: 8 }, ref.as_non_null(self.location)));
-        drop(JsonStructSerializer^SerializeStruct::field<Array<String>>(st_3, String { repr: array.new_data<u8>("tags"), used: 4 }, self.tags));
+    let __fused_payload_13: ref JsonStructSerializer;
+    __fused___inline_JsonSerializer_Serializer__begin_struct_0: block {
+        name = String { repr: array.new_data<u8>("User"), used: 4 };
+        self_8 = s;
+        s_9 = String { repr: array.new_data<u8>("{"), used: 1 };
+        String::append(self_8.buf, s_9);
+        __fused_payload_13 = JsonStructSerializer { w: ref.as_non_null(s), count: 0 };
+        st = __fused_payload_13;
+        drop(JsonStructSerializer^SerializeStruct::field<String>(st, String { repr: array.new_data<u8>("name"), used: 4 }, self.name));
+        drop(JsonStructSerializer^SerializeStruct::field<i32>(st, String { repr: array.new_data<u8>("age"), used: 3 }, self.age));
+        drop(JsonStructSerializer^SerializeStruct::field<bool>(st, String { repr: array.new_data<u8>("active"), used: 6 }, self.active));
+        drop(JsonStructSerializer^SerializeStruct::field<Option<Point>>(st, String { repr: array.new_data<u8>("location"), used: 8 }, ref.as_non_null(self.location)));
+        drop(JsonStructSerializer^SerializeStruct::field<Array<String>>(st, String { repr: array.new_data<u8>("tags"), used: 4 }, self.tags));
         return __inline_JsonStructSerializer_SerializeStruct__end_2: block -> ref Result<unit,SerializeError> {
-            __local_11 = st_3.w;
+            __local_11 = st.w;
             __local_12 = String { repr: array.new_data<u8>("}"), used: 1 };
             String::append(__local_11.buf, __local_12);
             break __inline_JsonStructSerializer_SerializeStruct__end_2: Result<unit,SerializeError> { 0, nop };
         };
+        break __fused___inline_JsonSerializer_Serializer__begin_struct_0;
     };
     return Result<unit,SerializeError>::Err { discriminant: 1, payload_0: SerializeError { message: String { repr: array.new_data<u8>("begin_struct failed"), used: 19 } } };
 }
@@ -2036,49 +2035,48 @@ fn JsonStructSerializer^SerializeStruct::field<Array<String>>(self, name, value)
 }
 
 fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
-    let seq_2: ref Result<JsonSeqSerializer,SerializeError>;
-    let seq_3: ref JsonSeqSerializer;
+    let seq: ref JsonSeqSerializer;
     let __iter_4: ref ArrayIter<String>;
     let item: ref String;
-    let __local_9: i32;
-    let __local_11: ref JsonWriter;
-    let __local_12: ref String;
+    let len: i32;
+    let self_11: ref JsonWriter;
+    let s_12: ref String;
     let __local_13: ref Array<String>;
     let __local_15: ref JsonWriter;
     let __local_16: ref String;
-    seq_2 = __inline_JsonSerializer_Serializer__begin_seq_0: block -> ref Result<JsonSeqSerializer,SerializeError> {
-        __local_9 = self.used;
-        __local_11 = s;
-        __local_12 = String { repr: array.new_data<u8>("["), used: 1 };
-        String::append(__local_11.buf, __local_12);
-        break __inline_JsonSerializer_Serializer__begin_seq_0: Result<JsonSeqSerializer,SerializeError>::Ok { discriminant: 0, payload_0: JsonSeqSerializer { w: ref.as_non_null(s), count: 0 } };
-    };
-    if ref.test Result<JsonSeqSerializer,SerializeError>::Ok(seq_2) {
-        seq_3 = value_copy JsonSeqSerializer(ref.cast Result<JsonSeqSerializer,SerializeError>::Ok(seq_2).payload_0);
+    let __fused_payload_17: ref JsonSeqSerializer;
+    __fused___inline_JsonSerializer_Serializer__begin_seq_0: block {
+        len = self.used;
+        self_11 = s;
+        s_12 = String { repr: array.new_data<u8>("["), used: 1 };
+        String::append(self_11.buf, s_12);
+        __fused_payload_17 = JsonSeqSerializer { w: ref.as_non_null(s), count: 0 };
+        seq = __fused_payload_17;
         __iter_4 = __inline_Array_String__IntoIterator__into_iter_3: block -> ref ArrayIter<String> {
             __local_13 = self;
             break __inline_Array_String__IntoIterator__into_iter_3: ArrayIter<String> { repr: ref.as_non_null(__local_13.repr), used: __local_13.used, index: 0 };
         };
-        b162: block {
-            l163: loop {
+        b160: block {
+            l161: loop {
                 let __sroa___pattern_temp_1_discriminant: i32;
                 let __sroa___pattern_temp_1_payload_0: ref null String;
                 multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<String>^Iterator::next(__iter_4);
                 if __sroa___pattern_temp_1_discriminant == 0 {
                     item = ref.as_non_null(__sroa___pattern_temp_1_payload_0);
-                    drop(JsonSeqSerializer^SerializeSeq::element<String>(seq_3, item));
+                    drop(JsonSeqSerializer^SerializeSeq::element<String>(seq, item));
                 } else {
-                    break b162;
+                    break b160;
                 };
-                continue l163;
+                continue l161;
             };
         };
         return __inline_JsonSeqSerializer_SerializeSeq__end_4: block -> ref Result<unit,SerializeError> {
-            __local_15 = seq_3.w;
+            __local_15 = seq.w;
             __local_16 = String { repr: array.new_data<u8>("]"), used: 1 };
             String::append(__local_15.buf, __local_16);
             break __inline_JsonSeqSerializer_SerializeSeq__end_4: Result<unit,SerializeError> { 0, nop };
         };
+        break __fused___inline_JsonSerializer_Serializer__begin_seq_0;
     };
     return Result<unit,SerializeError>::Err { discriminant: 1, payload_0: SerializeError { message: String { repr: array.new_data<u8>("begin_seq failed"), used: 16 } } };
 }
@@ -2162,30 +2160,29 @@ fn JsonStructSerializer^SerializeStruct::field<Option<Point>>(self, name, value)
 }
 
 fn Point^Serialize::serialize<JsonSerializer>(self, s) {
-    let st_2: ref Result<JsonStructSerializer,SerializeError>;
-    let st_3: ref JsonStructSerializer;
-    let __local_6: ref String;
-    let __local_8: ref JsonWriter;
-    let __local_9: ref String;
+    let st: ref JsonStructSerializer;
+    let name: ref String;
+    let self_8: ref JsonWriter;
+    let s_9: ref String;
     let __local_11: ref JsonWriter;
     let __local_12: ref String;
-    st_2 = __inline_JsonSerializer_Serializer__begin_struct_0: block -> ref Result<JsonStructSerializer,SerializeError> {
-        __local_6 = String { repr: array.new_data<u8>("Point"), used: 5 };
-        __local_8 = s;
-        __local_9 = String { repr: array.new_data<u8>("{"), used: 1 };
-        String::append(__local_8.buf, __local_9);
-        break __inline_JsonSerializer_Serializer__begin_struct_0: Result<JsonStructSerializer,SerializeError>::Ok { discriminant: 0, payload_0: JsonStructSerializer { w: ref.as_non_null(s), count: 0 } };
-    };
-    if ref.test Result<JsonStructSerializer,SerializeError>::Ok(st_2) {
-        st_3 = value_copy JsonStructSerializer(ref.cast Result<JsonStructSerializer,SerializeError>::Ok(st_2).payload_0);
-        drop(JsonStructSerializer^SerializeStruct::field<f64>(st_3, String { repr: array.new_data<u8>("x"), used: 1 }, self.x));
-        drop(JsonStructSerializer^SerializeStruct::field<f64>(st_3, String { repr: array.new_data<u8>("y"), used: 1 }, self.y));
+    let __fused_payload_13: ref JsonStructSerializer;
+    __fused___inline_JsonSerializer_Serializer__begin_struct_0: block {
+        name = String { repr: array.new_data<u8>("Point"), used: 5 };
+        self_8 = s;
+        s_9 = String { repr: array.new_data<u8>("{"), used: 1 };
+        String::append(self_8.buf, s_9);
+        __fused_payload_13 = JsonStructSerializer { w: ref.as_non_null(s), count: 0 };
+        st = __fused_payload_13;
+        drop(JsonStructSerializer^SerializeStruct::field<f64>(st, String { repr: array.new_data<u8>("x"), used: 1 }, self.x));
+        drop(JsonStructSerializer^SerializeStruct::field<f64>(st, String { repr: array.new_data<u8>("y"), used: 1 }, self.y));
         return __inline_JsonStructSerializer_SerializeStruct__end_2: block -> ref Result<unit,SerializeError> {
-            __local_11 = st_3.w;
+            __local_11 = st.w;
             __local_12 = String { repr: array.new_data<u8>("}"), used: 1 };
             String::append(__local_11.buf, __local_12);
             break __inline_JsonStructSerializer_SerializeStruct__end_2: Result<unit,SerializeError> { 0, nop };
         };
+        break __fused___inline_JsonSerializer_Serializer__begin_struct_0;
     };
     return Result<unit,SerializeError>::Err { discriminant: 1, payload_0: SerializeError { message: String { repr: array.new_data<u8>("begin_struct failed"), used: 19 } } };
 }
@@ -2329,13 +2326,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l175: loop {
+            l172: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l175;
+                continue l172;
             };
         };
     };
@@ -2392,10 +2389,10 @@ fn Formatter::apply_padding(self, start_pos) {
         i_8 = content_len - 1;
         _licm_buf_29 = self.buf;
         _licm_repr_33 = _licm_buf_29.repr;
-        b181: block {
-            l182: loop {
+        b178: block {
+            l179: loop {
                 if (i_8 >= 0) == 0 {
-                    break b181;
+                    break b178;
                 };
                 index_14 = (start_pos + left_pad) + i_8;
                 value_15 = __inline_String__get_byte_2: block -> u8 {
@@ -2404,7 +2401,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 };
                 builtin::array_set_u8(_licm_repr_33, index_14, value_15);
                 i_8 = i_8 - 1;
-                continue l182;
+                continue l179;
             };
         };
         __for_1: block {
@@ -2412,14 +2409,14 @@ fn Formatter::apply_padding(self, start_pos) {
             _licm_buf_30 = self.buf;
             _licm_repr_34 = _licm_buf_30.repr;
             block {
-                l185: loop {
+                l182: loop {
                     if (j_9 < left_pad) == 0 {
                         break __for_1;
                     };
                     index_19 = start_pos + j_9;
                     builtin::array_set_u8(_licm_repr_34, index_19, fill_byte);
                     j_9 = j_9 + 1;
-                    continue l185;
+                    continue l182;
                 };
             };
         };
@@ -2429,10 +2426,10 @@ fn Formatter::apply_padding(self, start_pos) {
         i_10 = content_len - 1;
         _licm_buf_31 = self.buf;
         _licm_repr_35 = _licm_buf_31.repr;
-        b187: block {
-            l188: loop {
+        b184: block {
+            l185: loop {
                 if (i_10 >= 0) == 0 {
-                    break b187;
+                    break b184;
                 };
                 index_22 = (start_pos + padding) + i_10;
                 value_23 = __inline_String__get_byte_5: block -> u8 {
@@ -2441,7 +2438,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 };
                 builtin::array_set_u8(_licm_repr_35, index_22, value_23);
                 i_10 = i_10 - 1;
-                continue l188;
+                continue l185;
             };
         };
         __for_2: block {
@@ -2449,14 +2446,14 @@ fn Formatter::apply_padding(self, start_pos) {
             _licm_buf_32 = self.buf;
             _licm_repr_36 = _licm_buf_32.repr;
             block {
-                l191: loop {
+                l188: loop {
                     if (j_11 < padding) == 0 {
                         break __for_2;
                     };
                     index_27 = start_pos + j_11;
                     builtin::array_set_u8(_licm_repr_36, index_27, fill_byte);
                     j_11 = j_11 + 1;
-                    continue l191;
+                    continue l188;
                 };
             };
         };
