@@ -220,8 +220,6 @@ type "functype/Array<Option<i32>>::append" = fn(ref Array<Option<i32>>, ref Opti
 
 type "functype/Array<Array<i32>>^Inspect::inspect" = fn(ref Array<Array<i32>>, ref Formatter);
 
-type "functype/Array<Array<i32>>^IndexAssign::index_assign" = fn(ref Array<Array<i32>>, i32, ref Array<i32>);
-
 type "functype/Array<i32>^Inspect::inspect" = fn(ref Array<i32>, ref Formatter);
 
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
@@ -615,7 +613,7 @@ fn nested_array_mutate_test() with Stdout {
     let __local_9: ref String;
     let __local_10: ref Formatter;
     let __local_35: ref String;
-    let __local_46: ref String;
+    let __local_49: ref String;
     matrix = __seq_lit: block -> ref Array<Array<i32>> {
         __local_0 = Array<Array<i32>> { repr: array.new_fixed<ref Array<i32>>(__seq_lit: block -> ref Array<i32> {
             __local_1 = Array<i32> { repr: array.new_fixed<i32>(1, 2), used: 2 };
@@ -647,12 +645,16 @@ fn nested_array_mutate_test() with Stdout {
         __local_5 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_5;
     };
-    Array<Array<i32>>^IndexAssign::index_assign(matrix, 0, new_row);
+    if 0 >= matrix.used {
+        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
+    };
+    builtin::array_set<ref Array<i32>>(matrix.repr, 0, new_row);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_9 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_10 = __inline_Formatter__new_25: block -> ref Formatter {
-            __local_46 = __local_9;
-            break __inline_Formatter__new_25: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_46) };
+        __local_10 = __inline_Formatter__new_26: block -> ref Formatter {
+            __local_49 = __local_9;
+            break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_49) };
         };
         Array<Array<i32>>^Inspect::inspect(matrix, __local_10);
         break __tmpl: __local_9;
@@ -726,8 +728,8 @@ fn nested_array_option_access_test() with Stdout {
         "core:cli/println"(String { repr: array.new_data<u8>("second: null"), used: 12 });
     };
     __iter_6 = "core:allocator/ArrayIter<Option<i32>>" { repr: ref.as_non_null(arr.repr), used: 3, index: 0 };
-    b30: block {
-        l31: loop {
+    b31: block {
+        l32: loop {
             let __sroa___pattern_temp_2_discriminant: i32;
             let __sroa___pattern_temp_2_payload_0: ref null Option<i32>;
             multivalue_bind [__sroa___pattern_temp_2_discriminant, __sroa___pattern_temp_2_payload_0] = ArrayIter<Option<i32>>^Iterator::next(__iter_6);
@@ -760,9 +762,9 @@ fn nested_array_option_access_test() with Stdout {
                 });
                 "core:cli/println"(s);
             } else {
-                break b30;
+                break b31;
             };
-            continue l31;
+            continue l32;
         };
     };
     "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
@@ -884,13 +886,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l45: loop {
+            l46: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l45;
+                continue l46;
             };
         };
     };
@@ -1019,13 +1021,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l52: loop {
+            l53: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l52;
+                continue l53;
             };
         };
     };
@@ -1042,14 +1044,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l56: loop {
+                l57: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l56;
+                    continue l57;
                 };
             };
         };
@@ -1209,7 +1211,7 @@ fn Array<Array<i32>>^Inspect::inspect(self, f) {
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
-            l70: loop {
+            l71: loop {
                 if (i < _licm_used_12) == 0 {
                     break __for_4;
                 };
@@ -1222,19 +1224,11 @@ fn Array<Array<i32>>^Inspect::inspect(self, f) {
                     break __inline_Array_Array_i32___IndexValue__index_value_3: builtin::array_get<ref Array<i32>>(_licm_repr_13, __local_9);
                 }, f);
                 i = i + 1;
-                continue l70;
+                continue l71;
             };
         };
     };
     String::append_char(f.buf, 93);
-}
-
-fn Array<Array<i32>>^IndexAssign::index_assign(self, index, value) {
-    if index >= self.used {
-        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-        unreachable;
-    };
-    builtin::array_set<ref Array<i32>>(self.repr, index, value);
 }
 
 fn Array<i32>^Inspect::inspect(self, f) {

@@ -119,8 +119,6 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/Pair<i32>^Eq::eq" = fn(ref Pair<i32>, ref Pair<i32>) -> bool;
-
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
@@ -150,15 +148,7 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn trait_bound_propagation() with Stdout {
-    let other: ref Pair<i32>;
-    let __sroa_c_item: ref Pair<i32>;
-    __sroa_c_item = Pair<i32> { first: 1, second: 2 };
-    other = Pair<i32> { first: 1, second: 2 };
-    if Pair<i32>^Eq::eq(__sroa_c_item, other) {
-        "core:cli/println"(String { repr: array.new_data<u8>("equal"), used: 5 });
-    } else {
-        "core:cli/println"(String { repr: array.new_data<u8>("not equal"), used: 9 });
-    };
+    "core:cli/println"(String { repr: array.new_data<u8>("equal"), used: 5 });
 }
 
 fn trait_bound_ref_mut() with Stdout {
@@ -294,13 +284,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l11: loop {
+            l10: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l11;
+                continue l10;
             };
         };
     };
@@ -392,13 +382,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l17: loop {
+            l16: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l17;
+                continue l16;
             };
         };
     };
@@ -415,14 +405,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l21: loop {
+                l20: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l21;
+                    continue l20;
                 };
             };
         };
@@ -525,14 +515,6 @@ fn String::append_char(self, c) {
     };
 }
 
-fn Pair<i32>^Eq::eq(self, other) {
-    return if self.first == other.first -> i32 {
-        self.second == other.second;
-    } else {
-        0;
-    };
-}
-
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref String;
@@ -540,13 +522,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l34: loop {
+            l32: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l34;
+                continue l32;
             };
         };
     };

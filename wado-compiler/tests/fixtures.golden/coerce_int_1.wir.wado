@@ -139,15 +139,11 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/u128^Eq::eq" = fn(ref u128, ref u128) -> bool;
-
 type "functype/u128^Add::add" = fn(ref u128, ref u128) -> ref u128;
 
 type "functype/u128^Sub::sub" = fn(ref u128, ref u128) -> ref u128;
 
 type "functype/u128^Mul::mul" = fn(ref u128, ref u128) -> ref u128;
-
-type "functype/i128^Eq::eq" = fn(ref i128, ref i128) -> bool;
 
 type "functype/i128^Add::add" = fn(ref i128, ref i128) -> ref i128;
 
@@ -178,6 +174,18 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
+
+type "functype/u128^Add::add" = fn(ref u128, ref u128) -> [u64, u64];
+
+type "functype/u128^Sub::sub" = fn(ref u128, ref u128) -> [u64, u64];
+
+type "functype/u128^Mul::mul" = fn(ref u128, ref u128) -> [u64, u64];
+
+type "functype/i128^Add::add" = fn(ref i128, ref i128) -> [u64, i64];
+
+type "functype/i128^Sub::sub" = fn(ref i128, ref i128) -> [u64, i64];
+
+type "functype/i128^Mul::mul" = fn(ref i128, ref i128) -> [u64, i64];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -345,126 +353,246 @@ fn coerce_int_literal_binary() with Stdout {
 fn coerce_int_literal_binary_i128() with Stdout {
     let x_u128: ref u128;
     let x_i128: ref i128;
-    let a1: ref u128;
-    let a2: ref u128;
-    let a3: ref i128;
-    let a4: ref i128;
-    let b1: ref u128;
-    let b2: ref u128;
-    let b3: ref i128;
-    let b4: ref i128;
-    let c1: ref u128;
-    let c2: ref u128;
-    let c3: ref i128;
-    let c4: ref i128;
     let cond_18: bool;
     let label_19: ref String;
-    let cond_22: bool;
-    let label_23: ref String;
-    let cond_27: bool;
-    let label_28: ref String;
-    let cond_33: bool;
-    let label_34: ref String;
-    let cond_38: bool;
-    let label_39: ref String;
-    let cond_42: bool;
-    let label_43: ref String;
-    let cond_47: bool;
-    let label_48: ref String;
-    let cond_53: bool;
-    let label_54: ref String;
-    let cond_58: bool;
-    let label_59: ref String;
-    let cond_62: bool;
-    let label_63: ref String;
+    let __local_21: ref u128;
+    let cond_24: bool;
+    let label_25: ref String;
+    let __local_27: ref u128;
+    let cond_31: bool;
+    let label_32: ref String;
+    let __local_34: ref i128;
+    let cond_39: bool;
+    let label_40: ref String;
+    let __local_42: ref i128;
+    let cond_46: bool;
+    let label_47: ref String;
+    let __local_49: ref u128;
+    let cond_52: bool;
+    let label_53: ref String;
+    let __local_55: ref u128;
+    let cond_59: bool;
+    let label_60: ref String;
+    let __local_62: ref i128;
     let cond_67: bool;
     let label_68: ref String;
-    let cond_73: bool;
-    let label_74: ref String;
+    let __local_70: ref i128;
+    let cond_74: bool;
+    let label_75: ref String;
+    let __local_77: ref u128;
+    let cond_80: bool;
+    let label_81: ref String;
+    let __local_83: ref u128;
+    let cond_87: bool;
+    let label_88: ref String;
+    let __local_90: ref i128;
+    let cond_95: bool;
+    let label_96: ref String;
+    let __local_98: ref i128;
     x_u128 = u128 { low: 1000_i64, high: 0_i64 };
     x_i128 = i128 { low: -500_i64, high: -1_i64 };
-    a1 = u128^Add::add(x_u128, u128 { low: 42_i64, high: 0_i64 });
-    cond_18 = u128^Eq::eq(a1, u128 { low: 1042_i64, high: 0_i64 });
+    let __sroa_a1_low: u64;
+    let __sroa_a1_high: u64;
+    multivalue_bind [__sroa_a1_low, __sroa_a1_high] = u128^Add::add(x_u128, u128 { low: 42_i64, high: 0_i64 });
+    cond_18 = __inline_u128_Eq__eq_4: block -> bool {
+        __local_21 = u128 { low: 1042_i64, high: 0_i64 };
+        if __sroa_a1_low == 1042_i64 -> i32 {
+            __sroa_a1_high == 0_i64;
+        } else {
+            0;
+        };
+        break __inline_u128_Eq__eq_4;
+    };
     label_19 = String { repr: array.new_data<u8>("+ u128 rhs"), used: 10 };
     if cond_18 == 0 {
         "core:internal/panic"(label_19);
         unreachable;
     };
-    a2 = u128^Add::add(u128 { low: 42_i64, high: 0_i64 }, x_u128);
-    cond_22 = u128^Eq::eq(a2, u128 { low: 1042_i64, high: 0_i64 });
-    label_23 = String { repr: array.new_data<u8>("+ lhs u128"), used: 10 };
-    if cond_22 == 0 {
-        "core:internal/panic"(label_23);
+    let __sroa_a2_low: u64;
+    let __sroa_a2_high: u64;
+    multivalue_bind [__sroa_a2_low, __sroa_a2_high] = u128^Add::add(u128 { low: 42_i64, high: 0_i64 }, x_u128);
+    cond_24 = __inline_u128_Eq__eq_8: block -> bool {
+        __local_27 = u128 { low: 1042_i64, high: 0_i64 };
+        if __sroa_a2_low == 1042_i64 -> i32 {
+            __sroa_a2_high == 0_i64;
+        } else {
+            0;
+        };
+        break __inline_u128_Eq__eq_8;
+    };
+    label_25 = String { repr: array.new_data<u8>("+ lhs u128"), used: 10 };
+    if cond_24 == 0 {
+        "core:internal/panic"(label_25);
         unreachable;
     };
-    a3 = i128^Add::add(x_i128, i128 { low: 100_i64, high: 0_i64 });
-    cond_27 = i128^Eq::eq(a3, i128 { low: -400_i64, high: -1_i64 });
-    label_28 = String { repr: array.new_data<u8>("+ i128 rhs"), used: 10 };
-    if cond_27 == 0 {
-        "core:internal/panic"(label_28);
+    let __sroa_a3_low: u64;
+    let __sroa_a3_high: i64;
+    multivalue_bind [__sroa_a3_low, __sroa_a3_high] = i128^Add::add(x_i128, i128 { low: 100_i64, high: 0_i64 });
+    cond_31 = __inline_i128_Eq__eq_12: block -> bool {
+        __local_34 = i128 { low: -400_i64, high: -1_i64 };
+        if __sroa_a3_low == -400_i64 -> i32 {
+            __sroa_a3_high == -1_i64;
+        } else {
+            0;
+        };
+        break __inline_i128_Eq__eq_12;
+    };
+    label_32 = String { repr: array.new_data<u8>("+ i128 rhs"), used: 10 };
+    if cond_31 == 0 {
+        "core:internal/panic"(label_32);
         unreachable;
     };
-    a4 = i128^Add::add(i128 { low: 100_i64, high: 0_i64 }, x_i128);
-    cond_33 = i128^Eq::eq(a4, i128 { low: -400_i64, high: -1_i64 });
-    label_34 = String { repr: array.new_data<u8>("+ lhs i128"), used: 10 };
-    if cond_33 == 0 {
-        "core:internal/panic"(label_34);
+    let __sroa_a4_low: u64;
+    let __sroa_a4_high: i64;
+    multivalue_bind [__sroa_a4_low, __sroa_a4_high] = i128^Add::add(i128 { low: 100_i64, high: 0_i64 }, x_i128);
+    cond_39 = __inline_i128_Eq__eq_16: block -> bool {
+        __local_42 = i128 { low: -400_i64, high: -1_i64 };
+        if __sroa_a4_low == -400_i64 -> i32 {
+            __sroa_a4_high == -1_i64;
+        } else {
+            0;
+        };
+        break __inline_i128_Eq__eq_16;
+    };
+    label_40 = String { repr: array.new_data<u8>("+ lhs i128"), used: 10 };
+    if cond_39 == 0 {
+        "core:internal/panic"(label_40);
         unreachable;
     };
-    b1 = u128^Sub::sub(x_u128, u128 { low: 100_i64, high: 0_i64 });
-    cond_38 = u128^Eq::eq(b1, u128 { low: 900_i64, high: 0_i64 });
-    label_39 = String { repr: array.new_data<u8>("- u128 rhs"), used: 10 };
-    if cond_38 == 0 {
-        "core:internal/panic"(label_39);
+    let __sroa_b1_low: u64;
+    let __sroa_b1_high: u64;
+    multivalue_bind [__sroa_b1_low, __sroa_b1_high] = u128^Sub::sub(x_u128, u128 { low: 100_i64, high: 0_i64 });
+    cond_46 = __inline_u128_Eq__eq_20: block -> bool {
+        __local_49 = u128 { low: 900_i64, high: 0_i64 };
+        if __sroa_b1_low == 900_i64 -> i32 {
+            __sroa_b1_high == 0_i64;
+        } else {
+            0;
+        };
+        break __inline_u128_Eq__eq_20;
+    };
+    label_47 = String { repr: array.new_data<u8>("- u128 rhs"), used: 10 };
+    if cond_46 == 0 {
+        "core:internal/panic"(label_47);
         unreachable;
     };
-    b2 = u128^Sub::sub(u128 { low: 2000_i64, high: 0_i64 }, x_u128);
-    cond_42 = u128^Eq::eq(b2, u128 { low: 1000_i64, high: 0_i64 });
-    label_43 = String { repr: array.new_data<u8>("- lhs u128"), used: 10 };
-    if cond_42 == 0 {
-        "core:internal/panic"(label_43);
+    let __sroa_b2_low: u64;
+    let __sroa_b2_high: u64;
+    multivalue_bind [__sroa_b2_low, __sroa_b2_high] = u128^Sub::sub(u128 { low: 2000_i64, high: 0_i64 }, x_u128);
+    cond_52 = __inline_u128_Eq__eq_24: block -> bool {
+        __local_55 = u128 { low: 1000_i64, high: 0_i64 };
+        if __sroa_b2_low == 1000_i64 -> i32 {
+            __sroa_b2_high == 0_i64;
+        } else {
+            0;
+        };
+        break __inline_u128_Eq__eq_24;
+    };
+    label_53 = String { repr: array.new_data<u8>("- lhs u128"), used: 10 };
+    if cond_52 == 0 {
+        "core:internal/panic"(label_53);
         unreachable;
     };
-    b3 = i128^Sub::sub(x_i128, i128 { low: 100_i64, high: 0_i64 });
-    cond_47 = i128^Eq::eq(b3, i128 { low: -600_i64, high: -1_i64 });
-    label_48 = String { repr: array.new_data<u8>("- i128 rhs"), used: 10 };
-    if cond_47 == 0 {
-        "core:internal/panic"(label_48);
+    let __sroa_b3_low: u64;
+    let __sroa_b3_high: i64;
+    multivalue_bind [__sroa_b3_low, __sroa_b3_high] = i128^Sub::sub(x_i128, i128 { low: 100_i64, high: 0_i64 });
+    cond_59 = __inline_i128_Eq__eq_28: block -> bool {
+        __local_62 = i128 { low: -600_i64, high: -1_i64 };
+        if __sroa_b3_low == -600_i64 -> i32 {
+            __sroa_b3_high == -1_i64;
+        } else {
+            0;
+        };
+        break __inline_i128_Eq__eq_28;
+    };
+    label_60 = String { repr: array.new_data<u8>("- i128 rhs"), used: 10 };
+    if cond_59 == 0 {
+        "core:internal/panic"(label_60);
         unreachable;
     };
-    b4 = i128^Sub::sub(i128 { low: 100_i64, high: 0_i64 }, x_i128);
-    cond_53 = i128^Eq::eq(b4, i128 { low: 600_i64, high: 0_i64 });
-    label_54 = String { repr: array.new_data<u8>("- lhs i128"), used: 10 };
-    if cond_53 == 0 {
-        "core:internal/panic"(label_54);
-        unreachable;
+    let __sroa_b4_low: u64;
+    let __sroa_b4_high: i64;
+    multivalue_bind [__sroa_b4_low, __sroa_b4_high] = i128^Sub::sub(i128 { low: 100_i64, high: 0_i64 }, x_i128);
+    cond_67 = __inline_i128_Eq__eq_32: block -> bool {
+        __local_70 = i128 { low: 600_i64, high: 0_i64 };
+        if __sroa_b4_low == 600_i64 -> i32 {
+            __sroa_b4_high == 0_i64;
+        } else {
+            0;
+        };
+        break __inline_i128_Eq__eq_32;
     };
-    c1 = u128^Mul::mul(x_u128, u128 { low: 3_i64, high: 0_i64 });
-    cond_58 = u128^Eq::eq(c1, u128 { low: 3000_i64, high: 0_i64 });
-    label_59 = String { repr: array.new_data<u8>("* u128 rhs"), used: 10 };
-    if cond_58 == 0 {
-        "core:internal/panic"(label_59);
-        unreachable;
-    };
-    c2 = u128^Mul::mul(u128 { low: 3_i64, high: 0_i64 }, x_u128);
-    cond_62 = u128^Eq::eq(c2, u128 { low: 3000_i64, high: 0_i64 });
-    label_63 = String { repr: array.new_data<u8>("* lhs u128"), used: 10 };
-    if cond_62 == 0 {
-        "core:internal/panic"(label_63);
-        unreachable;
-    };
-    c3 = i128^Mul::mul(x_i128, i128 { low: 2_i64, high: 0_i64 });
-    cond_67 = i128^Eq::eq(c3, i128 { low: -1000_i64, high: -1_i64 });
-    label_68 = String { repr: array.new_data<u8>("* i128 rhs"), used: 10 };
+    label_68 = String { repr: array.new_data<u8>("- lhs i128"), used: 10 };
     if cond_67 == 0 {
         "core:internal/panic"(label_68);
         unreachable;
     };
-    c4 = i128^Mul::mul(i128 { low: 2_i64, high: 0_i64 }, x_i128);
-    cond_73 = i128^Eq::eq(c4, i128 { low: -1000_i64, high: -1_i64 });
-    label_74 = String { repr: array.new_data<u8>("* lhs i128"), used: 10 };
-    if cond_73 == 0 {
-        "core:internal/panic"(label_74);
+    let __sroa_c1_low: u64;
+    let __sroa_c1_high: u64;
+    multivalue_bind [__sroa_c1_low, __sroa_c1_high] = u128^Mul::mul(x_u128, u128 { low: 3_i64, high: 0_i64 });
+    cond_74 = __inline_u128_Eq__eq_36: block -> bool {
+        __local_77 = u128 { low: 3000_i64, high: 0_i64 };
+        if __sroa_c1_low == 3000_i64 -> i32 {
+            __sroa_c1_high == 0_i64;
+        } else {
+            0;
+        };
+        break __inline_u128_Eq__eq_36;
+    };
+    label_75 = String { repr: array.new_data<u8>("* u128 rhs"), used: 10 };
+    if cond_74 == 0 {
+        "core:internal/panic"(label_75);
+        unreachable;
+    };
+    let __sroa_c2_low: u64;
+    let __sroa_c2_high: u64;
+    multivalue_bind [__sroa_c2_low, __sroa_c2_high] = u128^Mul::mul(u128 { low: 3_i64, high: 0_i64 }, x_u128);
+    cond_80 = __inline_u128_Eq__eq_40: block -> bool {
+        __local_83 = u128 { low: 3000_i64, high: 0_i64 };
+        if __sroa_c2_low == 3000_i64 -> i32 {
+            __sroa_c2_high == 0_i64;
+        } else {
+            0;
+        };
+        break __inline_u128_Eq__eq_40;
+    };
+    label_81 = String { repr: array.new_data<u8>("* lhs u128"), used: 10 };
+    if cond_80 == 0 {
+        "core:internal/panic"(label_81);
+        unreachable;
+    };
+    let __sroa_c3_low: u64;
+    let __sroa_c3_high: i64;
+    multivalue_bind [__sroa_c3_low, __sroa_c3_high] = i128^Mul::mul(x_i128, i128 { low: 2_i64, high: 0_i64 });
+    cond_87 = __inline_i128_Eq__eq_44: block -> bool {
+        __local_90 = i128 { low: -1000_i64, high: -1_i64 };
+        if __sroa_c3_low == -1000_i64 -> i32 {
+            __sroa_c3_high == -1_i64;
+        } else {
+            0;
+        };
+        break __inline_i128_Eq__eq_44;
+    };
+    label_88 = String { repr: array.new_data<u8>("* i128 rhs"), used: 10 };
+    if cond_87 == 0 {
+        "core:internal/panic"(label_88);
+        unreachable;
+    };
+    let __sroa_c4_low: u64;
+    let __sroa_c4_high: i64;
+    multivalue_bind [__sroa_c4_low, __sroa_c4_high] = i128^Mul::mul(i128 { low: 2_i64, high: 0_i64 }, x_i128);
+    cond_95 = __inline_i128_Eq__eq_48: block -> bool {
+        __local_98 = i128 { low: -1000_i64, high: -1_i64 };
+        if __sroa_c4_low == -1000_i64 -> i32 {
+            __sroa_c4_high == -1_i64;
+        } else {
+            0;
+        };
+        break __inline_i128_Eq__eq_48;
+    };
+    label_96 = String { repr: array.new_data<u8>("* lhs i128"), used: 10 };
+    if cond_95 == 0 {
+        "core:internal/panic"(label_96);
         unreachable;
     };
     "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
@@ -589,13 +717,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l22: loop {
+            l34: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l22;
+                continue l34;
             };
         };
     };
@@ -724,13 +852,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l29: loop {
+            l41: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l29;
+                continue l41;
             };
         };
     };
@@ -747,25 +875,17 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l33: loop {
+                l45: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l33;
+                    continue l45;
                 };
             };
         };
-    };
-}
-
-fn u128^Eq::eq(self, other) {
-    return if self.low == other.low -> i32 {
-        self.high == other.high;
-    } else {
-        0;
     };
 }
 
@@ -773,14 +893,14 @@ fn u128^Add::add(self, other) {
     let __local_2: i64;
     let __local_3: i64;
     multivalue_bind [__local_2, __local_3] = i64.add128(self.low, self.high, other.low, other.high);
-    return u128 { low: __local_2, high: __local_3 };
+    return __local_2; __local_3;
 }
 
 fn u128^Sub::sub(self, other) {
     let __local_2: i64;
     let __local_3: i64;
     multivalue_bind [__local_2, __local_3] = i64.sub128(self.low, self.high, other.low, other.high);
-    return u128 { low: __local_2, high: __local_3 };
+    return __local_2; __local_3;
 }
 
 fn u128^Mul::mul(self, other) {
@@ -795,29 +915,21 @@ fn u128^Mul::mul(self, other) {
     p0_high = __local_3;
     p1_low = self.low * other.high;
     p2_low = self.high * other.low;
-    return u128 { low: p0_low, high: (p0_high + p1_low) + p2_low };
-}
-
-fn i128^Eq::eq(self, other) {
-    return if self.low == other.low -> i32 {
-        self.high == other.high;
-    } else {
-        0;
-    };
+    return p0_low; (p0_high + p1_low) + p2_low;
 }
 
 fn i128^Add::add(self, other) {
     let __local_2: i64;
     let __local_3: i64;
     multivalue_bind [__local_2, __local_3] = i64.add128(self.low, self.high, other.low, other.high);
-    return i128 { low: __local_2, high: __local_3 };
+    return __local_2; __local_3;
 }
 
 fn i128^Sub::sub(self, other) {
     let __local_2: i64;
     let __local_3: i64;
     multivalue_bind [__local_2, __local_3] = i64.sub128(self.low, self.high, other.low, other.high);
-    return i128 { low: __local_2, high: __local_3 };
+    return __local_2; __local_3;
 }
 
 fn i128^Mul::mul(self, other) {
@@ -832,7 +944,7 @@ fn i128^Mul::mul(self, other) {
     p0_high = __local_3;
     p1_low = self.low * other.high;
     p2_low = self.high * other.low;
-    return i128 { low: p0_low, high: (p0_high + p1_low) + p2_low };
+    return p0_low; (p0_high + p1_low) + p2_low;
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -924,10 +1036,10 @@ fn u64::fmt_decimal(self, f) {
     };
     digit_count = 0;
     temp = val_i64;
-    b41: block {
-        l42: loop {
+    b51: block {
+        l52: loop {
             if (temp != 0_i64) == 0 {
-                break b41;
+                break b51;
             };
             digit_count = digit_count + 1;
             if temp >= 0_i64 {
@@ -942,7 +1054,7 @@ fn u64::fmt_decimal(self, f) {
                 };
                 temp = (signed_quot_9 + 1844674407370955161_i64) + carry_10;
             };
-            continue l42;
+            continue l52;
         };
     };
     offset_11 = Formatter::prepare_int_write(f, 0, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
@@ -952,10 +1064,10 @@ fn u64::fmt_decimal(self, f) {
     };
     pos = offset_11 + digit_count;
     temp = val_i64;
-    b46: block {
-        l47: loop {
+    b56: block {
+        l57: loop {
             if (temp != 0_i64) == 0 {
-                break b46;
+                break b56;
             };
             pos = pos - 1;
             digit = 0;
@@ -978,7 +1090,7 @@ fn u64::fmt_decimal(self, f) {
                 temp = (signed_quot_17 + 1844674407370955161_i64) + carry_18;
             };
             builtin::array_set_u8(repr, pos, (48 + digit) & 255);
-            continue l47;
+            continue l57;
         };
     };
 }
@@ -1066,13 +1178,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l61: loop {
+            l71: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l61;
+                continue l71;
             };
         };
     };

@@ -92,8 +92,6 @@ type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/swap_array" = fn(ref Array<i32>) -> ref Array<i32>;
 
-type "functype/double_first" = fn(ref Array<i32>) -> ref Array<i32>;
-
 type "functype/translate" = fn(ref Point, i32, i32) -> ref Point;
 
 type "functype/mut_param_basic" = fn();
@@ -156,8 +154,6 @@ type "functype/String::append_char" = fn(ref String, char);
 
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
-type "functype/Array<i32>^IndexAssign::index_assign" = fn(ref Array<i32>, i32, i32);
-
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
@@ -197,17 +193,6 @@ fn swap_array(arr) {
         __local_1 = Array<i32> { repr: array.new_fixed<i32>(99, 88, 77), used: 3 };
         break __seq_lit: __local_1;
     };
-    return arr;
-}
-
-fn double_first(arr) {
-    Array<i32>^IndexAssign::index_assign(arr, 0, __inline_Array_i32__IndexValue__index_value_0: block -> i32 {
-        if 0 >= arr.used {
-            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        };
-        break __inline_Array_i32__IndexValue__index_value_0: builtin::array_get<i32>(arr.repr, 0);
-    } * 2);
     return arr;
 }
 
@@ -358,28 +343,30 @@ fn mut_param_string() with Stdout {
     let __local_124: ref Formatter;
     let __local_127: ref String;
     let __local_129: ref Formatter;
-    let __local_144: ref String;
-    let __local_146: ref Formatter;
-    let __local_149: ref String;
-    let __local_151: ref Formatter;
-    let __local_157: ref String;
-    let __local_159: ref Formatter;
-    let __local_162: ref String;
-    let __local_164: ref Formatter;
-    let __local_176: ref Array<i32>;
-    let __local_179: ref String;
-    let __local_181: ref Formatter;
-    let __local_184: ref String;
-    let __local_186: ref Formatter;
-    let __local_191: ref String;
-    let __local_193: ref Formatter;
-    let __local_196: ref String;
-    let __local_198: ref Formatter;
-    let __local_201: i32;
-    let __local_204: ref String;
-    let __local_206: ref Formatter;
-    let __local_209: ref String;
-    let __local_211: ref Formatter;
+    let __local_141: ref Array<i32>;
+    let __local_144: i32;
+    let __local_150: ref String;
+    let __local_152: ref Formatter;
+    let __local_155: ref String;
+    let __local_157: ref Formatter;
+    let __local_163: ref String;
+    let __local_165: ref Formatter;
+    let __local_168: ref String;
+    let __local_170: ref Formatter;
+    let __local_182: ref Array<i32>;
+    let __local_185: ref String;
+    let __local_187: ref Formatter;
+    let __local_190: ref String;
+    let __local_192: ref Formatter;
+    let __local_197: ref String;
+    let __local_199: ref Formatter;
+    let __local_202: ref String;
+    let __local_204: ref Formatter;
+    let __local_207: i32;
+    let __local_210: ref String;
+    let __local_212: ref Formatter;
+    let __local_215: ref String;
+    let __local_217: ref Formatter;
     original = String { repr: array.new_data<u8>("original"), used: 8 };
     result = __inline_replace_0: block -> ref String {
         __local_67 = value_copy String(original);
@@ -630,13 +617,28 @@ condition: a[0] == 1
         __local_19 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_19;
     };
-    d = double_first(value_copy Array<i32>(c));
-    __v0_22 = __inline_Array_i32__IndexValue__index_value_50: block -> i32 {
+    d = value_copy Array<i32>(__inline_double_first_50: block -> ref Array<i32> {
+        __local_141 = value_copy Array<i32>(c);
+        __local_144 = __inline_Array_i32__IndexValue__index_value_52: block -> i32 {
+            if 0 {
+                "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                unreachable;
+            };
+            break __inline_Array_i32__IndexValue__index_value_52: builtin::array_get<i32>(__local_141.repr, 0);
+        } * 2;
+        if 0 {
+            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+            unreachable;
+        };
+        builtin::array_set<i32>(__local_141.repr, 0, __local_144);
+        break __inline_double_first_50: __local_141;
+    });
+    __v0_22 = __inline_Array_i32__IndexValue__index_value_53: block -> i32 {
         if 0 >= d.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_i32__IndexValue__index_value_50: builtin::array_get<i32>(d.repr, 0);
+        break __inline_Array_i32__IndexValue__index_value_53: builtin::array_get<i32>(d.repr, 0);
     };
     __cond_23 = __v0_22 == 20;
     if __cond_23 == 0 {
@@ -650,12 +652,12 @@ condition: a[0] == 1
             String::append_char(__local_53, 32);
             String::append(__local_53, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_53, 58);
-            __local_54 = __inline_Formatter__new_52: block -> ref Formatter {
-                __local_144 = __local_53;
-                break __inline_Formatter__new_52: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_144) };
+            __local_54 = __inline_Formatter__new_55: block -> ref Formatter {
+                __local_150 = __local_53;
+                break __inline_Formatter__new_55: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_150) };
             };
-            __local_146 = __local_54;
-            i32::fmt_decimal(112, __local_146);
+            __local_152 = __local_54;
+            i32::fmt_decimal(112, __local_152);
             String::append(__local_53, String { repr: array.new_data<u8>("
 condition: d[0] == 20
 "), used: 23 });
@@ -665,23 +667,23 @@ condition: d[0] == 20
             String::append_char(__local_53, 93);
             String::append_char(__local_53, 58);
             String::append_char(__local_53, 32);
-            __local_54 = __inline_Formatter__new_55: block -> ref Formatter {
-                __local_149 = __local_53;
-                break __inline_Formatter__new_55: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_149) };
+            __local_54 = __inline_Formatter__new_58: block -> ref Formatter {
+                __local_155 = __local_53;
+                break __inline_Formatter__new_58: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_155) };
             };
-            __local_151 = __local_54;
-            i32::fmt_decimal(__v0_22, __local_151);
+            __local_157 = __local_54;
+            i32::fmt_decimal(__v0_22, __local_157);
             String::append_char(__local_53, 10);
             break __tmpl: __local_53;
         });
         unreachable;
     };
-    __v0_24 = __inline_Array_i32__IndexValue__index_value_58: block -> i32 {
-        if 0 >= c.used {
+    __v0_24 = __inline_Array_i32__IndexValue__index_value_61: block -> i32 {
+        if 0 {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_i32__IndexValue__index_value_58: builtin::array_get<i32>(c.repr, 0);
+        break __inline_Array_i32__IndexValue__index_value_61: builtin::array_get<i32>(c.repr, 0);
     };
     __cond_25 = __v0_24 == 10;
     if __cond_25 == 0 {
@@ -695,12 +697,12 @@ condition: d[0] == 20
             String::append_char(__local_55, 32);
             String::append(__local_55, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_55, 58);
-            __local_56 = __inline_Formatter__new_60: block -> ref Formatter {
-                __local_157 = __local_55;
-                break __inline_Formatter__new_60: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_157) };
+            __local_56 = __inline_Formatter__new_63: block -> ref Formatter {
+                __local_163 = __local_55;
+                break __inline_Formatter__new_63: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_163) };
             };
-            __local_159 = __local_56;
-            i32::fmt_decimal(113, __local_159);
+            __local_165 = __local_56;
+            i32::fmt_decimal(113, __local_165);
             String::append(__local_55, String { repr: array.new_data<u8>("
 condition: c[0] == 10
 "), used: 23 });
@@ -710,12 +712,12 @@ condition: c[0] == 10
             String::append_char(__local_55, 93);
             String::append_char(__local_55, 58);
             String::append_char(__local_55, 32);
-            __local_56 = __inline_Formatter__new_63: block -> ref Formatter {
-                __local_162 = __local_55;
-                break __inline_Formatter__new_63: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_162) };
+            __local_56 = __inline_Formatter__new_66: block -> ref Formatter {
+                __local_168 = __local_55;
+                break __inline_Formatter__new_66: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_168) };
             };
-            __local_164 = __local_56;
-            i32::fmt_decimal(__v0_24, __local_164);
+            __local_170 = __local_56;
+            i32::fmt_decimal(__v0_24, __local_170);
             String::append_char(__local_55, 10);
             break __tmpl: __local_55;
         });
@@ -725,10 +727,10 @@ condition: c[0] == 10
         __local_26 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_26;
     };
-    f = value_copy Array<i32>(__inline_push_zero_72: block -> ref Array<i32> {
-        __local_176 = value_copy Array<i32>(e);
-        Array<i32>::append(__local_176, 0);
-        break __inline_push_zero_72: __local_176;
+    f = value_copy Array<i32>(__inline_push_zero_75: block -> ref Array<i32> {
+        __local_182 = value_copy Array<i32>(e);
+        Array<i32>::append(__local_182, 0);
+        break __inline_push_zero_75: __local_182;
     });
     __v0_29 = f.used;
     __cond_30 = __v0_29 == 4;
@@ -743,22 +745,22 @@ condition: c[0] == 10
             String::append_char(__local_57, 32);
             String::append(__local_57, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_57, 58);
-            __local_58 = __inline_Formatter__new_75: block -> ref Formatter {
-                __local_179 = __local_57;
-                break __inline_Formatter__new_75: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_179) };
+            __local_58 = __inline_Formatter__new_78: block -> ref Formatter {
+                __local_185 = __local_57;
+                break __inline_Formatter__new_78: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_185) };
             };
-            __local_181 = __local_58;
-            i32::fmt_decimal(118, __local_181);
+            __local_187 = __local_58;
+            i32::fmt_decimal(118, __local_187);
             String::append(__local_57, String { repr: array.new_data<u8>("
 condition: f.len() == 4
 "), used: 25 });
             String::append(__local_57, String { repr: array.new_data<u8>("f.len(): "), used: 9 });
-            __local_58 = __inline_Formatter__new_78: block -> ref Formatter {
-                __local_184 = __local_57;
-                break __inline_Formatter__new_78: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_184) };
+            __local_58 = __inline_Formatter__new_81: block -> ref Formatter {
+                __local_190 = __local_57;
+                break __inline_Formatter__new_81: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_190) };
             };
-            __local_186 = __local_58;
-            i32::fmt_decimal(__v0_29, __local_186);
+            __local_192 = __local_58;
+            i32::fmt_decimal(__v0_29, __local_192);
             String::append_char(__local_57, 10);
             break __tmpl: __local_57;
         });
@@ -777,31 +779,31 @@ condition: f.len() == 4
             String::append_char(__local_59, 32);
             String::append(__local_59, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_59, 58);
-            __local_60 = __inline_Formatter__new_83: block -> ref Formatter {
-                __local_191 = __local_59;
-                break __inline_Formatter__new_83: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_191) };
+            __local_60 = __inline_Formatter__new_86: block -> ref Formatter {
+                __local_197 = __local_59;
+                break __inline_Formatter__new_86: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_197) };
             };
-            __local_193 = __local_60;
-            i32::fmt_decimal(119, __local_193);
+            __local_199 = __local_60;
+            i32::fmt_decimal(119, __local_199);
             String::append(__local_59, String { repr: array.new_data<u8>("
 condition: e.len() == 3
 "), used: 25 });
             String::append(__local_59, String { repr: array.new_data<u8>("e.len(): "), used: 9 });
-            __local_60 = __inline_Formatter__new_86: block -> ref Formatter {
-                __local_196 = __local_59;
-                break __inline_Formatter__new_86: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_196) };
+            __local_60 = __inline_Formatter__new_89: block -> ref Formatter {
+                __local_202 = __local_59;
+                break __inline_Formatter__new_89: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_202) };
             };
-            __local_198 = __local_60;
-            i32::fmt_decimal(__v0_31, __local_198);
+            __local_204 = __local_60;
+            i32::fmt_decimal(__v0_31, __local_204);
             String::append_char(__local_59, 10);
             break __tmpl: __local_59;
         });
         unreachable;
     };
-    __v0_35 = __inline_compute_89: block -> i32 {
-        __local_201 = 5;
-        __local_201 = 10;
-        break __inline_compute_89: 13;
+    __v0_35 = __inline_compute_92: block -> i32 {
+        __local_207 = 5;
+        __local_207 = 10;
+        break __inline_compute_92: 13;
     };
     __cond_36 = __v0_35 == 13;
     if __cond_36 == 0 {
@@ -815,22 +817,22 @@ condition: e.len() == 3
             String::append_char(__local_61, 32);
             String::append(__local_61, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_61, 58);
-            __local_62 = __inline_Formatter__new_91: block -> ref Formatter {
-                __local_204 = __local_61;
-                break __inline_Formatter__new_91: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_204) };
+            __local_62 = __inline_Formatter__new_94: block -> ref Formatter {
+                __local_210 = __local_61;
+                break __inline_Formatter__new_94: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_210) };
             };
-            __local_206 = __local_62;
-            i32::fmt_decimal(124, __local_206);
+            __local_212 = __local_62;
+            i32::fmt_decimal(124, __local_212);
             String::append(__local_61, String { repr: array.new_data<u8>("
 condition: compute(p, q) == 13
 "), used: 32 });
             String::append(__local_61, String { repr: array.new_data<u8>("compute(p, q): "), used: 15 });
-            __local_62 = __inline_Formatter__new_94: block -> ref Formatter {
-                __local_209 = __local_61;
-                break __inline_Formatter__new_94: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_209) };
+            __local_62 = __inline_Formatter__new_97: block -> ref Formatter {
+                __local_215 = __local_61;
+                break __inline_Formatter__new_97: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_215) };
             };
-            __local_211 = __local_62;
-            i32::fmt_decimal(__v0_35, __local_211);
+            __local_217 = __local_62;
+            i32::fmt_decimal(__v0_35, __local_217);
             String::append_char(__local_61, 10);
             break __tmpl: __local_61;
         });
@@ -1345,13 +1347,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l35: loop {
+            l36: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l35;
+                continue l36;
             };
         };
     };
@@ -1480,13 +1482,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l42: loop {
+            l43: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l42;
+                continue l43;
             };
         };
     };
@@ -1503,14 +1505,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l46: loop {
+                l47: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l46;
+                    continue l47;
                 };
             };
         };
@@ -1602,7 +1604,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l55: loop {
+            l56: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -1610,7 +1612,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l55;
+                continue l56;
             };
         };
     };
@@ -1719,14 +1721,6 @@ fn Array<i32>::append(self, value) {
     };
     builtin::array_set<i32>(self.repr, used, value);
     self.used = used + 1;
-}
-
-fn Array<i32>^IndexAssign::index_assign(self, index, value) {
-    if index >= self.used {
-        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-        unreachable;
-    };
-    builtin::array_set<i32>(self.repr, index, value);
 }
 
 fn Formatter::write_char_n(self, c, n) {

@@ -79,8 +79,6 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/replace" = fn(ref String);
-
 type "functype/maybe_read" = fn(ref "core:internal/Box<Option<i32>>") -> ref String;
 
 type "functype/ref_deref_assign_string" = fn();
@@ -163,13 +161,6 @@ import fn subtask-drop from "wasi/subtask-drop";
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
-fn replace(s) {
-    let __deref_val_2: ref String;
-    __deref_val_2 = String { repr: array.new_data<u8>("goodbye"), used: 7 };
-    s.repr = ref.as_non_null(__deref_val_2.repr);
-    s.used = 7;
-}
-
 fn maybe_read(r) {
     let v: i32;
     let __local_2: ref String;
@@ -202,9 +193,12 @@ fn maybe_read(r) {
 
 fn ref_deref_assign_string() with Stdout {
     let greeting: ref String;
+    let __deref_val_2: ref String;
     greeting = String { repr: array.new_data<u8>("hello"), used: 5 };
     "core:cli/println"(greeting);
-    replace(greeting);
+    __deref_val_2 = String { repr: array.new_data<u8>("goodbye"), used: 7 };
+    greeting.repr = ref.as_non_null(__deref_val_2.repr);
+    greeting.used = 7;
     "core:cli/println"(greeting);
 }
 

@@ -171,8 +171,6 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/clamp" = fn(i32, i32, i32) -> i32;
-
 type "functype/scale_and_add" = fn(ref Array<i32>, i32, i32) -> i32;
 
 type "functype/closure_capture_fn_param" = fn();
@@ -304,24 +302,14 @@ import fn subtask-drop from "wasi/subtask-drop";
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
-fn clamp(value, min_val, max_val) {
-    if (value >= min_val) == 0 {
-        return min_val;
-    };
-    if (value <= max_val) == 0 {
-        return max_val;
-    };
-    return value;
-}
-
 fn scale_and_add(items, scale, base) {
     let total: i32;
     let __iter_5: ref "core:allocator/ArrayIter<i32>";
     let item: i32;
     total = 0;
     __iter_5 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(items.repr), used: items.used, index: 0 };
-    b2: block {
-        l3: loop {
+    b0: block {
+        l1: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_5);
@@ -329,9 +317,9 @@ fn scale_and_add(items, scale, base) {
                 item = __sroa___pattern_temp_0_payload_0;
                 total = total + ((item * scale) + base);
             } else {
-                break b2;
+                break b0;
             };
-            continue l3;
+            continue l1;
         };
     };
     return total;
@@ -339,7 +327,6 @@ fn scale_and_add(items, scale, base) {
 
 fn closure_capture_fn_param() with Stdout {
     let r2: i32;
-    let r3: i32;
     let r4: i32;
     let __local_4: ref Array<i32>;
     let items: ref Array<i32>;
@@ -374,7 +361,10 @@ fn closure_capture_fn_param() with Stdout {
         i32::fmt_decimal(15, __local_25);
         break __tmpl: __local_7;
     });
-    r2 = clamp(15, 0, 10);
+    r2 = __inline_clamp_0: block -> i32 {
+        break __inline_clamp_0: 10;
+        break __inline_clamp_0: 15;
+    };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_9 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_10 = __inline_Formatter__new_7: block -> ref Formatter {
@@ -385,7 +375,6 @@ fn closure_capture_fn_param() with Stdout {
         i32::fmt_decimal(r2, __local_31);
         break __tmpl: __local_9;
     });
-    r3 = clamp(5, 0, 10);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_11 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_12 = __inline_Formatter__new_11: block -> ref Formatter {
@@ -393,10 +382,13 @@ fn closure_capture_fn_param() with Stdout {
             break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_35) };
         };
         __local_37 = __local_12;
-        i32::fmt_decimal(r3, __local_37);
+        i32::fmt_decimal(5, __local_37);
         break __tmpl: __local_11;
     });
-    r4 = clamp(-5, 0, 10);
+    r4 = __inline_clamp_2: block -> i32 {
+        break __inline_clamp_2: 0;
+        break __inline_clamp_2: -5;
+    };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_13 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_14 = __inline_Formatter__new_15: block -> ref Formatter {
@@ -728,13 +720,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l16: loop {
+            l14: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l16;
+                continue l14;
             };
         };
     };
@@ -826,13 +818,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l22: loop {
+            l20: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l22;
+                continue l20;
             };
         };
     };
@@ -849,14 +841,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l26: loop {
+                l24: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l26;
+                    continue l24;
                 };
             };
         };
@@ -948,7 +940,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l35: loop {
+            l33: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -956,7 +948,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l35;
+                continue l33;
             };
         };
     };
@@ -1076,13 +1068,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l45: loop {
+            l43: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l45;
+                continue l43;
             };
         };
     };

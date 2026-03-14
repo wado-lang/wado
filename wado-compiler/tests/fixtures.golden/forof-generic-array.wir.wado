@@ -102,8 +102,6 @@ type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i3
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32) -> ref WaitEvent;
 
-type "functype/Container<i32>::process" = fn(ref Container<i32>);
-
 type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "wasi:cli/ArrayIter<i32>") -> ref Option<i32>;
 
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
@@ -115,8 +113,6 @@ type "functype/wasi/stream-new" = fn() -> i64;
 type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "wasi:cli/ArrayIter<i32>") -> [i32, i32];
-
-type "functype/Container<i32>::process" = fn(ref Array<i32>);
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -136,16 +132,33 @@ global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let __local_0: ref Array<i32>;
+    let __iter_1: ref "wasi:cli/ArrayIter<i32>";
+    let item: i32;
+    let __sroa_c_items: ref Array<i32>;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
         };
         __modules_initialized = 1;
     };
-    Container<i32>::process(ref.as_non_null(__seq_lit: block -> ref Array<i32> {
+    __sroa_c_items = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_0;
-    }));
+    };
+    __iter_1 = "wasi:cli/ArrayIter<i32>" { repr: ref.as_non_null(__sroa_c_items.repr), used: 3, index: 0 };
+    b1: block {
+        l2: loop {
+            let __sroa___pattern_temp_0_discriminant: i32;
+            let __sroa___pattern_temp_0_payload_0: i32;
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_1);
+            if __sroa___pattern_temp_0_discriminant == 0 {
+                item = __sroa___pattern_temp_0_payload_0;
+            } else {
+                break b1;
+            };
+            continue l2;
+        };
+    };
     "core:cli/println"(String { repr: array.new_data<u8>("done"), used: 4 });
 }
 
@@ -251,13 +264,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l10: loop {
+            l13: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l10;
+                continue l13;
             };
         };
     };
@@ -337,29 +350,6 @@ fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
     payload = builtin::load_i32(out_ptr + 4);
     freed = "mem/realloc"(out_ptr, 8, 4, 0);
     return WaitEvent { code: code, handle: evt_handle, payload: payload };
-}
-
-fn Container<i32>::process(self) {
-    let __iter_1: ref "wasi:cli/ArrayIter<i32>";
-    let item: i32;
-    let __local_4: ref Array<i32>;
-    __iter_1 = __inline_Array_i32__IntoIterator__into_iter_0: block -> ref "wasi:cli/ArrayIter<i32>" {
-        __local_4 = self;
-        break __inline_Array_i32__IntoIterator__into_iter_0: "wasi:cli/ArrayIter<i32>" { repr: ref.as_non_null(__local_4.repr), used: __local_4.used, index: 0 };
-    };
-    b14: block {
-        l15: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: i32;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_1);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                item = __sroa___pattern_temp_0_payload_0;
-            } else {
-                break b14;
-            };
-            continue l15;
-        };
-    };
 }
 
 fn ArrayIter<i32>^Iterator::next(self) {

@@ -184,8 +184,6 @@ type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i3
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32) -> ref WaitEvent;
 
-type "functype/unrounded_round" = fn(u64) -> u64;
-
 type "functype/pow10_coarse" = fn(i32) -> ref PmHiLo;
 
 type "functype/pow10_fine" = fn(i32) -> u64;
@@ -634,10 +632,6 @@ fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
     return WaitEvent { code: code, handle: evt_handle, payload: payload };
 }
 
-fn unrounded_round(u) {
-    return ((u + 1_i64) + ((u >>u 2_i64) & 1_i64)) >>u 2_i64;
-}
-
 fn pow10_coarse(i) {
     b23: block {
         b24: block {
@@ -956,6 +950,7 @@ fn parse(d, p) {
     let u: u64;
     let shift: u64;
     let __local_14: i32;
+    let __local_16: u64;
     b = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d));
     lp = (p * 108853) >> 15;
     e = __inline_i32__min_2: block -> i32 {
@@ -971,7 +966,10 @@ fn parse(d, p) {
     shift = builtin::i64_extend_i32_u(u >=u 36028797018963966_i64);
     u = (u >>u shift) | (u & 1_i64);
     e = e - builtin::i32_wrap_i64(shift);
-    return pack64(unrounded_round(u), 0 - e);
+    return pack64(__inline_unrounded_round_4: block -> u64 {
+        __local_16 = u;
+        break __inline_unrounded_round_4: ((__local_16 + 1_i64) + ((__local_16 >>u 2_i64) & 1_i64)) >>u 2_i64;
+    }, 0 - e);
 }
 
 fn count_digits_i64(val) {
