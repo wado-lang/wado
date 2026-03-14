@@ -1210,8 +1210,9 @@ pub struct Newtype {
 #[derive(Debug, Clone)]
 pub struct AssociatedTypeDecl {
     pub name: String,
-    /// Trait bounds on this associated type (e.g., `SerializeSeq` in `type SeqSerializer: SerializeSeq;`)
-    pub bounds: Vec<String>,
+    /// Trait bounds on this associated type (e.g., `SerializeSeq` in `type SeqSerializer: SerializeSeq;`
+    /// or `Iterator<Item = Self::Item>` in `type Iter: Iterator<Item = Self::Item>;`)
+    pub bounds: Vec<TraitBound>,
     pub span: Span,
 }
 

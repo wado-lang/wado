@@ -68,12 +68,47 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Handle T::AssociatedType where T is a type parameter in scope
         if let Some(&(_, param_type_id)) = self.current_type_params.get(&namespaced.namespace) {
-            // Look up trait bounds on the associated type from the trait declaration
+            // If the param is bound to a concrete type (not a TypeParam), look up the assoc
+            // type from the TypeTable directly. This handles cases like blanket impl resolution
+            // where we temporarily bind e.g. I = StrUtf8ByteIter (concrete struct), and
+            // I::Item should resolve to u8 via (StrUtf8ByteIter, "Item") → u8.
+            let param_is_concrete = !self.type_table.borrow().contains_type_param(param_type_id);
+            if param_is_concrete {
+                if let Some(resolved) = self
+                    .type_table
+                    .borrow()
+                    .resolve_assoc_type(param_type_id, &namespaced.name)
+                {
+                    return resolved;
+                }
+            }
+
+            // First, check if the current bounds directly specify this assoc type.
+            // e.g., I: IntoIterator<Item = u8> → I::Item resolves directly to u8.
+            if let Some(direct_type) =
+                self.find_direct_assoc_type_binding(&namespaced.namespace, &namespaced.name)
+            {
+                return direct_type;
+            }
+
+            // Look up trait bounds on the associated type from the trait declaration.
             let assoc_bounds = self.find_assoc_type_bounds(param_type_id, &namespaced.name);
+            let bound_names: Vec<String> = assoc_bounds.iter().map(|b| b.name.clone()).collect();
+
+            // Compute assoc_type_bindings by resolving Self::X in the assoc type's bounds.
+            // e.g., IntoIterator::Iter has bound Iterator<Item = Self::Item>.
+            // With I: IntoIterator<Item = u8>, Self::Item = I::Item = u8,
+            // so I::Iter.assoc_type_bindings = [("Item", u8_typeid)].
+            let assoc_type_bindings = self.compute_assoc_type_bindings(
+                &namespaced.namespace.clone(),
+                &assoc_bounds.clone(),
+            );
+
             return self.type_table.borrow_mut().make_assoc_type_projection(
                 param_type_id,
                 namespaced.name.clone(),
-                assoc_bounds,
+                bound_names,
+                assoc_type_bindings,
             );
         }
 
@@ -292,8 +327,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
     /// Look up the trait bounds on an associated type declaration.
     /// Given a type parameter `param_id` (e.g., `S: Serializer`), find the trait that
-    /// declares the associated type `assoc_name` and return its bounds.
-    fn find_assoc_type_bounds(&self, param_id: TypeId, assoc_name: &str) -> Vec<String> {
+    /// declares the associated type `assoc_name` and return its full bounds (with assoc types).
+    fn find_assoc_type_bounds(
+        &self,
+        param_id: TypeId,
+        assoc_name: &str,
+    ) -> Vec<crate::ast::TraitBound> {
         let param_type = self.type_table.borrow().get(param_id).clone();
         if !matches!(param_type, ResolvedType::TypeParam { .. }) {
             return Vec::new();
@@ -322,5 +361,50 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         Vec::new()
+    }
+
+    /// Check if type parameter `param_name` has a bound that directly specifies `assoc_name`.
+    /// e.g., I: IntoIterator<Item = u8> → find_direct_assoc_type_binding("I", "Item") = Some(u8)
+    fn find_direct_assoc_type_binding(
+        &mut self,
+        param_name: &str,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        let bounds = self.current_type_param_bounds.get(param_name)?.clone();
+        for bound in &bounds {
+            for assoc in &bound.assoc_types {
+                if assoc.name == assoc_name {
+                    return Some(self.resolve_type(&assoc.ty));
+                }
+            }
+        }
+        None
+    }
+
+    /// Compute assoc_type_bindings for an AssocTypeProjection by resolving Self::X references.
+    /// e.g., IntoIterator::Iter has bound Iterator<Item = Self::Item>.
+    /// With I: IntoIterator<Item = u8>, Self = I, so Self::Item = I::Item = u8.
+    /// Result: [("Item", u8_typeid)].
+    fn compute_assoc_type_bindings(
+        &mut self,
+        source_param_name: &str,
+        assoc_bounds: &[crate::ast::TraitBound],
+    ) -> Vec<(String, TypeId)> {
+        let mut bindings = Vec::new();
+        for bound in assoc_bounds {
+            for assoc in &bound.assoc_types.clone() {
+                // Resolve Self::X in the context of source_param: Self = source_param
+                if let crate::ast::Type::NamespacedGeneric(ns) = &assoc.ty {
+                    if ns.namespace == "Self" {
+                        if let Some(direct) =
+                            self.find_direct_assoc_type_binding(source_param_name, &ns.name)
+                        {
+                            bindings.push((assoc.name.clone(), direct));
+                        }
+                    }
+                }
+            }
+        }
+        bindings
     }
 }

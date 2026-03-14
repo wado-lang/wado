@@ -363,6 +363,9 @@ pub enum ResolvedType {
         assoc_name: String,
         /// Trait bounds on this associated type (from the trait declaration)
         bounds: Vec<String>,
+        /// Resolved associated type bindings (e.g., [("Item", u8_typeid)] for I::Iter
+        /// when I: IntoIterator<Item = u8> and IntoIterator::Iter: Iterator<Item = Self::Item>)
+        assoc_type_bindings: Vec<(String, TypeId)>,
     },
     /// Raw GC array intrinsic (`builtin::array<T>`)
     /// This is the underlying storage type for String and Array<T> structs
@@ -851,11 +854,13 @@ impl TypeTable {
         param_id: TypeId,
         assoc_name: String,
         bounds: Vec<String>,
+        assoc_type_bindings: Vec<(String, TypeId)>,
     ) -> TypeId {
         self.intern(ResolvedType::AssocTypeProjection {
             param_id,
             assoc_name,
             bounds,
+            assoc_type_bindings,
         })
     }
 

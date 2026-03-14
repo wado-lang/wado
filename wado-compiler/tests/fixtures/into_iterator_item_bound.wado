@@ -1,0 +1,25 @@
+// Min repro: generic function over I: IntoIterator<Item = u8>
+// Tests that the compiler correctly handles associated type bounds in IntoIterator
+use { println, Stdout } from "core:cli";
+
+fn sum_bytes<I: IntoIterator<Item = u8>>(items: I) -> i32 {
+    let mut total: i32 = 0;
+    let mut iter = items.into_iter();
+    loop {
+        if let Some(b) = iter.next() {
+            total += b as i32;
+        } else {
+            break;
+        }
+    }
+    return total;
+}
+
+export fn run() with Stdout {
+    let arr: Array<u8> = [10, 20, 30];
+    let s = sum_bytes(arr);
+    println(`{s}`);
+}
+
+__DATA__
+{"stdout": "60\n"}

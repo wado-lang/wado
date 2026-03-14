@@ -129,8 +129,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
             };
             if let Some(name) = type_param_name
                 && let Some(bounds) = self.current_type_param_bounds.get(&name).cloned()
-                && let Some((found_trait, info)) =
-                    self.find_method_in_trait_bounds(&bounds, &method_call.method, base_type_id)
+                && let Some((found_trait, info)) = {
+                    let bound_names: Vec<String> =
+                        bounds.iter().map(|b| b.name.clone()).collect();
+                    self.find_method_in_trait_bounds(
+                        &bound_names,
+                        &method_call.method,
+                        base_type_id,
+                    )
+                }
             {
                 trait_name = Some(found_trait);
                 method_info = Some(info);

@@ -3725,10 +3725,10 @@ impl Parser {
                 let mut bounds = Vec::new();
                 if self.check(&TokenKind::Colon) {
                     self.advance();
-                    bounds.push(self.consume_ident()?);
+                    bounds.push(self.parse_trait_bound()?);
                     while self.check(&TokenKind::Plus) {
                         self.advance();
-                        bounds.push(self.consume_ident()?);
+                        bounds.push(self.parse_trait_bound()?);
                     }
                 }
                 let end = self.expect(&TokenKind::Semicolon)?.span;

@@ -2770,11 +2770,52 @@ impl Monomorphizer {
                                     }
                                     module_source_for_trait_impl(type_table, inner)
                                 });
+                            // For blanket impl methods (e.g., I^IntoIterator::into_iter where
+                            // the concrete function doesn't exist directly), set is_blanket=true
+                            // so the monomorphizer can queue instantiation of the template.
+                            // - Direct concrete method (e.g., StrUtf8ByteIter^Iterator::next):
+                            //   found in trait_method_locations → monomorph_info = None
+                            // - Generic impl method (e.g., Array<u8>^IntoIterator::into_iter):
+                            //   receiver has type_args → handled by receiver-based scan → None
+                            // - Blanket impl method (e.g., StrUtf8ByteIter^IntoIterator::into_iter):
+                            //   not in trait_method_locations, receiver has no type_args → is_blanket
+                            let receiver_has_type_args = {
+                                let mut inner = receiver.type_id;
+                                while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
+                                    type_table.get(inner).clone()
+                                {
+                                    inner = t;
+                                }
+                                matches!(
+                                    type_table.get(inner),
+                                    ResolvedType::GenericInstance {
+                                        type_args: args, ..
+                                    } if !args.is_empty()
+                                ) || matches!(
+                                    type_table.get(inner),
+                                    ResolvedType::BuiltinArray(_)
+                                )
+                            };
+                            let monomorph_info =
+                                if self.trait_method_locations.contains_key(&new_func_name) {
+                                    // Direct concrete method found — no monomorphization needed
+                                    None
+                                } else if receiver_has_type_args {
+                                    // Generic impl (e.g., Array<T>) — handled by receiver scan
+                                    None
+                                } else {
+                                    // Potential blanket impl method — mark for blanket instantiation
+                                    Some(MonomorphInfo {
+                                        generic_name: old_func_name.clone(),
+                                        type_args: type_args.clone(),
+                                        is_blanket: true,
+                                    })
+                                };
                             *method_func = FunctionRef {
                                 module_source: concrete_module
                                     .unwrap_or_else(|| module_source.clone()),
                                 name: new_func_name,
-                                monomorph_info: None,
+                                monomorph_info,
                                 method_info: Some(new_info),
                                 is_cm_adapter: false,
                             };
