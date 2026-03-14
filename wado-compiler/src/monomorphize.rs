@@ -1324,12 +1324,10 @@ impl Monomorphizer {
                     // Newtype fallback: newtypes inherit associated types from their base type.
                     // e.g. `type MyBytes = Array<u8>` → `MyBytes::Iter` resolves to `ArrayIter<u8>`.
                     let base_id = type_table.get_ultimate_base_type(concrete_id);
-                    if base_id != concrete_id {
-                        if let Some(resolved) =
-                            type_table.resolve_assoc_type(base_id, &assoc_name)
-                        {
-                            return resolved;
-                        }
+                    if base_id != concrete_id
+                        && let Some(resolved) = type_table.resolve_assoc_type(base_id, &assoc_name)
+                    {
+                        return resolved;
                     }
                 }
                 // Fallback: return the original type (projection unresolved)
