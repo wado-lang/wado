@@ -1471,13 +1471,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let impl_offset = self.current_type_params.len() as u32;
                 for (i, type_param) in method_type_params.iter().enumerate() {
                     let index = impl_offset + i as u32;
-                    let type_param_id = self
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::TypeParam {
-                            name: type_param.name.clone(),
-                            index,
-                        });
+                    let type_param_id =
+                        self.type_table
+                            .borrow_mut()
+                            .intern(ResolvedType::TypeParam {
+                                name: type_param.name.clone(),
+                                index,
+                            });
                     self.current_type_params
                         .insert(type_param.name.clone(), (index, type_param_id));
                     if !type_param.bounds.is_empty() {
