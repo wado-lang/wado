@@ -34,7 +34,10 @@ fn extract_literal(module: &wado_compiler::ast::Module) -> Option<&wado_compiler
     let Stmt::Let(let_stmt) = stmt else {
         return None;
     };
-    let Expr::Literal(lit_expr) = &let_stmt.value else {
+    let Some(value) = &let_stmt.value else {
+        return None;
+    };
+    let Expr::Literal(lit_expr) = value else {
         return None;
     };
     Some(&lit_expr.value)

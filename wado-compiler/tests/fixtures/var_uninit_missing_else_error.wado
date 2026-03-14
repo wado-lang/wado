@@ -1,0 +1,14 @@
+// Error: if without else does not guarantee assignment on all paths
+
+export fn run() {
+    let x: i32;
+    let cond = true;
+    if cond {
+        x = 1;
+        // no else branch: x may not be assigned if cond is false
+    }
+    assert x == 1;  // Error: x may be used before initialization
+}
+
+__DATA__
+{"compile_error": "used before initialization"}

@@ -88,12 +88,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
     /// Resolve a let statement
     pub(super) fn resolve_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) -> TirStmt {
+        // Handle uninitialized declaration: `let x: T;` (no initializer)
+        if let_stmt.value.is_none() {
+            return self.resolve_uninit_let(let_stmt, ctx);
+        }
+
+        // From here on `value` is guaranteed to be Some.
+        let ast_value = let_stmt.value.as_ref().unwrap();
+
         // Check for tuple literal to array coercion when type annotation is present
         let (value, type_id) = if let Some(annotated_type) = &let_stmt.ty {
             let target_type = self.resolve_type(annotated_type);
 
             // Special case: tuple literal with Tuple type annotation
-            if let ast::Expr::TupleLiteral(tuple_lit) = &let_stmt.value {
+            if let ast::Expr::TupleLiteral(tuple_lit) = ast_value {
                 {
                     let target_resolved = self.type_table.borrow().get(target_type).clone();
                     if let ResolvedType::Tuple(expected_elem_types) = target_resolved {
@@ -129,22 +137,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     expected_elem_types.len()
                                 ),
                                 found: format!("tuple with {} elements", tuple_lit.elements.len()),
-                                span: let_stmt.value.span(),
+                                span: ast_value.span(),
                             });
                         }
 
                         let value = TirExpr::new(
                             TirExprKind::TupleLiteral { elements },
                             target_type,
-                            let_stmt.value.span(),
+                            ast_value.span(),
                         );
                         (value, target_type)
                     } else {
-                        let value = self.resolve_expr(&let_stmt.value, ctx, Some(target_type));
+                        let value = self.resolve_expr(ast_value, ctx, Some(target_type));
                         (value, target_type)
                     }
                 }
-            } else if let ast::Expr::StructLiteral(struct_lit) = &let_stmt.value {
+            } else if let ast::Expr::StructLiteral(struct_lit) = ast_value {
                 // Handle implicit struct literal: let p: Point = { x: 1, y: 2 }
                 if struct_lit.name.is_none() {
                     // Check if target type is a struct
@@ -220,7 +228,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         );
                         (value, target_type)
                     } else if let Some(coerced) =
-                        self.try_coerce_struct_to_map(&let_stmt.value, ctx, target_type)
+                        self.try_coerce_struct_to_map(ast_value, ctx, target_type)
                     {
                         (coerced, target_type)
                     } else {
@@ -233,21 +241,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             ),
                             span: struct_lit.span,
                         });
-                        let value = self.resolve_expr(&let_stmt.value, ctx, None);
+                        let value = self.resolve_expr(ast_value, ctx, None);
                         (value, target_type)
                     }
                 } else {
                     // Named struct literal - resolve normally
-                    let value = self.resolve_expr(&let_stmt.value, ctx, Some(target_type));
+                    let value = self.resolve_expr(ast_value, ctx, Some(target_type));
                     (value, target_type)
                 }
             } else {
                 // Use expected type for numeric literal coercion
-                let value = self.resolve_expr(&let_stmt.value, ctx, Some(target_type));
+                let value = self.resolve_expr(ast_value, ctx, Some(target_type));
                 (value, target_type)
             }
         } else {
-            let value = self.resolve_expr(&let_stmt.value, ctx, None);
+            let value = self.resolve_expr(ast_value, ctx, None);
             (value.clone(), value.type_id)
         };
 
@@ -270,7 +278,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let _ = self.logger.error(TypeError::TypeMismatch {
                     expected: self.type_table.borrow().type_name(type_id),
                     found: self.type_table.borrow().type_name(value.type_id),
-                    span: let_stmt.value.span(),
+                    span: ast_value.span(),
                 });
             }
         }
@@ -344,6 +352,60 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 });
                 // Return a dummy statement
                 TirStmt::new(TirStmtKind::Expr(value), let_stmt.span)
+            }
+        }
+    }
+
+    /// Resolve an uninitialized let declaration: `let x: T;`
+    ///
+    /// Emits a `TirStmtKind::Let` with a unit placeholder value so that
+    /// the local is pre-allocated (Wasm zero-initializes locals) without
+    /// emitting a `LocalSet`.  The bind phase has already verified that the
+    /// variable is assigned before any use.
+    fn resolve_uninit_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) -> TirStmt {
+        // Type annotation is guaranteed by the parser when there is no initializer.
+        let type_id = self.resolve_type(
+            let_stmt
+                .ty
+                .as_ref()
+                .expect("parser ensures type annotation for uninit let"),
+        );
+
+        match &let_stmt.pattern {
+            ast::Pattern::Ident(name) | ast::Pattern::MutIdent(name) => {
+                let is_mut =
+                    let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent(_));
+                let local_index = ctx.add_local(name.clone(), type_id, is_mut);
+                // Unit placeholder: WIR builder sees unit type → skips LocalSet.
+                // The local is pre-declared and Wasm zero-initializes it.
+                let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
+                TirStmt::new(
+                    TirStmtKind::Let {
+                        name: name.clone(),
+                        local_index,
+                        is_mut,
+                        is_reactive: let_stmt.is_reactive,
+                        type_id,
+                        value: placeholder,
+                        skip_value_copy: false,
+                    },
+                    let_stmt.span,
+                )
+            }
+            _ => {
+                let _ = self.logger.error(TypeError::InvalidPattern {
+                    message: "only simple variable names are allowed in uninitialized declarations"
+                        .to_string(),
+                    span: let_stmt.span,
+                });
+                TirStmt::new(
+                    TirStmtKind::Expr(TirExpr::new(
+                        TirExprKind::Unit,
+                        TypeTable::UNIT,
+                        let_stmt.span,
+                    )),
+                    let_stmt.span,
+                )
             }
         }
     }
@@ -1332,14 +1394,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
             is_mut: true,
             is_reactive: false,
             ty: None,
-            value: Expr::MethodCall(Box::new(MethodCallExpr {
+            value: Some(Expr::MethodCall(Box::new(MethodCallExpr {
                 receiver: into_iter_receiver,
                 method: "into_iter".to_string(),
                 type_args: vec![],
                 args: vec![],
                 has_trailing_comma: false,
                 span,
-            })),
+            }))),
             span,
         };
         let iter_let_tir = self.resolve_let(&into_iter_let, ctx);

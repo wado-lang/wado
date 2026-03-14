@@ -1,0 +1,14 @@
+// Error: not all match arms assign the variable
+
+export fn run() {
+    let x: i32;
+    let opt: Option<i32> = Option::Some(10);
+    match opt {
+        Some(v) => { x = v; },
+        None => {},  // x is not assigned in this arm
+    };
+    assert x == 10;  // Error: x may be used before initialization
+}
+
+__DATA__
+{"compile_error": "used before initialization"}
