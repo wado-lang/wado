@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773446182867,
+  "lastUpdate": 1773459588938,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3026,6 +3026,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b5235eeee85f0938ec13b489bb682b94adda85ae"
         },
         "date": 1773446182676,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9236,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22767,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fa82219f58a92c4c20daef0e3c68b13ba9de4a7f",
+          "message": "Merge pull request #576 from wado-lang/claude/add-http-endpoints-Uve3U\n\nFix monomorphization of generic types in library modules",
+          "timestamp": "2026-03-14T12:37:24+09:00",
+          "tree_id": "4bca3f6e70af982785b39ebb1e84c1a079d27b9a",
+          "url": "https://github.com/wado-lang/wado/commit/fa82219f58a92c4c20daef0e3c68b13ba9de4a7f"
+        },
+        "date": 1773459588740,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
