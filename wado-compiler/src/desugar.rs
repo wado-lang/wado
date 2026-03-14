@@ -883,7 +883,7 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
     })
 }
 
-/// Pass ForOf through to the resolver phase (which has type information).
+/// Pass `ForOf` through to the resolver phase (which has type information).
 ///
 /// The resolver handles two cases:
 /// - **Tuple iterable**: unrolls the loop body once per element (compile-time expansion)

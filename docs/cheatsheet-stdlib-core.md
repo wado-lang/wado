@@ -510,6 +510,10 @@ impl String {
     pub fn trim(&self) -> String;
 }
 
+impl Add for String {
+    pub fn add(&self, other: &Self) -> Self::Output;
+}
+
 impl Eq for String {
     pub fn eq(&self, other: &Self) -> bool;
 }

@@ -776,14 +776,14 @@ fn Array<String>::append(self, value) {
 fn TreeMap<String,i32>::keys(self) {
     let __local_1: ref Array<String>;
     let result: ref Array<String>;
-    let __iter_1: ref "wasi:cli/ArrayIter<TreeMapEntry<String,i32>>";
+    let __iter_3: ref "wasi:cli/ArrayIter<TreeMapEntry<String,i32>>";
     let entry: ref "core:allocator/TreeMapEntry<String,i32>";
     let __local_9: ref Array<TreeMapEntry<String,i32>>;
     result = __seq_lit: block -> ref Array<String> {
         __local_1 = Array<String> { repr: builtin::array_new<ref String>(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    __iter_1 = __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: block -> ref "wasi:cli/ArrayIter<TreeMapEntry<String,i32>>" {
+    __iter_3 = __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: block -> ref "wasi:cli/ArrayIter<TreeMapEntry<String,i32>>" {
         __local_9 = self.entries;
         break __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: "wasi:cli/ArrayIter<TreeMapEntry<String,i32>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
     };
@@ -791,7 +791,7 @@ fn TreeMap<String,i32>::keys(self) {
         l47: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: ref null "core:allocator/TreeMapEntry<String,i32>";
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<TreeMapEntry<String,i32>>^Iterator::next(__iter_1);
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<TreeMapEntry<String,i32>>^Iterator::next(__iter_3);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 entry = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
                 if entry.deleted == 0 {
