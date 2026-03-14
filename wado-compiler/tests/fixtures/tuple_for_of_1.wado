@@ -1,0 +1,139 @@
+use { println, Stdout } from "core:cli";
+
+// === Basic: for-of over a heterogeneous tuple ===
+fn basic_heterogeneous() with Stdout {
+    let t = [42, "hello", true];
+    for let v of t {
+        println(`{v}`);
+    }
+}
+
+// === Enumerate: indexed iteration with .enumerate() pseudo-method ===
+fn enumerate_tuple() with Stdout {
+    let t = [10, "world", false];
+    for let [i, v] of t.enumerate() {
+        println(`{i}: {v}`);
+    }
+}
+
+// === Homogeneous tuple (all same type) ===
+fn homogeneous() with Stdout {
+    let t = [1, 2, 3];
+    let mut sum = 0;
+    for let v of t {
+        sum = sum + v;
+    }
+    println(`sum = {sum}`);
+}
+
+// === Empty tuple: should be a no-op ===
+fn empty_tuple() with Stdout {
+    let t: [] = [];
+    for let v of t {
+        println("should not print");
+    }
+    println("empty done");
+}
+
+// === Single-element tuple ===
+fn single_element() with Stdout {
+    let t = [99];
+    for let v of t {
+        println(`{v}`);
+    }
+}
+
+// === Method calls with different types (C++ template model) ===
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+impl Describe for i32 {
+    fn describe(&self) -> String {
+        return `int({*self})`;
+    }
+}
+
+impl Describe for String {
+    fn describe(&self) -> String {
+        return `str({*self})`;
+    }
+}
+
+impl Describe for bool {
+    fn describe(&self) -> String {
+        if *self { return "yes"; }
+        return "no";
+    }
+}
+
+fn trait_dispatch() with Stdout {
+    let t = [42, "wado", true];
+    for let v of t {
+        println(v.describe());
+    }
+}
+
+// === Enumerate with trait dispatch ===
+fn enumerate_with_trait() with Stdout {
+    let t = [1, "two"];
+    for let [i, v] of t.enumerate() {
+        println(`{i}: {v.describe()}`);
+    }
+}
+
+// === Generic function with tuple type parameter ===
+fn process_all<T>(values: T) with Stdout {
+    for let v of values {
+        println(`{v}`);
+    }
+}
+
+fn generic_tuple() with Stdout {
+    process_all([100, "generic", false]);
+}
+
+// === Nested tuples: inner tuples are elements, not flattened ===
+fn nested_tuples() with Stdout {
+    let t = [[1, 2], [3, 4]];
+    for let v of t {
+        println(`{v.0},{v.1}`);
+    }
+}
+
+// === Mutable binding inside tuple for-of ===
+fn mutable_binding() with Stdout {
+    let t = [10, 20, 30];
+    for let mut v of t {
+        v = v + 1;
+        println(`{v}`);
+    }
+}
+
+// === Enumerate index used for tuple indexing ===
+fn enumerate_index_as_constant() with Stdout {
+    let strings: Array<String> = ["a", "b", "c"];
+    let t = [100, "hello"];
+    let mut result = strings[0];
+    for let [i, v] of t.enumerate() {
+        result = result + `{v}` + strings[i + 1];
+    }
+    println(result);
+}
+
+export fn run() with Stdout {
+    basic_heterogeneous();
+    enumerate_tuple();
+    homogeneous();
+    empty_tuple();
+    single_element();
+    trait_dispatch();
+    enumerate_with_trait();
+    generic_tuple();
+    nested_tuples();
+    mutable_binding();
+    enumerate_index_as_constant();
+}
+
+__DATA__
+{"stdout": "42\nhello\ntrue\n0: 10\n1: world\n2: false\nsum = 6\nempty done\n99\nint(42)\nstr(wado)\nyes\n0: int(1)\n1: str(two)\n100\ngeneric\nfalse\n1,2\n3,4\n11\n21\n31\na100bhelloc\n"}
