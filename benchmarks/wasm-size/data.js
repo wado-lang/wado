@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773459588938,
+  "lastUpdate": 1773461219534,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3065,6 +3065,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fa82219f58a92c4c20daef0e3c68b13ba9de4a7f"
         },
         "date": 1773459588740,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9236,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22767,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "92c57d0638be5856aa4ce84d58b8473c81da18d3",
+          "message": "Merge pull request #577 from wado-lang/claude/research-variadic-generics-8cxcV\n\nAdd research and WEP for variadic type parameters",
+          "timestamp": "2026-03-14T13:04:32+09:00",
+          "tree_id": "fd0d2df92cb5e9e055dbb8b1a77200867e90c58a",
+          "url": "https://github.com/wado-lang/wado/commit/92c57d0638be5856aa4ce84d58b8473c81da18d3"
+        },
+        "date": 1773461219365,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
