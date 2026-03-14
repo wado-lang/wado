@@ -67,6 +67,9 @@ pub enum BindError {
 
     /// Assignment to an immutable variable
     AssignToImmutable { name: String, span: Span },
+
+    /// Variable used before it was definitely initialized
+    UseBeforeInit { name: String, span: Span },
 }
 
 impl std::fmt::Display for BindError {
@@ -94,6 +97,13 @@ impl std::fmt::Display for BindError {
                 write!(
                     f,
                     "{}:{}: error: cannot assign to immutable variable '{}'",
+                    span.line, span.column, name
+                )
+            }
+            BindError::UseBeforeInit { name, span } => {
+                write!(
+                    f,
+                    "{}:{}: error: '{}' is used before initialization",
                     span.line, span.column, name
                 )
             }
@@ -129,6 +139,11 @@ impl From<BindError> for crate::compiler_host::Diagnostic {
                 format!("cannot assign to immutable variable '{name}'"),
                 *span,
             ),
+            BindError::UseBeforeInit { name, span } => (
+                Code::UninitializedVariable,
+                format!("'{name}' is used before initialization"),
+                *span,
+            ),
         };
         crate::compiler_host::Diagnostic {
             severity: Severity::Error,
@@ -147,6 +162,10 @@ pub struct Binder<'a, H: CompilerHost> {
     /// All local variable names defined in the current function
     /// Used to distinguish "out of scope" errors from "global reference"
     local_names_in_function: IndexSet<String>,
+    /// Variables declared without an initializer that have not yet been
+    /// definitely assigned on all paths reaching the current point.
+    /// Key: (scope_depth, name) — scope_depth disambiguates shadowed vars.
+    possibly_uninit: IndexSet<(u32, String)>,
 }
 
 impl<'a, H: CompilerHost> Binder<'a, H> {
@@ -157,6 +176,25 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             logger,
             current_depth: 0,
             local_names_in_function: IndexSet::default(),
+            possibly_uninit: IndexSet::default(),
+        }
+    }
+
+    /// Returns true if the innermost binding for `name` is possibly uninitialized.
+    fn is_possibly_uninit(&self, name: &str) -> bool {
+        if let Some(binding) = self.lookup(name) {
+            self.possibly_uninit
+                .contains(&(binding.scope_depth, name.to_string()))
+        } else {
+            false
+        }
+    }
+
+    /// Mark the innermost binding for `name` as definitely initialized.
+    fn mark_initialized(&mut self, name: &str) {
+        if let Some(binding) = self.lookup(name) {
+            self.possibly_uninit
+                .shift_remove(&(binding.scope_depth, name.to_string()));
         }
     }
 
@@ -200,8 +238,9 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
     /// Bind a function's local variables
     fn bind_function(&mut self, func: &Function) -> Result<(), Bail> {
-        // Clear local names for this function
+        // Clear per-function state
         self.local_names_in_function.clear();
+        self.possibly_uninit.clear();
 
         self.enter_scope();
 
@@ -257,16 +296,54 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
     /// Bind a let statement
     fn bind_let(&mut self, let_stmt: &LetStmt) -> Result<(), Bail> {
-        // First bind the value expression (uses variables from outer scope)
-        self.bind_expr(&let_stmt.value)?;
+        if let Some(ref value) = let_stmt.value {
+            // Initialized let: bind the initializer first (uses outer scope vars)
+            self.bind_expr(value)?;
+            // Define the variables from the pattern as initialized
+            self.bind_let_pattern(
+                &let_stmt.pattern,
+                let_stmt.is_mut,
+                let_stmt.is_reactive,
+                let_stmt.span,
+            )
+        } else {
+            // Uninitialized let (`let x: T;`): define as possibly uninitialized.
+            // Type annotation is guaranteed by the parser.
+            self.bind_let_pattern_uninit(
+                &let_stmt.pattern,
+                let_stmt.is_mut,
+                let_stmt.is_reactive,
+                let_stmt.span,
+            )
+        }
+    }
 
-        // Then define the variables from the pattern
-        self.bind_let_pattern(
-            &let_stmt.pattern,
-            let_stmt.is_mut,
-            let_stmt.is_reactive,
-            let_stmt.span,
-        )
+    /// Like `bind_let_pattern` but registers variables as possibly uninitialized.
+    fn bind_let_pattern_uninit(
+        &mut self,
+        pattern: &crate::ast::Pattern,
+        is_mut: bool,
+        is_reactive: bool,
+        span: Span,
+    ) -> Result<(), Bail> {
+        match pattern {
+            crate::ast::Pattern::Ident(name) | crate::ast::Pattern::MutIdent(name) => {
+                self.define_uninit(name, is_mut, is_reactive, span)?;
+            }
+            crate::ast::Pattern::Tuple(patterns) => {
+                for p in patterns {
+                    self.bind_let_pattern_uninit(p, is_mut, is_reactive, span)?;
+                }
+            }
+            crate::ast::Pattern::Wildcard => {}
+            crate::ast::Pattern::Struct { fields, .. } => {
+                for field in fields {
+                    self.bind_let_pattern_uninit(&field.pattern, is_mut, is_reactive, span)?;
+                }
+            }
+            crate::ast::Pattern::Literal(_) | crate::ast::Pattern::Variant { .. } => {}
+        }
+        Ok(())
     }
 
     /// Bind a let pattern with mutability and reactivity information
@@ -334,14 +411,30 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         }
 
         self.bind_condition(&if_stmt.condition)?;
+
+        // Snapshot possibly_uninit before diverging branches.
+        let uninit_before = self.possibly_uninit.clone();
+
         self.bind_block(&if_stmt.then_block)?;
+        let uninit_after_then = self.possibly_uninit.clone();
 
         if is_pattern {
             self.exit_scope();
         }
 
         if let Some(ref else_block) = if_stmt.else_block {
+            // Process else with the pre-branch state
+            self.possibly_uninit = uninit_before.clone();
             self.bind_block(else_block)?;
+            let uninit_after_else = self.possibly_uninit.clone();
+            // After if-else: a var is possibly-uninit if uninit in either branch (union)
+            self.possibly_uninit = uninit_after_then;
+            for entry in uninit_after_else {
+                self.possibly_uninit.insert(entry);
+            }
+        } else {
+            // No else branch: restore to before-branch state (branch might not run)
+            self.possibly_uninit = uninit_before;
         }
 
         if if_stmt.init.is_some() {
@@ -360,7 +453,11 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         }
 
         self.bind_condition(&while_stmt.condition)?;
+
+        // Loop body does not guarantee initialization (may execute zero times).
+        let uninit_before = self.possibly_uninit.clone();
         self.bind_block(&while_stmt.body)?;
+        self.possibly_uninit = uninit_before;
 
         if is_pattern {
             self.exit_scope();
@@ -387,8 +484,10 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             self.bind_expr(update)?;
         }
 
-        // Bind body
+        // Loop body does not guarantee initialization (may execute zero times).
+        let uninit_before = self.possibly_uninit.clone();
         self.bind_block(&for_stmt.body)?;
+        self.possibly_uninit = uninit_before;
 
         self.exit_scope();
         Ok(())
@@ -410,8 +509,10 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             for_of_stmt.span,
         )?;
 
-        // Bind body
+        // Loop body does not guarantee initialization (may execute zero times).
+        let uninit_before = self.possibly_uninit.clone();
         self.bind_block(&for_of_stmt.body)?;
+        self.possibly_uninit = uninit_before;
 
         self.exit_scope();
         Ok(())
@@ -419,7 +520,12 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
     /// Bind a loop statement
     fn bind_loop(&mut self, loop_stmt: &LoopStmt) -> Result<(), Bail> {
-        self.bind_block(&loop_stmt.body)
+        // Loop body does not guarantee initialization (may execute zero times
+        // from the perspective of the enclosing code).
+        let uninit_before = self.possibly_uninit.clone();
+        self.bind_block(&loop_stmt.body)?;
+        self.possibly_uninit = uninit_before;
+        Ok(())
     }
 
     /// Bind an assert statement
@@ -447,11 +553,27 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                             used_at: ident.span,
                         })?;
                     }
+                } else if self.is_possibly_uninit(&ident.name) {
+                    self.logger.error(BindError::UseBeforeInit {
+                        name: ident.name.clone(),
+                        span: ident.span,
+                    })?;
                 }
             }
 
             Expr::Assign(assign) => {
-                // Check mutability for simple variable assignments
+                // If the target is an uninitialized variable, this is its first
+                // initialization — allow it (skipping the immutability check) and
+                // mark the variable as definitely initialized.
+                if let Expr::Ident(ident) = &assign.target {
+                    if self.is_possibly_uninit(&ident.name) {
+                        self.mark_initialized(&ident.name);
+                        self.bind_expr(&assign.value)?;
+                        return Ok(());
+                    }
+                }
+
+                // Normal assignment: check mutability for simple variable assignments
                 if let Expr::Ident(ident) = &assign.target
                     && let Some(binding) = self.lookup(&ident.name)
                     && !binding.is_mut
@@ -612,14 +734,27 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         }
 
         self.bind_condition(&if_expr.condition)?;
+
+        // Snapshot possibly_uninit before diverging branches.
+        let uninit_before = self.possibly_uninit.clone();
+
         self.bind_block(&if_expr.then_block)?;
+        let uninit_after_then = self.possibly_uninit.clone();
 
         if is_pattern {
             self.exit_scope();
         }
 
         if let Some(ref else_block) = if_expr.else_block {
+            self.possibly_uninit = uninit_before.clone();
             self.bind_block(else_block)?;
+            let uninit_after_else = self.possibly_uninit.clone();
+            self.possibly_uninit = uninit_after_then;
+            for entry in uninit_after_else {
+                self.possibly_uninit.insert(entry);
+            }
+        } else {
+            self.possibly_uninit = uninit_before;
         }
 
         if if_expr.init.is_some() {
@@ -649,18 +784,36 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
     /// Bind a match expression
     fn bind_match_expr(&mut self, match_expr: &MatchExpr) -> Result<(), Bail> {
         self.bind_expr(&match_expr.expr)?;
+
+        let uninit_before = self.possibly_uninit.clone();
+        let mut uninit_after_all_arms: Option<IndexSet<(u32, String)>> = None;
+
         for arm in &match_expr.arms {
+            // Process each arm from the pre-match state
+            self.possibly_uninit = uninit_before.clone();
+
             self.enter_scope();
-            // Bind pattern (introduces variables)
             self.bind_pattern(&arm.pattern, arm.span)?;
-            // Bind optional guard
             if let Some(guard) = &arm.guard {
                 self.bind_expr(guard)?;
             }
-            // Bind arm body
             self.bind_expr(&arm.body)?;
             self.exit_scope();
+
+            // Merge: a var is possibly-uninit after the match if possibly-uninit in any arm
+            match uninit_after_all_arms.take() {
+                None => uninit_after_all_arms = Some(self.possibly_uninit.clone()),
+                Some(prev) => {
+                    let mut merged = prev;
+                    for entry in &self.possibly_uninit {
+                        merged.insert(entry.clone());
+                    }
+                    uninit_after_all_arms = Some(merged);
+                }
+            }
         }
+
+        self.possibly_uninit = uninit_after_all_arms.unwrap_or(uninit_before);
         Ok(())
     }
 
@@ -723,9 +876,14 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         self.scopes.push(Scope::new());
     }
 
-    /// Exit the current scope
+    /// Exit the current scope, removing its variables from `possibly_uninit`.
     fn exit_scope(&mut self) {
-        self.scopes.pop();
+        if let Some(scope) = self.scopes.pop() {
+            for (name, binding) in &scope.bindings {
+                self.possibly_uninit
+                    .shift_remove(&(binding.scope_depth, name.clone()));
+            }
+        }
         self.current_depth -= 1;
     }
 
@@ -762,6 +920,21 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 scope_depth: self.current_depth,
             },
         );
+        Ok(())
+    }
+
+    /// Like `define`, but also marks the variable as possibly uninitialized.
+    /// Used for `let x: T;` declarations without an initializer.
+    fn define_uninit(
+        &mut self,
+        name: &str,
+        is_mut: bool,
+        is_reactive: bool,
+        span: Span,
+    ) -> Result<(), Bail> {
+        self.define(name, is_mut, is_reactive, span)?;
+        self.possibly_uninit
+            .insert((self.current_depth, name.to_string()));
         Ok(())
     }
 

@@ -1091,9 +1091,24 @@ impl Parser {
             None
         };
 
-        self.expect(&TokenKind::Eq)?;
-        let value = self.parse_expr()?;
-        let end_span = value.span();
+        let (value, end_span) = if self.check(&TokenKind::Eq) {
+            self.advance();
+            let v = self.parse_expr()?;
+            let s = v.span();
+            (Some(v), s)
+        } else {
+            // No initializer: type annotation is required
+            if ty.is_none() {
+                let span = self.peek().span;
+                return Err(ParseError {
+                    message: "type annotation required for variable declaration without initializer"
+                        .to_string(),
+                    span,
+                });
+            }
+            // Use current position (before the semicolon) as end span
+            (None, self.peek().span)
+        };
 
         Ok(Stmt::Let(LetStmt {
             pattern,
@@ -1274,7 +1289,7 @@ impl Parser {
             is_mut,
             is_reactive: false,
             ty,
-            value,
+            value: Some(value),
             span: start_span.merge(&end_span),
         })
     }

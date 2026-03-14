@@ -84,6 +84,8 @@ pub enum Code {
     DuplicateDefinition,
     /// Cannot assign to immutable variable
     ImmutableAssignment,
+    /// Variable used before it was definitely initialized
+    UninitializedVariable,
 
     // Type errors
     /// Type mismatch
@@ -136,6 +138,7 @@ impl std::fmt::Display for Code {
             Code::UndefinedVariable => "UNDEFINED_VARIABLE",
             Code::DuplicateDefinition => "DUPLICATE_DEFINITION",
             Code::ImmutableAssignment => "IMMUTABLE_ASSIGNMENT",
+            Code::UninitializedVariable => "UNINITIALIZED_VARIABLE",
             Code::TypeMismatch => "TYPE_MISMATCH",
             Code::UnknownType => "UNKNOWN_TYPE",
             Code::InvalidCast => "INVALID_CAST",

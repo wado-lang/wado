@@ -168,7 +168,7 @@ fn desugar_let_stmt(l: &LetStmt) -> LetStmt {
         is_mut: l.is_mut,
         is_reactive: l.is_reactive,
         ty: l.ty.clone(),
-        value: desugar_expr(&l.value),
+        value: l.value.as_ref().map(desugar_expr),
         span: l.span,
     }
 }
@@ -217,7 +217,7 @@ fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
             is_mut: l.is_mut,
             is_reactive: l.is_reactive,
             ty: l.ty.clone(),
-            value: desugar_expr(&l.value),
+            value: l.value.as_ref().map(desugar_expr),
             span: l.span,
         }),
         Stmt::Expr(e) => Stmt::Expr(crate::ast::ExprStmt {
@@ -944,7 +944,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
             is_mut: false,
             is_reactive: false,
             ty: None,
-            value: expr.clone(),
+            value: Some(expr.clone()),
             span,
         }));
     }
@@ -960,7 +960,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
         is_mut: false,
         is_reactive: false,
         ty: None,
-        value: reconstructed_condition,
+        value: Some(reconstructed_condition),
         span,
     }));
 
