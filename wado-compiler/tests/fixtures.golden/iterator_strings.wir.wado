@@ -26,7 +26,7 @@ struct [Stream<u8>, StreamWritable<u8>] {
 
 array array<String> (mut ref String);
 
-struct ArrayIter<String> {  // ArrayIter<T> with T=String
+struct ArrayIter<String> {  // from core:allocator  // ArrayIter<T> with T=String
     mut repr: ref array<String>,
     mut used: i32,
     mut index: i32,
@@ -100,7 +100,7 @@ type "functype/core:internal/cm_waitable_set_wait" = fn(i32) -> ref WaitEvent;
 
 type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
 
-type "functype/ArrayIter<String>^Iterator::next" = fn(ref ArrayIter<String>) -> ref Option<String>;
+type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:allocator/ArrayIter<String>") -> ref Option<String>;
 
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
@@ -108,7 +108,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/ArrayIter<String>^Iterator::next" = fn(ref ArrayIter<String>) -> [i32, ref null String];
+type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:allocator/ArrayIter<String>") -> [i32, ref null String];
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -129,7 +129,7 @@ global mut __modules_initialized: bool = 0;
 fn run() with Stdout {
     let __local_0: ref Array<String>;
     let arr: ref Array<String>;
-    let iter: ref ArrayIter<String>;
+    let iter: ref "core:allocator/ArrayIter<String>";
     let s: ref String;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
@@ -141,7 +141,7 @@ fn run() with Stdout {
         __local_0 = Array<String> { repr: array.new_fixed<ref String>(String { repr: array.new_data<u8>("hello"), used: 5 }, String { repr: array.new_data<u8>("world"), used: 5 }, String { repr: array.new_data<u8>("!"), used: 1 }), used: 3 };
         break __seq_lit: __local_0;
     };
-    iter = ArrayIter<String> { repr: ref.as_non_null(arr.repr), used: 3, index: 0 };
+    iter = "core:allocator/ArrayIter<String>" { repr: ref.as_non_null(arr.repr), used: 3, index: 0 };
     b1: block {
         l2: loop {
             let __sroa___pattern_temp_0_discriminant: i32;

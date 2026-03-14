@@ -39,7 +39,7 @@ array array<i32> (mut i32);
 
 array array<String> (mut ref String);
 
-struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
@@ -151,7 +151,7 @@ type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
 
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> ref Option<i32>;
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> ref Option<i32>;
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -163,7 +163,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -186,13 +186,13 @@ global mut __modules_initialized: bool = 0;
 
 fn sum_values(m) {
     let total: i32;
-    let __iter_1: ref ArrayIter<i32>;
+    let __iter_1: ref "core:allocator/ArrayIter<i32>";
     let v: i32;
     let __local_5: ref Array<i32>;
     total = 0;
-    __iter_1 = __inline_Array_i32__IntoIterator__into_iter_0: block -> ref ArrayIter<i32> {
+    __iter_1 = __inline_Array_i32__IntoIterator__into_iter_0: block -> ref "core:allocator/ArrayIter<i32>" {
         __local_5 = m.values;
-        break __inline_Array_i32__IntoIterator__into_iter_0: ArrayIter<i32> { repr: ref.as_non_null(__local_5.repr), used: __local_5.used, index: 0 };
+        break __inline_Array_i32__IntoIterator__into_iter_0: "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(__local_5.repr), used: __local_5.used, index: 0 };
     };
     b0: block {
         l1: loop {

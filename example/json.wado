@@ -12,7 +12,7 @@ use { println, Stdout } from "core:cli";
 use { TreeMap } from "core:collections";
 
 
-variant JsonValue {
+pub variant JsonValue {
     Null,
     Bool(bool),
     Number(f64),
@@ -1209,7 +1209,7 @@ fn format_number(n: f64) -> String {
     return `{n}`;
 }
 
-fn stringify(value: &JsonValue) -> String {
+pub fn stringify(value: &JsonValue) -> String {
     return match *value {
         Null => "null",
         Bool(b) => if b { "true" } else { "false" },

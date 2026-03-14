@@ -4982,19 +4982,6 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
             .get_mut(&entry_source)
             .expect("entry module should exist");
 
-        // Strip `task return` from `export async fn` bodies in the test world.
-        // These functions are not exported in the test world and will be eliminated
-        // by DCE, but `task return` must not reach monomorphize intact or it panics.
-        for f in &entry_module.functions {
-            let is_async_export = {
-                let func = f.borrow();
-                func.is_async && func.is_export
-            };
-            if is_async_export {
-                strip_task_returns_in_func(f);
-            }
-        }
-
         // Collect test functions first to avoid borrow conflict.
         // Test functions have is_export=false (they're not world exports),
         // but they need adapters for task-return when called via `wado test`.
@@ -5010,6 +4997,24 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
             let adapter = synthesize_void_export_adapter(&test_name, user_func_rc, &entry_source);
             project.export_adapter_names.insert(test_name, adapter_name);
             entry_module.functions.push(adapter);
+        }
+    }
+
+    // Strip remaining TaskReturn from all modules.
+    // `task return` is only valid inside `async fn` (checked by resolver).
+    // Step 5 expands TaskReturn into CM calls for async exports that match the
+    // target world. Any remaining async fn (unmatched exports, imported modules)
+    // will be DCE'd — strip their TaskReturn stmts so they don't reach monomorphize.
+    // This is idempotent: already-expanded functions have no TaskReturn stmts left.
+    for module in project.tir_modules.values() {
+        for f in &module.functions {
+            let needs_strip = {
+                let func = f.borrow();
+                func.is_async
+            };
+            if needs_strip {
+                strip_task_returns_in_func(f);
+            }
         }
     }
 

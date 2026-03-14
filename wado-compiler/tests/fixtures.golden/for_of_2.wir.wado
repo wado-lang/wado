@@ -60,31 +60,31 @@ array array<String> (mut ref String);
 
 array array<i32> (mut i32);
 
-struct ArrayIter<Tuple<i32,i32>> {  // ArrayIter<T> with T=Tuple<i32,i32>
+struct ArrayIter<Tuple<i32,i32>> {  // from core:allocator  // ArrayIter<T> with T=Tuple<i32,i32>
     mut repr: ref array<Tuple<i32,i32>>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<Tuple<String,i32>> {  // ArrayIter<T> with T=Tuple<String,i32>
+struct ArrayIter<Tuple<String,i32>> {  // from core:allocator  // ArrayIter<T> with T=Tuple<String,i32>
     mut repr: ref array<Tuple<String,i32>>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<Point> {  // ArrayIter<T> with T=Point
+struct ArrayIter<Point> {  // from core:allocator  // ArrayIter<T> with T=Point
     mut repr: ref array<Point>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<String> {  // ArrayIter<T> with T=String
+struct ArrayIter<String> {  // from core:allocator  // ArrayIter<T> with T=String
     mut repr: ref array<String>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
@@ -256,19 +256,19 @@ type "functype/String::append_char" = fn(ref String, char);
 
 type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
 
-type "functype/ArrayIter<Tuple<i32,i32>>^Iterator::next" = fn(ref ArrayIter<Tuple<i32,i32>>) -> ref Option<Tuple<i32,i32>>;
+type "functype/ArrayIter<Tuple<i32,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<i32,i32>>") -> ref Option<Tuple<i32,i32>>;
 
 type "functype/Array<Tuple<i32,i32>>::append" = fn(ref Array<Tuple<i32,i32>>, ref "tuple/[i32, i32]");
 
-type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref ArrayIter<Tuple<String,i32>>) -> ref Option<Tuple<String,i32>>;
+type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,i32>>") -> ref Option<Tuple<String,i32>>;
 
-type "functype/ArrayIter<Point>^Iterator::next" = fn(ref ArrayIter<Point>) -> ref Option<Point>;
+type "functype/ArrayIter<Point>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Point>") -> ref Option<Point>;
 
 type "functype/Array<Point>::append" = fn(ref Array<Point>, ref Point);
 
-type "functype/ArrayIter<String>^Iterator::next" = fn(ref ArrayIter<String>) -> ref Option<String>;
+type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:allocator/ArrayIter<String>") -> ref Option<String>;
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> ref Option<i32>;
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> ref Option<i32>;
 
 type "functype/Holder<String,i32>::process" = fn(ref Holder<String,i32>);
 
@@ -286,15 +286,15 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/ArrayIter<Tuple<i32,i32>>^Iterator::next" = fn(ref ArrayIter<Tuple<i32,i32>>) -> [i32, ref null "tuple/[i32, i32]"];
+type "functype/ArrayIter<Tuple<i32,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<i32,i32>>") -> [i32, ref null "tuple/[i32, i32]"];
 
-type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref ArrayIter<Tuple<String,i32>>) -> [i32, ref null "tuple/[String, i32]"];
+type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,i32>>") -> [i32, ref null "tuple/[String, i32]"];
 
-type "functype/ArrayIter<Point>^Iterator::next" = fn(ref ArrayIter<Point>) -> [i32, ref null Point];
+type "functype/ArrayIter<Point>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Point>") -> [i32, ref null Point];
 
-type "functype/ArrayIter<String>^Iterator::next" = fn(ref ArrayIter<String>) -> [i32, ref null String];
+type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:allocator/ArrayIter<String>") -> [i32, ref null String];
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -337,7 +337,7 @@ fn for_of_generic_tuple() with Stdout {
 fn for_of_mut() with Stdout {
     let __local_0: ref Array<i32>;
     let numbers: ref Array<i32>;
-    let __iter_1: ref ArrayIter<i32>;
+    let __iter_1: ref "core:allocator/ArrayIter<i32>";
     let n: i32;
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -347,7 +347,7 @@ fn for_of_mut() with Stdout {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_0;
     };
-    __iter_1 = ArrayIter<i32> { repr: ref.as_non_null(numbers.repr), used: 3, index: 0 };
+    __iter_1 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(numbers.repr), used: 3, index: 0 };
     b0: block {
         l1: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -379,9 +379,9 @@ fn for_of_nested() with Stdout {
     let outer: ref Array<i32>;
     let __local_2: ref Array<i32>;
     let inner: ref Array<i32>;
-    let __iter_2: ref ArrayIter<i32>;
+    let __iter_2: ref "core:allocator/ArrayIter<i32>";
     let i: i32;
-    let __iter_3: ref ArrayIter<i32>;
+    let __iter_3: ref "core:allocator/ArrayIter<i32>";
     let j: i32;
     let __local_8: ref String;
     let __local_9: ref Formatter;
@@ -399,7 +399,7 @@ fn for_of_nested() with Stdout {
         __local_2 = Array<i32> { repr: array.new_fixed<i32>(10, 20), used: 2 };
         break __seq_lit: __local_2;
     };
-    __iter_2 = ArrayIter<i32> { repr: ref.as_non_null(outer.repr), used: 3, index: 0 };
+    __iter_2 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(outer.repr), used: 3, index: 0 };
     _licm_repr_41 = inner.repr;
     _licm_used_42 = 2;
     b3: block {
@@ -409,7 +409,7 @@ fn for_of_nested() with Stdout {
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_2);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 i = __sroa___pattern_temp_0_payload_0;
-                __iter_3 = ArrayIter<i32> { repr: ref.as_non_null(_licm_repr_41), used: _licm_used_42, index: 0 };
+                __iter_3 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(_licm_repr_41), used: _licm_used_42, index: 0 };
                 b6: block {
                     l7: loop {
                         let __sroa___pattern_temp_1_discriminant: i32;
@@ -449,16 +449,16 @@ fn for_of_nested() with Stdout {
 }
 
 fn for_of_side_effect() with Stdout {
-    let __iter_4: ref ArrayIter<i32>;
+    let __iter_4: ref "core:allocator/ArrayIter<i32>";
     let n: i32;
     let __local_2: ref String;
     let __local_3: ref Formatter;
     let __local_5: ref Array<i32>;
     let __local_7: ref String;
     let __local_9: ref Formatter;
-    __iter_4 = __inline_Array_i32__IntoIterator__into_iter_0: block -> ref ArrayIter<i32> {
+    __iter_4 = __inline_Array_i32__IntoIterator__into_iter_0: block -> ref "core:allocator/ArrayIter<i32>" {
         __local_5 = get_numbers();
-        break __inline_Array_i32__IntoIterator__into_iter_0: ArrayIter<i32> { repr: ref.as_non_null(__local_5.repr), used: __local_5.used, index: 0 };
+        break __inline_Array_i32__IntoIterator__into_iter_0: "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(__local_5.repr), used: __local_5.used, index: 0 };
     };
     b9: block {
         l10: loop {
@@ -489,14 +489,14 @@ fn for_of_side_effect() with Stdout {
 fn for_of_strings() with Stdout {
     let __local_0: ref Array<String>;
     let names: ref Array<String>;
-    let __iter_5: ref ArrayIter<String>;
+    let __iter_5: ref "core:allocator/ArrayIter<String>";
     let name: ref String;
     let __local_4: ref String;
     names = __seq_lit: block -> ref Array<String> {
         __local_0 = Array<String> { repr: array.new_fixed<ref String>(String { repr: array.new_data<u8>("Alice"), used: 5 }, String { repr: array.new_data<u8>("Bob"), used: 3 }, String { repr: array.new_data<u8>("Charlie"), used: 7 }), used: 3 };
         break __seq_lit: __local_0;
     };
-    __iter_5 = ArrayIter<String> { repr: ref.as_non_null(names.repr), used: 3, index: 0 };
+    __iter_5 = "core:allocator/ArrayIter<String>" { repr: ref.as_non_null(names.repr), used: 3, index: 0 };
     b12: block {
         l13: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -530,7 +530,7 @@ fn for_of_structs() with Stdout {
     let p2: ref Point;
     let __local_2: ref Array<Point>;
     let points: ref Array<Point>;
-    let __iter_6: ref ArrayIter<Point>;
+    let __iter_6: ref "core:allocator/ArrayIter<Point>";
     let p: ref Point;
     let __local_6: ref String;
     let __local_7: ref Formatter;
@@ -544,7 +544,7 @@ fn for_of_structs() with Stdout {
         __local_2 = Array<Point> { repr: array.new_fixed<ref Point>(p1, p2), used: 2 };
         break __seq_lit: __local_2;
     };
-    __iter_6 = ArrayIter<Point> { repr: ref.as_non_null(points.repr), used: 2, index: 0 };
+    __iter_6 = "core:allocator/ArrayIter<Point>" { repr: ref.as_non_null(points.repr), used: 2, index: 0 };
     b15: block {
         l16: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -580,13 +580,13 @@ fn for_of_structs() with Stdout {
 fn for_of_tuple_array() with Stdout {
     let __local_0: ref Array<Tuple<String,i32>>;
     let items: ref Array<Tuple<String,i32>>;
-    let __iter_7: ref ArrayIter<Tuple<String,i32>>;
+    let __iter_7: ref "core:allocator/ArrayIter<Tuple<String,i32>>";
     let pair: ref "tuple/[String, i32]";
     items = __seq_lit: block -> ref Array<Tuple<String,i32>> {
         __local_0 = Array<Tuple<String,i32>> { repr: array.new_fixed<ref "tuple/[String, i32]">("tuple/[String, i32]" { 0: String { repr: array.new_data<u8>("a"), used: 1 }, 1: 1 }, "tuple/[String, i32]" { 0: String { repr: array.new_data<u8>("b"), used: 1 }, 1: 2 }), used: 2 };
         break __seq_lit: __local_0;
     };
-    __iter_7 = ArrayIter<Tuple<String,i32>> { repr: ref.as_non_null(items.repr), used: 2, index: 0 };
+    __iter_7 = "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: ref.as_non_null(items.repr), used: 2, index: 0 };
     b18: block {
         l19: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -609,7 +609,7 @@ fn for_of_tuples() with Stdout {
     let t2: ref "tuple/[i32, i32]";
     let __local_2: ref Array<Tuple<i32,i32>>;
     let pairs: ref Array<Tuple<i32,i32>>;
-    let __iter_8: ref ArrayIter<Tuple<i32,i32>>;
+    let __iter_8: ref "core:allocator/ArrayIter<Tuple<i32,i32>>";
     let p: ref "tuple/[i32, i32]";
     let __local_6: ref String;
     let __local_7: ref Formatter;
@@ -623,7 +623,7 @@ fn for_of_tuples() with Stdout {
         __local_2 = Array<Tuple<i32,i32>> { repr: array.new_fixed<ref "tuple/[i32, i32]">(t1, t2), used: 2 };
         break __seq_lit: __local_2;
     };
-    __iter_8 = ArrayIter<Tuple<i32,i32>> { repr: ref.as_non_null(pairs.repr), used: 2, index: 0 };
+    __iter_8 = "core:allocator/ArrayIter<Tuple<i32,i32>>" { repr: ref.as_non_null(pairs.repr), used: 2, index: 0 };
     b21: block {
         l22: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -1120,12 +1120,12 @@ fn ArrayIter<i32>^Iterator::next(self) {
 }
 
 fn Holder<String,i32>::process(self) {
-    let __iter_0: ref ArrayIter<Tuple<String,i32>>;
+    let __iter_0: ref "core:allocator/ArrayIter<Tuple<String,i32>>";
     let pair: ref "tuple/[String, i32]";
     let __local_4: ref Array<Tuple<String,i32>>;
-    __iter_0 = __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: block -> ref ArrayIter<Tuple<String,i32>> {
+    __iter_0 = __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: block -> ref "core:allocator/ArrayIter<Tuple<String,i32>>" {
         __local_4 = self;
-        break __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: ArrayIter<Tuple<String,i32>> { repr: ref.as_non_null(__local_4.repr), used: __local_4.used, index: 0 };
+        break __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: ref.as_non_null(__local_4.repr), used: __local_4.used, index: 0 };
     };
     b63: block {
         l64: loop {

@@ -76,13 +76,13 @@ array array<f64> (mut f64);
 
 array array<u64> (mut u64);
 
-struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<f64> {  // ArrayIter<T> with T=f64
+struct ArrayIter<f64> {  // from core:allocator  // ArrayIter<T> with T=f64
     mut repr: ref array<f64>,
     mut used: i32,
     mut index: i32,
@@ -258,11 +258,11 @@ type "functype/String::append_char" = fn(ref String, char);
 
 type "functype/Array<u8>::append" = fn(ref Array<u8>, u8);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> ref Option<i32>;
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> ref Option<i32>;
 
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
-type "functype/ArrayIter<f64>^Iterator::next" = fn(ref ArrayIter<f64>) -> ref Option<f64>;
+type "functype/ArrayIter<f64>^Iterator::next" = fn(ref "core:allocator/ArrayIter<f64>") -> ref Option<f64>;
 
 type "functype/Array<f64>::append" = fn(ref Array<f64>, f64);
 
@@ -292,9 +292,9 @@ type "functype/trim_zeros" = fn(u64, i32) -> [u64, i32];
 
 type "functype/check_special" = fn(f64) -> [bool, bool, i32];
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
 
-type "functype/ArrayIter<f64>^Iterator::next" = fn(ref ArrayIter<f64>) -> [i32, f64];
+type "functype/ArrayIter<f64>^Iterator::next" = fn(ref "core:allocator/ArrayIter<f64>") -> [i32, f64];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -336,7 +336,7 @@ fn array_new_data_f64() with Stdout {
     let __v0_6: f64;
     let __cond_7: bool;
     let sum: f64;
-    let __iter_0: ref ArrayIter<f64>;
+    let __iter_0: ref "core:allocator/ArrayIter<f64>";
     let item: f64;
     let __v0_11: f64;
     let __cond_12: bool;
@@ -502,7 +502,7 @@ condition: a[127] == 128.0
         unreachable;
     };
     sum = 0;
-    __iter_0 = ArrayIter<f64> { repr: ref.as_non_null(a.repr), used: a.used, index: 0 };
+    __iter_0 = "core:allocator/ArrayIter<f64>" { repr: ref.as_non_null(a.repr), used: a.used, index: 0 };
     b5: block {
         l6: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -622,7 +622,7 @@ fn array_new_data_i32() with Stdout {
     let __v0_8: i32;
     let __cond_9: bool;
     let sum: i32;
-    let __iter_1: ref ArrayIter<i32>;
+    let __iter_1: ref "core:allocator/ArrayIter<i32>";
     let item: i32;
     let __v0_13: i32;
     let __cond_14: bool;
@@ -842,7 +842,7 @@ condition: a[127] == 1280
         unreachable;
     };
     sum = 0;
-    __iter_1 = ArrayIter<i32> { repr: ref.as_non_null(a.repr), used: a.used, index: 0 };
+    __iter_1 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(a.repr), used: a.used, index: 0 };
     b18: block {
         l19: loop {
             let __sroa___pattern_temp_0_discriminant: i32;

@@ -42,7 +42,7 @@ struct Point {
 
 array array<Point> (mut ref Point);
 
-struct ArrayIter<Point> {  // ArrayIter<T> with T=Point
+struct ArrayIter<Point> {  // from core:allocator  // ArrayIter<T> with T=Point
     mut repr: ref array<Point>,
     mut used: i32,
     mut index: i32,
@@ -130,7 +130,7 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/ArrayIter<Point>^Iterator::next" = fn(ref ArrayIter<Point>) -> ref Option<Point>;
+type "functype/ArrayIter<Point>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Point>") -> ref Option<Point>;
 
 type "functype/Array<Point>::append" = fn(ref Array<Point>, ref Point);
 
@@ -144,7 +144,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/ArrayIter<Point>^Iterator::next" = fn(ref ArrayIter<Point>) -> [i32, ref null Point];
+type "functype/ArrayIter<Point>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Point>") -> [i32, ref null Point];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -167,10 +167,10 @@ global mut __modules_initialized: bool = 0;
 fn run() with Stdout {
     let __local_0: ref Array<Point>;
     let points: ref Array<Point>;
-    let __iter_0: ref ArrayIter<Point>;
+    let __iter_0: ref "core:allocator/ArrayIter<Point>";
     let x: i32;
     let y: i32;
-    let __iter_1: ref ArrayIter<Point>;
+    let __iter_1: ref "core:allocator/ArrayIter<Point>";
     let a: i32;
     let b: i32;
     let __local_8: ref String;
@@ -193,7 +193,7 @@ fn run() with Stdout {
         __local_0 = Array<Point> { repr: array.new_fixed<ref Point>(Point { x: 1, y: 2 }, Point { x: 3, y: 4 }, Point { x: 5, y: 6 }), used: 3 };
         break __seq_lit: __local_0;
     };
-    __iter_0 = ArrayIter<Point> { repr: ref.as_non_null(points.repr), used: 3, index: 0 };
+    __iter_0 = "core:allocator/ArrayIter<Point>" { repr: ref.as_non_null(points.repr), used: 3, index: 0 };
     b1: block {
         l2: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -219,7 +219,7 @@ fn run() with Stdout {
             continue l2;
         };
     };
-    __iter_1 = ArrayIter<Point> { repr: ref.as_non_null(points.repr), used: 3, index: 0 };
+    __iter_1 = "core:allocator/ArrayIter<Point>" { repr: ref.as_non_null(points.repr), used: 3, index: 0 };
     b4: block {
         l5: loop {
             let __sroa___pattern_temp_2_discriminant: i32;

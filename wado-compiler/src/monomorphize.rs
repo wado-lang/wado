@@ -202,22 +202,33 @@ fn monomorphize_with_externals(
             }
         }
     } else {
-        // Library module: only use structs from this module itself
-        // Skip struct monomorphization for structs that are shadowed by entry module
-        // This prevents prelude's TreeMap<String,i32> from being instantiated when
-        // user defines their own TreeMap
+        // Non-entry module: use structs from any non-shadowed module.
+        // This enables cross-module monomorphization (e.g., `./treemap-mod.wado`
+        // can instantiate `ArrayIter<TreeMapEntry<String,Value>>` from core:prelude).
         for (name, sources) in all_generic_structs_with_sources {
             // Skip if this struct name is defined in entry module (shadowed)
             if entry_generic_struct_names.contains(name) {
                 continue;
             }
 
-            // Only use structs from the current module
+            // Prefer structs from the current module, fall back to any non-shadowed module
+            let mut selected: Option<&TirStruct> = None;
             for (source, tir_struct) in sources {
                 if source == current_module_source {
-                    all_generic_structs.insert(name.clone(), tir_struct.clone());
+                    selected = Some(tir_struct);
                     break;
                 }
+            }
+            if selected.is_none() {
+                for (source, tir_struct) in sources {
+                    if !shadowed_modules.contains(source) {
+                        selected = Some(tir_struct);
+                        break;
+                    }
+                }
+            }
+            if let Some(tir_struct) = selected {
+                all_generic_structs.insert(name.clone(), tir_struct.clone());
             }
         }
     }

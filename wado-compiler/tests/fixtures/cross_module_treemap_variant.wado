@@ -1,0 +1,17 @@
+// Cross-module monomorphization: importing a function from another module
+// that uses TreeMap<String, RecursiveVariant>::entries() must work.
+// This tests that non-entry modules can access external generic structs
+// (e.g., ArrayIter from core:prelude) during monomorphization.
+use { println, Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
+use { Value, stringify } from "./sub/cross_module_treemap_variant_helper.wado";
+
+export fn run() with Stdout {
+    let mut map = TreeMap::<String, Value>::new();
+    map["hello"] = Value::Str("world");
+    let obj = Value::Obj(map);
+    println(stringify(&obj));
+}
+
+__DATA__
+{"stdout": "{\"hello\":\"world\"}\n"}

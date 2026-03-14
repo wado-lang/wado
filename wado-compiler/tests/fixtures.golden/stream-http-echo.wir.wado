@@ -172,7 +172,7 @@ struct [Response, Future<Result<unit,ErrorCode>>] {
 
 array array<Array<u8>> (mut ref Array<u8>);
 
-struct ArrayIter<Array<u8>> {  // ArrayIter<T> with T=Array<u8>
+struct ArrayIter<Array<u8>> {  // from core:allocator  // ArrayIter<T> with T=Array<u8>
     mut repr: ref array<Array<u8>>,
     mut used: i32,
     mut index: i32,
@@ -360,7 +360,7 @@ type "functype/core:internal/cm_stream_read_u8" = fn(i32, i32) -> ref Array<u8>;
 
 type "functype/core:internal/cm_stream_write_u8" = fn(i32, ref Array<u8>);
 
-type "functype/ArrayIter<Array<u8>>^Iterator::next" = fn(ref ArrayIter<Array<u8>>) -> ref Option<Array<u8>>;
+type "functype/ArrayIter<Array<u8>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Array<u8>>") -> ref Option<Array<u8>>;
 
 type "functype/Array<Array<u8>>::append" = fn(ref Array<Array<u8>>, ref Array<u8>);
 
@@ -380,7 +380,7 @@ type "functype/__cm_adapter__Request_consume_body" = fn(i32, i32) -> [i32, i32];
 
 type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
 
-type "functype/ArrayIter<Array<u8>>^Iterator::next" = fn(ref ArrayIter<Array<u8>>) -> [i32, ref null Array<u8>];
+type "functype/ArrayIter<Array<u8>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Array<u8>>") -> [i32, ref null Array<u8>];
 
 import fn realloc from "mem/realloc";
 import fn stream-read from "wasi/stream-read";
@@ -418,7 +418,7 @@ fn handle(request) {
     let headers: i32;
     let response: i32;
     let _tx_future: i32;
-    let __iter_0: ref ArrayIter<Array<u8>>;
+    let __iter_0: ref "core:allocator/ArrayIter<Array<u8>>";
     let chunk_16: ref Array<u8>;
     let __task_ret: ref Result<Response,ErrorCode>;
     let __tv_0: i32;
@@ -904,7 +904,7 @@ fn handle(request) {
         };
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     };
-    __iter_0 = ArrayIter<Array<u8>> { repr: ref.as_non_null(chunks.repr), used: chunks.used, index: 0 };
+    __iter_0 = "core:allocator/ArrayIter<Array<u8>>" { repr: ref.as_non_null(chunks.repr), used: chunks.used, index: 0 };
     b41: block {
         l42: loop {
             let __sroa___pattern_temp_5_discriminant: i32;

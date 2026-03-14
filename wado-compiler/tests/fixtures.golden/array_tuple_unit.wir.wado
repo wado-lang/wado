@@ -41,7 +41,7 @@ struct [i32, unit] {
 
 array array<Tuple<i32,unit>> (mut ref "tuple/[i32, unit]");
 
-struct ArrayIter<Tuple<i32,unit>> {  // ArrayIter<T> with T=Tuple<i32,unit>
+struct ArrayIter<Tuple<i32,unit>> {  // from core:allocator  // ArrayIter<T> with T=Tuple<i32,unit>
     mut repr: ref array<Tuple<i32,unit>>,
     mut used: i32,
     mut index: i32,
@@ -129,7 +129,7 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/ArrayIter<Tuple<i32,unit>>^Iterator::next" = fn(ref ArrayIter<Tuple<i32,unit>>) -> ref Option<Tuple<i32,unit>>;
+type "functype/ArrayIter<Tuple<i32,unit>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<i32,unit>>") -> ref Option<Tuple<i32,unit>>;
 
 type "functype/Array<Tuple<i32,unit>>::append" = fn(ref Array<Tuple<i32,unit>>, ref "tuple/[i32, unit]");
 
@@ -143,7 +143,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/ArrayIter<Tuple<i32,unit>>^Iterator::next" = fn(ref ArrayIter<Tuple<i32,unit>>) -> [i32, ref null "tuple/[i32, unit]"];
+type "functype/ArrayIter<Tuple<i32,unit>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<i32,unit>>") -> [i32, ref null "tuple/[i32, unit]"];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -166,7 +166,7 @@ global mut __modules_initialized: bool = 0;
 fn run() with Stdout {
     let __local_0: ref Array<Tuple<i32,unit>>;
     let arr: ref Array<Tuple<i32,unit>>;
-    let __iter_0: ref ArrayIter<Tuple<i32,unit>>;
+    let __iter_0: ref "core:allocator/ArrayIter<Tuple<i32,unit>>";
     let item: ref "tuple/[i32, unit]";
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -182,7 +182,7 @@ fn run() with Stdout {
         __local_0 = Array<Tuple<i32,unit>> { repr: array.new_fixed<ref "tuple/[i32, unit]">("tuple/[i32, unit]" { 0: 1 }, "tuple/[i32, unit]" { 0: 2 }, "tuple/[i32, unit]" { 0: 3 }), used: 3 };
         break __seq_lit: __local_0;
     };
-    __iter_0 = ArrayIter<Tuple<i32,unit>> { repr: ref.as_non_null(arr.repr), used: 3, index: 0 };
+    __iter_0 = "core:allocator/ArrayIter<Tuple<i32,unit>>" { repr: ref.as_non_null(arr.repr), used: 3, index: 0 };
     b1: block {
         l2: loop {
             let __sroa___pattern_temp_0_discriminant: i32;

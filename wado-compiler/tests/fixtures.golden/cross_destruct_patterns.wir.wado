@@ -57,7 +57,7 @@ struct Point {
 
 array array<Tagged> (mut ref Tagged);
 
-struct ArrayIter<Tagged> {  // ArrayIter<T> with T=Tagged
+struct ArrayIter<Tagged> {  // from core:allocator  // ArrayIter<T> with T=Tagged
     mut repr: ref array<Tagged>,
     mut used: i32,
     mut index: i32,
@@ -155,7 +155,7 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/ArrayIter<Tagged>^Iterator::next" = fn(ref ArrayIter<Tagged>) -> ref Option<Tagged>;
+type "functype/ArrayIter<Tagged>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tagged>") -> ref Option<Tagged>;
 
 type "functype/Array<Tagged>::append" = fn(ref Array<Tagged>, ref Tagged);
 
@@ -169,7 +169,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/ArrayIter<Tagged>^Iterator::next" = fn(ref ArrayIter<Tagged>) -> [i32, ref null Tagged];
+type "functype/ArrayIter<Tagged>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tagged>") -> [i32, ref null Tagged];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -192,7 +192,7 @@ global mut __modules_initialized: bool = 0;
 fn run() with Stdout {
     let __local_8: ref Array<Tagged>;
     let items: ref Array<Tagged>;
-    let __iter_0: ref ArrayIter<Tagged>;
+    let __iter_0: ref "core:allocator/ArrayIter<Tagged>";
     let l: ref String;
     let a: i32;
     let b: i32;
@@ -292,7 +292,7 @@ fn run() with Stdout {
         __local_8 = Array<Tagged> { repr: array.new_fixed<ref Tagged>(Tagged { label: String { repr: array.new_data<u8>("P"), used: 1 }, coords: "tuple/[i32, i32]" { 0: 3, 1: 4 } }, Tagged { label: String { repr: array.new_data<u8>("Q"), used: 1 }, coords: "tuple/[i32, i32]" { 0: 5, 1: 6 } }), used: 2 };
         break __seq_lit: __local_8;
     };
-    __iter_0 = ArrayIter<Tagged> { repr: ref.as_non_null(items.repr), used: 2, index: 0 };
+    __iter_0 = "core:allocator/ArrayIter<Tagged>" { repr: ref.as_non_null(items.repr), used: 2, index: 0 };
     b1: block {
         l2: loop {
             let __sroa___pattern_temp_4_discriminant: i32;
