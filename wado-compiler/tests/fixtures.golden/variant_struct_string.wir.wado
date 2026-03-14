@@ -64,8 +64,6 @@ type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_export__run" = fn();
 
-type "functype/./variant_struct_string_module.wado/format_str" = fn(ref String, ref "./variant_struct_string_module.wado/Opts") -> ref String;
-
 type "functype/core:allocator/grow_memory" = fn(i32);
 
 type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
@@ -111,16 +109,32 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let opts: ref "./variant_struct_string_module.wado/Opts";
     let s: ref String;
+    let __local_3: ref String;
+    let __sroa_opts_align: ref "./variant_struct_string_module.wado/Align";
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
         };
         __modules_initialized = 1;
     };
-    opts = "./variant_struct_string_module.wado/Opts" { align: "./variant_struct_string_module.wado/Align" { 1 }, width: 0 };
-    s = "./variant_struct_string_module.wado/format_str"(String { repr: array.new_data<u8>("hello"), used: 5 }, opts);
+    __sroa_opts_align = "./variant_struct_string_module.wado/Align" { 1 };
+    s = value_copy String(__inline_format_str_3: block -> ref String {
+        __local_3 = String { repr: array.new_data<u8>("hello"), used: 5 };
+        break __inline_format_str_3: __local_3;
+        let __match_scrut_0: ref "./variant_struct_string_module.wado/Align";
+        __match_scrut_0 = __sroa_opts_align;
+        if __match_scrut_0.discriminant == 0 -> ref String {
+            __local_3;
+        } else if __match_scrut_0.discriminant == 1 -> ref String {
+            __local_3;
+        } else if __match_scrut_0.discriminant == 2 -> ref String {
+            __local_3;
+        } else {
+            unreachable;
+        };
+        break __inline_format_str_3;
+    });
     "core:cli/println"(s);
 }
 
@@ -133,21 +147,6 @@ fn __cm_adapter__Stdout_write_via_stream(data) {
 fn __cm_export__run() {
     run();
     "wasi/task-return"(0);
-}
-
-fn "./variant_struct_string_module.wado/format_str"(s, opts) {  // from ./variant_struct_string_module.wado
-    if opts.width <= 0 {
-        return s;
-    };
-    return let __match_scrut_0: ref "./variant_struct_string_module.wado/Align"; __match_scrut_0 = opts.align; if __match_scrut_0.discriminant == 0 -> ref String {
-        s;
-    } else if __match_scrut_0.discriminant == 1 -> ref String {
-        s;
-    } else if __match_scrut_0.discriminant == 2 -> ref String {
-        s;
-    } else {
-        unreachable;
-    };
 }
 
 fn "core:allocator/grow_memory"(new_offset) {  // from core:allocator
@@ -241,13 +240,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l14: loop {
+            l13: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l14;
+                continue l13;
             };
         };
     };

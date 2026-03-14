@@ -119,8 +119,6 @@ type "functype/Value::describe" = fn(ref Value) -> ref String;
 
 type "functype/Container::stats" = fn(ref Container) -> ref String;
 
-type "functype/Container::total" = fn(ref Container) -> i32;
-
 type "functype/Container^Index::index" = fn(ref Container, i32) -> ref Value;
 
 type "functype/Container^IndexMut::index_mut" = fn(ref Container, i32) -> ref Value;
@@ -182,8 +180,8 @@ fn run() with Stdout {
     let __local_35: ref String;
     let __local_38: ref String;
     let __local_40: ref Formatter;
-    let self_46: ref Value;
     let self_47: ref Value;
+    let self_48: ref Value;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -283,7 +281,7 @@ fn run() with Stdout {
             break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_38) };
         };
         __local_40 = __local_10;
-        i32::fmt_decimal(Container::total(c), __local_40);
+        i32::fmt_decimal((c.v0.n + c.v1.n) + c.v2.n, __local_40);
         break __tmpl: __local_9;
     });
     "core:cli/println"(__tmpl: block -> ref String {
@@ -306,10 +304,10 @@ fn run() with Stdout {
         String::append(__local_12, Container::stats(c));
         break __tmpl: __local_12;
     });
-    self_46 = Container^IndexMut::index_mut(c, 0);
-    self_46.n = self_46.n + 1;
-    self_47 = Container^IndexMut::index_mut(c, 1);
+    self_47 = Container^IndexMut::index_mut(c, 0);
     self_47.n = self_47.n + 1;
+    self_48 = Container^IndexMut::index_mut(c, 1);
+    self_48.n = self_48.n + 1;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_13 = String { repr: builtin::array_new<u8>(29), used: 0 };
         String::append(__local_13, String { repr: array.new_data<u8>("Final stats: "), used: 13 });
@@ -700,10 +698,6 @@ fn Container::stats(self) {
         i32::fmt_decimal(self.write_count, __local_11);
         break __tmpl: __local_1;
     };
-}
-
-fn Container::total(self) {
-    return (self.v0.n + self.v1.n) + self.v2.n;
 }
 
 fn Container^Index::index(self, idx) {

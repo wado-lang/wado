@@ -111,8 +111,6 @@ type "functype/core:base64/encode_impl" = fn(ref Array<u8>, ref Array<u8>, bool)
 
 type "functype/core:base64/decode_impl" = fn(ref Array<u8>, i32) -> ref Option<Array<u8>>;
 
-type "functype/core:base64/decode" = fn(ref String) -> ref Option<Array<u8>>;
-
 type "functype/core:base64/__initialize_module" = fn();
 
 type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
@@ -142,8 +140,6 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
 type "functype/core:base64/Array<u8>::append" = fn(ref Array<u8>, u8);
-
-type "functype/core:base64/Array<u8>^IndexAssign::index_assign" = fn(ref Array<u8>, i32, u8);
 
 type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
@@ -238,28 +234,44 @@ fn run() with Stdout {
     let __local_35: ref String;
     let __local_36: ref Formatter;
     let __local_38: ref String;
-    let __local_40: ref String;
-    let __local_42: ref Formatter;
-    let __local_46: ref String;
-    let __local_48: ref Formatter;
-    let __local_53: ref String;
-    let __local_55: ref Formatter;
-    let __local_71: ref Array<u8>;
-    let __local_73: ref String;
-    let __local_75: ref Formatter;
-    let __local_78: ref Array<u8>;
-    let __local_80: ref String;
-    let __local_82: ref Formatter;
-    let __local_85: ref String;
+    let __local_39: ref String;
+    let __local_40: ref Array<u8>;
+    let __local_42: ref String;
+    let __local_44: ref Formatter;
+    let __local_47: ref String;
+    let __local_48: ref Array<u8>;
+    let __local_50: ref String;
+    let __local_52: ref Formatter;
+    let __local_55: ref String;
+    let __local_56: ref Array<u8>;
+    let __local_59: ref String;
+    let __local_61: ref Formatter;
+    let __local_77: ref Array<u8>;
+    let __local_78: ref String;
+    let __local_79: ref Array<u8>;
+    let __local_81: ref String;
+    let __local_83: ref Formatter;
     let __local_86: ref Array<u8>;
-    let __local_88: ref String;
-    let __local_90: ref Formatter;
-    let __local_94: ref String;
-    let __local_96: ref Formatter;
-    let __local_100: ref String;
-    let __local_102: ref Formatter;
+    let __local_87: ref String;
+    let __local_88: ref Array<u8>;
+    let __local_90: ref String;
+    let __local_92: ref Formatter;
+    let __local_95: ref String;
+    let __local_96: ref Array<u8>;
+    let __local_98: ref String;
+    let __local_100: ref Formatter;
+    let __local_103: ref String;
+    let __local_104: ref Array<u8>;
     let __local_106: ref String;
     let __local_108: ref Formatter;
+    let __local_111: ref String;
+    let __local_112: ref Array<u8>;
+    let __local_114: ref String;
+    let __local_116: ref Formatter;
+    let __local_119: ref String;
+    let __local_120: ref Array<u8>;
+    let __local_122: ref String;
+    let __local_124: ref Formatter;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -272,7 +284,11 @@ fn run() with Stdout {
         break __inline_String__bytes_2: StrUtf8ByteIter { repr: ref.as_non_null(__local_38.repr), used: __local_38.used, index: 0 };
     });
     let __match_scrut_0: ref Option<Array<u8>>;
-    __match_scrut_0 = "core:base64/decode"(String { repr: array.new_data<u8>("SGVsbG8="), used: 8 });
+    __match_scrut_0 = __inline_decode_3: block -> ref Option<Array<u8>> {
+        __local_39 = String { repr: array.new_data<u8>("SGVsbG8="), used: 8 };
+        __local_40 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: ref.as_non_null(__local_39.repr), used: __local_39.used, index: 0 });
+        break __inline_decode_3: "core:base64/decode_impl"(__local_40, __local_40.used);
+    };
     __cond_2 = if ref.test Option<Array<u8>>::Some(__match_scrut_0) -> bool {
         let __cast_1: ref Option<Array<u8>>::Some;
         __cast_1 = ref.cast Option<Array<u8>>::Some(__match_scrut_0);
@@ -294,12 +310,12 @@ fn run() with Stdout {
             String::append_char(__local_19, 32);
             String::append(__local_19, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
             String::append_char(__local_19, 58);
-            __local_20 = __inline_Formatter__new_4: block -> ref Formatter {
-                __local_40 = __local_19;
-                break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_40) };
+            __local_20 = __inline_Formatter__new_5: block -> ref Formatter {
+                __local_42 = __local_19;
+                break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_42) };
             };
-            __local_42 = __local_20;
-            i32::fmt_decimal(8, __local_42);
+            __local_44 = __local_20;
+            i32::fmt_decimal(8, __local_44);
             String::append(__local_19, String { repr: array.new_data<u8>("
 condition: decode(\"SGVsbG8=\") matches { Some(d) && d == hello }
 "), used: 65 });
@@ -308,7 +324,11 @@ condition: decode(\"SGVsbG8=\") matches { Some(d) && d == hello }
         unreachable;
     };
     let __match_scrut_1: ref Option<Array<u8>>;
-    __match_scrut_1 = "core:base64/decode"(String { repr: array.new_data<u8>("SGVsbG8"), used: 7 });
+    __match_scrut_1 = __inline_decode_8: block -> ref Option<Array<u8>> {
+        __local_47 = String { repr: array.new_data<u8>("SGVsbG8"), used: 7 };
+        __local_48 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: ref.as_non_null(__local_47.repr), used: __local_47.used, index: 0 });
+        break __inline_decode_8: "core:base64/decode_impl"(__local_48, __local_48.used);
+    };
     __cond_4 = if ref.test Option<Array<u8>>::Some(__match_scrut_1) -> bool {
         let __cast_2: ref Option<Array<u8>>::Some;
         __cast_2 = ref.cast Option<Array<u8>>::Some(__match_scrut_1);
@@ -330,12 +350,12 @@ condition: decode(\"SGVsbG8=\") matches { Some(d) && d == hello }
             String::append_char(__local_21, 32);
             String::append(__local_21, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
             String::append_char(__local_21, 58);
-            __local_22 = __inline_Formatter__new_8: block -> ref Formatter {
-                __local_46 = __local_21;
-                break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_46) };
+            __local_22 = __inline_Formatter__new_10: block -> ref Formatter {
+                __local_50 = __local_21;
+                break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_50) };
             };
-            __local_48 = __local_22;
-            i32::fmt_decimal(11, __local_48);
+            __local_52 = __local_22;
+            i32::fmt_decimal(11, __local_52);
             String::append(__local_21, String { repr: array.new_data<u8>("
 condition: decode(\"SGVsbG8\") matches { Some(d) && d == hello }
 "), used: 64 });
@@ -344,7 +364,11 @@ condition: decode(\"SGVsbG8\") matches { Some(d) && d == hello }
         unreachable;
     };
     let __match_scrut_2: ref Option<Array<u8>>;
-    __match_scrut_2 = "core:base64/decode"(String { repr: builtin::array_new<u8>(0), used: 0 });
+    __match_scrut_2 = __inline_decode_13: block -> ref Option<Array<u8>> {
+        __local_55 = String { repr: builtin::array_new<u8>(0), used: 0 };
+        __local_56 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: ref.as_non_null(__local_55.repr), used: __local_55.used, index: 0 });
+        break __inline_decode_13: "core:base64/decode_impl"(__local_56, __local_56.used);
+    };
     __cond_6 = if ref.test Option<Array<u8>>::Some(__match_scrut_2) -> bool {
         let __cast_3: ref Option<Array<u8>>::Some;
         __cast_3 = ref.cast Option<Array<u8>>::Some(__match_scrut_2);
@@ -366,12 +390,12 @@ condition: decode(\"SGVsbG8\") matches { Some(d) && d == hello }
             String::append_char(__local_23, 32);
             String::append(__local_23, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
             String::append_char(__local_23, 58);
-            __local_24 = __inline_Formatter__new_13: block -> ref Formatter {
-                __local_53 = __local_23;
-                break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_53) };
+            __local_24 = __inline_Formatter__new_16: block -> ref Formatter {
+                __local_59 = __local_23;
+                break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_59) };
             };
-            __local_55 = __local_24;
-            i32::fmt_decimal(14, __local_55);
+            __local_61 = __local_24;
+            i32::fmt_decimal(14, __local_61);
             String::append(__local_23, String { repr: array.new_data<u8>("
 condition: decode(\"\") matches { Some(d) && d.len() == 0 }
 "), used: 59 });
@@ -384,10 +408,14 @@ condition: decode(\"\") matches { Some(d) && d.len() == 0 }
         break __seq_lit: __local_7;
     };
     let __match_scrut_3: ref Option<Array<u8>>;
-    __match_scrut_3 = "core:base64/decode"(__inline_encode_24: block -> ref String {
-        __local_71 = data;
-        break __inline_encode_24: "core:base64/encode_impl"(__local_71, STANDARD_TABLE, 1);
-    });
+    __match_scrut_3 = __inline_decode_28: block -> ref Option<Array<u8>> {
+        __local_78 = __inline_encode_27: block -> ref String {
+            __local_77 = data;
+            break __inline_encode_27: "core:base64/encode_impl"(__local_77, STANDARD_TABLE, 1);
+        };
+        __local_79 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: ref.as_non_null(__local_78.repr), used: __local_78.used, index: 0 });
+        break __inline_decode_28: "core:base64/decode_impl"(__local_79, __local_79.used);
+    };
     __cond_10 = if ref.test Option<Array<u8>>::Some(__match_scrut_3) -> bool {
         let __cast_4: ref Option<Array<u8>>::Some;
         __cast_4 = ref.cast Option<Array<u8>>::Some(__match_scrut_3);
@@ -409,12 +437,12 @@ condition: decode(\"\") matches { Some(d) && d.len() == 0 }
             String::append_char(__local_25, 32);
             String::append(__local_25, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
             String::append_char(__local_25, 58);
-            __local_26 = __inline_Formatter__new_26: block -> ref Formatter {
-                __local_73 = __local_25;
-                break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_73) };
+            __local_26 = __inline_Formatter__new_30: block -> ref Formatter {
+                __local_81 = __local_25;
+                break __inline_Formatter__new_30: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_81) };
             };
-            __local_75 = __local_26;
-            i32::fmt_decimal(18, __local_75);
+            __local_83 = __local_26;
+            i32::fmt_decimal(18, __local_83);
             String::append(__local_25, String { repr: array.new_data<u8>("
 condition: decode(encode(&data)) matches { Some(d) && d == data }
 "), used: 67 });
@@ -423,10 +451,14 @@ condition: decode(encode(&data)) matches { Some(d) && d == data }
         unreachable;
     };
     let __match_scrut_4: ref Option<Array<u8>>;
-    __match_scrut_4 = "core:base64/decode"(__inline_encode_url_29: block -> ref String {
-        __local_78 = data;
-        break __inline_encode_url_29: "core:base64/encode_impl"(__local_78, URL_SAFE_TABLE, 0);
-    });
+    __match_scrut_4 = __inline_decode_34: block -> ref Option<Array<u8>> {
+        __local_87 = __inline_encode_url_33: block -> ref String {
+            __local_86 = data;
+            break __inline_encode_url_33: "core:base64/encode_impl"(__local_86, URL_SAFE_TABLE, 0);
+        };
+        __local_88 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: ref.as_non_null(__local_87.repr), used: __local_87.used, index: 0 });
+        break __inline_decode_34: "core:base64/decode_impl"(__local_88, __local_88.used);
+    };
     __cond_12 = if ref.test Option<Array<u8>>::Some(__match_scrut_4) -> bool {
         let __cast_5: ref Option<Array<u8>>::Some;
         __cast_5 = ref.cast Option<Array<u8>>::Some(__match_scrut_4);
@@ -448,12 +480,12 @@ condition: decode(encode(&data)) matches { Some(d) && d == data }
             String::append_char(__local_27, 32);
             String::append(__local_27, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
             String::append_char(__local_27, 58);
-            __local_28 = __inline_Formatter__new_31: block -> ref Formatter {
-                __local_80 = __local_27;
-                break __inline_Formatter__new_31: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_80) };
+            __local_28 = __inline_Formatter__new_36: block -> ref Formatter {
+                __local_90 = __local_27;
+                break __inline_Formatter__new_36: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_90) };
             };
-            __local_82 = __local_28;
-            i32::fmt_decimal(21, __local_82);
+            __local_92 = __local_28;
+            i32::fmt_decimal(21, __local_92);
             String::append(__local_27, String { repr: array.new_data<u8>("
 condition: decode(encode_url(&data)) matches { Some(d) && d == data }
 "), used: 71 });
@@ -461,14 +493,14 @@ condition: decode(encode_url(&data)) matches { Some(d) && d == data }
         });
         unreachable;
     };
-    raw = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_34: block -> ref StrUtf8ByteIter {
-        __local_85 = String { repr: array.new_data<u8>("SGVsbG8="), used: 8 };
-        break __inline_String__bytes_34: StrUtf8ByteIter { repr: ref.as_non_null(__local_85.repr), used: __local_85.used, index: 0 };
+    raw = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_39: block -> ref StrUtf8ByteIter {
+        __local_95 = String { repr: array.new_data<u8>("SGVsbG8="), used: 8 };
+        break __inline_String__bytes_39: StrUtf8ByteIter { repr: ref.as_non_null(__local_95.repr), used: __local_95.used, index: 0 };
     });
     let __match_scrut_5: ref Option<Array<u8>>;
-    __match_scrut_5 = __inline_decode_bytes_35: block -> ref Option<Array<u8>> {
-        __local_86 = raw;
-        break __inline_decode_bytes_35: "core:base64/decode_impl"(__local_86, __local_86.used);
+    __match_scrut_5 = __inline_decode_bytes_40: block -> ref Option<Array<u8>> {
+        __local_96 = raw;
+        break __inline_decode_bytes_40: "core:base64/decode_impl"(__local_96, __local_96.used);
     };
     __cond_15 = if ref.test Option<Array<u8>>::Some(__match_scrut_5) -> bool {
         let __cast_6: ref Option<Array<u8>>::Some;
@@ -491,12 +523,12 @@ condition: decode(encode_url(&data)) matches { Some(d) && d == data }
             String::append_char(__local_29, 32);
             String::append(__local_29, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
             String::append_char(__local_29, 58);
-            __local_30 = __inline_Formatter__new_37: block -> ref Formatter {
-                __local_88 = __local_29;
-                break __inline_Formatter__new_37: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_88) };
+            __local_30 = __inline_Formatter__new_42: block -> ref Formatter {
+                __local_98 = __local_29;
+                break __inline_Formatter__new_42: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_98) };
             };
-            __local_90 = __local_30;
-            i32::fmt_decimal(25, __local_90);
+            __local_100 = __local_30;
+            i32::fmt_decimal(25, __local_100);
             String::append(__local_29, String { repr: array.new_data<u8>("
 condition: decode_bytes(&raw) matches { Some(d) && d == hello }
 "), used: 65 });
@@ -505,7 +537,11 @@ condition: decode_bytes(&raw) matches { Some(d) && d == hello }
         unreachable;
     };
     let __match_scrut_6: ref Option<Array<u8>>;
-    __match_scrut_6 = "core:base64/decode"(String { repr: array.new_data<u8>("abc+def_ghi"), used: 11 });
+    __match_scrut_6 = __inline_decode_45: block -> ref Option<Array<u8>> {
+        __local_103 = String { repr: array.new_data<u8>("abc+def_ghi"), used: 11 };
+        __local_104 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: ref.as_non_null(__local_103.repr), used: __local_103.used, index: 0 });
+        break __inline_decode_45: "core:base64/decode_impl"(__local_104, __local_104.used);
+    };
     __cond_16 = if ref.test Option<Array<u8>>::Some(__match_scrut_6) -> bool {
         let __cast_7: ref Option<Array<u8>>::Some;
         __cast_7 = ref.cast Option<Array<u8>>::Some(__match_scrut_6);
@@ -526,12 +562,12 @@ condition: decode_bytes(&raw) matches { Some(d) && d == hello }
             String::append_char(__local_31, 32);
             String::append(__local_31, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
             String::append_char(__local_31, 58);
-            __local_32 = __inline_Formatter__new_41: block -> ref Formatter {
-                __local_94 = __local_31;
-                break __inline_Formatter__new_41: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_94) };
+            __local_32 = __inline_Formatter__new_47: block -> ref Formatter {
+                __local_106 = __local_31;
+                break __inline_Formatter__new_47: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_106) };
             };
-            __local_96 = __local_32;
-            i32::fmt_decimal(28, __local_96);
+            __local_108 = __local_32;
+            i32::fmt_decimal(28, __local_108);
             String::append(__local_31, String { repr: array.new_data<u8>("
 condition: decode(\"abc+def_ghi\") matches { Some(_) }
 "), used: 54 });
@@ -540,7 +576,11 @@ condition: decode(\"abc+def_ghi\") matches { Some(_) }
         unreachable;
     };
     let __match_scrut_7: ref Option<Array<u8>>;
-    __match_scrut_7 = "core:base64/decode"(String { repr: array.new_data<u8>("!!!"), used: 3 });
+    __match_scrut_7 = __inline_decode_50: block -> ref Option<Array<u8>> {
+        __local_111 = String { repr: array.new_data<u8>("!!!"), used: 3 };
+        __local_112 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: ref.as_non_null(__local_111.repr), used: __local_111.used, index: 0 });
+        break __inline_decode_50: "core:base64/decode_impl"(__local_112, __local_112.used);
+    };
     __cond_17 = if __match_scrut_7.discriminant == 1 -> bool {
         1;
     } else {
@@ -559,12 +599,12 @@ condition: decode(\"abc+def_ghi\") matches { Some(_) }
             String::append_char(__local_33, 32);
             String::append(__local_33, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
             String::append_char(__local_33, 58);
-            __local_34 = __inline_Formatter__new_45: block -> ref Formatter {
-                __local_100 = __local_33;
-                break __inline_Formatter__new_45: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_100) };
+            __local_34 = __inline_Formatter__new_52: block -> ref Formatter {
+                __local_114 = __local_33;
+                break __inline_Formatter__new_52: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_114) };
             };
-            __local_102 = __local_34;
-            i32::fmt_decimal(31, __local_102);
+            __local_116 = __local_34;
+            i32::fmt_decimal(31, __local_116);
             String::append(__local_33, String { repr: array.new_data<u8>("
 condition: decode(\"!!!\") matches { None }
 "), used: 43 });
@@ -573,7 +613,11 @@ condition: decode(\"!!!\") matches { None }
         unreachable;
     };
     let __match_scrut_8: ref Option<Array<u8>>;
-    __match_scrut_8 = "core:base64/decode"(String { repr: array.new_data<u8>("A"), used: 1 });
+    __match_scrut_8 = __inline_decode_55: block -> ref Option<Array<u8>> {
+        __local_119 = String { repr: array.new_data<u8>("A"), used: 1 };
+        __local_120 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: ref.as_non_null(__local_119.repr), used: __local_119.used, index: 0 });
+        break __inline_decode_55: "core:base64/decode_impl"(__local_120, __local_120.used);
+    };
     __cond_18 = if __match_scrut_8.discriminant == 1 -> bool {
         1;
     } else {
@@ -592,12 +636,12 @@ condition: decode(\"!!!\") matches { None }
             String::append_char(__local_35, 32);
             String::append(__local_35, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
             String::append_char(__local_35, 58);
-            __local_36 = __inline_Formatter__new_49: block -> ref Formatter {
-                __local_106 = __local_35;
-                break __inline_Formatter__new_49: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_106) };
+            __local_36 = __inline_Formatter__new_57: block -> ref Formatter {
+                __local_122 = __local_35;
+                break __inline_Formatter__new_57: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_122) };
             };
-            __local_108 = __local_36;
-            i32::fmt_decimal(32, __local_108);
+            __local_124 = __local_36;
+            i32::fmt_decimal(32, __local_124);
             String::append(__local_35, String { repr: array.new_data<u8>("
 condition: decode(\"A\") matches { None }
 "), used: 41 });
@@ -679,6 +723,18 @@ fn "core:base64/build_decode_table"() {  // from core:base64
     let i_2: i32;
     let i_3: i32;
     let __local_6: ref array<u8>;
+    let index_8: i32;
+    let value_9: u8;
+    let index_11: i32;
+    let value_12: u8;
+    let index_14: i32;
+    let value_15: u8;
+    let _licm_used_31: i32;
+    let _licm_repr_32: ref array<u8>;
+    let _licm_used_33: i32;
+    let _licm_repr_34: ref array<u8>;
+    let _licm_used_35: i32;
+    let _licm_repr_36: ref array<u8>;
     table = __inline_Array_u8___filled_0: block -> ref Array<u8> {
         __local_6 = builtin::array_new<u8>(256);
         builtin::array_fill<u8>(__local_6, 0, 255, 256);
@@ -686,12 +742,20 @@ fn "core:base64/build_decode_table"() {  // from core:base64
     };
     __for_0: block {
         i_1 = 0;
+        _licm_used_31 = table.used;
+        _licm_repr_32 = table.repr;
         block {
             l27: loop {
                 if (i_1 < 26) == 0 {
                     break __for_0;
                 };
-                "core:base64/Array<u8>^IndexAssign::index_assign"(table, 65 + i_1, i_1 & 255);
+                index_8 = 65 + i_1;
+                value_9 = i_1 & 255;
+                if index_8 >= _licm_used_31 {
+                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    unreachable;
+                };
+                builtin::array_set_u8(_licm_repr_32, index_8, value_9);
                 i_1 = i_1 + 1;
                 continue l27;
             };
@@ -699,35 +763,71 @@ fn "core:base64/build_decode_table"() {  // from core:base64
     };
     __for_1: block {
         i_2 = 0;
+        _licm_used_33 = table.used;
+        _licm_repr_34 = table.repr;
         block {
-            l30: loop {
+            l31: loop {
                 if (i_2 < 26) == 0 {
                     break __for_1;
                 };
-                "core:base64/Array<u8>^IndexAssign::index_assign"(table, 97 + i_2, (26 + i_2) & 255);
+                index_11 = 97 + i_2;
+                value_12 = (26 + i_2) & 255;
+                if index_11 >= _licm_used_33 {
+                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    unreachable;
+                };
+                builtin::array_set_u8(_licm_repr_34, index_11, value_12);
                 i_2 = i_2 + 1;
-                continue l30;
+                continue l31;
             };
         };
     };
     __for_2: block {
         i_3 = 0;
+        _licm_used_35 = table.used;
+        _licm_repr_36 = table.repr;
         block {
-            l33: loop {
+            l35: loop {
                 if (i_3 < 10) == 0 {
                     break __for_2;
                 };
-                "core:base64/Array<u8>^IndexAssign::index_assign"(table, 48 + i_3, (52 + i_3) & 255);
+                index_14 = 48 + i_3;
+                value_15 = (52 + i_3) & 255;
+                if index_14 >= _licm_used_35 {
+                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    unreachable;
+                };
+                builtin::array_set_u8(_licm_repr_36, index_14, value_15);
                 i_3 = i_3 + 1;
-                continue l33;
+                continue l35;
             };
         };
     };
-    "core:base64/Array<u8>^IndexAssign::index_assign"(table, 43, 62);
-    "core:base64/Array<u8>^IndexAssign::index_assign"(table, 47, 63);
-    "core:base64/Array<u8>^IndexAssign::index_assign"(table, 45, 62);
-    "core:base64/Array<u8>^IndexAssign::index_assign"(table, 95, 63);
-    "core:base64/Array<u8>^IndexAssign::index_assign"(table, 61, 254);
+    if 43 >= table.used {
+        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
+    };
+    builtin::array_set_u8(table.repr, 43, 62);
+    if 47 >= table.used {
+        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
+    };
+    builtin::array_set_u8(table.repr, 47, 63);
+    if 45 >= table.used {
+        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
+    };
+    builtin::array_set_u8(table.repr, 45, 62);
+    if 95 >= table.used {
+        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
+    };
+    builtin::array_set_u8(table.repr, 95, 63);
+    if 61 >= table.used {
+        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
+    };
+    builtin::array_set_u8(table.repr, 61, 254);
     return table;
 }
 
@@ -776,10 +876,10 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
     _licm_repr_46 = data.repr;
     _licm_used_47 = table.used;
     _licm_repr_48 = table.repr;
-    b36: block {
-        l37: loop {
+    b44: block {
+        l45: loop {
             if ((i + 2) < len) == 0 {
-                break b36;
+                break b44;
             };
             b0_7 = __inline_Array_u8__IndexValue__index_value_2: block -> u8 {
                 __local_16 = i;
@@ -838,7 +938,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
                 break __inline_Array_u8__IndexValue__index_value_8: builtin::array_get<u8>(_licm_repr_48, __local_28);
             });
             i = i + 3;
-            continue l37;
+            continue l45;
         };
     };
     if remainder == 1 {
@@ -964,8 +1064,8 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
     end = input_len;
     _licm_used_57 = input.used;
     _licm_repr_58 = input.repr;
-    b58: block {
-        l59: loop {
+    b66: block {
+        l67: loop {
             if if end > 0 -> i32 {
                 __inline_Array_u8__IndexValue__index_value_0: block -> u8 {
                     __local_19 = end - 1;
@@ -978,10 +1078,10 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
             } else {
                 0;
             } == 0 {
-                break b58;
+                break b66;
             };
             end = end - 1;
-            continue l59;
+            continue l67;
         };
     };
     if (end % 4) == 1 {
@@ -1005,10 +1105,10 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
     _licm_repr_60 = input.repr;
     _licm_used_61 = table.used;
     _licm_repr_62 = table.repr;
-    b66: block {
-        l67: loop {
+    b74: block {
+        l75: loop {
             if ((i + 3) < end) == 0 {
-                break b66;
+                break b74;
             };
             v0_9 = __inline_Array_u8__IndexValue__index_value_3: block -> u8 {
                 __local_24 = __inline_Array_u8__IndexValue__index_value_2: block -> u8 {
@@ -1089,7 +1189,7 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
             "core:base64/Array<u8>::append"(out, (((v1_10 & 15) << 4) | (v2_11 >> 2)) & 255);
             "core:base64/Array<u8>::append"(out, (((v2_11 & 3) << 6) | v3) & 255);
             i = i + 4;
-            continue l67;
+            continue l75;
         };
     };
     if remainder == 2 {
@@ -1194,12 +1294,6 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
     return Option<Array<u8>>::Some { discriminant: 0, payload_0: ref.as_non_null(out) };
 }
 
-fn "core:base64/decode"(encoded) {  // from core:base64
-    let bytes: ref Array<u8>;
-    bytes = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: ref.as_non_null(encoded.repr), used: encoded.used, index: 0 });
-    return "core:base64/decode_impl"(bytes, bytes.used);
-}
-
 fn "core:base64/__initialize_module"() {  // from core:base64
     let __local_0: ref Array<u8>;
     let __local_1: ref Array<u8>;
@@ -1251,13 +1345,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l100: loop {
+            l108: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l100;
+                continue l108;
             };
         };
     };
@@ -1386,13 +1480,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l107: loop {
+            l115: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l107;
+                continue l115;
             };
         };
     };
@@ -1409,14 +1503,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l111: loop {
+                l119: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l111;
+                    continue l119;
                 };
             };
         };
@@ -1442,14 +1536,6 @@ fn "core:base64/Array<u8>::append"(self, value) {  // from core:base64
     };
     builtin::array_set_u8(self.repr, used, value);
     self.used = used + 1;
-}
-
-fn "core:base64/Array<u8>^IndexAssign::index_assign"(self, index, value) {  // from core:base64
-    if index >= self.used {
-        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-        unreachable;
-    };
-    builtin::array_set_u8(self.repr, index, value);
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -1539,8 +1625,8 @@ fn StrUtf8ByteIter^Iterator::collect(self) {
         __local_1 = Array<u8> { repr: builtin::array_new<u8>(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    b121: block {
-        l122: loop {
+    b128: block {
+        l129: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: u8;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(self);
@@ -1548,9 +1634,9 @@ fn StrUtf8ByteIter^Iterator::collect(self) {
                 item = __sroa___pattern_temp_0_payload_0;
                 Array<u8>::append(result, item);
             } else {
-                break b121;
+                break b128;
             };
-            continue l122;
+            continue l129;
         };
     };
     return result;
@@ -1639,7 +1725,7 @@ fn Array<u8>^Eq::eq(self, other) {
         _licm_repr_4 = self.repr;
         _licm_repr_5 = other.repr;
         block {
-            l132: loop {
+            l139: loop {
                 if (i < _licm_used_3) == 0 {
                     break __for_1;
                 };
@@ -1647,7 +1733,7 @@ fn Array<u8>^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l132;
+                continue l139;
             };
         };
     };
@@ -1661,13 +1747,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l136: loop {
+            l143: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l136;
+                continue l143;
             };
         };
     };

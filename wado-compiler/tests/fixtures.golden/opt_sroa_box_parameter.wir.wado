@@ -268,8 +268,6 @@ type "functype/unpack64" = fn(f64) -> ref UnpackResult;
 
 type "functype/unpack32" = fn(f32) -> ref UnpackResult;
 
-type "functype/unrounded_round" = fn(u64) -> u64;
-
 type "functype/unrounded_div" = fn(u64, u64) -> u64;
 
 type "functype/pow10_coarse" = fn(i32) -> ref PmHiLo;
@@ -308,8 +306,6 @@ type "functype/count_digits_base" = fn(i64, i32) -> i32;
 
 type "functype/fmt_float_special" = fn(ref Formatter, bool, enum:SpecialKind, ref String);
 
-type "functype/fmt_float_sign" = fn(ref Formatter, bool);
-
 type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
 
 type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
@@ -345,16 +341,6 @@ type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<char>;
 
 type "functype/String::append_char" = fn(ref String, char);
-
-type "functype/__Closure_0::__call" = fn(ref __Closure_0, i32) -> ref String;
-
-type "functype/__Closure_1::__call" = fn(ref __Closure_1, i64) -> ref String;
-
-type "functype/__Closure_2::__call" = fn(ref __Closure_2, f32) -> ref String;
-
-type "functype/__Closure_3::__call" = fn(ref __Closure_3, f64) -> ref String;
-
-type "functype/__Closure_4::__call" = fn(ref __Closure_4, bool) -> ref String;
 
 type "functype/__Closure_5::__call" = fn(ref __Closure_5) -> ref String;
 
@@ -435,6 +421,16 @@ type "functype/trim_zeros" = fn(u64, i32) -> [u64, i32];
 type "functype/check_special" = fn(f64) -> [bool, bool, i32];
 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
+
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> [ref array<u8>, i32];
+
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, i64) -> [ref array<u8>, i32];
+
+type "functype/$canonical_closure_fn_2" = fn(ref null struct, f32) -> [ref array<u8>, i32];
+
+type "functype/$canonical_closure_fn_3" = fn(ref null struct, f64) -> [ref array<u8>, i32];
+
+type "functype/$canonical_closure_fn_4" = fn(ref null struct, bool) -> [ref array<u8>, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -760,11 +756,6 @@ fn run() with Stdout {
     let s_76: ref String;
     let __v0_77: ref String;
     let __cond_78: bool;
-    let fmt_i32: ref __Closure_0;
-    let fmt_i64: ref __Closure_1;
-    let fmt_f32: ref __Closure_2;
-    let fmt_f64: ref __Closure_3;
-    let fmt_bool: ref __Closure_4;
     let __v0_84: ref String;
     let __cond_85: bool;
     let __v0_86: ref String;
@@ -1044,24 +1035,44 @@ fn run() with Stdout {
     let __local_609: ref String;
     let __local_611: ref Formatter;
     let __local_614: ref String;
-    let __local_616: ref String;
-    let __local_618: ref Formatter;
-    let __local_621: ref String;
-    let __local_623: ref String;
-    let __local_625: ref Formatter;
-    let __local_628: ref String;
-    let __local_630: ref String;
-    let __local_632: ref Formatter;
-    let __local_635: ref String;
-    let __local_637: ref String;
-    let __local_639: ref Formatter;
-    let __local_642: ref String;
-    let __local_644: ref String;
-    let __local_646: ref Formatter;
-    let __local_649: ref String;
-    let __local_651: ref String;
-    let __local_653: ref Formatter;
-    let __local_656: ref String;
+    let __local_843: ref String;
+    let __local_844: ref Formatter;
+    let __local_846: ref String;
+    let __local_848: ref Formatter;
+    let __local_852: ref String;
+    let __local_854: ref Formatter;
+    let __local_857: ref String;
+    let __local_1088: ref String;
+    let __local_1089: ref Formatter;
+    let __local_1091: ref String;
+    let __local_1093: ref Formatter;
+    let __local_1097: ref String;
+    let __local_1099: ref Formatter;
+    let __local_1102: ref String;
+    let __local_1335: ref String;
+    let __local_1336: ref Formatter;
+    let __local_1338: ref String;
+    let __local_1340: ref Formatter;
+    let __local_1342: ref String;
+    let __local_1344: ref Formatter;
+    let __local_1347: ref String;
+    let __local_1582: ref String;
+    let __local_1583: ref Formatter;
+    let __local_1585: ref String;
+    let __local_1587: ref Formatter;
+    let __local_1589: ref String;
+    let __local_1591: ref Formatter;
+    let __local_1594: ref String;
+    let __local_1831: ref String;
+    let __local_1832: ref Formatter;
+    let __local_1834: ref String;
+    let __local_1836: ref Formatter;
+    let __local_1840: ref String;
+    let __local_1842: ref Formatter;
+    let __local_1845: ref String;
+    let __local_1847: ref String;
+    let __local_1849: ref Formatter;
+    let __local_1852: ref String;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -2379,12 +2390,16 @@ condition: s == \"true\"
         "core:internal/panic"(String { repr: array.new_data<u8>("bool if-let failed"), used: 18 });
         unreachable;
     };
-    fmt_i32 = __Closure_0 {  };
-    fmt_i64 = __Closure_1 {  };
-    fmt_f32 = __Closure_2 {  };
-    fmt_f64 = __Closure_3 {  };
-    fmt_bool = __Closure_4 {  };
-    __v0_84 = __Closure_0::__call(fmt_i32, 42);
+    __v0_84 = __tmpl: block -> ref String {
+        __local_843 = String { repr: builtin::array_new<u8>(16), used: 0 };
+        __local_844 = __inline_Formatter__new_253: block -> ref Formatter {
+            __local_846 = __local_843;
+            break __inline_Formatter__new_253: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_846) };
+        };
+        __local_848 = __local_844;
+        i32::fmt_decimal(42, __local_848);
+        break __tmpl: __local_843;
+    };
     __cond_85 = String^Eq::eq(__v0_84, String { repr: array.new_data<u8>("42"), used: 2 });
     if __cond_85 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2399,19 +2414,19 @@ condition: s == \"true\"
             String::append_char(__local_237, 32);
             String::append(__local_237, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
             String::append_char(__local_237, 58);
-            __local_238 = __inline_Formatter__new_252: block -> ref Formatter {
-                __local_616 = __local_237;
-                break __inline_Formatter__new_252: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_616) };
+            __local_238 = __inline_Formatter__new_257: block -> ref Formatter {
+                __local_852 = __local_237;
+                break __inline_Formatter__new_257: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_852) };
             };
-            __local_618 = __local_238;
-            i32::fmt_decimal(158, __local_618);
+            __local_854 = __local_238;
+            i32::fmt_decimal(158, __local_854);
             String::append(__local_237, String { repr: array.new_data<u8>("
 condition: fmt_i32(42) == \"42\"
 "), used: 32 });
             String::append(__local_237, String { repr: array.new_data<u8>("fmt_i32(42): "), used: 13 });
-            __local_238 = __inline_Formatter__new_255: block -> ref Formatter {
-                __local_621 = __local_237;
-                break __inline_Formatter__new_255: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_621) };
+            __local_238 = __inline_Formatter__new_260: block -> ref Formatter {
+                __local_857 = __local_237;
+                break __inline_Formatter__new_260: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_857) };
             };
             String^Inspect::inspect(__v0_84, __local_238);
             String::append_char(__local_237, 10);
@@ -2419,7 +2434,16 @@ condition: fmt_i32(42) == \"42\"
         });
         unreachable;
     };
-    __v0_86 = __Closure_1::__call(fmt_i64, 123456789_i64);
+    __v0_86 = __tmpl: block -> ref String {
+        __local_1088 = String { repr: builtin::array_new<u8>(16), used: 0 };
+        __local_1089 = __inline_Formatter__new_263: block -> ref Formatter {
+            __local_1091 = __local_1088;
+            break __inline_Formatter__new_263: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_1091) };
+        };
+        __local_1093 = __local_1089;
+        i64::fmt_decimal(123456789_i64, __local_1093);
+        break __tmpl: __local_1088;
+    };
     __cond_87 = String^Eq::eq(__v0_86, String { repr: array.new_data<u8>("123456789"), used: 9 });
     if __cond_87 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2434,19 +2458,19 @@ condition: fmt_i32(42) == \"42\"
             String::append_char(__local_239, 32);
             String::append(__local_239, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
             String::append_char(__local_239, 58);
-            __local_240 = __inline_Formatter__new_257: block -> ref Formatter {
-                __local_623 = __local_239;
-                break __inline_Formatter__new_257: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_623) };
+            __local_240 = __inline_Formatter__new_267: block -> ref Formatter {
+                __local_1097 = __local_239;
+                break __inline_Formatter__new_267: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_1097) };
             };
-            __local_625 = __local_240;
-            i32::fmt_decimal(159, __local_625);
+            __local_1099 = __local_240;
+            i32::fmt_decimal(159, __local_1099);
             String::append(__local_239, String { repr: array.new_data<u8>("
 condition: fmt_i64(123456789) == \"123456789\"
 "), used: 46 });
             String::append(__local_239, String { repr: array.new_data<u8>("fmt_i64(123456789): "), used: 20 });
-            __local_240 = __inline_Formatter__new_260: block -> ref Formatter {
-                __local_628 = __local_239;
-                break __inline_Formatter__new_260: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_628) };
+            __local_240 = __inline_Formatter__new_270: block -> ref Formatter {
+                __local_1102 = __local_239;
+                break __inline_Formatter__new_270: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_1102) };
             };
             String^Inspect::inspect(__v0_86, __local_240);
             String::append_char(__local_239, 10);
@@ -2454,7 +2478,16 @@ condition: fmt_i64(123456789) == \"123456789\"
         });
         unreachable;
     };
-    __v0_88 = __Closure_2::__call(fmt_f32, 2.5_f32);
+    __v0_88 = __tmpl: block -> ref String {
+        __local_1335 = String { repr: builtin::array_new<u8>(16), used: 0 };
+        __local_1336 = __inline_Formatter__new_273: block -> ref Formatter {
+            __local_1338 = __local_1335;
+            break __inline_Formatter__new_273: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_1338) };
+        };
+        __local_1340 = __local_1336;
+        f32::fmt_into(2.5_f32, __local_1340);
+        break __tmpl: __local_1335;
+    };
     __cond_89 = String^Eq::eq(__v0_88, String { repr: array.new_data<u8>("2.5"), used: 3 });
     if __cond_89 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2469,19 +2502,19 @@ condition: fmt_i64(123456789) == \"123456789\"
             String::append_char(__local_241, 32);
             String::append(__local_241, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
             String::append_char(__local_241, 58);
-            __local_242 = __inline_Formatter__new_262: block -> ref Formatter {
-                __local_630 = __local_241;
-                break __inline_Formatter__new_262: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_630) };
+            __local_242 = __inline_Formatter__new_276: block -> ref Formatter {
+                __local_1342 = __local_241;
+                break __inline_Formatter__new_276: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_1342) };
             };
-            __local_632 = __local_242;
-            i32::fmt_decimal(160, __local_632);
+            __local_1344 = __local_242;
+            i32::fmt_decimal(160, __local_1344);
             String::append(__local_241, String { repr: array.new_data<u8>("
 condition: fmt_f32(2.5) == \"2.5\"
 "), used: 34 });
             String::append(__local_241, String { repr: array.new_data<u8>("fmt_f32(2.5): "), used: 14 });
-            __local_242 = __inline_Formatter__new_265: block -> ref Formatter {
-                __local_635 = __local_241;
-                break __inline_Formatter__new_265: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_635) };
+            __local_242 = __inline_Formatter__new_279: block -> ref Formatter {
+                __local_1347 = __local_241;
+                break __inline_Formatter__new_279: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_1347) };
             };
             String^Inspect::inspect(__v0_88, __local_242);
             String::append_char(__local_241, 10);
@@ -2489,7 +2522,16 @@ condition: fmt_f32(2.5) == \"2.5\"
         });
         unreachable;
     };
-    __v0_90 = __Closure_3::__call(fmt_f64, 3.14159);
+    __v0_90 = __tmpl: block -> ref String {
+        __local_1582 = String { repr: builtin::array_new<u8>(16), used: 0 };
+        __local_1583 = __inline_Formatter__new_282: block -> ref Formatter {
+            __local_1585 = __local_1582;
+            break __inline_Formatter__new_282: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_1585) };
+        };
+        __local_1587 = __local_1583;
+        f64::fmt_into(3.14159, __local_1587);
+        break __tmpl: __local_1582;
+    };
     __cond_91 = String^Eq::eq(__v0_90, String { repr: array.new_data<u8>("3.14159"), used: 7 });
     if __cond_91 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2504,19 +2546,19 @@ condition: fmt_f32(2.5) == \"2.5\"
             String::append_char(__local_243, 32);
             String::append(__local_243, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
             String::append_char(__local_243, 58);
-            __local_244 = __inline_Formatter__new_267: block -> ref Formatter {
-                __local_637 = __local_243;
-                break __inline_Formatter__new_267: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_637) };
+            __local_244 = __inline_Formatter__new_285: block -> ref Formatter {
+                __local_1589 = __local_243;
+                break __inline_Formatter__new_285: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_1589) };
             };
-            __local_639 = __local_244;
-            i32::fmt_decimal(161, __local_639);
+            __local_1591 = __local_244;
+            i32::fmt_decimal(161, __local_1591);
             String::append(__local_243, String { repr: array.new_data<u8>("
 condition: fmt_f64(3.14159) == \"3.14159\"
 "), used: 42 });
             String::append(__local_243, String { repr: array.new_data<u8>("fmt_f64(3.14159): "), used: 18 });
-            __local_244 = __inline_Formatter__new_270: block -> ref Formatter {
-                __local_642 = __local_243;
-                break __inline_Formatter__new_270: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_642) };
+            __local_244 = __inline_Formatter__new_288: block -> ref Formatter {
+                __local_1594 = __local_243;
+                break __inline_Formatter__new_288: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_1594) };
             };
             String^Inspect::inspect(__v0_90, __local_244);
             String::append_char(__local_243, 10);
@@ -2524,7 +2566,16 @@ condition: fmt_f64(3.14159) == \"3.14159\"
         });
         unreachable;
     };
-    __v0_92 = __Closure_4::__call(fmt_bool, 0);
+    __v0_92 = __tmpl: block -> ref String {
+        __local_1831 = String { repr: builtin::array_new<u8>(16), used: 0 };
+        __local_1832 = __inline_Formatter__new_291: block -> ref Formatter {
+            __local_1834 = __local_1831;
+            break __inline_Formatter__new_291: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_1834) };
+        };
+        __local_1836 = __local_1832;
+        Formatter::pad(__local_1836, String { repr: array.new_data<u8>("false"), used: 5 });
+        break __tmpl: __local_1831;
+    };
     __cond_93 = String^Eq::eq(__v0_92, String { repr: array.new_data<u8>("false"), used: 5 });
     if __cond_93 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2539,19 +2590,19 @@ condition: fmt_f64(3.14159) == \"3.14159\"
             String::append_char(__local_245, 32);
             String::append(__local_245, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
             String::append_char(__local_245, 58);
-            __local_246 = __inline_Formatter__new_272: block -> ref Formatter {
-                __local_644 = __local_245;
-                break __inline_Formatter__new_272: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_644) };
+            __local_246 = __inline_Formatter__new_295: block -> ref Formatter {
+                __local_1840 = __local_245;
+                break __inline_Formatter__new_295: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_1840) };
             };
-            __local_646 = __local_246;
-            i32::fmt_decimal(162, __local_646);
+            __local_1842 = __local_246;
+            i32::fmt_decimal(162, __local_1842);
             String::append(__local_245, String { repr: array.new_data<u8>("
 condition: fmt_bool(false) == \"false\"
 "), used: 39 });
             String::append(__local_245, String { repr: array.new_data<u8>("fmt_bool(false): "), used: 17 });
-            __local_246 = __inline_Formatter__new_275: block -> ref Formatter {
-                __local_649 = __local_245;
-                break __inline_Formatter__new_275: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_649) };
+            __local_246 = __inline_Formatter__new_298: block -> ref Formatter {
+                __local_1845 = __local_245;
+                break __inline_Formatter__new_298: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_1845) };
             };
             String^Inspect::inspect(__v0_92, __local_246);
             String::append_char(__local_245, 10);
@@ -2575,19 +2626,19 @@ condition: fmt_bool(false) == \"false\"
             String::append_char(__local_249, 32);
             String::append(__local_249, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado"), used: 56 });
             String::append_char(__local_249, 58);
-            __local_250 = __inline_Formatter__new_277: block -> ref Formatter {
-                __local_651 = __local_249;
-                break __inline_Formatter__new_277: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_651) };
+            __local_250 = __inline_Formatter__new_300: block -> ref Formatter {
+                __local_1847 = __local_249;
+                break __inline_Formatter__new_300: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_1847) };
             };
-            __local_653 = __local_250;
-            i32::fmt_decimal(168, __local_653);
+            __local_1849 = __local_250;
+            i32::fmt_decimal(168, __local_1849);
             String::append(__local_249, String { repr: array.new_data<u8>("
 condition: fmt_captured() == \"999, 1.618\"
 "), used: 43 });
             String::append(__local_249, String { repr: array.new_data<u8>("fmt_captured(): "), used: 16 });
-            __local_250 = __inline_Formatter__new_280: block -> ref Formatter {
-                __local_656 = __local_249;
-                break __inline_Formatter__new_280: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_656) };
+            __local_250 = __inline_Formatter__new_303: block -> ref Formatter {
+                __local_1852 = __local_249;
+                break __inline_Formatter__new_303: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_1852) };
             };
             String^Inspect::inspect(__v0_97, __local_250);
             String::append_char(__local_249, 10);
@@ -2883,10 +2934,6 @@ fn unpack32(f) {
     m_12 = -9223372036854775808_i64 | (raw_mantissa << 40_i64);
     e = (raw_exp - 1) + -189;
     return m_12; e;
-}
-
-fn unrounded_round(u) {
-    return ((u + 1_i64) + ((u >>u 2_i64) & 1_i64)) >>u 2_i64;
 }
 
 fn unrounded_div(u, d) {
@@ -3205,7 +3252,8 @@ fn fixed_width_for_prec(f, precision) {
     let u: u64;
     let d: u64;
     let __local_21: i32;
-    let __local_28: ref Array<u64>;
+    let __local_29: u64;
+    let __local_30: ref Array<u64>;
     let __sroa_unpack_mantissa: u64;
     let __sroa_unpack_exponent: i32;
     multivalue_bind [__sroa_unpack_mantissa, __sroa_unpack_exponent] = unpack64(f);
@@ -3241,16 +3289,19 @@ fn fixed_width_for_prec(f, precision) {
     multivalue_bind [__sroa_pm_hi, __sroa_pm_lo] = mul_pow10(p);
     s = 0 - ((e + lp) + 3);
     u = uscale(m, __sroa_pm_hi, __sroa_pm_lo, s);
-    d = unrounded_round(u);
+    d = ((u + 1_i64) + ((u >>u 2_i64) & 1_i64)) >>u 2_i64;
     if d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
-        __local_28 = POW10;
-        if n >= __local_28.used {
+        __local_30 = POW10;
+        if n >= __local_30.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_28.repr, n);
+        break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_30.repr, n);
     } {
-        d = unrounded_round(unrounded_div(u, 10_i64));
+        d = __inline_unrounded_round_8: block -> u64 {
+            __local_29 = unrounded_div(u, 10_i64);
+            break __inline_unrounded_round_8: ((__local_29 + 1_i64) + ((__local_29 >>u 2_i64) & 1_i64)) >>u 2_i64;
+        };
         return d; (0 - p) + 1;
     };
     return d; 0 - p;
@@ -3283,6 +3334,7 @@ fn short(f) {
     let __local_29: u64;
     let __local_30: u64;
     let __local_31: i32;
+    let __local_32: u64;
     let __sroa_unpack_mantissa: u64;
     let __sroa_unpack_exponent: i32;
     multivalue_bind [__sroa_unpack_mantissa, __sroa_unpack_exponent] = unpack64(f);
@@ -3350,7 +3402,10 @@ fn short(f) {
     };
     d = dmin;
     if dmin <u dmax {
-        d = unrounded_round(uscale(m, __sroa_pm_hi, __sroa_pm_lo, s));
+        d = __inline_unrounded_round_8: block -> u64 {
+            __local_32 = uscale(m, __sroa_pm_hi, __sroa_pm_lo, s);
+            break __inline_unrounded_round_8: ((__local_32 + 1_i64) + ((__local_32 >>u 2_i64) & 1_i64)) >>u 2_i64;
+        };
     };
     return d; 0 - p;
 }
@@ -3382,6 +3437,7 @@ fn short32(f) {
     let __local_29: u64;
     let __local_30: u64;
     let __local_31: i32;
+    let __local_32: u64;
     let __sroa_unpack_mantissa: u64;
     let __sroa_unpack_exponent: i32;
     multivalue_bind [__sroa_unpack_mantissa, __sroa_unpack_exponent] = unpack32(f);
@@ -3449,7 +3505,10 @@ fn short32(f) {
     };
     d = dmin;
     if dmin <u dmax {
-        d = unrounded_round(uscale(m, __sroa_pm_hi, __sroa_pm_lo, s));
+        d = __inline_unrounded_round_8: block -> u64 {
+            __local_32 = uscale(m, __sroa_pm_hi, __sroa_pm_lo, s);
+            break __inline_unrounded_round_8: ((__local_32 + 1_i64) + ((__local_32 >>u 2_i64) & 1_i64)) >>u 2_i64;
+        };
     };
     return d; 0 - p;
 }
@@ -3885,14 +3944,6 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
     Formatter::apply_padding(f, mark);
 }
 
-fn fmt_float_sign(f, is_neg) {
-    if is_neg {
-        String::append_char(f.buf, 45);
-    } else if f.sign_plus {
-        String::append_char(f.buf, 43);
-    };
-}
-
 fn Array<u64>::append(self, value) {
     let used: i32;
     let capacity: i32;
@@ -4051,10 +4102,10 @@ fn u64::fmt_decimal(self, f) {
     };
     digit_count = 0;
     temp = val_i64;
-    b215: block {
-        l216: loop {
+    b213: block {
+        l214: loop {
             if (temp != 0_i64) == 0 {
-                break b215;
+                break b213;
             };
             digit_count = digit_count + 1;
             if temp >= 0_i64 {
@@ -4069,7 +4120,7 @@ fn u64::fmt_decimal(self, f) {
                 };
                 temp = (signed_quot_9 + 1844674407370955161_i64) + carry_10;
             };
-            continue l216;
+            continue l214;
         };
     };
     offset_11 = Formatter::prepare_int_write(f, 0, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
@@ -4079,10 +4130,10 @@ fn u64::fmt_decimal(self, f) {
     };
     pos = offset_11 + digit_count;
     temp = val_i64;
-    b220: block {
-        l221: loop {
+    b218: block {
+        l219: loop {
             if (temp != 0_i64) == 0 {
-                break b220;
+                break b218;
             };
             pos = pos - 1;
             digit = 0;
@@ -4105,7 +4156,7 @@ fn u64::fmt_decimal(self, f) {
                 temp = (signed_quot_17 + 1844674407370955161_i64) + carry_18;
             };
             builtin::array_set_u8(repr, pos, (48 + digit) & 255);
-            continue l221;
+            continue l219;
         };
     };
 }
@@ -4124,7 +4175,7 @@ fn f32::fmt_into(self, f) {
     let __local_17: i32;
     let __local_18: i32;
     let __local_22: ref String;
-    let __local_23: ref Array<u64>;
+    let __local_25: ref Array<u64>;
     if f.precision >= 0 {
         precision = f.precision;
         v64 = builtin::f64_promote_f32(self);
@@ -4158,19 +4209,23 @@ fn f32::fmt_into(self, f) {
             break __inline_log10_pow2_2: (__local_18 * 78913) >> 18;
         };
         break __inline_digits_1: __local_17 + (d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
-            __local_23 = POW10;
-            if __local_17 >= __local_23.used {
+            __local_25 = POW10;
+            if __local_17 >= __local_25.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
-            break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_23.repr, __local_17);
+            break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_25.repr, __local_17);
         });
     };
     mark = __inline_String__len_6: block -> i32 {
         __local_22 = f.buf;
         break __inline_String__len_6: __local_22.used;
     };
-    fmt_float_sign(f, is_neg);
+    if is_neg {
+        String::append_char(f.buf, 45);
+    } else if f.sign_plus {
+        String::append_char(f.buf, 43);
+    };
     write_decimal(f.buf, d, p, nd);
     Formatter::apply_padding(f, mark);
 }
@@ -4188,7 +4243,7 @@ fn f64::fmt_into(self, f) {
     let __local_14: i32;
     let __local_15: i32;
     let __local_19: ref String;
-    let __local_20: ref Array<u64>;
+    let __local_22: ref Array<u64>;
     if f.precision >= 0 {
         f64::fmt_fixed(self, f.precision, f);
         return;
@@ -4221,19 +4276,23 @@ fn f64::fmt_into(self, f) {
             break __inline_log10_pow2_1: (__local_15 * 78913) >> 18;
         };
         break __inline_digits_0: __local_14 + (d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
-            __local_20 = POW10;
-            if __local_14 >= __local_20.used {
+            __local_22 = POW10;
+            if __local_14 >= __local_22.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
-            break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_20.repr, __local_14);
+            break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_22.repr, __local_14);
         });
     };
     mark = __inline_String__len_5: block -> i32 {
         __local_19 = f.buf;
         break __inline_String__len_5: __local_19.used;
     };
-    fmt_float_sign(f, is_neg);
+    if is_neg {
+        String::append_char(f.buf, 45);
+    } else if f.sign_plus {
+        String::append_char(f.buf, 43);
+    };
     write_decimal(f.buf, d, p, nd);
     Formatter::apply_padding(f, mark);
 }
@@ -4250,10 +4309,10 @@ fn f64::fmt_fixed(self, precision, f) {
     let nd: i32;
     let mark_13: i32;
     let __local_16: ref String;
-    let __local_18: i32;
-    let __local_19: i32;
-    let __local_23: ref String;
-    let __local_24: ref Array<u64>;
+    let __local_20: i32;
+    let __local_21: i32;
+    let __local_25: ref String;
+    let __local_28: ref Array<u64>;
     value = self;
     let __sroa___pattern_temp_0_0: bool;
     let __sroa___pattern_temp_0_1: bool;
@@ -4285,7 +4344,11 @@ fn f64::fmt_fixed(self, precision, f) {
             __local_16 = f.buf;
             break __inline_String__len_1: __local_16.used;
         };
-        fmt_float_sign(f, is_neg);
+        if is_neg {
+            String::append_char(f.buf, 45);
+        } else if f.sign_plus {
+            String::append_char(f.buf, 43);
+        };
         String::append_char(f.buf, 48);
         if precision > 0 {
             String::append_char(f.buf, 46);
@@ -4304,25 +4367,29 @@ fn f64::fmt_fixed(self, precision, f) {
     multivalue_bind [__sroa_result_digits, __sroa_result_exponent] = fixed_width_for_prec(abs_f, precision);
     d = __sroa_result_digits;
     p = __sroa_result_exponent;
-    nd = __inline_digits_2: block -> i32 {
-        __local_18 = __inline_log10_pow2_3: block -> i32 {
-            __local_19 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d));
-            break __inline_log10_pow2_3: (__local_19 * 78913) >> 18;
+    nd = __inline_digits_3: block -> i32 {
+        __local_20 = __inline_log10_pow2_4: block -> i32 {
+            __local_21 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d));
+            break __inline_log10_pow2_4: (__local_21 * 78913) >> 18;
         };
-        break __inline_digits_2: __local_18 + (d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
-            __local_24 = POW10;
-            if __local_18 >= __local_24.used {
+        break __inline_digits_3: __local_20 + (d >=u __inline_Array_u64__IndexValue__index_value_0: block -> u64 {
+            __local_28 = POW10;
+            if __local_20 >= __local_28.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
-            break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_24.repr, __local_18);
+            break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_28.repr, __local_20);
         });
     };
-    mark_13 = __inline_String__len_7: block -> i32 {
-        __local_23 = f.buf;
-        break __inline_String__len_7: __local_23.used;
+    mark_13 = __inline_String__len_8: block -> i32 {
+        __local_25 = f.buf;
+        break __inline_String__len_8: __local_25.used;
     };
-    fmt_float_sign(f, is_neg);
+    if is_neg {
+        String::append_char(f.buf, 45);
+    } else if f.sign_plus {
+        String::append_char(f.buf, 43);
+    };
     write_decimal_prec(f.buf, d, p, nd, precision);
     Formatter::apply_padding(f, mark_13);
 }
@@ -4432,7 +4499,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l252: loop {
+            l258: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -4440,7 +4507,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l252;
+                continue l258;
             };
         };
     };
@@ -4530,95 +4597,6 @@ fn String::append_char(self, c) {
     };
 }
 
-fn __Closure_0::__call(self, x) {
-    let __local_228: ref String;
-    let __local_229: ref Formatter;
-    let __local_231: ref String;
-    let __local_233: ref Formatter;
-    return __tmpl: block -> ref String {
-        __local_228 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_229 = __inline_Formatter__new_1: block -> ref Formatter {
-            __local_231 = __local_228;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_231) };
-        };
-        __local_233 = __local_229;
-        i32::fmt_decimal(x, __local_233);
-        break __tmpl: __local_228;
-    };
-}
-
-fn __Closure_1::__call(self, x) {
-    let __local_230: ref String;
-    let __local_231: ref Formatter;
-    let __local_233: ref String;
-    let __local_235: ref Formatter;
-    return __tmpl: block -> ref String {
-        __local_230 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_231 = __inline_Formatter__new_1: block -> ref Formatter {
-            __local_233 = __local_230;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_233) };
-        };
-        __local_235 = __local_231;
-        i64::fmt_decimal(x, __local_235);
-        break __tmpl: __local_230;
-    };
-}
-
-fn __Closure_2::__call(self, x) {
-    let __local_232: ref String;
-    let __local_233: ref Formatter;
-    let __local_235: ref String;
-    let __local_237: ref Formatter;
-    return __tmpl: block -> ref String {
-        __local_232 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_233 = __inline_Formatter__new_1: block -> ref Formatter {
-            __local_235 = __local_232;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_235) };
-        };
-        __local_237 = __local_233;
-        f32::fmt_into(x, __local_237);
-        break __tmpl: __local_232;
-    };
-}
-
-fn __Closure_3::__call(self, x) {
-    let __local_234: ref String;
-    let __local_235: ref Formatter;
-    let __local_237: ref String;
-    let __local_239: ref Formatter;
-    return __tmpl: block -> ref String {
-        __local_234 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_235 = __inline_Formatter__new_1: block -> ref Formatter {
-            __local_237 = __local_234;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_237) };
-        };
-        __local_239 = __local_235;
-        f64::fmt_into(x, __local_239);
-        break __tmpl: __local_234;
-    };
-}
-
-fn __Closure_4::__call(self, x) {
-    let __local_236: ref String;
-    let __local_237: ref Formatter;
-    let __local_239: ref String;
-    let __local_241: ref Formatter;
-    return __tmpl: block -> ref String {
-        __local_236 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_237 = __inline_Formatter__new_1: block -> ref Formatter {
-            __local_239 = __local_236;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_239) };
-        };
-        __local_241 = __local_237;
-        Formatter::pad(__local_241, if x -> ref String {
-            String { repr: array.new_data<u8>("true"), used: 4 };
-        } else {
-            String { repr: array.new_data<u8>("false"), used: 5 };
-        });
-        break __tmpl: __local_236;
-    };
-}
-
 fn __Closure_5::__call(self) {
     let __local_248: ref String;
     let __local_249: ref Formatter;
@@ -4653,13 +4631,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l265: loop {
+            l270: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l265;
+                continue l270;
             };
         };
     };
@@ -4748,10 +4726,10 @@ fn Formatter::apply_padding(self, start_pos) {
         i_8 = content_len - 1;
         _licm_buf_29 = self.buf;
         _licm_repr_33 = _licm_buf_29.repr;
-        b275: block {
-            l276: loop {
+        b280: block {
+            l281: loop {
                 if (i_8 >= 0) == 0 {
-                    break b275;
+                    break b280;
                 };
                 index_14 = (start_pos + left_pad) + i_8;
                 value_15 = __inline_String__get_byte_2: block -> u8 {
@@ -4760,7 +4738,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 };
                 builtin::array_set_u8(_licm_repr_33, index_14, value_15);
                 i_8 = i_8 - 1;
-                continue l276;
+                continue l281;
             };
         };
         __for_1: block {
@@ -4768,14 +4746,14 @@ fn Formatter::apply_padding(self, start_pos) {
             _licm_buf_30 = self.buf;
             _licm_repr_34 = _licm_buf_30.repr;
             block {
-                l279: loop {
+                l284: loop {
                     if (j_9 < left_pad) == 0 {
                         break __for_1;
                     };
                     index_19 = start_pos + j_9;
                     builtin::array_set_u8(_licm_repr_34, index_19, fill_byte);
                     j_9 = j_9 + 1;
-                    continue l279;
+                    continue l284;
                 };
             };
         };
@@ -4785,10 +4763,10 @@ fn Formatter::apply_padding(self, start_pos) {
         i_10 = content_len - 1;
         _licm_buf_31 = self.buf;
         _licm_repr_35 = _licm_buf_31.repr;
-        b281: block {
-            l282: loop {
+        b286: block {
+            l287: loop {
                 if (i_10 >= 0) == 0 {
-                    break b281;
+                    break b286;
                 };
                 index_22 = (start_pos + padding) + i_10;
                 value_23 = __inline_String__get_byte_5: block -> u8 {
@@ -4797,7 +4775,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 };
                 builtin::array_set_u8(_licm_repr_35, index_22, value_23);
                 i_10 = i_10 - 1;
-                continue l282;
+                continue l287;
             };
         };
         __for_2: block {
@@ -4805,14 +4783,14 @@ fn Formatter::apply_padding(self, start_pos) {
             _licm_buf_32 = self.buf;
             _licm_repr_36 = _licm_buf_32.repr;
             block {
-                l285: loop {
+                l290: loop {
                     if (j_11 < padding) == 0 {
                         break __for_2;
                     };
                     index_27 = start_pos + j_11;
                     builtin::array_set_u8(_licm_repr_36, index_27, fill_byte);
                     j_11 = j_11 + 1;
-                    continue l285;
+                    continue l290;
                 };
             };
         };
@@ -4914,8 +4892,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b304: block {
-        l305: loop {
+    b309: block {
+        l310: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
@@ -4940,9 +4918,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b304;
+                break b309;
             };
-            continue l305;
+            continue l310;
         };
     };
     String::append_char(f.buf, 34);
@@ -4951,31 +4929,31 @@ fn String^Inspect::inspect(self, f) {
 fn "closure/__closure_wrapper_0"(__env, __p0) {
     let __typed_env: ref __Closure_0;
     __typed_env = ref.cast __Closure_0(__env);
-    return __Closure_0::__call(__typed_env, __p0);
+    unreachable;
 }
 
 fn "closure/__closure_wrapper_1"(__env, __p0) {
     let __typed_env: ref __Closure_1;
     __typed_env = ref.cast __Closure_1(__env);
-    return __Closure_1::__call(__typed_env, __p0);
+    unreachable;
 }
 
 fn "closure/__closure_wrapper_2"(__env, __p0) {
     let __typed_env: ref __Closure_2;
     __typed_env = ref.cast __Closure_2(__env);
-    return __Closure_2::__call(__typed_env, __p0);
+    unreachable;
 }
 
 fn "closure/__closure_wrapper_3"(__env, __p0) {
     let __typed_env: ref __Closure_3;
     __typed_env = ref.cast __Closure_3(__env);
-    return __Closure_3::__call(__typed_env, __p0);
+    unreachable;
 }
 
 fn "closure/__closure_wrapper_4"(__env, __p0) {
     let __typed_env: ref __Closure_4;
     __typed_env = ref.cast __Closure_4(__env);
-    return __Closure_4::__call(__typed_env, __p0);
+    unreachable;
 }
 
 fn "closure/__closure_wrapper_5"(__env) {

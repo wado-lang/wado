@@ -76,8 +76,6 @@ type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
 type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32, i32) -> i32;
 
-type "functype/classify" = fn(i32) -> ref String;
-
 type "functype/classify_builder" = fn(i32) -> ref String;
 
 type "functype/run" = fn();
@@ -158,22 +156,6 @@ import fn stream-new from "wasi/stream-new";
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
-fn classify(x) {
-    return let __match_scrut_0: i32; __match_scrut_0 = x; if 1 -> ref String {
-        if x > 0 -> ref String {
-            if x > 10 -> ref String {
-                String { repr: array.new_data<u8>("big"), used: 3 };
-            } else {
-                String { repr: array.new_data<u8>("small"), used: 5 };
-            };
-        } else {
-            String { repr: array.new_data<u8>("zero"), used: 4 };
-        };
-    } else {
-        String { repr: array.new_data<u8>("zero"), used: 4 };
-    };
-}
-
 fn classify_builder(x) {
     let __local_1: ref String;
     return let __match_scrut_0: i32; __match_scrut_0 = x; if 1 -> ref String {
@@ -220,31 +202,39 @@ fn run() {
     let __local_21: ref Formatter;
     let __local_22: ref String;
     let __local_23: ref Formatter;
-    let __local_26: ref String;
-    let __local_28: ref Formatter;
-    let __local_31: ref String;
-    let __local_33: ref String;
-    let __local_35: ref Formatter;
-    let __local_38: ref String;
+    let __local_27: ref String;
+    let __local_29: ref Formatter;
+    let __local_32: ref String;
+    let __local_35: ref String;
+    let __local_37: ref Formatter;
     let __local_40: ref String;
-    let __local_42: ref Formatter;
-    let __local_45: ref String;
-    let __local_47: ref String;
-    let __local_49: ref Formatter;
-    let __local_52: ref String;
-    let __local_54: ref String;
-    let __local_56: ref Formatter;
-    let __local_59: ref String;
-    let __local_61: ref String;
-    let __local_63: ref Formatter;
-    let __local_66: ref String;
+    let __local_43: ref String;
+    let __local_45: ref Formatter;
+    let __local_48: ref String;
+    let __local_50: ref String;
+    let __local_52: ref Formatter;
+    let __local_55: ref String;
+    let __local_57: ref String;
+    let __local_59: ref Formatter;
+    let __local_62: ref String;
+    let __local_64: ref String;
+    let __local_66: ref Formatter;
+    let __local_69: ref String;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
         };
         __modules_initialized = 1;
     };
-    __v0_0 = classify(5);
+    __v0_0 = value_copy String(let __match_scrut_0: i32; __match_scrut_0 = 5; if 1 -> ref String {
+        if 1 -> ref String {
+            String { repr: array.new_data<u8>("small"), used: 5 };
+        } else {
+            String { repr: array.new_data<u8>("zero"), used: 4 };
+        };
+    } else {
+        String { repr: array.new_data<u8>("zero"), used: 4 };
+    });
     __cond_1 = String^Eq::eq(__v0_0, String { repr: array.new_data<u8>("small"), used: 5 });
     if __cond_1 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -259,19 +249,19 @@ fn run() {
             String::append_char(__local_12, 32);
             String::append(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/match_arm_nested_if_value.wado"), used: 59 });
             String::append_char(__local_12, 58);
-            __local_13 = __inline_Formatter__new_3: block -> ref Formatter {
-                __local_26 = __local_12;
-                break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_26) };
+            __local_13 = __inline_Formatter__new_4: block -> ref Formatter {
+                __local_27 = __local_12;
+                break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_27) };
             };
-            __local_28 = __local_13;
-            i32::fmt_decimal(33, __local_28);
+            __local_29 = __local_13;
+            i32::fmt_decimal(33, __local_29);
             String::append(__local_12, String { repr: array.new_data<u8>("
 condition: classify(5) == \"small\"
 "), used: 35 });
             String::append(__local_12, String { repr: array.new_data<u8>("classify(5): "), used: 13 });
-            __local_13 = __inline_Formatter__new_6: block -> ref Formatter {
-                __local_31 = __local_12;
-                break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_31) };
+            __local_13 = __inline_Formatter__new_7: block -> ref Formatter {
+                __local_32 = __local_12;
+                break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_32) };
             };
             String^Inspect::inspect(__v0_0, __local_13);
             String::append_char(__local_12, 10);
@@ -279,7 +269,15 @@ condition: classify(5) == \"small\"
         });
         unreachable;
     };
-    __v0_2 = classify(15);
+    __v0_2 = value_copy String(let __match_scrut_1: i32; __match_scrut_1 = 15; if 1 -> ref String {
+        if 1 -> ref String {
+            String { repr: array.new_data<u8>("big"), used: 3 };
+        } else {
+            String { repr: array.new_data<u8>("zero"), used: 4 };
+        };
+    } else {
+        String { repr: array.new_data<u8>("zero"), used: 4 };
+    });
     __cond_3 = String^Eq::eq(__v0_2, String { repr: array.new_data<u8>("big"), used: 3 });
     if __cond_3 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -294,19 +292,19 @@ condition: classify(5) == \"small\"
             String::append_char(__local_14, 32);
             String::append(__local_14, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/match_arm_nested_if_value.wado"), used: 59 });
             String::append_char(__local_14, 58);
-            __local_15 = __inline_Formatter__new_8: block -> ref Formatter {
-                __local_33 = __local_14;
-                break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_33) };
+            __local_15 = __inline_Formatter__new_10: block -> ref Formatter {
+                __local_35 = __local_14;
+                break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_35) };
             };
-            __local_35 = __local_15;
-            i32::fmt_decimal(34, __local_35);
+            __local_37 = __local_15;
+            i32::fmt_decimal(34, __local_37);
             String::append(__local_14, String { repr: array.new_data<u8>("
 condition: classify(15) == \"big\"
 "), used: 34 });
             String::append(__local_14, String { repr: array.new_data<u8>("classify(15): "), used: 14 });
-            __local_15 = __inline_Formatter__new_11: block -> ref Formatter {
-                __local_38 = __local_14;
-                break __inline_Formatter__new_11: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_38) };
+            __local_15 = __inline_Formatter__new_13: block -> ref Formatter {
+                __local_40 = __local_14;
+                break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_40) };
             };
             String^Inspect::inspect(__v0_2, __local_15);
             String::append_char(__local_14, 10);
@@ -314,7 +312,15 @@ condition: classify(15) == \"big\"
         });
         unreachable;
     };
-    __v0_4 = classify(0);
+    __v0_4 = value_copy String(let __match_scrut_2: i32; __match_scrut_2 = 0; if 1 -> ref String {
+        if 0 -> ref String {
+            String { repr: array.new_data<u8>("small"), used: 5 };
+        } else {
+            String { repr: array.new_data<u8>("zero"), used: 4 };
+        };
+    } else {
+        String { repr: array.new_data<u8>("zero"), used: 4 };
+    });
     __cond_5 = String^Eq::eq(__v0_4, String { repr: array.new_data<u8>("zero"), used: 4 });
     if __cond_5 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -329,19 +335,19 @@ condition: classify(15) == \"big\"
             String::append_char(__local_16, 32);
             String::append(__local_16, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/match_arm_nested_if_value.wado"), used: 59 });
             String::append_char(__local_16, 58);
-            __local_17 = __inline_Formatter__new_13: block -> ref Formatter {
-                __local_40 = __local_16;
-                break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_40) };
+            __local_17 = __inline_Formatter__new_16: block -> ref Formatter {
+                __local_43 = __local_16;
+                break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_43) };
             };
-            __local_42 = __local_17;
-            i32::fmt_decimal(35, __local_42);
+            __local_45 = __local_17;
+            i32::fmt_decimal(35, __local_45);
             String::append(__local_16, String { repr: array.new_data<u8>("
 condition: classify(0) == \"zero\"
 "), used: 34 });
             String::append(__local_16, String { repr: array.new_data<u8>("classify(0): "), used: 13 });
-            __local_17 = __inline_Formatter__new_16: block -> ref Formatter {
-                __local_45 = __local_16;
-                break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_45) };
+            __local_17 = __inline_Formatter__new_19: block -> ref Formatter {
+                __local_48 = __local_16;
+                break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_48) };
             };
             String^Inspect::inspect(__v0_4, __local_17);
             String::append_char(__local_16, 10);
@@ -364,19 +370,19 @@ condition: classify(0) == \"zero\"
             String::append_char(__local_18, 32);
             String::append(__local_18, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/match_arm_nested_if_value.wado"), used: 59 });
             String::append_char(__local_18, 58);
-            __local_19 = __inline_Formatter__new_18: block -> ref Formatter {
-                __local_47 = __local_18;
-                break __inline_Formatter__new_18: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_47) };
+            __local_19 = __inline_Formatter__new_21: block -> ref Formatter {
+                __local_50 = __local_18;
+                break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_50) };
             };
-            __local_49 = __local_19;
-            i32::fmt_decimal(37, __local_49);
+            __local_52 = __local_19;
+            i32::fmt_decimal(37, __local_52);
             String::append(__local_18, String { repr: array.new_data<u8>("
 condition: classify_builder(5) == \"small\"
 "), used: 43 });
             String::append(__local_18, String { repr: array.new_data<u8>("classify_builder(5): "), used: 21 });
-            __local_19 = __inline_Formatter__new_21: block -> ref Formatter {
-                __local_52 = __local_18;
-                break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_52) };
+            __local_19 = __inline_Formatter__new_24: block -> ref Formatter {
+                __local_55 = __local_18;
+                break __inline_Formatter__new_24: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_55) };
             };
             String^Inspect::inspect(__v0_6, __local_19);
             String::append_char(__local_18, 10);
@@ -399,19 +405,19 @@ condition: classify_builder(5) == \"small\"
             String::append_char(__local_20, 32);
             String::append(__local_20, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/match_arm_nested_if_value.wado"), used: 59 });
             String::append_char(__local_20, 58);
-            __local_21 = __inline_Formatter__new_23: block -> ref Formatter {
-                __local_54 = __local_20;
-                break __inline_Formatter__new_23: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_54) };
+            __local_21 = __inline_Formatter__new_26: block -> ref Formatter {
+                __local_57 = __local_20;
+                break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_57) };
             };
-            __local_56 = __local_21;
-            i32::fmt_decimal(38, __local_56);
+            __local_59 = __local_21;
+            i32::fmt_decimal(38, __local_59);
             String::append(__local_20, String { repr: array.new_data<u8>("
 condition: classify_builder(15) == \"big\"
 "), used: 42 });
             String::append(__local_20, String { repr: array.new_data<u8>("classify_builder(15): "), used: 22 });
-            __local_21 = __inline_Formatter__new_26: block -> ref Formatter {
-                __local_59 = __local_20;
-                break __inline_Formatter__new_26: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_59) };
+            __local_21 = __inline_Formatter__new_29: block -> ref Formatter {
+                __local_62 = __local_20;
+                break __inline_Formatter__new_29: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_62) };
             };
             String^Inspect::inspect(__v0_8, __local_21);
             String::append_char(__local_20, 10);
@@ -434,19 +440,19 @@ condition: classify_builder(15) == \"big\"
             String::append_char(__local_22, 32);
             String::append(__local_22, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/match_arm_nested_if_value.wado"), used: 59 });
             String::append_char(__local_22, 58);
-            __local_23 = __inline_Formatter__new_28: block -> ref Formatter {
-                __local_61 = __local_22;
-                break __inline_Formatter__new_28: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_61) };
+            __local_23 = __inline_Formatter__new_31: block -> ref Formatter {
+                __local_64 = __local_22;
+                break __inline_Formatter__new_31: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_64) };
             };
-            __local_63 = __local_23;
-            i32::fmt_decimal(39, __local_63);
+            __local_66 = __local_23;
+            i32::fmt_decimal(39, __local_66);
             String::append(__local_22, String { repr: array.new_data<u8>("
 condition: classify_builder(0) == \"zero\"
 "), used: 42 });
             String::append(__local_22, String { repr: array.new_data<u8>("classify_builder(0): "), used: 21 });
-            __local_23 = __inline_Formatter__new_31: block -> ref Formatter {
-                __local_66 = __local_22;
-                break __inline_Formatter__new_31: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_66) };
+            __local_23 = __inline_Formatter__new_34: block -> ref Formatter {
+                __local_69 = __local_22;
+                break __inline_Formatter__new_34: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_69) };
             };
             String^Inspect::inspect(__v0_10, __local_23);
             String::append_char(__local_22, 10);
@@ -520,13 +526,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l21: loop {
+            l24: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l21;
+                continue l24;
             };
         };
     };
@@ -655,13 +661,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l28: loop {
+            l31: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l28;
+                continue l31;
             };
         };
     };
@@ -678,14 +684,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l32: loop {
+                l35: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l32;
+                    continue l35;
                 };
             };
         };
@@ -777,7 +783,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l41: loop {
+            l44: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -785,7 +791,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l41;
+                continue l44;
             };
         };
     };
@@ -882,13 +888,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l53: loop {
+            l56: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l53;
+                continue l56;
             };
         };
     };
@@ -989,8 +995,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b72: block {
-        l73: loop {
+    b75: block {
+        l76: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
@@ -1015,9 +1021,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b72;
+                break b75;
             };
-            continue l73;
+            continue l76;
         };
     };
     String::append_char(f.buf, 34);

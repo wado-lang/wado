@@ -120,10 +120,6 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/Triple<i64>^IndexValue::index_value" = fn(ref Triple<i64>, i32) -> i64;
-
-type "functype/Triple<i32>^IndexValue::index_value" = fn(ref Triple<i32>, i32) -> i32;
-
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
@@ -155,42 +151,30 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let nums: ref Triple<i32>;
-    let n0: i32;
-    let n1: i32;
-    let n2: i32;
-    let longs: ref Triple<i64>;
-    let l0: i64;
-    let l1: i64;
-    let sum: i32;
     let __local_8: ref String;
     let __local_9: ref Formatter;
     let __local_10: ref String;
     let __local_11: ref Formatter;
     let __local_12: ref String;
     let __local_13: ref Formatter;
-    let __local_16: ref String;
-    let __local_18: ref Formatter;
-    let __local_21: ref String;
-    let __local_23: ref Formatter;
-    let __local_26: ref String;
-    let __local_28: ref Formatter;
+    let __local_22: ref String;
+    let __local_24: ref Formatter;
+    let __local_27: ref String;
+    let __local_29: ref Formatter;
     let __local_32: ref String;
     let __local_34: ref Formatter;
-    let __local_37: ref String;
-    let __local_39: ref Formatter;
-    let __local_43: ref String;
-    let __local_45: ref Formatter;
+    let __local_42: ref String;
+    let __local_44: ref Formatter;
+    let __local_47: ref String;
+    let __local_49: ref Formatter;
+    let __local_59: ref String;
+    let __local_61: ref Formatter;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
         };
         __modules_initialized = 1;
     };
-    nums = Triple<i32> { first: 10, second: 20, third: 30 };
-    n0 = Triple<i32>^IndexValue::index_value(nums, 0);
-    n1 = Triple<i32>^IndexValue::index_value(nums, 1);
-    n2 = Triple<i32>^IndexValue::index_value(nums, 2);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_8 = String { repr: builtin::array_new<u8>(58), used: 0 };
         String::append_char(__local_8, 110);
@@ -199,33 +183,30 @@ fn run() with Stdout {
         String::append_char(__local_8, 115);
         String::append_char(__local_8, 58);
         String::append_char(__local_8, 32);
-        __local_9 = __inline_Formatter__new_3: block -> ref Formatter {
-            __local_16 = __local_8;
-            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_16) };
-        };
-        __local_18 = __local_9;
-        i32::fmt_decimal(n0, __local_18);
-        String::append_char(__local_8, 44);
-        String::append_char(__local_8, 32);
         __local_9 = __inline_Formatter__new_6: block -> ref Formatter {
-            __local_21 = __local_8;
-            break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_21) };
+            __local_22 = __local_8;
+            break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_22) };
         };
-        __local_23 = __local_9;
-        i32::fmt_decimal(n1, __local_23);
+        __local_24 = __local_9;
+        i32::fmt_decimal(10, __local_24);
         String::append_char(__local_8, 44);
         String::append_char(__local_8, 32);
         __local_9 = __inline_Formatter__new_9: block -> ref Formatter {
-            __local_26 = __local_8;
-            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_26) };
+            __local_27 = __local_8;
+            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_27) };
         };
-        __local_28 = __local_9;
-        i32::fmt_decimal(n2, __local_28);
+        __local_29 = __local_9;
+        i32::fmt_decimal(20, __local_29);
+        String::append_char(__local_8, 44);
+        String::append_char(__local_8, 32);
+        __local_9 = __inline_Formatter__new_12: block -> ref Formatter {
+            __local_32 = __local_8;
+            break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_32) };
+        };
+        __local_34 = __local_9;
+        i32::fmt_decimal(30, __local_34);
         break __tmpl: __local_8;
     });
-    longs = Triple<i64> { first: 100_i64, second: 200_i64, third: 300_i64 };
-    l0 = Triple<i64>^IndexValue::index_value(longs, 0);
-    l1 = Triple<i64>^IndexValue::index_value(longs, 1);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_10 = String { repr: builtin::array_new<u8>(41), used: 0 };
         String::append_char(__local_10, 108);
@@ -235,23 +216,22 @@ fn run() with Stdout {
         String::append_char(__local_10, 115);
         String::append_char(__local_10, 58);
         String::append_char(__local_10, 32);
-        __local_11 = __inline_Formatter__new_13: block -> ref Formatter {
-            __local_32 = __local_10;
-            break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_32) };
+        __local_11 = __inline_Formatter__new_18: block -> ref Formatter {
+            __local_42 = __local_10;
+            break __inline_Formatter__new_18: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_42) };
         };
-        __local_34 = __local_11;
-        i64::fmt_decimal(l0, __local_34);
+        __local_44 = __local_11;
+        i64::fmt_decimal(100_i64, __local_44);
         String::append_char(__local_10, 44);
         String::append_char(__local_10, 32);
-        __local_11 = __inline_Formatter__new_16: block -> ref Formatter {
-            __local_37 = __local_10;
-            break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_37) };
+        __local_11 = __inline_Formatter__new_21: block -> ref Formatter {
+            __local_47 = __local_10;
+            break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_47) };
         };
-        __local_39 = __local_11;
-        i64::fmt_decimal(l1, __local_39);
+        __local_49 = __local_11;
+        i64::fmt_decimal(200_i64, __local_49);
         break __tmpl: __local_10;
     });
-    sum = (Triple<i32>^IndexValue::index_value(nums, 0) + Triple<i32>^IndexValue::index_value(nums, 1)) + Triple<i32>^IndexValue::index_value(nums, 2);
     "core:cli/println"(__tmpl: block -> ref String {
         __local_12 = String { repr: builtin::array_new<u8>(21), used: 0 };
         String::append_char(__local_12, 115);
@@ -259,12 +239,12 @@ fn run() with Stdout {
         String::append_char(__local_12, 109);
         String::append_char(__local_12, 58);
         String::append_char(__local_12, 32);
-        __local_13 = __inline_Formatter__new_20: block -> ref Formatter {
-            __local_43 = __local_12;
-            break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_43) };
+        __local_13 = __inline_Formatter__new_28: block -> ref Formatter {
+            __local_59 = __local_12;
+            break __inline_Formatter__new_28: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_59) };
         };
-        __local_45 = __local_13;
-        i32::fmt_decimal(sum, __local_45);
+        __local_61 = __local_13;
+        i32::fmt_decimal(60, __local_61);
         break __tmpl: __local_12;
     });
 }
@@ -641,26 +621,6 @@ fn String::append_char(self, c) {
     };
 }
 
-fn Triple<i64>^IndexValue::index_value(self, index) {
-    if index == 0 {
-        return self.first;
-    } else if index == 1 {
-        return self.second;
-    } else {
-        return self.third;
-    };
-}
-
-fn Triple<i32>^IndexValue::index_value(self, index) {
-    if index == 0 {
-        return self.first;
-    } else if index == 1 {
-        return self.second;
-    } else {
-        return self.third;
-    };
-}
-
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref String;
@@ -668,13 +628,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l38: loop {
+            l34: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l38;
+                continue l34;
             };
         };
     };
