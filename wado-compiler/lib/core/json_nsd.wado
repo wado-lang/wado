@@ -31,6 +31,7 @@ use {
     SerializeErrorKind,
     DeserializeError,
     DeserializeErrorKind,
+    Visitor,
 } from "core:serde";
 
 use {
@@ -576,6 +577,10 @@ impl Deserializer for NsdDeserializer {
             return Result::<NsdVariantAccess, DeserializeError>::Err(e);
         }
         unreachable();
+    }
+
+    fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
+        return self.de.deserialize_any::<V>(visitor);
     }
 }
 

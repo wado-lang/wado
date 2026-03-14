@@ -38,7 +38,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Expr::Unary(unary) => self.resolve_unary(unary, ctx),
             Expr::Assign(assign) => self.resolve_assign(assign, ctx),
             Expr::Call(call) => self.resolve_call(call, ctx, expected_type),
-            Expr::MethodCall(method_call) => self.resolve_method_call(method_call, ctx),
+            Expr::MethodCall(method_call) => {
+                self.resolve_method_call(method_call, ctx, expected_type)
+            }
             Expr::StaticMethodCall(static_call) => {
                 self.resolve_static_method_call(static_call, ctx)
             }
@@ -788,6 +790,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self.type_table
                     .borrow_mut()
                     .make_generic_instance(name, module_source, new_args)
+            }
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+                ..
+            } => {
+                // Substitute the type parameter into a concrete type, then resolve.
+                let concrete = self.substitute_type_params(param_id, type_args);
+                if !self.type_table.borrow().contains_type_param(concrete)
+                    && let Some(resolved) = self
+                        .type_table
+                        .borrow()
+                        .resolve_assoc_type(concrete, &assoc_name)
+                {
+                    return resolved;
+                }
+                // Type param still generic or assoc type not yet registered — leave as-is.
+                type_id
             }
             // Other types don't contain type parameters
             _ => type_id,
@@ -1772,6 +1792,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 Self::find_return_type_in_block(body)
             }
+            TirStmtKind::Expr(expr) => Self::find_return_type_in_expr(expr),
+            _ => None,
+        }
+    }
+
+    fn find_return_type_in_expr(expr: &TirExpr) -> Option<TypeId> {
+        match &expr.kind {
+            TirExprKind::Match { arms, .. } => {
+                for arm in arms {
+                    if let Some(t) = Self::find_return_type_in_expr(&arm.body) {
+                        return Some(t);
+                    }
+                }
+                None
+            }
+            TirExprKind::Block(block) => Self::find_return_type_in_block(block),
             _ => None,
         }
     }

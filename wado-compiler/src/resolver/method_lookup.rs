@@ -918,12 +918,83 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Infer method type arguments from actual argument types.
     /// Returns a list of inferred type args matching the method's type params order.
     /// Uses the position of type params in parameter types to map actual arg types.
+    /// Recursively match an AST return type against a resolved expected `TypeId`,
+    /// filling in `bindings[i]` for each `type_param_names`[i] found in the return type.
+    fn match_return_type_against_expected(
+        return_ty: &ast::Type,
+        type_param_names: &[String],
+        expected: TypeId,
+        type_table: &TypeTable,
+        bindings: &mut [TypeId],
+    ) {
+        match return_ty {
+            // Direct type param reference: T, U, etc.
+            ast::Type::Named(named) => {
+                if let Some(idx) = type_param_names.iter().position(|n| *n == named.name)
+                    && bindings[idx] == TypeTable::UNKNOWN
+                {
+                    bindings[idx] = expected;
+                }
+            }
+            // Generic type like Option<T>, Result<T, E>, Array<T>
+            ast::Type::Generic(generic) => {
+                let expected_resolved = type_table.get(expected).clone();
+                let (expected_name, expected_type_args) = match &expected_resolved {
+                    ResolvedType::GenericInstance {
+                        name, type_args, ..
+                    } => (name.clone(), type_args.clone()),
+                    _ => return,
+                };
+                if expected_name == generic.name && generic.args.len() == expected_type_args.len() {
+                    for (ast_arg, &resolved_arg) in
+                        generic.args.iter().zip(expected_type_args.iter())
+                    {
+                        Self::match_return_type_against_expected(
+                            ast_arg,
+                            type_param_names,
+                            resolved_arg,
+                            type_table,
+                            bindings,
+                        );
+                    }
+                }
+            }
+            // Reference types
+            ast::Type::Reference(inner) => {
+                let expected_resolved = type_table.get(expected).clone();
+                if let ResolvedType::Ref(inner_expected) = expected_resolved {
+                    Self::match_return_type_against_expected(
+                        inner,
+                        type_param_names,
+                        inner_expected,
+                        type_table,
+                        bindings,
+                    );
+                }
+            }
+            ast::Type::MutReference(inner) => {
+                let expected_resolved = type_table.get(expected).clone();
+                if let ResolvedType::MutRef(inner_expected) = expected_resolved {
+                    Self::match_return_type_against_expected(
+                        inner,
+                        type_param_names,
+                        inner_expected,
+                        type_table,
+                        bindings,
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+
     pub(super) fn infer_method_type_args(
         &self,
         receiver_type: TypeId,
         method_name: &str,
         args: &[TirExpr],
         impl_offset: u32,
+        expected_return_type: Option<TypeId>,
     ) -> Vec<TypeId> {
         let base_type_id = self.get_base_type(receiver_type);
         let base_type = self.type_table.borrow().get(base_type_id).clone();
@@ -945,25 +1016,28 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Search for the method in loaded modules
         let mut method_type_params: Vec<String> = Vec::new();
         let mut param_type_strs: Vec<String> = Vec::new();
+        let mut method_return_type: Option<ast::Type> = None;
 
         // Helper function to extract param info from method
-        let extract_method_info = |method: &crate::ast::Function| -> (Vec<String>, Vec<String>) {
-            let type_params: Vec<String> =
-                method.type_params.iter().map(|p| p.name.clone()).collect();
-            let params: Vec<String> = method
-                .params
-                .iter()
-                // Skip self parameter (has SelfKind::Ref/MutRef and name "self")
-                .filter(|p| {
-                    !(matches!(
-                        p.self_kind,
-                        ast::SelfKind::Ref | ast::SelfKind::MutRef | ast::SelfKind::None
-                    ) && p.name == "self")
-                })
-                .map(|p| self.get_type_name(&p.ty))
-                .collect();
-            (type_params, params)
-        };
+        let extract_method_info =
+            |method: &crate::ast::Function| -> (Vec<String>, Vec<String>, Option<ast::Type>) {
+                let type_params: Vec<String> =
+                    method.type_params.iter().map(|p| p.name.clone()).collect();
+                let params: Vec<String> = method
+                    .params
+                    .iter()
+                    // Skip self parameter (has SelfKind::Ref/MutRef and name "self")
+                    .filter(|p| {
+                        !(matches!(
+                            p.self_kind,
+                            ast::SelfKind::Ref | ast::SelfKind::MutRef | ast::SelfKind::None
+                        ) && p.name == "self")
+                    })
+                    .map(|p| self.get_type_name(&p.ty))
+                    .collect();
+                let return_ty = method.return_type.clone();
+                (type_params, params, return_ty)
+            };
 
         // Check specific module first
         if let Some(ref module_source) = struct_module_source
@@ -981,9 +1055,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     if impl_type_name == struct_name || impl_base_name == struct_name {
                         for method in &impl_block.methods {
                             if method.name == method_name && !method.type_params.is_empty() {
-                                let (tp, pp) = extract_method_info(method);
+                                let (tp, pp, rt) = extract_method_info(method);
                                 method_type_params = tp;
                                 param_type_strs = pp;
+                                method_return_type = rt;
                                 break;
                             }
                         }
@@ -1005,9 +1080,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         if impl_type_name == struct_name || impl_base_name == struct_name {
                             for method in &impl_block.methods {
                                 if method.name == method_name && !method.type_params.is_empty() {
-                                    let (tp, pp) = extract_method_info(method);
+                                    let (tp, pp, rt) = extract_method_info(method);
                                     method_type_params = tp;
                                     param_type_strs = pp;
+                                    method_return_type = rt;
                                     break;
                                 }
                             }
@@ -1062,6 +1138,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 }
             }
+        }
+
+        // If there are still unknown type params and we have an expected return type,
+        // try to infer them by matching the method's return type against the expected type.
+        if let Some(expected) = expected_return_type
+            && let Some(ref return_ty) = method_return_type
+            && inferred.contains(&TypeTable::UNKNOWN)
+        {
+            let type_table = self.type_table.borrow();
+            Self::match_return_type_against_expected(
+                return_ty,
+                &method_type_params,
+                expected,
+                &type_table,
+                &mut inferred,
+            );
         }
 
         // Return only if we found at least some type args
@@ -1349,30 +1441,62 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             // Extract method info from impl block before calling &mut self methods
             let impl_block = self.get_impl_block(impl_ref);
-            let method_data: Option<(Option<ast::Type>, ast::SelfKind, Vec<ast::Param>)> =
-                impl_block
-                    .methods
-                    .iter()
-                    .find(|m| m.name == method_name)
-                    .map(|m| {
-                        (
-                            m.return_type.clone(),
-                            m.params
-                                .first()
-                                .map(|p| p.self_kind)
-                                .unwrap_or(ast::SelfKind::None),
-                            m.params.clone(),
-                        )
-                    });
+            let method_data: Option<(
+                Option<ast::Type>,
+                ast::SelfKind,
+                Vec<ast::Param>,
+                Vec<ast::GenericParam>,
+            )> = impl_block
+                .methods
+                .iter()
+                .find(|m| m.name == method_name)
+                .map(|m| {
+                    (
+                        m.return_type.clone(),
+                        m.params
+                            .first()
+                            .map(|p| p.self_kind)
+                            .unwrap_or(ast::SelfKind::None),
+                        m.params.clone(),
+                        m.type_params.clone(),
+                    )
+                });
             let trait_type_for_name = impl_block.trait_type.as_ref().unwrap().clone();
 
             let mut method_found = false;
-            if let Some((return_type_ast, self_kind, params)) = method_data {
+            if let Some((return_type_ast, self_kind, params, method_type_params)) = method_data {
                 let trait_name = self.get_type_name(&trait_type_for_name);
+
+                // Set up method-level type params (e.g., V in deserialize_any<V: Visitor>)
+                let impl_offset = self.current_type_params.len() as u32;
+                for (i, type_param) in method_type_params.iter().enumerate() {
+                    let index = impl_offset + i as u32;
+                    let type_param_id =
+                        self.type_table
+                            .borrow_mut()
+                            .intern(ResolvedType::TypeParam {
+                                name: type_param.name.clone(),
+                                index,
+                            });
+                    self.current_type_params
+                        .insert(type_param.name.clone(), (index, type_param_id));
+                    if !type_param.bounds.is_empty() {
+                        self.current_type_param_bounds
+                            .insert(type_param.name.clone(), type_param.bounds.clone());
+                    }
+                }
+
                 let return_type = return_type_ast
                     .as_ref()
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNIT);
+
+                // Remove method-level type params from scope
+                for type_param in &method_type_params {
+                    self.current_type_params.shift_remove(&type_param.name);
+                    self.current_type_param_bounds
+                        .shift_remove(&type_param.name);
+                }
                 let param_types = self.extract_param_types(&params);
                 let param_is_mut: Vec<bool> = params
                     .iter()
@@ -2263,6 +2387,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .insert(assoc_decl.name.clone(), projection);
                 }
 
+                // Register the method's own type parameters so that they resolve to
+                // TypeParam{index: N} instead of UNKNOWN. This is needed for generic methods
+                // like `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, ...>`
+                // where `T` must be a proper TypeParam to allow substitution at the call site.
+                // We use index 0, 1, ... because find_method_in_trait_bounds is only called
+                // for TypeParam/AssocTypeProjection receivers, where impl_offset = 0.
+                let old_type_params_for_method = self.current_type_params.clone();
+                let old_type_param_bounds_for_method = self.current_type_param_bounds.clone();
+                for (index, param) in method.type_params.iter().enumerate() {
+                    let type_id = self
+                        .type_table
+                        .borrow_mut()
+                        .make_type_param(param.name.clone(), index as u32);
+                    self.current_type_params
+                        .insert(param.name.clone(), (index as u32, type_id));
+                    if !param.bounds.is_empty() {
+                        self.current_type_param_bounds
+                            .insert(param.name.clone(), param.bounds.clone());
+                    }
+                }
+
                 let return_type = method
                     .return_type
                     .as_ref()
@@ -2281,6 +2426,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .map(|p| p.is_mut)
                     .collect();
 
+                self.current_type_params = old_type_params_for_method;
+                self.current_type_param_bounds = old_type_param_bounds_for_method;
                 self.current_associated_type_bindings = old_bindings;
                 self.current_self_type = old_self_type;
 

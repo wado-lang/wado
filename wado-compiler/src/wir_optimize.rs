@@ -3057,6 +3057,12 @@ fn optimize_nested(instr: &mut WirInstr, types: &[WirTypeDef]) {
         WirInstr::Seq(body) => {
             optimize_instrs(body, types);
         }
+        WirInstr::LocalSet { value, .. } | WirInstr::LocalTee { value, .. } => {
+            optimize_nested(value, types);
+        }
+        WirInstr::ValueCopy { expr, .. } => {
+            optimize_nested(expr, types);
+        }
         _ => {}
     }
 }

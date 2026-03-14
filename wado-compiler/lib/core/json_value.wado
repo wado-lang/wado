@@ -1,0 +1,193 @@
+//! Dynamically-typed JSON value type.
+//!
+//! Represents any JSON value: null, boolean, number (as f64), string,
+//! array, or object. Implements `Serialize` and `Deserialize` so it
+//! works transparently with `core:json`'s `to_string` / `from_string`.
+//!
+//! Usage:
+//!   use { Value } from "core:json_value";
+//!   use { to_string, from_string } from "core:json";
+//!
+//!   let v = from_string::<Value>(`{"x": 1, "y": [true, null]}`);
+//!   let s = to_string::<Value>(&v);
+
+use {
+    Serialize,
+    Deserialize,
+    Serializer,
+    Deserializer,
+    DeserializeSeq,
+    DeserializeMap,
+    SerializeError,
+    DeserializeError,
+    Visitor,
+} from "core:serde";
+
+use { TreeMap } from "core:collections";
+
+/// A dynamically-typed JSON value, analogous to serde_json::Value.
+pub variant Value {
+    Null,
+    Bool(bool),
+    Number(f64),
+    String(String),
+    Array(Array<Value>),
+    Object(TreeMap<String, Value>),
+}
+
+impl Eq for Value {
+    fn eq(&self, other: &Value) -> bool {
+        return match self {
+            Null => other matches { Null },
+            Bool(b1) => match other { Bool(b2) => *b1 == *b2, _ => false },
+            Number(n1) => match other { Number(n2) => *n1 == *n2, _ => false },
+            String(s1) => match other { String(s2) => *s1 == *s2, _ => false },
+            Array(a1) => match other {
+                Array(a2) => {
+                    if a1.len() != a2.len() { return false; }
+                    let mut i = 0;
+                    while i < a1.len() {
+                        if !(a1[i] == a2[i]) { return false; }
+                        i += 1;
+                    }
+                    true
+                },
+                _ => false,
+            },
+            Object(m1) => match other {
+                Object(m2) => {
+                    if m1.len() != m2.len() { return false; }
+                    for let [k, v] of m1.entries() {
+                        if let Some(other_v) = m2.get(k) {
+                            if !(v == other_v) { return false; }
+                        } else {
+                            return false;
+                        }
+                    }
+                    true
+                },
+                _ => false,
+            },
+        };
+    }
+}
+
+impl Serialize for Value {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return match self {
+            Null => s.serialize_null(),
+            Bool(b) => s.serialize_bool(*b),
+            Number(n) => s.serialize_f64(*n),
+            String(str_val) => s.serialize_string(str_val),
+            Array(arr) => {
+                let seq_r = s.begin_seq(arr.len());
+                match seq_r {
+                    Ok(mut seq) => {
+                        for let item of *arr {
+                            let r = seq.element::<Value>(&item);
+                            if let Err(e) = r {
+                                return Result::<(), SerializeError>::Err(e);
+                            }
+                        }
+                        seq.end()
+                    },
+                    Err(e) => Result::<(), SerializeError>::Err(e),
+                }
+            },
+            Object(map) => {
+                let map_r = s.begin_map(map.len());
+                match map_r {
+                    Ok(mut m) => {
+                        for let [key, val] of map.entries() {
+                            let key_r = m.key::<String>(&key);
+                            if let Err(e) = key_r {
+                                return Result::<(), SerializeError>::Err(e);
+                            }
+                            let val_r = m.value::<Value>(&val);
+                            if let Err(e) = val_r {
+                                return Result::<(), SerializeError>::Err(e);
+                            }
+                        }
+                        m.end()
+                    },
+                    Err(e) => Result::<(), SerializeError>::Err(e),
+                }
+            },
+        };
+    }
+}
+
+struct ValueVisitor {}
+
+impl Visitor for ValueVisitor {
+    type Value = Value;
+
+    fn visit_null(&mut self) -> Result<Value, DeserializeError> {
+        return Result::<Value, DeserializeError>::Ok(Value::Null);
+    }
+
+    fn visit_bool(&mut self, v: bool) -> Result<Value, DeserializeError> {
+        return Result::<Value, DeserializeError>::Ok(Value::Bool(v));
+    }
+
+    fn visit_f64(&mut self, v: f64) -> Result<Value, DeserializeError> {
+        return Result::<Value, DeserializeError>::Ok(Value::Number(v));
+    }
+
+    fn visit_string(&mut self, v: String) -> Result<Value, DeserializeError> {
+        return Result::<Value, DeserializeError>::Ok(Value::String(v));
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<Value, DeserializeError> {
+        let mut items: Array<Value> = [];
+        loop {
+            let next: Result<Option<Value>, DeserializeError> = seq.next_element::<Value>();
+            match next {
+                Ok(opt) => match opt {
+                    Some(item) => { items.append(item); },
+                    None => {
+                        let end_r = seq.end();
+                        if let Err(e) = end_r {
+                            return Result::<Value, DeserializeError>::Err(e);
+                        }
+                        return Result::<Value, DeserializeError>::Ok(Value::Array(items));
+                    },
+                },
+                Err(e) => { return Result::<Value, DeserializeError>::Err(e); },
+            }
+        }
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<Value, DeserializeError> {
+        let mut obj = TreeMap::<String, Value>::new();
+        loop {
+            let key_r: Result<Option<String>, DeserializeError> = map.next_key_string();
+            match key_r {
+                Ok(opt) => match opt {
+                    Some(key) => {
+                        let val_r: Result<Value, DeserializeError> = map.next_value::<Value>();
+                        match val_r {
+                            Ok(val) => { obj[key] = val; },
+                            Err(e) => { return Result::<Value, DeserializeError>::Err(e); },
+                        }
+                    },
+                    None => {
+                        let end_r = map.end();
+                        if let Err(e) = end_r {
+                            return Result::<Value, DeserializeError>::Err(e);
+                        }
+                        return Result::<Value, DeserializeError>::Ok(Value::Object(obj));
+                    },
+                },
+                Err(e) => { return Result::<Value, DeserializeError>::Err(e); },
+            }
+        }
+    }
+}
+
+impl Deserialize for Value {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Value, DeserializeError> {
+        let mut visitor = ValueVisitor {};
+        return d.deserialize_any::<ValueVisitor>(&mut visitor);
+    }
+}

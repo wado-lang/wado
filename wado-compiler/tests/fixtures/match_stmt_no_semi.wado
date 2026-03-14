@@ -1,0 +1,20 @@
+// match as a block statement should not require a trailing semicolon,
+// just like if/while/loop blocks.
+
+fn classify(n: i32) -> String {
+    match n {
+        x && x > 0 => { return "positive"; },
+        x && x < 0 => { return "negative"; },
+        _ => { return "zero"; },
+    }
+    unreachable()
+}
+
+export fn run() {
+    assert classify(1) == "positive";
+    assert classify(-1) == "negative";
+    assert classify(0) == "zero";
+}
+
+__DATA__
+{"stdout": ""}

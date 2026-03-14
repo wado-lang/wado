@@ -806,6 +806,14 @@ impl FunctionTranslator<'_, '_> {
                     instrs.push(instr);
                     // Note: `translate_expr` already appends `unreachable` for
                     // `never`-typed expressions, so no extra push is needed here.
+                    // For UNIT-typed expressions, all paths exit via break/return,
+                    // so the fall-through is dead code — mark it explicitly so the
+                    // Wasm validator knows the enclosing value-block's `end` is
+                    // unreachable (void intermediate blocks don't push the expected
+                    // typed result to the outer block's type stack).
+                    if expr.type_id == TypeTable::UNIT {
+                        instrs.push(WirInstr::Unreachable);
+                    }
                     continue;
                 }
                 // Statement-level If with else can produce a value

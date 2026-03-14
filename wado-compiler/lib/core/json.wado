@@ -25,6 +25,7 @@ use {
     SerializeErrorKind,
     DeserializeError,
     DeserializeErrorKind,
+    Visitor,
 } from "core:serde";
 
 use { parse as fpfmt_parse } from "core:prelude/fpfmt.wado";
@@ -1782,6 +1783,71 @@ impl Deserializer for JsonDeserializer {
             "expected string or object for variant",
             self.pos as i64,
         ));
+    }
+
+    fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
+        self.skip_whitespace();
+        if self.pos >= self.input.len() {
+            return Result::<V::Value, DeserializeError>::Err(DeserializeError::eof(self.pos as i64));
+        }
+        let b = self.peek();
+        if b == 'n' as i32 {
+            let r = self.is_null();
+            if let Ok(_) = r {
+                return visitor.visit_null();
+            }
+            if let Err(e) = r {
+                return Result::<V::Value, DeserializeError>::Err(e);
+            }
+        }
+        if b == 't' as i32 || b == 'f' as i32 {
+            let r = self.deserialize_bool();
+            if let Ok(v) = r {
+                return visitor.visit_bool(v);
+            }
+            if let Err(e) = r {
+                return Result::<V::Value, DeserializeError>::Err(e);
+            }
+        }
+        if b == '"' as i32 {
+            let r = self.deserialize_string();
+            if let Ok(v) = r {
+                return visitor.visit_string(v);
+            }
+            if let Err(e) = r {
+                return Result::<V::Value, DeserializeError>::Err(e);
+            }
+        }
+        if b == '[' as i32 {
+            let seq_r = self.begin_seq();
+            if let Ok(mut seq) = seq_r {
+                return visitor.visit_seq::<JsonSeqAccess>(&mut seq);
+            }
+            if let Err(e) = seq_r {
+                return Result::<V::Value, DeserializeError>::Err(e);
+            }
+        }
+        if b == '{' as i32 {
+            let map_r = self.begin_map();
+            if let Ok(mut map) = map_r {
+                return visitor.visit_map::<JsonMapAccess>(&mut map);
+            }
+            if let Err(e) = map_r {
+                return Result::<V::Value, DeserializeError>::Err(e);
+            }
+        }
+        if b == '-' as i32 || (b >= '0' as i32 && b <= '9' as i32) {
+            let r = self.deserialize_f64();
+            if let Ok(v) = r {
+                return visitor.visit_f64(v);
+            }
+            if let Err(e) = r {
+                return Result::<V::Value, DeserializeError>::Err(e);
+            }
+        }
+        return Result::<V::Value, DeserializeError>::Err(
+            DeserializeError::unexpected_type("unexpected byte in JSON value", self.pos as i64)
+        );
     }
 }
 

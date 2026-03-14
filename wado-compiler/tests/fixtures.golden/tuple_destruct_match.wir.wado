@@ -183,121 +183,46 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     pair = "tuple/[i32, i32]" { 0: 5, 1: 10 };
-    label = value_copy String(let __match_scrut_0: ref "tuple/[i32, i32]"; __match_scrut_0 = pair; if 1 -> ref String {
+    label = value_copy String(let __match_scrut_0: ref "tuple/[i32, i32]"; __match_scrut_0 = pair; block -> ref String {
         __local_1 = __match_scrut_0.0;
         __local_2 = __match_scrut_0.1;
         if (__local_1 + __local_2) > 20 -> ref String {
             __local_1 = __match_scrut_0.0;
             __local_2 = __match_scrut_0.1;
             String { repr: array.new_data<u8>("large"), used: 5 };
-        } else if 1 -> ref String {
-            __local_3 = __match_scrut_0.0;
-            __local_4 = __match_scrut_0.1;
-            if __local_3 == __local_4 -> ref String {
+        } else {
+            block -> ref String {
                 __local_3 = __match_scrut_0.0;
                 __local_4 = __match_scrut_0.1;
-                String { repr: array.new_data<u8>("equal"), used: 5 };
-            } else {
-                __local_5 = __match_scrut_0.0;
-                __local_6 = __match_scrut_0.1;
-                __tmpl: block -> ref String {
-                    __local_14 = String { repr: builtin::array_new<u8>(34), used: 0 };
-                    __local_15 = __inline_Formatter__new_4: block -> ref Formatter {
-                        __local_23 = __local_14;
-                        break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_23) };
+                if __local_3 == __local_4 -> ref String {
+                    __local_3 = __match_scrut_0.0;
+                    __local_4 = __match_scrut_0.1;
+                    String { repr: array.new_data<u8>("equal"), used: 5 };
+                } else {
+                    __local_5 = __match_scrut_0.0;
+                    __local_6 = __match_scrut_0.1;
+                    __tmpl: block -> ref String {
+                        __local_14 = String { repr: builtin::array_new<u8>(34), used: 0 };
+                        __local_15 = __inline_Formatter__new_4: block -> ref Formatter {
+                            __local_23 = __local_14;
+                            break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_23) };
+                        };
+                        __local_24 = "core:internal/Box<i32>" { value: __local_5 };
+                        __local_25 = __local_15;
+                        i32::fmt_decimal(__local_24.value, __local_25);
+                        String::append_char(__local_14, 44);
+                        String::append_char(__local_14, 32);
+                        __local_15 = __inline_Formatter__new_7: block -> ref Formatter {
+                            __local_28 = __local_14;
+                            break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_28) };
+                        };
+                        __local_29 = "core:internal/Box<i32>" { value: __local_6 };
+                        __local_30 = __local_15;
+                        i32::fmt_decimal(__local_29.value, __local_30);
+                        break __tmpl: __local_14;
                     };
-                    __local_24 = "core:internal/Box<i32>" { value: __local_5 };
-                    __local_25 = __local_15;
-                    i32::fmt_decimal(__local_24.value, __local_25);
-                    String::append_char(__local_14, 44);
-                    String::append_char(__local_14, 32);
-                    __local_15 = __inline_Formatter__new_7: block -> ref Formatter {
-                        __local_28 = __local_14;
-                        break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_28) };
-                    };
-                    __local_29 = "core:internal/Box<i32>" { value: __local_6 };
-                    __local_30 = __local_15;
-                    i32::fmt_decimal(__local_29.value, __local_30);
-                    break __tmpl: __local_14;
                 };
             };
-        } else {
-            __local_5 = __match_scrut_0.0;
-            __local_6 = __match_scrut_0.1;
-            __tmpl: block -> ref String {
-                __local_14 = String { repr: builtin::array_new<u8>(34), used: 0 };
-                __local_15 = __inline_Formatter__new_4: block -> ref Formatter {
-                    __local_23 = __local_14;
-                    break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_23) };
-                };
-                __local_24 = "core:internal/Box<i32>" { value: __local_5 };
-                __local_25 = __local_15;
-                i32::fmt_decimal(__local_24.value, __local_25);
-                String::append_char(__local_14, 44);
-                String::append_char(__local_14, 32);
-                __local_15 = __inline_Formatter__new_7: block -> ref Formatter {
-                    __local_28 = __local_14;
-                    break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_28) };
-                };
-                __local_29 = "core:internal/Box<i32>" { value: __local_6 };
-                __local_30 = __local_15;
-                i32::fmt_decimal(__local_29.value, __local_30);
-                break __tmpl: __local_14;
-            };
-        };
-    } else if 1 -> ref String {
-        __local_3 = __match_scrut_0.0;
-        __local_4 = __match_scrut_0.1;
-        if __local_3 == __local_4 -> ref String {
-            __local_3 = __match_scrut_0.0;
-            __local_4 = __match_scrut_0.1;
-            String { repr: array.new_data<u8>("equal"), used: 5 };
-        } else {
-            __local_5 = __match_scrut_0.0;
-            __local_6 = __match_scrut_0.1;
-            __tmpl: block -> ref String {
-                __local_14 = String { repr: builtin::array_new<u8>(34), used: 0 };
-                __local_15 = __inline_Formatter__new_4: block -> ref Formatter {
-                    __local_23 = __local_14;
-                    break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_23) };
-                };
-                __local_24 = "core:internal/Box<i32>" { value: __local_5 };
-                __local_25 = __local_15;
-                i32::fmt_decimal(__local_24.value, __local_25);
-                String::append_char(__local_14, 44);
-                String::append_char(__local_14, 32);
-                __local_15 = __inline_Formatter__new_7: block -> ref Formatter {
-                    __local_28 = __local_14;
-                    break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_28) };
-                };
-                __local_29 = "core:internal/Box<i32>" { value: __local_6 };
-                __local_30 = __local_15;
-                i32::fmt_decimal(__local_29.value, __local_30);
-                break __tmpl: __local_14;
-            };
-        };
-    } else {
-        __local_5 = __match_scrut_0.0;
-        __local_6 = __match_scrut_0.1;
-        __tmpl: block -> ref String {
-            __local_14 = String { repr: builtin::array_new<u8>(34), used: 0 };
-            __local_15 = __inline_Formatter__new_4: block -> ref Formatter {
-                __local_23 = __local_14;
-                break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_23) };
-            };
-            __local_24 = "core:internal/Box<i32>" { value: __local_5 };
-            __local_25 = __local_15;
-            i32::fmt_decimal(__local_24.value, __local_25);
-            String::append_char(__local_14, 44);
-            String::append_char(__local_14, 32);
-            __local_15 = __inline_Formatter__new_7: block -> ref Formatter {
-                __local_28 = __local_14;
-                break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_28) };
-            };
-            __local_29 = "core:internal/Box<i32>" { value: __local_6 };
-            __local_30 = __local_15;
-            i32::fmt_decimal(__local_29.value, __local_30);
-            break __tmpl: __local_14;
         };
     });
     "core:cli/println"(label);
@@ -444,13 +369,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l18: loop {
+            l16: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l18;
+                continue l16;
             };
         };
     };
@@ -542,13 +467,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l24: loop {
+            l22: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l24;
+                continue l22;
             };
         };
     };
@@ -565,14 +490,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l28: loop {
+                l26: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l28;
+                    continue l26;
                 };
             };
         };
@@ -682,13 +607,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l40: loop {
+            l38: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l40;
+                continue l38;
             };
         };
     };

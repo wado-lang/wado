@@ -1,0 +1,43 @@
+// Test: user-defined Eq impl for variant type is correctly called via ==
+// Regression test: variant types were incorrectly emitting I32Eq (enum codegen)
+// instead of calling Eq::eq, causing Wasm validation error.
+use { println } from "core:cli";
+
+variant Color {
+    Red,
+    Green,
+    Blue(i32),
+}
+
+impl Eq for Color {
+    fn eq(&self, other: &Color) -> bool {
+        if let Red = self {
+            if let Red = other { return true; }
+            return false;
+        }
+        if let Green = self {
+            if let Green = other { return true; }
+            return false;
+        }
+        if let Blue(b1) = self {
+            if let Blue(b2) = other { return *b1 == *b2; }
+            return false;
+        }
+        unreachable();
+    }
+}
+
+export fn run() with Stdout {
+    let c1 = Color::Red;
+    let c2 = Color::Red;
+    let c3 = Color::Blue(42);
+    let c4 = Color::Blue(42);
+    let c5 = Color::Blue(7);
+    if c1 == c2 { println("red == red"); }
+    if !(c1 == c3) { println("red != blue"); }
+    if c3 == c4 { println("blue(42) == blue(42)"); }
+    if !(c3 == c5) { println("blue(42) != blue(7)"); }
+}
+
+__DATA__
+{"stdout": "red == red\nred != blue\nblue(42) == blue(42)\nblue(42) != blue(7)\n"}

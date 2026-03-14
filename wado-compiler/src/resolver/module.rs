@@ -247,11 +247,29 @@ impl<H: CompilerHost> Resolver<'_, H> {
         for item in &module.items {
             match item {
                 Item::Function(func) => {
+                    // Set up the function's own type parameters before resolving the return type,
+                    // so that associated type projections like `V::Output` can be resolved.
+                    let old_type_params = std::mem::take(&mut self.current_type_params);
+                    let old_type_param_bounds = std::mem::take(&mut self.current_type_param_bounds);
+                    for (i, param) in func.type_params.iter().enumerate() {
+                        let type_id = self
+                            .type_table
+                            .borrow_mut()
+                            .make_type_param(param.name.clone(), i as u32);
+                        self.current_type_params
+                            .insert(param.name.clone(), (i as u32, type_id));
+                        if !param.bounds.is_empty() {
+                            self.current_type_param_bounds
+                                .insert(param.name.clone(), param.bounds.clone());
+                        }
+                    }
                     let return_type = func
                         .return_type
                         .as_ref()
                         .map(|t| self.resolve_type(t))
                         .unwrap_or(TypeTable::UNIT);
+                    self.current_type_params = old_type_params;
+                    self.current_type_param_bounds = old_type_param_bounds;
                     self.function_return_types
                         .insert(func.name.clone(), return_type);
                 }
@@ -321,11 +339,36 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .map(|t| self.get_type_name(t));
 
                     for method in &impl_block.methods {
+                        // Set up method-level type parameters so that `V::Output`-style
+                        // associated type projections can be resolved in the return type.
+                        let mut method_type_param_names: Vec<String> = Vec::new();
+                        let offset = self.current_type_params.len();
+                        for (i, param) in method.type_params.iter().enumerate() {
+                            let idx = (offset + i) as u32;
+                            let type_id = self
+                                .type_table
+                                .borrow_mut()
+                                .make_type_param(param.name.clone(), idx);
+                            self.current_type_params
+                                .insert(param.name.clone(), (idx, type_id));
+                            if !param.bounds.is_empty() {
+                                self.current_type_param_bounds
+                                    .insert(param.name.clone(), param.bounds.clone());
+                            }
+                            method_type_param_names.push(param.name.clone());
+                        }
+
                         let return_type = method
                             .return_type
                             .as_ref()
                             .map(|t| self.resolve_type(t))
                             .unwrap_or(TypeTable::UNIT);
+
+                        // Remove method-level type params from scope
+                        for name in &method_type_param_names {
+                            self.current_type_params.shift_remove(name);
+                            self.current_type_param_bounds.shift_remove(name);
+                        }
 
                         let mangled_name = MethodName::format_local(
                             &struct_name,
