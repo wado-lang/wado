@@ -93,11 +93,13 @@ fn generic_tuple() with Stdout {
     process_all([100, "generic", false]);
 }
 
-// === Nested tuples: inner tuples are elements, not flattened ===
+// === Nested tuple for-of: outer and inner tuples both expanded ===
 fn nested_tuples() with Stdout {
-    let t = [[1, 2], [3, 4]];
+    let t = [[1, "a"], [true, 3.14]];
     for let v of t {
-        println(`{v.0},{v.1}`);
+        for let w of v {
+            println(`{w}`);
+        }
     }
 }
 
@@ -136,4 +138,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"stdout": "42\nhello\ntrue\n0: 10\n1: world\n2: false\nsum = 6\nempty done\n99\nint(42)\nstr(wado)\nyes\n0: int(1)\n1: str(two)\n100\ngeneric\nfalse\n1,2\n3,4\n11\n21\n31\na100bhelloc\n"}
+{"stdout": "42\nhello\ntrue\n0: 10\n1: world\n2: false\nsum = 6\nempty done\n99\nint(42)\nstr(wado)\nyes\n0: int(1)\n1: str(two)\n100\ngeneric\nfalse\n1\na\ntrue\n3.14\n11\n21\n31\na100bhelloc\n"}
