@@ -1998,6 +1998,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // e.g., I::Iter: Iterator when IntoIterator::Iter: Iterator
                 return bounds.iter().any(|b| b == trait_name);
             }
+            ResolvedType::Newtype { base_type, .. } => {
+                // Newtypes inherit trait implementations from their base type.
+                let base_id = *base_type;
+                return self.type_implements_trait(base_id, trait_name);
+            }
             _ => return false,
         };
 
@@ -2426,10 +2431,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         concrete_type_id: TypeId,
         trait_name: &str,
     ) {
-        // Get the base type name and concrete type args for impl block lookup
+        // Get the base type name and concrete type args for impl block lookup.
+        // For newtypes, follow the chain to the underlying type to find the trait impl,
+        // but registration (below) still uses concrete_type_id so the monomorphizer can
+        // resolve e.g. `MyBytes::Iter` when `MyBytes` is a newtype over `Array<u8>`.
         let (type_name, concrete_type_args) = {
             let tt = self.type_table.borrow();
-            match tt.get(concrete_type_id).clone() {
+            let effective_id = tt.get_ultimate_base_type(concrete_type_id);
+            match tt.get(effective_id).clone() {
                 ResolvedType::GenericInstance {
                     name, type_args, ..
                 } => (name, type_args),
