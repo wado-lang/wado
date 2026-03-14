@@ -1023,19 +1023,16 @@ Returns a new string with trailing Unicode whitespace removed.
 
 Returns a new string with leading and trailing Unicode whitespace removed.
 
-<<<<<<< HEAD
 ##### `pub fn from_bytes<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, String>`
 
 Build a String from any iterable of bytes, validating that they form valid UTF-8.
 Returns Ok(String) on success, or Err(String) with an error message on failure.
 
 Accepts any `IntoIterator` whose item is `u8`: `Array<u8>`, `StrUtf8ByteIter`, etc.
-||||||| 92c57d0
-=======
+
 ##### `impl Add for String`
 
 ###### `pub fn add(&self, other: &Self) -> Self::Output`
->>>>>>> origin/main
 
 ##### `impl Eq for String`
 
