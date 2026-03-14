@@ -33,7 +33,7 @@ All levels run DCE (Dead Code Elimination) to remove unreachable functions and t
 | `-O0`           | Yes | 0          | N/A              |
 | `-O1`           | Yes | 2          | 5                |
 | `-O2` (default) | Yes | 10         | 10               |
-| `-O3`           | Yes | 100        | 19               |
+| `-O3`           | Yes | 100        | 20               |
 | `-Os`           | Yes | 10         | 10               |
 
 `-Os` additionally strips the Wasm name section. Optimization passes (inlining, ref-elim, etc.) run in a fixed-point loop with early exit on convergence.
