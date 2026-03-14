@@ -1,5 +1,6 @@
 // Valid patterns for uninitialized variable declarations.
 // Rule (from Wasm validation): a local get is valid if a set is guaranteed before it.
+// Type annotation is required when there is no initializer.
 
 // Pattern 1: declare then assign then use in sequence
 test "declare, assign, use" {
@@ -56,11 +57,12 @@ test "nested if-else all paths assign" {
     assert x == 2;
 }
 
-// Pattern 6: assign before use in a loop body (set happens before the get)
-test "assign before use in loop" {
+// Pattern 6: assign *before* the loop, then use inside and after the loop.
+// (Assignment inside a loop body does NOT count as guaranteed initialization.)
+test "assign before loop, use inside loop" {
     let mut x: i32;
     let mut i = 0;
-    x = 0;
+    x = 0;  // guaranteed assignment happens before the loop
     while i < 3 {
         x = x + 1;
         i = i + 1;
@@ -68,7 +70,7 @@ test "assign before use in loop" {
     assert x == 3;
 }
 
-// Pattern 7: different types — f64
+// Pattern 7: f64
 test "f64 uninit then assign" {
     let y: f64;
     y = 3.14;
@@ -84,6 +86,25 @@ test "bool uninit assigned in if-else" {
         flag = false;
     }
     assert flag;
+}
+
+// Pattern 9: String uninit then assign
+test "String uninit then assign" {
+    let s: String;
+    s = "hello";
+    assert s.len() == 5;
+}
+
+// Pattern 10: String uninit assigned in if-else
+test "String uninit assigned in if-else" {
+    let greeting: String;
+    let formal = false;
+    if formal {
+        greeting = "Good day.";
+    } else {
+        greeting = "Hi!";
+    }
+    assert greeting.len() == 3;
 }
 
 __DATA__
