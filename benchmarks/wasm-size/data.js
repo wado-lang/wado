@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773484282190,
+  "lastUpdate": 1773490028724,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3299,6 +3299,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/54a1ee8bfae324bedf36458b47c1d3e306f1befd"
         },
         "date": 1773484281997,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9236,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22767,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7275318c152f2a730da1b067b1484268a6afa47f",
+          "message": "Merge pull request #582 from wado-lang/claude/improve-http-server-O8aOD\n\nFix associated type resolution for newtypes in monomorphizer",
+          "timestamp": "2026-03-14T21:04:37+09:00",
+          "tree_id": "bd095a5bb01cbb440cb52222dd2a426ce1002634",
+          "url": "https://github.com/wado-lang/wado/commit/7275318c152f2a730da1b067b1484268a6afa47f"
+        },
+        "date": 1773490028556,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
