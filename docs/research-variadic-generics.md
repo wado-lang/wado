@@ -180,6 +180,7 @@ type InferCallbackArgs<T> =
 ### Status
 
 Implemented in Swift 5.9 (June 2023). Three proposals:
+
 - SE-0393: value and type parameter packs (core feature)
 - SE-0398: variadic types
 - SE-0399: tuple-related fixes
@@ -368,7 +369,7 @@ nominal.
 
 ### Generic functions over records (limited)
 
-A function can be generic in the *element types* of a fixed-shape record:
+A function can be generic in the _element types_ of a fixed-shape record:
 
 ```dart
 // Works: generic in one field's type
@@ -378,7 +379,7 @@ A function can be generic in the *element types* of a fixed-shape record:
 (String, String) strings = getPair("a", "b");
 ```
 
-But the *shape* (arity) cannot be generic:
+But the _shape_ (arity) cannot be generic:
 
 ```dart
 // NOT POSSIBLE in Dart today:
@@ -424,12 +425,12 @@ Tuple<(int, String, bool)> t = ...;
 
 ### Key comparison: Dart Records vs. TypeScript/Swift
 
-| Feature                     | Dart Records          | TypeScript tuples     | Swift tuples          |
-| --------------------------- | --------------------- | --------------------- | --------------------- |
-| Fixed-size heterogeneous    | Yes                   | Yes                   | Yes                   |
-| Structural typing           | Yes                   | No (nominal)          | No (nominal)          |
-| Generic over shape (arity)  | **No**                | Yes (variadic tuples) | Yes (parameter packs) |
-| Pattern matching            | Yes                   | Limited               | Yes                   |
+| Feature                    | Dart Records | TypeScript tuples     | Swift tuples          |
+| -------------------------- | ------------ | --------------------- | --------------------- |
+| Fixed-size heterogeneous   | Yes          | Yes                   | Yes                   |
+| Structural typing          | Yes          | No (nominal)          | No (nominal)          |
+| Generic over shape (arity) | **No**       | Yes (variadic tuples) | Yes (parameter packs) |
+| Pattern matching           | Yes          | Limited               | Yes                   |
 
 ### Relevance to Wado
 
@@ -504,14 +505,14 @@ The specific obstacles Rust faces do not directly apply.
 
 ## Summary Comparison
 
-| Language   | Status            | Syntax                      | Tuple support        | Iteration              | Multi-pack     |
-| ---------- | ----------------- | --------------------------- | -------------------- | ---------------------- | -------------- |
-| C++        | Implemented       | `typename... Ts`, `args...` | `std::tuple<Ts...>`  | Fold expressions       | Equal length   |
-| TypeScript | Implemented       | `[...T, ...U]` in types     | First-class          | Mapped types           | Spread at call |
-| Swift      | Implemented       | `each T`, `repeat each T`   | `(repeat each T)`    | `repeat` expression    | Equal shape, labels required |
-| D          | Implemented       | `T...` sequences             | Via AliasSeq         | `foreach`, `static if` | Equal length   |
-| Dart       | Not implemented   | Proposed (`T[]` or `...T`)  | Records (fixed-arity only) | N/A             | N/A            |
-| Rust       | Not implemented   | `..T` (proposed)            | Proposed             | Not yet specified      | Not yet specified |
+| Language   | Status          | Syntax                      | Tuple support              | Iteration              | Multi-pack                   |
+| ---------- | --------------- | --------------------------- | -------------------------- | ---------------------- | ---------------------------- |
+| C++        | Implemented     | `typename... Ts`, `args...` | `std::tuple<Ts...>`        | Fold expressions       | Equal length                 |
+| TypeScript | Implemented     | `[...T, ...U]` in types     | First-class                | Mapped types           | Spread at call               |
+| Swift      | Implemented     | `each T`, `repeat each T`   | `(repeat each T)`          | `repeat` expression    | Equal shape, labels required |
+| D          | Implemented     | `T...` sequences            | Via AliasSeq               | `foreach`, `static if` | Equal length                 |
+| Dart       | Not implemented | Proposed (`T[]` or `...T`)  | Records (fixed-arity only) | N/A                    | N/A                          |
+| Rust       | Not implemented | `..T` (proposed)            | Proposed                   | Not yet specified      | Not yet specified            |
 
 ### Key observations for Wado
 
