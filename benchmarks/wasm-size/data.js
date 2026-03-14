@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773473368792,
+  "lastUpdate": 1773479769014,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3182,6 +3182,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/24970c69a60bf5c0b46403c0838fb3079bb9eac1"
         },
         "date": 1773473368604,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9236,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22767,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3ed3e20bf760c0c333c144f2e73cb57269534c9c",
+          "message": "Merge pull request #579 from wado-lang/claude/string-from-bytes-hoGGp\n\nFix associated type bounds in blanket impl method resolution",
+          "timestamp": "2026-03-14T18:13:40+09:00",
+          "tree_id": "16ed8718952709247e774411f0a54f8cc24c7947",
+          "url": "https://github.com/wado-lang/wado/commit/3ed3e20bf760c0c333c144f2e73cb57269534c9c"
+        },
+        "date": 1773479768815,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
