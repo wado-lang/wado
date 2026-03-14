@@ -978,8 +978,24 @@ impl Parser {
             TokenKind::Break => self.parse_break_stmt(),
             TokenKind::Continue => self.parse_continue_stmt(),
             TokenKind::Assert => self.parse_assert_stmt(),
+            TokenKind::Match => self.parse_match_stmt(),
             _ => self.parse_expr_stmt_in_block(),
         }
+    }
+
+    /// Parse a match statement (no trailing semicolon required, like if/while/loop).
+    fn parse_match_stmt(&mut self) -> ParseResult<Stmt> {
+        let start_span = self.peek().span;
+        let expr = self.parse_match_expr()?;
+        // Trailing semicolon is optional (consumed if present)
+        if self.check(&TokenKind::Semicolon) {
+            self.advance();
+        }
+        let end_span = expr.span();
+        Ok(Stmt::Expr(ExprStmt {
+            expr,
+            span: start_span.merge(&end_span),
+        }))
     }
 
     /// Parse an expression statement in a block, with optional trailing semicolon

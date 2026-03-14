@@ -796,19 +796,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 assoc_name,
                 ..
             } => {
-                // Substitute the underlying type param to get the concrete type,
-                // then look up the associated type binding.
-                let concrete_id = self.substitute_type_params(param_id, type_args);
-                if concrete_id != param_id {
-                    if let Some(resolved) = self
-                        .type_table
-                        .borrow()
-                        .resolve_assoc_type(concrete_id, &assoc_name)
+                // Substitute the type parameter into a concrete type, then resolve.
+                let concrete = self.substitute_type_params(param_id, type_args);
+                if !self.type_table.borrow().contains_type_param(concrete) {
+                    if let Some(resolved) =
+                        self.type_table.borrow().resolve_assoc_type(concrete, &assoc_name)
                     {
                         return resolved;
                     }
                 }
-                concrete_id
+                // Type param still generic or assoc type not yet registered — leave as-is.
+                type_id
             }
             // Other types don't contain type parameters
             _ => type_id,

@@ -1,0 +1,18 @@
+// A match arm body `{ return expr; }` should have type `never` (bottom type).
+// This allows the match expression to produce a value from other arms.
+
+fn first_non_negative(a: i32, b: i32) -> i32 {
+    let result: i32 = match a >= 0 {
+        true => a,
+        false => { return b; },
+    };
+    return result;
+}
+
+export fn run() {
+    assert first_non_negative(5, 10) == 5;
+    assert first_non_negative(-1, 10) == 10;
+}
+
+__DATA__
+{"stdout": ""}

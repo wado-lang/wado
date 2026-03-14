@@ -367,8 +367,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                         // Remove method-level type params from scope
                         for name in &method_type_param_names {
-                            self.current_type_params.remove(name);
-                            self.current_type_param_bounds.remove(name);
+                            self.current_type_params.shift_remove(name);
+                            self.current_type_param_bounds.shift_remove(name);
                         }
 
                         let mangled_name = MethodName::format_local(

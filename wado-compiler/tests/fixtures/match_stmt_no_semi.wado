@@ -1,5 +1,5 @@
-// match arms containing return statements should satisfy the "explicit return" check.
-// All arms have return so no fallthrough is needed.
+// match as a block statement should not require a trailing semicolon,
+// just like if/while/loop blocks.
 
 fn classify(n: i32) -> String {
     match n {
@@ -7,6 +7,7 @@ fn classify(n: i32) -> String {
         x && x < 0 => { return "negative"; },
         _ => { return "zero"; },
     }
+    unreachable()
 }
 
 export fn run() {
