@@ -462,7 +462,14 @@ fn register_raw_array_type(
     );
 
     ctx.array_type_map.insert(element_type_id, type_id.clone());
-    ctx.array_type_by_name.insert(elem_name, type_id);
+    ctx.array_type_by_name
+        .insert(elem_name.clone(), type_id.clone());
+    // Also register under the newtype-resolved name so that e.g.
+    // `Array<[FieldName, FieldValue]>` and `Array<[String, Array<u8>]>` share
+    // the same raw array type when FieldName/FieldValue are newtypes.
+    if resolved_name != elem_name {
+        ctx.array_type_by_name.insert(resolved_name, type_id);
+    }
 }
 
 // === Phase implementations ===
@@ -1135,7 +1142,11 @@ fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
                 if type_table.contains_type_param(type_args[0]) {
                     continue;
                 }
-                let elem_name = type_table.mangle_type_name(type_args[0]);
+                // Use newtype-resolved name for deduplication so that e.g.
+                // Array<[FieldName, FieldValue]> and Array<[String, Array<u8>]>
+                // are treated as the same type.
+                let elem_name =
+                    type_table.mangle_type_name_resolving_newtypes(type_args[0]);
                 if !array_elem_types.iter().any(|(_, n)| n == &elem_name) {
                     array_elem_types.push((type_args[0], elem_name));
                 }
