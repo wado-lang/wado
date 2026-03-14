@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773482586164,
+  "lastUpdate": 1773484282190,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3260,6 +3260,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6c0a14a01a5f4804068c20e9dc15d9711f63cd35"
         },
         "date": 1773482585974,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9236,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22767,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "54a1ee8bfae324bedf36458b47c1d3e306f1befd",
+          "message": "Merge pull request #581 from wado-lang/claude/define-variable-initialization-IQEDO\n\nImplement definite initialization analysis for uninitialized variables",
+          "timestamp": "2026-03-14T19:28:54+09:00",
+          "tree_id": "2edc7c0d8841b4fb6d7f67173366d9401c2353fb",
+          "url": "https://github.com/wado-lang/wado/commit/54a1ee8bfae324bedf36458b47c1d3e306f1befd"
+        },
+        "date": 1773484281997,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
