@@ -1,0 +1,50 @@
+use { println, Stdout } from "core:cli";
+
+/// Test: associated type projection `V::Output` where V is a generic type parameter.
+/// This is the pattern needed for the Visitor pattern in serde.
+
+trait Wrapper {
+    type Output;
+    fn wrap(&self) -> Self::Output;
+}
+
+struct IntWrapper {
+    value: i32,
+}
+
+impl Wrapper for IntWrapper {
+    type Output = i32;
+    fn wrap(&self) -> Self::Output {
+        return self.value;
+    }
+}
+
+struct StringWrapper {
+    value: String,
+}
+
+impl Wrapper for StringWrapper {
+    type Output = String;
+    fn wrap(&self) -> Self::Output {
+        return self.value;
+    }
+}
+
+// Generic function returning V::Output — the key feature under test
+fn get_value<V: Wrapper>(w: &V) -> V::Output {
+    return w.wrap();
+}
+
+export fn run() with Stdout {
+    let iw = IntWrapper { value: 42 };
+    let sw = StringWrapper { value: "hello" };
+
+    let i: i32 = get_value::<IntWrapper>(&iw);
+    let s: String = get_value::<StringWrapper>(&sw);
+
+    println(`{i}`);
+    println(`{s}`);
+}
+
+__DATA__
+{"stdout": "42\nhello\n"}

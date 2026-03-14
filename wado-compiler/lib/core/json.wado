@@ -25,7 +25,7 @@ use {
     SerializeErrorKind,
     DeserializeError,
     DeserializeErrorKind,
-    ValueKind,
+    Visitor,
 } from "core:serde";
 
 use { parse as fpfmt_parse } from "core:prelude/fpfmt.wado";
@@ -1785,31 +1785,70 @@ impl Deserializer for JsonDeserializer {
         ));
     }
 
-    fn peek_value_kind(&mut self) -> Result<ValueKind, DeserializeError> {
+    fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
         self.skip_whitespace();
         if self.pos >= self.input.len() {
-            return Result::<ValueKind, DeserializeError>::Err(DeserializeError::eof(self.pos as i64));
+            return Result::<V::Value, DeserializeError>::Err(DeserializeError::eof(self.pos as i64));
         }
         let b = self.peek();
         if b == 'n' as i32 {
-            return Result::<ValueKind, DeserializeError>::Ok(ValueKind::Null);
+            let r = self.expect_literal(&"null");
+            if let Err(e) = r {
+                return Result::<V::Value, DeserializeError>::Err(e);
+            }
+            return visitor.visit_null();
         }
         if b == 't' as i32 || b == 'f' as i32 {
-            return Result::<ValueKind, DeserializeError>::Ok(ValueKind::Bool);
+            let bool_r = self.deserialize_bool();
+            if let Ok(v) = bool_r {
+                return visitor.visit_bool(v);
+            }
+            if let Err(e) = bool_r {
+                return Result::<V::Value, DeserializeError>::Err(e);
+            }
+            unreachable();
         }
         if b == '"' as i32 {
-            return Result::<ValueKind, DeserializeError>::Ok(ValueKind::String);
+            let str_r = self.read_json_string();
+            if let Ok(s) = str_r {
+                return visitor.visit_string(s);
+            }
+            if let Err(e) = str_r {
+                return Result::<V::Value, DeserializeError>::Err(e);
+            }
+            unreachable();
         }
         if b == '[' as i32 {
-            return Result::<ValueKind, DeserializeError>::Ok(ValueKind::Seq);
+            let seq_r = self.begin_seq();
+            if let Ok(mut seq) = seq_r {
+                return visitor.visit_seq::<JsonSeqAccess>(&mut seq);
+            }
+            if let Err(e) = seq_r {
+                return Result::<V::Value, DeserializeError>::Err(e);
+            }
+            unreachable();
         }
         if b == '{' as i32 {
-            return Result::<ValueKind, DeserializeError>::Ok(ValueKind::Map);
+            let map_r = self.begin_map();
+            if let Ok(mut map) = map_r {
+                return visitor.visit_map::<JsonMapAccess>(&mut map);
+            }
+            if let Err(e) = map_r {
+                return Result::<V::Value, DeserializeError>::Err(e);
+            }
+            unreachable();
         }
         if b == '-' as i32 || (b >= '0' as i32 && b <= '9' as i32) {
-            return Result::<ValueKind, DeserializeError>::Ok(ValueKind::Number);
+            let num_r = self.parse_f64_direct();
+            if let Ok(v) = num_r {
+                return visitor.visit_f64(v);
+            }
+            if let Err(e) = num_r {
+                return Result::<V::Value, DeserializeError>::Err(e);
+            }
+            unreachable();
         }
-        return Result::<ValueKind, DeserializeError>::Err(
+        return Result::<V::Value, DeserializeError>::Err(
             DeserializeError::unexpected_type("unexpected byte in JSON value", self.pos as i64)
         );
     }
@@ -1961,109 +2000,80 @@ impl Serialize for Value {
     }
 }
 
+struct ValueVisitor {}
+
+impl Visitor for ValueVisitor {
+    type Value = Value;
+
+    fn visit_null(&mut self) -> Result<Value, DeserializeError> {
+        return Result::<Value, DeserializeError>::Ok(Value::Null);
+    }
+
+    fn visit_bool(&mut self, v: bool) -> Result<Value, DeserializeError> {
+        return Result::<Value, DeserializeError>::Ok(Value::Bool(v));
+    }
+
+    fn visit_f64(&mut self, v: f64) -> Result<Value, DeserializeError> {
+        return Result::<Value, DeserializeError>::Ok(Value::Number(v));
+    }
+
+    fn visit_string(&mut self, v: String) -> Result<Value, DeserializeError> {
+        return Result::<Value, DeserializeError>::Ok(Value::String(v));
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<Value, DeserializeError> {
+        let mut items: Array<Value> = [];
+        loop {
+            let next: Result<Option<Value>, DeserializeError> = seq.next_element::<Value>();
+            if let Ok(opt) = next {
+                if let Some(item) = opt {
+                    items.append(item);
+                } else {
+                    let end_r = seq.end();
+                    if let Err(e) = end_r {
+                        return Result::<Value, DeserializeError>::Err(e);
+                    }
+                    return Result::<Value, DeserializeError>::Ok(Value::Array(items));
+                }
+            }
+            if let Err(e) = next {
+                return Result::<Value, DeserializeError>::Err(e);
+            }
+        }
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<Value, DeserializeError> {
+        let mut pairs: Array<[String, Value]> = [];
+        loop {
+            let key_r: Result<Option<String>, DeserializeError> = map.next_key_string();
+            if let Ok(opt) = key_r {
+                if let Some(key) = opt {
+                    let val_r: Result<Value, DeserializeError> = map.next_value::<Value>();
+                    if let Ok(val) = val_r {
+                        let entry: [String, Value] = [key, val];
+                        pairs.append(entry);
+                    }
+                    if let Err(e) = val_r {
+                        return Result::<Value, DeserializeError>::Err(e);
+                    }
+                } else {
+                    let end_r = map.end();
+                    if let Err(e) = end_r {
+                        return Result::<Value, DeserializeError>::Err(e);
+                    }
+                    return Result::<Value, DeserializeError>::Ok(Value::Object(pairs));
+                }
+            }
+            if let Err(e) = key_r {
+                return Result::<Value, DeserializeError>::Err(e);
+            }
+        }
+    }
+}
+
 impl Deserialize for Value {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Value, DeserializeError> {
-        let kind_r: Result<ValueKind, DeserializeError> = d.peek_value_kind();
-        if let Ok(kind) = kind_r {
-            if kind == ValueKind::Null {
-                let r: Result<bool, DeserializeError> = d.is_null();
-                if let Ok(_) = r {
-                    return Result::<Value, DeserializeError>::Ok(Value::Null);
-                }
-                if let Err(e) = r {
-                    return Result::<Value, DeserializeError>::Err(e);
-                }
-            }
-            if kind == ValueKind::Bool {
-                let r: Result<bool, DeserializeError> = d.deserialize_bool();
-                if let Ok(b) = r {
-                    return Result::<Value, DeserializeError>::Ok(Value::Bool(b));
-                }
-                if let Err(e) = r {
-                    return Result::<Value, DeserializeError>::Err(e);
-                }
-            }
-            if kind == ValueKind::Number {
-                let r: Result<f64, DeserializeError> = d.deserialize_f64();
-                if let Ok(n) = r {
-                    return Result::<Value, DeserializeError>::Ok(Value::Number(n));
-                }
-                if let Err(e) = r {
-                    return Result::<Value, DeserializeError>::Err(e);
-                }
-            }
-            if kind == ValueKind::String {
-                let r: Result<String, DeserializeError> = d.deserialize_string();
-                if let Ok(s) = r {
-                    return Result::<Value, DeserializeError>::Ok(Value::String(s));
-                }
-                if let Err(e) = r {
-                    return Result::<Value, DeserializeError>::Err(e);
-                }
-            }
-            if kind == ValueKind::Seq {
-                let seq_r = d.begin_seq();
-                if let Ok(mut seq) = seq_r {
-                    let mut items: Array<Value> = [];
-                    loop {
-                        let next: Result<Option<Value>, DeserializeError> = seq.next_element::<Value>();
-                        if let Ok(opt) = next {
-                            if let Some(item) = opt {
-                                items.append(item);
-                            } else {
-                                let end_r = seq.end();
-                                if let Err(e) = end_r {
-                                    return Result::<Value, DeserializeError>::Err(e);
-                                }
-                                return Result::<Value, DeserializeError>::Ok(Value::Array(items));
-                            }
-                        }
-                        if let Err(e) = next {
-                            return Result::<Value, DeserializeError>::Err(e);
-                        }
-                    }
-                }
-                if let Err(e) = seq_r {
-                    return Result::<Value, DeserializeError>::Err(e);
-                }
-            }
-            if kind == ValueKind::Map {
-                let map_r = d.begin_map();
-                if let Ok(mut map) = map_r {
-                    let mut pairs: Array<[String, Value]> = [];
-                    loop {
-                        let key_r: Result<Option<String>, DeserializeError> = map.next_key_string();
-                        if let Ok(opt) = key_r {
-                            if let Some(key) = opt {
-                                let val_r: Result<Value, DeserializeError> = map.next_value::<Value>();
-                                if let Ok(val) = val_r {
-                                    let entry: [String, Value] = [key, val];
-                                    pairs.append(entry);
-                                }
-                                if let Err(e) = val_r {
-                                    return Result::<Value, DeserializeError>::Err(e);
-                                }
-                            } else {
-                                let end_r = map.end();
-                                if let Err(e) = end_r {
-                                    return Result::<Value, DeserializeError>::Err(e);
-                                }
-                                return Result::<Value, DeserializeError>::Ok(Value::Object(pairs));
-                            }
-                        }
-                        if let Err(e) = key_r {
-                            return Result::<Value, DeserializeError>::Err(e);
-                        }
-                    }
-                }
-                if let Err(e) = map_r {
-                    return Result::<Value, DeserializeError>::Err(e);
-                }
-            }
-        }
-        if let Err(e) = kind_r {
-            return Result::<Value, DeserializeError>::Err(e);
-        }
-        unreachable();
+        let mut visitor = ValueVisitor {};
+        return d.deserialize_any::<ValueVisitor>(&mut visitor);
     }
 }

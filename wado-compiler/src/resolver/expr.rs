@@ -791,6 +791,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .borrow_mut()
                     .make_generic_instance(name, module_source, new_args)
             }
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+                ..
+            } => {
+                // Substitute the underlying type param to get the concrete type,
+                // then look up the associated type binding.
+                let concrete_id = self.substitute_type_params(param_id, type_args);
+                if concrete_id != param_id {
+                    if let Some(resolved) = self
+                        .type_table
+                        .borrow()
+                        .resolve_assoc_type(concrete_id, &assoc_name)
+                    {
+                        return resolved;
+                    }
+                }
+                concrete_id
+            }
             // Other types don't contain type parameters
             _ => type_id,
         }
