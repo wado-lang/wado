@@ -20,25 +20,12 @@ use {
 use { TreeMap } from "core:collections";
 use { JsonValue, stringify } from "./json.wado";
 
-fn bytes_to_string(bytes: Array<u8>) -> String {
-    let mut s = String::with_capacity(bytes.len());
-    for let b of bytes {
-        s.append_char(char::from_u32(b as u32).unwrap());
-    }
-    return s;
-}
-
-fn string_to_bytes(s: String) -> Array<u8> {
-    return s.bytes().collect();
-}
-
 fn headers_to_json(headers: &Fields) -> String {
     let all = headers.copy_all();
     let mut map = TreeMap::<String, JsonValue>::new();
     for let entry of all {
         let [name, value] = entry;
-        let value_str = bytes_to_string(value);
-        map[name] = JsonValue::Str(value_str);
+        map[name] = JsonValue::Str(String::from_utf8_lossy(value));
     }
     let obj = JsonValue::Obj(map);
     return stringify(&obj);
@@ -48,8 +35,8 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let path = request.get_path_with_query();
     let req_headers = request.get_headers();
 
-    let mut body_str = "Not Found\n";
-    let mut status: StatusCode = 404;
+    let body_str: String;
+    let status: StatusCode;
     if let Some(p) = path {
         if p == "/" {
             status = 200;
@@ -57,7 +44,13 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
         } else if p == "/echo" {
             status = 200;
             body_str = headers_to_json(&req_headers);
+        } else {
+            status = 404;
+            body_str = "Not Found\n";
         }
+    } else {
+        status = 404;
+        body_str = "Not Found\n";
     }
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
@@ -69,7 +62,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
     task return Result::<Response, ErrorCode>::Ok(response);
 
-    body_tx.write(string_to_bytes(body_str));
+    body_tx.write(body_str.bytes().collect());
     body_tx.drop();
 
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
