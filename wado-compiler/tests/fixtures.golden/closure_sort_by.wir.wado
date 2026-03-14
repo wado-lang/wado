@@ -43,7 +43,7 @@ struct __Closure_0 {}
 
 array array<i32> (mut i32);
 
-struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
@@ -140,7 +140,7 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> ref Option<i32>;
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> ref Option<i32>;
 
 type "functype/Array<i32>::sort_by" = fn(ref Array<i32>, ref struct);
 
@@ -168,7 +168,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -211,14 +211,14 @@ global mut __modules_initialized: bool = 0;
 fn run() with Stdout {
     let __local_0: ref Array<i32>;
     let nums: ref Array<i32>;
-    let __iter_0: ref ArrayIter<i32>;
+    let __iter_0: ref "core:allocator/ArrayIter<i32>";
     let x_3: i32;
-    let __iter_1: ref ArrayIter<i32>;
+    let __iter_1: ref "core:allocator/ArrayIter<i32>";
     let x_5: i32;
     let __local_6: ref Array<i32>;
     let original: ref Array<i32>;
     let asc: ref Array<i32>;
-    let __iter_2: ref ArrayIter<i32>;
+    let __iter_2: ref "core:allocator/ArrayIter<i32>";
     let x_10: i32;
     let __local_11: ref String;
     let __local_12: ref Formatter;
@@ -243,7 +243,7 @@ fn run() with Stdout {
         break __seq_lit: __local_0;
     };
     Array<i32>::sort_by$__Closure_0(nums, __Closure_0 {  });
-    __iter_0 = ArrayIter<i32> { repr: ref.as_non_null(nums.repr), used: nums.used, index: 0 };
+    __iter_0 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(nums.repr), used: nums.used, index: 0 };
     b1: block {
         l2: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -268,7 +268,7 @@ fn run() with Stdout {
         };
     };
     Array<i32>::sort_by$__Closure_1(nums, __Closure_1 {  });
-    __iter_1 = ArrayIter<i32> { repr: ref.as_non_null(nums.repr), used: nums.used, index: 0 };
+    __iter_1 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(nums.repr), used: nums.used, index: 0 };
     b4: block {
         l5: loop {
             let __sroa___pattern_temp_1_discriminant: i32;
@@ -297,7 +297,7 @@ fn run() with Stdout {
         break __seq_lit: __local_6;
     };
     asc = Array<i32>::sorted_by$__Closure_2(original, __Closure_2 {  });
-    __iter_2 = ArrayIter<i32> { repr: ref.as_non_null(asc.repr), used: asc.used, index: 0 };
+    __iter_2 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(asc.repr), used: asc.used, index: 0 };
     b7: block {
         l8: loop {
             let __sroa___pattern_temp_2_discriminant: i32;

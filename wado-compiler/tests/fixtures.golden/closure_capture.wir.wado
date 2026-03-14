@@ -125,7 +125,7 @@ struct __Closure_12 {
 
 array array<i32> (mut i32);
 
-struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
@@ -229,7 +229,7 @@ type "functype/String::append_char" = fn(ref String, char);
 
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> ref Option<i32>;
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> ref Option<i32>;
 
 type "functype/__Closure_5::__call" = fn(ref __Closure_5) -> ref String;
 
@@ -282,7 +282,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
 
 type "functype/$canonical_closure_fn_3" = fn(ref null struct) -> [ref array<u8>, i32];
 
@@ -316,10 +316,10 @@ fn clamp(value, min_val, max_val) {
 
 fn scale_and_add(items, scale, base) {
     let total: i32;
-    let __iter_0: ref ArrayIter<i32>;
+    let __iter_0: ref "core:allocator/ArrayIter<i32>";
     let item: i32;
     total = 0;
-    __iter_0 = ArrayIter<i32> { repr: ref.as_non_null(items.repr), used: items.used, index: 0 };
+    __iter_0 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(items.repr), used: items.used, index: 0 };
     b2: block {
         l3: loop {
             let __sroa___pattern_temp_0_discriminant: i32;

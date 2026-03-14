@@ -62,7 +62,7 @@ struct Point {
 
 array array<i32> (mut i32);
 
-struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
@@ -186,7 +186,7 @@ type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<c
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> ref Option<i32>;
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> ref Option<i32>;
 
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
@@ -204,7 +204,7 @@ type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> [i32
 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -229,7 +229,7 @@ fn auto_deref_for_of() with Stdout {
     let __local_0: ref Array<i32>;
     let arr: ref Array<i32>;
     let sum: i32;
-    let __iter_0: ref ArrayIter<i32>;
+    let __iter_0: ref "core:allocator/ArrayIter<i32>";
     let x: i32;
     let __v0_6: i32;
     let __cond_7: bool;
@@ -257,7 +257,7 @@ fn auto_deref_for_of() with Stdout {
         break __seq_lit: __local_0;
     };
     sum = 0;
-    __iter_0 = ArrayIter<i32> { repr: ref.as_non_null(arr.repr), used: 3, index: 0 };
+    __iter_0 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(arr.repr), used: 3, index: 0 };
     b0: block {
         l1: loop {
             let __sroa___pattern_temp_0_discriminant: i32;

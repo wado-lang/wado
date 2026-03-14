@@ -43,7 +43,7 @@ array array<i32> (mut i32);
 
 array array<Fn<1,i32>> (mut ref struct);
 
-struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
@@ -153,7 +153,7 @@ type "functype/String::append_char" = fn(ref String, char);
 
 type "functype/Array<Fn<1,i32>>::append" = fn(ref Array<Fn<1,i32>>, ref struct);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> ref Option<i32>;
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> ref Option<i32>;
 
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
@@ -169,7 +169,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -197,7 +197,7 @@ fn run() with Stdout {
     let items: ref Array<i32>;
     let __local_2: ref Array<Fn<1,i32>>;
     let closures: ref Array<Fn<1,i32>>;
-    let __iter_0: ref ArrayIter<i32>;
+    let __iter_0: ref "core:allocator/ArrayIter<i32>";
     let item: i32;
     let get_item: ref struct;
     let r0: i32;
@@ -236,7 +236,7 @@ fn run() with Stdout {
         __local_2 = Array<Fn<1,i32>> { repr: builtin::array_new<ref struct>(0), used: 0 };
         break __seq_lit: __local_2;
     };
-    __iter_0 = ArrayIter<i32> { repr: ref.as_non_null(items.repr), used: 5, index: 0 };
+    __iter_0 = "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(items.repr), used: 5, index: 0 };
     b1: block {
         l2: loop {
             let __sroa___pattern_temp_0_discriminant: i32;

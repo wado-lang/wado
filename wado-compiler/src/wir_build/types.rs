@@ -1145,8 +1145,7 @@ fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
                 // Use newtype-resolved name for deduplication so that e.g.
                 // Array<[FieldName, FieldValue]> and Array<[String, Array<u8>]>
                 // are treated as the same type.
-                let elem_name =
-                    type_table.mangle_type_name_resolving_newtypes(type_args[0]);
+                let elem_name = type_table.mangle_type_name_resolving_newtypes(type_args[0]);
                 if !array_elem_types.iter().any(|(_, n)| n == &elem_name) {
                     array_elem_types.push((type_args[0], elem_name));
                 }

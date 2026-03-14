@@ -2,6 +2,12 @@
 // --- Module: core:allocator ---
 global mut heap_offset: i32 = 8;
 
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 fn grow_memory(new_offset: i32) {
     let current_bytes: i32 = (core::builtin::memory_size() * 65536);
     let deficit: i32 = (new_offset - current_bytes);
@@ -263,6 +269,12 @@ pub fn "Tuple<i32,i32,i32>^Display::fmt"(self: &[i32, i32, i32], f: &mut Formatt
 
 
 // --- Module: core:builtin ---
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 fn task_return(result: i32);
 
 fn i32_as_char(value: i32) -> char;
@@ -1231,6 +1243,12 @@ pub fn "Tuple<i32,i32,i32>^Display::fmt"(self: &[i32, i32, i32], f: &mut Formatt
 
 
 // --- Module: core:cli ---
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
     let bytes: builtin::array<u8> = message.String::internal_raw_bytes();
     let len: i32 = message.String::len();
@@ -1562,6 +1580,12 @@ fn "array_new<u8>"(len: i32) -> builtin::array<u8>;
 
 
 // --- Module: core:internal ---
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 pub struct "Box<f64>" {
     value: f64,
 }
@@ -2083,6 +2107,12 @@ fn "array_new<u8>"(len: i32) -> builtin::array<u8>;
 
 
 // --- Module: core:prelude ---
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -2546,6 +2576,12 @@ pub struct PmHiLo {
 pub struct FormatResult {
     pub digits: u64,
     pub exponent: i32,
+}
+
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
 }
 
 pub enum SpecialKind {
@@ -3907,6 +3943,12 @@ pub struct i128 {
     high: i64,
 }
 
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 pub fn u128::from_u64(value: u64) -> u128 {
     return u128 { low: value, high: 0 };
 }
@@ -4913,6 +4955,12 @@ pub fn "Tuple<i32,i32,i32>^Display::fmt"(self: &[i32, i32, i32], f: &mut Formatt
 
 
 // --- Module: core:prelude/primitive.wado ---
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
     let arr: builtin::array<u8> = "core::prelude/primitive.wado::array_new<u8>"(len);
     __for_0: {
@@ -6981,6 +7029,12 @@ pub struct StrCharIter {
     byte_index: i32,
 }
 
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 fn i32_min(a: i32, b: i32) -> i32 {
     return "core::prelude/string.wado::select<i32>"((a < b), a, b);
 }
@@ -7835,6 +7889,12 @@ fn "select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
 
 
 // --- Module: core:prelude/traits.wado ---
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 pub enum Ordering {
     Less,
     Equal,
@@ -8095,6 +8155,12 @@ pub struct WaitEvent {
     pub code: i32,
     pub handle: Waitable,
     pub payload: u32,
+}
+
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
 }
 
 pub fn "Waitable^Eq::eq"(self: &Waitable, other: &Waitable) -> bool {
@@ -9431,6 +9497,12 @@ fn __initialize_modules() {
 
 
 // --- Module: wasi:cli ---
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -9647,6 +9719,12 @@ pub fn "Tuple<i32,i32,i32>^Display::fmt"(self: &[i32, i32, i32], f: &mut Formatt
 
 
 // --- Module: wasi:cli/environment.wado ---
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -9863,6 +9941,12 @@ pub fn "Tuple<i32,i32,i32>^Display::fmt"(self: &[i32, i32, i32], f: &mut Formatt
 
 
 // --- Module: wasi:cli/exit.wado ---
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -10079,6 +10163,12 @@ pub fn "Tuple<i32,i32,i32>^Display::fmt"(self: &[i32, i32, i32], f: &mut Formatt
 
 
 // --- Module: wasi:cli/run.wado ---
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -10295,6 +10385,12 @@ pub fn "Tuple<i32,i32,i32>^Display::fmt"(self: &[i32, i32, i32], f: &mut Formatt
 
 
 // --- Module: wasi:cli/stderr.wado ---
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -10511,6 +10607,12 @@ pub fn "Tuple<i32,i32,i32>^Display::fmt"(self: &[i32, i32, i32], f: &mut Formatt
 
 
 // --- Module: wasi:cli/stdin.wado ---
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -10727,6 +10829,12 @@ pub fn "Tuple<i32,i32,i32>^Display::fmt"(self: &[i32, i32, i32], f: &mut Formatt
 
 
 // --- Module: wasi:cli/stdout.wado ---
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -10943,6 +11051,12 @@ pub fn "Tuple<i32,i32,i32>^Display::fmt"(self: &[i32, i32, i32], f: &mut Formatt
 
 
 // --- Module: wasi:cli/terminal-input.wado ---
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -11159,6 +11273,12 @@ pub fn "Tuple<i32,i32,i32>^Display::fmt"(self: &[i32, i32, i32], f: &mut Formatt
 
 
 // --- Module: wasi:cli/terminal-output.wado ---
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -11375,6 +11495,12 @@ pub fn "Tuple<i32,i32,i32>^Display::fmt"(self: &[i32, i32, i32], f: &mut Formatt
 
 
 // --- Module: wasi:cli/terminal-stderr.wado ---
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -11591,6 +11717,12 @@ pub fn "Tuple<i32,i32,i32>^Display::fmt"(self: &[i32, i32, i32], f: &mut Formatt
 
 
 // --- Module: wasi:cli/terminal-stdin.wado ---
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -11807,6 +11939,12 @@ pub fn "Tuple<i32,i32,i32>^Display::fmt"(self: &[i32, i32, i32], f: &mut Formatt
 
 
 // --- Module: wasi:cli/terminal-stdout.wado ---
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 pub fn "Tuple<i64,i64>^Inspect::inspect"(self: &[i64, i64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<i64> { value: *self.0 }."i64^Inspect::inspect"(f);
@@ -12023,6 +12161,12 @@ pub fn "Tuple<i32,i32,i32>^Display::fmt"(self: &[i32, i32, i32], f: &mut Formatt
 
 
 // --- Module: wasi:cli/types.wado ---
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
+}
+
 pub enum ErrorCode {
     Io,
     IllegalByteSequence,
@@ -12288,6 +12432,12 @@ pub struct Formatter {
     pub width: i32,
     pub precision: i32,
     pub buf: &mut String,
+}
+
+pub struct "ArrayIter<Point>" {
+    repr: builtin::array<Point>,
+    used: i32,
+    index: i32,
 }
 
 pub enum Alignment {

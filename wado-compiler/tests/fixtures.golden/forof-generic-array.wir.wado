@@ -26,6 +26,12 @@ struct [Stream<u8>, StreamWritable<u8>] {
 
 array array<i32> (mut i32);
 
+struct ArrayIter<i32> {  // from wasi:cli  // ArrayIter<T> with T=i32
+    mut repr: ref array<i32>,
+    mut used: i32,
+    mut index: i32,
+}
+
 variant Option<i32> {
     Some(i32),
     None,
@@ -50,12 +56,6 @@ struct Array<i32> {  // Array<T> with T=i32
 
 struct Container<i32> {  // Container<T> with T=i32
     mut items: ref Array<i32>,
-}
-
-struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
-    mut repr: ref array<i32>,
-    mut used: i32,
-    mut index: i32,
 }
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
@@ -104,7 +104,7 @@ type "functype/core:internal/cm_waitable_set_wait" = fn(i32) -> ref WaitEvent;
 
 type "functype/Container<i32>::process" = fn(ref Container<i32>);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> ref Option<i32>;
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "wasi:cli/ArrayIter<i32>") -> ref Option<i32>;
 
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
@@ -114,7 +114,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "wasi:cli/ArrayIter<i32>") -> [i32, i32];
 
 type "functype/Container<i32>::process" = fn(ref Array<i32>);
 
@@ -340,12 +340,12 @@ fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
 }
 
 fn Container<i32>::process(self) {
-    let __iter_0: ref ArrayIter<i32>;
+    let __iter_0: ref "wasi:cli/ArrayIter<i32>";
     let item: i32;
     let __local_4: ref Array<i32>;
-    __iter_0 = __inline_Array_i32__IntoIterator__into_iter_0: block -> ref ArrayIter<i32> {
+    __iter_0 = __inline_Array_i32__IntoIterator__into_iter_0: block -> ref "wasi:cli/ArrayIter<i32>" {
         __local_4 = self;
-        break __inline_Array_i32__IntoIterator__into_iter_0: ArrayIter<i32> { repr: ref.as_non_null(__local_4.repr), used: __local_4.used, index: 0 };
+        break __inline_Array_i32__IntoIterator__into_iter_0: "wasi:cli/ArrayIter<i32>" { repr: ref.as_non_null(__local_4.repr), used: __local_4.used, index: 0 };
     };
     b14: block {
         l15: loop {

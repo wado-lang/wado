@@ -47,7 +47,7 @@ struct [i32, i32] {
 
 array array<Tuple<i32,String>> (mut ref "tuple/[i32, String]");
 
-struct ArrayIter<Tuple<i32,String>> {  // ArrayIter<T> with T=Tuple<i32,String>
+struct ArrayIter<Tuple<i32,String>> {  // from core:allocator  // ArrayIter<T> with T=Tuple<i32,String>
     mut repr: ref array<Tuple<i32,String>>,
     mut used: i32,
     mut index: i32,
@@ -151,7 +151,7 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/ArrayIter<Tuple<i32,String>>^Iterator::next" = fn(ref ArrayIter<Tuple<i32,String>>) -> ref Option<Tuple<i32,String>>;
+type "functype/ArrayIter<Tuple<i32,String>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<i32,String>>") -> ref Option<Tuple<i32,String>>;
 
 type "functype/Array<Tuple<i32,String>>::append" = fn(ref Array<Tuple<i32,String>>, ref "tuple/[i32, String]");
 
@@ -165,7 +165,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/ArrayIter<Tuple<i32,String>>^Iterator::next" = fn(ref ArrayIter<Tuple<i32,String>>) -> [i32, ref null "tuple/[i32, String]"];
+type "functype/ArrayIter<Tuple<i32,String>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<i32,String>>") -> [i32, ref null "tuple/[i32, String]"];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -210,10 +210,10 @@ fn tuple_destruct_basic() with Stdout {
 fn tuple_destruct_for_of() with Stdout {
     let __local_0: ref Array<Tuple<i32,String>>;
     let pairs: ref Array<Tuple<i32,String>>;
-    let __iter_0: ref ArrayIter<Tuple<i32,String>>;
+    let __iter_0: ref "core:allocator/ArrayIter<Tuple<i32,String>>";
     let num: i32;
     let name_4: ref String;
-    let __iter_1: ref ArrayIter<Tuple<i32,String>>;
+    let __iter_1: ref "core:allocator/ArrayIter<Tuple<i32,String>>";
     let name_6: ref String;
     let __local_7: ref String;
     let __local_8: ref Formatter;
@@ -225,7 +225,7 @@ fn tuple_destruct_for_of() with Stdout {
         __local_0 = Array<Tuple<i32,String>> { repr: array.new_fixed<ref "tuple/[i32, String]">("tuple/[i32, String]" { 0: 1, 1: String { repr: array.new_data<u8>("one"), used: 3 } }, "tuple/[i32, String]" { 0: 2, 1: String { repr: array.new_data<u8>("two"), used: 3 } }, "tuple/[i32, String]" { 0: 3, 1: String { repr: array.new_data<u8>("three"), used: 5 } }), used: 3 };
         break __seq_lit: __local_0;
     };
-    __iter_0 = ArrayIter<Tuple<i32,String>> { repr: ref.as_non_null(pairs.repr), used: 3, index: 0 };
+    __iter_0 = "core:allocator/ArrayIter<Tuple<i32,String>>" { repr: ref.as_non_null(pairs.repr), used: 3, index: 0 };
     b0: block {
         l1: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -254,7 +254,7 @@ fn tuple_destruct_for_of() with Stdout {
             continue l1;
         };
     };
-    __iter_1 = ArrayIter<Tuple<i32,String>> { repr: ref.as_non_null(pairs.repr), used: 3, index: 0 };
+    __iter_1 = "core:allocator/ArrayIter<Tuple<i32,String>>" { repr: ref.as_non_null(pairs.repr), used: 3, index: 0 };
     b3: block {
         l4: loop {
             let __sroa___pattern_temp_2_discriminant: i32;

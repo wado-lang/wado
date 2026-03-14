@@ -117,6 +117,12 @@ array array<u64> (mut u64);
 
 array array<String> (mut ref String);
 
+struct ArrayIter<String> {  // ArrayIter<T> with T=String
+    mut repr: ref array<String>,
+    mut used: i32,
+    mut index: i32,
+}
+
 variant Option<Point> {
     Some(ref Point),
     None,
@@ -185,12 +191,6 @@ struct Array<String> {  // Array<T> with T=String
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
     mut used: i32,
-}
-
-struct ArrayIter<String> {  // ArrayIter<T> with T=String
-    mut repr: ref array<String>,
-    mut used: i32,
-    mut index: i32,
 }
 
 enum SpecialKind { NotSpecial = 0, Zero = 1, Inf = 2, NaN = 3 };
