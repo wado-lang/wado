@@ -1639,6 +1639,27 @@ impl WirInstr {
         instrs.iter().any(Self::always_diverges)
     }
 
+    /// Returns true if this instruction leaves a value on the Wasm stack.
+    /// Used to guard `Drop` emission — a `Block{result: None}` produces no value.
+    pub fn produces_stack_value(&self) -> bool {
+        match self {
+            Self::Block { result, .. } | Self::If { result, .. } => result.is_some(),
+            Self::Loop { .. } => false,
+            Self::Seq(body) => body.last().is_some_and(WirInstr::produces_stack_value),
+            Self::Drop(_)
+            | Self::LocalSet { .. }
+            | Self::GlobalSet { .. }
+            | Self::Return { .. }
+            | Self::Unreachable
+            | Self::Br { .. }
+            | Self::BrIf { .. }
+            | Self::BrTable { .. }
+            | Self::DeclareLocal { .. }
+            | Self::Nop => false,
+            _ => true,
+        }
+    }
+
     /// Returns true if this instruction is guaranteed to produce a non-null
     /// reference. Used to skip redundant `RefAsNonNull` wrappers.
     pub fn is_nonnull_result(&self) -> bool {
