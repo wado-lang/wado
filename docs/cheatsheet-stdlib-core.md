@@ -511,6 +511,10 @@ impl String {
     pub fn from_bytes<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, String>;
 }
 
+impl Add for String {
+    pub fn add(&self, other: &Self) -> Self::Output;
+}
+
 impl Eq for String {
     pub fn eq(&self, other: &Self) -> bool;
 }

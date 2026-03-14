@@ -158,6 +158,14 @@ impl String {
     }
 }
 
+impl Add for String {
+    type Output = String;
+
+    pub fn add(&self, other: &Self) -> Self::Output {
+        return String::concat(*self, *other);
+    }
+}
+
 // Eq implementation for String - lexicographic equality
 impl Eq for String {
     pub fn eq(&self, other: &Self) -> bool {

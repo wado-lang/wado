@@ -7150,6 +7150,10 @@ pub fn String::concat(a: String, b: String) -> String {
     return String { repr: repr, used: total };
 }
 
+pub fn "String^Add::add"(self: &String, other: &String) -> String {
+    return "core::prelude/string.wado::String::concat"(*self, *other);
+}
+
 pub fn "String^Eq::eq"(self: &String, other: &String) -> bool {
     let len_a: i32 = self.String::len();
     let len_b: i32 = other.String::len();
@@ -7364,7 +7368,7 @@ pub fn String::truncate_bytes(self: &mut String, byte_len: i32) {
                 __r.String::append("core:prelude/string.wado");
                 __r.String::append(":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 346 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 354 }."i32^Display::fmt"(&mut __f);
                 __r.String::append(": ");
                 __r.String::append("negative length");
                 __r.String::append("\ncondition: byte_len >= 0\n");
@@ -7393,7 +7397,7 @@ pub fn String::truncate_bytes(self: &mut String, byte_len: i32) {
                     __r.String::append("core:prelude/string.wado");
                     __r.String::append(":");
                     let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                    Box<i32> { value: 351 }."i32^Display::fmt"(&mut __f);
+                    Box<i32> { value: 359 }."i32^Display::fmt"(&mut __f);
                     __r.String::append(": ");
                     __r.String::append("not on a UTF-8 character boundary");
                     __r.String::append("\ncondition: b < 0x80 || b >= 0xC0\n");
@@ -8885,10 +8889,10 @@ fn destructuring_examples() {
         let mut __b: Array<Point> = "Array<Point>^SequenceLiteralBuilder::new_literal"(0);
         break __seq_lit: __b."Array<Point>^SequenceLiteralBuilder::build"();
     };
-    __for_of_0: {
-        let mut __iter_0: ArrayIter<Point> = points."Array<Point>^IntoIterator::into_iter"();
+    __for_of_14: {
+        let mut __iter_14: ArrayIter<Point> = points."Array<Point>^IntoIterator::into_iter"();
         loop {
-            let __pattern_temp_5: Option<Point> = __iter_0."ArrayIter<Point>^Iterator::next"();
+            let __pattern_temp_5: Option<Point> = __iter_14."ArrayIter<Point>^Iterator::next"();
             if __variant_test(__pattern_temp_5, case=0, name=Some) {
                 let __pattern_temp_6: Point = __variant_payload(__pattern_temp_5, case=0);
                 let x: i32 = __pattern_temp_6.x;
@@ -12680,10 +12684,10 @@ pub fn "String^Display::fmt"(self: &String, f: &mut Formatter) {
 
 pub fn "String^Inspect::inspect"(self: &String, f: &mut Formatter) {
     f.Formatter::write_char('"');
-    __for_of_4: {
-        let mut __iter_4: StrCharIter = *self.String::chars()."StrCharIter^IntoIterator::into_iter"();
+    __for_of_2: {
+        let mut __iter_2: StrCharIter = *self.String::chars()."StrCharIter^IntoIterator::into_iter"();
         loop {
-            let __pattern_temp_0: Option<char> = __iter_4."StrCharIter^Iterator::next"();
+            let __pattern_temp_0: Option<char> = __iter_2."StrCharIter^Iterator::next"();
             if __variant_test(__pattern_temp_0, case=0, name=Some) {
                 let c: char = __variant_payload(__pattern_temp_0, case=0);
                 if (c == '"') {

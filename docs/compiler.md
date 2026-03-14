@@ -770,7 +770,9 @@ The compiler resolves iterator traits (`Iterator`, `IntoIterator`, `FromIterator
 
 **For-Of Loop Compilation:**
 
-For-of loops are desugared to use `IntoIterator` and `Iterator` traits:
+For-of loops over tuples are expanded at compile time in the resolver (one copy of the body per element, each typed independently). This enables heterogeneous iteration with per-element trait dispatch. `break`, `continue`, and `return` are compile errors inside tuple for-of.
+
+For-of loops over non-tuple types are desugared to use `IntoIterator` and `Iterator` traits:
 
 ```wado
 // Source

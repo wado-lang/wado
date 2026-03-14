@@ -315,12 +315,12 @@ global mut __modules_initialized: bool = 0;
 fn run() with Stdout {
     let map: ref TreeMap<String,i32>;
     let entries: ref Array<Tuple<String,i32>>;
-    let __iter_7: ref "core:allocator/ArrayIter<Tuple<String,i32>>";
+    let __iter_2: ref "core:allocator/ArrayIter<Tuple<String,i32>>";
     let entry_3: ref "tuple/[String, i32]";
     let key_4: ref String;
     let value_5: i32;
     let final_entries: ref Array<Tuple<String,i32>>;
-    let __iter_8: ref "core:allocator/ArrayIter<Tuple<String,i32>>";
+    let __iter_7: ref "core:allocator/ArrayIter<Tuple<String,i32>>";
     let entry_8: ref "tuple/[String, i32]";
     let key_9: ref String;
     let value_10: i32;
@@ -475,12 +475,12 @@ fn run() with Stdout {
     "core:cli/println"(String { repr: array.new_data<u8>("
 === Iteration (sorted) ==="), used: 27 });
     entries = TreeMap<String,i32>::iter(map);
-    __iter_7 = "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
+    __iter_2 = "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
     b1: block {
         l2: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: ref null "tuple/[String, i32]";
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_7);
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_2);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 entry_3 = ref.as_non_null(__sroa___pattern_temp_0_payload_0);
                 key_4 = entry_3.0;
@@ -541,12 +541,12 @@ fn run() with Stdout {
     "core:cli/println"(String { repr: array.new_data<u8>("
 === Final iteration ==="), used: 24 });
     final_entries = TreeMap<String,i32>::iter(map);
-    __iter_8 = "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: ref.as_non_null(final_entries.repr), used: final_entries.used, index: 0 };
+    __iter_7 = "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: ref.as_non_null(final_entries.repr), used: final_entries.used, index: 0 };
     b5: block {
         l6: loop {
             let __sroa___pattern_temp_1_discriminant: i32;
             let __sroa___pattern_temp_1_payload_0: ref null "tuple/[String, i32]";
-            multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_8);
+            multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_7);
             if __sroa___pattern_temp_1_discriminant == 0 {
                 entry_8 = ref.as_non_null(__sroa___pattern_temp_1_payload_0);
                 key_9 = entry_8.0;
@@ -2285,13 +2285,13 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
 }
 
 fn String^Inspect::inspect(self, f) {
-    let __iter_4: ref StrCharIter;
+    let __iter_2: ref StrCharIter;
     let c: char;
     let __local_7: ref StrCharIter;
     let __local_8: ref String;
     let _licm_buf_33: ref String;
     String::append_char(f.buf, 34);
-    __iter_4 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
+    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
         __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
             __local_8 = self;
             break __inline_String__chars_2: StrCharIter { repr: ref.as_non_null(__local_8.repr), used: __local_8.used, byte_index: 0 };
@@ -2303,7 +2303,7 @@ fn String^Inspect::inspect(self, f) {
         l197: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_4);
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 c = __sroa___pattern_temp_0_payload_0;
                 if c == 34 {

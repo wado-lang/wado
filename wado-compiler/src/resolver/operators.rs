@@ -523,6 +523,74 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
+        // If the left operand is a non-primitive type (Struct, GenericInstance, or a
+        // Newtype whose ultimate base is non-primitive), we should have dispatched via
+        // a trait above.  Reaching here means the required trait is not implemented.
+        {
+            let requires_trait = match &left_type {
+                ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
+                ResolvedType::Newtype { base_type, .. } => {
+                    let tt = self.type_table.borrow();
+                    let ultimate = tt.get_ultimate_base_type(*base_type);
+                    matches!(
+                        tt.get(ultimate),
+                        ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. }
+                    )
+                }
+                _ => false,
+            };
+            if requires_trait
+                && !matches!(binary.op, BinaryOp::And | BinaryOp::Or)
+                && left.type_id != TypeTable::ERROR
+                && right.type_id != TypeTable::ERROR
+            {
+                let type_table = self.type_table.borrow();
+                let type_name = type_table.type_name(left.type_id);
+                let op_char = match binary.op {
+                    BinaryOp::Add => "+",
+                    BinaryOp::Sub => "-",
+                    BinaryOp::Mul => "*",
+                    BinaryOp::Div => "/",
+                    BinaryOp::Mod => "%",
+                    BinaryOp::BitAnd => "&",
+                    BinaryOp::BitOr => "|",
+                    BinaryOp::BitXor => "^",
+                    BinaryOp::Shl => "<<",
+                    BinaryOp::Shr => ">>",
+                    BinaryOp::Eq => "==",
+                    BinaryOp::NotEq => "!=",
+                    BinaryOp::Lt => "<",
+                    BinaryOp::LtEq => "<=",
+                    BinaryOp::Gt => ">",
+                    BinaryOp::GtEq => ">=",
+                    _ => "?",
+                };
+                let trait_name = match binary.op {
+                    BinaryOp::Add => "Add",
+                    BinaryOp::Sub => "Sub",
+                    BinaryOp::Mul => "Mul",
+                    BinaryOp::Div => "Div",
+                    BinaryOp::Mod => "Rem",
+                    BinaryOp::BitAnd => "BitAnd",
+                    BinaryOp::BitOr => "BitOr",
+                    BinaryOp::BitXor => "BitXor",
+                    BinaryOp::Shl => "Shl",
+                    BinaryOp::Shr => "Shr",
+                    BinaryOp::Eq | BinaryOp::NotEq => "Eq",
+                    BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => "Ord",
+                    _ => "?",
+                };
+                drop(type_table);
+                let _ = self.logger.error(TypeError::InvalidPattern {
+                    message: format!(
+                        "operator `{op_char}` cannot be applied to type `{type_name}`: type does not implement `{trait_name}`"
+                    ),
+                    span: binary.span,
+                });
+                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, binary.span);
+            }
+        }
+
         let op = util::convert_binary_op(binary.op);
 
         // Type check: both operands of a binary operation must have the same type.

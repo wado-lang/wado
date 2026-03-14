@@ -1,0 +1,15 @@
+// return inside tuple for-of is a compile error
+fn foo() -> i32 {
+    let t = [1, "hello"];
+    for let v of t {
+        return 0;
+    }
+    return 1;
+}
+
+export fn run() {
+    foo();
+}
+
+__DATA__
+{"compile_error": "return"}

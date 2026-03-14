@@ -473,6 +473,19 @@ scope: {
 
 **Note:** The binding is a copy of each element (value semantics), so modifying it does not affect the original collection. For-of works with any type implementing `IntoIterator`, not just arrays.
 
+**Tuple for-of (compile-time expansion):**
+
+When the iterable is a tuple, the loop body is expanded once per element at compile time. Each expansion independently types the binding, enabling heterogeneous iteration with per-element trait dispatch.
+
+```wado
+let t = [42, "hello", true];
+for let v of t {
+    println(`{v}`);  // expanded to three blocks, each with the correct type
+}
+```
+
+`break`, `continue`, and `return` are not allowed inside a tuple for-of body because the loop is unrolled at compile time into sequential blocks. `.enumerate()` is supported and provides a compile-time index.
+
 ### Infinite Loop
 
 ```wado
