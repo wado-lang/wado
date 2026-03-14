@@ -187,12 +187,6 @@ global mut heap_offset: i32 = 8;  // from core:allocator
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let i: ref Result<i32,DeserializeError>;
-    let v_2: i32;
-    let s: ref Result<String,DeserializeError>;
-    let v_4: ref String;
-    let b: ref Result<bool,DeserializeError>;
-    let v_6: bool;
     let __local_7: ref String;
     let __local_8: ref Formatter;
     let __local_9: ref String;
@@ -206,9 +200,7 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     __sroa_d_str_val = String { repr: array.new_data<u8>("hello"), used: 5 };
-    i = Result<i32,DeserializeError>::Ok { discriminant: 0, payload_0: 42 };
-    if ref.test Result<i32,DeserializeError>::Ok(i) {
-        v_2 = ref.cast Result<i32,DeserializeError>::Ok(i).payload_0;
+    __fused___inline_i32_Deserialize__deserialize_MockDeserializer__2: block {
         "core:cli/println"(__tmpl: block -> ref String {
             __local_7 = String { repr: builtin::array_new<u8>(21), used: 0 };
             String::append_char(__local_7, 105);
@@ -221,13 +213,12 @@ fn run() with Stdout {
                 break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_17) };
             };
             __local_19 = __local_8;
-            i32::fmt_decimal(v_2, __local_19);
+            i32::fmt_decimal(42, __local_19);
             break __tmpl: __local_7;
         });
+        break __fused___inline_i32_Deserialize__deserialize_MockDeserializer__2;
     };
-    s = Result<String,DeserializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(__sroa_d_str_val) };
-    if ref.test Result<String,DeserializeError>::Ok(s) {
-        v_4 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(s).payload_0);
+    __fused___inline_String_Deserialize__deserialize_MockDeserializer__8: block {
         "core:cli/println"(__tmpl: block -> ref String {
             __local_9 = String { repr: builtin::array_new<u8>(24), used: 0 };
             String::append_char(__local_9, 83);
@@ -238,18 +229,14 @@ fn run() with Stdout {
             String::append_char(__local_9, 103);
             String::append_char(__local_9, 58);
             String::append_char(__local_9, 32);
-            String::append(__local_9, v_4);
+            String::append(__local_9, __sroa_d_str_val);
             break __tmpl: __local_9;
         });
+        break __fused___inline_String_Deserialize__deserialize_MockDeserializer__8;
     };
-    b = Result<bool,DeserializeError>::Ok { discriminant: 0, payload_0: 1 };
-    if ref.test Result<bool,DeserializeError>::Ok(b) {
-        v_6 = ref.cast Result<bool,DeserializeError>::Ok(b).payload_0;
-        if v_6 {
-            "core:cli/println"(String { repr: array.new_data<u8>("bool: true"), used: 10 });
-        } else {
-            "core:cli/println"(String { repr: array.new_data<u8>("bool: false"), used: 11 });
-        };
+    __fused___inline_bool_Deserialize__deserialize_MockDeserializer__11: block {
+        "core:cli/println"(String { repr: array.new_data<u8>("bool: true"), used: 10 });
+        break __fused___inline_bool_Deserialize__deserialize_MockDeserializer__11;
     };
 }
 
@@ -355,13 +342,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l14: loop {
+            l10: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l14;
+                continue l10;
             };
         };
     };
@@ -453,13 +440,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l20: loop {
+            l16: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l20;
+                continue l16;
             };
         };
     };
@@ -476,14 +463,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l24: loop {
+                l20: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l24;
+                    continue l20;
                 };
             };
         };
@@ -593,13 +580,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l36: loop {
+            l32: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l36;
+                continue l32;
             };
         };
     };
