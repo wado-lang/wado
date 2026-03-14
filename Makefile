@@ -151,11 +151,10 @@ update-stdlib-wasi:
 	rm -rf wado-compiler/lib/wasi/
 	mkdir -p wado-compiler/lib/wasi/
 	cargo run -p wado-from-wit -- \
-		--wit-dir vendor/wasmtime/crates/wasi-http/src/p3/wit \
+		--wit-dir vendor/wasi/proposals/**/wit-0.3.0-draft \
 		--output-dir wado-compiler/lib/wasi
-	cargo run -p wado-from-wit -- \
-		--wit-dir vendor/wasmtime/crates/wasi/src/p3/wit \
-		--output-dir wado-compiler/lib/wasi
+	# remove files for bindgen
+	# rm wado-compiler/lib/wasi/wasi-http/worlds.wado
 
 wado-compiler/lib/builtins/wado-bundled-libm.wat: Cargo.toml Cargo.lock wado-bundled-libm/Cargo.toml wado-bundled-libm/src/lib.rs
 	make update-bundled
