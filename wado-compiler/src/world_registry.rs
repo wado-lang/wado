@@ -182,7 +182,7 @@ impl WorldRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::Attribute;
+    use crate::ast::{self, Attribute};
     use crate::token::Span;
 
     fn make_span() -> Span {
@@ -198,7 +198,7 @@ mod tests {
             is_pub: false,
             attrs: vec![Attribute {
                 name: "wasi".to_string(),
-                args: vec!["wasi:cli/command@0.3.0".to_string()],
+                args: vec![ast::AttrArg::Str("wasi:cli/command@0.3.0".to_string())],
                 wasi_import: None,
                 span: make_span(),
             }],

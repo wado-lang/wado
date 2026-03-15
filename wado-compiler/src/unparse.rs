@@ -817,6 +817,27 @@ impl<'a> Unparser<'a> {
             self.write_indent();
             self.output.push_str("type ");
             self.output.push_str(&assoc.name);
+            if !assoc.bounds.is_empty() {
+                self.output.push_str(": ");
+                for (j, bound) in assoc.bounds.iter().enumerate() {
+                    if j > 0 {
+                        self.output.push_str(" + ");
+                    }
+                    self.output.push_str(&bound.name);
+                    if !bound.assoc_types.is_empty() {
+                        self.output.push('<');
+                        for (k, ab) in bound.assoc_types.iter().enumerate() {
+                            if k > 0 {
+                                self.output.push_str(", ");
+                            }
+                            self.output.push_str(&ab.name);
+                            self.output.push_str(" = ");
+                            self.unparse_type(&ab.ty);
+                        }
+                        self.output.push('>');
+                    }
+                }
+            }
             self.output.push_str(";\n");
             self.last_source_line = assoc.span.end_line();
         }
@@ -1606,6 +1627,20 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_binary(&mut self, b: &BinaryExpr) {
+        if matches!(b.op, BinaryOp::And | BinaryOp::Or) {
+            let snap = self.snapshot();
+            self.unparse_binary_inline(b);
+            if !self.output[snap..].contains('\n') && !self.exceeds_width_since(snap) {
+                return;
+            }
+            self.rollback(snap);
+            self.unparse_logical_chain_multiline(b);
+            return;
+        }
+        self.unparse_binary_inline(b);
+    }
+
+    fn unparse_binary_inline(&mut self, b: &BinaryExpr) {
         let needs_parens_left = needs_parens(&b.left, b.op, true);
         let needs_parens_right = needs_parens(&b.right, b.op, false);
 
@@ -1627,6 +1662,37 @@ impl<'a> Unparser<'a> {
         self.unparse_expr(&b.right);
         if needs_parens_right {
             self.output.push(')');
+        }
+    }
+
+    fn unparse_logical_chain_multiline(&mut self, b: &BinaryExpr) {
+        let op_str = binary_op_str(b.op);
+        let parts = collect_logical_chain_binary(b);
+
+        let needs_left = needs_parens(parts[0], b.op, true);
+        if needs_left {
+            self.output.push('(');
+        }
+        self.unparse_expr(parts[0]);
+        if needs_left {
+            self.output.push(')');
+        }
+
+        for part in &parts[1..] {
+            self.output.push('\n');
+            self.indent_level += 1;
+            self.write_indent();
+            self.indent_level -= 1;
+            self.output.push_str(op_str);
+            self.output.push(' ');
+            let np = needs_parens(part, b.op, false);
+            if np {
+                self.output.push('(');
+            }
+            self.unparse_expr(part);
+            if np {
+                self.output.push(')');
+            }
         }
     }
 
@@ -1801,7 +1867,7 @@ impl<'a> Unparser<'a> {
             }
             self.output.push(')');
 
-            if args.len() > 1 && self.exceeds_width_since(snap) {
+            if self.exceeds_width_since(snap) {
                 // Rollback and format multi-line
                 self.rollback(snap);
                 self.output.push_str("(\n");
@@ -2550,6 +2616,24 @@ fn binary_op_precedence(op: BinaryOp) -> u8 {
         BinaryOp::Shl | BinaryOp::Shr => 8,
         BinaryOp::Add | BinaryOp::Sub => 9,
         BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod => 10,
+    }
+}
+
+/// Collect all operands of a same-op logical chain (flattens left- and right-associative trees).
+fn collect_logical_chain_binary(b: &BinaryExpr) -> Vec<&Expr> {
+    let mut parts = Vec::new();
+    collect_logical_chain_expr(&b.left, b.op, &mut parts);
+    collect_logical_chain_expr(&b.right, b.op, &mut parts);
+    parts
+}
+
+fn collect_logical_chain_expr<'a>(expr: &'a Expr, op: BinaryOp, parts: &mut Vec<&'a Expr>) {
+    match expr {
+        Expr::Binary(inner) if inner.op == op => {
+            collect_logical_chain_expr(&inner.left, op, parts);
+            collect_logical_chain_expr(&inner.right, op, parts);
+        }
+        _ => parts.push(expr),
     }
 }
 
