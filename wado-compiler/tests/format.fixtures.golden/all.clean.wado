@@ -417,6 +417,11 @@ fn kv_list_long(entries: Array<[String, i32]>) {
 export fn run() {
 }
 
+/// Unary ref with cast: &(x as T) must keep parentheses (as has lower precedence than &)
+fn ref_cast_parens(x: i32) {
+    let _ = &(x as i64);
+}
+
 /// World: blank lines between import blocks are preserved
 pub world TestWorld {
     import Foo {

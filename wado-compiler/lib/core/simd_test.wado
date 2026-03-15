@@ -841,14 +841,14 @@ test "i8x16 avgr_u" {
 test "i8x16 narrow_i16x8" {
     let a: i16x8 = [0, 127, 128, -1, -128, -129, 256, 32767];
     let b: i16x8 = [0, 1, 2, 3, 4, 5, 6, 7];
-    let narrow_s = (a as i8x16).narrow_i16x8_s(&b as i8x16);
+    let narrow_s = (a as i8x16).narrow_i16x8_s(&(b as i8x16));
     assert narrow_s.extract_lane_s(0) == 0;
     assert narrow_s.extract_lane_s(1) == 127;
     assert narrow_s.extract_lane_s(2) == 127;
     assert narrow_s.extract_lane_s(3) == -1;
     assert narrow_s.extract_lane_s(4) == -128;
     assert narrow_s.extract_lane_s(5) == -128;
-    let narrow_u = (a as i8x16).narrow_i16x8_u(&b as i8x16);
+    let narrow_u = (a as i8x16).narrow_i16x8_u(&(b as i8x16));
     assert narrow_u.extract_lane_u(0) == 0;
     assert narrow_u.extract_lane_u(1) == 127;
     assert narrow_u.extract_lane_u(2) == 128;
@@ -922,12 +922,12 @@ test "i16x8 avgr_u" {
 test "i16x8 narrow_i32x4" {
     let a: i32x4 = [0, 32767, 32768, -32769];
     let b: i32x4 = [1, 2, 3, 4];
-    let narrow_s = (a as i16x8).narrow_i32x4_s(&b as i16x8);
+    let narrow_s = (a as i16x8).narrow_i32x4_s(&(b as i16x8));
     assert narrow_s.extract_lane_s(0) == 0;
     assert narrow_s.extract_lane_s(1) == 32767;
     assert narrow_s.extract_lane_s(2) == 32767;
     assert narrow_s.extract_lane_s(3) == -32768;
-    let narrow_u = (a as i16x8).narrow_i32x4_u(&b as i16x8);
+    let narrow_u = (a as i16x8).narrow_i32x4_u(&(b as i16x8));
     assert narrow_u.extract_lane_u(0) == 0;
     assert narrow_u.extract_lane_u(1) == 32767;
     assert narrow_u.extract_lane_u(2) == 32768;
@@ -1260,7 +1260,7 @@ test "u32x4 bitselect" {
     let a: u32x4 = [100, 200, 0, 0];
     let b: u32x4 = [1, 2, 0, 0];
     let mask_i: i32x4 = [-1, 0, 0, 0];
-    let r = a.bitselect(&mask_i as u32x4, &b);
+    let r = a.bitselect(&(mask_i as u32x4), &b);
     assert r.extract_lane(0) == 100;
     assert r.extract_lane(1) == 2;
 }
@@ -1287,7 +1287,7 @@ test "u64x2 bitselect" {
     let mask_i: i64x2 = [-1, 0];
     let a = a_i as u64x2;
     let b = b_i as u64x2;
-    let r = a.bitselect(&mask_i as u64x2, &b);
+    let r = a.bitselect(&(mask_i as u64x2), &b);
     assert r.extract_lane(0) == 100;
     assert r.extract_lane(1) == 2;
 }

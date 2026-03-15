@@ -1820,7 +1820,11 @@ impl<'a> Unparser<'a> {
 
         let needs_parens = matches!(
             &u.expr,
-            Expr::Binary(_) | Expr::Assign(_) | Expr::CompoundAssign(_) | Expr::ComparisonChain(_)
+            Expr::Binary(_)
+                | Expr::Assign(_)
+                | Expr::CompoundAssign(_)
+                | Expr::ComparisonChain(_)
+                | Expr::Cast(_)
         );
         if needs_parens {
             self.output.push('(');
