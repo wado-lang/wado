@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773542142593,
+  "lastUpdate": 1773613943221,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3494,6 +3494,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/772efeb24aa60253b24f2030669b5612d011b27e"
         },
         "date": 1773542142393,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9285,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21283,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "814dbb84de1100ec242cd566565951654b832aa8",
+          "message": "Merge pull request #588 from wado-lang/claude/extend-format-command-tVeey\n\nImprove code formatter: operator spacing, attribute parsing, and formatting rules",
+          "timestamp": "2026-03-16T07:29:53+09:00",
+          "tree_id": "14ed2c0135064d025519f796ad6f732dc84ea532",
+          "url": "https://github.com/wado-lang/wado/commit/814dbb84de1100ec242cd566565951654b832aa8"
+        },
+        "date": 1773613943024,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
