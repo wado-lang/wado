@@ -64,7 +64,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .type_table
                             .borrow_mut()
                             .make_type_param(param.name.clone(), index as u32);
-                        self.trait_ctx.type_params
+                        self.trait_ctx
+                            .type_params
                             .insert(param.name.clone(), (index as u32, type_id));
                     }
 
@@ -129,7 +130,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .type_table
                             .borrow_mut()
                             .make_type_param(param.name.clone(), index as u32);
-                        self.trait_ctx.type_params
+                        self.trait_ctx
+                            .type_params
                             .insert(param.name.clone(), (index as u32, type_id));
                         type_param_type_ids.push(type_id);
                     }
@@ -246,16 +248,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // Set up the function's own type parameters before resolving the return type,
                     // so that associated type projections like `V::Output` can be resolved.
                     let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
-                    let old_type_param_bounds = std::mem::take(&mut self.trait_ctx.type_param_bounds);
+                    let old_type_param_bounds =
+                        std::mem::take(&mut self.trait_ctx.type_param_bounds);
                     for (i, param) in func.type_params.iter().enumerate() {
                         let type_id = self
                             .type_table
                             .borrow_mut()
                             .make_type_param(param.name.clone(), i as u32);
-                        self.trait_ctx.type_params
+                        self.trait_ctx
+                            .type_params
                             .insert(param.name.clone(), (i as u32, type_id));
                         if !param.bounds.is_empty() {
-                            self.trait_ctx.type_param_bounds
+                            self.trait_ctx
+                                .type_param_bounds
                                 .insert(param.name.clone(), param.bounds.clone());
                         }
                     }
@@ -272,7 +277,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 Item::Impl(impl_block) => {
                     // Set up type parameters from impl block before resolving method signatures
                     let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
-                    let old_type_param_bounds = std::mem::take(&mut self.trait_ctx.type_param_bounds);
+                    let old_type_param_bounds =
+                        std::mem::take(&mut self.trait_ctx.type_param_bounds);
 
                     // First, collect explicit type params from impl<T>, skipping concrete types
                     // (e.g., `impl<i32, T> IndexValue<i32> for Triple<T>` — skip "i32").
@@ -285,10 +291,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .type_table
                             .borrow_mut()
                             .make_type_param(param.name.clone(), actual_idx);
-                        self.trait_ctx.type_params
+                        self.trait_ctx
+                            .type_params
                             .insert(param.name.clone(), (actual_idx, type_id));
                         if !param.bounds.is_empty() {
-                            self.trait_ctx.type_param_bounds
+                            self.trait_ctx
+                                .type_param_bounds
                                 .insert(param.name.clone(), param.bounds.clone());
                         }
                         actual_idx += 1;
@@ -309,7 +317,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         .type_table
                                         .borrow_mut()
                                         .make_type_param(name.clone(), index);
-                                    self.trait_ctx.type_params
+                                    self.trait_ctx
+                                        .type_params
                                         .insert(name.clone(), (index, type_id));
                                 }
                             }
@@ -322,7 +331,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     if impl_block.trait_type.is_some() {
                         for binding in &impl_block.associated_types {
                             let type_id = self.resolve_type(&binding.ty);
-                            self.trait_ctx.assoc_type_bindings
+                            self.trait_ctx
+                                .assoc_type_bindings
                                 .insert(binding.name.clone(), type_id);
                         }
                     }
@@ -345,10 +355,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 .type_table
                                 .borrow_mut()
                                 .make_type_param(param.name.clone(), idx);
-                            self.trait_ctx.type_params
+                            self.trait_ctx
+                                .type_params
                                 .insert(param.name.clone(), (idx, type_id));
                             if !param.bounds.is_empty() {
-                                self.trait_ctx.type_param_bounds
+                                self.trait_ctx
+                                    .type_param_bounds
                                     .insert(param.name.clone(), param.bounds.clone());
                             }
                             method_type_param_names.push(param.name.clone());

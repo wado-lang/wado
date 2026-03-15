@@ -555,7 +555,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .type_table
                         .borrow_mut()
                         .make_type_param(type_param.name.clone(), i as u32);
-                    self.trait_ctx.type_params
+                    self.trait_ctx
+                        .type_params
                         .insert(type_param.name.clone(), (i as u32, type_id));
                 }
 
@@ -1067,10 +1068,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .type_table
                 .borrow_mut()
                 .make_type_param(tp.name.clone(), i as u32);
-            self.trait_ctx.type_params
+            self.trait_ctx
+                .type_params
                 .insert(tp.name.clone(), (i as u32, type_id));
             if !tp.bounds.is_empty() {
-                self.trait_ctx.type_param_bounds
+                self.trait_ctx
+                    .type_param_bounds
                     .insert(tp.name.clone(), tp.bounds.clone());
             }
             type_param_list.push((tp.name.clone(), type_id));
@@ -1159,7 +1162,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .type_table
                 .borrow_mut()
                 .make_type_param(tp.name.clone(), idx);
-            self.trait_ctx.type_params
+            self.trait_ctx
+                .type_params
                 .insert(tp.name.clone(), (idx, type_id));
         }
 
@@ -1263,7 +1267,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         call: &ast::CallExpr,
         _ctx: &mut FunctionContext,
     ) -> TirExpr {
-        let bounds = self.trait_ctx.type_param_bounds.get(type_param_name).cloned();
+        let bounds = self
+            .trait_ctx
+            .type_param_bounds
+            .get(type_param_name)
+            .cloned();
 
         if let Some(bounds) = bounds
             && let Some((found_trait, method_info_result)) = {

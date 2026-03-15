@@ -238,8 +238,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 {
                     // Self::ns.name → type_param_name::ns.name
                     // Look in current_type_param_bounds[type_param_name] for direct binding
-                    if let Some(param_bounds) =
-                        self.trait_ctx.type_param_bounds.get(type_param_name).cloned()
+                    if let Some(param_bounds) = self
+                        .trait_ctx
+                        .type_param_bounds
+                        .get(type_param_name)
+                        .cloned()
                     {
                         for pb in &param_bounds {
                             for ab in &pb.assoc_types {
@@ -373,7 +376,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             atb,
                         )
                     });
-                    self.trait_ctx.assoc_type_bindings
+                    self.trait_ctx
+                        .assoc_type_bindings
                         .insert(assoc_decl.name.clone(), projection);
                 }
 
@@ -388,10 +392,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .type_table
                         .borrow_mut()
                         .make_type_param(param.name.clone(), index as u32);
-                    self.trait_ctx.type_params
+                    self.trait_ctx
+                        .type_params
                         .insert(param.name.clone(), (index as u32, type_id));
                     if !param.bounds.is_empty() {
-                        self.trait_ctx.type_param_bounds
+                        self.trait_ctx
+                            .type_param_bounds
                             .insert(param.name.clone(), param.bounds.clone());
                     }
                 }
@@ -631,14 +637,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // → set current_type_params["T"] = (0, u8_typeid)
             for (i, tp_name) in info.impl_ty_param_names.iter().enumerate() {
                 if let Some(&concrete_arg) = concrete_type_args.get(i) {
-                    self.trait_ctx.type_params
+                    self.trait_ctx
+                        .type_params
                         .insert(tp_name.clone(), (i as u32, concrete_arg));
                 }
             }
             // Add bounds from type param declarations
             for param in &info.type_params {
                 if !param.bounds.is_empty() {
-                    self.trait_ctx.type_param_bounds
+                    self.trait_ctx
+                        .type_param_bounds
                         .entry(param.name.clone())
                         .or_insert_with(Vec::new)
                         .extend(param.bounds.clone());
@@ -706,9 +714,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Bind the blanket type param to the concrete type
             // For `impl<I: Iterator> IntoIterator for I` with StrUtf8ByteIter:
             // → set current_type_params["I"] = (0, StrUtf8ByteIter_typeid)
-            self.trait_ctx.type_params
+            self.trait_ctx
+                .type_params
                 .insert(info.blanket_param_name.clone(), (0, concrete_type_id));
-            self.trait_ctx.type_param_bounds
+            self.trait_ctx
+                .type_param_bounds
                 .insert(info.blanket_param_name.clone(), info.blanket_param_bounds);
 
             // Resolve and register each associated type

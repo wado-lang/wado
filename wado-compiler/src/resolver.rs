@@ -44,8 +44,8 @@ use crate::tir::{
     TirEnum, TirEnumCase, TirFlags, TirFlagsMember, TirModule, TirNewtype, TypeId, TypeTable,
 };
 
-pub use types::TypeError;
 use trait_env::TraitEnv;
+pub use types::TypeError;
 use types::{EnumInfo, FlagsInfo, ModuleTypeMaps, ResourceInfo, StructFieldInfo, VariantInfo};
 
 pub struct Resolver<'a, H: CompilerHost> {
@@ -362,7 +362,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         if self.is_known_type_name(&param.name) {
                             // Concrete type in explicit params (e.g., `impl<i32, T>`): skip
                             if !param.bounds.is_empty() {
-                                self.trait_ctx.type_param_bounds
+                                self.trait_ctx
+                                    .type_param_bounds
                                     .entry(param.name.clone())
                                     .or_insert_with(Vec::new)
                                     .extend(param.bounds.clone());
@@ -374,11 +375,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 .type_table
                                 .borrow_mut()
                                 .make_type_param(param.name.clone(), actual_idx);
-                            self.trait_ctx.type_params
+                            self.trait_ctx
+                                .type_params
                                 .insert(param.name.clone(), (actual_idx, type_id));
                         }
                         if !param.bounds.is_empty() {
-                            self.trait_ctx.type_param_bounds
+                            self.trait_ctx
+                                .type_param_bounds
                                 .entry(param.name.clone())
                                 .or_insert_with(Vec::new)
                                 .extend(param.bounds.clone());
@@ -397,7 +400,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                         .type_table
                                         .borrow_mut()
                                         .make_type_param(name.clone(), i as u32);
-                                    self.trait_ctx.type_params
+                                    self.trait_ctx
+                                        .type_params
                                         .insert(name.clone(), (i as u32, type_id));
                                 }
                             }
@@ -409,7 +413,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         if let Some(ref tn) = trait_name {
                             let target_type_id = self.resolve_type(&impl_block.ty);
                             let type_params: Vec<_> = self
-                                .trait_ctx.type_params
+                                .trait_ctx
+                                .type_params
                                 .iter()
                                 .map(|(name, &(index, type_id))| (name.clone(), index, type_id))
                                 .collect();
@@ -438,7 +443,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
                         for binding in &impl_block.associated_types {
                             let type_id = self.resolve_type(&binding.ty);
-                            self.trait_ctx.assoc_type_bindings
+                            self.trait_ctx
+                                .assoc_type_bindings
                                 .insert(binding.name.clone(), type_id);
 
                             // Register in TypeTable for substitution resolution

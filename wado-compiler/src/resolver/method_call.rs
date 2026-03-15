@@ -1051,7 +1051,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 .any(|p| p.self_kind != ast::SelfKind::None);
                             if method.name == method_name && !has_self {
                                 // Set up type parameters from impl block before resolving
-                                let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
+                                let old_type_params =
+                                    std::mem::take(&mut self.trait_ctx.type_params);
 
                                 // Extract type params from impl block type (e.g., impl Array<T>)
                                 if let ast::Type::Generic(generic) = &impl_block.ty {
@@ -1063,7 +1064,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                                     .type_table
                                                     .borrow_mut()
                                                     .make_type_param(name.clone(), i as u32);
-                                                self.trait_ctx.type_params
+                                                self.trait_ctx
+                                                    .type_params
                                                     .insert(name.clone(), (i as u32, type_id));
                                             }
                                         }
@@ -1107,7 +1109,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         .type_table
                                         .borrow_mut()
                                         .make_type_param(name.clone(), i as u32);
-                                    self.trait_ctx.type_params
+                                    self.trait_ctx
+                                        .type_params
                                         .insert(name.clone(), (i as u32, type_id));
                                 }
                             }
@@ -1155,7 +1158,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                                         .type_table
                                                         .borrow_mut()
                                                         .make_type_param(name.clone(), i as u32);
-                                                    self.trait_ctx.type_params
+                                                    self.trait_ctx
+                                                        .type_params
                                                         .insert(name.clone(), (i as u32, type_id));
                                                 }
                                             }
@@ -1205,7 +1209,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         .type_table
                                         .borrow_mut()
                                         .make_type_param(name.clone(), i as u32);
-                                    self.trait_ctx.type_params
+                                    self.trait_ctx
+                                        .type_params
                                         .insert(name.clone(), (i as u32, type_id));
                                 }
                             }

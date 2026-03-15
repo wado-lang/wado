@@ -6,8 +6,7 @@ use crate::ast::{self, BinaryOp, Expr, Item, Literal, Type, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
-    CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirUnaryOp, TypeId,
-    TypeTable,
+    CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -713,7 +712,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             if let Some(type_args) = receiver_type_args {
                 for (i, param) in resource.type_params.iter().enumerate() {
                     if i < type_args.len() {
-                        self.trait_ctx.type_params
+                        self.trait_ctx
+                            .type_params
                             .insert(param.name.clone(), (i as u32, type_args[i]));
                     }
                 }
@@ -1406,7 +1406,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 for (name, idx) in &type_param_entries {
                     let i = *idx as usize;
                     if i < type_args.len() {
-                        self.trait_ctx.type_params
+                        self.trait_ctx
+                            .type_params
                             .insert(name.clone(), (*idx, type_args[i]));
                     }
                 }
@@ -1418,20 +1419,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 && !self.is_known_type_name(name)
             {
                 if let Some(recv_id) = receiver_type_id {
-                    self.trait_ctx.type_params.insert(name.clone(), (0, recv_id));
+                    self.trait_ctx
+                        .type_params
+                        .insert(name.clone(), (0, recv_id));
                 } else {
                     let type_id = self
                         .type_table
                         .borrow_mut()
                         .make_type_param(name.clone(), 0);
-                    self.trait_ctx.type_params.insert(name.clone(), (0, type_id));
+                    self.trait_ctx
+                        .type_params
+                        .insert(name.clone(), (0, type_id));
                 }
             }
 
             // Set up associated type bindings for resolving Self::* types
             for (name, ty) in &assoc_bindings {
                 let type_id = self.resolve_type(ty);
-                self.trait_ctx.assoc_type_bindings
+                self.trait_ctx
+                    .assoc_type_bindings
                     .insert(name.clone(), type_id);
             }
 
@@ -1480,10 +1486,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 name: type_param.name.clone(),
                                 index,
                             });
-                    self.trait_ctx.type_params
+                    self.trait_ctx
+                        .type_params
                         .insert(type_param.name.clone(), (index, type_param_id));
                     if !type_param.bounds.is_empty() {
-                        self.trait_ctx.type_param_bounds
+                        self.trait_ctx
+                            .type_param_bounds
                             .insert(type_param.name.clone(), type_param.bounds.clone());
                     }
                 }
@@ -1496,7 +1504,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Remove method-level type params from scope
                 for type_param in &method_type_params {
                     self.trait_ctx.type_params.shift_remove(&type_param.name);
-                    self.trait_ctx.type_param_bounds
+                    self.trait_ctx
+                        .type_param_bounds
                         .shift_remove(&type_param.name);
                 }
                 let param_types = self.extract_param_types(&params);
@@ -1574,7 +1583,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // but we'll handle that later with explicit disambiguation syntax)
         found_traits.into_iter().next()
     }
-
 
     /// Find Index trait implementation for a type
     pub(super) fn find_index_trait_impl(
@@ -2021,7 +2029,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         None
     }
 
-
     /// Look up the type parameters of a static method from its AST definition.
     /// Searches impl blocks in loaded modules for `impl StructName { fn method_name<...> }`.
     pub(super) fn lookup_static_method_type_params(
@@ -2224,13 +2231,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let old_bindings = std::mem::take(&mut self.trait_ctx.assoc_type_bindings);
                 for (name, ty) in &assoc_bindings {
                     let type_id = self.resolve_type_with_param_mapping(ty, &type_param_mapping);
-                    self.trait_ctx.assoc_type_bindings
+                    self.trait_ctx
+                        .assoc_type_bindings
                         .insert(name.clone(), type_id);
                 }
 
                 // Get the associated type (Output or Input)
                 let assoc_type = self
-                    .trait_ctx.assoc_type_bindings
+                    .trait_ctx
+                    .assoc_type_bindings
                     .get(assoc_type_name)
                     .copied()
                     .unwrap_or(TypeTable::UNKNOWN);
@@ -2247,7 +2256,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         self.indexing_trait_cache.insert(cache_key, None);
         None
     }
-
 
     /// Resolve a type, substituting type parameters using the provided mapping.
     pub(super) fn resolve_type_with_param_mapping(
