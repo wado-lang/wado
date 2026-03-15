@@ -1142,3 +1142,76 @@ fn foo(x: i32) -> i32 {
     let formatted2 = wado_compiler::format(&formatted).expect("format failed");
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
+
+#[test]
+fn test_format_single_arg_wide_wraps_multiline() {
+    // A single argument that exceeds MAX_LINE_WIDTH should trigger multiline call formatting
+    let source = r#"
+fn run() {
+    println(match classify(i) { Fizz => "Fizz", Buzz => "Buzz", FizzBuzz => "FizzBuzz", Number(n) => `{n}` });
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    // The match should have been broken out to multiline since it exceeds 120 chars
+    assert!(
+        formatted.contains('\n'),
+        "wide single-arg call should wrap: {}",
+        formatted
+    );
+    // Should be idempotent
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_trait_assoc_type_bounds_preserved() {
+    let source = r#"
+trait Serializer {
+    type SeqSerializer: SerializeSeq;
+    type MapSerializer: SerializeMap;
+
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>;
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("type SeqSerializer: SerializeSeq;"),
+        "assoc type bounds should be preserved: {}",
+        formatted
+    );
+    assert!(
+        formatted.contains("type MapSerializer: SerializeMap;"),
+        "assoc type bounds should be preserved: {}",
+        formatted
+    );
+    // Should be idempotent
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_logical_chain_multiline() {
+    // A long && chain should be broken with operator at start of continuation lines
+    let source = r#"
+fn run() {
+    if self.input.get_byte(self.pos) as i32 == 'n' as i32 && self.input.get_byte(self.pos + 1) as i32 == 'u' as i32 && self.input.get_byte(self.pos + 2) as i32 == 'l' as i32 && self.input.get_byte(self.pos + 3) as i32 == 'l' as i32 {
+        return null;
+    }
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    // Each continuation line should start with && (after indentation)
+    let lines: Vec<&str> = formatted.lines().collect();
+    let continuation_lines: Vec<&&str> = lines
+        .iter()
+        .filter(|l| l.trim_start().starts_with("&&"))
+        .collect();
+    assert!(
+        !continuation_lines.is_empty(),
+        "&& should appear at start of continuation lines: {}",
+        formatted
+    );
+    // Should be idempotent
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}

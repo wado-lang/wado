@@ -49,7 +49,7 @@ fn compute_stats(data: &Array<f64>) -> Stats {
         max_val = f64::max(max_val, (*data)[i]);
     }
 
-    let mean = sum / (len as f64);
+    let mean = sum / len as f64;
 
     // Phase 2: SIMD variance (sum of squared deviations)
     let mean_vec = f64x2::splat(mean);
@@ -69,7 +69,7 @@ fn compute_stats(data: &Array<f64>) -> Stats {
         sq_sum = sq_sum + diff * diff;
     }
 
-    let variance = sq_sum / (len as f64);
+    let variance = sq_sum / len as f64;
 
     return Stats { count: len, sum, mean, variance, min: min_val, max: max_val };
 }
@@ -97,9 +97,7 @@ fn normalize(data: &Array<f64>) -> Array<f64> {
         i = i + 2;
     }
 
-    if i < len {
-        result.append(((*data)[i] - s.mean) / sd);
-    }
+    if i < len { result.append(((*data)[i] - s.mean) / sd) }
 
     return result;
 }
@@ -118,9 +116,7 @@ fn dot_product(a: &Array<f64>, b: &Array<f64>) -> f64 {
     }
 
     let mut sum = sum_vec.extract_lane(0) + sum_vec.extract_lane(1);
-    if i < len {
-        sum = sum + (*a)[i] * (*b)[i];
-    }
+    if i < len { sum = sum + (*a)[i] * (*b)[i] }
 
     return sum;
 }
@@ -190,7 +186,7 @@ test "dot product" {
 test "dot product even" {
     let a: Array<f64> = [1.0, 0.0, 0.0, 1.0];
     let b: Array<f64> = [0.0, 1.0, 1.0, 0.0];
-    assert approx_eq(dot_product(&a, &b), 0.0); // orthogonal
+    assert approx_eq(dot_product(&a, &b), 0.0);  // orthogonal
 }
 
 // --- Demo ---
@@ -200,11 +196,7 @@ export fn run() with Stdout {
     println("");
 
     // Sample data: daily temperatures (Celsius)
-    let temps: Array<f64> = [
-        22.1, 23.4, 19.8, 25.2, 24.0,
-        21.5, 26.3, 20.7, 23.9, 25.8,
-        18.4, 27.1, 22.0, 24.5, 21.2,
-    ];
+    let temps: Array<f64> = [22.1, 23.4, 19.8, 25.2, 24.0, 21.5, 26.3, 20.7, 23.9, 25.8, 18.4, 27.1, 22.0, 24.5, 21.2];
 
     let s = compute_stats(&temps);
     println("Daily temperatures (15 days):");
@@ -226,11 +218,7 @@ export fn run() with Stdout {
 
     // Dot product (correlation-like computation)
     println("");
-    let weights: Array<f64> = [
-        0.05, 0.05, 0.05, 0.10, 0.10,
-        0.10, 0.10, 0.10, 0.10, 0.10,
-        0.05, 0.02, 0.02, 0.03, 0.03,
-    ];
+    let weights: Array<f64> = [0.05, 0.05, 0.05, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.05, 0.02, 0.02, 0.03, 0.03];
     let weighted_avg = dot_product(&temps, &weights);
     println(`Weighted average temp: {weighted_avg:0.2f}`);
 }

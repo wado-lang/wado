@@ -113,12 +113,13 @@ fn fq_name_from_attrs(attrs: &[crate::ast::Attribute]) -> Option<String> {
         .iter()
         .find(|a| a.name == "wasi")
         .and_then(|a| a.args.first())
-        .map(|s| {
+        .map(|arg| {
+            let s = arg.as_str();
             // Strip version suffix (e.g., "@0.3.0-rc-2026-01-06")
             if let Some(at_pos) = s.find('@') {
                 s[..at_pos].to_string()
             } else {
-                s.clone()
+                s.to_string()
             }
         })
 }
@@ -181,7 +182,7 @@ impl WorldRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::Attribute;
+    use crate::ast::{self, Attribute};
     use crate::token::Span;
 
     fn make_span() -> Span {
@@ -197,7 +198,7 @@ mod tests {
             is_pub: false,
             attrs: vec![Attribute {
                 name: "wasi".to_string(),
-                args: vec!["wasi:cli/command@0.3.0".to_string()],
+                args: vec![ast::AttrArg::Str("wasi:cli/command@0.3.0".to_string())],
                 wasi_import: None,
                 span: make_span(),
             }],

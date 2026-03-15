@@ -8,18 +8,20 @@
 /// in more specific worlds such as `wasi:http/middleware`.
 #[wasi("wasi:http/service@0.3.0-rc-2026-01-06")]
 pub world Service {
+
+
     import Stdout {
         write_via_stream,
     }
-    
+
     import Stderr {
         write_via_stream,
     }
-    
+
     import Stdin {
         read_via_stream,
     }
-    
+
     import Types {
         Fields::new,
         Fields::from_list,
@@ -57,43 +59,43 @@ pub world Service {
         Response::get_headers,
         Response::consume_body,
     }
-    
+
     import Client {
         send,
     }
-    
+
     import MonotonicClock {
         now,
         get_resolution,
         wait_until,
         wait_for,
     }
-    
+
     import SystemClock {
         now,
         get_resolution,
     }
-    
+
     import Timezone {
         iana_id,
         utc_offset,
         to_debug_string,
     }
-    
+
     import Random {
         get_random_bytes,
         get_random_u64,
     }
-    
+
     import Insecure {
         get_insecure_random_bytes,
         get_insecure_random_u64,
     }
-    
+
     import InsecureSeed {
         get_insecure_seed,
     }
-    
+
     export async fn handle(request: Request) -> Result<Response, ErrorCode>;
 }
 
@@ -105,6 +107,8 @@ pub world Service {
 /// `service` and corresponding `response` flows in the opposite direction.
 #[wasi("wasi:http/middleware@0.3.0-rc-2026-01-06")]
 pub world Middleware {
+
+
     import Types {
         Fields::new,
         Fields::from_list,
@@ -142,59 +146,58 @@ pub world Middleware {
         Response::get_headers,
         Response::consume_body,
     }
-    
+
     import Handler {
         handle,
     }
-    
+
     import Stdout {
         write_via_stream,
     }
-    
+
     import Stderr {
         write_via_stream,
     }
-    
+
     import Stdin {
         read_via_stream,
     }
-    
+
     import Client {
         send,
     }
-    
+
     import MonotonicClock {
         now,
         get_resolution,
         wait_until,
         wait_for,
     }
-    
+
     import SystemClock {
         now,
         get_resolution,
     }
-    
+
     import Timezone {
         iana_id,
         utc_offset,
         to_debug_string,
     }
-    
+
     import Random {
         get_random_bytes,
         get_random_u64,
     }
-    
+
     import Insecure {
         get_insecure_random_bytes,
         get_insecure_random_u64,
     }
-    
+
     import InsecureSeed {
         get_insecure_seed,
     }
-    
+
     export async fn handle(request: Request) -> Result<Response, ErrorCode>;
 }
-

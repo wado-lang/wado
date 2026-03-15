@@ -2,18 +2,19 @@
 // This module must be synchronized with syntax.rs (canonical syntax definition).
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, Attribute,
-    BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ChainedComparison, ClosureExpr,
-    ClosureParam, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
-    ContinueStmt, EffectDecl, EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr,
-    FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType,
-    GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
-    Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr,
-    MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, Pattern,
-    ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField,
-    StructLiteralExpr, StructLiteralField, StructPatternField, TaskReturnStmt, TestDecl, TraitDecl,
-    TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
-    VariantDecl, WasiImport, WhileStmt, WorldDecl, WorldExport, WorldImport,
+    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AttrArg,
+    Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ChainedComparison,
+    ClosureExpr, ClosureParam, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp,
+    Condition, ContinueStmt, EffectDecl, EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt,
+    FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
+    FunctionType, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes,
+    IndexExpr, InnerAttribute, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt,
+    MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType,
+    Newtype, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt,
+    StructDecl, StructField, StructLiteralExpr, StructLiteralField, StructPatternField,
+    TaskReturnStmt, TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl,
+    UseItem, UseItemSimple, VariantCase, VariantDecl, WasiImport, WhileStmt, WorldDecl,
+    WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -490,27 +491,35 @@ impl Parser {
 
         let args = if self.check(&TokenKind::LParen) {
             self.advance();
-            // Parse comma-separated arguments (string literals or identifiers)
-            // Also supports key=value pairs: #[serde(rename = "name")]
-            // which produces args ["rename", "name"]
-            let mut args = Vec::new();
+            // Parse comma-separated arguments (string literals or identifiers).
+            // Supports key=value pairs: #[serde(rename = "name")] → KeyValue("rename", "name")
+            let mut args: Vec<AttrArg> = Vec::new();
             loop {
-                match self.peek_kind().clone() {
+                let arg = match self.peek_kind().clone() {
                     TokenKind::StringLit(raw) => {
                         self.advance();
-                        args.push(raw);
+                        AttrArg::Str(raw)
                     }
                     TokenKind::Ident(value) => {
                         self.advance();
-                        args.push(value);
+                        // Check if this identifier is followed by '=' making it a key=value pair
+                        if self.check(&TokenKind::Eq) {
+                            self.advance();
+                            // Expect a string literal as the value
+                            match self.peek_kind().clone() {
+                                TokenKind::StringLit(val) => {
+                                    self.advance();
+                                    AttrArg::KeyValue(value, val)
+                                }
+                                _ => AttrArg::Ident(value),
+                            }
+                        } else {
+                            AttrArg::Ident(value)
+                        }
                     }
                     _ => break,
-                }
-                // Handle key = value syntax: skip '=' and continue to parse the value
-                if self.check(&TokenKind::Eq) {
-                    self.advance();
-                    continue;
-                }
+                };
+                args.push(arg);
                 if self.check(&TokenKind::Comma) {
                     self.advance();
                 } else {
@@ -527,7 +536,7 @@ impl Parser {
 
         // Parse WASI import path if this is a wasi attribute
         let wasi_import = if name == "wasi" {
-            args.first().and_then(|s| WasiImport::parse(s))
+            args.first().and_then(|s| WasiImport::parse(s.as_str()))
         } else {
             None
         };
@@ -985,17 +994,15 @@ impl Parser {
 
     /// Parse a match statement (no trailing semicolon required, like if/while/loop).
     fn parse_match_stmt(&mut self) -> ParseResult<Stmt> {
-        let start_span = self.peek().span;
         let expr = self.parse_match_expr()?;
         // Trailing semicolon is optional (consumed if present)
         if self.check(&TokenKind::Semicolon) {
             self.advance();
         }
-        let end_span = expr.span();
-        Ok(Stmt::Expr(ExprStmt {
-            expr,
-            span: start_span.merge(&end_span),
-        }))
+        let Expr::Match(m) = expr else {
+            unreachable!("parse_match_expr must return Expr::Match");
+        };
+        Ok(Stmt::Match(m))
     }
 
     /// Parse an expression statement in a block, with optional trailing semicolon
@@ -3864,12 +3871,13 @@ impl Parser {
             }
         }
 
+        let close_span = self.peek().span;
         self.expect(&TokenKind::RBrace)?;
 
         Ok(WorldImport {
             effect_name,
             functions,
-            span: start_span,
+            span: start_span.merge(&close_span),
         })
     }
 

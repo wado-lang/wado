@@ -108,7 +108,10 @@ impl BuiltinRegistry {
         let (namespace, canonical_name) = if let Some(attr) = canonical_attr {
             if attr.args.len() >= 2 {
                 // New format: #[canonical("wasi", "stream-new")]
-                (attr.args[0].clone(), Some(attr.args[1].clone()))
+                (
+                    attr.args[0].as_str().to_string(),
+                    Some(attr.args[1].as_str().to_string()),
+                )
             } else if attr.args.len() == 1 {
                 // Legacy single-arg format not supported anymore
                 panic!(

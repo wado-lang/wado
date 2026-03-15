@@ -130,14 +130,73 @@ pub struct GlobalDecl {
     pub span: Span,
 }
 
+/// A single argument in an attribute.
+///
+/// Distinguishes between string literals, bare identifiers, and key=value pairs so that
+/// `unparse` can reconstruct the original syntax faithfully.
+///
+/// Examples:
+/// - `#[wasi("wasi:cli/stdout")]`          → `[Str("wasi:cli/stdout")]`
+/// - `#[inline(always)]`                   → `[Ident("always")]`
+/// - `#[serde(rename = "type")]`           → `[KeyValue("rename", "type")]`
+/// - `#[canonical("wasi", "stream-new")]`  → `[Str("wasi"), Str("stream-new")]`
+#[derive(Debug, Clone)]
+pub enum AttrArg {
+    /// A quoted string literal, e.g. `"value"`.
+    Str(String),
+    /// A bare identifier, e.g. `always` or `default`.
+    Ident(String),
+    /// A key = "value" pair, e.g. `rename = "type"`.
+    KeyValue(String, String),
+}
+
+impl AttrArg {
+    /// Returns the string value: for `Str`/`Ident` the contained string; for `KeyValue` the value side.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Str(s) | Self::Ident(s) => s,
+            Self::KeyValue(_, v) => v,
+        }
+    }
+}
+
 /// Attribute like #[wasi("...")]
 #[derive(Debug, Clone)]
 pub struct Attribute {
     pub name: String,
-    /// Arguments passed to the attribute, e.g., #[canonical("wasi", "stream-new")] -> ["wasi", "stream-new"]
-    pub args: Vec<String>,
+    /// Arguments passed to the attribute.
+    ///
+    /// - `#[canonical("wasi", "stream-new")]` → `[Str("wasi"), Str("stream-new")]`
+    /// - `#[serde(rename = "type")]`           → `[KeyValue("rename", "type")]`
+    /// - `#[serde(default)]`                   → `[Ident("default")]`
+    pub args: Vec<AttrArg>,
     pub wasi_import: Option<WasiImport>,
     pub span: Span,
+}
+
+impl Attribute {
+    /// Find the value of a key-value argument by key name.
+    ///
+    /// For `#[serde(rename = "type")]`, `attr.kv_value("rename")` returns `Some("type")`.
+    pub fn kv_value(&self, key: &str) -> Option<&str> {
+        self.args.iter().find_map(|arg| {
+            if let AttrArg::KeyValue(k, v) = arg {
+                if k == key { Some(v.as_str()) } else { None }
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Return true if any arg matches the given name as an identifier, string, or key in a key-value pair.
+    ///
+    /// For `#[serde(default)]`, `attr.has_arg("default")` returns `true`.
+    pub fn has_arg(&self, name: &str) -> bool {
+        self.args.iter().any(|arg| match arg {
+            AttrArg::Str(s) | AttrArg::Ident(s) => s == name,
+            AttrArg::KeyValue(k, _) => k == name,
+        })
+    }
 }
 
 /// Parsed WASI import path
@@ -370,6 +429,7 @@ pub enum Stmt {
     For(ForStmt),
     ForOf(ForOfStmt),
     Loop(LoopStmt),
+    Match(Box<MatchExpr>),
     Break(BreakStmt),
     Continue(ContinueStmt),
     Assert(AssertStmt),

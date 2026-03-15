@@ -54,6 +54,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Stmt::For(_) => unreachable!("For should be desugared before resolving"),
             Stmt::ForOf(for_of) => self.resolve_for_of(for_of, ctx),
             Stmt::Loop(loop_stmt) => vec![self.resolve_loop(loop_stmt, ctx)],
+            Stmt::Match(match_expr) => {
+                let tir = self.resolve_match_expr(match_expr, ctx, None);
+                vec![TirStmt::new(TirStmtKind::Expr(tir), match_expr.span)]
+            }
             Stmt::Break(break_stmt) => vec![self.resolve_break(break_stmt, ctx)],
             Stmt::Continue(continue_stmt) => vec![self.resolve_continue(continue_stmt)],
             Stmt::Assert(_) => {

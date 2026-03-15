@@ -11,6 +11,16 @@ struct Point {
     y: i32,
 }
 
+/// Struct with serde attributes (key=value and bare identifier)
+struct SerdeExample {
+    #[serde(rename = "myField")]
+    my_field: i32,
+    #[serde(default)]
+    flag: bool,
+    #[serde(rename_all = "camelCase")]
+    other: i32,
+}
+
 /// Doc comment on enum
 enum Color {
     /// Red case
@@ -54,6 +64,20 @@ trait Container {
 
     /// Get the contained item
     fn get(&self) -> Self::Item;
+}
+
+/// Trait with attribute (attribute must be preserved)
+#[comp_feature("default")]
+pub trait HasDefault {
+    fn default() -> Self;
+}
+
+/// Trait with associated type bound (bound must be preserved)
+pub trait HasBoundedAssocType {
+    type Item;
+    type Iter: Iterator<Item = Self::Item>;
+
+    fn into_iter(&self) -> Self::Iter;
 }
 
 /// Generic struct for bounded impl test
@@ -205,7 +229,11 @@ fn asserts(x: i32, s: String) {
 
 /// Match expression with variant patterns
 fn match_shape(shape: Shape) -> f64 {
-    return match shape { Circle(r) => 3.14159 * r * r, Rectangle([w, h]) => w * h, Point => 0.0 };
+    return match shape {
+        Circle(r) => 3.14159 * r * r,
+        Rectangle([w, h]) => w * h,
+        Point => 0.0,
+    };
 }
 
 /// Match with guard conditions
@@ -220,7 +248,11 @@ fn match_with_guard(opt: Option<i32>) -> String {
 
 /// Match with wildcard and block body
 fn match_wildcard(color: Color) -> String {
-    return match color { Red => "red", Green => "green", _ => "other" };
+    return match color {
+        Red => "red",
+        Green => "green",
+        _ => "other",
+    };
 }
 
 /// Match with enum and struct pattern
@@ -350,5 +382,56 @@ fn destructuring_examples() {
     }
 }
 
+/// Match used as a statement: trailing semicolon should be removed
+fn match_as_stmt(color: Color, opt: Option<i32>) {
+    match color {
+        Red => {
+            let _ = 1;
+        },
+        _ => {
+            let _ = 2;
+        },
+    }
+    match opt {
+        Some(x) => {
+            let _ = x;
+        },
+        None => {
+        },
+    }
+}
+
+/// Key-value list: array of 2-element tuples should be formatted one entry per line
+fn kv_list_long(entries: Array<[String, i32]>) {
+    let long = [
+        ["first-key", 100],
+        ["second-key", 200],
+        ["third-key", 300],
+        ["fourth-key", 400],
+        ["fifth-key", 500],
+        ["sixth-key", 600],
+    ];
+    let _ = long;
+}
+
 export fn run() {
+}
+
+/// Unary ref with cast: &(x as T) must keep parentheses (as has lower precedence than &)
+fn ref_cast_parens(x: i32) {
+    let _ = &(x as i64);
+}
+
+/// World: blank lines between import blocks are preserved
+pub world TestWorld {
+    import Foo {
+        foo,
+    }
+
+    import Bar {
+        bar,
+        baz,
+    }
+
+    export fn run();
 }
