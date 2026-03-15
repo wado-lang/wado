@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773530159346,
+  "lastUpdate": 1773542142593,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3455,6 +3455,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/086063c93c36f5a635b1cc9e05d4a3bb6cf2581b"
         },
         "date": 1773530159223,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9285,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21283,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "772efeb24aa60253b24f2030669b5612d011b27e",
+          "message": "Merge pull request #586 from wado-lang/claude/refactor-trait-resolution-FQPg7\n\nRefactor trait resolution context into dedicated TraitEnv and TraitContext",
+          "timestamp": "2026-03-15T11:33:18+09:00",
+          "tree_id": "684af997c54a268c779b83e83a3453a30f55d9c8",
+          "url": "https://github.com/wado-lang/wado/commit/772efeb24aa60253b24f2030669b5612d011b27e"
+        },
+        "date": 1773542142393,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
