@@ -404,21 +404,16 @@ impl BoxLowerer {
         // - Primitives (except i128/u128 which are already GC types)
         // - Variant types (subtype hierarchy prevents field-by-field deref assignment)
         let mut needs_box_base: IndexSet<TypeId> = IndexSet::default();
-        let mut newtype_pairs: Vec<(TypeId, TypeId)> = Vec::new(); // (alias, base)
 
         for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
             match type_table.get(type_id).clone() {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    let base = type_table.get_ultimate_base_type(inner);
-                    let is_prim = matches!(type_table.get(base), ResolvedType::Primitive(p)
+                    let is_prim = matches!(type_table.get(inner), ResolvedType::Primitive(p)
                         if !matches!(p, PrimitiveType::I128 | PrimitiveType::U128));
-                    let is_variant = self.is_variant_type(base, type_table);
+                    let is_variant = self.is_variant_type(inner, type_table);
                     let needs_box = is_prim || is_variant;
                     if needs_box {
-                        needs_box_base.insert(base);
-                        if inner != base {
-                            newtype_pairs.push((inner, base));
-                        }
+                        needs_box_base.insert(inner);
                     }
                 }
                 _ => {}
@@ -428,14 +423,6 @@ impl BoxLowerer {
         // Create Box<T> struct types for each type that needs boxing
         for base_type_id in needs_box_base {
             self.get_or_create_box_type(base_type_id, type_table);
-        }
-
-        // Map newtypes to their base type's Box type
-        // e.g., Radians (newtype of f64) → Box<f64>
-        for (alias_id, base_id) in newtype_pairs {
-            if let Some(&box_type_id) = self.box_struct_types.get(&base_id) {
-                self.box_struct_types.insert(alias_id, box_type_id);
-            }
         }
     }
 
@@ -452,9 +439,7 @@ impl BoxLowerer {
         for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
             match type_table.get(type_id).clone() {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    // Use get_ultimate_base_type to handle newtypes of primitives
-                    let base_inner = type_table.get_ultimate_base_type(inner);
-                    if let Some(&box_type_id) = self.box_struct_types.get(&base_inner) {
+                    if let Some(&box_type_id) = self.box_struct_types.get(&inner) {
                         // Replace Ref(primitive) with the Box struct type
                         replacements.push((type_id, type_table.get(box_type_id).clone()));
                     }

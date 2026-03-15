@@ -367,6 +367,15 @@ pub async fn compile_with_options<H: CompilerHost>(
         })?
     };
 
+    // === Phase 8.5: Erase newtypes ===
+    // After synthesis (which needs Newtype info for Display/Inspect generation),
+    // erase newtypes so all post-synthesis phases see only base types.
+    {
+        if let Some(first_module) = project.tir_modules.values().next() {
+            first_module.type_table.borrow_mut().erase_newtypes();
+        }
+    }
+
     // === Phase 8: Monomorphize (Project -> Project) ===
     let project = {
         let _span = logger.span("monomorphize");
@@ -622,6 +631,13 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 Bail
             })?
         };
+
+        // Erase newtypes (must be after synthesis, before monomorphize)
+        {
+            if let Some(first_module) = project.tir_modules.values().next() {
+                first_module.type_table.borrow_mut().erase_newtypes();
+            }
+        }
 
         // Monomorphize
         let project = {

@@ -422,6 +422,12 @@ pub struct TypeTable {
     /// Associated type resolutions: `(concrete_type_id, assoc_name)` → `resolved_type_id`.
     /// Populated when impl blocks with associated type bindings are processed.
     assoc_type_resolutions: IndexMap<(TypeId, String), TypeId>,
+    /// After `erase_newtypes()`, maps each newtype `TypeId` to its ultimate base `TypeId`.
+    /// `get()` follows these redirects, making newtypes transparent to all post-resolve phases.
+    newtype_redirects: IndexMap<TypeId, TypeId>,
+    /// Maps newtype names to their ultimate base type name.
+    /// Populated by `erase_newtypes()` and used by `wir_build` for name-based newtype resolution.
+    newtype_to_base_name: IndexMap<String, String>,
 }
 
 impl Default for TypeTable {
@@ -461,6 +467,8 @@ impl TypeTable {
             result_module_source: None,
             default_trait_module_source: None,
             assoc_type_resolutions: IndexMap::default(),
+            newtype_redirects: IndexMap::default(),
+            newtype_to_base_name: IndexMap::default(),
         };
 
         // Pre-populate primitive types matching the constants above
@@ -500,9 +508,48 @@ impl TypeTable {
     }
 
     pub fn get(&self, id: TypeId) -> &ResolvedType {
+        let id = self.newtype_redirects.get(&id).copied().unwrap_or(id);
         self.types
             .get(&id)
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
+    }
+
+    /// Erase all newtypes from the `TypeTable`.
+    ///
+    /// After this call, `get(newtype_id)` transparently returns the ultimate base type,
+    /// making newtypes invisible to all post-resolve phases. Also populates
+    /// `newtype_to_base_name` for name-based lookups in `wir_build`.
+    pub fn erase_newtypes(&mut self) {
+        let newtype_ids: Vec<TypeId> = self
+            .types
+            .iter()
+            .filter(|(_, ty)| matches!(ty, ResolvedType::Newtype { .. }))
+            .map(|(&id, _)| id)
+            .collect();
+
+        for id in newtype_ids {
+            // Follow the chain directly (without redirect, which is not built yet)
+            let mut base = id;
+            loop {
+                match &self.types[&base] {
+                    ResolvedType::Newtype { base_type, .. } => base = *base_type,
+                    _ => break,
+                }
+            }
+            self.newtype_redirects.insert(id, base);
+
+            if let Some(ResolvedType::Newtype { name, .. }) = self.types.get(&id) {
+                let base_name = self.type_name(base);
+                self.newtype_to_base_name.insert(name.clone(), base_name);
+            }
+        }
+    }
+
+    /// Look up the ultimate base type name for a newtype by its name.
+    /// Returns `None` if the name is not a known newtype.
+    /// Available after `erase_newtypes()` is called.
+    pub fn get_newtype_ultimate_base_name(&self, name: &str) -> Option<&str> {
+        self.newtype_to_base_name.get(name).map(String::as_str)
     }
 
     /// Iterate over all types in the type table.
@@ -1072,8 +1119,16 @@ impl TypeTable {
     ///
     /// Resolve through newtypes to find the base type.
     /// Returns the original `TypeId` if not a newtype.
+    ///
+    /// Works both before and after `erase_newtypes()`. After erasure, the redirect
+    /// map is checked first so that `resolve_newtype_base(FieldName_id)` → `String_id`.
     #[must_use]
     pub fn resolve_newtype_base(&self, id: TypeId) -> TypeId {
+        // After erasure: redirect map has the direct base TypeId.
+        if let Some(&redirected) = self.newtype_redirects.get(&id) {
+            return redirected;
+        }
+        // Before erasure: follow the Newtype chain via get().
         let mut current = id;
         loop {
             match self.get(current) {

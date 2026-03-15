@@ -177,7 +177,7 @@ struct [Stream<u8>, StreamWritable<u8>] {
     mut 1: i32,
 }
 
-struct [Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>] {
+struct [Future<Result<Option<Fields>,ErrorCode>>, FutureWritable<Result<Option<Fields>,ErrorCode>>] {
     mut 0: i32,
     mut 1: i32,
 }
@@ -274,12 +274,12 @@ struct Result<unit,HeaderError>::Err {
     payload_0: ref "wasi:http/types.wado/HeaderError",
 }
 
-variant Option<Trailers> {
+variant Option<Fields> {
     Some(i32),
     None,
 }
 
-struct Option<Trailers>::Some {
+struct Option<Fields>::Some {
     discriminant: i32,
     payload_0: i32,
 }
@@ -294,17 +294,17 @@ struct Result<unit,ErrorCode>::Err {
     payload_0: ref "wasi:http/types.wado/ErrorCode",
 }
 
-variant Result<Option<Trailers>,ErrorCode> {
-    Ok(ref Option<Trailers>),
+variant Result<Option<Fields>,ErrorCode> {
+    Ok(ref Option<Fields>),
     Err(ref "wasi:http/types.wado/ErrorCode"),
 }
 
-struct Result<Option<Trailers>,ErrorCode>::Ok {
+struct Result<Option<Fields>,ErrorCode>::Ok {
     discriminant: i32,
-    payload_0: ref Option<Trailers>,
+    payload_0: ref Option<Fields>,
 }
 
-struct Result<Option<Trailers>,ErrorCode>::Err {
+struct Result<Option<Fields>,ErrorCode>::Err {
     discriminant: i32,
     payload_0: ref "wasi:http/types.wado/ErrorCode",
 }
@@ -319,17 +319,17 @@ struct Array<Array<u8>> {  // Array<T> with T=Array<u8>
     mut used: i32,
 }
 
-variant Result<Array<FieldValue>,HeaderError> {
+variant Result<Array<Array<u8>>,HeaderError> {
     Ok(ref Array<Array<u8>>),
     Err(ref "wasi:http/types.wado/HeaderError"),
 }
 
-struct Result<Array<FieldValue>,HeaderError>::Ok {
+struct Result<Array<Array<u8>>,HeaderError>::Ok {
     discriminant: i32,
     payload_0: ref Array<Array<u8>>,
 }
 
-struct Result<Array<FieldValue>,HeaderError>::Err {
+struct Result<Array<Array<u8>>,HeaderError>::Err {
     discriminant: i32,
     payload_0: ref "wasi:http/types.wado/HeaderError",
 }
@@ -370,7 +370,7 @@ type "functype/__cm_adapter__Fields_append" = fn(i32, ref String, ref Array<u8>)
 
 type "functype/__cm_adapter__Fields_has" = fn(i32, ref String) -> bool;
 
-type "functype/__cm_adapter__Fields_get_and_delete" = fn(i32, ref String) -> ref Result<Array<FieldValue>,HeaderError>;
+type "functype/__cm_adapter__Fields_get_and_delete" = fn(i32, ref String) -> ref Result<Array<Array<u8>>,HeaderError>;
 
 type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> ref "tuple/[Response, Future<Result<unit,ErrorCode>>]";
 
@@ -467,7 +467,7 @@ fn handle(request) {
     let __local_2: ref Array<u8>;
     let v: ref Array<u8>;
     let __v0_4: bool;
-    let result: ref Result<Array<FieldValue>,HeaderError>;
+    let result: ref Result<Array<Array<u8>>,HeaderError>;
     let values: ref Array<Array<u8>>;
     let __v0_8: i32;
     let __cond_9: bool;
@@ -619,7 +619,7 @@ fn handle(request) {
     let __packed_171: i64;
     let __ptr_172: i32;
     let __len_173: i32;
-    let __pattern_temp_1: ref "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]";
+    let __pattern_temp_1: ref "tuple/[Future<Result<Option<Fields>,ErrorCode>>, FutureWritable<Result<Option<Fields>,ErrorCode>>]";
     let __local_183: ref String;
     let __local_185: ref Formatter;
     let __local_188: ref String;
@@ -681,8 +681,8 @@ condition: fields.has(\"x-temp\" as FieldName)
         unreachable;
     };
     result = __cm_adapter__Fields_get_and_delete(fields, String { repr: array.new_data<u8>("x-temp"), used: 6 });
-    if ref.test Result<Array<FieldValue>,HeaderError>::Ok(result) {
-        values = value_copy Array<Array<u8>>(ref.cast Result<Array<FieldValue>,HeaderError>::Ok(result).payload_0);
+    if ref.test Result<Array<Array<u8>>,HeaderError>::Ok(result) {
+        values = value_copy Array<Array<u8>>(ref.cast Result<Array<Array<u8>>,HeaderError>::Ok(result).payload_0);
         __v0_8 = values.used;
         __cond_9 = __v0_8 == 1;
         if __cond_9 == 0 {
@@ -771,7 +771,7 @@ condition: !fields.has(\"x-temp\" as FieldName)
     };
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
-    __pattern_temp_1 = "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
+    __pattern_temp_1 = "tuple/[Future<Result<Option<Fields>,ErrorCode>>, FutureWritable<Result<Option<Fields>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
     trailers_future = __pattern_temp_1.0;
     trailers_tx = __pattern_temp_1.1;
     resp_headers = __cm_adapter__Fields_new();
@@ -1159,7 +1159,7 @@ fn __cm_adapter__Fields_get_and_delete(self, name) {
     let __name_packed: i64;
     let __outptr: i32;
     let __disc: i32;
-    let __result_val: ref Result<Array<FieldValue>,HeaderError>;
+    let __result_val: ref Result<Array<Array<u8>>,HeaderError>;
     let __base_6: i32;
     let __count_7: i32;
     let __result_8: ref Array<Array<u8>>;
@@ -1214,7 +1214,7 @@ fn __cm_adapter__Fields_get_and_delete(self, name) {
         if __count_7 > 0 {
             drop("mem/realloc"(__base_6, __count_7 * 8, 4, 0));
         };
-        __result_val = Result<Array<FieldValue>,HeaderError>::Ok { discriminant: 0, payload_0: ref.as_non_null(__result_8) };
+        __result_val = Result<Array<Array<u8>>,HeaderError>::Ok { discriminant: 0, payload_0: ref.as_non_null(__result_8) };
     } else {
         __vdisc = builtin::load_u8(__outptr + 4);
         __vresult = ref.null none;
@@ -1225,7 +1225,7 @@ fn __cm_adapter__Fields_get_and_delete(self, name) {
         } else {
             __vresult = "wasi:http/types.wado/HeaderError" { 2 };
         };
-        __result_val = Result<Array<FieldValue>,HeaderError>::Err { discriminant: 1, payload_0: ref.as_non_null(__vresult) };
+        __result_val = Result<Array<Array<u8>>,HeaderError>::Err { discriminant: 1, payload_0: ref.as_non_null(__vresult) };
     };
     drop("mem/realloc"(__outptr, 12, 4, 0));
     return __result_val;

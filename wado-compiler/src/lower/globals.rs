@@ -34,8 +34,7 @@ fn is_constant_initializer(expr: &TirExpr) -> bool {
 
 /// Create a default value expression for a type (used for lazy-initialized globals)
 fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -> TirExpr {
-    let base_type = type_table.get_ultimate_base_type(type_id);
-    match type_table.get(base_type) {
+    match type_table.get(type_id) {
         ResolvedType::Primitive(prim) => match prim {
             crate::tir::PrimitiveType::I8
             | crate::tir::PrimitiveType::I16
@@ -105,8 +104,7 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
 
 /// Check if a type is a reference type (needs nullable Wasm type for lazy init)
 fn is_reference_type(type_id: TypeId, type_table: &TypeTable) -> bool {
-    let base_type = type_table.get_ultimate_base_type(type_id);
-    match type_table.get(base_type) {
+    match type_table.get(type_id) {
         ResolvedType::Primitive(_) | ResolvedType::Unit | ResolvedType::Never => false,
         // Struct, Array, String, etc. are reference types in Wasm GC
         _ => true,
