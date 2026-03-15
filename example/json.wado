@@ -1302,7 +1302,7 @@ pub fn stringify(value: &JsonValue) -> String {
                 result.append(stringify(&items[i]));
             }
             result.append_char(']');
-            result;
+            result
         },
         Obj(map) => {
             let mut result = String::with_capacity(32);
@@ -1318,7 +1318,7 @@ pub fn stringify(value: &JsonValue) -> String {
                 result.append(stringify(&val));
             }
             result.append_char('}');
-            result;
+            result
         },
     };
 }
@@ -1340,7 +1340,7 @@ fn stringify_at_level(value: &JsonValue, level: i32, indent_size: i32) -> String
         Str(s) => escape_json_string(&s),
         Arr(items) => {
             if items.len() == 0 {
-                "[]";
+                "[]"
             } else {
                 let mut result = String::with_capacity(64);
                 result.append("[\n");
@@ -1354,13 +1354,13 @@ fn stringify_at_level(value: &JsonValue, level: i32, indent_size: i32) -> String
                 }
                 result.append(make_indent(level, indent_size));
                 result.append_char(']');
-                result;
+                result
             }
         },
         Obj(map) => {
             let entries = map.entries();
             if entries.len() == 0 {
-                "{}";
+                "{}"
             } else {
                 let mut result = String::with_capacity(64);
                 result.append("{\n");
@@ -1377,7 +1377,7 @@ fn stringify_at_level(value: &JsonValue, level: i32, indent_size: i32) -> String
                 }
                 result.append(make_indent(level, indent_size));
                 result.append_char('}');
-                result;
+                result
             }
         },
     };

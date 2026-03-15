@@ -469,6 +469,9 @@ pub struct LetStmt {
 pub struct ExprStmt {
     pub expr: Expr,
     pub span: Span,
+    /// Whether the statement had a trailing semicolon in the source.
+    /// False for "tail expressions" (last expr in a block without `;`).
+    pub has_semicolon: bool,
 }
 
 #[derive(Debug, Clone)]

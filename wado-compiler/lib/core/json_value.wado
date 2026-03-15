@@ -54,7 +54,7 @@ impl Eq for Value {
                         }
                         i += 1;
                     }
-                    true;
+                    true
                 },
                 _ => false,
             },
@@ -72,7 +72,7 @@ impl Eq for Value {
                             return false;
                         }
                     }
-                    true;
+                    true
                 },
                 _ => false,
             },
@@ -97,10 +97,10 @@ impl Serialize for Value {
                                 return Result::<(), SerializeError>::Err(e);
                             }
                         }
-                        seq.end();
+                        seq.end()
                     },
                     Err(e) => Result::<(), SerializeError>::Err(e),
-                };
+                }
             },
             Object(map) => {
                 let map_r = s.begin_map(map.len());
@@ -116,10 +116,10 @@ impl Serialize for Value {
                                 return Result::<(), SerializeError>::Err(e);
                             }
                         }
-                        m.end();
+                        m.end()
                     },
                     Err(e) => Result::<(), SerializeError>::Err(e),
-                };
+                }
             },
         };
     }
@@ -167,7 +167,7 @@ impl Visitor for ValueVisitor {
                 Err(e) => {
                     return Result::<Value, DeserializeError>::Err(e);
                 },
-            };
+            }
         }
     }
 
@@ -186,7 +186,7 @@ impl Visitor for ValueVisitor {
                             Err(e) => {
                                 return Result::<Value, DeserializeError>::Err(e);
                             },
-                        };
+                        }
                     },
                     None => {
                         let end_r = map.end();
@@ -199,7 +199,7 @@ impl Visitor for ValueVisitor {
                 Err(e) => {
                     return Result::<Value, DeserializeError>::Err(e);
                 },
-            };
+            }
         }
     }
 }

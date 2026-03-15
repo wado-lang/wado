@@ -95,6 +95,9 @@ impl<'a> Unparser<'a> {
                 self.output.push(')');
             }
             self.output.push_str("]\n");
+            // Track the line so blank lines between inner attrs and the first
+            // item are preserved by emit_blank_lines_to.
+            self.last_source_line = attr.span.end_line();
         }
 
         for item in &module.items {
@@ -1237,7 +1240,14 @@ impl<'a> Unparser<'a> {
     fn unparse_expr_stmt(&mut self, e: &ExprStmt) {
         self.write_indent();
         self.unparse_expr(&e.expr);
-        self.output.push_str(";\n");
+        // match expressions used as statements don't need a trailing semicolon
+        // (same as if/while/loop/for which are separate Stmt variants).
+        // Tail expressions (last expr in a block without `;`) also omit it.
+        if !e.has_semicolon || matches!(e.expr, Expr::Match(_)) {
+            self.output.push('\n');
+        } else {
+            self.output.push_str(";\n");
+        }
     }
 
     fn unparse_return(&mut self, r: &ReturnStmt) {
@@ -1572,12 +1582,40 @@ impl<'a> Unparser<'a> {
         }
         self.output.push(']');
 
-        if !self.exceeds_width_since(snap) {
+        if !self.output[snap..].contains('\n') && !self.exceeds_width_since(snap) {
             return;
         }
 
-        // Rollback and format fill-style: pack elements onto lines up to MAX_LINE_WIDTH
+        // Rollback for multi-line formatting
         self.rollback(snap);
+
+        // Key-value list heuristic: if all elements are 2-element tuple literals,
+        // format as one entry per line (Wasm CM associative array pattern).
+        let is_kv_list = tuple_lit.elements.len() >= 2
+            && tuple_lit.elements.iter().all(|e| {
+                matches!(e, Expr::TupleLiteral(t) if t.elements.len() == 2)
+            });
+
+        if is_kv_list {
+            self.output.push('[');
+            self.indent_level += 1;
+            for (i, elem) in tuple_lit.elements.iter().enumerate() {
+                if i > 0 {
+                    self.output.push(',');
+                }
+                self.output.push('\n');
+                self.write_indent();
+                self.unparse_expr(elem);
+            }
+            self.output.push(',');
+            self.output.push('\n');
+            self.indent_level -= 1;
+            self.write_indent();
+            self.output.push(']');
+            return;
+        }
+
+        // Fill-style: pack elements onto lines up to MAX_LINE_WIDTH
         self.output.push('[');
         self.indent_level += 1;
         for (i, elem) in tuple_lit.elements.iter().enumerate() {

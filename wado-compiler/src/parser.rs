@@ -997,13 +997,17 @@ impl Parser {
         let start_span = self.peek().span;
         let expr = self.parse_match_expr()?;
         // Trailing semicolon is optional (consumed if present)
-        if self.check(&TokenKind::Semicolon) {
+        let has_semicolon = if self.check(&TokenKind::Semicolon) {
             self.advance();
-        }
+            true
+        } else {
+            false
+        };
         let end_span = expr.span();
         Ok(Stmt::Expr(ExprStmt {
             expr,
             span: start_span.merge(&end_span),
+            has_semicolon,
         }))
     }
 
@@ -1013,20 +1017,21 @@ impl Parser {
         let expr = self.parse_expr()?;
 
         // Semicolon is optional if followed by `}` (end of block)
-        let end_span = if self.check(&TokenKind::Semicolon) {
-            self.advance().span
+        let (end_span, has_semicolon) = if self.check(&TokenKind::Semicolon) {
+            (self.advance().span, true)
         } else if !self.check(&TokenKind::RBrace) {
             return Err(ParseError {
                 message: format!("expected `;` or `}}`, found {:?}", self.peek_kind()),
                 span: self.peek().span,
             });
         } else {
-            expr.span()
+            (expr.span(), false)
         };
 
         Ok(Stmt::Expr(ExprStmt {
             expr,
             span: start_span.merge(&end_span),
+            has_semicolon,
         }))
     }
 
@@ -1420,6 +1425,7 @@ impl Parser {
             Some(Box::new(Stmt::Expr(ExprStmt {
                 expr,
                 span: start_span,
+                has_semicolon: true,
             })))
         };
         self.expect(&TokenKind::Semicolon)?;
@@ -2727,6 +2733,7 @@ impl Parser {
                     stmts: vec![Stmt::Expr(ExprStmt {
                         expr: if_expr,
                         span,
+                        has_semicolon: false,
                     })],
                     span,
                 })
