@@ -25,12 +25,12 @@ fn compute_stats(data: &Array<f64>) -> Stats {
 
     // Phase 1: SIMD sum and min/max
     let mut sum_vec = f64x2::splat(0.0);
-    let mut min_vec = f64x2::splat((*data)[0]);
-    let mut max_vec = f64x2::splat((*data)[0]);
+    let mut min_vec = f64x2::splat(*data[0]);
+    let mut max_vec = f64x2::splat(*data[0]);
 
     let mut i = 0;
     while i + 2 <= len {
-        let chunk: f64x2 = [(*data)[i], (*data)[i + 1]];
+        let chunk: f64x2 = [*data[i], *data[i + 1]];
         sum_vec = sum_vec + chunk;
         min_vec = min_vec.min(&chunk);
         max_vec = max_vec.max(&chunk);
@@ -44,9 +44,9 @@ fn compute_stats(data: &Array<f64>) -> Stats {
 
     // Handle odd element
     if i < len {
-        sum = sum + (*data)[i];
-        min_val = f64::min(min_val, (*data)[i]);
-        max_val = f64::max(max_val, (*data)[i]);
+        sum = sum + *data[i];
+        min_val = f64::min(min_val, *data[i]);
+        max_val = f64::max(max_val, *data[i]);
     }
 
     let mean = sum / len as f64;
@@ -57,7 +57,7 @@ fn compute_stats(data: &Array<f64>) -> Stats {
 
     i = 0;
     while i + 2 <= len {
-        let chunk: f64x2 = [(*data)[i], (*data)[i + 1]];
+        let chunk: f64x2 = [*data[i], *data[i + 1]];
         let diff = chunk - mean_vec;
         sq_sum_vec = sq_sum_vec + diff * diff;
         i = i + 2;
@@ -65,7 +65,7 @@ fn compute_stats(data: &Array<f64>) -> Stats {
 
     let mut sq_sum = sq_sum_vec.extract_lane(0) + sq_sum_vec.extract_lane(1);
     if i < len {
-        let diff = (*data)[i] - mean;
+        let diff = *data[i] - mean;
         sq_sum = sq_sum + diff * diff;
     }
 
@@ -90,14 +90,16 @@ fn normalize(data: &Array<f64>) -> Array<f64> {
 
     let mut i = 0;
     while i + 2 <= len {
-        let chunk: f64x2 = [(*data)[i], (*data)[i + 1]];
+        let chunk: f64x2 = [*data[i], *data[i + 1]];
         let normalized = (chunk - mean_vec) / sd_vec;
         result.append(normalized.extract_lane(0));
         result.append(normalized.extract_lane(1));
         i = i + 2;
     }
 
-    if i < len { result.append(((*data)[i] - s.mean) / sd) }
+    if i < len {
+        result.append((*data[i] - s.mean) / sd);
+    }
 
     return result;
 }
@@ -109,14 +111,16 @@ fn dot_product(a: &Array<f64>, b: &Array<f64>) -> f64 {
 
     let mut i = 0;
     while i + 2 <= len {
-        let va: f64x2 = [(*a)[i], (*a)[i + 1]];
-        let vb: f64x2 = [(*b)[i], (*b)[i + 1]];
+        let va: f64x2 = [*a[i], *a[i + 1]];
+        let vb: f64x2 = [*b[i], *b[i + 1]];
         sum_vec = sum_vec + va * vb;
         i = i + 2;
     }
 
     let mut sum = sum_vec.extract_lane(0) + sum_vec.extract_lane(1);
-    if i < len { sum = sum + (*a)[i] * (*b)[i] }
+    if i < len {
+        sum = sum + *a[i] * *b[i];
+    }
 
     return sum;
 }

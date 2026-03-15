@@ -35,14 +35,18 @@ fn grow_memory(new_offset: i32) {
 export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     // Free: rewind if this was the most recent allocation
     if newsize == 0 {
-        if oldptr + oldsize == heap_offset { heap_offset = oldptr }
+        if oldptr + oldsize == heap_offset {
+            heap_offset = oldptr;
+        }
         return 0;
     }
 
     let aligned = builtin::i32_and(heap_offset + align - 1, 0 - align);
     let new_offset = aligned + newsize;
 
-    if builtin::unlikely(new_offset > builtin::memory_size() * 65536) { grow_memory(new_offset) }
+    if builtin::unlikely(new_offset > builtin::memory_size() * 65536) {
+        grow_memory(new_offset);
+    }
 
     heap_offset = new_offset;
 
@@ -56,14 +60,18 @@ export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i
 export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     // Free: poison freed memory with 0xFF, never reuse
     if newsize == 0 {
-        if oldsize > 0 { builtin::memory_fill(oldptr, 0xFF, oldsize) }
+        if oldsize > 0 {
+            builtin::memory_fill(oldptr, 0xFF, oldsize);
+        }
         return 0;
     }
 
     let aligned = builtin::i32_and(heap_offset + align - 1, 0 - align);
     let new_offset = aligned + newsize;
 
-    if builtin::unlikely(new_offset > builtin::memory_size() * 65536) { grow_memory(new_offset) }
+    if builtin::unlikely(new_offset > builtin::memory_size() * 65536) {
+        grow_memory(new_offset);
+    }
 
     heap_offset = new_offset;
 

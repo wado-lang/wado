@@ -393,7 +393,9 @@ impl Parser {
 
         // Handle negative
         if let Some(b) = self.peek() {
-            if b == '-' as u8 { self.advance() }
+            if b == '-' as u8 {
+                self.advance();
+            }
         }
 
         // Must have at least one digit
@@ -431,7 +433,9 @@ impl Parser {
             if e == 'e' as u8 || e == 'E' as u8 {
                 self.advance();
                 if let Some(sign) = self.peek() {
-                    if sign == '-' as u8 || sign == '+' as u8 { self.advance() }
+                    if sign == '-' as u8 || sign == '+' as u8 {
+                        self.advance();
+                    }
                 }
                 while let Some(b) = self.peek() {
                     if !is_digit(b) {
@@ -1292,7 +1296,9 @@ pub fn stringify(value: &JsonValue) -> String {
             let mut result = String::with_capacity(32);
             result.append_char('[');
             for let mut i = 0; i < items.len(); i += 1 {
-                if i > 0 { result.append_char(',') }
+                if i > 0 {
+                    result.append_char(',');
+                }
                 result.append(stringify(&items[i]));
             }
             result.append_char(']');
@@ -1303,7 +1309,9 @@ pub fn stringify(value: &JsonValue) -> String {
             result.append_char('{');
             let entries = map.entries();
             for let mut i = 0; i < entries.len(); i += 1 {
-                if i > 0 { result.append_char(',') }
+                if i > 0 {
+                    result.append_char(',');
+                }
                 let [key, val] = entries[i];
                 result.append(escape_json_string(&key));
                 result.append_char(':');
@@ -1339,7 +1347,9 @@ fn stringify_at_level(value: &JsonValue, level: i32, indent_size: i32) -> String
                 for let mut i = 0; i < items.len(); i += 1 {
                     result.append(make_indent(level + 1, indent_size));
                     result.append(stringify_at_level(&items[i], level + 1, indent_size));
-                    if i < items.len() - 1 { result.append_char(',') }
+                    if i < items.len() - 1 {
+                        result.append_char(',');
+                    }
                     result.append_char('\n');
                 }
                 result.append(make_indent(level, indent_size));
@@ -1360,7 +1370,9 @@ fn stringify_at_level(value: &JsonValue, level: i32, indent_size: i32) -> String
                     result.append(escape_json_string(&key));
                     result.append(": ");
                     result.append(stringify_at_level(&val, level + 1, indent_size));
-                    if i < entries.len() - 1 { result.append_char(',') }
+                    if i < entries.len() - 1 {
+                        result.append_char(',');
+                    }
                     result.append_char('\n');
                 }
                 result.append(make_indent(level, indent_size));

@@ -12,7 +12,9 @@ pub fn stringify(v: &Value) -> String {
             let mut result = "{";
             let entries = map.entries();
             for let mut i = 0; i < entries.len(); i += 1 {
-                if i > 0 { result = `{result},` }
+                if i > 0 {
+                    result = `{result},`;
+                }
                 let [key, val] = entries[i];
                 result = `{result}"{key}":{stringify(&val)}`;
             }

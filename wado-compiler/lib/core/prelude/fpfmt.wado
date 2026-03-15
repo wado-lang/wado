@@ -233,7 +233,9 @@ fn mul_pow10(p: i32) -> PmHiLo {
     // Round up if not exact (matching generator convention)
     if a0_lo != 0 {
         top_lo = top_lo + 1;
-        if top_lo == 0 { top_hi = top_hi + 1 }
+        if top_lo == 0 {
+            top_hi = top_hi + 1;
+        }
     }
 
     // Normalize: ensure bit 127 is set (top_hi bit 63)
@@ -369,7 +371,9 @@ pub fn short(f: f64) -> FormatResult {
         p = -skewed(e + z);
         min_m = m - (1 as u64 << (z - 2) as u64);
     } else {
-        if e < min_exp { z = 11 + (min_exp - e) }
+        if e < min_exp {
+            z = 11 + (min_exp - e);
+        }
         p = -log10_pow2(e + z);
         min_m = m - (1 as u64 << (z - 1) as u64);
     }
@@ -394,7 +398,9 @@ pub fn short(f: f64) -> FormatResult {
     }
 
     let mut d = dmin;
-    if dmin < dmax { d = unrounded_round(uscale(m, pm.hi, pm.lo, s)) }
+    if dmin < dmax {
+        d = unrounded_round(uscale(m, pm.hi, pm.lo, s));
+    }
     return FormatResult { digits: d, exponent: -p };
 }
 
@@ -416,7 +422,9 @@ pub fn short32(f: f32) -> FormatResult {
         p = -skewed(e + z);
         min_m = m - (1 as u64 << (z - 2) as u64);
     } else {
-        if e < min_exp { z = 40 + (min_exp - e) }
+        if e < min_exp {
+            z = 40 + (min_exp - e);
+        }
         p = -log10_pow2(e + z);
         min_m = m - (1 as u64 << (z - 1) as u64);
     }
@@ -440,7 +448,9 @@ pub fn short32(f: f32) -> FormatResult {
     }
 
     let mut d = dmin;
-    if dmin < dmax { d = unrounded_round(uscale(m, pm.hi, pm.lo, s)) }
+    if dmin < dmax {
+        d = unrounded_round(uscale(m, pm.hi, pm.lo, s));
+    }
     return FormatResult { digits: d, exponent: -p };
 }
 
@@ -604,7 +614,9 @@ pub fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
 
     // Exponent
     buf.append(if upper { "E" } else { "e" });
-    if exp < 0 { buf.append("-") }
+    if exp < 0 {
+        buf.append("-");
+    }
 
     let abs_exp = if exp < 0 { -exp } else { exp };
     if abs_exp < 10 {
@@ -743,7 +755,9 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
 
     let exp = p + nd - 1;
     buf.append(if upper { "E" } else { "e" });
-    if exp < 0 { buf.append("-") }
+    if exp < 0 {
+        buf.append("-");
+    }
 
     let abs_exp = if exp < 0 { -exp } else { exp };
     if abs_exp < 10 {

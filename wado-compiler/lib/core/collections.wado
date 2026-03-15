@@ -223,7 +223,9 @@ impl TreeMap<K, V> {
         self.size = self.size - 1;
 
         // Compact if too many deleted entries
-        if self.deleted_count > self.size && self.deleted_count > 4 { self.compact() }
+        if self.deleted_count > self.size && self.deleted_count > 4 {
+            self.compact();
+        }
 
         return true;
     }
@@ -263,7 +265,9 @@ impl TreeMap<K, V> {
     pub fn keys(&self) -> Array<K> {
         let mut result: Array<K> = [];
         for let entry of self.entries {
-            if !entry.deleted { result.append(entry.key) }
+            if !entry.deleted {
+                result.append(entry.key);
+            }
         }
         return result;
     }
@@ -272,7 +276,9 @@ impl TreeMap<K, V> {
     pub fn values(&self) -> Array<V> {
         let mut result: Array<V> = [];
         for let entry of self.entries {
-            if !entry.deleted { result.append(entry.value) }
+            if !entry.deleted {
+                result.append(entry.value);
+            }
         }
         return result;
     }
@@ -281,7 +287,9 @@ impl TreeMap<K, V> {
     pub fn entries(&self) -> Array<[K, V]> {
         let mut result: Array<[K, V]> = [];
         for let entry of self.entries {
-            if !entry.deleted { result.append([entry.key, entry.value]) }
+            if !entry.deleted {
+                result.append([entry.key, entry.value]);
+            }
         }
         return result;
     }
@@ -310,7 +318,9 @@ impl IndexValue<K> for TreeMap<K, V> {
 
     fn index_value(&self, key: K) -> Self::Output {
         let index = self.find_index(key);
-        if index < 0 { panic(`key not found: {key:?}`) }
+        if index < 0 {
+            panic(`key not found: {key:?}`);
+        }
         return self.entries[index].value;
     }
 }
@@ -483,7 +493,9 @@ impl<V: Deserialize> Deserialize for TreeMap<String, V> {
                 if let Ok(key_opt) = key_r {
                     if let Some(key) = key_opt {
                         let val_r = ma.next_value::<V>();
-                        if let Ok(val) = val_r { result.insert(key, val) }
+                        if let Ok(val) = val_r {
+                            result.insert(key, val);
+                        }
                         if let Err(e) = val_r {
                             return Result::<TreeMap<String, V>, DeserializeError>::Err(e);
                         }
