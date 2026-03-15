@@ -55,7 +55,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Handle Self::AssociatedType
         if namespaced.namespace.as_str() == "Self" {
             // Look up the associated type binding
-            if let Some(&type_id) = self.current_associated_type_bindings.get(&namespaced.name) {
+            if let Some(&type_id) = self.trait_ctx.assoc_type_bindings.get(&namespaced.name) {
                 return type_id;
             }
             // If not found, it's an unknown associated type
@@ -67,7 +67,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Handle T::AssociatedType where T is a type parameter in scope
-        if let Some(&(_, param_type_id)) = self.current_type_params.get(&namespaced.namespace) {
+        if let Some(&(_, param_type_id)) = self.trait_ctx.type_params.get(&namespaced.namespace) {
             // If the param is bound to a concrete type (not a TypeParam), look up the assoc
             // type from the TypeTable directly. This handles cases like blanket impl resolution
             // where we temporarily bind e.g. I = StrUtf8ByteIter (concrete struct), and
@@ -143,7 +143,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn resolve_named_type(&mut self, name: &str, _span: Span) -> TypeId {
         // Handle `Self` type reference in impl blocks
         if name == "Self" {
-            if let Some(self_type) = self.current_self_type {
+            if let Some(self_type) = self.trait_ctx.self_type {
                 return self_type;
             }
             // Self used outside of impl block - return Unknown
@@ -151,7 +151,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // First check if it's a type parameter in scope
-        if let Some(&(_, type_id)) = self.current_type_params.get(name) {
+        if let Some(&(_, type_id)) = self.trait_ctx.type_params.get(name) {
             return type_id;
         }
 
@@ -367,7 +367,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         param_name: &str,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let bounds = self.current_type_param_bounds.get(param_name)?.clone();
+        let bounds = self.trait_ctx.type_param_bounds.get(param_name)?.clone();
         for bound in &bounds {
             for assoc in &bound.assoc_types {
                 if assoc.name == assoc_name {

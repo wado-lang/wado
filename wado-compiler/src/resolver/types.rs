@@ -679,18 +679,6 @@ pub(super) enum VarRef {
     },
 }
 
-/// Pre-built index: type name → list of (`ModuleSource`, item index) for trait impl blocks.
-/// Built once from all loaded modules to avoid O(all items) scans per method call.
-pub(super) type TraitImplIndex = IndexMap<String, Vec<(ModuleSource, usize)>>;
-
-/// Pre-built index: trait name → (`ModuleSource`, item index) for trait declarations.
-pub(super) type TraitDeclIndex = IndexMap<String, (ModuleSource, usize)>;
-
-/// Pre-built list of blanket trait impls: `impl<T: Trait> OtherTrait for T`.
-/// These are impl blocks where the impl type is a free type parameter with trait bounds.
-/// Stored separately because they can't be indexed by concrete type name.
-pub(super) type BlanketTraitImplIndex = Vec<(ModuleSource, usize)>;
-
 /// Result of finding a trait method for a type via `find_trait_method_for_type`.
 pub(super) struct TraitMethodMatch {
     pub(super) trait_name: String,

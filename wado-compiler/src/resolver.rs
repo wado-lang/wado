@@ -20,6 +20,8 @@ mod operators;
 mod orchestration;
 mod stmt;
 mod template;
+mod trait_env;
+mod trait_query;
 mod type_resolution;
 pub(crate) mod types;
 mod util;
@@ -42,11 +44,9 @@ use crate::tir::{
     TirEnum, TirEnumCase, TirFlags, TirFlagsMember, TirModule, TirNewtype, TypeId, TypeTable,
 };
 
+use trait_env::TraitEnv;
 pub use types::TypeError;
-use types::{
-    BlanketTraitImplIndex, EnumInfo, FlagsInfo, ModuleTypeMaps, ResourceInfo, StructFieldInfo,
-    TraitDeclIndex, TraitImplIndex, VariantInfo,
-};
+use types::{EnumInfo, FlagsInfo, ModuleTypeMaps, ResourceInfo, StructFieldInfo, VariantInfo};
 
 pub struct Resolver<'a, H: CompilerHost> {
     /// Type table (shared across all modules via Rc<RefCell>)
@@ -86,13 +86,9 @@ pub struct Resolver<'a, H: CompilerHost> {
     current_module_source: ModuleSource,
     /// Current module items (for local function parameter lookup)
     current_module_items: Vec<Item>,
-    /// Type parameters currently in scope (name -> (index, `TypeId`))
-    /// Set when resolving generic structs or functions
-    current_type_params: IndexMap<String, (u32, TypeId)>,
-    /// Trait bounds on type parameters in scope (name -> full bounds with assoc types)
-    /// Used for resolving trait methods on type params (e.g., `T.cmp()` when T: Ord)
-    /// Full `TraitBound` objects preserve associated type bindings like `I: IntoIterator<Item = u8>`
-    current_type_param_bounds: IndexMap<String, Vec<ast::TraitBound>>,
+    /// Mutable trait resolution context: type params, bounds, associated type bindings, self type.
+    /// Grouped together so scope entry/exit can save/restore the whole context at once.
+    trait_ctx: trait_env::TraitContext,
     /// Generic struct definitions (name -> type param count)
     /// Used to determine if a struct is generic
     generic_struct_names: IndexSet<String>,
@@ -108,11 +104,6 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Resolved param types for generic methods (`mangled_name` -> `param TypeIds`)
     /// Resolved in the method's own type param scope so `TypeParams` have correct ids.
     generic_method_resolved_param_types: IndexMap<String, Vec<TypeId>>,
-    /// Current associated type bindings in scope (`Self::Name` -> resolved type)
-    /// Set when resolving trait implementations
-    current_associated_type_bindings: IndexMap<String, TypeId>,
-    /// Current `Self` type in scope (the type being implemented in an impl block)
-    current_self_type: Option<TypeId>,
     /// WASI registry for looking up effect return types
     wasi_registry: &'static WasiRegistry,
     /// Builtin registry for looking up builtin function return types
@@ -128,14 +119,9 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Built lazily on first access per module. Avoids rebuilding `build_module_map`
     /// on every imported method call or field access.
     module_type_maps_cache: IndexMap<ModuleSource, ModuleTypeMaps>,
-    /// Pre-built index: type name → (`module_source`, `item_idx`) for trait impl blocks in `loaded_modules`.
-    /// Shared across all module Resolvers; avoids O(all items) scans in `find_trait_method_for_type`.
-    trait_impl_index: Arc<TraitImplIndex>,
-    /// Pre-built index: trait name → (`module_source`, `item_idx`) for trait declarations in `loaded_modules`.
-    trait_decl_index: Arc<TraitDeclIndex>,
-    /// Pre-built list of blanket trait impl blocks: `impl<T: Trait> OtherTrait for T`.
-    /// Checked as fallback when concrete type lookup in `trait_impl_index` fails.
-    blanket_trait_impl_index: Arc<BlanketTraitImplIndex>,
+    /// Immutable trait knowledge base: impl indices, trait declarations, and blanket impls.
+    /// Built once and shared across all module resolvers via `Arc`.
+    trait_env: Arc<TraitEnv>,
     /// Pre-loaded file contents for `#include_str` / `#include_bytes`.
     /// Key: `[module_source_display, raw_path]`, value: raw bytes.
     included_files: &'a IndexMap<[String; 2], Vec<u8>>,
@@ -159,8 +145,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     ) -> Self {
         let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
-        let (trait_impl_index, trait_decl_index, blanket_trait_impl_index) =
-            Self::build_trait_indices(loaded_modules);
+        let trait_env = TraitEnv::build(loaded_modules);
         Self {
             type_table,
             symbols,
@@ -182,24 +167,19 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             logger,
             current_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"),
             current_module_items: Vec::new(),
-            current_type_params: IndexMap::default(),
-            current_type_param_bounds: IndexMap::default(),
+            trait_ctx: trait_env::TraitContext::default(),
             generic_struct_names: IndexSet::default(),
             generic_function_params: IndexMap::default(),
             generic_function_resolved_param_types: IndexMap::default(),
             generic_method_params: IndexMap::default(),
             generic_method_resolved_param_types: IndexMap::default(),
-            current_associated_type_bindings: IndexMap::default(),
-            current_self_type: None,
             wasi_registry,
             builtin_registry,
             current_module_globals: IndexMap::default(),
             imported_globals: IndexMap::default(),
             associated_constants: IndexMap::default(),
             module_type_maps_cache: IndexMap::default(),
-            trait_impl_index,
-            trait_decl_index,
-            blanket_trait_impl_index,
+            trait_env,
             included_files,
             known_type_names_cache: IndexSet::default(),
             indexing_trait_cache: IndexMap::default(),
@@ -369,8 +349,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
                     // Register type parameters from impl block's generic type FIRST
                     // e.g., impl IndexValue<i32> for Triple<T> needs T registered
-                    let old_type_params = std::mem::take(&mut self.current_type_params);
-                    let old_type_param_bounds = std::mem::take(&mut self.current_type_param_bounds);
+                    let saved_trait_ctx = self.trait_ctx.clone();
+                    self.trait_ctx.type_params.clear();
+                    self.trait_ctx.type_param_bounds.clear();
 
                     // Register explicit type params from impl<T: Bound> declarations,
                     // skipping concrete types (e.g., `impl<i32, T>` — skip "i32").
@@ -381,23 +362,26 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         if self.is_known_type_name(&param.name) {
                             // Concrete type in explicit params (e.g., `impl<i32, T>`): skip
                             if !param.bounds.is_empty() {
-                                self.current_type_param_bounds
+                                self.trait_ctx
+                                    .type_param_bounds
                                     .entry(param.name.clone())
                                     .or_insert_with(Vec::new)
                                     .extend(param.bounds.clone());
                             }
                             continue;
                         }
-                        if !self.current_type_params.contains_key(&param.name) {
+                        if !self.trait_ctx.type_params.contains_key(&param.name) {
                             let type_id = self
                                 .type_table
                                 .borrow_mut()
                                 .make_type_param(param.name.clone(), actual_idx);
-                            self.current_type_params
+                            self.trait_ctx
+                                .type_params
                                 .insert(param.name.clone(), (actual_idx, type_id));
                         }
                         if !param.bounds.is_empty() {
-                            self.current_type_param_bounds
+                            self.trait_ctx
+                                .type_param_bounds
                                 .entry(param.name.clone())
                                 .or_insert_with(Vec::new)
                                 .extend(param.bounds.clone());
@@ -409,14 +393,15 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         for (i, arg) in generic.args.iter().enumerate() {
                             if let ast::Type::Named(named) = arg {
                                 let name = &named.name;
-                                if !self.current_type_params.contains_key(name)
+                                if !self.trait_ctx.type_params.contains_key(name)
                                     && !self.is_known_type_name(name)
                                 {
                                     let type_id = self
                                         .type_table
                                         .borrow_mut()
                                         .make_type_param(name.clone(), i as u32);
-                                    self.current_type_params
+                                    self.trait_ctx
+                                        .type_params
                                         .insert(name.clone(), (i as u32, type_id));
                                 }
                             }
@@ -428,7 +413,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         if let Some(ref tn) = trait_name {
                             let target_type_id = self.resolve_type(&impl_block.ty);
                             let type_params: Vec<_> = self
-                                .current_type_params
+                                .trait_ctx
+                                .type_params
                                 .iter()
                                 .map(|(name, &(index, type_id))| (name.clone(), index, type_id))
                                 .collect();
@@ -442,15 +428,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     span: impl_block.span,
                                 });
                         }
-                        self.current_type_params = old_type_params;
-                        self.current_type_param_bounds = old_type_param_bounds;
+                        self.trait_ctx = saved_trait_ctx;
                         continue;
                     }
 
                     // Set up associated type bindings for trait implementations
                     // This now works because type params (like T) are registered above
-                    let old_associated_type_bindings =
-                        std::mem::take(&mut self.current_associated_type_bindings);
+                    self.trait_ctx.assoc_type_bindings.clear();
                     if impl_block.trait_type.is_some() {
                         // Resolve the target type for registering associated type resolutions
                         let target_type_id = self.resolve_type(&impl_block.ty);
@@ -459,7 +443,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
                         for binding in &impl_block.associated_types {
                             let type_id = self.resolve_type(&binding.ty);
-                            self.current_associated_type_bindings
+                            self.trait_ctx
+                                .assoc_type_bindings
                                 .insert(binding.name.clone(), type_id);
 
                             // Register in TypeTable for substitution resolution
@@ -527,10 +512,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         }
                     }
 
-                    // Restore old associated type bindings, type params, and bounds
-                    self.current_associated_type_bindings = old_associated_type_bindings;
-                    self.current_type_params = old_type_params;
-                    self.current_type_param_bounds = old_type_param_bounds;
+                    // Restore trait context
+                    self.trait_ctx = saved_trait_ctx;
                 }
                 Item::Trait(_trait_decl) => {
                     // Trait declarations are handled in the first pass (signature registration)

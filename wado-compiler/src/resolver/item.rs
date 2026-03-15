@@ -36,13 +36,14 @@ pub(super) fn extract_comp_features(attrs: &[crate::ast::Attribute]) -> u32 {
 impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn resolve_struct(&mut self, struct_decl: &ast::StructDecl) -> TirStruct {
         // Set up type parameters in scope before resolving fields
-        let old_type_params = std::mem::take(&mut self.current_type_params);
+        let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
         for (index, param) in struct_decl.type_params.iter().enumerate() {
             let type_id = self
                 .type_table
                 .borrow_mut()
                 .make_type_param(param.name.clone(), index as u32);
-            self.current_type_params
+            self.trait_ctx
+                .type_params
                 .insert(param.name.clone(), (index as u32, type_id));
         }
 
@@ -86,7 +87,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .collect();
 
         // Restore previous type params scope
-        self.current_type_params = old_type_params;
+        self.trait_ctx.type_params = old_type_params;
 
         let serde_rename_all = struct_decl.attrs.iter().find_map(|a| {
             if a.name == "serde" && a.args.first().is_some_and(|s| s == "rename_all") {
@@ -154,13 +155,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         variant_decl: &ast::VariantDecl,
     ) -> TirVariantDecl {
         // Set up type parameters in scope before resolving field types
-        let old_type_params = std::mem::take(&mut self.current_type_params);
+        let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
         for (index, param) in variant_decl.type_params.iter().enumerate() {
             let type_id = self
                 .type_table
                 .borrow_mut()
                 .make_type_param(param.name.clone(), index as u32);
-            self.current_type_params
+            self.trait_ctx
+                .type_params
                 .insert(param.name.clone(), (index as u32, type_id));
         }
 
@@ -195,7 +197,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .collect();
 
         // Restore previous type params scope
-        self.current_type_params = old_type_params;
+        self.trait_ctx.type_params = old_type_params;
 
         let comp_features = extract_comp_features(&variant_decl.attrs);
         if comp_features != 0 {
@@ -245,18 +247,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Resolve a function
     pub(super) fn resolve_function(&mut self, func: &Function) -> Option<TirFunction> {
         // Set up type parameters in scope before resolving types
-        let old_type_params = std::mem::take(&mut self.current_type_params);
-        let old_type_param_bounds = std::mem::take(&mut self.current_type_param_bounds);
+        let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
+        let old_type_param_bounds = std::mem::take(&mut self.trait_ctx.type_param_bounds);
         let mut type_param_list = Vec::new();
         for (index, param) in func.type_params.iter().enumerate() {
             let type_id = self
                 .type_table
                 .borrow_mut()
                 .make_type_param(param.name.clone(), index as u32);
-            self.current_type_params
+            self.trait_ctx
+                .type_params
                 .insert(param.name.clone(), (index as u32, type_id));
             if !param.bounds.is_empty() {
-                self.current_type_param_bounds
+                self.trait_ctx
+                    .type_param_bounds
                     .insert(param.name.clone(), param.bounds.clone());
             }
             type_param_list.push((param.name.clone(), type_id));
@@ -350,8 +354,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .collect();
 
         // Restore previous type params scope
-        self.current_type_params = old_type_params;
-        self.current_type_param_bounds = old_type_param_bounds;
+        self.trait_ctx.type_params = old_type_params;
+        self.trait_ctx.type_param_bounds = old_type_param_bounds;
 
         Some(TirFunction {
             name: func.name.clone(),
@@ -463,8 +467,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         trait_name: Option<&str>,
     ) -> Option<TirFunction> {
         // Set up type parameters in scope before resolving types
-        let old_type_params = std::mem::take(&mut self.current_type_params);
-        let old_type_param_bounds = std::mem::take(&mut self.current_type_param_bounds);
+        let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
+        let old_type_param_bounds = std::mem::take(&mut self.trait_ctx.type_param_bounds);
         let mut type_param_list = Vec::new();
 
         // First, collect type params from impl block's generic type (e.g., impl Box<T>)
@@ -474,12 +478,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             for (i, arg) in generic.args.iter().enumerate() {
                 if let ast::Type::Named(named) = arg {
                     let name = &named.name;
-                    if !self.current_type_params.contains_key(name) {
+                    if !self.trait_ctx.type_params.contains_key(name) {
                         let type_id = self
                             .type_table
                             .borrow_mut()
                             .make_type_param(name.clone(), i as u32);
-                        self.current_type_params
+                        self.trait_ctx
+                            .type_params
                             .insert(name.clone(), (i as u32, type_id));
                         // Store impl type param info for later monomorphization
                         impl_type_params.push(crate::tir::TirTypeParam {
@@ -500,7 +505,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .type_table
                     .borrow_mut()
                     .make_type_param(named.name.clone(), idx);
-                self.current_type_params
+                self.trait_ctx
+                    .type_params
                     .insert(named.name.clone(), (idx, type_id));
                 let bounds = old_type_param_bounds
                     .get(&named.name)
@@ -523,7 +529,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .type_table
                     .borrow_mut()
                     .make_type_param(named.name.clone(), idx);
-                self.current_type_params
+                self.trait_ctx
+                    .type_params
                     .insert(named.name.clone(), (idx, type_id));
                 let bounds = old_type_param_bounds
                     .get(&named.name)
@@ -545,29 +552,31 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // We need to restore them from old_type_param_bounds temporarily... NO.
         // The caller sets up bounds BEFORE calling resolve_method, so old_type_param_bounds
         // contains the caller's bounds. We should use those as base and add method-level bounds.
-        self.current_type_param_bounds = old_type_param_bounds.clone();
+        self.trait_ctx.type_param_bounds = old_type_param_bounds.clone();
 
         // Then, collect method-level type params
-        let offset = self.current_type_params.len();
+        let offset = self.trait_ctx.type_params.len();
         for (index, param) in func.type_params.iter().enumerate() {
             let idx = (offset + index) as u32;
             let type_id = self
                 .type_table
                 .borrow_mut()
                 .make_type_param(param.name.clone(), idx);
-            self.current_type_params
+            self.trait_ctx
+                .type_params
                 .insert(param.name.clone(), (idx, type_id));
             type_param_list.push((param.name.clone(), type_id));
             if !param.bounds.is_empty() {
-                self.current_type_param_bounds
+                self.trait_ctx
+                    .type_param_bounds
                     .insert(param.name.clone(), param.bounds.clone());
             }
         }
 
         // Set up Self type for the impl block
         // This allows `&Self` to resolve correctly in method parameters
-        let old_self_type = self.current_self_type;
-        self.current_self_type = Some(self.resolve_type(impl_type));
+        let old_self_type = self.trait_ctx.self_type;
+        self.trait_ctx.self_type = Some(self.resolve_type(impl_type));
 
         // Resolve return type
         let return_type = func
@@ -659,8 +668,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // Restore previous type params scope and bounds
-        self.current_type_params = old_type_params;
-        self.current_type_param_bounds = old_type_param_bounds;
+        self.trait_ctx.type_params = old_type_params;
+        self.trait_ctx.type_param_bounds = old_type_param_bounds;
 
         // Store type parameters for generic methods (for call site substitution)
         if !func.type_params.is_empty() {
@@ -671,7 +680,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Restore Self type
-        self.current_self_type = old_self_type;
+        self.trait_ctx.self_type = old_self_type;
 
         Some(TirFunction {
             name: func.name.clone(), // Will be mangled by caller

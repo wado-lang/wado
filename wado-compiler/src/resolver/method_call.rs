@@ -129,7 +129,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             };
             if let Some(name) = type_param_name
-                && let Some(bounds) = self.current_type_param_bounds.get(&name).cloned()
+                && let Some(bounds) = self.trait_ctx.type_param_bounds.get(&name).cloned()
                 && let Some((found_trait, info)) = {
                     let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
                     self.find_method_in_trait_bounds(
@@ -1051,19 +1051,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 .any(|p| p.self_kind != ast::SelfKind::None);
                             if method.name == method_name && !has_self {
                                 // Set up type parameters from impl block before resolving
-                                let old_type_params = std::mem::take(&mut self.current_type_params);
+                                let old_type_params =
+                                    std::mem::take(&mut self.trait_ctx.type_params);
 
                                 // Extract type params from impl block type (e.g., impl Array<T>)
                                 if let ast::Type::Generic(generic) = &impl_block.ty {
                                     for (i, arg) in generic.args.iter().enumerate() {
                                         if let ast::Type::Named(named) = arg {
                                             let name = &named.name;
-                                            if !self.current_type_params.contains_key(name) {
+                                            if !self.trait_ctx.type_params.contains_key(name) {
                                                 let type_id = self
                                                     .type_table
                                                     .borrow_mut()
                                                     .make_type_param(name.clone(), i as u32);
-                                                self.current_type_params
+                                                self.trait_ctx
+                                                    .type_params
                                                     .insert(name.clone(), (i as u32, type_id));
                                             }
                                         }
@@ -1077,7 +1079,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     .unwrap_or(TypeTable::UNIT);
 
                                 // Restore type parameters
-                                self.current_type_params = old_type_params;
+                                self.trait_ctx.type_params = old_type_params;
 
                                 return result;
                             }
@@ -1098,16 +1100,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             });
                         if method.name == method_name && !has_self {
                             // Set up type parameters from resource declaration before resolving
-                            let old_type_params = std::mem::take(&mut self.current_type_params);
+                            let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
 
                             for (i, param) in resource.type_params.iter().enumerate() {
                                 let name = &param.name;
-                                if !self.current_type_params.contains_key(name) {
+                                if !self.trait_ctx.type_params.contains_key(name) {
                                     let type_id = self
                                         .type_table
                                         .borrow_mut()
                                         .make_type_param(name.clone(), i as u32);
-                                    self.current_type_params
+                                    self.trait_ctx
+                                        .type_params
                                         .insert(name.clone(), (i as u32, type_id));
                                 }
                             }
@@ -1119,7 +1122,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 .unwrap_or(TypeTable::UNIT);
 
                             // Restore type parameters
-                            self.current_type_params = old_type_params;
+                            self.trait_ctx.type_params = old_type_params;
 
                             return result;
                         }
@@ -1143,19 +1146,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 if method.name == method_name && !has_self {
                                     // Set up type parameters from impl block before resolving
                                     let old_type_params =
-                                        std::mem::take(&mut self.current_type_params);
+                                        std::mem::take(&mut self.trait_ctx.type_params);
 
                                     // Extract type params from impl block type (e.g., impl Array<T>)
                                     if let ast::Type::Generic(generic) = &impl_block.ty {
                                         for (i, arg) in generic.args.iter().enumerate() {
                                             if let ast::Type::Named(named) = arg {
                                                 let name = &named.name;
-                                                if !self.current_type_params.contains_key(name) {
+                                                if !self.trait_ctx.type_params.contains_key(name) {
                                                     let type_id = self
                                                         .type_table
                                                         .borrow_mut()
                                                         .make_type_param(name.clone(), i as u32);
-                                                    self.current_type_params
+                                                    self.trait_ctx
+                                                        .type_params
                                                         .insert(name.clone(), (i as u32, type_id));
                                                 }
                                             }
@@ -1169,7 +1173,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         .unwrap_or(TypeTable::UNIT);
 
                                     // Restore type parameters
-                                    self.current_type_params = old_type_params;
+                                    self.trait_ctx.type_params = old_type_params;
 
                                     return result;
                                 }
@@ -1196,16 +1200,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             });
                         if method.name == method_name && !has_self {
                             // Set up type parameters from resource declaration before resolving
-                            let old_type_params = std::mem::take(&mut self.current_type_params);
+                            let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
 
                             for (i, param) in resource.type_params.iter().enumerate() {
                                 let name = &param.name;
-                                if !self.current_type_params.contains_key(name) {
+                                if !self.trait_ctx.type_params.contains_key(name) {
                                     let type_id = self
                                         .type_table
                                         .borrow_mut()
                                         .make_type_param(name.clone(), i as u32);
-                                    self.current_type_params
+                                    self.trait_ctx
+                                        .type_params
                                         .insert(name.clone(), (i as u32, type_id));
                                 }
                             }
@@ -1217,7 +1222,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 .unwrap_or(TypeTable::UNIT);
 
                             // Restore type parameters
-                            self.current_type_params = old_type_params;
+                            self.trait_ctx.type_params = old_type_params;
 
                             return result;
                         }

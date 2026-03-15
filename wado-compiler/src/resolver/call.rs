@@ -214,7 +214,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                     // Check if this is a type parameter static call (T::method where T: Trait)
                     else if let Some(&(_param_idx, type_param_type_id)) =
-                        self.current_type_params.get(prefix)
+                        self.trait_ctx.type_params.get(prefix)
                     {
                         return self.resolve_type_param_static_call(
                             prefix,
@@ -549,13 +549,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
             {
                 // Set up the function's type parameters in scope so we can resolve
                 // type parameter references (like T -> TypeParam { index: 0 })
-                let old_type_params = std::mem::take(&mut self.current_type_params);
+                let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
                 for (i, type_param) in type_params.iter().enumerate() {
                     let type_id = self
                         .type_table
                         .borrow_mut()
                         .make_type_param(type_param.name.clone(), i as u32);
-                    self.current_type_params
+                    self.trait_ctx
+                        .type_params
                         .insert(type_param.name.clone(), (i as u32, type_id));
                 }
 
@@ -624,7 +625,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self.enum_cases = old_enum_cases;
                 self.flags_cases = old_flags_cases;
                 self.resource_types = old_resource_types;
-                self.current_type_params = old_type_params;
+                self.trait_ctx.type_params = old_type_params;
 
                 return resolved;
             }
@@ -1060,18 +1061,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // Temporarily create TypeParam TypeIds for this method's type params
-        let old_type_params = self.current_type_params.clone();
-        let old_type_param_bounds = self.current_type_param_bounds.clone();
+        let saved_trait_ctx = self.trait_ctx.clone();
         let mut type_param_list: Vec<(String, TypeId)> = vec![];
         for (i, tp) in type_params.iter().enumerate() {
             let type_id = self
                 .type_table
                 .borrow_mut()
                 .make_type_param(tp.name.clone(), i as u32);
-            self.current_type_params
+            self.trait_ctx
+                .type_params
                 .insert(tp.name.clone(), (i as u32, type_id));
             if !tp.bounds.is_empty() {
-                self.current_type_param_bounds
+                self.trait_ctx
+                    .type_param_bounds
                     .insert(tp.name.clone(), tp.bounds.clone());
             }
             type_param_list.push((tp.name.clone(), type_id));
@@ -1084,9 +1086,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .map(|p| self.resolve_type(&p.ty))
             .collect();
 
-        // Restore type params
-        self.current_type_params = old_type_params;
-        self.current_type_param_bounds = old_type_param_bounds;
+        self.trait_ctx = saved_trait_ctx;
 
         // Unify resolved param types against actual arg types
         let mut type_param_map: IndexMap<TypeId, TypeId> = IndexMap::default();
@@ -1155,20 +1155,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // Temporarily register type params so resolve_type can find them
-        let saved = std::mem::take(&mut self.current_type_params);
+        let saved = std::mem::take(&mut self.trait_ctx.type_params);
         for (i, tp) in fn_type_params.iter().enumerate() {
             let idx = i as u32;
             let type_id = self
                 .type_table
                 .borrow_mut()
                 .make_type_param(tp.name.clone(), idx);
-            self.current_type_params
+            self.trait_ctx
+                .type_params
                 .insert(tp.name.clone(), (idx, type_id));
         }
 
         let param_types: Vec<TypeId> = fn_params.iter().map(|p| self.resolve_type(&p.ty)).collect();
 
-        self.current_type_params = saved;
+        self.trait_ctx.type_params = saved;
 
         // Substitute type params with explicit type args
         param_types
@@ -1241,7 +1242,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .iter()
             .any(|&t| self.type_table.borrow().contains_type_param(t));
 
-        if has_unresolved && self.current_type_params.is_empty() {
+        if has_unresolved && self.trait_ctx.type_params.is_empty() {
             return self
                 .type_table
                 .borrow_mut()
@@ -1266,7 +1267,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         call: &ast::CallExpr,
         _ctx: &mut FunctionContext,
     ) -> TirExpr {
-        let bounds = self.current_type_param_bounds.get(type_param_name).cloned();
+        let bounds = self
+            .trait_ctx
+            .type_param_bounds
+            .get(type_param_name)
+            .cloned();
 
         if let Some(bounds) = bounds
             && let Some((found_trait, method_info_result)) = {
