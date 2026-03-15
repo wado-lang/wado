@@ -453,13 +453,12 @@ async fn run_bulk(opts: &DumpOptions, template: &str) {
     let mut tasks: Vec<tokio::task::JoinHandle<Result<String, String>>> = Vec::new();
 
     for input in &opts.inputs {
-        // Skip files with TODO or compile_error in __DATA__ section
-        if let Ok(source) = fs::read_to_string(input)
-            && let Some(data_start) = source.find("\n__DATA__\n")
-        {
-            let data = &source[data_start..];
+        // Skip files with expected compilation failures: compile_error or TODO tests.
+        if let Ok(source) = fs::read_to_string(input) {
+            let data = source
+                .find("\n__DATA__\n")
+                .map_or("", |p| &source[p..]);
             if data.contains("\"TODO\"") || data.contains("\"compile_error\"") {
-                // Remove stale golden file if it exists
                 let name = Path::new(input)
                     .file_stem()
                     .map_or("unknown", |s| s.to_str().unwrap_or("unknown"));
@@ -538,7 +537,6 @@ async fn run_bulk(opts: &DumpOptions, template: &str) {
     }
 
     let mut success_count = 0;
-    let mut skip_count = 0;
 
     for task in tasks {
         match task.await {
@@ -546,18 +544,20 @@ async fn run_bulk(opts: &DumpOptions, template: &str) {
                 eprintln!("  Generated {output_path}");
                 success_count += 1;
             }
-            Ok(Err(warning)) => {
-                eprintln!("  WARNING: {warning}");
-                skip_count += 1;
+            Ok(Err(e)) => {
+                panic!(
+                    "Golden fixture generation failed: {e}\n\
+                     If this test is expected to fail at compile time, add \
+                     \"compile_error\" or \"TODO\" to its __DATA__ section."
+                );
             }
             Err(e) => {
-                eprintln!("  WARNING: Task panicked: {e}");
-                skip_count += 1;
+                panic!("Golden fixture generation task panicked: {e}");
             }
         }
     }
 
-    let skip_count = skip_count + skip_count_early;
+    let skip_count = skip_count_early;
     let elapsed = start.elapsed().as_secs_f64();
     eprintln!("Generated {success_count} files ({skip_count} skipped) in {elapsed:.2}s");
 }
@@ -574,7 +574,14 @@ async fn generate_output_params(
     opt_iterations: Option<u32>,
     input: &str,
 ) -> Result<String, String> {
-    let path = Path::new(input);
+    // Canonicalize to an absolute path so that #include_str / #include_bytes
+    // paths resolve correctly: loader builds CWD-relative paths from the
+    // filename, and the host joins with base_path — doubling happens unless
+    // both are absolute.
+    let abs_path = fs::canonicalize(input)
+        .map_err(|e| format!("Error resolving '{}': {e}", input))?;
+    let path = abs_path.as_path();
+    let input_abs = abs_path.to_string_lossy();
 
     // Read source file
     let source =
@@ -594,7 +601,7 @@ async fn generate_output_params(
     let result = wado_compiler::dump_with_host_and_world(
         &source,
         &host,
-        Some(input),
+        Some(&input_abs),
         opt_level,
         target_world.as_deref(),
         inline_threshold,
@@ -654,7 +661,15 @@ async fn generate_output_params(
 }
 
 async fn run_single(opts: &DumpOptions, input: &str) {
-    let path = Path::new(input);
+    let abs_path = match fs::canonicalize(input) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Error resolving '{}': {e}", input);
+            process::exit(1);
+        }
+    };
+    let path = abs_path.as_path();
+    let input_abs = abs_path.to_string_lossy();
 
     // Read source file
     let source = match fs::read_to_string(path) {
@@ -679,7 +694,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
     let result = match wado_compiler::dump_with_host_and_world(
         &source,
         &host,
-        Some(input),
+        Some(&input_abs),
         opts.opt_level,
         target_world.as_deref(),
         opts.inline_threshold,
