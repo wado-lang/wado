@@ -1656,7 +1656,18 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_comparison_chain(&mut self, chain: &ComparisonChainExpr) {
+        let first_needs_parens = matches!(&chain.first, Expr::Cast(_))
+            && chain
+                .comparisons
+                .first()
+                .is_some_and(|c| c.op == BinaryOp::Lt);
+        if first_needs_parens {
+            self.output.push('(');
+        }
         self.unparse_expr(&chain.first);
+        if first_needs_parens {
+            self.output.push(')');
+        }
         for cmp in &chain.comparisons {
             self.output.push(' ');
             self.output.push_str(binary_op_str(cmp.op));
@@ -2540,6 +2551,9 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
             }
             false
         }
+        // `x as T < y` is re-parsed as `x as T<y>` (generic type), so the cast
+        // must be parenthesized when it appears as the left operand of `<`.
+        Expr::Cast(_) if is_left && parent_op == BinaryOp::Lt => true,
         _ => false,
     }
 }
