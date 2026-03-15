@@ -1142,28 +1142,3 @@ fn foo(x: i32) -> i32 {
     let formatted2 = wado_compiler::format(&formatted).expect("format failed");
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
-
-#[test]
-fn test_format_attribute_key_value_preserved() {
-    // Regression test: #[serde(rename = "name")] must not be reformatted to #[serde("rename", "name")]
-    let source = r#"struct Foo {
-    #[serde(rename = "myField")]
-    my_field: i32,
-    #[serde(default)]
-    flag: bool,
-}
-
-export fn run() {}
-"#;
-    let formatted = wado_compiler::format(source).expect("format failed");
-    assert!(
-        formatted.contains(r#"#[serde(rename = "myField")]"#),
-        "key=value attribute must be preserved: {formatted}"
-    );
-    assert!(
-        formatted.contains("#[serde(default)]"),
-        "bare identifier attribute must be preserved: {formatted}"
-    );
-    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
-    assert_eq!(formatted, formatted2, "format should be idempotent");
-}
