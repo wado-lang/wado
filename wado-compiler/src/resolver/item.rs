@@ -236,7 +236,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let Some(attr) = attrs.iter().find(|a| a.name == "inline") else {
             return crate::tir::InlineHint::Auto;
         };
-        match attr.args.first().map(|a| a.as_str()) {
+        match attr.args.first().map(super::super::ast::AttrArg::as_str) {
             Some("always") => crate::tir::InlineHint::Always,
             Some("never") => crate::tir::InlineHint::Never,
             None => crate::tir::InlineHint::Hint,

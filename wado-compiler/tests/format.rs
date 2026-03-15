@@ -1202,7 +1202,10 @@ fn run() {
     let formatted = wado_compiler::format(source).expect("format failed");
     // Each continuation line should start with && (after indentation)
     let lines: Vec<&str> = formatted.lines().collect();
-    let continuation_lines: Vec<&&str> = lines.iter().filter(|l| l.trim_start().starts_with("&&")).collect();
+    let continuation_lines: Vec<&&str> = lines
+        .iter()
+        .filter(|l| l.trim_start().starts_with("&&"))
+        .collect();
     assert!(
         !continuation_lines.is_empty(),
         "&& should appear at start of continuation lines: {}",
