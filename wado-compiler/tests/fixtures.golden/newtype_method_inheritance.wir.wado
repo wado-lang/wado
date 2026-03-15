@@ -107,10 +107,6 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/Point::sum" = fn(ref Point) -> i32;
-
-type "functype/Point::add" = fn(ref Point, ref Point) -> ref Point;
-
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
@@ -120,8 +116,6 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
-
-type "functype/Point::add" = fn(ref Point, ref Point) -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -149,12 +143,14 @@ fn run() with Stdout {
     let __local_5: ref Formatter;
     let __local_6: ref String;
     let __local_7: ref Formatter;
-    let __local_10: ref String;
-    let __local_12: ref Formatter;
-    let __local_16: ref String;
-    let __local_18: ref Formatter;
-    let __local_21: ref String;
-    let __local_23: ref Formatter;
+    let __local_11: ref String;
+    let __local_13: ref Formatter;
+    let __local_19: ref String;
+    let __local_21: ref Formatter;
+    let __local_24: ref String;
+    let __local_26: ref Formatter;
+    let __sroa_loc3_x: i32;
+    let __sroa_loc3_y: i32;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -163,7 +159,7 @@ fn run() with Stdout {
     };
     loc1 = Point { x: 10, y: 20 };
     loc2 = Point { x: 5, y: 5 };
-    s = Point::sum(loc1);
+    s = loc1.x + loc1.y;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_4 = String { repr: builtin::array_new<u8>(21), used: 0 };
         String::append_char(__local_4, 115);
@@ -171,17 +167,16 @@ fn run() with Stdout {
         String::append_char(__local_4, 109);
         String::append_char(__local_4, 58);
         String::append_char(__local_4, 32);
-        __local_5 = __inline_Formatter__new_3: block -> ref Formatter {
-            __local_10 = __local_4;
-            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_10) };
+        __local_5 = __inline_Formatter__new_4: block -> ref Formatter {
+            __local_11 = __local_4;
+            break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_11) };
         };
-        __local_12 = __local_5;
-        i32::fmt_decimal(s, __local_12);
+        __local_13 = __local_5;
+        i32::fmt_decimal(s, __local_13);
         break __tmpl: __local_4;
     });
-    let __sroa_loc3_x: i32;
-    let __sroa_loc3_y: i32;
-    multivalue_bind [__sroa_loc3_x, __sroa_loc3_y] = Point::add(loc1, loc2);
+    __sroa_loc3_x = loc1.x + loc2.x;
+    __sroa_loc3_y = loc1.y + loc2.y;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_6 = String { repr: builtin::array_new<u8>(43), used: 0 };
         String::append_char(__local_6, 97);
@@ -192,20 +187,20 @@ fn run() with Stdout {
         String::append_char(__local_6, 58);
         String::append_char(__local_6, 32);
         String::append_char(__local_6, 40);
-        __local_7 = __inline_Formatter__new_7: block -> ref Formatter {
-            __local_16 = __local_6;
-            break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_16) };
+        __local_7 = __inline_Formatter__new_9: block -> ref Formatter {
+            __local_19 = __local_6;
+            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_19) };
         };
-        __local_18 = __local_7;
-        i32::fmt_decimal(__sroa_loc3_x, __local_18);
+        __local_21 = __local_7;
+        i32::fmt_decimal(__sroa_loc3_x, __local_21);
         String::append_char(__local_6, 44);
         String::append_char(__local_6, 32);
-        __local_7 = __inline_Formatter__new_10: block -> ref Formatter {
-            __local_21 = __local_6;
-            break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_21) };
+        __local_7 = __inline_Formatter__new_12: block -> ref Formatter {
+            __local_24 = __local_6;
+            break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_24) };
         };
-        __local_23 = __local_7;
-        i32::fmt_decimal(__sroa_loc3_y, __local_23);
+        __local_26 = __local_7;
+        i32::fmt_decimal(__sroa_loc3_y, __local_26);
         String::append_char(__local_6, 41);
         break __tmpl: __local_6;
     });
@@ -542,14 +537,6 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
-}
-
-fn Point::sum(self) {
-    return self.x + self.y;
-}
-
-fn Point::add(self, other) {
-    return self.x + other.x; self.y + other.y;
 }
 
 fn Formatter::write_char_n(self, c, n) {

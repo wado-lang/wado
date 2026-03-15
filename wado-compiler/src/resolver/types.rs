@@ -687,6 +687,9 @@ pub(super) struct TraitMethodMatch {
     /// For blanket impl matches (e.g., `impl<I: Iterator> IntoIterator for I`),
     /// this holds the type parameter name (e.g., `"I"`). `None` for normal impls.
     pub(super) blanket_type_param: Option<String>,
+    /// The struct name that actually has the trait impl (may differ from the
+    /// receiver's struct name when the impl was found through the newtype chain).
+    pub(super) impl_struct_name: String,
 }
 
 /// Cached per-module type maps for cross-module type resolution.

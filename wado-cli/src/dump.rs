@@ -902,6 +902,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
                             wado_compiler::tir::ResolvedType::AssocTypeProjection { .. } => {
                                 "assoc_type"
                             }
+                            wado_compiler::tir::ResolvedType::Flags { .. } => "flags",
                             wado_compiler::tir::ResolvedType::Unknown => "unknown",
                             wado_compiler::tir::ResolvedType::Error => "error",
                         };

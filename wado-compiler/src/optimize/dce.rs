@@ -1710,6 +1710,8 @@ fn collect_type_dependencies(
         ResolvedType::Newtype { base_type, .. } => {
             collect_type_transitive(*base_type, type_table, reachable);
         }
+        // Flags: depends on u32 (always reachable, no-op)
+        ResolvedType::Flags { .. } => {}
     }
 }
 

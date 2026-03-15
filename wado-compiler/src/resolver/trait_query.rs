@@ -121,6 +121,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let base_id = *base_type;
                 return self.type_implements_trait(base_id, trait_name);
             }
+            ResolvedType::Flags { .. } => {
+                // Flags inherit trait implementations from u32.
+                return self.type_implements_trait(TypeTable::U32, trait_name);
+            }
             _ => return false,
         };
 

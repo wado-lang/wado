@@ -374,12 +374,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             );
                     }
                     Item::Flags(flags_decl) => {
-                        // Create a newtype over u32 for the flags type
-                        let flags_type = type_table.borrow_mut().make_newtype(
-                            flags_decl.name.clone(),
-                            module_source.clone(),
-                            TypeTable::U32,
-                        );
+                        // Create a distinct Flags type (not a newtype over u32)
+                        let flags_type = type_table
+                            .borrow_mut()
+                            .make_flags(flags_decl.name.clone(), module_source.clone());
                         // Add to newtypes so it can be used as a type name in signatures
                         all_newtypes
                             .entry(module_source.clone())
