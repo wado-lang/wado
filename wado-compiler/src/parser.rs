@@ -3873,12 +3873,13 @@ impl Parser {
             }
         }
 
+        let close_span = self.peek().span;
         self.expect(&TokenKind::RBrace)?;
 
         Ok(WorldImport {
             effect_name,
             functions,
-            span: start_span,
+            span: start_span.merge(&close_span),
         })
     }
 

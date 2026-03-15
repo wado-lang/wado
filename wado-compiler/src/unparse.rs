@@ -1000,6 +1000,7 @@ impl<'a> Unparser<'a> {
         self.indent_level += 1;
 
         for imp in &w.imports {
+            self.emit_blank_lines_to(imp.span.line);
             self.write_indent();
             self.output.push_str("import ");
             self.output.push_str(&imp.effect_name);
@@ -1015,9 +1016,11 @@ impl<'a> Unparser<'a> {
 
             self.write_indent();
             self.output.push_str("}\n");
+            self.last_source_line = imp.span.end_line();
         }
 
         for exp in &w.exports {
+            self.emit_blank_lines_to(exp.span.line);
             self.write_indent();
             self.output.push_str("export ");
             if exp.is_async {
