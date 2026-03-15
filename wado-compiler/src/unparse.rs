@@ -798,6 +798,12 @@ impl<'a> Unparser<'a> {
     fn unparse_trait(&mut self, t: &TraitDecl) {
         self.write_indent();
 
+        for attr in &t.attrs {
+            self.unparse_attribute(attr);
+            self.output.push('\n');
+            self.write_indent();
+        }
+
         if t.is_pub {
             self.output.push_str("pub ");
         }
@@ -2512,6 +2518,7 @@ fn get_item_first_line(item: &Item) -> usize {
             .attributes
             .as_deref()
             .and_then(|a| a.first().map(|a| a.span.line)),
+        Item::Trait(t) => first_attr_line(&t.attrs),
         _ => None,
     };
     attr_line.unwrap_or(item_line).min(item_line)

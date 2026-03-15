@@ -1167,7 +1167,9 @@ test "parse-document-with-unicode-keys" {
 }
 
 test "parse-document-multilingual" {
-    if let Some(v) = parse_json("{\"english\": \"hello\", \"日本語\": \"こんにちは\", \"한국어\": \"안녕\"}") {
+    if let Some(v) = parse_json(
+        "{\"english\": \"hello\", \"日本語\": \"こんにちは\", \"한국어\": \"안녕\"}",
+    ) {
         if let Obj(map) = v {
             assert map.len() == 3;
         } else {
@@ -1191,7 +1193,9 @@ test "parse-array-of-emoji" {
 }
 
 test "parse-nested-unicode" {
-    if let Some(v) = parse_json("{\"user\": {\"name\": \"田中\", \"emoji\": \"🎯\"}, \"tags\": [\"日本\", \"東京\"]}") {
+    if let Some(v) = parse_json(
+        "{\"user\": {\"name\": \"田中\", \"emoji\": \"🎯\"}, \"tags\": [\"日本\", \"東京\"]}",
+    ) {
         if let Obj(map) = v {
             assert map.len() == 2;
         } else {

@@ -25,7 +25,7 @@ pub trait Ord {
 }
 /// Trait for providing a default value for a type.
 /// Types implementing this trait can produce a sensible "zero" or "empty" value.
-
+#[comp_feature("default")]
 pub trait Default {
     /// Returns the default value for this type.
     fn default() -> Self;
@@ -281,7 +281,7 @@ pub trait Iterator {
 /// Types implementing this trait can be used in `for-of` loops directly.
 pub trait IntoIterator {
     type Item;
-    type Iter;
+    type Iter: Iterator<Item = Self::Item>;
 
     /// Creates an iterator from a value.
     /// Note: Uses &self due to parser limitation (self by value not yet supported in traits).

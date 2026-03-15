@@ -66,6 +66,20 @@ trait Container {
     fn get(&self) -> Self::Item;
 }
 
+/// Trait with attribute (attribute must be preserved)
+#[comp_feature("default")]
+pub trait HasDefault {
+    fn default() -> Self;
+}
+
+/// Trait with associated type bound (bound must be preserved)
+pub trait HasBoundedAssocType {
+    type Item;
+    type Iter: Iterator<Item = Self::Item>;
+
+    fn into_iter(&self) -> Self::Iter;
+}
+
 /// Generic struct for bounded impl test
 struct MyArray<T> {
     items: Array<T>,

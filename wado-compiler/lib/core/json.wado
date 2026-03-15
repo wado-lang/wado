@@ -1721,7 +1721,9 @@ impl Deserializer for JsonDeserializer {
             }
             return Result::<bool, DeserializeError>::Ok(false);
         }
-        return Result::<bool, DeserializeError>::Err(DeserializeError::unexpected_type("expected bool", self.pos as i64));
+        return Result::<bool, DeserializeError>::Err(
+            DeserializeError::unexpected_type("expected bool", self.pos as i64),
+        );
     }
 
     fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
@@ -1755,7 +1757,10 @@ impl Deserializer for JsonDeserializer {
     fn is_null(&mut self) -> Result<bool, DeserializeError> {
         self.skip_whitespace();
         if self.pos + 4 <= self.input.len() {
-            if self.input.get_byte(self.pos) as i32 == 'n' as i32 && self.input.get_byte(self.pos + 1) as i32 == 'u' as i32 && self.input.get_byte(self.pos + 2) as i32 == 'l' as i32 && self.input.get_byte(self.pos + 3) as i32 == 'l' as i32 {
+            if self.input.get_byte(self.pos) as i32 == 'n' as i32
+                && self.input.get_byte(self.pos + 1) as i32 == 'u' as i32
+                && self.input.get_byte(self.pos + 2) as i32 == 'l' as i32
+                && self.input.get_byte(self.pos + 3) as i32 == 'l' as i32 {
                 self.pos += 4;
                 return Result::<bool, DeserializeError>::Ok(true);
             }
