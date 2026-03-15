@@ -1192,7 +1192,7 @@ impl<'a> Unparser<'a> {
     /// Try to render a single-statement block inline as `{ stmt }`.
     /// Returns true on success, false if it must fall back to multiline.
     /// Only eligible when the block has exactly one statement, no comments,
-    /// and the statement is an ExprStmt with an inline-safe expression.
+    /// and the statement is an `ExprStmt` with an inline-safe expression.
     fn try_unparse_block_inline(&mut self, block: &Block) -> bool {
         // Must be exactly one ExprStmt with an inline-safe expression
         let [Stmt::Expr(e)] = block.stmts.as_slice() else {
@@ -1202,7 +1202,11 @@ impl<'a> Unparser<'a> {
             return false;
         }
         // No comments inside the block
-        if !self.comments.comments_in_range(block.span.start, block.span.end).is_empty() {
+        if !self
+            .comments
+            .comments_in_range(block.span.start, block.span.end)
+            .is_empty()
+        {
             return false;
         }
         let snap = self.snapshot();
@@ -1338,11 +1342,12 @@ impl<'a> Unparser<'a> {
         if i.init.is_none() && i.else_block.is_none() {
             let snap = self.snapshot();
             self.output.push(' ');
-            if self.try_unparse_block_inline(&i.then_block) {
-                if !self.output[snap..].contains('\n') && !self.exceeds_width_since(snap) {
-                    self.output.push('\n');
-                    return;
-                }
+            if self.try_unparse_block_inline(&i.then_block)
+                && !self.output[snap..].contains('\n')
+                && !self.exceeds_width_since(snap)
+            {
+                self.output.push('\n');
+                return;
             }
             self.rollback(snap);
         }
@@ -1649,9 +1654,10 @@ impl<'a> Unparser<'a> {
         // Key-value list heuristic: if all elements are 2-element tuple literals,
         // format as one entry per line (Wasm CM associative array pattern).
         let is_kv_list = tuple_lit.elements.len() >= 2
-            && tuple_lit.elements.iter().all(|e| {
-                matches!(e, Expr::TupleLiteral(t) if t.elements.len() == 2)
-            });
+            && tuple_lit
+                .elements
+                .iter()
+                .all(|e| matches!(e, Expr::TupleLiteral(t) if t.elements.len() == 2));
 
         if is_kv_list {
             self.output.push('[');
@@ -2128,6 +2134,10 @@ impl<'a> Unparser<'a> {
 
     /// Try to format a match expression on a single line.
     fn try_inline_match(&mut self, m: &MatchExpr) -> bool {
+        // Match expressions with 3 or more arms are always formatted multiline
+        if m.arms.len() >= 3 {
+            return false;
+        }
         // All arms must have inline-safe bodies, and no comments inside the match body
         if m.arms.iter().any(|arm| !is_inline_safe_expr(&arm.body)) {
             return false;

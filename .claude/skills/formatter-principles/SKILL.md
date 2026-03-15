@@ -1,3 +1,8 @@
+---
+name: formatter-principles
+description: Formatter Development Principles
+---
+
 # Formatter Development Principles
 
 This document codifies the formatting rules for `wado-compiler/src/unparse.rs`.
@@ -32,7 +37,20 @@ A block is eligible for single-line rendering (`try_unparse_block_inline`) if:
 When these conditions are met, the block is rendered as `{ expr }` on the same line with no trailing semicolon.
 
 Currently `try_unparse_block_inline` is called from:
+
 - `unparse_if_stmt`: only when there is no `else` and no `init` binding. Falls back to multiline if the inline attempt wraps or exceeds width.
+
+## Match Expressions
+
+- **2 or fewer arms**: inline format attempted first (`match expr { P1 => e1, P2 => e2 }`), then falls back to multiline if it exceeds width or contains comments.
+- **3 or more arms**: always formatted multiline, one arm per line:
+  ```
+  match expr {
+      P1 => e1,
+      P2 => e2,
+      P3 => e3,
+  }
+  ```
 
 ## Tuple/Array Literals (`[...]`)
 
@@ -71,6 +89,7 @@ Three formatting strategies are tried in order:
 **`make format-wado` is destructive.** The formatter is rule-based and discards information that is not encoded in the AST (e.g. semicolons inside inline blocks, specific whitespace). Running it on uncommitted changes can silently destroy work.
 
 Rules:
+
 1. **Always commit (or stash) before running `make format-wado`.**
 2. After formatting, review the diff carefully.
 3. If the formatter has dropped meaningful information (e.g. a comment, a blank line that was intentional, or changed semantics), **reset the commit** (`git reset HEAD~1`) and fix the formatter first.
