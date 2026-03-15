@@ -21,8 +21,13 @@ impl Vec2 {
         return Vec2 { v: f64x2::splat(0.0) };
     }
 
-    fn x(&self) -> f64 { return self.v.extract_lane(0); }
-    fn y(&self) -> f64 { return self.v.extract_lane(1); }
+    fn x(&self) -> f64 {
+        return self.v.extract_lane(0);
+    }
+
+    fn y(&self) -> f64 {
+        return self.v.extract_lane(1);
+    }
 
     fn add(&self, other: &Vec2) -> Vec2 {
         return Vec2 { v: self.v + other.v };
@@ -117,13 +122,11 @@ impl AABB {
     }
 
     fn contains(&self, p: &Vec2) -> bool {
-        return p.x() >= self.min.x() && p.x() <= self.max.x()
-            && p.y() >= self.min.y() && p.y() <= self.max.y();
+        return p.x() >= self.min.x() && p.x() <= self.max.x() && p.y() >= self.min.y() && p.y() <= self.max.y();
     }
 
     fn intersects(&self, other: &AABB) -> bool {
-        return self.min.x() <= other.max.x() && self.max.x() >= other.min.x()
-            && self.min.y() <= other.max.y() && self.max.y() >= other.min.y();
+        return self.min.x() <= other.max.x() && self.max.x() >= other.min.x() && self.min.y() <= other.max.y() && self.max.y() >= other.min.y();
     }
 
     fn center(&self) -> Vec2 {
@@ -158,22 +161,22 @@ test "vec2 add sub" {
 test "dot product" {
     let a = Vec2::new(1.0, 0.0);
     let b = Vec2::new(0.0, 1.0);
-    assert approx_eq(a.dot(&b), 0.0); // perpendicular
+    assert approx_eq(a.dot(&b), 0.0);  // perpendicular
 
     let c = Vec2::new(3.0, 4.0);
-    assert approx_eq(a.dot(&c), 3.0); // projection on x-axis
+    assert approx_eq(a.dot(&c), 3.0);  // projection on x-axis
 }
 
 test "cross product" {
     let a = Vec2::new(1.0, 0.0);
     let b = Vec2::new(0.0, 1.0);
     assert approx_eq(a.cross(&b), 1.0);  // counterclockwise
-    assert approx_eq(b.cross(&a), -1.0); // clockwise
+    assert approx_eq(b.cross(&a), -1.0);  // clockwise
 }
 
 test "length and normalize" {
     let v = Vec2::new(3.0, 4.0);
-    assert approx_eq(v.length(), 5.0);   // 3-4-5 triangle
+    assert approx_eq(v.length(), 5.0);  // 3-4-5 triangle
     assert approx_eq(v.length_sq(), 25.0);
 
     let n = v.normalize();
@@ -193,7 +196,7 @@ test "perpendicular" {
     let p = v.perp();
     assert approx_eq(p.x(), 0.0);
     assert approx_eq(p.y(), 1.0);
-    assert approx_eq(v.dot(&p), 0.0); // must be perpendicular
+    assert approx_eq(v.dot(&p), 0.0);  // must be perpendicular
 }
 
 test "reflect" {
@@ -245,7 +248,7 @@ export fn run() with Stdout {
     println("");
     println("Ball reflection off angled wall:");
     let ball_dir = Vec2::new(1.0, -0.5).normalize();
-    let wall_normal = Vec2::new(-0.707, 0.707).normalize(); // 45-degree wall
+    let wall_normal = Vec2::new(-0.707, 0.707).normalize();  // 45-degree wall
     let bounce = ball_dir.reflect(&wall_normal);
     println(`  Incoming:  {ball_dir.to_string()}`);
     println(`  Normal:    {wall_normal.to_string()}`);
@@ -257,7 +260,7 @@ export fn run() with Stdout {
     let a = Vec2::new(0.0, 0.0);
     let b = Vec2::new(100.0, 50.0);
     for let mut i = 0; i <= 4; i += 1 {
-        let t = (i as f64) / 4.0;
+        let t = i as f64 / 4.0;
         let p = a.lerp(&b, t);
         let dist = a.distance(&p);
         println(`  t={t:0.2f}: {p.to_string()}  dist={dist:0.2f}`);

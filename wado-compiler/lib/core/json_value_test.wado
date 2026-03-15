@@ -157,10 +157,8 @@ test "Value::Object deserialize" {
 test "Value nested object with array deserialize" {
     let r = from_string::<Value>("{\"nums\":[1,2],\"flag\":true}");
     if let Ok(v) = r {
-        let expected = Value::Object(obj([
-            ["nums", Value::Array([Value::Number(1.0), Value::Number(2.0)])],
-            ["flag", Value::Bool(true)],
-        ]));
+        let expected = Value::Object(obj([["nums", Value::Array([Value::Number(1.0), Value::Number(2.0)])], ["flag",
+            Value::Bool(true)]]));
         assert v == expected;
     }
 }
@@ -175,13 +173,9 @@ test "Value round-trip null" {
 }
 
 test "Value round-trip nested" {
-    let original = Value::Object(obj([
-        ["name", Value::String("Alice")],
-        ["age", Value::Number(30.0)],
-        ["tags", Value::Array([Value::String("admin"), Value::String("user")])],
-        ["active", Value::Bool(true)],
-        ["notes", Value::Null],
-    ]));
+    let original = Value::Object(obj([["name", Value::String("Alice")], ["age", Value::Number(30.0)], ["tags",
+        Value::Array([Value::String("admin"), Value::String("user")])], ["active", Value::Bool(true)], ["notes",
+        Value::Null]]));
     let json_r = to_string::<Value>(&original);
     if let Ok(json) = json_r {
         let parsed_r = from_string::<Value>(json);

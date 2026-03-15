@@ -27,10 +27,21 @@ impl Color {
         return Color { v };
     }
 
-    fn r(&self) -> f32 { return self.v.extract_lane(0); }
-    fn g(&self) -> f32 { return self.v.extract_lane(1); }
-    fn b(&self) -> f32 { return self.v.extract_lane(2); }
-    fn a(&self) -> f32 { return self.v.extract_lane(3); }
+    fn r(&self) -> f32 {
+        return self.v.extract_lane(0);
+    }
+
+    fn g(&self) -> f32 {
+        return self.v.extract_lane(1);
+    }
+
+    fn b(&self) -> f32 {
+        return self.v.extract_lane(2);
+    }
+
+    fn a(&self) -> f32 {
+        return self.v.extract_lane(3);
+    }
 
     // Adjust brightness by multiplying RGB channels, preserving alpha
     fn brighten(&self, factor: f32) -> Color {
@@ -135,7 +146,7 @@ test "brighten" {
     assert approx_eq(bright.r(), 1.0);
     assert approx_eq(bright.g(), 0.8);
     assert approx_eq(bright.b(), 0.6);
-    assert approx_eq(bright.a(), 1.0); // alpha preserved
+    assert approx_eq(bright.a(), 1.0);  // alpha preserved
 }
 
 test "grayscale" {
@@ -173,7 +184,7 @@ test "invert" {
     assert approx_eq(inv.r(), 0.8);
     assert approx_eq(inv.g(), 0.6);
     assert approx_eq(inv.b(), 0.4);
-    assert approx_eq(inv.a(), 1.0); // alpha preserved
+    assert approx_eq(inv.a(), 1.0);  // alpha preserved
 }
 
 test "clamp" {
@@ -214,7 +225,7 @@ export fn run() with Stdout {
     println("");
     println("Gradient (sky -> sunset):");
     for let mut i = 0; i <= 4; i += 1 {
-        let t = (i as f32) / 4.0;
+        let t = i as f32 / 4.0;
         let c = sky_blue.lerp(&sunset, t);
         println(`  t={t}: {c.to_string()}`);
     }

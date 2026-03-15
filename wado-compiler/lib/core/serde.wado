@@ -59,7 +59,11 @@ impl DeserializeError {
     }
 
     pub fn trailing(offset: i64) -> DeserializeError {
-        return DeserializeError { kind: DeserializeErrorKind::TrailingData, message: "trailing data after value", offset };
+        return DeserializeError {
+            kind: DeserializeErrorKind::TrailingData,
+            message: "trailing data after value",
+            offset,
+        };
     }
 
     pub fn overflow(msg: String, offset: i64) -> DeserializeError {
@@ -90,10 +94,10 @@ pub trait SerializeVariant {
 
 
 pub trait Serializer {
-    type SeqSerializer: SerializeSeq;
-    type MapSerializer: SerializeMap;
-    type StructSerializer: SerializeStruct;
-    type VariantSerializer: SerializeVariant;
+    type SeqSerializer;
+    type MapSerializer;
+    type StructSerializer;
+    type VariantSerializer;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>;
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError>;
@@ -159,10 +163,10 @@ pub trait Visitor {
 }
 
 pub trait Deserializer {
-    type SeqAccess: DeserializeSeq;
-    type MapAccess: DeserializeMap;
-    type StructAccess: DeserializeStruct;
-    type VariantAccess: DeserializeVariant;
+    type SeqAccess;
+    type MapAccess;
+    type StructAccess;
+    type VariantAccess;
 
     fn deserialize_i32(&mut self) -> Result<i32, DeserializeError>;
     fn deserialize_i64(&mut self) -> Result<i64, DeserializeError>;
@@ -303,10 +307,12 @@ impl<T: Serialize> Serialize for Array<T> {
         if let Err(e) = seq {
             return Result::<(), SerializeError>::Err(e);
         }
-        return Result::<(), SerializeError>::Err(SerializeError { kind: SerializeErrorKind::Custom, message: "begin_seq failed" });
+        return Result::<(), SerializeError>::Err(SerializeError {
+            kind: SerializeErrorKind::Custom,
+            message: "begin_seq failed",
+        });
     }
 }
-
 
 
 impl<T: Serialize, E: Serialize> Serialize for Result<T, E> {
@@ -555,9 +561,11 @@ impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
                         return Result::<Result<T, E>, DeserializeError>::Err(e);
                     }
                 }
-                return Result::<Result<T, E>, DeserializeError>::Err(
-                    DeserializeError { kind: DeserializeErrorKind::UnknownVariant, message: `unknown Result variant: {name}`, offset: -1 }
-                );
+                return Result::<Result<T, E>, DeserializeError>::Err(DeserializeError {
+                    kind: DeserializeErrorKind::UnknownVariant,
+                    message: `unknown Result variant: {name}`,
+                    offset: -1,
+                });
             }
             if let Err(e) = name_r {
                 return Result::<Result<T, E>, DeserializeError>::Err(e);
@@ -569,4 +577,3 @@ impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
         unreachable();
     }
 }
-
