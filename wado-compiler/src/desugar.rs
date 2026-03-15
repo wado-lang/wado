@@ -223,7 +223,6 @@ fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
         Stmt::Expr(e) => Stmt::Expr(crate::ast::ExprStmt {
             expr: desugar_expr(&e.expr),
             span: e.span,
-            has_semicolon: e.has_semicolon,
         }),
         Stmt::Return(r) => Stmt::Return(ReturnStmt {
             value: r.value.as_ref().map(desugar_expr),
@@ -806,7 +805,6 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
                 stmts.push(Stmt::Expr(ExprStmt {
                     expr: desugar_expr(update),
                     span,
-                    has_semicolon: true,
                 }));
             }
             Block { stmts, span }
@@ -824,7 +822,6 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
                 then_stmts.push(Stmt::Expr(ExprStmt {
                     expr: desugar_expr(update),
                     span,
-                    has_semicolon: true,
                 }));
             }
 
@@ -858,7 +855,6 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
                 stmts.push(Stmt::Expr(ExprStmt {
                     expr: desugar_expr(update),
                     span,
-                    has_semicolon: true,
                 }));
             }
             Block { stmts, span }
@@ -1063,7 +1059,6 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
             stmts: vec![Stmt::Expr(ExprStmt {
                 expr: panic_call,
                 span,
-                has_semicolon: true,
             })],
             span,
         },

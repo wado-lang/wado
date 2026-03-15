@@ -84,18 +84,14 @@ fn encode_impl(data: &Array<u8>, table: &Array<u8>, pad: bool) -> String {
         let b0 = data[i] as i32;
         out.append_char(table[b0 >> 2 & 63] as char);
         out.append_char(table[b0 << 4 & 63] as char);
-        if pad {
-            out.append("==");
-        }
+        if pad { out.append("==") }
     } else if remainder == 2 {
         let b0 = data[i] as i32;
         let b1 = data[i + 1] as i32;
         out.append_char(table[b0 >> 2 & 63] as char);
         out.append_char(table[(b0 << 4 | b1 >> 4) & 63] as char);
         out.append_char(table[b1 << 2 & 63] as char);
-        if pad {
-            out.append_char('=');
-        }
+        if pad { out.append_char('=') }
     }
 
     return out;

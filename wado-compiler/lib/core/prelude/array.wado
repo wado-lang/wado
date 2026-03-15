@@ -102,9 +102,7 @@ impl IndexValue<i32> for Array<T> {
     type Output = T;
 
     fn index_value(&self, index: i32) -> Self::Output {
-        if index >= self.used {
-            panic("index out of bounds");
-        }
+        if index >= self.used { panic("index out of bounds") }
         return builtin::array_get::<T>(self.repr, index);
     }
 }
@@ -113,9 +111,7 @@ impl IndexAssign<i32> for Array<T> {
     type Input = T;
 
     fn index_assign(&mut self, index: i32, value: Self::Input) {
-        if index >= self.used {
-            panic("index out of bounds");
-        }
+        if index >= self.used { panic("index out of bounds") }
         builtin::array_set::<T>(self.repr, index, value);
     }
 }
@@ -211,9 +207,7 @@ impl IndexValue<i32> for ArraySlice<T> {
     type Output = T;
 
     fn index_value(&self, index: i32) -> Self::Output {
-        if index < 0 || index >= self.end - self.start {
-            panic("index out of bounds");
-        }
+        if index < 0 || index >= self.end - self.start { panic("index out of bounds") }
         return builtin::array_get::<T>(self.repr, self.start + index);
     }
 }
@@ -760,9 +754,7 @@ impl ArrayIter<T: Ord> {
         if let Some(first) = self.next() {
             let mut result = first;
             for let item of *self {
-                if let Less = item.cmp(&result) {
-                    result = item;
-                }
+                if let Less = item.cmp(&result) { result = item }
             }
             return Option::Some(result);
         } else {
@@ -774,9 +766,7 @@ impl ArrayIter<T: Ord> {
         if let Some(first) = self.next() {
             let mut result = first;
             for let item of *self {
-                if let Greater = item.cmp(&result) {
-                    result = item;
-                }
+                if let Greater = item.cmp(&result) { result = item }
             }
             return Option::Some(result);
         } else {

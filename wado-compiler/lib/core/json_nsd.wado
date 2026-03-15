@@ -62,9 +62,7 @@ pub struct NsdSerializer {
 
 impl SerializeSeq for NsdSeqSerializer {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        if self.count > 0 {
-            self.buf.append(",");
-        }
+        if self.count > 0 { self.buf.append(",") }
         let mut ser = NsdSerializer { buf: self.buf };
         let r = value.serialize::<NsdSerializer>(&mut ser);
         self.buf = ser.buf;
@@ -80,9 +78,7 @@ impl SerializeSeq for NsdSeqSerializer {
 
 impl SerializeMap for NsdMapSerializer {
     fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
-        if self.count > 0 {
-            self.buf.append(",");
-        }
+        if self.count > 0 { self.buf.append(",") }
         let mut ser = NsdSerializer { buf: self.buf };
         let r = key.serialize::<NsdSerializer>(&mut ser);
         self.buf = ser.buf;
@@ -108,9 +104,7 @@ impl SerializeMap for NsdMapSerializer {
 
 impl SerializeStruct for NsdStructSerializer {
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
-        if self.count > 0 {
-            self.buf.append(",");
-        }
+        if self.count > 0 { self.buf.append(",") }
         // NSD: omit field name, write value only
         let mut ser = NsdSerializer { buf: self.buf };
         let r = value.serialize::<NsdSerializer>(&mut ser);

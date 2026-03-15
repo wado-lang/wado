@@ -100,9 +100,7 @@ fn read_file(path: String) -> String with Preopens {
     let dirs = Preopens::get_directories();
     let root = dirs[0].0;
     let open_result = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read);
-    if let Err(_) = open_result {
-        panic(`failed to open {path}`);
-    }
+    if let Err(_) = open_result { panic(`failed to open {path}`) }
     let file = match open_result { Ok(f) => f, Err(_) => unreachable() };
     let [stream, _done] = file.read_via_stream(0 as Filesize);
     let mut buf = String::with_capacity(2 * 1024 * 1024);
@@ -134,9 +132,7 @@ export fn run() with Stdout, MonotonicClock, Preopens {
             total_events = total_events + catalog.events.len();
             total_performances = total_performances + catalog.performances.len();
         } else {
-            if let Err(e) = result {
-                println(`Parse error: {e.message}`);
-            }
+            if let Err(e) = result { println(`Parse error: {e.message}`) }
             break;
         }
     }

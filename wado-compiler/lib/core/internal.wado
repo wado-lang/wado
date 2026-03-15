@@ -174,9 +174,7 @@ pub fn wait_for_blocked(handle: i32) -> i32 {
 pub fn cm_stream_read_u8(handle: i32, max: i32) -> Array<u8> {
     let ptr = builtin::realloc(0, 0, 1, max);
     let mut result = builtin::stream_read(handle, ptr, max);
-    if result == -1 {
-        result = wait_for_blocked(handle);
-    }
+    if result == -1 { result = wait_for_blocked(handle) }
     let count = result >> 4;
     let arr = memory_to_gc_array(ptr, count);
     let freed = builtin::realloc(ptr, max, 1, 0);

@@ -46,9 +46,7 @@ struct MockSerializer {
 
 impl SerializeSeq for MockSeqSerializer {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        if self.count > 0 {
-            self.w.buf.append(",");
-        }
+        if self.count > 0 { self.w.buf.append(",") }
         let mut ser = MockSerializer { w: self.w };
         let r = value.serialize::<MockSerializer>(&mut ser);
         self.w = ser.w;
@@ -64,9 +62,7 @@ impl SerializeSeq for MockSeqSerializer {
 
 impl SerializeMap for MockMapSerializer {
     fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
-        if self.count > 0 {
-            self.w.buf.append(",");
-        }
+        if self.count > 0 { self.w.buf.append(",") }
         let mut ser = MockSerializer { w: self.w };
         let r = key.serialize::<MockSerializer>(&mut ser);
         self.w = ser.w;
@@ -90,9 +86,7 @@ impl SerializeMap for MockMapSerializer {
 
 impl SerializeStruct for MockStructSerializer {
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
-        if self.count > 0 {
-            self.w.buf.append(",");
-        }
+        if self.count > 0 { self.w.buf.append(",") }
         self.w.buf.append(`"{*name}":`);
         let mut ser = MockSerializer { w: self.w };
         let r = value.serialize::<MockSerializer>(&mut ser);

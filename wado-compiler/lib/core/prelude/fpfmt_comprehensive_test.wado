@@ -101,17 +101,13 @@ fn run_batch(bits: &Array<i64>, expected: &Array<String>, batch_name: String) ->
 
         if actual != exp {
             failures = failures + 1;
-            if failures <= 10 {
-                println(`FAIL [{batch_name}][{i}]: expected="{exp}", got="{actual}"`);
-            }
+            if failures <= 10 { println(`FAIL [{batch_name}][{i}]: expected="{exp}", got="{actual}"`) }
         }
 
         let parsed = parse_text(actual);
         if !parsed matches { Some(v) && v == f } {
             failures = failures + 1;
-            if failures <= 10 {
-                println(`FAIL [{batch_name}][{i}]: parse_text("{actual}") did not round-trip`);
-            }
+            if failures <= 10 { println(`FAIL [{batch_name}][{i}]: parse_text("{actual}") did not round-trip`) }
         }
     }
 

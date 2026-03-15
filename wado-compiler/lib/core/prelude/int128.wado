@@ -31,9 +31,7 @@ impl u128 {
         while i < len {
             let byte = builtin::array_get_u8(bytes, i);
             let digit = byte as i32 - '0' as i32;
-            if 0 <= digit && digit <= 9 {
-                result = result * ten + u128::from_u64(digit as u64);
-            }
+            if 0 <= digit && digit <= 9 { result = result * ten + u128::from_u64(digit as u64) }
             i += 1;
         }
         return result;
@@ -92,9 +90,7 @@ impl u128 {
     /// Panics if divisor is zero
     pub fn div_rem(&self, divisor: &u128) -> [u128, u128] {
         // Check for division by zero
-        if divisor.low == 0 && divisor.high == 0 {
-            panic("u128 division by zero");
-        }
+        if divisor.low == 0 && divisor.high == 0 { panic("u128 division by zero") }
 
         // Quick return if dividend < divisor
         if *self < *divisor {
@@ -119,9 +115,7 @@ impl u128 {
 
             // Get bit i of dividend and set bit 0 of remainder
             let bit = self.get_bit(i);
-            if bit {
-                remainder = remainder | one;
-            }
+            if bit { remainder = remainder | one }
 
             // If remainder >= divisor, subtract and set quotient bit
             if remainder >= *divisor {
@@ -592,9 +586,7 @@ impl i128 {
         while i < len {
             let byte = builtin::array_get_u8(bytes, i);
             let digit = byte as i32 - '0' as i32;
-            if 0 <= digit && digit <= 9 {
-                abs_value = abs_value * ten + u128::from_u64(digit as u64);
-            }
+            if 0 <= digit && digit <= 9 { abs_value = abs_value * ten + u128::from_u64(digit as u64) }
             i += 1;
         }
 
@@ -686,9 +678,7 @@ impl i128 {
     /// Panics if divisor is zero
     pub fn div_rem(&self, divisor: &i128) -> [i128, i128] {
         // Check for division by zero
-        if divisor.low == 0 && divisor.high == 0 {
-            panic("i128 division by zero");
-        }
+        if divisor.low == 0 && divisor.high == 0 { panic("i128 division by zero") }
 
         let dividend_neg = self.is_negative();
         let divisor_neg = divisor.is_negative();
@@ -705,15 +695,11 @@ impl i128 {
         // Apply signs
         // Quotient: negative if signs differ
         let mut quotient = i128::from_u128(abs_quotient);
-        if dividend_neg != divisor_neg {
-            quotient = quotient.neg();
-        }
+        if dividend_neg != divisor_neg { quotient = quotient.neg() }
 
         // Remainder: same sign as dividend
         let mut remainder = i128::from_u128(abs_remainder);
-        if dividend_neg {
-            remainder = remainder.neg();
-        }
+        if dividend_neg { remainder = remainder.neg() }
 
         return [quotient, remainder];
     }

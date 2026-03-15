@@ -87,9 +87,7 @@ impl String {
             return;
         }
         let new_used = self.used + len;
-        if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
-            self.grow(new_used);
-        }
+        if builtin::unlikely(new_used > builtin::array_len(self.repr)) { self.grow(new_used) }
         for let mut i = 0; i < len; i += 1 {
             builtin::array_set_u8(self.repr, self.used + i, builtin::i32_load8_u(ptr + i));
         }
@@ -102,9 +100,7 @@ impl String {
     /// caller MUST fill all `n` bytes before the string is observed.
     pub fn internal_reserve_uninit(&mut self, n: i32) -> i32 {
         let new_used = self.used + n;
-        if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
-            self.grow(new_used);
-        }
+        if builtin::unlikely(new_used > builtin::array_len(self.repr)) { self.grow(new_used) }
         let start = self.used;
         self.used = new_used;
         return start;
@@ -117,9 +113,7 @@ impl String {
             return;
         }
         let new_used = self.used + n;
-        if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
-            self.grow(new_used);
-        }
+        if builtin::unlikely(new_used > builtin::array_len(self.repr)) { self.grow(new_used) }
         builtin::array_fill::<u8>(self.repr, self.used, byte, n);
         self.used = new_used;
     }
@@ -134,9 +128,7 @@ impl String {
         }
 
         let new_used = self.used + other_len;
-        if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
-            self.grow(new_used);
-        }
+        if builtin::unlikely(new_used > builtin::array_len(self.repr)) { self.grow(new_used) }
 
         builtin::array_copy::<u8>(self.repr, self.used, other.internal_raw_bytes(), 0, other_len);
         self.used = new_used;
@@ -320,9 +312,7 @@ impl String {
     pub fn append_char(&mut self, c: char) {
         let code = c as u32;
 
-        if builtin::unlikely(self.used + 4 > builtin::array_len(self.repr)) {
-            self.grow(self.used + 4);
-        }
+        if builtin::unlikely(self.used + 4 > builtin::array_len(self.repr)) { self.grow(self.used + 4) }
 
         if code < 0x80 {
             builtin::array_set_u8(self.repr, self.used, code as u8);
@@ -605,7 +595,7 @@ impl String {
             let b0_opt: Option<u8> = match pending {
                 Some(b) => {
                     pending = null;
-                    Option::Some(b)
+                    Option::Some(b);
                 },
                 None => iter.next(),
             };

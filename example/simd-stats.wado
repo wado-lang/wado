@@ -97,9 +97,7 @@ fn normalize(data: &Array<f64>) -> Array<f64> {
         i = i + 2;
     }
 
-    if i < len {
-        result.append((*data[i] - s.mean) / sd);
-    }
+    if i < len { result.append((*data[i] - s.mean) / sd) }
 
     return result;
 }
@@ -118,9 +116,7 @@ fn dot_product(a: &Array<f64>, b: &Array<f64>) -> f64 {
     }
 
     let mut sum = sum_vec.extract_lane(0) + sum_vec.extract_lane(1);
-    if i < len {
-        sum = sum + *a[i] * *b[i];
-    }
+    if i < len { sum = sum + *a[i] * *b[i] }
 
     return sum;
 }
