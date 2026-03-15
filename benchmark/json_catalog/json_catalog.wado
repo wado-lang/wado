@@ -12,86 +12,86 @@ use { MonotonicClock } from "wasi:clocks";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 
 struct Event {
-    #[serde("default")]
+    #[serde(default)]
     description: Option<String>,
     id: i64,
-    #[serde("default")]
+    #[serde(default)]
     logo: Option<String>,
     name: String,
-    #[serde("rename", "subTopicIds")]
+    #[serde(rename = "subTopicIds")]
     sub_topic_ids: Array<i64>,
-    #[serde("default", "rename", "subjectCode")]
+    #[serde(default, rename = "subjectCode")]
     subject_code: Option<String>,
-    #[serde("default")]
+    #[serde(default)]
     subtitle: Option<String>,
-    #[serde("rename", "topicIds")]
+    #[serde(rename = "topicIds")]
     topic_ids: Array<i64>,
 }
 impl Deserialize for Event;
 
 struct Price {
     amount: i64,
-    #[serde("rename", "audienceSubCategoryId")]
+    #[serde(rename = "audienceSubCategoryId")]
     audience_sub_category_id: i64,
-    #[serde("rename", "seatCategoryId")]
+    #[serde(rename = "seatCategoryId")]
     seat_category_id: i64,
 }
 impl Deserialize for Price;
 
 struct Area {
-    #[serde("rename", "areaId")]
+    #[serde(rename = "areaId")]
     area_id: i64,
-    #[serde("rename", "blockIds")]
+    #[serde(rename = "blockIds")]
     block_ids: Array<i64>,
 }
 impl Deserialize for Area;
 
 struct SeatCategory {
     areas: Array<Area>,
-    #[serde("rename", "seatCategoryId")]
+    #[serde(rename = "seatCategoryId")]
     seat_category_id: i64,
 }
 impl Deserialize for SeatCategory;
 
 struct Performance {
-    #[serde("rename", "eventId")]
+    #[serde(rename = "eventId")]
     event_id: i64,
     id: i64,
-    #[serde("default")]
+    #[serde(default)]
     logo: Option<String>,
-    #[serde("default")]
+    #[serde(default)]
     name: Option<String>,
     prices: Array<Price>,
-    #[serde("rename", "seatCategories")]
+    #[serde(rename = "seatCategories")]
     seat_categories: Array<SeatCategory>,
-    #[serde("default", "rename", "seatMapImage")]
+    #[serde(default, rename = "seatMapImage")]
     seat_map_image: Option<String>,
     start: i64,
-    #[serde("rename", "venueCode")]
+    #[serde(rename = "venueCode")]
     venue_code: String,
 }
 impl Deserialize for Performance;
 
 struct CitmCatalog {
-    #[serde("rename", "areaNames")]
+    #[serde(rename = "areaNames")]
     area_names: TreeMap<String, String>,
-    #[serde("rename", "audienceSubCategoryNames")]
+    #[serde(rename = "audienceSubCategoryNames")]
     audience_sub_category_names: TreeMap<String, String>,
-    #[serde("rename", "blockNames")]
+    #[serde(rename = "blockNames")]
     block_names: TreeMap<String, String>,
     events: TreeMap<String, Event>,
     performances: Array<Performance>,
-    #[serde("rename", "seatCategoryNames")]
+    #[serde(rename = "seatCategoryNames")]
     seat_category_names: TreeMap<String, String>,
-    #[serde("rename", "subTopicNames")]
+    #[serde(rename = "subTopicNames")]
     sub_topic_names: TreeMap<String, String>,
-    #[serde("rename", "subjectNames")]
+    #[serde(rename = "subjectNames")]
     subject_names: TreeMap<String, String>,
-    #[serde("rename", "topicNames")]
+    #[serde(rename = "topicNames")]
     topic_names: TreeMap<String, String>,
-    #[serde("rename", "topicSubTopics")]
+    #[serde(rename = "topicSubTopics")]
     topic_sub_topics: TreeMap<String, Array<i64>>,
-    #[serde("rename", "venueNames")]
+    #[serde(rename = "venueNames")]
     venue_names: TreeMap<String, String>,
 }
 impl Deserialize for CitmCatalog;

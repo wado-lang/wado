@@ -113,12 +113,13 @@ fn fq_name_from_attrs(attrs: &[crate::ast::Attribute]) -> Option<String> {
         .iter()
         .find(|a| a.name == "wasi")
         .and_then(|a| a.args.first())
-        .map(|s| {
+        .map(|arg| {
+            let s = arg.as_str();
             // Strip version suffix (e.g., "@0.3.0-rc-2026-01-06")
             if let Some(at_pos) = s.find('@') {
                 s[..at_pos].to_string()
             } else {
-                s.clone()
+                s.to_string()
             }
         })
 }

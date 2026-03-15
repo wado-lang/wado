@@ -3,15 +3,15 @@
 // Converts AST back to canonical source code with comments.
 
 use crate::ast::{
-    AssertStmt, AssignExpr, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
-    ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, EffectDecl,
-    EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
-    Function, FunctionType, GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr,
-    Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr,
-    Module, Newtype, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr,
-    Stmt, StructDecl, StructField, StructLiteralExpr, TemplateStringExpr, TestDecl, TraitDecl,
-    TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
-    VariantDecl, WhileStmt, WorldDecl,
+    AssertStmt, AssignExpr, AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr,
+    CastExpr, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
+    EffectDecl, EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt,
+    ForStmt, Function, FunctionType, GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes,
+    IndexExpr, Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr,
+    MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind,
+    StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr, TemplateStringExpr,
+    TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl, UseItem,
+    UseItemSimple, VariantCase, VariantDecl, WhileStmt, WorldDecl,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::hashmap::IndexSet;
@@ -343,6 +343,25 @@ impl<'a> Unparser<'a> {
         self.unparse_type(&param.ty);
     }
 
+    fn unparse_attr_arg(&mut self, arg: &AttrArg) {
+        match arg {
+            AttrArg::Str(s) => {
+                self.output.push('"');
+                self.output.push_str(s);
+                self.output.push('"');
+            }
+            AttrArg::Ident(s) => {
+                self.output.push_str(s);
+            }
+            AttrArg::KeyValue(k, v) => {
+                self.output.push_str(k);
+                self.output.push_str(" = \"");
+                self.output.push_str(v);
+                self.output.push('"');
+            }
+        }
+    }
+
     fn unparse_attribute(&mut self, attr: &Attribute) {
         self.output.push_str("#[");
         self.output.push_str(&attr.name);
@@ -352,9 +371,7 @@ impl<'a> Unparser<'a> {
                 if i > 0 {
                     self.output.push_str(", ");
                 }
-                self.output.push('"');
-                self.output.push_str(arg);
-                self.output.push('"');
+                self.unparse_attr_arg(arg);
             }
             self.output.push(')');
         }
