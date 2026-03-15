@@ -31,10 +31,6 @@ pub struct Unparser<'a> {
     indent_level: usize,
     emitted_comments: IndexSet<usize>,
     last_source_line: usize,
-    /// True while rendering the body of a single-statement block that is being
-    /// inlined onto one line (e.g. `{ expr }`).  Expression statements omit
-    /// their trailing semicolon and newline in this mode.
-    in_inline_block: bool,
 }
 
 impl<'a> Unparser<'a> {
@@ -45,7 +41,6 @@ impl<'a> Unparser<'a> {
             indent_level: 0,
             emitted_comments: IndexSet::default(),
             last_source_line: 0,
-            in_inline_block: false,
         }
     }
 
@@ -1189,39 +1184,6 @@ impl<'a> Unparser<'a> {
         self.last_source_line = saved_line.max(block.span.end_line());
     }
 
-    /// Try to render a single-statement block inline as `{ stmt }`.
-    /// Returns true on success, false if it must fall back to multiline.
-    /// Only eligible when the block has exactly one statement, no comments,
-    /// and the statement is an `ExprStmt` with an inline-safe expression.
-    fn try_unparse_block_inline(&mut self, block: &Block) -> bool {
-        // Must be exactly one ExprStmt with an inline-safe expression
-        let [Stmt::Expr(e)] = block.stmts.as_slice() else {
-            return false;
-        };
-        if !is_inline_safe_expr(&e.expr) {
-            return false;
-        }
-        // No comments inside the block
-        if !self
-            .comments
-            .comments_in_range(block.span.start, block.span.end)
-            .is_empty()
-        {
-            return false;
-        }
-        let snap = self.snapshot();
-        self.output.push_str("{ ");
-        self.in_inline_block = true;
-        self.unparse_expr_stmt(e);
-        self.in_inline_block = false;
-        self.output.push_str(" }");
-        if self.output[snap..].contains('\n') || self.exceeds_width_since(snap) {
-            self.rollback(snap);
-            return false;
-        }
-        true
-    }
-
     fn unparse_stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::Let(l) => self.unparse_let(l),
@@ -1233,6 +1195,7 @@ impl<'a> Unparser<'a> {
             Stmt::For(f) => self.unparse_for(f),
             Stmt::ForOf(f) => self.unparse_for_of(f),
             Stmt::Loop(l) => self.unparse_loop(l),
+            Stmt::Match(m) => self.unparse_match_stmt(m),
             Stmt::Break(b) => self.unparse_break(b),
             Stmt::Continue(_) => self.unparse_continue(),
             Stmt::Assert(a) => self.unparse_assert(a),
@@ -1279,21 +1242,9 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_expr_stmt(&mut self, e: &ExprStmt) {
-        if !self.in_inline_block {
-            self.write_indent();
-        }
+        self.write_indent();
         self.unparse_expr(&e.expr);
-        if self.in_inline_block {
-            // Single-statement block folded to one line: omit trailing semicolon
-            return;
-        }
-        // match expressions used as statements don't need a trailing semicolon
-        // (same as if/while/loop/for which are separate Stmt variants).
-        if matches!(e.expr, Expr::Match(_)) {
-            self.output.push('\n');
-        } else {
-            self.output.push_str(";\n");
-        }
+        self.output.push_str(";\n");
     }
 
     fn unparse_return(&mut self, r: &ReturnStmt) {
@@ -1336,22 +1287,6 @@ impl<'a> Unparser<'a> {
         }
 
         self.unparse_condition(&i.condition);
-
-        // Try inline single-statement block: `if cond { expr }` on one line.
-        // Only when there's no else and no init.
-        if i.init.is_none() && i.else_block.is_none() {
-            let snap = self.snapshot();
-            self.output.push(' ');
-            if self.try_unparse_block_inline(&i.then_block)
-                && !self.output[snap..].contains('\n')
-                && !self.exceeds_width_since(snap)
-            {
-                self.output.push('\n');
-                return;
-            }
-            self.rollback(snap);
-        }
-
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
@@ -1545,6 +1480,12 @@ impl<'a> Unparser<'a> {
 
         self.write_indent();
         self.output.push_str("}\n");
+    }
+
+    fn unparse_match_stmt(&mut self, m: &MatchExpr) {
+        self.write_indent();
+        self.unparse_match_multiline(m);
+        self.output.push('\n');
     }
 
     fn unparse_break(&mut self, b: &BreakStmt) {
@@ -2644,6 +2585,7 @@ fn get_stmt_span(stmt: &Stmt) -> Span {
         Stmt::For(f) => f.span,
         Stmt::ForOf(f) => f.span,
         Stmt::Loop(l) => l.span,
+        Stmt::Match(m) => m.span,
         Stmt::Break(b) => b.span,
         Stmt::Continue(c) => c.span,
         Stmt::Assert(a) => a.span,
@@ -3143,6 +3085,9 @@ fn unparse_stmt_into(stmt: &Stmt, output: &mut String) {
         Stmt::Loop(l) => {
             output.push_str("loop ");
             unparse_block_expr_into(&l.body, output);
+        }
+        Stmt::Match(m) => {
+            unparse_match_into(m, output);
         }
         Stmt::Break(_) => output.push_str("break;"),
         Stmt::Continue(_) => output.push_str("continue;"),

@@ -429,6 +429,7 @@ pub enum Stmt {
     For(ForStmt),
     ForOf(ForOfStmt),
     Loop(LoopStmt),
+    Match(Box<MatchExpr>),
     Break(BreakStmt),
     Continue(ContinueStmt),
     Assert(AssertStmt),

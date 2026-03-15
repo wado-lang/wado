@@ -994,17 +994,15 @@ impl Parser {
 
     /// Parse a match statement (no trailing semicolon required, like if/while/loop).
     fn parse_match_stmt(&mut self) -> ParseResult<Stmt> {
-        let start_span = self.peek().span;
         let expr = self.parse_match_expr()?;
         // Trailing semicolon is optional (consumed if present)
         if self.check(&TokenKind::Semicolon) {
             self.advance();
         }
-        let end_span = expr.span();
-        Ok(Stmt::Expr(ExprStmt {
-            expr,
-            span: start_span.merge(&end_span),
-        }))
+        let Expr::Match(m) = expr else {
+            unreachable!("parse_match_expr must return Expr::Match");
+        };
+        Ok(Stmt::Match(m))
     }
 
     /// Parse an expression statement in a block, with optional trailing semicolon

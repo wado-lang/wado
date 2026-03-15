@@ -286,6 +286,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             Stmt::For(for_stmt) => self.bind_for(for_stmt)?,
             Stmt::ForOf(for_of_stmt) => self.bind_for_of(for_of_stmt)?,
             Stmt::Loop(loop_stmt) => self.bind_loop(loop_stmt)?,
+            Stmt::Match(match_expr) => self.bind_match_expr(match_expr)?,
             Stmt::Break(_) => {}    // No bindings for break
             Stmt::Continue(_) => {} // No bindings for continue
             Stmt::Assert(assert_stmt) => self.bind_assert(assert_stmt)?,

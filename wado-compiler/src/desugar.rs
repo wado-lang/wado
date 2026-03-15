@@ -251,6 +251,20 @@ fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
             ctx.for_loop_labels = saved_labels;
             Stmt::Loop(LoopStmt { body, span: l.span })
         }
+        Stmt::Match(m) => Stmt::Match(Box::new(MatchExpr {
+            expr: desugar_expr(&m.expr),
+            arms: m
+                .arms
+                .iter()
+                .map(|arm| MatchArm {
+                    pattern: arm.pattern.clone(),
+                    guard: arm.guard.as_ref().map(desugar_expr),
+                    body: desugar_expr(&arm.body),
+                    span: arm.span,
+                })
+                .collect(),
+            span: m.span,
+        })),
         Stmt::Break(b) => {
             // If we're inside a For loop and this is an unlabeled break,
             // transform it to break the outer loop label
