@@ -387,6 +387,13 @@ pub enum ResolvedType {
         /// The direct base type (may be another newtype for chained newtypes)
         base_type: TypeId,
     },
+    /// Flags: a bitmask type over u32.
+    /// Created by `flags F { A, B, C }` declarations.
+    /// Distinct from Newtype so flags can be detected without name-based lookup.
+    Flags {
+        name: String,
+        module_source: ModuleSource,
+    },
     Unknown,
     Error,
 }
@@ -402,7 +409,8 @@ impl ResolvedType {
             | Self::Variant { module_source, .. }
             | Self::GenericInstance { module_source, .. }
             | Self::GenericResource { module_source, .. }
-            | Self::Newtype { module_source, .. } => module_source.to_path(),
+            | Self::Newtype { module_source, .. }
+            | Self::Flags { module_source, .. } => module_source.to_path(),
             _ => vec![],
         }
     }
@@ -422,6 +430,10 @@ pub struct TypeTable {
     /// Associated type resolutions: `(concrete_type_id, assoc_name)` → `resolved_type_id`.
     /// Populated when impl blocks with associated type bindings are processed.
     assoc_type_resolutions: IndexMap<(TypeId, String), TypeId>,
+    /// Erasure redirects: set by `erase_newtypes_and_flags()`.
+    /// After erasure, `get(id)` for any erased `TypeId` returns the base type.
+    /// Newtype → ultimate base type; Flags → u32.
+    redirects: IndexMap<TypeId, TypeId>,
 }
 
 impl Default for TypeTable {
@@ -461,6 +473,7 @@ impl TypeTable {
             result_module_source: None,
             default_trait_module_source: None,
             assoc_type_resolutions: IndexMap::default(),
+            redirects: IndexMap::default(),
         };
 
         // Pre-populate primitive types matching the constants above
@@ -500,6 +513,7 @@ impl TypeTable {
     }
 
     pub fn get(&self, id: TypeId) -> &ResolvedType {
+        let id = self.redirects.get(&id).copied().unwrap_or(id);
         self.types
             .get(&id)
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
@@ -926,6 +940,33 @@ impl TypeTable {
         })
     }
 
+    /// Create a flags type (bitmask over u32)
+    pub fn make_flags(&mut self, name: String, module_source: ModuleSource) -> TypeId {
+        self.intern(ResolvedType::Flags {
+            name,
+            module_source,
+        })
+    }
+
+    /// Erase all `Newtype` and `Flags` entries from the type table by populating
+    /// the redirect map. After this call, `get(id)` for any erased `TypeId` returns
+    /// its ultimate base type (`Newtype` chains) or `u32` (`Flags`).
+    ///
+    /// Must be called after resolve and synthesis, before monomorphize.
+    pub fn erase_newtypes_and_flags(&mut self) {
+        let ids: Vec<TypeId> = self.types.keys().copied().collect();
+        for id in ids {
+            let redirect = match self.types.get(&id).unwrap() {
+                ResolvedType::Newtype { .. } => Some(self.get_ultimate_base_type(id)),
+                ResolvedType::Flags { .. } => Some(TypeTable::U32),
+                _ => None,
+            };
+            if let Some(target) = redirect {
+                self.redirects.insert(id, target);
+            }
+        }
+    }
+
     /// Get the base type if this is a newtype, or None otherwise
     pub fn get_newtype_base(&self, id: TypeId) -> Option<TypeId> {
         if let ResolvedType::Newtype { base_type, .. } = self.get(id) {
@@ -936,13 +977,28 @@ impl TypeTable {
     }
 
     /// Get the ultimate base type by following the chain of newtypes.
-    /// Returns the original type if it's not a newtype.
+    /// `Flags` types ultimately resolve to `u32`.
+    /// Returns the original type if it's not a newtype or flags.
     pub fn get_ultimate_base_type(&self, id: TypeId) -> TypeId {
-        let mut current = id;
-        while let ResolvedType::Newtype { base_type, .. } = self.get(current) {
-            current = *base_type;
+        // Fast path: after erasure, redirects always point directly to the ultimate base.
+        if let Some(&redirect) = self.redirects.get(&id) {
+            return redirect;
         }
-        current
+        let mut current = id;
+        loop {
+            match self
+                .types
+                .get(&current)
+                .unwrap_or_else(|| panic!("TypeId {current:?} not found in TypeTable"))
+            {
+                ResolvedType::Newtype { base_type, .. } => {
+                    // Use redirect if already computed; otherwise follow the raw chain.
+                    current = self.redirects.get(base_type).copied().unwrap_or(*base_type);
+                }
+                ResolvedType::Flags { .. } => return TypeTable::U32,
+                _ => return current,
+            }
+        }
     }
 
     /// Check if two types share a common base type (for cast validation).
@@ -1049,7 +1105,7 @@ impl TypeTable {
                 let arg_names: Vec<String> = type_args.iter().map(|t| self.type_name(*t)).collect();
                 format!("{}<{}>", name, arg_names.join(", "))
             }
-            ResolvedType::Newtype { name, .. } => name.clone(),
+            ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => name.clone(),
         }
     }
 
@@ -1070,20 +1126,31 @@ impl TypeTable {
     /// - `GenericInstance`: `Name<T1,T2,...>`
     /// - Ref/MutRef: inner type (references are stripped for mangling)
     ///
-    /// Resolve through newtypes to find the base type.
-    /// Returns the original `TypeId` if not a newtype.
+    /// Resolve through newtypes/flags to find the base type.
+    /// Returns the original `TypeId` if not a newtype or flags.
     #[must_use]
     pub fn resolve_newtype_base(&self, id: TypeId) -> TypeId {
+        // Fast path: after erasure, redirects already point to the base.
+        if let Some(&redirect) = self.redirects.get(&id) {
+            return redirect;
+        }
         let mut current = id;
         loop {
-            match self.get(current) {
-                ResolvedType::Newtype { base_type, .. } => current = *base_type,
+            match self
+                .types
+                .get(&current)
+                .unwrap_or_else(|| panic!("TypeId {current:?} not found in TypeTable"))
+            {
+                ResolvedType::Newtype { base_type, .. } => {
+                    current = self.redirects.get(base_type).copied().unwrap_or(*base_type);
+                }
+                ResolvedType::Flags { .. } => return TypeTable::U32,
                 _ => return current,
             }
         }
     }
 
-    /// Mangle a type name, resolving all newtypes to their base types recursively.
+    /// Mangle a type name, resolving all newtypes/flags to their base types recursively.
     /// E.g., `Array<FieldName>` → `Array<String>` when `FieldName = String`.
     pub fn mangle_type_name_resolving_newtypes(&self, id: TypeId) -> String {
         let base = self.resolve_newtype_base(id);
@@ -1270,6 +1337,7 @@ impl TypeTable {
             | ResolvedType::Resource { name, .. }
             | ResolvedType::Variant { name, .. }
             | ResolvedType::Newtype { name, .. }
+            | ResolvedType::Flags { name, .. }
             | ResolvedType::TypeParam { name, .. } => TypeNameInfo::Named(name.clone()),
             ResolvedType::GenericInstance {
                 name, type_args, ..
@@ -2116,7 +2184,7 @@ pub struct TirEnumCase {
 
 /// A flags type declaration (bitmask type, like WIT flags)
 /// e.g., `flags PathFlags { SymlinkFollow }`
-/// Represented as a newtype over u32; each member is a bitmask value (1 << index).
+/// Represented as `ResolvedType::Flags`; each member is a bitmask value (1 << index).
 #[derive(Debug, Clone)]
 pub struct TirFlags {
     pub name: String,

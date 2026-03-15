@@ -367,7 +367,17 @@ pub async fn compile_with_options<H: CompilerHost>(
         })?
     };
 
-    // === Phase 8: Monomorphize (Project -> Project) ===
+    // === Phase 8b: Erase Newtypes and Flags (Project -> Project) ===
+    // After synthesis (which needs full type info) and before monomorphize
+    // (which must not see Newtype/Flags). Newtypes → ultimate base; Flags → u32.
+    let project = {
+        for module in project.tir_modules.values() {
+            module.type_table.borrow_mut().erase_newtypes_and_flags();
+        }
+        project
+    };
+
+    // === Phase 8c: Monomorphize (Project -> Project) ===
     let project = {
         let _span = logger.span("monomorphize");
         monomorphize_project(project)
@@ -622,6 +632,11 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 Bail
             })?
         };
+
+        // Erase Newtypes and Flags (after synthesis, before monomorphize)
+        for module in project.tir_modules.values() {
+            module.type_table.borrow_mut().erase_newtypes_and_flags();
+        }
 
         // Monomorphize
         let project = {

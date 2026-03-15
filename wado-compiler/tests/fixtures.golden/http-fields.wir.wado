@@ -177,7 +177,7 @@ struct [Stream<u8>, StreamWritable<u8>] {
     mut 1: i32,
 }
 
-struct [Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>] {
+struct [Future<Result<Option<Fields>,ErrorCode>>, FutureWritable<Result<Option<Fields>,ErrorCode>>] {
     mut 0: i32,
     mut 1: i32,
 }
@@ -272,12 +272,12 @@ struct Result<unit,HeaderError>::Err {
     payload_0: ref "wasi:http/types.wado/HeaderError",
 }
 
-variant Option<Trailers> {
+variant Option<Fields> {
     Some(i32),
     None,
 }
 
-struct Option<Trailers>::Some {
+struct Option<Fields>::Some {
     discriminant: i32,
     payload_0: i32,
 }
@@ -292,17 +292,17 @@ struct Result<unit,ErrorCode>::Err {
     payload_0: ref "wasi:http/types.wado/ErrorCode",
 }
 
-variant Result<Option<Trailers>,ErrorCode> {
-    Ok(ref Option<Trailers>),
+variant Result<Option<Fields>,ErrorCode> {
+    Ok(ref Option<Fields>),
     Err(ref "wasi:http/types.wado/ErrorCode"),
 }
 
-struct Result<Option<Trailers>,ErrorCode>::Ok {
+struct Result<Option<Fields>,ErrorCode>::Ok {
     discriminant: i32,
-    payload_0: ref Option<Trailers>,
+    payload_0: ref Option<Fields>,
 }
 
-struct Result<Option<Trailers>,ErrorCode>::Err {
+struct Result<Option<Fields>,ErrorCode>::Err {
     discriminant: i32,
     payload_0: ref "wasi:http/types.wado/ErrorCode",
 }
@@ -610,7 +610,7 @@ fn handle(request) {
     let __packed_188: i64;
     let __ptr_189: i32;
     let __len_190: i32;
-    let __pattern_temp_2: ref "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]";
+    let __pattern_temp_2: ref "tuple/[Future<Result<Option<Fields>,ErrorCode>>, FutureWritable<Result<Option<Fields>,ErrorCode>>]";
     let __local_196: ref String;
     let __local_198: ref Formatter;
     let __local_201: ref String;
@@ -679,7 +679,7 @@ condition: !has_before
         __local_5 = Array<u8> { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
         break __seq_lit: __local_5;
     };
-    value = bytes;
+    value = value_copy Array<u8>(bytes);
     append_result = __cm_adapter__Fields_append(fields, String { repr: array.new_data<u8>("x-test"), used: 6 }, value);
     if ref.test Result<unit,HeaderError>::Err(append_result) {
         e_9 = value_copy "wasi:http/types.wado/HeaderError"(ref.cast Result<unit,HeaderError>::Err(append_result).payload_0);
@@ -864,7 +864,7 @@ condition: cloned_still_has
     };
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
-    __pattern_temp_2 = "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
+    __pattern_temp_2 = "tuple/[Future<Result<Option<Fields>,ErrorCode>>, FutureWritable<Result<Option<Fields>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
     trailers_future = __pattern_temp_2.0;
     trailers_tx = __pattern_temp_2.1;
     response_headers = __cm_adapter__Fields_new();

@@ -182,7 +182,7 @@ struct [String, Array<u8>] {
     mut 1: ref Array<u8>,
 }
 
-struct [Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>] {
+struct [Future<Result<Option<Fields>,ErrorCode>>, FutureWritable<Result<Option<Fields>,ErrorCode>>] {
     mut 0: i32,
     mut 1: i32,
 }
@@ -284,12 +284,12 @@ struct Result<Fields,HeaderError>::Err {
     payload_0: ref "wasi:http/types.wado/HeaderError",
 }
 
-variant Option<Trailers> {
+variant Option<Fields> {
     Some(i32),
     None,
 }
 
-struct Option<Trailers>::Some {
+struct Option<Fields>::Some {
     discriminant: i32,
     payload_0: i32,
 }
@@ -304,17 +304,17 @@ struct Result<unit,ErrorCode>::Err {
     payload_0: ref "wasi:http/types.wado/ErrorCode",
 }
 
-variant Result<Option<Trailers>,ErrorCode> {
-    Ok(ref Option<Trailers>),
+variant Result<Option<Fields>,ErrorCode> {
+    Ok(ref Option<Fields>),
     Err(ref "wasi:http/types.wado/ErrorCode"),
 }
 
-struct Result<Option<Trailers>,ErrorCode>::Ok {
+struct Result<Option<Fields>,ErrorCode>::Ok {
     discriminant: i32,
-    payload_0: ref Option<Trailers>,
+    payload_0: ref Option<Fields>,
 }
 
-struct Result<Option<Trailers>,ErrorCode>::Err {
+struct Result<Option<Fields>,ErrorCode>::Err {
     discriminant: i32,
     payload_0: ref "wasi:http/types.wado/ErrorCode",
 }
@@ -407,7 +407,7 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/Array<Tuple<FieldName,FieldValue>>::append" = fn(ref Array<Tuple<String,Array<u8>>>, ref "tuple/[String, Array<u8>]");
+type "functype/Array<Tuple<String,Array<u8>>>::append" = fn(ref Array<Tuple<String,Array<u8>>>, ref "tuple/[String, Array<u8>]");
 
 type "functype/Array<u8>::append" = fn(ref Array<u8>, u8);
 
@@ -602,7 +602,7 @@ fn handle(request) {
     let __packed_164: i64;
     let __ptr_165: i32;
     let __len_166: i32;
-    let __pattern_temp_1: ref "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]";
+    let __pattern_temp_1: ref "tuple/[Future<Result<Option<Fields>,ErrorCode>>, FutureWritable<Result<Option<Fields>,ErrorCode>>]";
     let __local_183: ref String;
     let __local_185: ref Formatter;
     let __local_188: ref String;
@@ -666,7 +666,7 @@ condition: fields.has(\"x-one\" as FieldName)
     };
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
-    __pattern_temp_1 = "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
+    __pattern_temp_1 = "tuple/[Future<Result<Option<Fields>,ErrorCode>>, FutureWritable<Result<Option<Fields>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
     trailers_future = __pattern_temp_1.0;
     trailers_tx = __pattern_temp_1.1;
     headers = __cm_adapter__Fields_new();
@@ -1439,7 +1439,7 @@ fn String::append_char(self, c) {
     };
 }
 
-fn Array<Tuple<FieldName,FieldValue>>::append(self, value) {
+fn Array<Tuple<String,Array<u8>>>::append(self, value) {
     let used: i32;
     let capacity: i32;
     let new_capacity: i32;

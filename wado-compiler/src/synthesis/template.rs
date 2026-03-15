@@ -1041,7 +1041,8 @@ fn trait_impl_module(
         ResolvedType::Struct { module_source, .. }
         | ResolvedType::Enum { module_source, .. }
         | ResolvedType::Variant { module_source, .. }
-        | ResolvedType::Newtype { module_source, .. } => module_source,
+        | ResolvedType::Newtype { module_source, .. }
+        | ResolvedType::Flags { module_source, .. } => module_source,
         _ => ModuleSource::primitive(),
     }
 }

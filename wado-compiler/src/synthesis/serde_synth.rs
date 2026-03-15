@@ -441,6 +441,10 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
             name,
             module_source,
             ..
+        }
+        | crate::tir::ResolvedType::Flags {
+            name,
+            module_source,
         } => (name.clone(), module_source.clone(), vec![]),
         _ => return null_expr(type_id),
     };

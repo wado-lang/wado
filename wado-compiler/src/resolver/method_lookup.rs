@@ -142,12 +142,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    /// Get the struct name from a type ID, if it's a struct, generic instance, or newtype.
+    /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.
     pub(super) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
         match self.type_table.borrow().get(type_id) {
             ResolvedType::Struct { name, .. }
             | ResolvedType::GenericInstance { name, .. }
-            | ResolvedType::Newtype { name, .. } => Some(name.clone()),
+            | ResolvedType::Newtype { name, .. }
+            | ResolvedType::Flags { name, .. } => Some(name.clone()),
             _ => None,
         }
     }
@@ -226,6 +227,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 ResolvedType::Struct { name, .. } => return name,
                 ResolvedType::GenericInstance { name, .. } => return name,
                 ResolvedType::Newtype { base_type, .. } => current = base_type,
+                ResolvedType::Flags { .. } => return "u32".to_string(),
                 _ => return self.type_table.borrow().type_name(current),
             }
         }
@@ -280,12 +282,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
-        // Check newtypes — the impl block may live in the module that defines the newtype
-        if let Some(&type_id) = self.newtypes.get(struct_name)
-            && let ResolvedType::Newtype { module_source, .. } =
-                self.type_table.borrow().get(type_id).clone()
-        {
-            return module_source;
+        // Check newtypes/flags — the impl block may live in the module that defines the type
+        if let Some(&type_id) = self.newtypes.get(struct_name) {
+            let ms = match self.type_table.borrow().get(type_id).clone() {
+                ResolvedType::Newtype { module_source, .. }
+                | ResolvedType::Flags { module_source, .. } => Some(module_source),
+                _ => None,
+            };
+            if let Some(module_source) = ms {
+                return module_source;
+            }
         }
 
         // Check loaded modules for newtype definitions
@@ -354,6 +360,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 Some(module_source.clone()),
                 None,
                 Some(*base_type),
+            ),
+            // Flags: first try looking up methods on the flags type itself,
+            // then fall back to u32 for method inheritance
+            ResolvedType::Flags {
+                name,
+                module_source,
+            } => (
+                name.clone(),
+                Some(module_source.clone()),
+                None,
+                Some(TypeTable::U32),
             ),
             // Primitive types - search for impl blocks in loaded modules
             // (e.g., impl i32 { fn to_string(&self) -> String { ... } })
@@ -883,20 +900,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
             _ => expected,
         };
 
-        // Check if either inner type is a newtype
-        let actual_is_newtype =
-            matches!(type_table.get(actual_inner), ResolvedType::Newtype { .. });
-        let expected_is_newtype =
-            matches!(type_table.get(expected_inner), ResolvedType::Newtype { .. });
+        // Check if either inner type is a newtype or flags
+        let actual_is_newtype = matches!(
+            type_table.get(actual_inner),
+            ResolvedType::Newtype { .. } | ResolvedType::Flags { .. }
+        );
+        let expected_is_newtype = matches!(
+            type_table.get(expected_inner),
+            ResolvedType::Newtype { .. } | ResolvedType::Flags { .. }
+        );
 
-        // If either is a newtype and they're different, that's a mismatch
+        // If either is a newtype/flags and they're different, that's a mismatch
         if (actual_is_newtype || expected_is_newtype) && actual_inner != expected_inner {
             let actual_name = type_table.type_name(actual);
             let expected_name = type_table.type_name(expected);
             return Some((expected_name, actual_name));
         }
 
-        // Also check if one is the base type of the other
+        // Also check if one is the base type of the other (only for Newtype, not Flags)
         if let ResolvedType::Newtype { base_type, .. } = type_table.get(actual_inner)
             && *base_type == expected_inner
         {
@@ -1282,12 +1303,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let mut names = vec![struct_name.to_string()];
             if let Some(&newtype_id) = self.newtypes.get(struct_name) {
                 let mut current = newtype_id;
-                while let ResolvedType::Newtype { base_type, .. } =
-                    self.type_table.borrow().get(current).clone()
-                {
-                    let base_name = self.type_table.borrow().type_name(base_type);
-                    names.push(base_name);
-                    current = base_type;
+                loop {
+                    match self.type_table.borrow().get(current).clone() {
+                        ResolvedType::Newtype { base_type, .. } => {
+                            let base_name = self.type_table.borrow().type_name(base_type);
+                            names.push(base_name);
+                            current = base_type;
+                        }
+                        ResolvedType::Flags { .. } => {
+                            names.push("u32".to_string());
+                            break;
+                        }
+                        _ => break,
+                    }
                 }
             }
             names
@@ -1526,6 +1554,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     },
                     impl_module_source: impl_module_source.clone(),
                     blanket_type_param: blanket_type_param.clone(),
+                    impl_struct_name: impl_struct_name.clone(),
                 });
                 method_found = true;
             }
@@ -1566,6 +1595,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 },
                                 impl_module_source: impl_module_source.clone(),
                                 blanket_type_param: blanket_type_param.clone(),
+                                impl_struct_name: impl_struct_name.clone(),
                             });
                         }
                     }
