@@ -311,7 +311,7 @@ fn run_directory_mode(
                     .collect::<Vec<_>>()
                     .join(", ");
                 flat_code.push_str(&format!(
-                    "pub use {{ {names_str} }} from \"wasi:{pkg_name}/{iface_name}.wado\";\n"
+                    "pub use {{ {names_str} }} from \"wasi:{pkg_name}/{iface_name}.wado\";\n\n"
                 ));
                 for n in new_names {
                     exported_names.insert(n.clone());

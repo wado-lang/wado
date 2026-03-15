@@ -66,6 +66,15 @@ Three formatting strategies are tried in order:
 - Inline comments (`//` after code on the same line) are emitted after the line's content.
 - Comments inside a block prevent inline folding.
 
+## Safety: Always Commit Before Formatting
+
+**`make format-wado` is destructive.** The formatter is rule-based and discards information that is not encoded in the AST (e.g. semicolons inside inline blocks, specific whitespace). Running it on uncommitted changes can silently destroy work.
+
+Rules:
+1. **Always commit (or stash) before running `make format-wado`.**
+2. After formatting, review the diff carefully.
+3. If the formatter has dropped meaningful information (e.g. a comment, a blank line that was intentional, or changed semantics), **reset the commit** (`git reset HEAD~1`) and fix the formatter first.
+
 ## Adding New Formatting Rules
 
 1. Write a failing test: add a dirty fixture to `wado-compiler/tests/format.fixtures/all.dirty.wado` with the messy form, and add the expected clean form to `wado-compiler/tests/format.fixtures.golden/all.clean.wado`.
