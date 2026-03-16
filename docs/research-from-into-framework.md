@@ -194,6 +194,33 @@ let id: UserId = 42u64.into();
    "obvious" — but the compiler cannot enforce these. Misuse (e.g., lossy conversions via
    `From`) is possible and occurs in practice.
 
+9. **Monomorphization / compile-time cost**
+
+   Using `impl Into<T>` as a function parameter causes monomorphization — each unique caller
+   type generates a new copy of the function body. The `momo` crate exists specifically to
+   mitigate this by splitting `impl Into<T>` functions into a thin generic wrapper + non-generic
+   inner function. The standard library itself uses this "inner function" pattern.
+
+10. **Error handling boilerplate**
+
+    Writing `impl From<IoError> for MyError`, `impl From<ParseError> for MyError`, etc. for
+    every error type is tedious. This is why crates like `thiserror` and `anyhow` exist — they
+    automate what should arguably be a language-level solution. The coherence rules compound
+    this: you cannot write a blanket `impl<E: Error> From<E> for MyError` because it conflicts
+    with the reflexive `impl<T> From<T> for T` in std.
+
+11. **`TryFrom` / `FromStr` design wart**
+
+    `FromStr` predates `TryFrom` and serves the same purpose as `TryFrom<&str>`. Both exist
+    in the standard library with no clear migration path. This illustrates the risk of
+    introducing conversion traits incrementally without a unified design.
+
+12. **IDE support degrades with `.into()`**
+
+    rust-analyzer cannot determine the resulting type after `.into()` in some contexts,
+    breaking autocompletion. "Go to definition" navigates to the blanket impl in std, not the
+    actual `From` implementation.
+
 ### Community Opinions
 
 The Rust community is broadly positive about `From`/`Into` as a framework, but has specific
@@ -203,17 +230,37 @@ recurring complaints:
   often prefer `Type::from(x)` for clarity.
 
 - **"What is wrong with auto .into?"** (internals.rust-lang.org, 2022): A highly-discussed
-  thread proposing automatic `.into()` calls. Arguments against centered on hidden performance
-  costs and type inference complications. Even the author of the `auto_into` proc-macro crate
-  concluded it was "an anti-pattern."
+  thread proposing automatic `.into()` calls. Key arguments from participants:
+  - *ekuber*: "The compiler has no knowledge on the performance characteristics of a given
+    `impl From`. It might require allocation, it might require invoking syscalls, it might
+    even require IO."
+  - *afetisov*: Implicit conversions would break generic functions — `opt.unwrap_or_else(|| 3)`
+    would become ambiguous if `3` could auto-convert to multiple types.
+  - *Multiple participants*: cite C++ and Scala as warnings about implicit conversion pitfalls.
+  - Even the author of the `auto_into` proc-macro crate concluded it was "an anti-pattern."
 
 - **"Implicit into() on return"** (internals.rust-lang.org, 2022): Proposed that return
-  statements automatically apply `.into()` when types mismatch. Received pushback on
-  explicitness grounds.
+  statements automatically apply `.into()` when types mismatch. Key opposition:
+  - *SkiFire13*: "A hidden function call makes readability worse because now you have to ask
+    yourself if there's some kind of hidden conversion going on."
+  - *scottmcm*: Would be a breaking change — `fn foo() -> u8 { 0 }` would no longer compile
+    because `0` could `.into()` multiple types.
+  - *mjbshaw*: Some conversions like `&[T]` to `Arc<[T]>` "require cloning all the elements"
+    — hiding that is dangerous.
+
+- **The `?` operator inconsistency**: The `?` operator already performs an implicit
+  `From::from()` on errors. If Rust already hides `From` conversions inside `?`, why not
+  elsewhere? The counterargument: `?` is visually explicit (you see the `?` character) and
+  confined to error propagation, a well-understood pattern.
 
 - **Effective Rust** (David Drysdale): Recommends preferring `From`/`Into` over `as` casts,
   and `TryFrom`/`TryInto` over potentially lossy `as`. Notes the "inner function" pattern
   to avoid generic code bloat.
+
+- **Community sentiment summary**: Pragmatists want less boilerplate (auto-`.into()`,
+  operators, implicit conversions in limited contexts). Purists value explicitness (hidden
+  conversions hide performance costs, break type inference). The Rust language team has
+  consistently sided with explicitness, with `?` as the sole exception.
 
 ---
 
