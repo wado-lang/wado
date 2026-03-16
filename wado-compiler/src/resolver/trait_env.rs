@@ -317,3 +317,264 @@ fn get_type_name_static(ty: &ast::Type) -> String {
         _ => "Unknown".to_string(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::{GenericParam, ImplBlock, NamedType, GenericType};
+    use crate::token::Span;
+
+    fn dummy_span() -> Span {
+        Span { start: 0, end: 0, line: 1, column: 1, end_line: 1 }
+    }
+
+    fn named(name: &str) -> Type {
+        Type::Named(NamedType { name: name.to_string(), span: dummy_span() })
+    }
+
+    fn generic(name: &str, args: Vec<Type>) -> Type {
+        Type::Generic(GenericType { name: name.to_string(), args, span: dummy_span() })
+    }
+
+    fn ref_type(inner: Type) -> Type {
+        Type::Reference(Box::new(inner))
+    }
+
+    fn mut_ref_type(inner: Type) -> Type {
+        Type::MutReference(Box::new(inner))
+    }
+
+    fn type_param(name: &str) -> GenericParam {
+        GenericParam { name: name.to_string(), bounds: vec![], default: None, span: dummy_span() }
+    }
+
+    fn make_type_decl_index(local_names: &[&str]) -> IndexMap<String, ModuleSource> {
+        let mut m = IndexMap::default();
+        for &name in local_names {
+            m.insert(name.to_string(), ModuleSource::EntryPoint { filename: "test.wado".to_string() });
+        }
+        m
+    }
+
+    fn make_decl_index(local_trait_names: &[&str]) -> TraitDeclIndex {
+        let mut m = TraitDeclIndex::default();
+        for (i, &name) in local_trait_names.iter().enumerate() {
+            m.insert(name.to_string(), (ModuleSource::EntryPoint { filename: "test.wado".to_string() }, i));
+        }
+        m
+    }
+
+    fn make_foreign_decl_index(foreign_trait_names: &[&str]) -> TraitDeclIndex {
+        let mut m = TraitDeclIndex::default();
+        for (i, &name) in foreign_trait_names.iter().enumerate() {
+            m.insert(name.to_string(), (ModuleSource::Core { name: "prelude".to_string() }, i));
+        }
+        m
+    }
+
+    fn impl_block(type_params: Vec<GenericParam>, trait_type: Type, self_type: Type) -> ImplBlock {
+        ImplBlock {
+            type_params,
+            trait_type: Some(trait_type),
+            ty: self_type,
+            associated_types: vec![],
+            constants: vec![],
+            methods: vec![],
+            is_synthesize_request: false,
+            span: dummy_span(),
+        }
+    }
+
+    // --- is_user_local ---
+
+    #[test]
+    fn test_is_user_local_entry_point() {
+        assert!(is_user_local(&ModuleSource::EntryPoint { filename: "main.wado".to_string() }));
+    }
+
+    #[test]
+    fn test_is_user_local_local_path() {
+        assert!(is_user_local(&ModuleSource::Local { path: "./lib.wado".to_string() }));
+    }
+
+    #[test]
+    fn test_is_user_local_core_is_foreign() {
+        assert!(!is_user_local(&ModuleSource::Core { name: "prelude".to_string() }));
+    }
+
+    #[test]
+    fn test_is_user_local_wasi_is_foreign() {
+        assert!(!is_user_local(&ModuleSource::Wasi { interface: "cli".to_string() }));
+    }
+
+    #[test]
+    fn test_is_user_local_remote_is_foreign() {
+        assert!(!is_user_local(&ModuleSource::Remote { url: "https://example.com/lib.wado".to_string() }));
+    }
+
+    // --- classify_position ---
+
+    #[test]
+    fn test_classify_local_named_type() {
+        let tdx = make_type_decl_index(&["MyError"]);
+        assert!(matches!(classify_position(&named("MyError"), &[], &tdx), PositionKind::LocalType));
+    }
+
+    #[test]
+    fn test_classify_foreign_named_type() {
+        let tdx = make_type_decl_index(&[]);
+        assert!(matches!(classify_position(&named("String"), &[], &tdx), PositionKind::ForeignType));
+    }
+
+    #[test]
+    fn test_classify_primitive_is_foreign() {
+        let tdx = make_type_decl_index(&[]);
+        assert!(matches!(classify_position(&named("i32"), &[], &tdx), PositionKind::ForeignType));
+    }
+
+    #[test]
+    fn test_classify_uncovered_type_param() {
+        let tdx = make_type_decl_index(&[]);
+        assert!(matches!(
+            classify_position(&named("T"), &["T".to_string()], &tdx),
+            PositionKind::UncoveredTypeParam
+        ));
+    }
+
+    #[test]
+    fn test_classify_local_generic_head_is_local() {
+        // LocalType<T> — head is local regardless of args
+        let tdx = make_type_decl_index(&["LocalType"]);
+        let ty = generic("LocalType", vec![named("T")]);
+        assert!(matches!(classify_position(&ty, &["T".to_string()], &tdx), PositionKind::LocalType));
+    }
+
+    #[test]
+    fn test_classify_foreign_generic_is_foreign() {
+        // Array<T> — head Array is foreign
+        let tdx = make_type_decl_index(&[]);
+        let ty = generic("Array", vec![named("T")]);
+        assert!(matches!(classify_position(&ty, &["T".to_string()], &tdx), PositionKind::ForeignType));
+    }
+
+    #[test]
+    fn test_classify_reference_to_local_is_local() {
+        // &LocalType — fundamental: look through &
+        let tdx = make_type_decl_index(&["MyStruct"]);
+        assert!(matches!(
+            classify_position(&ref_type(named("MyStruct")), &[], &tdx),
+            PositionKind::LocalType
+        ));
+    }
+
+    #[test]
+    fn test_classify_mut_reference_to_local_is_local() {
+        // &mut LocalType — fundamental: look through &mut
+        let tdx = make_type_decl_index(&["MyStruct"]);
+        assert!(matches!(
+            classify_position(&mut_ref_type(named("MyStruct")), &[], &tdx),
+            PositionKind::LocalType
+        ));
+    }
+
+    #[test]
+    fn test_classify_reference_to_foreign_is_foreign() {
+        let tdx = make_type_decl_index(&[]);
+        assert!(matches!(
+            classify_position(&ref_type(named("String")), &[], &tdx),
+            PositionKind::ForeignType
+        ));
+    }
+
+    #[test]
+    fn test_classify_tuple_is_foreign() {
+        // Tuple types have no single named head → foreign
+        let tdx = make_type_decl_index(&["MyStruct"]);
+        let ty = Type::Tuple(vec![named("MyStruct"), named("i32")]);
+        assert!(matches!(classify_position(&ty, &[], &tdx), PositionKind::ForeignType));
+    }
+
+    // --- check_orphan_rfc2451 ---
+
+    #[test]
+    fn test_rfc2451_local_self_type_allowed() {
+        // impl ForeignTrait for LocalType → T0 is local → allowed
+        let tdx = make_type_decl_index(&["MyStruct"]);
+        let ib = impl_block(vec![], named("ForeignTrait"), named("MyStruct"));
+        assert!(check_orphan_rfc2451(&ib, &tdx));
+    }
+
+    #[test]
+    fn test_rfc2451_both_foreign_forbidden() {
+        // impl Eq for String → both foreign
+        let tdx = make_type_decl_index(&[]);
+        let ib = impl_block(vec![], named("Eq"), named("String"));
+        assert!(!check_orphan_rfc2451(&ib, &tdx));
+    }
+
+    #[test]
+    fn test_rfc2451_local_in_trait_arg_allowed() {
+        // impl From<MyError> for String → T0=String(foreign), T1=MyError(local) → allowed
+        let tdx = make_type_decl_index(&["MyError"]);
+        let ib = impl_block(vec![], generic("From", vec![named("MyError")]), named("String"));
+        assert!(check_orphan_rfc2451(&ib, &tdx));
+    }
+
+    #[test]
+    fn test_rfc2451_uncovered_type_param_forbidden() {
+        // impl<T> Eq for T → T0=T(uncovered) → forbidden
+        let tdx = make_type_decl_index(&[]);
+        let ib = impl_block(vec![type_param("T")], named("Eq"), named("T"));
+        assert!(!check_orphan_rfc2451(&ib, &tdx));
+    }
+
+    #[test]
+    fn test_rfc2451_uncovered_param_before_local_in_trait_arg_forbidden() {
+        // impl<T> From<T> for String → T0=String(foreign), T1=T(uncovered) → forbidden
+        let tdx = make_type_decl_index(&[]);
+        let ib = impl_block(vec![type_param("T")], generic("From", vec![named("T")]), named("String"));
+        assert!(!check_orphan_rfc2451(&ib, &tdx));
+    }
+
+    #[test]
+    fn test_rfc2451_local_type_as_generic_head_in_trait_arg() {
+        // impl<T> From<LocalType<T>> for ForeignType → T0=ForeignType, T1=LocalType<T>(local head) → allowed
+        let tdx = make_type_decl_index(&["LocalType"]);
+        let trait_ty = generic("From", vec![generic("LocalType", vec![named("T")])]);
+        let ib = impl_block(vec![type_param("T")], trait_ty, named("ForeignType"));
+        assert!(check_orphan_rfc2451(&ib, &tdx));
+    }
+
+    #[test]
+    fn test_rfc2451_foreign_generic_head_in_trait_arg_forbidden() {
+        // impl<T> From<Array<T>> for ForeignType → T0=ForeignType, T1=Array<T>(foreign head) → forbidden
+        let tdx = make_type_decl_index(&[]);
+        let trait_ty = generic("From", vec![generic("Array", vec![named("T")])]);
+        let ib = impl_block(vec![type_param("T")], trait_ty, named("ForeignType"));
+        assert!(!check_orphan_rfc2451(&ib, &tdx));
+    }
+
+    #[test]
+    fn test_rfc2451_ref_to_local_as_self_type() {
+        // impl ForeignTrait for &LocalType → fundamental, look through & → allowed
+        let tdx = make_type_decl_index(&["MyStruct"]);
+        let ib = impl_block(vec![], named("ForeignTrait"), ref_type(named("MyStruct")));
+        assert!(check_orphan_rfc2451(&ib, &tdx));
+    }
+
+    #[test]
+    fn test_rfc2451_ref_to_foreign_as_self_type_forbidden() {
+        // impl ForeignTrait for &String → &String is foreign → forbidden
+        let tdx = make_type_decl_index(&[]);
+        let ib = impl_block(vec![], named("ForeignTrait"), ref_type(named("String")));
+        assert!(!check_orphan_rfc2451(&ib, &tdx));
+    }
+
+    #[test]
+    fn test_rfc2451_local_self_before_uncovered_param_in_trait_arg() {
+        // impl<T> From<T> for LocalType → T0=LocalType(local!) → allowed before reaching T1=T
+        let tdx = make_type_decl_index(&["LocalType"]);
+        let ib = impl_block(vec![type_param("T")], generic("From", vec![named("T")]), named("LocalType"));
+        assert!(check_orphan_rfc2451(&ib, &tdx));
+    }
+}
