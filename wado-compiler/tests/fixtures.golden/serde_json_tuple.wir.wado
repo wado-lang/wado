@@ -358,13 +358,13 @@ type "functype/__cm_export____test_1_tuple_roundtrip__i32__string_" = fn();
 
 type "functype/__cm_export____test_2_pair_tuple_serialize" = fn();
 
-type "functype/to_string<Tuple<f64,f64>>" = fn(ref "tuple/[f64, f64]") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<Tuple<f64,f64>>" = fn(ref "tuple/[f64, f64]") -> ref Result<String,SerializeError>;
 
-type "functype/from_string<Tuple<i32,String>>" = fn(ref String) -> ref Result<Tuple<i32,String>,DeserializeError>;
+type "functype/core/json/from_string<Tuple<i32,String>>" = fn(ref String) -> ref Result<Tuple<i32,String>,DeserializeError>;
 
-type "functype/to_string<Tuple<i32,String>>" = fn(ref "tuple/[i32, String]") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<Tuple<i32,String>>" = fn(ref "tuple/[i32, String]") -> ref Result<String,SerializeError>;
 
-type "functype/to_string<Tuple<i32,String,bool>>" = fn(ref "tuple/[i32, String, bool]") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<Tuple<i32,String,bool>>" = fn(ref "tuple/[i32, String, bool]") -> ref Result<String,SerializeError>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -602,7 +602,7 @@ fn __test_0_tuple_serialize__i32__string__bool_() {
         __modules_initialized = 1;
     };
     t = "tuple/[i32, String, bool]" { 0: 42, 1: String { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 };
-    r = to_string<Tuple<i32,String,bool>>(t);
+    r = "core/json/to_string<Tuple<i32,String,bool>>"(t);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -675,10 +675,10 @@ fn __test_1_tuple_roundtrip__i32__string_() {
         __modules_initialized = 1;
     };
     t = "tuple/[i32, String]" { 0: 10, 1: String { repr: array.new_data<u8>("world"), used: 5 } };
-    json_r = to_string<Tuple<i32,String>>(t);
+    json_r = "core/json/to_string<Tuple<i32,String>>"(t);
     if ref.test Result<String,SerializeError>::Ok(json_r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
-        parsed_r = from_string<Tuple<i32,String>>(json);
+        parsed_r = "core/json/from_string<Tuple<i32,String>>"(json);
         if ref.test Result<Tuple<i32,String>,DeserializeError>::Ok(parsed_r) {
             parsed = value_copy "tuple/[i32, String]"(ref.cast Result<Tuple<i32,String>,DeserializeError>::Ok(parsed_r).payload_0);
             __v0_5 = parsed.0;
@@ -777,7 +777,7 @@ fn __test_2_pair_tuple_serialize() {
         __modules_initialized = 1;
     };
     pair = "tuple/[f64, f64]" { 0: 3.14, 1: 2.72 };
-    r = to_string<Tuple<f64,f64>>(pair);
+    r = "core/json/to_string<Tuple<f64,f64>>"(pair);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -836,7 +836,7 @@ fn __cm_export____test_2_pair_tuple_serialize() {
     "wasi/task-return"(0);
 }
 
-fn to_string<Tuple<f64,f64>>(value) {
+fn "core/json/to_string<Tuple<f64,f64>>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     ser = "core:json/JsonSerializer" { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };
@@ -850,7 +850,7 @@ fn to_string<Tuple<f64,f64>>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn from_string<Tuple<i32,String>>(input) {
+fn "core/json/from_string<Tuple<i32,String>>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<Tuple<i32,String>,DeserializeError>;
     let v: ref "tuple/[i32, String]";
@@ -885,7 +885,7 @@ fn from_string<Tuple<i32,String>>(input) {
     unreachable;
 }
 
-fn to_string<Tuple<i32,String>>(value) {
+fn "core/json/to_string<Tuple<i32,String>>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     ser = "core:json/JsonSerializer" { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };
@@ -899,7 +899,7 @@ fn to_string<Tuple<i32,String>>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn to_string<Tuple<i32,String,bool>>(value) {
+fn "core/json/to_string<Tuple<i32,String,bool>>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     ser = "core:json/JsonSerializer" { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };

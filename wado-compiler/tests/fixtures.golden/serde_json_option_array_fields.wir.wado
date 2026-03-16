@@ -436,9 +436,9 @@ type "functype/__cm_export____test_2_roundtrip_with_some" = fn();
 
 type "functype/__cm_export____test_3_roundtrip_with_none" = fn();
 
-type "functype/from_string<User>" = fn(ref String) -> ref Result<User,DeserializeError>;
+type "functype/core/json/from_string<User>" = fn(ref String) -> ref Result<User,DeserializeError>;
 
-type "functype/to_string<User>" = fn(ref User) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<User>" = fn(ref User) -> ref Result<String,SerializeError>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -640,7 +640,7 @@ fn __test_0_serialize_with_some_and_non_empty_array() {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(95, 87, 92), used: 3 };
         break __seq_lit: __local_0;
     }) };
-    r = to_string<User>(u);
+    r = "core/json/to_string<User>"(u);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -706,7 +706,7 @@ fn __test_1_serialize_with_none_and_empty_array() {
         __local_0 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __local_0;
     }) };
-    r = to_string<User>(u);
+    r = "core/json/to_string<User>"(u);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -801,10 +801,10 @@ fn __test_2_roundtrip_with_some() {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(100), used: 1 };
         break __seq_lit: __local_0;
     }) };
-    json_r = to_string<User>(orig);
+    json_r = "core/json/to_string<User>"(orig);
     if ref.test Result<String,SerializeError>::Ok(json_r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
-        parsed_r = from_string<User>(json);
+        parsed_r = "core/json/from_string<User>"(json);
         if ref.test Result<User,DeserializeError>::Ok(parsed_r) {
             parsed = value_copy User(ref.cast Result<User,DeserializeError>::Ok(parsed_r).payload_0);
             __v0_6 = parsed.name;
@@ -1004,10 +1004,10 @@ fn __test_3_roundtrip_with_none() {
         __local_0 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __local_0;
     }) };
-    json_r = to_string<User>(orig);
+    json_r = "core/json/to_string<User>"(orig);
     if ref.test Result<String,SerializeError>::Ok(json_r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
-        parsed_r = from_string<User>(json);
+        parsed_r = "core/json/from_string<User>"(json);
         if ref.test Result<User,DeserializeError>::Ok(parsed_r) {
             parsed = value_copy User(ref.cast Result<User,DeserializeError>::Ok(parsed_r).payload_0);
             __v0_6 = parsed.name;
@@ -1191,7 +1191,7 @@ fn __cm_export____test_3_roundtrip_with_none() {
     "wasi/task-return"(0);
 }
 
-fn from_string<User>(input) {
+fn "core/json/from_string<User>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<User,DeserializeError>;
     let v: ref User;
@@ -1226,7 +1226,7 @@ fn from_string<User>(input) {
     unreachable;
 }
 
-fn to_string<User>(value) {
+fn "core/json/to_string<User>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     ser = "core:json/JsonSerializer" { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };

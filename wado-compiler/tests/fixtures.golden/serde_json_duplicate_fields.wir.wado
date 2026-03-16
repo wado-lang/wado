@@ -276,7 +276,7 @@ type "functype/_point_field_lookup" = fn(ref String, i32, i32) -> ref Option<i32
 
 type "functype/__cm_export____test_0_duplicate_field_last_value_wins" = fn();
 
-type "functype/from_string<Point>" = fn(ref String) -> ref Result<Point,DeserializeError>;
+type "functype/core/json/from_string<Point>" = fn(ref String) -> ref Result<Point,DeserializeError>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -477,7 +477,7 @@ fn __test_0_duplicate_field_last_value_wins() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Point>(String { repr: array.new_data<u8>("{\"x\":1.0,\"y\":2.0,\"x\":99.0}"), used: 26 });
+    r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("{\"x\":1.0,\"y\":2.0,\"x\":99.0}"), used: 26 });
     if ref.test Result<Point,DeserializeError>::Ok(r) {
         p = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(r).payload_0);
         __v0_2 = p.x;
@@ -587,7 +587,7 @@ fn __cm_export____test_0_duplicate_field_last_value_wins() {
     "wasi/task-return"(0);
 }
 
-fn from_string<Point>(input) {
+fn "core/json/from_string<Point>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<Point,DeserializeError>;
     let v: ref Point;

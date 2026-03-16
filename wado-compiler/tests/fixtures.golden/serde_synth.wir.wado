@@ -442,17 +442,17 @@ type "functype/__cm_export____test_4_synthesized_serialize_point" = fn();
 
 type "functype/__cm_export____test_5_synthesized_serialize_user_with_snake_case____camelcase" = fn();
 
-type "functype/to_string<User>" = fn(ref User) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<User>" = fn(ref User) -> ref Result<String,SerializeError>;
 
-type "functype/to_string<Point>" = fn(ref Point) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<Point>" = fn(ref Point) -> ref Result<String,SerializeError>;
 
-type "functype/from_string<Config>" = fn(ref String) -> ref Result<Config,DeserializeError>;
+type "functype/core/json/from_string<Config>" = fn(ref String) -> ref Result<Config,DeserializeError>;
 
-type "functype/to_string<Config>" = fn(ref Config) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<Config>" = fn(ref Config) -> ref Result<String,SerializeError>;
 
-type "functype/from_string<User>" = fn(ref String) -> ref Result<User,DeserializeError>;
+type "functype/core/json/from_string<User>" = fn(ref String) -> ref Result<User,DeserializeError>;
 
-type "functype/from_string<Point>" = fn(ref String) -> ref Result<Point,DeserializeError>;
+type "functype/core/json/from_string<Point>" = fn(ref String) -> ref Result<Point,DeserializeError>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -725,7 +725,7 @@ fn __test_0_synthesized_deserialize_point() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Point>(String { repr: array.new_data<u8>("{\"x\":1.5,\"y\":2.5}"), used: 17 });
+    r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("{\"x\":1.5,\"y\":2.5}"), used: 17 });
     if ref.test Result<Point,DeserializeError>::Ok(r) {
         p = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(r).payload_0);
         __v0_2 = p.x;
@@ -836,7 +836,7 @@ fn __test_1_synthesized_deserialize_point_out_of_order_fields() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Point>(String { repr: array.new_data<u8>("{\"y\":3.0,\"x\":7.0}"), used: 17 });
+    r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("{\"y\":3.0,\"x\":7.0}"), used: 17 });
     if ref.test Result<Point,DeserializeError>::Ok(r) {
         p = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(r).payload_0);
         __v0_2 = p.x;
@@ -954,7 +954,7 @@ fn __test_2_synthesized_deserialize_user_with_camelcase_keys() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<User>(String { repr: array.new_data<u8>("{\"userName\":\"Alice\",\"age\":30,\"active\":true}"), used: 43 });
+    r = "core/json/from_string<User>"(String { repr: array.new_data<u8>("{\"userName\":\"Alice\",\"age\":30,\"active\":true}"), used: 43 });
     if ref.test Result<User,DeserializeError>::Ok(r) {
         u = value_copy User(ref.cast Result<User,DeserializeError>::Ok(r).payload_0);
         __v0_2 = u.user_name;
@@ -1118,7 +1118,7 @@ fn __test_3_roundtrip_config() {
         __modules_initialized = 1;
     };
     c = Config { host: String { repr: array.new_data<u8>("localhost"), used: 9 }, port: 8080, debug: 1 };
-    json_r = to_string<Config>(c);
+    json_r = "core/json/to_string<Config>"(c);
     if ref.test Result<String,SerializeError>::Ok(json_r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
         __v0_3 = json;
@@ -1159,7 +1159,7 @@ condition: json == `\\{\"host\":\"localhost\",\"port\":8080,\"debug\":true\\}`
             });
             unreachable;
         };
-        parsed_r = from_string<Config>(json);
+        parsed_r = "core/json/from_string<Config>"(json);
         if ref.test Result<Config,DeserializeError>::Ok(parsed_r) {
             parsed = value_copy Config(ref.cast Result<Config,DeserializeError>::Ok(parsed_r).payload_0);
             __v0_7 = parsed.host;
@@ -1296,7 +1296,7 @@ fn __test_4_synthesized_serialize_point() {
         __modules_initialized = 1;
     };
     p = Point { x: 1.5, y: 2.5 };
-    r = to_string<Point>(p);
+    r = "core/json/to_string<Point>"(p);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -1359,7 +1359,7 @@ fn __test_5_synthesized_serialize_user_with_snake_case____camelcase() {
         __modules_initialized = 1;
     };
     u = User { user_name: String { repr: array.new_data<u8>("Alice"), used: 5 }, age: 30, active: 1 };
-    r = to_string<User>(u);
+    r = "core/json/to_string<User>"(u);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -1603,7 +1603,7 @@ fn __cm_export____test_5_synthesized_serialize_user_with_snake_case____camelcase
     "wasi/task-return"(0);
 }
 
-fn to_string<User>(value) {
+fn "core/json/to_string<User>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     ser = "core:json/JsonSerializer" { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };
@@ -1617,7 +1617,7 @@ fn to_string<User>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn to_string<Point>(value) {
+fn "core/json/to_string<Point>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     ser = "core:json/JsonSerializer" { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };
@@ -1631,7 +1631,7 @@ fn to_string<Point>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn from_string<Config>(input) {
+fn "core/json/from_string<Config>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<Config,DeserializeError>;
     let v: ref Config;
@@ -1666,7 +1666,7 @@ fn from_string<Config>(input) {
     unreachable;
 }
 
-fn to_string<Config>(value) {
+fn "core/json/to_string<Config>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     ser = "core:json/JsonSerializer" { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };
@@ -1680,7 +1680,7 @@ fn to_string<Config>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn from_string<User>(input) {
+fn "core/json/from_string<User>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<User,DeserializeError>;
     let v: ref User;
@@ -1715,7 +1715,7 @@ fn from_string<User>(input) {
     unreachable;
 }
 
-fn from_string<Point>(input) {
+fn "core/json/from_string<Point>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<Point,DeserializeError>;
     let v: ref Point;

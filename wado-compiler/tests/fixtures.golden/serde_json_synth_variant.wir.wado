@@ -321,9 +321,9 @@ type "functype/__cm_export____test_2_variant_roundtrip_unit_case" = fn();
 
 type "functype/__cm_export____test_3_variant_roundtrip_payload_case" = fn();
 
-type "functype/from_string<Shape>" = fn(ref String) -> ref Result<Shape,DeserializeError>;
+type "functype/core/json/from_string<Shape>" = fn(ref String) -> ref Result<Shape,DeserializeError>;
 
-type "functype/to_string<Shape>" = fn(ref "core:internal/Box<Shape>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<Shape>" = fn(ref "core:internal/Box<Shape>") -> ref Result<String,SerializeError>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -481,7 +481,7 @@ type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
 type "functype/Shape^Serialize::serialize<JsonSerializer>" = fn(ref "core:internal/Box<Shape>", ref "core:json/JsonSerializer") -> [i32, ref null "core:serde/SerializeError"];
 
-type "functype/to_string<Shape>" = fn(ref Shape) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<Shape>" = fn(ref Shape) -> ref Result<String,SerializeError>;
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -535,7 +535,7 @@ fn __test_0_variant_serialize_unit_case() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<Shape>(Shape { 1 });
+    r = "core/json/to_string<Shape>"(Shape { 1 });
     if ref.test Result<String,SerializeError>::Ok(r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = json;
@@ -599,7 +599,7 @@ fn __test_1_variant_serialize_payload_case() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<Shape>(Shape::Circle { discriminant: 0, payload_0: 5 });
+    r = "core/json/to_string<Shape>"(Shape::Circle { discriminant: 0, payload_0: 5 });
     if ref.test Result<String,SerializeError>::Ok(r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = json;
@@ -658,10 +658,10 @@ fn __test_2_variant_roundtrip_unit_case() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    json_r = to_string<Shape>(Shape { 1 });
+    json_r = "core/json/to_string<Shape>"(Shape { 1 });
     if ref.test Result<String,SerializeError>::Ok(json_r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
-        parsed_r = from_string<Shape>(json);
+        parsed_r = "core/json/from_string<Shape>"(json);
         if ref.test Result<Shape,DeserializeError>::Ok(parsed_r) {
             parsed = value_copy Shape(ref.cast Result<Shape,DeserializeError>::Ok(parsed_r).payload_0);
             if parsed.discriminant == 1 {
@@ -699,10 +699,10 @@ fn __test_3_variant_roundtrip_payload_case() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    json_r = to_string<Shape>(Shape::Circle { discriminant: 0, payload_0: 3.14 });
+    json_r = "core/json/to_string<Shape>"(Shape::Circle { discriminant: 0, payload_0: 3.14 });
     if ref.test Result<String,SerializeError>::Ok(json_r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
-        parsed_r = from_string<Shape>(json);
+        parsed_r = "core/json/from_string<Shape>"(json);
         if ref.test Result<Shape,DeserializeError>::Ok(parsed_r) {
             parsed = value_copy Shape(ref.cast Result<Shape,DeserializeError>::Ok(parsed_r).payload_0);
             if ref.test Shape::Circle(parsed) {
@@ -776,7 +776,7 @@ fn __cm_export____test_3_variant_roundtrip_payload_case() {
     "wasi/task-return"(0);
 }
 
-fn from_string<Shape>(input) {
+fn "core/json/from_string<Shape>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<Shape,DeserializeError>;
     let v: ref Shape;
@@ -811,7 +811,7 @@ fn from_string<Shape>(input) {
     unreachable;
 }
 
-fn to_string<Shape>(value) {
+fn "core/json/to_string<Shape>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     ser = "core:json/JsonSerializer" { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };

@@ -319,9 +319,9 @@ type "functype/__cm_export____test_1_deserialize_with_rename" = fn();
 
 type "functype/__cm_export____test_2_roundtrip_with_rename" = fn();
 
-type "functype/from_string<ApiResponse>" = fn(ref String) -> ref Result<ApiResponse,DeserializeError>;
+type "functype/core/json/from_string<ApiResponse>" = fn(ref String) -> ref Result<ApiResponse,DeserializeError>;
 
-type "functype/to_string<ApiResponse>" = fn(ref ApiResponse) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<ApiResponse>" = fn(ref ApiResponse) -> ref Result<String,SerializeError>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -493,7 +493,7 @@ fn __test_0_serialize_with_rename() {
         __modules_initialized = 1;
     };
     resp = ApiResponse { status_code: 200, response_data: String { repr: array.new_data<u8>("ok"), used: 2 } };
-    r = to_string<ApiResponse>(resp);
+    r = "core/json/to_string<ApiResponse>"(resp);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -561,7 +561,7 @@ fn __test_1_deserialize_with_rename() {
         };
         __modules_initialized = 1;
     };
-    r = from_string<ApiResponse>(String { repr: array.new_data<u8>("{\"status_code\":200,\"data\":\"ok\"}"), used: 31 });
+    r = "core/json/from_string<ApiResponse>"(String { repr: array.new_data<u8>("{\"status_code\":200,\"data\":\"ok\"}"), used: 31 });
     if ref.test Result<ApiResponse,DeserializeError>::Ok(r) {
         resp = value_copy ApiResponse(ref.cast Result<ApiResponse,DeserializeError>::Ok(r).payload_0);
         __v0_2 = resp.status_code;
@@ -665,10 +665,10 @@ fn __test_2_roundtrip_with_rename() {
         __modules_initialized = 1;
     };
     orig = ApiResponse { status_code: 404, response_data: String { repr: array.new_data<u8>("not found"), used: 9 } };
-    json_r = to_string<ApiResponse>(orig);
+    json_r = "core/json/to_string<ApiResponse>"(orig);
     if ref.test Result<String,SerializeError>::Ok(json_r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
-        parsed_r = from_string<ApiResponse>(json);
+        parsed_r = "core/json/from_string<ApiResponse>"(json);
         if ref.test Result<ApiResponse,DeserializeError>::Ok(parsed_r) {
             parsed = value_copy ApiResponse(ref.cast Result<ApiResponse,DeserializeError>::Ok(parsed_r).payload_0);
             __v0_5 = parsed.status_code;
@@ -835,7 +835,7 @@ fn __cm_export____test_2_roundtrip_with_rename() {
     "wasi/task-return"(0);
 }
 
-fn from_string<ApiResponse>(input) {
+fn "core/json/from_string<ApiResponse>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<ApiResponse,DeserializeError>;
     let v: ref ApiResponse;
@@ -870,7 +870,7 @@ fn from_string<ApiResponse>(input) {
     unreachable;
 }
 
-fn to_string<ApiResponse>(value) {
+fn "core/json/to_string<ApiResponse>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     ser = "core:json/JsonSerializer" { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };

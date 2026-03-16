@@ -108,13 +108,13 @@ type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_export__run" = fn();
 
-type "functype/pair_to_array<i32>" = fn(ref "./sub/opt_crossmod_level1.wado/Pair<i32>") -> ref Array<i32>;
+type "functype/./sub/opt_crossmod_level1.wado/pair_to_array<i32>" = fn(ref "./sub/opt_crossmod_level1.wado/Pair<i32>") -> ref Array<i32>;
 
 type "functype/./sub/opt_crossmod_level2.wado/int_triple" = fn() -> ref Array<i32>;
 
 type "functype/./sub/opt_crossmod_level2.wado/string_literals" = fn() -> ref Array<String>;
 
-type "functype/./sub/opt_crossmod_level2.wado/pair_to_array<String>" = fn(ref "./sub/opt_crossmod_level1.wado/Pair<String>") -> ref Array<String>;
+type "functype/./sub/opt_crossmod_level2.wado/./sub/opt_crossmod_level1.wado/pair_to_array<String>" = fn(ref "./sub/opt_crossmod_level1.wado/Pair<String>") -> ref Array<String>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -322,10 +322,10 @@ fn run() with Stdout {
         };
         __modules_initialized = 1;
     };
-    sp = "./sub/opt_crossmod_level2.wado/pair_to_array<String>"(__inline_make_pair_String__3: block -> ref "./sub/opt_crossmod_level1.wado/Pair<String>" {
+    sp = "./sub/opt_crossmod_level2.wado/./sub/opt_crossmod_level1.wado/pair_to_array<String>"(__inline___sub_opt_crossmod_level1_wado_make_pair_String__3: block -> ref "./sub/opt_crossmod_level1.wado/Pair<String>" {
         __local_62 = String { repr: array.new_data<u8>("hello"), used: 5 };
         __local_63 = String { repr: array.new_data<u8>("world"), used: 5 };
-        break __inline_make_pair_String__3: "./sub/opt_crossmod_level1.wado/Pair<String>" { first: ref.as_non_null(__local_62), second: ref.as_non_null(__local_63) };
+        break __inline___sub_opt_crossmod_level1_wado_make_pair_String__3: "./sub/opt_crossmod_level1.wado/Pair<String>" { first: ref.as_non_null(__local_62), second: ref.as_non_null(__local_63) };
     });
     __v0_1 = sp.used;
     __cond_2 = __v0_1 == 2;
@@ -817,7 +817,7 @@ condition: sl[2] == \"gamma\"
         unreachable;
     };
     ip = "./sub/opt_crossmod_level1.wado/Pair<i32>" { first: 100, second: 200 };
-    ia = pair_to_array<i32>(ip);
+    ia = "./sub/opt_crossmod_level1.wado/pair_to_array<i32>"(ip);
     __v0_27 = ia.used;
     __cond_28 = __v0_27 == 2;
     if __cond_28 == 0 {
@@ -964,7 +964,7 @@ fn __cm_export__run() {
     "wasi/task-return"(0);
 }
 
-fn pair_to_array<i32>(p) {
+fn "./sub/opt_crossmod_level1.wado/pair_to_array<i32>"(p) {
     let __local_1: ref Array<i32>;
     return __seq_lit: block -> ref Array<i32> {
         __local_1 = Array<i32> { repr: array.new_fixed<i32>(p.first, p.second), used: 2 };
@@ -988,7 +988,7 @@ fn "./sub/opt_crossmod_level2.wado/string_literals"() {  // from ./sub/opt_cross
     };
 }
 
-fn "./sub/opt_crossmod_level2.wado/pair_to_array<String>"(p) {  // from ./sub/opt_crossmod_level2.wado
+fn "./sub/opt_crossmod_level2.wado/./sub/opt_crossmod_level1.wado/pair_to_array<String>"(p) {  // from ./sub/opt_crossmod_level2.wado
     let __local_1: ref Array<String>;
     return __seq_lit: block -> ref Array<String> {
         __local_1 = Array<String> { repr: array.new_fixed<ref String>(value_copy String(p.first), value_copy String(p.second)), used: 2 };

@@ -15,7 +15,22 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
+use crate::name::{
+    FreeFunctionName, LocalMethodName, MethodName, ModuleSource, mangle_generic_name,
+};
+
+/// Returns the key used to store/look up a generic function in the global function map.
+///
+/// Methods use their unqualified name — the struct name already provides namespace.
+/// Free functions are module-qualified to keep same-named generics from different
+/// modules distinct (e.g., `wrap<T>` in `mod_a` vs `mod_b`).
+fn generic_function_key(is_method: bool, module_source: &ModuleSource, name: &str) -> String {
+    if is_method {
+        name.to_string()
+    } else {
+        FreeFunctionName::from_module_source(module_source, name).to_string()
+    }
+}
 use crate::project::Project;
 use crate::tir::{
     CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp, TirBlock,
@@ -53,13 +68,14 @@ pub fn monomorphize_project(mut project: Project) -> Project {
 pub fn monomorphize_modules_indexed(
     modules: IndexMap<ModuleSource, TirModule>,
 ) -> IndexMap<ModuleSource, TirModule> {
-    // First pass: collect all generic functions from all modules
+    // First pass: collect all generic functions from all modules.
     let mut all_generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
-    for (_, module) in &modules {
+    for (module_source, module) in &modules {
         for func_rc in &module.functions {
             let func = func_rc.borrow();
             if !func.type_params.is_empty() || !func.impl_type_params.is_empty() {
-                all_generic_functions.insert(func.name.clone(), Rc::clone(func_rc));
+                let key = generic_function_key(func.is_method(), module_source, &func.name);
+                all_generic_functions.insert(key, Rc::clone(func_rc));
             }
         }
     }
@@ -525,11 +541,12 @@ impl Monomorphizer {
         let mut generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>> =
             external_generic_functions.clone();
 
-        // Local generic functions override external ones (allows module-local specialization)
         for func_rc in &module.functions {
             let func = func_rc.borrow();
             if !func.type_params.is_empty() || !func.impl_type_params.is_empty() {
-                generic_functions.insert(func.name.clone(), Rc::clone(func_rc));
+                let key =
+                    generic_function_key(func.is_method(), &self.current_module_source, &func.name);
+                generic_functions.insert(key, Rc::clone(func_rc));
             }
         }
 
@@ -1490,11 +1507,12 @@ impl Monomorphizer {
                 args,
                 ..
             } => {
-                let func_name = func.name.clone();
+                let qualified_func_name =
+                    generic_function_key(func.is_method(), &func.module_source, &func.name);
                 // Check if this is a call to a generic function with explicit type args
-                if !type_args.is_empty() && generic_functions.contains_key(&func_name) {
+                if !type_args.is_empty() && generic_functions.contains_key(&qualified_func_name) {
                     let key = InstantiationKey {
-                        name: func_name.clone(),
+                        name: qualified_func_name.clone(),
                         type_args: type_args.clone(),
                         method_info: func.method_info.clone(),
                     };
@@ -3387,12 +3405,14 @@ impl Monomorphizer {
                 args,
                 ..
             } => {
-                let func_name = func.name.clone();
+                let original_func_name = func.name.clone();
                 let original_method_info = func.method_info.clone();
+                let qualified_func_name =
+                    generic_function_key(func.is_method(), &func.module_source, &func.name);
                 // If this is a generic call, rewrite to monomorphized name
                 if !type_args.is_empty() {
                     let key = InstantiationKey {
-                        name: func_name.clone(),
+                        name: qualified_func_name.clone(),
                         type_args: type_args.clone(),
                         method_info: original_method_info.clone(),
                     };
@@ -3401,7 +3421,7 @@ impl Monomorphizer {
                             module_source: self.current_module_source.clone(),
                             name: mangled.clone(),
                             monomorph_info: Some(MonomorphInfo {
-                                generic_name: func_name,
+                                generic_name: original_func_name,
                                 type_args: key.type_args.clone(),
                                 is_blanket: false,
                             }),

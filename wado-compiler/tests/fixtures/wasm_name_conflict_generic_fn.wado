@@ -1,0 +1,17 @@
+// Test: two library modules define the same generic function name 'wrap', both called
+// with the same concrete type i32. Monomorphized wasm names must include module path
+// to be distinct.
+
+use { println } from "core:cli";
+use { wrap as wrap_a } from "./sub/wasm_name_conflict_generic_fn_mod_a.wado";
+use { wrap as wrap_b } from "./sub/wasm_name_conflict_generic_fn_mod_b.wado";
+
+export fn run() with Stdout {
+    let a = wrap_a::<i32>(42);
+    let b = wrap_b::<i32>(42);
+    println(`a: {a.0} {a.1}`);
+    println(`b: {b.0} {b.1}`);
+}
+
+__DATA__
+{"stdout": "a: 42 1\nb: 42 2\n"}

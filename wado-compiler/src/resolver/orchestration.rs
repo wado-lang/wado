@@ -727,6 +727,43 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             .insert(module_source.clone(), maps);
     }
 
+    /// Resolve an optional AST return type using the source module's type context.
+    ///
+    /// Temporarily swaps the active type maps with those of `module_source` so that
+    /// same-named types from different modules are resolved correctly.
+    /// Requires `ensure_module_maps_cached(module_source)` to have been called first.
+    pub(super) fn resolve_return_type_in_module(
+        &mut self,
+        module_source: &ModuleSource,
+        return_type: Option<&crate::ast::Type>,
+    ) -> crate::tir::TypeId {
+        let mut cached = self
+            .module_type_maps_cache
+            .shift_remove(module_source)
+            .expect("cache populated by ensure_module_maps_cached");
+        std::mem::swap(&mut self.struct_fields, &mut cached.struct_fields);
+        std::mem::swap(&mut self.variant_cases, &mut cached.variant_cases);
+        std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
+        std::mem::swap(&mut self.flags_cases, &mut cached.flags_cases);
+        std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
+        std::mem::swap(&mut self.resource_types, &mut cached.resource_types);
+
+        let result = return_type
+            .map(|t| self.resolve_type(t))
+            .unwrap_or(crate::tir::TypeTable::UNIT);
+
+        std::mem::swap(&mut self.struct_fields, &mut cached.struct_fields);
+        std::mem::swap(&mut self.variant_cases, &mut cached.variant_cases);
+        std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
+        std::mem::swap(&mut self.flags_cases, &mut cached.flags_cases);
+        std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
+        std::mem::swap(&mut self.resource_types, &mut cached.resource_types);
+        self.module_type_maps_cache
+            .insert(module_source.clone(), cached);
+
+        result
+    }
+
     /// Topologically sort modules based on struct field type dependencies.
     ///
     /// Recursively collect cross-module struct/variant dependencies from a type.

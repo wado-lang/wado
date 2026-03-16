@@ -1,0 +1,21 @@
+// Test: same-named private free function in three modules (entry + 2 libs).
+// Each module should use its own version.
+// The entry module's `process` has no module prefix in WIR,
+// library functions have module-qualified names.
+
+use { println } from "core:cli";
+use { compute_a } from "./sub/wasm_name_conflict_free_fn_mod_a.wado";
+use { compute_b } from "./sub/wasm_name_conflict_free_fn_mod_b.wado";
+
+fn process() -> i32 {
+    return 30;
+}
+
+export fn run() with Stdout {
+    println(`a: {compute_a()}`);
+    println(`b: {compute_b()}`);
+    println(`entry: {process()}`);
+}
+
+__DATA__
+{"stdout": "a: 11\nb: 21\nentry: 30\n"}

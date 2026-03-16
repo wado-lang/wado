@@ -1087,6 +1087,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Try looking up in loaded modules
+        if !struct_module.is_entry_point() {
+            self.ensure_module_maps_cached(struct_module);
+        }
         if !struct_module.is_entry_point()
             && let Some(module) = self.loaded_modules.get(struct_module)
         {
@@ -1124,11 +1127,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     }
                                 }
 
-                                let result = method
-                                    .return_type
-                                    .as_ref()
-                                    .map(|t| self.resolve_type(t))
-                                    .unwrap_or(TypeTable::UNIT);
+                                let result = self.resolve_return_type_in_module(
+                                    struct_module,
+                                    method.return_type.as_ref(),
+                                );
 
                                 // Restore type parameters
                                 self.trait_ctx.type_params = old_type_params;
@@ -1167,11 +1169,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 }
                             }
 
-                            let result = method
-                                .return_type
-                                .as_ref()
-                                .map(|t| self.resolve_type(t))
-                                .unwrap_or(TypeTable::UNIT);
+                            let result = self.resolve_return_type_in_module(
+                                struct_module,
+                                method.return_type.as_ref(),
+                            );
 
                             // Restore type parameters
                             self.trait_ctx.type_params = old_type_params;

@@ -307,7 +307,7 @@ type "functype/__cm_export____test_7_trailing_data_after_valid_json" = fn();
 
 type "functype/__cm_export____test_8_valid_input_still_works" = fn();
 
-type "functype/from_string<User>" = fn(ref String) -> ref Result<User,DeserializeError>;
+type "functype/core/json/from_string<User>" = fn(ref String) -> ref Result<User,DeserializeError>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -462,7 +462,7 @@ fn __test_0_invalid_json___not_an_object() {
     };
     __v0 = __inline_deser_msg_2: block -> ref String {
         __local_5 = String { repr: array.new_data<u8>("not json at all"), used: 15 };
-        __local_6 = from_string<User>(__local_5);
+        __local_6 = "core/json/from_string<User>"(__local_5);
         if ref.test Result<User,DeserializeError>::Err(__local_6) {
             __local_7 = value_copy "core:serde/DeserializeError"(ref.cast Result<User,DeserializeError>::Err(__local_6).payload_0);
             break __inline_deser_msg_2: __local_7.message;
@@ -522,7 +522,7 @@ fn __test_1_invalid_json___empty_string() {
     };
     __v0 = __inline_deser_msg_2: block -> ref String {
         __local_5 = String { repr: builtin::array_new<u8>(0), used: 0 };
-        __local_6 = from_string<User>(__local_5);
+        __local_6 = "core/json/from_string<User>"(__local_5);
         if ref.test Result<User,DeserializeError>::Err(__local_6) {
             __local_7 = value_copy "core:serde/DeserializeError"(ref.cast Result<User,DeserializeError>::Err(__local_6).payload_0);
             break __inline_deser_msg_2: __local_7.message;
@@ -582,7 +582,7 @@ fn __test_2_invalid_json___truncated_string() {
     };
     __v0 = __inline_deser_msg_2: block -> ref String {
         __local_5 = String { repr: array.new_data<u8>("{\"name\":\"Al"), used: 11 };
-        __local_6 = from_string<User>(__local_5);
+        __local_6 = "core/json/from_string<User>"(__local_5);
         if ref.test Result<User,DeserializeError>::Err(__local_6) {
             __local_7 = value_copy "core:serde/DeserializeError"(ref.cast Result<User,DeserializeError>::Err(__local_6).payload_0);
             break __inline_deser_msg_2: __local_7.message;
@@ -642,7 +642,7 @@ fn __test_3_missing_required_field() {
     };
     __v0 = __inline_deser_msg_2: block -> ref String {
         __local_5 = String { repr: array.new_data<u8>("{\"name\":\"Alice\",\"active\":true}"), used: 30 };
-        __local_6 = from_string<User>(__local_5);
+        __local_6 = "core/json/from_string<User>"(__local_5);
         if ref.test Result<User,DeserializeError>::Err(__local_6) {
             __local_7 = value_copy "core:serde/DeserializeError"(ref.cast Result<User,DeserializeError>::Err(__local_6).payload_0);
             break __inline_deser_msg_2: __local_7.message;
@@ -702,7 +702,7 @@ fn __test_4_type_mismatch___string_where_number_expected() {
     };
     __v0 = __inline_deser_msg_2: block -> ref String {
         __local_5 = String { repr: array.new_data<u8>("{\"name\":\"Alice\",\"age\":\"thirty\",\"active\":true}"), used: 45 };
-        __local_6 = from_string<User>(__local_5);
+        __local_6 = "core/json/from_string<User>"(__local_5);
         if ref.test Result<User,DeserializeError>::Err(__local_6) {
             __local_7 = value_copy "core:serde/DeserializeError"(ref.cast Result<User,DeserializeError>::Err(__local_6).payload_0);
             break __inline_deser_msg_2: __local_7.message;
@@ -762,7 +762,7 @@ fn __test_5_type_mismatch___number_where_string_expected() {
     };
     __v0 = __inline_deser_msg_2: block -> ref String {
         __local_5 = String { repr: array.new_data<u8>("{\"name\":42,\"age\":30,\"active\":true}"), used: 34 };
-        __local_6 = from_string<User>(__local_5);
+        __local_6 = "core/json/from_string<User>"(__local_5);
         if ref.test Result<User,DeserializeError>::Err(__local_6) {
             __local_7 = value_copy "core:serde/DeserializeError"(ref.cast Result<User,DeserializeError>::Err(__local_6).payload_0);
             break __inline_deser_msg_2: __local_7.message;
@@ -822,7 +822,7 @@ fn __test_6_type_mismatch___number_where_bool_expected() {
     };
     __v0 = __inline_deser_msg_2: block -> ref String {
         __local_5 = String { repr: array.new_data<u8>("{\"name\":\"Alice\",\"age\":30,\"active\":1}"), used: 36 };
-        __local_6 = from_string<User>(__local_5);
+        __local_6 = "core/json/from_string<User>"(__local_5);
         if ref.test Result<User,DeserializeError>::Err(__local_6) {
             __local_7 = value_copy "core:serde/DeserializeError"(ref.cast Result<User,DeserializeError>::Err(__local_6).payload_0);
             break __inline_deser_msg_2: __local_7.message;
@@ -882,7 +882,7 @@ fn __test_7_trailing_data_after_valid_json() {
     };
     __v0 = __inline_deser_msg_2: block -> ref String {
         __local_5 = String { repr: array.new_data<u8>("{\"name\":\"Alice\",\"age\":30,\"active\":true}extra"), used: 44 };
-        __local_6 = from_string<User>(__local_5);
+        __local_6 = "core/json/from_string<User>"(__local_5);
         if ref.test Result<User,DeserializeError>::Err(__local_6) {
             __local_7 = value_copy "core:serde/DeserializeError"(ref.cast Result<User,DeserializeError>::Err(__local_6).payload_0);
             break __inline_deser_msg_2: __local_7.message;
@@ -955,7 +955,7 @@ fn __test_8_valid_input_still_works() {
         };
         __modules_initialized = 1;
     };
-    r = from_string<User>(String { repr: array.new_data<u8>("{\"name\":\"Alice\",\"age\":30,\"active\":true}"), used: 39 });
+    r = "core/json/from_string<User>"(String { repr: array.new_data<u8>("{\"name\":\"Alice\",\"age\":30,\"active\":true}"), used: 39 });
     if ref.test Result<User,DeserializeError>::Ok(r) {
         u = value_copy User(ref.cast Result<User,DeserializeError>::Ok(r).payload_0);
         __v0_2 = u.name;
@@ -1194,7 +1194,7 @@ fn __cm_export____test_8_valid_input_still_works() {
     "wasi/task-return"(0);
 }
 
-fn from_string<User>(input) {
+fn "core/json/from_string<User>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<User,DeserializeError>;
     let v: ref User;

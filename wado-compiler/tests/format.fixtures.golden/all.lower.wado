@@ -1317,8 +1317,8 @@ pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: boo
     let bytes: builtin::array<u8> = message.String::internal_raw_bytes();
     let len: i32 = message.String::len();
     if add_newline {
-        let new_repr: builtin::array<u8> = "core::cli::array_new<u8>"((len + 1));
-        "core::cli::array_copy<u8>"(new_repr, 0, bytes, 0, len);
+        let new_repr: builtin::array<u8> = "core::cli::core/builtin/array_new<u8>"((len + 1));
+        "core::cli::core/builtin/array_copy<u8>"(new_repr, 0, bytes, 0, len);
         core::builtin::array_set_u8(new_repr, len, 10);
         core::internal::cm_stream_write_raw_u8(&tx as i32, new_repr, (len + 1));
     } else {
@@ -1670,9 +1670,9 @@ pub fn "Array<Tuple<String,String>>::len"(self: &Array<[String, String]>) -> i32
     return self.used;
 }
 
-fn "array_copy<u8>"(dst: builtin::array<u8>, dst_offset: i32, src: builtin::array<u8>, src_offset: i32, len: i32);
+fn "core/builtin/array_copy<u8>"(dst: builtin::array<u8>, dst_offset: i32, src: builtin::array<u8>, src_offset: i32, len: i32);
 
-fn "array_new<u8>"(len: i32) -> builtin::array<u8>;
+fn "core/builtin/array_new<u8>"(len: i32) -> builtin::array<u8>;
 
 
 // --- Module: core:internal ---
@@ -1755,7 +1755,7 @@ pub struct "Box<f64>" {
 }
 
 pub fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
-    let arr: builtin::array<u8> = "core::internal::array_new<u8>"(len);
+    let arr: builtin::array<u8> = "core::internal::core/builtin/array_new<u8>"(len);
     __for_0: {
         let mut i: i32 = 0;
         loop {
@@ -1795,8 +1795,8 @@ pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newli
     let bytes: builtin::array<u8> = message.String::internal_raw_bytes();
     let len: i32 = message.String::len();
     if add_newline {
-        let new_repr: builtin::array<u8> = "core::internal::array_new<u8>"((len + 1));
-        "core::internal::array_copy<u8>"(new_repr, 0, bytes, 0, len);
+        let new_repr: builtin::array<u8> = "core::internal::core/builtin/array_new<u8>"((len + 1));
+        "core::internal::core/builtin/array_copy<u8>"(new_repr, 0, bytes, 0, len);
         core::builtin::array_set_u8(new_repr, len, 10);
         core::internal::cm_stream_write_raw_u8(&tx as i32, new_repr, (len + 1));
     } else {
@@ -2241,9 +2241,9 @@ pub fn "Array<u8>::internal_raw_data"(self: &Array<u8>) -> builtin::array<u8> {
     return self.repr;
 }
 
-fn "array_copy<u8>"(dst: builtin::array<u8>, dst_offset: i32, src: builtin::array<u8>, src_offset: i32, len: i32);
+fn "core/builtin/array_copy<u8>"(dst: builtin::array<u8>, dst_offset: i32, src: builtin::array<u8>, src_offset: i32, len: i32);
 
-fn "array_new<u8>"(len: i32) -> builtin::array<u8>;
+fn "core/builtin/array_new<u8>"(len: i32) -> builtin::array<u8>;
 
 
 // --- Module: core:prelude ---
@@ -2508,11 +2508,11 @@ pub struct "ArrayIter<Point>" {
 }
 
 fn i32_min(a: i32, b: i32) -> i32 {
-    return "core::prelude/array.wado::select<i32>"((a < b), a, b);
+    return "core::prelude/array.wado::core/builtin/select<i32>"((a < b), a, b);
 }
 
 fn i32_max(a: i32, b: i32) -> i32 {
-    return "core::prelude/array.wado::select<i32>"((a > b), a, b);
+    return "core::prelude/array.wado::core/builtin/select<i32>"((a > b), a, b);
 }
 
 pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
@@ -2761,7 +2761,7 @@ pub fn "Tuple<Tuple<String,i32>,Tuple<String,i32>,Tuple<String,i32>,Tuple<String
     self."Tuple<Tuple<String,i32>,Tuple<String,i32>,Tuple<String,i32>,Tuple<String,i32>,Tuple<String,i32>,Tuple<String,i32>>^Inspect::inspect"(f);
 }
 
-fn "select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
+fn "core/builtin/select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
 
 
 // --- Module: core:prelude/fpfmt.wado ---
@@ -3379,7 +3379,7 @@ pub fn write_decimal(buf: &mut String, d: u64, p: i32, nd: i32) {
             "core::prelude/fpfmt.wado::fill_zeros"(buf, (nd + 1));
             "core::prelude/fpfmt.wado::write_digits_at"(buf, start, d, nd);
             let raw: builtin::array<u8> = buf.String::internal_raw_bytes();
-            "core::prelude/fpfmt.wado::array_copy<u8>"(raw, ((start + decimal_pos) + 1), raw, (start + decimal_pos), (nd - decimal_pos));
+            "core::prelude/fpfmt.wado::core/builtin/array_copy<u8>"(raw, ((start + decimal_pos) + 1), raw, (start + decimal_pos), (nd - decimal_pos));
             buf.String::set_byte((start + decimal_pos), '.' as u8);
         }
     }
@@ -3408,7 +3408,7 @@ pub fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
         "core::prelude/fpfmt.wado::fill_zeros"(buf, (nd + 1));
         "core::prelude/fpfmt.wado::write_digits_at"(buf, start, d, nd);
         let raw: builtin::array<u8> = buf.String::internal_raw_bytes();
-        "core::prelude/fpfmt.wado::array_copy<u8>"(raw, (start + 2), raw, (start + 1), (nd - 1));
+        "core::prelude/fpfmt.wado::core/builtin/array_copy<u8>"(raw, (start + 2), raw, (start + 1), (nd - 1));
         buf.String::set_byte((start + 1), '.' as u8);
     } else {
         let start: i32 = buf.String::len();
@@ -3510,7 +3510,7 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
                 "core::prelude/fpfmt.wado::fill_zeros"(buf, total);
                 "core::prelude/fpfmt.wado::write_digits_at"(buf, start, trim_d, output_nd);
                 let raw: builtin::array<u8> = buf.String::internal_raw_bytes();
-                "core::prelude/fpfmt.wado::array_copy<u8>"(raw, ((start + decimal_pos) + 1), raw, (start + decimal_pos), (output_nd - decimal_pos));
+                "core::prelude/fpfmt.wado::core/builtin/array_copy<u8>"(raw, ((start + decimal_pos) + 1), raw, (start + decimal_pos), (output_nd - decimal_pos));
                 buf.String::set_byte((start + decimal_pos), '.' as u8);
                 return;
             }
@@ -3519,7 +3519,7 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
             "core::prelude/fpfmt.wado::fill_zeros"(buf, (nd + 1));
             "core::prelude/fpfmt.wado::write_digits_at"(buf, start, d, nd);
             let raw: builtin::array<u8> = buf.String::internal_raw_bytes();
-            "core::prelude/fpfmt.wado::array_copy<u8>"(raw, ((start + decimal_pos) + 1), raw, (start + decimal_pos), (nd - decimal_pos));
+            "core::prelude/fpfmt.wado::core/builtin/array_copy<u8>"(raw, ((start + decimal_pos) + 1), raw, (start + decimal_pos), (nd - decimal_pos));
             buf.String::set_byte((start + decimal_pos), '.' as u8);
             "core::prelude/fpfmt.wado::fill_zeros"(buf, trailing);
         }
@@ -3559,7 +3559,7 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
         }
         "core::prelude/fpfmt.wado::write_digits_at"(buf, start, trim_d, digit_count);
         let raw: builtin::array<u8> = buf.String::internal_raw_bytes();
-        "core::prelude/fpfmt.wado::array_copy<u8>"(raw, (start + 2), raw, (start + 1), (digit_count - 1));
+        "core::prelude/fpfmt.wado::core/builtin/array_copy<u8>"(raw, (start + 2), raw, (start + 1), (digit_count - 1));
         buf.String::set_byte((start + 1), '.' as u8);
         "core::prelude/fpfmt.wado::fill_zeros"(buf, trailing);
     } else {
@@ -4137,7 +4137,7 @@ pub fn "Array<u64>::append"(self: &mut Array<u64>, value: u64) {
     if core::builtin::unlikely((used >= capacity)) {
         let new_capacity: i32 = __inline_i32_max_0: {
             let a: i32 = (capacity * 2);
-            break __inline_i32_max_0: "core::prelude/array.wado::select<i32>"((a > 4), a, 4);
+            break __inline_i32_max_0: "core::prelude/array.wado::core/builtin/select<i32>"((a > 4), a, 4);
         };
         let new_repr: builtin::array<u64> = core::builtin::array_new::<u64>(new_capacity);
         let old_repr: builtin::array<u64> = self.repr;
@@ -4165,7 +4165,7 @@ pub fn "Array<u64>::with_capacity"(capacity: i32) -> Array<u64> {
     return Array<u64> { repr: core::builtin::array_new::<u64>(capacity), used: 0 };
 }
 
-fn "array_copy<u8>"(dst: builtin::array<u8>, dst_offset: i32, src: builtin::array<u8>, src_offset: i32, len: i32);
+fn "core/builtin/array_copy<u8>"(dst: builtin::array<u8>, dst_offset: i32, src: builtin::array<u8>, src_offset: i32, len: i32);
 
 fn "Array<u64>^IndexValue::index_value"(self: &Array<u64>, index: i32) -> u64 {
     if (index >= self.used) {
@@ -5240,7 +5240,7 @@ pub struct "ArrayIter<Point>" {
 }
 
 fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
-    let arr: builtin::array<u8> = "core::prelude/primitive.wado::array_new<u8>"(len);
+    let arr: builtin::array<u8> = "core::prelude/primitive.wado::core/builtin/array_new<u8>"(len);
     __for_0: {
         let mut i: i32 = 0;
         loop {
@@ -5501,11 +5501,11 @@ pub fn char::is_whitespace(self: Box<char>) -> bool {
 }
 
 pub fn i8::max(a: i8, b: i8) -> i8 {
-    return "core::prelude/primitive.wado::select<i8>"((a > b), a, b);
+    return "core::prelude/primitive.wado::core/builtin/select<i8>"((a > b), a, b);
 }
 
 pub fn i8::min(a: i8, b: i8) -> i8 {
-    return "core::prelude/primitive.wado::select<i8>"((a < b), a, b);
+    return "core::prelude/primitive.wado::core/builtin/select<i8>"((a < b), a, b);
 }
 
 fn i8::fmt_into(self: Box<i8>, f: &mut Formatter) {
@@ -5520,11 +5520,11 @@ pub fn i8::to_string(self: Box<i8>) -> String {
 }
 
 pub fn u8::max(a: u8, b: u8) -> u8 {
-    return "core::prelude/primitive.wado::select<u8>"((a > b), a, b);
+    return "core::prelude/primitive.wado::core/builtin/select<u8>"((a > b), a, b);
 }
 
 pub fn u8::min(a: u8, b: u8) -> u8 {
-    return "core::prelude/primitive.wado::select<u8>"((a < b), a, b);
+    return "core::prelude/primitive.wado::core/builtin/select<u8>"((a < b), a, b);
 }
 
 fn u8::fmt_into(self: Box<u8>, f: &mut Formatter) {
@@ -5539,11 +5539,11 @@ pub fn u8::to_string(self: Box<u8>) -> String {
 }
 
 pub fn i16::max(a: i16, b: i16) -> i16 {
-    return "core::prelude/primitive.wado::select<i16>"((a > b), a, b);
+    return "core::prelude/primitive.wado::core/builtin/select<i16>"((a > b), a, b);
 }
 
 pub fn i16::min(a: i16, b: i16) -> i16 {
-    return "core::prelude/primitive.wado::select<i16>"((a < b), a, b);
+    return "core::prelude/primitive.wado::core/builtin/select<i16>"((a < b), a, b);
 }
 
 fn i16::fmt_into(self: Box<i16>, f: &mut Formatter) {
@@ -5558,11 +5558,11 @@ pub fn i16::to_string(self: Box<i16>) -> String {
 }
 
 pub fn u16::max(a: u16, b: u16) -> u16 {
-    return "core::prelude/primitive.wado::select<u16>"((a > b), a, b);
+    return "core::prelude/primitive.wado::core/builtin/select<u16>"((a > b), a, b);
 }
 
 pub fn u16::min(a: u16, b: u16) -> u16 {
-    return "core::prelude/primitive.wado::select<u16>"((a < b), a, b);
+    return "core::prelude/primitive.wado::core/builtin/select<u16>"((a < b), a, b);
 }
 
 fn u16::fmt_into(self: Box<u16>, f: &mut Formatter) {
@@ -5577,11 +5577,11 @@ pub fn u16::to_string(self: Box<u16>) -> String {
 }
 
 pub fn i32::max(a: i32, b: i32) -> i32 {
-    return "core::prelude/primitive.wado::select<i32>"((a > b), a, b);
+    return "core::prelude/primitive.wado::core/builtin/select<i32>"((a > b), a, b);
 }
 
 pub fn i32::min(a: i32, b: i32) -> i32 {
-    return "core::prelude/primitive.wado::select<i32>"((a < b), a, b);
+    return "core::prelude/primitive.wado::core/builtin/select<i32>"((a < b), a, b);
 }
 
 pub fn i32::clz(x: i32) -> i32 {
@@ -5620,11 +5620,11 @@ pub fn i32::to_string(self: Box<i32>) -> String {
 }
 
 pub fn u32::max(a: u32, b: u32) -> u32 {
-    return "core::prelude/primitive.wado::select<u32>"((a > b), a, b);
+    return "core::prelude/primitive.wado::core/builtin/select<u32>"((a > b), a, b);
 }
 
 pub fn u32::min(a: u32, b: u32) -> u32 {
-    return "core::prelude/primitive.wado::select<u32>"((a < b), a, b);
+    return "core::prelude/primitive.wado::core/builtin/select<u32>"((a < b), a, b);
 }
 
 fn u32::fmt_decimal(self: Box<u32>, f: &mut Formatter) {
@@ -5651,11 +5651,11 @@ pub fn u32::to_string(self: Box<u32>) -> String {
 }
 
 pub fn i64::max(a: i64, b: i64) -> i64 {
-    return "core::prelude/primitive.wado::select<i64>"((a > b), a, b);
+    return "core::prelude/primitive.wado::core/builtin/select<i64>"((a > b), a, b);
 }
 
 pub fn i64::min(a: i64, b: i64) -> i64 {
-    return "core::prelude/primitive.wado::select<i64>"((a < b), a, b);
+    return "core::prelude/primitive.wado::core/builtin/select<i64>"((a < b), a, b);
 }
 
 pub fn i64::clz(x: i64) -> i64 {
@@ -5729,11 +5729,11 @@ pub fn i64::to_string(self: Box<i64>) -> String {
 }
 
 pub fn u64::max(a: u64, b: u64) -> u64 {
-    return "core::prelude/primitive.wado::select<u64>"((a > b), a, b);
+    return "core::prelude/primitive.wado::core/builtin/select<u64>"((a > b), a, b);
 }
 
 pub fn u64::min(a: u64, b: u64) -> u64 {
-    return "core::prelude/primitive.wado::select<u64>"((a < b), a, b);
+    return "core::prelude/primitive.wado::core/builtin/select<u64>"((a < b), a, b);
 }
 
 fn u64::fmt_decimal(self: Box<u64>, f: &mut Formatter) {
@@ -7302,23 +7302,23 @@ pub fn "Tuple<Tuple<String,i32>,Tuple<String,i32>,Tuple<String,i32>,Tuple<String
     self."Tuple<Tuple<String,i32>,Tuple<String,i32>,Tuple<String,i32>,Tuple<String,i32>,Tuple<String,i32>,Tuple<String,i32>>^Inspect::inspect"(f);
 }
 
-fn "select<u64>"(cond: bool, if_true: u64, if_false: u64) -> u64;
+fn "core/builtin/select<u64>"(cond: bool, if_true: u64, if_false: u64) -> u64;
 
-fn "select<i64>"(cond: bool, if_true: i64, if_false: i64) -> i64;
+fn "core/builtin/select<i64>"(cond: bool, if_true: i64, if_false: i64) -> i64;
 
-fn "select<u32>"(cond: bool, if_true: u32, if_false: u32) -> u32;
+fn "core/builtin/select<u32>"(cond: bool, if_true: u32, if_false: u32) -> u32;
 
-fn "select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
+fn "core/builtin/select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
 
-fn "select<u16>"(cond: bool, if_true: u16, if_false: u16) -> u16;
+fn "core/builtin/select<u16>"(cond: bool, if_true: u16, if_false: u16) -> u16;
 
-fn "select<i16>"(cond: bool, if_true: i16, if_false: i16) -> i16;
+fn "core/builtin/select<i16>"(cond: bool, if_true: i16, if_false: i16) -> i16;
 
-fn "select<u8>"(cond: bool, if_true: u8, if_false: u8) -> u8;
+fn "core/builtin/select<u8>"(cond: bool, if_true: u8, if_false: u8) -> u8;
 
-fn "select<i8>"(cond: bool, if_true: i8, if_false: i8) -> i8;
+fn "core/builtin/select<i8>"(cond: bool, if_true: i8, if_false: i8) -> i8;
 
-fn "array_new<u8>"(len: i32) -> builtin::array<u8>;
+fn "core/builtin/array_new<u8>"(len: i32) -> builtin::array<u8>;
 
 
 // --- Module: core:prelude/string.wado ---
@@ -7346,15 +7346,15 @@ pub struct "ArrayIter<Point>" {
 }
 
 fn i32_min(a: i32, b: i32) -> i32 {
-    return "core::prelude/string.wado::select<i32>"((a < b), a, b);
+    return "core::prelude/string.wado::core/builtin/select<i32>"((a < b), a, b);
 }
 
 fn i32_max(a: i32, b: i32) -> i32 {
-    return "core::prelude/string.wado::select<i32>"((a > b), a, b);
+    return "core::prelude/string.wado::core/builtin/select<i32>"((a > b), a, b);
 }
 
 pub fn String::with_capacity(capacity: i32) -> String {
-    return String { repr: "core::prelude/string.wado::array_new<u8>"(capacity), used: 0 };
+    return String { repr: "core::prelude/string.wado::core/builtin/array_new<u8>"(capacity), used: 0 };
 }
 
 pub fn String::len(self: &String) -> i32 {
@@ -7387,8 +7387,8 @@ pub fn String::grow(self: &mut String, min_capacity: i32) {
         return;
     }
     let new_capacity: i32 = "core::prelude/string.wado::i32_max"("core::prelude/string.wado::i32_max"((capacity * 2), min_capacity), 8);
-    let new_repr: builtin::array<u8> = "core::prelude/string.wado::array_new<u8>"(new_capacity);
-    "core::prelude/string.wado::array_copy<u8>"(new_repr, 0, self.repr, 0, self.used);
+    let new_repr: builtin::array<u8> = "core::prelude/string.wado::core/builtin/array_new<u8>"(new_capacity);
+    "core::prelude/string.wado::core/builtin/array_copy<u8>"(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -7433,7 +7433,7 @@ pub fn String::append_byte_filled(self: &mut String, byte: u8, n: i32) {
     if core::builtin::unlikely((new_used > core::builtin::array_len(self.repr))) {
         self.String::grow(new_used);
     }
-    "core::prelude/string.wado::array_fill<u8>"(self.repr, self.used, byte, n);
+    "core::prelude/string.wado::core/builtin/array_fill<u8>"(self.repr, self.used, byte, n);
     self.used = new_used;
 }
 
@@ -7446,7 +7446,7 @@ pub fn String::append(self: &mut String, other: String) {
     if core::builtin::unlikely((new_used > core::builtin::array_len(self.repr))) {
         self.String::grow(new_used);
     }
-    "core::prelude/string.wado::array_copy<u8>"(self.repr, self.used, other.String::internal_raw_bytes(), 0, other_len);
+    "core::prelude/string.wado::core/builtin/array_copy<u8>"(self.repr, self.used, other.String::internal_raw_bytes(), 0, other_len);
     self.used = new_used;
 }
 
@@ -7454,9 +7454,9 @@ pub fn String::concat(a: String, b: String) -> String {
     let len_a: i32 = a.String::len();
     let len_b: i32 = b.String::len();
     let total: i32 = (len_a + len_b);
-    let repr: builtin::array<u8> = "core::prelude/string.wado::array_new<u8>"(total);
-    "core::prelude/string.wado::array_copy<u8>"(repr, 0, a.String::internal_raw_bytes(), 0, len_a);
-    "core::prelude/string.wado::array_copy<u8>"(repr, len_a, b.String::internal_raw_bytes(), 0, len_b);
+    let repr: builtin::array<u8> = "core::prelude/string.wado::core/builtin/array_new<u8>"(total);
+    "core::prelude/string.wado::core/builtin/array_copy<u8>"(repr, 0, a.String::internal_raw_bytes(), 0, len_a);
+    "core::prelude/string.wado::core/builtin/array_copy<u8>"(repr, len_a, b.String::internal_raw_bytes(), 0, len_b);
     return String { repr: repr, used: total };
 }
 
@@ -7887,8 +7887,8 @@ fn String::internal_substr_bytes(self: &String, start: i32, end: i32) -> String 
     if (len <= 0) {
         return "core::prelude/string.wado::String::with_capacity"(0);
     }
-    let repr: builtin::array<u8> = "core::prelude/string.wado::array_new<u8>"(len);
-    "core::prelude/string.wado::array_copy<u8>"(repr, 0, self.repr, start, len);
+    let repr: builtin::array<u8> = "core::prelude/string.wado::core/builtin/array_new<u8>"(len);
+    "core::prelude/string.wado::core/builtin/array_copy<u8>"(repr, 0, self.repr, start, len);
     return String { repr: repr, used: len };
 }
 
@@ -8218,6 +8218,7 @@ pub fn "Array<u8>::append"(self: &mut Array<u8>, value: u8) {
     let capacity: i32 = core::builtin::array_len(self.repr);
     if core::builtin::unlikely((used >= capacity)) {
         let new_capacity: i32 = "core::prelude/array.wado::i32_max"((capacity * 2), 4);
+<<<<<<< HEAD
         let new_repr: builtin::array<u8> = "core::prelude/string.wado::array_new<u8>"(new_capacity);
         let old_repr: builtin::array<u8> = self.repr;
         __for_0: {
@@ -8232,6 +8233,13 @@ pub fn "Array<u8>::append"(self: &mut Array<u8>, value: u8) {
                 i = (i + 1);
             }
         }
+||||||| 376fc2d
+        let new_repr: builtin::array<u8> = "core::prelude/string.wado::array_new<u8>"(new_capacity);
+        "core::prelude/string.wado::array_copy<u8>"(new_repr, 0, self.repr, 0, used);
+=======
+        let new_repr: builtin::array<u8> = "core::prelude/string.wado::core/builtin/array_new<u8>"(new_capacity);
+        "core::prelude/string.wado::core/builtin/array_copy<u8>"(new_repr, 0, self.repr, 0, used);
+>>>>>>> origin/main
         self.repr = new_repr;
     }
     core::builtin::array_set::<u8>(self.repr, used, value);
@@ -8247,16 +8255,16 @@ fn "Array<u8>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<u8> {
 }
 
 pub fn "Array<u8>::with_capacity"(capacity: i32) -> Array<u8> {
-    return Array<u8> { repr: "core::prelude/string.wado::array_new<u8>"(capacity), used: 0 };
+    return Array<u8> { repr: "core::prelude/string.wado::core/builtin/array_new<u8>"(capacity), used: 0 };
 }
 
-fn "array_fill<u8>"(arr: builtin::array<u8>, offset: i32, value: u8, len: i32);
+fn "core/builtin/array_fill<u8>"(arr: builtin::array<u8>, offset: i32, value: u8, len: i32);
 
-fn "array_copy<u8>"(dst: builtin::array<u8>, dst_offset: i32, src: builtin::array<u8>, src_offset: i32, len: i32);
+fn "core/builtin/array_copy<u8>"(dst: builtin::array<u8>, dst_offset: i32, src: builtin::array<u8>, src_offset: i32, len: i32);
 
-fn "array_new<u8>"(len: i32) -> builtin::array<u8>;
+fn "core/builtin/array_new<u8>"(len: i32) -> builtin::array<u8>;
 
-fn "select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
+fn "core/builtin/select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
 
 
 // --- Module: core:prelude/traits.wado ---
@@ -13562,7 +13570,7 @@ pub fn Formatter::write_from_memory(self: &mut Formatter, ptr: i32, len: i32) {
         self.buf.String::internal_append_from_memory(ptr, len);
         return;
     }
-    let arr: builtin::array<u8> = "core::prelude/format.wado::array_new<u8>"(len);
+    let arr: builtin::array<u8> = "core::prelude/format.wado::core/builtin/array_new<u8>"(len);
     __for_3: {
         let mut i: i32 = 0;
         loop {
@@ -13985,6 +13993,6 @@ fn "StrCharIter^IntoIterator::into_iter"(self: &StrCharIter) -> StrCharIter {
     return *self;
 }
 
-fn "array_new<u8>"(len: i32) -> builtin::array<u8>;
+fn "core/builtin/array_new<u8>"(len: i32) -> builtin::array<u8>;
 
 

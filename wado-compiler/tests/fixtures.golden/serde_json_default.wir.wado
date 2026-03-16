@@ -352,7 +352,7 @@ type "functype/__cm_export____test_1_provided_fields_override_defaults" = fn();
 
 type "functype/__cm_export____test_2_missing_required_field_still_errors" = fn();
 
-type "functype/from_string<Config>" = fn(ref String) -> ref Result<Config,DeserializeError>;
+type "functype/core/json/from_string<Config>" = fn(ref String) -> ref Result<Config,DeserializeError>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -542,7 +542,7 @@ fn __test_0_missing_default_fields_use_zero_values() {
         };
         __modules_initialized = 1;
     };
-    r = from_string<Config>(String { repr: array.new_data<u8>("{\"host\":\"localhost\"}"), used: 20 });
+    r = "core/json/from_string<Config>"(String { repr: array.new_data<u8>("{\"host\":\"localhost\"}"), used: 20 });
     if ref.test Result<Config,DeserializeError>::Ok(r) {
         c = value_copy Config(ref.cast Result<Config,DeserializeError>::Ok(r).payload_0);
         __v0_2 = c.host;
@@ -763,7 +763,7 @@ fn __test_1_provided_fields_override_defaults() {
         };
         __modules_initialized = 1;
     };
-    r = from_string<Config>(String { repr: array.new_data<u8>("{\"host\":\"example.com\",\"port\":8080,\"verbose\":true,\"tags\":[\"a\"],\"description\":\"test\"}"), used: 83 });
+    r = "core/json/from_string<Config>"(String { repr: array.new_data<u8>("{\"host\":\"example.com\",\"port\":8080,\"verbose\":true,\"tags\":[\"a\"],\"description\":\"test\"}"), used: 83 });
     if ref.test Result<Config,DeserializeError>::Ok(r) {
         c = value_copy Config(ref.cast Result<Config,DeserializeError>::Ok(r).payload_0);
         __v0_2 = c.host;
@@ -979,7 +979,7 @@ fn __test_2_missing_required_field_still_errors() {
         };
         __modules_initialized = 1;
     };
-    r = from_string<Config>(String { repr: array.new_data<u8>("{\"port\":8080}"), used: 13 });
+    r = "core/json/from_string<Config>"(String { repr: array.new_data<u8>("{\"port\":8080}"), used: 13 });
     if ref.test Result<Config,DeserializeError>::Err(r) {
         e = value_copy "core:serde/DeserializeError"(ref.cast Result<Config,DeserializeError>::Err(r).payload_0);
     } else {
@@ -1148,7 +1148,7 @@ fn __cm_export____test_2_missing_required_field_still_errors() {
         };
         __modules_initialized = 1;
     };
-    r = from_string<Config>(String { repr: array.new_data<u8>("{\"port\":8080}"), used: 13 });
+    r = "core/json/from_string<Config>"(String { repr: array.new_data<u8>("{\"port\":8080}"), used: 13 });
     if ref.test Result<Config,DeserializeError>::Err(r) {
         e = value_copy "core:serde/DeserializeError"(ref.cast Result<Config,DeserializeError>::Err(r).payload_0);
     } else {
@@ -1158,7 +1158,7 @@ fn __cm_export____test_2_missing_required_field_still_errors() {
     "wasi/task-return"(0);
 }
 
-fn from_string<Config>(input) {
+fn "core/json/from_string<Config>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<Config,DeserializeError>;
     let v: ref Config;

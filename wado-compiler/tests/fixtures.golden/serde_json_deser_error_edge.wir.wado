@@ -559,25 +559,25 @@ type "functype/__cm_export____test_27_enum_unknown_variant" = fn();
 
 type "functype/__cm_export____test_28_enum_non_string_value" = fn();
 
-type "functype/from_string<Color>" = fn(ref String) -> ref Result<Color,DeserializeError>;
+type "functype/core/json/from_string<Color>" = fn(ref String) -> ref Result<Color,DeserializeError>;
 
-type "functype/from_string<Option<i32>>" = fn(ref String) -> ref Result<Option<i32>,DeserializeError>;
+type "functype/core/json/from_string<Option<i32>>" = fn(ref String) -> ref Result<Option<i32>,DeserializeError>;
 
-type "functype/from_string<Array<i32>>" = fn(ref String) -> ref Result<Array<i32>,DeserializeError>;
+type "functype/core/json/from_string<Array<i32>>" = fn(ref String) -> ref Result<Array<i32>,DeserializeError>;
 
-type "functype/from_string<Point>" = fn(ref String) -> ref Result<Point,DeserializeError>;
+type "functype/core/json/from_string<Point>" = fn(ref String) -> ref Result<Point,DeserializeError>;
 
-type "functype/to_string<f32>" = fn(ref "core:internal/Box<f32>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<f32>" = fn(ref "core:internal/Box<f32>") -> ref Result<String,SerializeError>;
 
-type "functype/to_string<f64>" = fn(ref "core:internal/Box<f64>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<f64>" = fn(ref "core:internal/Box<f64>") -> ref Result<String,SerializeError>;
 
-type "functype/from_string<u32>" = fn(ref String) -> ref Result<u32,DeserializeError>;
+type "functype/core/json/from_string<u32>" = fn(ref String) -> ref Result<u32,DeserializeError>;
 
-type "functype/from_string<String>" = fn(ref String) -> ref Result<String,DeserializeError>;
+type "functype/core/json/from_string<String>" = fn(ref String) -> ref Result<String,DeserializeError>;
 
-type "functype/from_string<bool>" = fn(ref String) -> ref Result<bool,DeserializeError>;
+type "functype/core/json/from_string<bool>" = fn(ref String) -> ref Result<bool,DeserializeError>;
 
-type "functype/from_string<i32>" = fn(ref String) -> ref Result<i32,DeserializeError>;
+type "functype/core/json/from_string<i32>" = fn(ref String) -> ref Result<i32,DeserializeError>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -763,9 +763,9 @@ type "functype/core:json/JsonSerializer^Serializer::serialize_f32" = fn(ref "cor
 
 type "functype/core:json/JsonSerializer^Serializer::serialize_f64" = fn(ref "core:json/JsonSerializer", f64) -> [i32, ref null "core:serde/SerializeError"];
 
-type "functype/to_string<f32>" = fn(f32) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<f32>" = fn(f32) -> ref Result<String,SerializeError>;
 
-type "functype/to_string<f64>" = fn(f64) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<f64>" = fn(f64) -> ref Result<String,SerializeError>;
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -805,7 +805,7 @@ fn __test_0_string_where_i32_expected() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<i32>(String { repr: array.new_data<u8>("\"hello\""), used: 7 });
+    r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("\"hello\""), used: 7 });
     if ref.test Result<i32,DeserializeError>::Err(r) {
         drop(ref.cast Result<i32,DeserializeError>::Err(r).payload_0);
     } else {
@@ -823,7 +823,7 @@ fn __test_1_bool_where_i32_expected() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<i32>(String { repr: array.new_data<u8>("true"), used: 4 });
+    r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("true"), used: 4 });
     if ref.test Result<i32,DeserializeError>::Err(r) {
         drop(ref.cast Result<i32,DeserializeError>::Err(r).payload_0);
     } else {
@@ -849,7 +849,7 @@ fn __test_2_number_where_bool_expected() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<bool>(String { repr: array.new_data<u8>("42"), used: 2 });
+    r = "core/json/from_string<bool>"(String { repr: array.new_data<u8>("42"), used: 2 });
     if ref.test Result<bool,DeserializeError>::Err(r) {
         e = value_copy "core:serde/DeserializeError"(ref.cast Result<bool,DeserializeError>::Err(r).payload_0);
         __v0 = e.message;
@@ -908,7 +908,7 @@ fn __test_3_number_where_string_expected() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<String>(String { repr: array.new_data<u8>("42"), used: 2 });
+    r = "core/json/from_string<String>"(String { repr: array.new_data<u8>("42"), used: 2 });
     if ref.test Result<String,DeserializeError>::Err(r) {
         e = value_copy "core:serde/DeserializeError"(ref.cast Result<String,DeserializeError>::Err(r).payload_0);
         __v0 = e.message;
@@ -959,7 +959,7 @@ fn __test_4_null_where_i32_expected() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<i32>(String { repr: array.new_data<u8>("null"), used: 4 });
+    r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("null"), used: 4 });
     if ref.test Result<i32,DeserializeError>::Err(r) {
         drop(ref.cast Result<i32,DeserializeError>::Err(r).payload_0);
     } else {
@@ -977,7 +977,7 @@ fn __test_5_array_where_i32_expected() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<i32>(String { repr: array.new_data<u8>("[1,2]"), used: 5 });
+    r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("[1,2]"), used: 5 });
     if ref.test Result<i32,DeserializeError>::Err(r) {
         drop(ref.cast Result<i32,DeserializeError>::Err(r).payload_0);
     } else {
@@ -995,7 +995,7 @@ fn __test_6_object_where_i32_expected() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<i32>(String { repr: array.new_data<u8>("{\"a\":1}"), used: 7 });
+    r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("{\"a\":1}"), used: 7 });
     if ref.test Result<i32,DeserializeError>::Err(r) {
         drop(ref.cast Result<i32,DeserializeError>::Err(r).payload_0);
     } else {
@@ -1013,7 +1013,7 @@ fn __test_7_empty_input() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<i32>(String { repr: builtin::array_new<u8>(0), used: 0 });
+    r = "core/json/from_string<i32>"(String { repr: builtin::array_new<u8>(0), used: 0 });
     if ref.test Result<i32,DeserializeError>::Err(r) {
         drop(ref.cast Result<i32,DeserializeError>::Err(r).payload_0);
     } else {
@@ -1031,7 +1031,7 @@ fn __test_8_whitespace_only() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<i32>(String { repr: array.new_data<u8>("   "), used: 3 });
+    r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("   "), used: 3 });
     if ref.test Result<i32,DeserializeError>::Err(r) {
         drop(ref.cast Result<i32,DeserializeError>::Err(r).payload_0);
     } else {
@@ -1057,7 +1057,7 @@ fn __test_9_truncated_string() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<String>(String { repr: array.new_data<u8>("\"hello"), used: 6 });
+    r = "core/json/from_string<String>"(String { repr: array.new_data<u8>("\"hello"), used: 6 });
     if ref.test Result<String,DeserializeError>::Err(r) {
         e = value_copy "core:serde/DeserializeError"(ref.cast Result<String,DeserializeError>::Err(r).payload_0);
         __v0 = e.message;
@@ -1116,7 +1116,7 @@ fn __test_10_trailing_garbage() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<i32>(String { repr: array.new_data<u8>("42 garbage"), used: 10 });
+    r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("42 garbage"), used: 10 });
     if ref.test Result<i32,DeserializeError>::Err(r) {
         e = value_copy "core:serde/DeserializeError"(ref.cast Result<i32,DeserializeError>::Err(r).payload_0);
         __v0 = e.message;
@@ -1175,7 +1175,7 @@ fn __test_11_multiple_values() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<i32>(String { repr: array.new_data<u8>("1 2"), used: 3 });
+    r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("1 2"), used: 3 });
     if ref.test Result<i32,DeserializeError>::Err(r) {
         e = value_copy "core:serde/DeserializeError"(ref.cast Result<i32,DeserializeError>::Err(r).payload_0);
         __v0 = e.message;
@@ -1226,7 +1226,7 @@ fn __test_12_u32_negative_value() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<u32>(String { repr: array.new_data<u8>("-1"), used: 2 });
+    r = "core/json/from_string<u32>"(String { repr: array.new_data<u8>("-1"), used: 2 });
     if ref.test Result<u32,DeserializeError>::Err(r) {
         drop(ref.cast Result<u32,DeserializeError>::Err(r).payload_0);
     } else {
@@ -1252,7 +1252,7 @@ fn __test_13_u32_too_large() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<u32>(String { repr: array.new_data<u8>("4294967296"), used: 10 });
+    r = "core/json/from_string<u32>"(String { repr: array.new_data<u8>("4294967296"), used: 10 });
     if ref.test Result<u32,DeserializeError>::Err(r) {
         e = value_copy "core:serde/DeserializeError"(ref.cast Result<u32,DeserializeError>::Err(r).payload_0);
         __v0 = e.message;
@@ -1311,7 +1311,7 @@ fn __test_14_f64_nan_serialize_error() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<f64>(0 / 0);
+    r = "core/json/to_string<f64>"(0 / 0);
     if ref.test Result<String,SerializeError>::Err(r) {
         e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
         __v0 = e.message;
@@ -1370,7 +1370,7 @@ fn __test_15_f64_infinity_serialize_error() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<f64>(inf);
+    r = "core/json/to_string<f64>"(inf);
     if ref.test Result<String,SerializeError>::Err(r) {
         e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
         __v0 = e.message;
@@ -1429,7 +1429,7 @@ fn __test_16_f64_negative_infinity_serialize_error() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<f64>(-inf);
+    r = "core/json/to_string<f64>"(-inf);
     if ref.test Result<String,SerializeError>::Err(r) {
         e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
         __v0 = e.message;
@@ -1488,7 +1488,7 @@ fn __test_17_f32_nan_serialize_error() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<f32>(0_f32 / 0_f32);
+    r = "core/json/to_string<f32>"(0_f32 / 0_f32);
     if ref.test Result<String,SerializeError>::Err(r) {
         e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
         __v0 = e.message;
@@ -1547,7 +1547,7 @@ fn __test_18_f32_infinity_serialize_error() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<f32>(inf_f32);
+    r = "core/json/to_string<f32>"(inf_f32);
     if ref.test Result<String,SerializeError>::Err(r) {
         e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
         __v0 = e.message;
@@ -1598,7 +1598,7 @@ fn __test_19_struct_from_non_object() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Point>(String { repr: array.new_data<u8>("42"), used: 2 });
+    r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("42"), used: 2 });
     if ref.test Result<Point,DeserializeError>::Err(r) {
         drop(ref.cast Result<Point,DeserializeError>::Err(r).payload_0);
     } else {
@@ -1616,7 +1616,7 @@ fn __test_20_struct_from_array() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Point>(String { repr: array.new_data<u8>("[1,2]"), used: 5 });
+    r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("[1,2]"), used: 5 });
     if ref.test Result<Point,DeserializeError>::Err(r) {
         drop(ref.cast Result<Point,DeserializeError>::Err(r).payload_0);
     } else {
@@ -1642,7 +1642,7 @@ fn __test_21_struct_missing_required_field() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Point>(String { repr: array.new_data<u8>("{\"x\":1}"), used: 7 });
+    r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("{\"x\":1}"), used: 7 });
     if ref.test Result<Point,DeserializeError>::Err(r) {
         e = value_copy "core:serde/DeserializeError"(ref.cast Result<Point,DeserializeError>::Err(r).payload_0);
         __v0 = e.message;
@@ -1693,7 +1693,7 @@ fn __test_22_struct_wrong_field_type() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Point>(String { repr: array.new_data<u8>("{\"x\":\"one\",\"y\":2}"), used: 17 });
+    r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("{\"x\":\"one\",\"y\":2}"), used: 17 });
     if ref.test Result<Point,DeserializeError>::Err(r) {
         drop(ref.cast Result<Point,DeserializeError>::Err(r).payload_0);
     } else {
@@ -1711,7 +1711,7 @@ fn __test_23_array_malformed() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Array<i32>>(String { repr: array.new_data<u8>("[1,2,"), used: 5 });
+    r = "core/json/from_string<Array<i32>>"(String { repr: array.new_data<u8>("[1,2,"), used: 5 });
     if ref.test Result<Array<i32>,DeserializeError>::Err(r) {
         drop(ref.cast Result<Array<i32>,DeserializeError>::Err(r).payload_0);
     } else {
@@ -1729,7 +1729,7 @@ fn __test_24_array_wrong_element_type() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Array<i32>>(String { repr: array.new_data<u8>("[1,\"two\",3]"), used: 11 });
+    r = "core/json/from_string<Array<i32>>"(String { repr: array.new_data<u8>("[1,\"two\",3]"), used: 11 });
     if ref.test Result<Array<i32>,DeserializeError>::Err(r) {
         drop(ref.cast Result<Array<i32>,DeserializeError>::Err(r).payload_0);
     } else {
@@ -1748,7 +1748,7 @@ fn __test_25_option_null_deserialize() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Option<i32>>(String { repr: array.new_data<u8>("null"), used: 4 });
+    r = "core/json/from_string<Option<i32>>"(String { repr: array.new_data<u8>("null"), used: 4 });
     if ref.test Result<Option<i32>,DeserializeError>::Ok(r) {
         v = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(r).payload_0);
         if v.discriminant == 1 {
@@ -1780,7 +1780,7 @@ fn __test_26_option_some_deserialize() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Option<i32>>(String { repr: array.new_data<u8>("42"), used: 2 });
+    r = "core/json/from_string<Option<i32>>"(String { repr: array.new_data<u8>("42"), used: 2 });
     if ref.test Result<Option<i32>,DeserializeError>::Ok(r) {
         v = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(r).payload_0);
         if ref.test Option<i32>::Some(v) {
@@ -1847,7 +1847,7 @@ fn __test_27_enum_unknown_variant() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Color>(String { repr: array.new_data<u8>("\"Yellow\""), used: 8 });
+    r = "core/json/from_string<Color>"(String { repr: array.new_data<u8>("\"Yellow\""), used: 8 });
     if ref.test Result<Color,DeserializeError>::Err(r) {
         e = value_copy "core:serde/DeserializeError"(ref.cast Result<Color,DeserializeError>::Err(r).payload_0);
         __v0 = e.message;
@@ -1898,7 +1898,7 @@ fn __test_28_enum_non_string_value() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Color>(String { repr: array.new_data<u8>("42"), used: 2 });
+    r = "core/json/from_string<Color>"(String { repr: array.new_data<u8>("42"), used: 2 });
     if ref.test Result<Color,DeserializeError>::Err(r) {
         drop(ref.cast Result<Color,DeserializeError>::Err(r).payload_0);
     } else {
@@ -1936,7 +1936,7 @@ fn __cm_export____test_0_string_where_i32_expected() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<i32>(String { repr: array.new_data<u8>("\"hello\""), used: 7 });
+    r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("\"hello\""), used: 7 });
     if ref.test Result<i32,DeserializeError>::Err(r) {
         drop(ref.cast Result<i32,DeserializeError>::Err(r).payload_0);
     } else {
@@ -1955,7 +1955,7 @@ fn __cm_export____test_1_bool_where_i32_expected() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<i32>(String { repr: array.new_data<u8>("true"), used: 4 });
+    r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("true"), used: 4 });
     if ref.test Result<i32,DeserializeError>::Err(r) {
         drop(ref.cast Result<i32,DeserializeError>::Err(r).payload_0);
     } else {
@@ -1984,7 +1984,7 @@ fn __cm_export____test_4_null_where_i32_expected() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<i32>(String { repr: array.new_data<u8>("null"), used: 4 });
+    r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("null"), used: 4 });
     if ref.test Result<i32,DeserializeError>::Err(r) {
         drop(ref.cast Result<i32,DeserializeError>::Err(r).payload_0);
     } else {
@@ -2003,7 +2003,7 @@ fn __cm_export____test_5_array_where_i32_expected() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<i32>(String { repr: array.new_data<u8>("[1,2]"), used: 5 });
+    r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("[1,2]"), used: 5 });
     if ref.test Result<i32,DeserializeError>::Err(r) {
         drop(ref.cast Result<i32,DeserializeError>::Err(r).payload_0);
     } else {
@@ -2022,7 +2022,7 @@ fn __cm_export____test_6_object_where_i32_expected() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<i32>(String { repr: array.new_data<u8>("{\"a\":1}"), used: 7 });
+    r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("{\"a\":1}"), used: 7 });
     if ref.test Result<i32,DeserializeError>::Err(r) {
         drop(ref.cast Result<i32,DeserializeError>::Err(r).payload_0);
     } else {
@@ -2041,7 +2041,7 @@ fn __cm_export____test_7_empty_input() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<i32>(String { repr: builtin::array_new<u8>(0), used: 0 });
+    r = "core/json/from_string<i32>"(String { repr: builtin::array_new<u8>(0), used: 0 });
     if ref.test Result<i32,DeserializeError>::Err(r) {
         drop(ref.cast Result<i32,DeserializeError>::Err(r).payload_0);
     } else {
@@ -2060,7 +2060,7 @@ fn __cm_export____test_8_whitespace_only() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<i32>(String { repr: array.new_data<u8>("   "), used: 3 });
+    r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("   "), used: 3 });
     if ref.test Result<i32,DeserializeError>::Err(r) {
         drop(ref.cast Result<i32,DeserializeError>::Err(r).payload_0);
     } else {
@@ -2094,7 +2094,7 @@ fn __cm_export____test_12_u32_negative_value() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<u32>(String { repr: array.new_data<u8>("-1"), used: 2 });
+    r = "core/json/from_string<u32>"(String { repr: array.new_data<u8>("-1"), used: 2 });
     if ref.test Result<u32,DeserializeError>::Err(r) {
         drop(ref.cast Result<u32,DeserializeError>::Err(r).payload_0);
     } else {
@@ -2143,7 +2143,7 @@ fn __cm_export____test_19_struct_from_non_object() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Point>(String { repr: array.new_data<u8>("42"), used: 2 });
+    r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("42"), used: 2 });
     if ref.test Result<Point,DeserializeError>::Err(r) {
         drop(ref.cast Result<Point,DeserializeError>::Err(r).payload_0);
     } else {
@@ -2162,7 +2162,7 @@ fn __cm_export____test_20_struct_from_array() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Point>(String { repr: array.new_data<u8>("[1,2]"), used: 5 });
+    r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("[1,2]"), used: 5 });
     if ref.test Result<Point,DeserializeError>::Err(r) {
         drop(ref.cast Result<Point,DeserializeError>::Err(r).payload_0);
     } else {
@@ -2186,7 +2186,7 @@ fn __cm_export____test_22_struct_wrong_field_type() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Point>(String { repr: array.new_data<u8>("{\"x\":\"one\",\"y\":2}"), used: 17 });
+    r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("{\"x\":\"one\",\"y\":2}"), used: 17 });
     if ref.test Result<Point,DeserializeError>::Err(r) {
         drop(ref.cast Result<Point,DeserializeError>::Err(r).payload_0);
     } else {
@@ -2205,7 +2205,7 @@ fn __cm_export____test_23_array_malformed() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Array<i32>>(String { repr: array.new_data<u8>("[1,2,"), used: 5 });
+    r = "core/json/from_string<Array<i32>>"(String { repr: array.new_data<u8>("[1,2,"), used: 5 });
     if ref.test Result<Array<i32>,DeserializeError>::Err(r) {
         drop(ref.cast Result<Array<i32>,DeserializeError>::Err(r).payload_0);
     } else {
@@ -2224,7 +2224,7 @@ fn __cm_export____test_24_array_wrong_element_type() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Array<i32>>(String { repr: array.new_data<u8>("[1,\"two\",3]"), used: 11 });
+    r = "core/json/from_string<Array<i32>>"(String { repr: array.new_data<u8>("[1,\"two\",3]"), used: 11 });
     if ref.test Result<Array<i32>,DeserializeError>::Err(r) {
         drop(ref.cast Result<Array<i32>,DeserializeError>::Err(r).payload_0);
     } else {
@@ -2258,7 +2258,7 @@ fn __cm_export____test_28_enum_non_string_value() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Color>(String { repr: array.new_data<u8>("42"), used: 2 });
+    r = "core/json/from_string<Color>"(String { repr: array.new_data<u8>("42"), used: 2 });
     if ref.test Result<Color,DeserializeError>::Err(r) {
         drop(ref.cast Result<Color,DeserializeError>::Err(r).payload_0);
     } else {
@@ -2268,7 +2268,7 @@ fn __cm_export____test_28_enum_non_string_value() {
     "wasi/task-return"(0);
 }
 
-fn from_string<Color>(input) {
+fn "core/json/from_string<Color>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<Color,DeserializeError>;
     let v: enum:Color;
@@ -2303,7 +2303,7 @@ fn from_string<Color>(input) {
     unreachable;
 }
 
-fn from_string<Option<i32>>(input) {
+fn "core/json/from_string<Option<i32>>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<Option<i32>,DeserializeError>;
     let v: ref Option<i32>;
@@ -2338,7 +2338,7 @@ fn from_string<Option<i32>>(input) {
     unreachable;
 }
 
-fn from_string<Array<i32>>(input) {
+fn "core/json/from_string<Array<i32>>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<Array<i32>,DeserializeError>;
     let v: ref Array<i32>;
@@ -2373,7 +2373,7 @@ fn from_string<Array<i32>>(input) {
     unreachable;
 }
 
-fn from_string<Point>(input) {
+fn "core/json/from_string<Point>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<Point,DeserializeError>;
     let v: ref Point;
@@ -2408,7 +2408,7 @@ fn from_string<Point>(input) {
     unreachable;
 }
 
-fn to_string<f32>(value) {
+fn "core/json/to_string<f32>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     let __local_6: ref "core:json/JsonSerializer";
@@ -2424,7 +2424,7 @@ fn to_string<f32>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn to_string<f64>(value) {
+fn "core/json/to_string<f64>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     let __local_6: ref "core:json/JsonSerializer";
@@ -2440,7 +2440,7 @@ fn to_string<f64>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn from_string<u32>(input) {
+fn "core/json/from_string<u32>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<u32,DeserializeError>;
     let v: u32;
@@ -2479,7 +2479,7 @@ fn from_string<u32>(input) {
     unreachable;
 }
 
-fn from_string<String>(input) {
+fn "core/json/from_string<String>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<String,DeserializeError>;
     let v: ref String;
@@ -2518,7 +2518,7 @@ fn from_string<String>(input) {
     unreachable;
 }
 
-fn from_string<bool>(input) {
+fn "core/json/from_string<bool>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<bool,DeserializeError>;
     let v: bool;
@@ -2557,7 +2557,7 @@ fn from_string<bool>(input) {
     unreachable;
 }
 
-fn from_string<i32>(input) {
+fn "core/json/from_string<i32>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<i32,DeserializeError>;
     let v: i32;

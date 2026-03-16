@@ -270,17 +270,17 @@ type "functype/__cm_export____test_7_i128_large_value_as_string" = fn();
 
 type "functype/__cm_export____test_8_u128_large_value_as_string" = fn();
 
-type "functype/to_string<u128>" = fn(ref u128) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<u128>" = fn(ref u128) -> ref Result<String,SerializeError>;
 
-type "functype/to_string<i128>" = fn(ref i128) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<i128>" = fn(ref i128) -> ref Result<String,SerializeError>;
 
-type "functype/from_string<u64>" = fn(ref String) -> ref Result<u64,DeserializeError>;
+type "functype/core/json/from_string<u64>" = fn(ref String) -> ref Result<u64,DeserializeError>;
 
-type "functype/from_string<i64>" = fn(ref String) -> ref Result<i64,DeserializeError>;
+type "functype/core/json/from_string<i64>" = fn(ref String) -> ref Result<i64,DeserializeError>;
 
-type "functype/to_string<u64>" = fn(ref "core:internal/Box<u64>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<u64>" = fn(ref "core:internal/Box<u64>") -> ref Result<String,SerializeError>;
 
-type "functype/to_string<i64>" = fn(ref "core:internal/Box<i64>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<i64>" = fn(ref "core:internal/Box<i64>") -> ref Result<String,SerializeError>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -432,9 +432,9 @@ type "functype/core:json/JsonSerializer^Serializer::serialize_i128" = fn(ref "co
 
 type "functype/core:json/JsonSerializer^Serializer::serialize_u128" = fn(ref "core:json/JsonSerializer", ref u128) -> [i32, ref null "core:serde/SerializeError"];
 
-type "functype/to_string<u64>" = fn(u64) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<u64>" = fn(u64) -> ref Result<String,SerializeError>;
 
-type "functype/to_string<i64>" = fn(i64) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<i64>" = fn(i64) -> ref Result<String,SerializeError>;
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -484,7 +484,7 @@ fn __test_0_i64_small_value_as_number() {
         };
         __modules_initialized = 1;
     };
-    r = to_string<i64>(42_i64);
+    r = "core/json/to_string<i64>"(42_i64);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -544,7 +544,7 @@ fn __test_1_i64_at_max_safe_integer_as_number() {
         };
         __modules_initialized = 1;
     };
-    r = to_string<i64>(9007199254740991_i64);
+    r = "core/json/to_string<i64>"(9007199254740991_i64);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -604,7 +604,7 @@ fn __test_2_i64_above_max_safe_integer_as_string() {
         };
         __modules_initialized = 1;
     };
-    r = to_string<i64>(9007199254740992_i64);
+    r = "core/json/to_string<i64>"(9007199254740992_i64);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -664,7 +664,7 @@ fn __test_3_u64_large_value_as_string() {
         };
         __modules_initialized = 1;
     };
-    r = to_string<u64>(-1_i64);
+    r = "core/json/to_string<u64>"(-1_i64);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -724,7 +724,7 @@ fn __test_4_i64_negative_large_value_as_string() {
         };
         __modules_initialized = 1;
     };
-    r = to_string<i64>(-9007199254740992_i64);
+    r = "core/json/to_string<i64>"(-9007199254740992_i64);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -784,7 +784,7 @@ fn __test_5_deserialize_i64_from_string() {
         };
         __modules_initialized = 1;
     };
-    r = from_string<i64>(String { repr: array.new_data<u8>("\"9007199254740992\""), used: 18 });
+    r = "core/json/from_string<i64>"(String { repr: array.new_data<u8>("\"9007199254740992\""), used: 18 });
     if ref.test Result<i64,DeserializeError>::Ok(r) {
         v = ref.cast Result<i64,DeserializeError>::Ok(r).payload_0;
         __cond = v == 9007199254740992_i64;
@@ -844,7 +844,7 @@ fn __test_6_deserialize_u64_from_string() {
         };
         __modules_initialized = 1;
     };
-    r = from_string<u64>(String { repr: array.new_data<u8>("\"18446744073709551615\""), used: 22 });
+    r = "core/json/from_string<u64>"(String { repr: array.new_data<u8>("\"18446744073709551615\""), used: 22 });
     if ref.test Result<u64,DeserializeError>::Ok(r) {
         v = ref.cast Result<u64,DeserializeError>::Ok(r).payload_0;
         __cond = v == -1_i64;
@@ -906,7 +906,7 @@ fn __test_7_i128_large_value_as_string() {
         __modules_initialized = 1;
     };
     v = i128 { low: -1_i64, high: 9223372036854775807_i64 };
-    r = to_string<i128>(v);
+    r = "core/json/to_string<i128>"(v);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -968,7 +968,7 @@ fn __test_8_u128_large_value_as_string() {
         __modules_initialized = 1;
     };
     v = u128 { low: -1_i64, high: -1_i64 };
-    r = to_string<u128>(v);
+    r = "core/json/to_string<u128>"(v);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -1057,7 +1057,7 @@ fn __cm_export____test_8_u128_large_value_as_string() {
     "wasi/task-return"(0);
 }
 
-fn to_string<u128>(value) {
+fn "core/json/to_string<u128>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     let __local_6: ref "core:json/JsonSerializer";
@@ -1073,7 +1073,7 @@ fn to_string<u128>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn to_string<i128>(value) {
+fn "core/json/to_string<i128>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     let __local_6: ref "core:json/JsonSerializer";
@@ -1089,7 +1089,7 @@ fn to_string<i128>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn from_string<u64>(input) {
+fn "core/json/from_string<u64>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<u64,DeserializeError>;
     let v: u64;
@@ -1128,7 +1128,7 @@ fn from_string<u64>(input) {
     unreachable;
 }
 
-fn from_string<i64>(input) {
+fn "core/json/from_string<i64>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<i64,DeserializeError>;
     let v: i64;
@@ -1167,7 +1167,7 @@ fn from_string<i64>(input) {
     unreachable;
 }
 
-fn to_string<u64>(value) {
+fn "core/json/to_string<u64>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     let __local_6: ref "core:json/JsonSerializer";
@@ -1183,7 +1183,7 @@ fn to_string<u64>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn to_string<i64>(value) {
+fn "core/json/to_string<i64>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     let __local_6: ref "core:json/JsonSerializer";
