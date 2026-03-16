@@ -247,3 +247,245 @@ test "newtype From is type-safe: distinct newtypes do not convert" {
     let pid = ProductId::from(u64::from(uid));
     assert pid as u64 == 1 as u64;
 }
+
+// ── JsonValue-like variant: From for ergonomic tree construction ───────────
+//
+// A common pattern: build a dynamically-typed tree (JSON, config, AST node)
+// by converting native types via From rather than writing out constructor calls.
+
+variant JsonLike {
+    Null,
+    Bool(bool),
+    Number(f64),
+    Str(String),
+    Arr(Array<JsonLike>),
+}
+
+impl From<bool> for JsonLike {
+    fn from(v: bool) -> JsonLike {
+        return JsonLike::Bool(v);
+    }
+}
+
+impl From<f64> for JsonLike {
+    fn from(v: f64) -> JsonLike {
+        return JsonLike::Number(v);
+    }
+}
+
+impl From<i32> for JsonLike {
+    fn from(v: i32) -> JsonLike {
+        return JsonLike::Number(v as f64);
+    }
+}
+
+impl From<String> for JsonLike {
+    fn from(v: String) -> JsonLike {
+        return JsonLike::Str(v);
+    }
+}
+
+test "JsonLike: From<bool>" {
+    assert JsonLike::from(true) matches { Bool(b) && b };
+    assert JsonLike::from(false) matches { Bool(b) && !b };
+}
+
+test "JsonLike: From<f64>" {
+    assert JsonLike::from(3.14) matches { Number(n) && n == 3.14 };
+    assert JsonLike::from(0.0) matches { Number(n) && n == 0.0 };
+}
+
+test "JsonLike: From<i32> widens to f64" {
+    assert JsonLike::from(42) matches { Number(n) && n == 42.0 };
+    assert JsonLike::from(-1) matches { Number(n) && n == -1.0 };
+}
+
+test "JsonLike: From<String>" {
+    assert JsonLike::from("hello") matches { Str(s) && s == "hello" };
+    assert JsonLike::from("") matches { Str(s) && s == "" };
+}
+
+test "JsonLike: building a mixed array via From" {
+    let mut items: Array<JsonLike> = [];
+    items.append(JsonLike::from(1));
+    items.append(JsonLike::from(true));
+    items.append(JsonLike::from("ok"));
+    let arr = JsonLike::Arr(items);
+    assert arr matches { Arr(a) && a.len() == 3 };
+}
+
+// ── enum: TryFrom<i32> for discriminant parsing ────────────────────────────
+//
+// Realistic use case: decode a network protocol enum from its wire integer,
+// returning Err for unknown values rather than panicking.
+
+enum Direction {
+    North,
+    East,
+    South,
+    West,
+}
+
+impl TryFrom<i32> for Direction {
+    type Error = String;
+    fn try_from(value: i32) -> Result<Direction, String> {
+        return match value {
+            0 => Result::<Direction, String>::Ok(Direction::North),
+            1 => Result::<Direction, String>::Ok(Direction::East),
+            2 => Result::<Direction, String>::Ok(Direction::South),
+            3 => Result::<Direction, String>::Ok(Direction::West),
+            _ => Result::<Direction, String>::Err(`unknown direction code: {value}`),
+        };
+    }
+}
+
+impl From<Direction> for i32 {
+    fn from(d: Direction) -> i32 {
+        return d as i32;
+    }
+}
+
+test "enum TryFrom<i32>: valid discriminants" {
+    assert Direction::try_from(0) matches { Ok(North) };
+    assert Direction::try_from(1) matches { Ok(East) };
+    assert Direction::try_from(2) matches { Ok(South) };
+    assert Direction::try_from(3) matches { Ok(West) };
+}
+
+test "enum TryFrom<i32>: invalid discriminant" {
+    assert Direction::try_from(4) matches { Err(_) };
+    assert Direction::try_from(-1) matches { Err(_) };
+    assert Direction::try_from(100) matches { Err(e) && e == "unknown direction code: 100" };
+}
+
+test "enum From<Direction> for i32: discriminant round-trip" {
+    assert i32::from(Direction::North) == 0;
+    assert i32::from(Direction::East) == 1;
+    assert i32::from(Direction::South) == 2;
+    assert i32::from(Direction::West) == 3;
+}
+
+test "enum TryFrom + From: round-trip" {
+    let d = Direction::try_from(2).unwrap();
+    assert i32::from(d) == 2;
+}
+
+// ── flags: From / TryFrom with u32 ────────────────────────────────────────
+//
+// Realistic use case: serialize flags to wire format (u32) and parse them
+// back with validation, rejecting bit patterns that set undefined bits.
+
+flags AccessFlags {
+    Read,
+    Write,
+    Execute,
+}
+
+impl From<AccessFlags> for u32 {
+    fn from(f: AccessFlags) -> u32 {
+        return f as u32;
+    }
+}
+
+impl TryFrom<u32> for AccessFlags {
+    type Error = String;
+    fn try_from(value: u32) -> Result<AccessFlags, String> {
+        // Only bits 0–2 are defined; reject anything with higher bits set
+        if value > 7 as u32 {
+            return Result::<AccessFlags, String>::Err(`invalid flags: {value as i32}`);
+        }
+        return Result::<AccessFlags, String>::Ok(value as AccessFlags);
+    }
+}
+
+test "flags From<AccessFlags> for u32: individual bits" {
+    assert u32::from(AccessFlags::Read) == 1 as u32;
+    assert u32::from(AccessFlags::Write) == 2 as u32;
+    assert u32::from(AccessFlags::Execute) == 4 as u32;
+}
+
+test "flags From<AccessFlags> for u32: combined and edge values" {
+    assert u32::from(AccessFlags::Read | AccessFlags::Write) == 3 as u32;
+    assert u32::from(AccessFlags::all()) == 7 as u32;
+    assert u32::from(AccessFlags::none()) == 0 as u32;
+}
+
+test "flags TryFrom<u32> for AccessFlags: valid bit patterns" {
+    assert AccessFlags::try_from(0 as u32) matches { Ok(f) && f == AccessFlags::none() };
+    assert AccessFlags::try_from(1 as u32) matches { Ok(f) && f == AccessFlags::Read };
+    assert AccessFlags::try_from(7 as u32) matches { Ok(f) && f == AccessFlags::all() };
+}
+
+test "flags TryFrom<u32> for AccessFlags: invalid bit patterns" {
+    assert AccessFlags::try_from(8 as u32) matches { Err(_) };
+    assert AccessFlags::try_from(255 as u32) matches { Err(_) };
+}
+
+test "flags From + TryFrom: serialization round-trip" {
+    let original = AccessFlags::Read | AccessFlags::Execute;
+    let wire = u32::from(original);
+    let restored = AccessFlags::try_from(wire).unwrap();
+    assert restored == original;
+}
+
+// ── i128 / u128: widening From and narrowing TryFrom ──────────────────────
+//
+// Realistic use case: accumulating small integers into a 128-bit counter for
+// overflow-safe summation, then safely extracting the result back.
+
+test "From<u64> for u128: widening is lossless" {
+    let small = 42 as u64;
+    let wide = u128::from(small);
+    assert wide == 42 as u128;
+}
+
+test "From<u64> for u128: max u64 value fits" {
+    let max_u64 = u64::MAX;
+    let wide = u128::from(max_u64);
+    assert wide == u64::MAX as u128;
+}
+
+test "From<i64> for i128: widening preserves sign" {
+    assert i128::from(100 as i64) == 100 as i128;
+    assert i128::from(-100 as i64) == -100 as i128;
+    assert i128::from(i64::MIN) == i64::MIN as i128;
+    assert i128::from(i64::MAX) == i64::MAX as i128;
+}
+
+test "TryFrom<u128> for u64: in range" {
+    assert u64::try_from(0 as u128) matches { Ok(n) && n == 0 as u64 };
+    assert u64::try_from(42 as u128) matches { Ok(n) && n == 42 as u64 };
+    assert u64::try_from(u64::MAX as u128) matches { Ok(n) && n == u64::MAX };
+}
+
+test "TryFrom<u128> for u64: out of range" {
+    // u64::MAX + 1 as u128
+    let too_big = u64::MAX as u128 + 1 as u128;
+    assert u64::try_from(too_big) matches { Err(_) };
+}
+
+test "TryFrom<i128> for i64: in range" {
+    assert i64::try_from(0 as i128) matches { Ok(n) && n == 0 as i64 };
+    assert i64::try_from(i64::MAX as i128) matches { Ok(n) && n == i64::MAX };
+    assert i64::try_from(i64::MIN as i128) matches { Ok(n) && n == i64::MIN };
+}
+
+test "TryFrom<i128> for i64: out of range" {
+    let too_big: i128 = i64::MAX as i128 + 1 as i128;
+    assert i64::try_from(too_big) matches { Err(_) };
+    let too_small: i128 = i64::MIN as i128 - 1 as i128;
+    assert i64::try_from(too_small) matches { Err(_) };
+}
+
+test "u128 accumulation round-trip via From / TryFrom" {
+    // Sum 1000 × u32::MAX safely in u128, then recover the u64 partial sum
+    let chunk = u32::MAX as u64;
+    let mut acc = 0 as u128;
+    let mut i = 0;
+    while i < 4 {
+        acc = acc + u128::from(chunk);
+        i += 1;
+    }
+    // 4 × (2^32 - 1) = 4 × 4294967295 = 17179869180, which fits in u64
+    assert u64::try_from(acc) matches { Ok(n) && n == 17179869180 as u64 };
+}
