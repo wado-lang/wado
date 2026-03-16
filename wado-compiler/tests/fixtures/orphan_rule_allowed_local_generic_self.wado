@@ -1,0 +1,23 @@
+// Orphan rule: impl foreign trait for local generic type → ALLOWED
+// Eq is foreign, MyBox<T> is local → self type is local → OK
+
+struct MyBox<T> {
+    value: T,
+}
+
+impl<T: Eq> Eq for MyBox<T> {
+    fn eq(&self, other: &Self) -> bool {
+        return self.value == other.value;
+    }
+}
+
+export fn run() {
+    let a = MyBox { value: 42 };
+    let b = MyBox { value: 42 };
+    let c = MyBox { value: 99 };
+    assert a == b;
+    assert !(a == c);
+}
+
+__DATA__
+{"stdout": ""}

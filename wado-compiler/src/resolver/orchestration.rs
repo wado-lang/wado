@@ -440,7 +440,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Build trait lookup indices once for all modules.
         // This allows find_trait_method_for_type and find_indexing_trait_impl to do O(1)
         // lookups by type name instead of scanning all items in all modules per method call.
-        let trait_env = super::trait_env::TraitEnv::build(modules);
+        // Also runs orphan rule checking; violations are emitted as errors.
+        let (trait_env, orphan_violations) = super::trait_env::TraitEnv::build(modules);
+        for violation in orphan_violations {
+            let _ = logger.error(violation);
+        }
 
         // Second pass: resolve each module with per-module function_return_types and imports
         for module_source in &sorted_sources {

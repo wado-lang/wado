@@ -157,6 +157,13 @@ pub enum TypeError {
 
     /// Function/method/closure with return type but no return statement
     MissingReturn { return_type: String, span: Span },
+
+    /// Orphan rule violation: impl of a foreign trait for a foreign type
+    OrphanViolation {
+        trait_name: String,
+        self_type_name: String,
+        span: Span,
+    },
 }
 
 impl std::fmt::Display for TypeError {
@@ -274,6 +281,17 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, return_type
                 )
             }
+            TypeError::OrphanViolation {
+                trait_name,
+                self_type_name,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: orphan rule violation: cannot implement foreign trait `{}` for foreign type `{}`",
+                    span.line, span.column, trait_name, self_type_name
+                )
+            }
         }
     }
 }
@@ -372,6 +390,17 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
             TypeError::MissingReturn { return_type, span } => (
                 Code::TypeMismatch,
                 format!("function with return type '{return_type}' must use explicit `return`"),
+                *span,
+            ),
+            TypeError::OrphanViolation {
+                trait_name,
+                self_type_name,
+                span,
+            } => (
+                Code::OrphanRule,
+                format!(
+                    "orphan rule violation: cannot implement foreign trait `{trait_name}` for foreign type `{self_type_name}`"
+                ),
                 *span,
             ),
         };

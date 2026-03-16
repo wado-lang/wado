@@ -109,6 +109,10 @@ pub enum Code {
     /// Network error
     NetworkError,
 
+    // Coherence errors
+    /// Orphan rule violation
+    OrphanRule,
+
     // Codegen errors
     /// Code generation failed
     CodegenError,
@@ -147,6 +151,7 @@ impl std::fmt::Display for Code {
             Code::ModuleParseError => "MODULE_PARSE_ERROR",
             Code::FileReadError => "FILE_READ_ERROR",
             Code::NetworkError => "NETWORK_ERROR",
+            Code::OrphanRule => "ORPHAN_RULE",
             Code::CodegenError => "CODEGEN_ERROR",
             Code::UnsupportedFeature => "UNSUPPORTED_FEATURE",
             Code::SpanStart => "SPAN_START",

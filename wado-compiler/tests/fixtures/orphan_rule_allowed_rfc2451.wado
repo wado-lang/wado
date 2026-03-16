@@ -1,0 +1,25 @@
+// Orphan rule (RFC 2451): impl foreign trait with local type as trait argument → ALLOWED
+// From<MyError> for String:
+//   - From is foreign (core:prelude)
+//   - String (self type) is foreign (core:prelude)
+//   - MyError (trait arg T1) is LOCAL
+//   - Sequence check: [String(foreign), MyError(local)] → found local at T1, no uncovered param before it → ALLOWED
+
+variant MyError {
+    BadInput(String),
+    NotFound,
+}
+
+impl From<MyError> for String {
+    fn from(value: MyError) -> String {
+        return match value {
+            BadInput(s) => s,
+            NotFound => "not found",
+        };
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{"stdout": ""}

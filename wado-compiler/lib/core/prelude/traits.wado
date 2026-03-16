@@ -299,6 +299,26 @@ impl<I: Iterator> IntoIterator for I {
     }
 }
 
+/// Infallible conversion trait.
+/// Implement this to define how to convert from type `T` into `Self`.
+/// Usage: `TargetType::from(value)` — the target type is always explicit.
+///
+/// The compiler provides a reflexive blanket impl `From<T> for T` for all types.
+#[comp_feature("from")]
+pub trait From<T> {
+    /// Converts a value of type `T` into `Self`.
+    fn from(value: T) -> Self;
+}
+
+/// Fallible conversion trait.
+/// Returns `Result<Self, Self::Error>` so callers can handle conversion failures.
+pub trait TryFrom<T> {
+    type Error;
+
+    /// Attempts to convert a value of type `T` into `Self`.
+    fn try_from(value: T) -> Result<Self, Self::Error>;
+}
+
 /// Trait for creating a collection from an iterator.
 /// This is a simplified version - the full Rust-style trait requires `impl Iterator`
 /// syntax which is not yet supported.

@@ -1,0 +1,14 @@
+// Orphan rule violation: impl foreign trait for foreign generic type → FORBIDDEN
+// Eq is foreign, Array<i32> head type is Array which is foreign (core:prelude)
+// Even though i32 is inside, the outermost type constructor (Array) is foreign → FORBIDDEN
+
+impl Eq for Array<i32> {
+    fn eq(&self, other: &Self) -> bool {
+        return true;
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "orphan rule"}

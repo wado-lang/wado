@@ -130,6 +130,8 @@ impl TokenKind {
             // Contextual keywords: only keywords at declaration start
             Self::Flags => Some("flags"),
             Self::Type => Some("type"),
+            // `from` appears in `use { x } from "mod"` but is also valid as a type/trait name
+            Self::From => Some("from"),
             _ => None,
         }
     }

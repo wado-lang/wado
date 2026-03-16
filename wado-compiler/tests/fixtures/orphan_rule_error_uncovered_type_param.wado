@@ -1,0 +1,14 @@
+// Orphan rule violation: uncovered type parameter with foreign trait → FORBIDDEN
+// impl<T> Eq for T: Eq is foreign, T is an uncovered type parameter (bare T, no wrapper) → FORBIDDEN
+// The uncovered T appears before any local type in the sequence → violation
+
+impl<T> Eq for T {
+    fn eq(&self, other: &Self) -> bool {
+        return true;
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "orphan rule"}

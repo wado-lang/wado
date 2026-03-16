@@ -1,0 +1,29 @@
+// Orphan rule: impl LOCAL trait for foreign type → ALWAYS ALLOWED
+
+use { println, Stdout } from "core:cli";
+
+trait Describable {
+    fn describe(&self) -> String;
+}
+
+impl Describable for i32 {
+    fn describe(&self) -> String {
+        return `number: {*self}`;
+    }
+}
+
+impl Describable for String {
+    fn describe(&self) -> String {
+        return `string: {*self}`;
+    }
+}
+
+export fn run() with Stdout {
+    let n: i32 = 42;
+    let s = "hello";
+    println(n.describe());
+    println(s.describe());
+}
+
+__DATA__
+{"stdout": "number: 42\nstring: hello\n"}

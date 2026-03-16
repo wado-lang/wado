@@ -6,10 +6,12 @@
 
 use std::sync::Arc;
 
-use crate::ast::{self, Item, Module};
+use crate::ast::{self, Item, Module, Type};
 use crate::hashmap::IndexMap;
 use crate::name::ModuleSource;
 use crate::tir::TypeId;
+
+use super::types::TypeError;
 
 /// Pre-built index: type name → list of (`ModuleSource`, item index) for trait impl blocks.
 /// Built once from all loaded modules to avoid O(all items) scans per method call.
@@ -42,10 +44,13 @@ impl TraitEnv {
     ///
     /// Called once in `resolve_all_modules` before per-module resolution begins.
     /// The indices enable O(1) trait lookup by type/trait name instead of scanning all modules.
-    pub(super) fn build(modules: &IndexMap<ModuleSource, Module>) -> Arc<Self> {
+    /// Also performs orphan rule checking for impl blocks in local (user) modules.
+    pub(super) fn build(modules: &IndexMap<ModuleSource, Module>) -> (Arc<Self>, Vec<TypeError>) {
         let mut impl_index: TraitImplIndex = IndexMap::default();
         let mut decl_index: TraitDeclIndex = IndexMap::default();
         let mut blanket_impl_index: BlanketTraitImplIndex = Vec::new();
+        // type name → module source, for orphan rule "is this type local?" checks
+        let mut type_decl_index: IndexMap<String, ModuleSource> = IndexMap::default();
 
         for (module_source, module) in modules {
             for (item_idx, item) in module.items.iter().enumerate() {
@@ -70,17 +75,215 @@ impl TraitEnv {
                             .entry(trait_decl.name.clone())
                             .or_insert((module_source.clone(), item_idx));
                     }
+                    Item::Struct(s) => {
+                        type_decl_index
+                            .entry(s.name.clone())
+                            .or_insert_with(|| module_source.clone());
+                    }
+                    Item::Variant(v) => {
+                        type_decl_index
+                            .entry(v.name.clone())
+                            .or_insert_with(|| module_source.clone());
+                    }
+                    Item::Enum(e) => {
+                        type_decl_index
+                            .entry(e.name.clone())
+                            .or_insert_with(|| module_source.clone());
+                    }
+                    Item::Flags(f) => {
+                        type_decl_index
+                            .entry(f.name.clone())
+                            .or_insert_with(|| module_source.clone());
+                    }
+                    Item::Type(n) => {
+                        type_decl_index
+                            .entry(n.name.clone())
+                            .or_insert_with(|| module_source.clone());
+                    }
                     _ => {}
                 }
             }
         }
 
-        Arc::new(Self {
-            impl_index,
-            decl_index,
-            blanket_impl_index,
-        })
+        let violations = check_all_orphan_rules(modules, &decl_index, &type_decl_index);
+
+        (
+            Arc::new(Self {
+                impl_index,
+                decl_index,
+                blanket_impl_index,
+            }),
+            violations,
+        )
     }
+}
+
+/// Returns `true` if the module source is a user-local module (part of the current package).
+fn is_user_local(ms: &ModuleSource) -> bool {
+    matches!(
+        ms,
+        ModuleSource::Local { .. } | ModuleSource::EntryPoint { .. }
+    )
+}
+
+/// Returns `true` if the named type is a local (user-defined) type.
+/// Primitive types (i32, bool, char, etc.) are not in the index and return `false`.
+fn is_local_type_name(name: &str, type_decl_index: &IndexMap<String, ModuleSource>) -> bool {
+    type_decl_index.get(name).is_some_and(is_user_local)
+}
+
+/// Returns `true` if the named trait is a local (user-defined) trait.
+fn is_local_trait_name(name: &str, decl_index: &TraitDeclIndex) -> bool {
+    decl_index
+        .get(name)
+        .is_some_and(|(ms, _)| is_user_local(ms))
+}
+
+/// Describes the orphan-rule "classification" of a position in the impl sequence.
+enum PositionKind {
+    /// The outermost type constructor is a user-local type.
+    LocalType,
+    /// The position is a bare uncovered type parameter.
+    UncoveredTypeParam,
+    /// The outermost type constructor is a foreign (non-local) type.
+    ForeignType,
+}
+
+/// Classify the outermost type constructor of an AST type relative to the orphan rule.
+///
+/// RFC 2451 sequence rule: walk `[self_type, trait_arg1, ...]` left-to-right.
+/// - `LocalType` at position i, with no `UncoveredTypeParam` seen before i → **allowed**.
+/// - `UncoveredTypeParam` before any `LocalType` → **forbidden**.
+///
+/// References (`&T`, `&mut T`) are *fundamental* and are looked through.
+fn classify_position(
+    ty: &Type,
+    type_params: &[String],
+    type_decl_index: &IndexMap<String, ModuleSource>,
+) -> PositionKind {
+    match ty {
+        // Fundamental: look through references
+        Type::Reference(inner) | Type::MutReference(inner) => {
+            classify_position(inner, type_params, type_decl_index)
+        }
+        Type::Named(named) => {
+            if type_params.contains(&named.name) {
+                PositionKind::UncoveredTypeParam
+            } else if is_local_type_name(&named.name, type_decl_index) {
+                PositionKind::LocalType
+            } else {
+                PositionKind::ForeignType
+            }
+        }
+        Type::Generic(generic) => {
+            if type_params.contains(&generic.name) {
+                // Generic<T> where generic itself is a type param: uncovered
+                PositionKind::UncoveredTypeParam
+            } else if is_local_type_name(&generic.name, type_decl_index) {
+                // LocalType<...>: the head is local → this position is local
+                PositionKind::LocalType
+            } else {
+                PositionKind::ForeignType
+            }
+        }
+        // Tuples and function types have no single named head → foreign
+        Type::Tuple(_) | Type::Function(_) | Type::NamespacedGeneric(_) => {
+            PositionKind::ForeignType
+        }
+    }
+}
+
+/// Check the RFC 2451 orphan rule for a single impl block that has a foreign trait.
+///
+/// Sequence: `[self_type, trait_arg1, trait_arg2, ...]`.
+/// Valid if there exists a position with `LocalType` and no `UncoveredTypeParam` before it.
+fn check_orphan_rfc2451(
+    impl_block: &ast::ImplBlock,
+    type_decl_index: &IndexMap<String, ModuleSource>,
+) -> bool {
+    let type_params: Vec<String> = impl_block
+        .type_params
+        .iter()
+        .map(|p| p.name.clone())
+        .collect();
+
+    // Build the sequence: self type first, then trait type arguments
+    let trait_args: &[Type] = match impl_block.trait_type.as_ref() {
+        Some(Type::Generic(g)) => &g.args,
+        _ => &[],
+    };
+
+    let mut seen_uncovered_before_local = false;
+
+    // Position 0: self type
+    match classify_position(&impl_block.ty, &type_params, type_decl_index) {
+        PositionKind::LocalType => return true,
+        PositionKind::UncoveredTypeParam => seen_uncovered_before_local = true,
+        PositionKind::ForeignType => {}
+    }
+
+    // Positions 1+: trait type arguments
+    for trait_arg in trait_args {
+        match classify_position(trait_arg, &type_params, type_decl_index) {
+            PositionKind::LocalType => {
+                if !seen_uncovered_before_local {
+                    return true;
+                }
+                // Uncovered param was seen before this local type → still violated
+                return false;
+            }
+            PositionKind::UncoveredTypeParam => {
+                seen_uncovered_before_local = true;
+            }
+            PositionKind::ForeignType => {}
+        }
+    }
+
+    false
+}
+
+/// Check orphan rules for all trait impl blocks across all modules.
+/// Only impl blocks in local (user) modules are checked.
+fn check_all_orphan_rules(
+    modules: &IndexMap<ModuleSource, Module>,
+    decl_index: &TraitDeclIndex,
+    type_decl_index: &IndexMap<String, ModuleSource>,
+) -> Vec<TypeError> {
+    let mut violations = Vec::new();
+
+    for (module_source, module) in modules {
+        if !is_user_local(module_source) {
+            continue;
+        }
+
+        for item in &module.items {
+            let Item::Impl(impl_block) = item else {
+                continue;
+            };
+            let Some(trait_type) = &impl_block.trait_type else {
+                continue; // inherent impl, no orphan rule
+            };
+
+            let trait_name = get_type_name_static(trait_type);
+
+            // If the trait is local, always allowed
+            if is_local_trait_name(&trait_name, decl_index) {
+                continue;
+            }
+
+            // Foreign trait: apply RFC 2451 sequence check
+            if !check_orphan_rfc2451(impl_block, type_decl_index) {
+                let self_type_name = get_type_name_static(&impl_block.ty);
+                violations.push(TypeError::OrphanViolation {
+                    trait_name,
+                    self_type_name,
+                    span: impl_block.span,
+                });
+            }
+        }
+    }
+
+    violations
 }
 
 /// Mutable trait resolution context scoped to the current resolution site.
@@ -112,5 +315,345 @@ fn get_type_name_static(ty: &ast::Type) -> String {
         ast::Type::Reference(_) => "&".to_string(),
         ast::Type::MutReference(_) => "&mut".to_string(),
         _ => "Unknown".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::{GenericParam, GenericType, ImplBlock, NamedType};
+    use crate::token::Span;
+
+    fn dummy_span() -> Span {
+        Span {
+            start: 0,
+            end: 0,
+            line: 1,
+            column: 1,
+            end_line: 1,
+        }
+    }
+
+    fn named(name: &str) -> Type {
+        Type::Named(NamedType {
+            name: name.to_string(),
+            span: dummy_span(),
+        })
+    }
+
+    fn generic(name: &str, args: Vec<Type>) -> Type {
+        Type::Generic(GenericType {
+            name: name.to_string(),
+            args,
+            span: dummy_span(),
+        })
+    }
+
+    fn ref_type(inner: Type) -> Type {
+        Type::Reference(Box::new(inner))
+    }
+
+    fn mut_ref_type(inner: Type) -> Type {
+        Type::MutReference(Box::new(inner))
+    }
+
+    fn type_param(name: &str) -> GenericParam {
+        GenericParam {
+            name: name.to_string(),
+            bounds: vec![],
+            default: None,
+            span: dummy_span(),
+        }
+    }
+
+    fn make_type_decl_index(local_names: &[&str]) -> IndexMap<String, ModuleSource> {
+        let mut m = IndexMap::default();
+        for &name in local_names {
+            m.insert(
+                name.to_string(),
+                ModuleSource::EntryPoint {
+                    filename: "test.wado".to_string(),
+                },
+            );
+        }
+        m
+    }
+
+    fn make_decl_index(local_trait_names: &[&str]) -> TraitDeclIndex {
+        let mut m = TraitDeclIndex::default();
+        for (i, &name) in local_trait_names.iter().enumerate() {
+            m.insert(
+                name.to_string(),
+                (
+                    ModuleSource::EntryPoint {
+                        filename: "test.wado".to_string(),
+                    },
+                    i,
+                ),
+            );
+        }
+        m
+    }
+
+    fn make_foreign_decl_index(foreign_trait_names: &[&str]) -> TraitDeclIndex {
+        let mut m = TraitDeclIndex::default();
+        for (i, &name) in foreign_trait_names.iter().enumerate() {
+            m.insert(
+                name.to_string(),
+                (
+                    ModuleSource::Core {
+                        name: "prelude".to_string(),
+                    },
+                    i,
+                ),
+            );
+        }
+        m
+    }
+
+    fn impl_block(type_params: Vec<GenericParam>, trait_type: Type, self_type: Type) -> ImplBlock {
+        ImplBlock {
+            type_params,
+            trait_type: Some(trait_type),
+            ty: self_type,
+            associated_types: vec![],
+            constants: vec![],
+            methods: vec![],
+            is_synthesize_request: false,
+            span: dummy_span(),
+        }
+    }
+
+    // --- is_user_local ---
+
+    #[test]
+    fn test_is_user_local_entry_point() {
+        assert!(is_user_local(&ModuleSource::EntryPoint {
+            filename: "main.wado".to_string()
+        }));
+    }
+
+    #[test]
+    fn test_is_user_local_local_path() {
+        assert!(is_user_local(&ModuleSource::Local {
+            path: "./lib.wado".to_string()
+        }));
+    }
+
+    #[test]
+    fn test_is_user_local_core_is_foreign() {
+        assert!(!is_user_local(&ModuleSource::Core {
+            name: "prelude".to_string()
+        }));
+    }
+
+    #[test]
+    fn test_is_user_local_wasi_is_foreign() {
+        assert!(!is_user_local(&ModuleSource::Wasi {
+            interface: "cli".to_string()
+        }));
+    }
+
+    #[test]
+    fn test_is_user_local_remote_is_foreign() {
+        assert!(!is_user_local(&ModuleSource::Remote {
+            url: "https://example.com/lib.wado".to_string()
+        }));
+    }
+
+    // --- classify_position ---
+
+    #[test]
+    fn test_classify_local_named_type() {
+        let tdx = make_type_decl_index(&["MyError"]);
+        assert!(matches!(
+            classify_position(&named("MyError"), &[], &tdx),
+            PositionKind::LocalType
+        ));
+    }
+
+    #[test]
+    fn test_classify_foreign_named_type() {
+        let tdx = make_type_decl_index(&[]);
+        assert!(matches!(
+            classify_position(&named("String"), &[], &tdx),
+            PositionKind::ForeignType
+        ));
+    }
+
+    #[test]
+    fn test_classify_primitive_is_foreign() {
+        let tdx = make_type_decl_index(&[]);
+        assert!(matches!(
+            classify_position(&named("i32"), &[], &tdx),
+            PositionKind::ForeignType
+        ));
+    }
+
+    #[test]
+    fn test_classify_uncovered_type_param() {
+        let tdx = make_type_decl_index(&[]);
+        assert!(matches!(
+            classify_position(&named("T"), &["T".to_string()], &tdx),
+            PositionKind::UncoveredTypeParam
+        ));
+    }
+
+    #[test]
+    fn test_classify_local_generic_head_is_local() {
+        // LocalType<T> — head is local regardless of args
+        let tdx = make_type_decl_index(&["LocalType"]);
+        let ty = generic("LocalType", vec![named("T")]);
+        assert!(matches!(
+            classify_position(&ty, &["T".to_string()], &tdx),
+            PositionKind::LocalType
+        ));
+    }
+
+    #[test]
+    fn test_classify_foreign_generic_is_foreign() {
+        // Array<T> — head Array is foreign
+        let tdx = make_type_decl_index(&[]);
+        let ty = generic("Array", vec![named("T")]);
+        assert!(matches!(
+            classify_position(&ty, &["T".to_string()], &tdx),
+            PositionKind::ForeignType
+        ));
+    }
+
+    #[test]
+    fn test_classify_reference_to_local_is_local() {
+        // &LocalType — fundamental: look through &
+        let tdx = make_type_decl_index(&["MyStruct"]);
+        assert!(matches!(
+            classify_position(&ref_type(named("MyStruct")), &[], &tdx),
+            PositionKind::LocalType
+        ));
+    }
+
+    #[test]
+    fn test_classify_mut_reference_to_local_is_local() {
+        // &mut LocalType — fundamental: look through &mut
+        let tdx = make_type_decl_index(&["MyStruct"]);
+        assert!(matches!(
+            classify_position(&mut_ref_type(named("MyStruct")), &[], &tdx),
+            PositionKind::LocalType
+        ));
+    }
+
+    #[test]
+    fn test_classify_reference_to_foreign_is_foreign() {
+        let tdx = make_type_decl_index(&[]);
+        assert!(matches!(
+            classify_position(&ref_type(named("String")), &[], &tdx),
+            PositionKind::ForeignType
+        ));
+    }
+
+    #[test]
+    fn test_classify_tuple_is_foreign() {
+        // Tuple types have no single named head → foreign
+        let tdx = make_type_decl_index(&["MyStruct"]);
+        let ty = Type::Tuple(vec![named("MyStruct"), named("i32")]);
+        assert!(matches!(
+            classify_position(&ty, &[], &tdx),
+            PositionKind::ForeignType
+        ));
+    }
+
+    // --- check_orphan_rfc2451 ---
+
+    #[test]
+    fn test_rfc2451_local_self_type_allowed() {
+        // impl ForeignTrait for LocalType → T0 is local → allowed
+        let tdx = make_type_decl_index(&["MyStruct"]);
+        let ib = impl_block(vec![], named("ForeignTrait"), named("MyStruct"));
+        assert!(check_orphan_rfc2451(&ib, &tdx));
+    }
+
+    #[test]
+    fn test_rfc2451_both_foreign_forbidden() {
+        // impl Eq for String → both foreign
+        let tdx = make_type_decl_index(&[]);
+        let ib = impl_block(vec![], named("Eq"), named("String"));
+        assert!(!check_orphan_rfc2451(&ib, &tdx));
+    }
+
+    #[test]
+    fn test_rfc2451_local_in_trait_arg_allowed() {
+        // impl From<MyError> for String → T0=String(foreign), T1=MyError(local) → allowed
+        let tdx = make_type_decl_index(&["MyError"]);
+        let ib = impl_block(
+            vec![],
+            generic("From", vec![named("MyError")]),
+            named("String"),
+        );
+        assert!(check_orphan_rfc2451(&ib, &tdx));
+    }
+
+    #[test]
+    fn test_rfc2451_uncovered_type_param_forbidden() {
+        // impl<T> Eq for T → T0=T(uncovered) → forbidden
+        let tdx = make_type_decl_index(&[]);
+        let ib = impl_block(vec![type_param("T")], named("Eq"), named("T"));
+        assert!(!check_orphan_rfc2451(&ib, &tdx));
+    }
+
+    #[test]
+    fn test_rfc2451_uncovered_param_before_local_in_trait_arg_forbidden() {
+        // impl<T> From<T> for String → T0=String(foreign), T1=T(uncovered) → forbidden
+        let tdx = make_type_decl_index(&[]);
+        let ib = impl_block(
+            vec![type_param("T")],
+            generic("From", vec![named("T")]),
+            named("String"),
+        );
+        assert!(!check_orphan_rfc2451(&ib, &tdx));
+    }
+
+    #[test]
+    fn test_rfc2451_local_type_as_generic_head_in_trait_arg() {
+        // impl<T> From<LocalType<T>> for ForeignType → T0=ForeignType, T1=LocalType<T>(local head) → allowed
+        let tdx = make_type_decl_index(&["LocalType"]);
+        let trait_ty = generic("From", vec![generic("LocalType", vec![named("T")])]);
+        let ib = impl_block(vec![type_param("T")], trait_ty, named("ForeignType"));
+        assert!(check_orphan_rfc2451(&ib, &tdx));
+    }
+
+    #[test]
+    fn test_rfc2451_foreign_generic_head_in_trait_arg_forbidden() {
+        // impl<T> From<Array<T>> for ForeignType → T0=ForeignType, T1=Array<T>(foreign head) → forbidden
+        let tdx = make_type_decl_index(&[]);
+        let trait_ty = generic("From", vec![generic("Array", vec![named("T")])]);
+        let ib = impl_block(vec![type_param("T")], trait_ty, named("ForeignType"));
+        assert!(!check_orphan_rfc2451(&ib, &tdx));
+    }
+
+    #[test]
+    fn test_rfc2451_ref_to_local_as_self_type() {
+        // impl ForeignTrait for &LocalType → fundamental, look through & → allowed
+        let tdx = make_type_decl_index(&["MyStruct"]);
+        let ib = impl_block(vec![], named("ForeignTrait"), ref_type(named("MyStruct")));
+        assert!(check_orphan_rfc2451(&ib, &tdx));
+    }
+
+    #[test]
+    fn test_rfc2451_ref_to_foreign_as_self_type_forbidden() {
+        // impl ForeignTrait for &String → &String is foreign → forbidden
+        let tdx = make_type_decl_index(&[]);
+        let ib = impl_block(vec![], named("ForeignTrait"), ref_type(named("String")));
+        assert!(!check_orphan_rfc2451(&ib, &tdx));
+    }
+
+    #[test]
+    fn test_rfc2451_local_self_before_uncovered_param_in_trait_arg() {
+        // impl<T> From<T> for LocalType → T0=LocalType(local!) → allowed before reaching T1=T
+        let tdx = make_type_decl_index(&["LocalType"]);
+        let ib = impl_block(
+            vec![type_param("T")],
+            generic("From", vec![named("T")]),
+            named("LocalType"),
+        );
+        assert!(check_orphan_rfc2451(&ib, &tdx));
     }
 }
