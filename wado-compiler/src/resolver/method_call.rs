@@ -1087,11 +1087,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Try looking up in loaded modules
-        // Pre-populate module type maps cache before borrowing loaded_modules so that
-        // return type resolution uses the source module's type context rather than the
-        // caller's. This prevents same-named types from different modules being confused
-        // (e.g., entry and library both define "Widget" — without the swap, the entry
-        // module's Widget shadows the library's Widget when resolving the return type).
         if !struct_module.is_entry_point() {
             self.ensure_module_maps_cached(struct_module);
         }
@@ -1132,45 +1127,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     }
                                 }
 
-                                // Resolve return type in source module's type context so that
-                                // same-named types from different modules are not confused.
-                                let mut cached = self
-                                    .module_type_maps_cache
-                                    .shift_remove(struct_module)
-                                    .expect("cache populated by ensure_module_maps_cached");
-                                std::mem::swap(&mut self.struct_fields, &mut cached.struct_fields);
-                                std::mem::swap(
-                                    &mut self.variant_cases,
-                                    &mut cached.variant_cases,
+                                let result = self.resolve_return_type_in_module(
+                                    struct_module,
+                                    method.return_type.as_ref(),
                                 );
-                                std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
-                                std::mem::swap(&mut self.flags_cases, &mut cached.flags_cases);
-                                std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
-                                std::mem::swap(
-                                    &mut self.resource_types,
-                                    &mut cached.resource_types,
-                                );
-
-                                let result = method
-                                    .return_type
-                                    .as_ref()
-                                    .map(|t| self.resolve_type(t))
-                                    .unwrap_or(TypeTable::UNIT);
-
-                                std::mem::swap(&mut self.struct_fields, &mut cached.struct_fields);
-                                std::mem::swap(
-                                    &mut self.variant_cases,
-                                    &mut cached.variant_cases,
-                                );
-                                std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
-                                std::mem::swap(&mut self.flags_cases, &mut cached.flags_cases);
-                                std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
-                                std::mem::swap(
-                                    &mut self.resource_types,
-                                    &mut cached.resource_types,
-                                );
-                                self.module_type_maps_cache
-                                    .insert(struct_module.clone(), cached);
 
                                 // Restore type parameters
                                 self.trait_ctx.type_params = old_type_params;
@@ -1209,32 +1169,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 }
                             }
 
-                            // Resolve return type in source module's type context.
-                            let mut cached = self
-                                .module_type_maps_cache
-                                .shift_remove(struct_module)
-                                .expect("cache populated by ensure_module_maps_cached");
-                            std::mem::swap(&mut self.struct_fields, &mut cached.struct_fields);
-                            std::mem::swap(&mut self.variant_cases, &mut cached.variant_cases);
-                            std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
-                            std::mem::swap(&mut self.flags_cases, &mut cached.flags_cases);
-                            std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
-                            std::mem::swap(&mut self.resource_types, &mut cached.resource_types);
-
-                            let result = method
-                                .return_type
-                                .as_ref()
-                                .map(|t| self.resolve_type(t))
-                                .unwrap_or(TypeTable::UNIT);
-
-                            std::mem::swap(&mut self.struct_fields, &mut cached.struct_fields);
-                            std::mem::swap(&mut self.variant_cases, &mut cached.variant_cases);
-                            std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
-                            std::mem::swap(&mut self.flags_cases, &mut cached.flags_cases);
-                            std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
-                            std::mem::swap(&mut self.resource_types, &mut cached.resource_types);
-                            self.module_type_maps_cache
-                                .insert(struct_module.clone(), cached);
+                            let result = self.resolve_return_type_in_module(
+                                struct_module,
+                                method.return_type.as_ref(),
+                            );
 
                             // Restore type parameters
                             self.trait_ctx.type_params = old_type_params;

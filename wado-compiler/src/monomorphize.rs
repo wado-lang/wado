@@ -16,6 +16,19 @@ use std::rc::Rc;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::name::{FreeFunctionName, LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
+
+/// Returns the key used to store/look up a generic function in the global function map.
+///
+/// Methods use their unqualified name — the struct name already provides namespace.
+/// Free functions are module-qualified to keep same-named generics from different
+/// modules distinct (e.g., `wrap<T>` in mod_a vs mod_b).
+fn generic_function_key(is_method: bool, module_source: &ModuleSource, name: &str) -> String {
+    if is_method {
+        name.to_string()
+    } else {
+        FreeFunctionName::from_module_source(module_source, name).to_string()
+    }
+}
 use crate::project::Project;
 use crate::tir::{
     CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp, TirBlock,
@@ -54,23 +67,12 @@ pub fn monomorphize_modules_indexed(
     modules: IndexMap<ModuleSource, TirModule>,
 ) -> IndexMap<ModuleSource, TirModule> {
     // First pass: collect all generic functions from all modules.
-    // For free functions (no "::" in name), use module-qualified keys so that same-named
-    // generic free functions from different modules (e.g., `wrap<T>` in mod_a and mod_b)
-    // are kept distinct.
-    // For methods (name contains "::"), the struct name already acts as a namespace, so
-    // the unqualified function name is used as-is.
     let mut all_generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
     for (module_source, module) in &modules {
         for func_rc in &module.functions {
             let func = func_rc.borrow();
             if !func.type_params.is_empty() || !func.impl_type_params.is_empty() {
-                let key = if func.name.contains("::") {
-                    // Method: use the function name as-is (struct name provides namespace)
-                    func.name.clone()
-                } else {
-                    // Free function: qualify with module source to avoid cross-module conflicts
-                    FreeFunctionName::from_module_source(module_source, &func.name).to_string()
-                };
+                let key = generic_function_key(func.is_method(), module_source, &func.name);
                 all_generic_functions.insert(key, Rc::clone(func_rc));
             }
         }
@@ -537,16 +539,14 @@ impl Monomorphizer {
         let mut generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>> =
             external_generic_functions.clone();
 
-        // Local generic functions: free functions get module-qualified keys; methods use name as-is.
         for func_rc in &module.functions {
             let func = func_rc.borrow();
             if !func.type_params.is_empty() || !func.impl_type_params.is_empty() {
-                let key = if func.name.contains("::") {
-                    func.name.clone()
-                } else {
-                    FreeFunctionName::from_module_source(&self.current_module_source, &func.name)
-                        .to_string()
-                };
+                let key = generic_function_key(
+                    func.is_method(),
+                    &self.current_module_source,
+                    &func.name,
+                );
                 generic_functions.insert(key, Rc::clone(func_rc));
             }
         }
@@ -1508,16 +1508,8 @@ impl Monomorphizer {
                 args,
                 ..
             } => {
-                // Build the lookup key: for free functions (no "::" in name) use a
-                // module-qualified key so same-named generics from different modules are
-                // distinct. For methods (name contains "::") the struct name already
-                // provides namespace, so use the name as-is.
-                let qualified_func_name = if func.name.contains("::") {
-                    func.name.clone()
-                } else {
-                    FreeFunctionName::from_module_source(&func.module_source, &func.name)
-                        .to_string()
-                };
+                let qualified_func_name =
+                    generic_function_key(func.is_method(), &func.module_source, &func.name);
                 // Check if this is a call to a generic function with explicit type args
                 if !type_args.is_empty() && generic_functions.contains_key(&qualified_func_name) {
                     let key = InstantiationKey {
@@ -3416,14 +3408,8 @@ impl Monomorphizer {
             } => {
                 let original_func_name = func.name.clone();
                 let original_method_info = func.method_info.clone();
-                // Build the lookup key matching what was used during collection:
-                // free functions (no "::") are qualified with module source; methods are not.
-                let qualified_func_name = if func.name.contains("::") {
-                    func.name.clone()
-                } else {
-                    FreeFunctionName::from_module_source(&func.module_source, &func.name)
-                        .to_string()
-                };
+                let qualified_func_name =
+                    generic_function_key(func.is_method(), &func.module_source, &func.name);
                 // If this is a generic call, rewrite to monomorphized name
                 if !type_args.is_empty() {
                     let key = InstantiationKey {
@@ -3436,8 +3422,6 @@ impl Monomorphizer {
                             module_source: self.current_module_source.clone(),
                             name: mangled.clone(),
                             monomorph_info: Some(MonomorphInfo {
-                                // Keep the unqualified name in MonomorphInfo so that
-                                // monomorphized_builtin_name() can still match "array_new" etc.
                                 generic_name: original_func_name,
                                 type_args: key.type_args.clone(),
                                 is_blanket: false,
