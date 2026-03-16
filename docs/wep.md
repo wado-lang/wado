@@ -74,3 +74,5 @@ Filename: `docs/wep-YYYY-MM-DD-{feature-name}.md`
 - [Gale — Grammar Adaptive LL Engine](./wep-2026-03-02-gale.md)
 - [Range Object](./wep-2026-03-03-range-object.md)
 - [Default Trait](./wep-2026-03-04-default-trait.md)
+- [Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md)
+- [Conversion Traits (From, TryFrom, ? operator)](./wep-2026-03-16-conversion-traits.md)
