@@ -1,7 +1,5 @@
 // Tests for From and TryFrom conversion traits.
 
-// ── User-defined From ──────────────────────────────────────────────────────
-
 struct Celsius {
     degrees: f64,
 }
@@ -27,8 +25,6 @@ test "user-defined From: 0°C → 32°F" {
     assert f.degrees == 32.0;
 }
 
-// ── Reflexive From (identity) ──────────────────────────────────────────────
-
 test "From<i32> for i32 is identity" {
     assert i32::from(42 as i32) == 42;
 }
@@ -42,8 +38,6 @@ test "From<String> for String is identity" {
     let s = "hello";
     assert String::from(s) == "hello";
 }
-
-// ── Numeric widening From ──────────────────────────────────────────────────
 
 test "From<i8> for i16" {
     assert i16::from(127 as i8) == 127 as i16;
@@ -125,8 +119,6 @@ test "From<f32> for f64" {
     assert v == 1.0;
 }
 
-// ── From<char> for String ──────────────────────────────────────────────────
-
 test "From<char> for String: ASCII" {
     assert String::from('A') == "A";
     assert String::from('z') == "z";
@@ -138,8 +130,6 @@ test "From<char> for String: special chars" {
     assert String::from(' ') == " ";
 }
 
-// ── From<bool> for i32 ────────────────────────────────────────────────────
-
 test "From<bool> for i32: true → 1" {
     assert i32::from(true) == 1;
 }
@@ -147,8 +137,6 @@ test "From<bool> for i32: true → 1" {
 test "From<bool> for i32: false → 0" {
     assert i32::from(false) == 0;
 }
-
-// ── User-defined TryFrom ──────────────────────────────────────────────────
 
 struct EvenNumber {
     value: i32,
@@ -174,8 +162,6 @@ test "user-defined TryFrom: Err" {
     assert EvenNumber::try_from(-1) matches { Err(_) };
 }
 
-// ── Stdlib TryFrom: narrowing i64 → i32 ───────────────────────────────────
-
 test "TryFrom<i64> for i32: in range" {
     assert i32::try_from(42 as i64) matches { Ok(n) && n == 42 };
     assert i32::try_from(2147483647 as i64) matches { Ok(n) && n == 2147483647 };
@@ -187,8 +173,6 @@ test "TryFrom<i64> for i32: out of range" {
     assert i32::try_from(-2147483649 as i64) matches { Err(_) };
 }
 
-// ── Stdlib TryFrom: i32 → u32 ─────────────────────────────────────────────
-
 test "TryFrom<i32> for u32: non-negative" {
     assert u32::try_from(0) matches { Ok(n) && n == 0 as u32 };
     assert u32::try_from(2147483647) matches { Ok(n) && n == 2147483647 as u32 };
@@ -198,8 +182,6 @@ test "TryFrom<i32> for u32: negative fails" {
     assert u32::try_from(-1) matches { Err(_) };
     assert u32::try_from(-100) matches { Err(_) };
 }
-
-// ── Variant auto-derive From ──────────────────────────────────────────────
 
 struct NetworkError { code: i32 }
 struct TimeoutError { seconds: i32 }
@@ -225,8 +207,6 @@ test "variant auto-derive From: wraps into correct case" {
     assert ue matches { Unknown(msg) && msg == "unexpected" };
 }
 
-// ── Newtype auto-generated From ────────────────────────────────────────────
-
 type UserId = u64;
 type ProductId = u64;
 
@@ -243,15 +223,9 @@ test "newtype From: newtype → base" {
 
 test "newtype From is type-safe: distinct newtypes do not convert" {
     let uid = UserId::from(1 as u64);
-    // u64::from(uid) yields u64; can then build ProductId from that u64
     let pid = ProductId::from(u64::from(uid));
     assert pid as u64 == 1 as u64;
 }
-
-// ── JsonValue-like variant: From for ergonomic tree construction ───────────
-//
-// A common pattern: build a dynamically-typed tree (JSON, config, AST node)
-// by converting native types via From rather than writing out constructor calls.
 
 variant JsonLike {
     Null,
@@ -314,11 +288,6 @@ test "JsonLike: building a mixed array via From" {
     assert arr matches { Arr(a) && a.len() == 3 };
 }
 
-// ── enum: TryFrom<i32> for discriminant parsing ────────────────────────────
-//
-// Realistic use case: decode a network protocol enum from its wire integer,
-// returning Err for unknown values rather than panicking.
-
 enum Direction {
     North,
     East,
@@ -370,11 +339,6 @@ test "enum TryFrom + From: round-trip" {
     assert i32::from(d) == 2;
 }
 
-// ── flags: From / TryFrom with u32 ────────────────────────────────────────
-//
-// Realistic use case: serialize flags to wire format (u32) and parse them
-// back with validation, rejecting bit patterns that set undefined bits.
-
 flags AccessFlags {
     Read,
     Write,
@@ -390,7 +354,6 @@ impl From<AccessFlags> for u32 {
 impl TryFrom<u32> for AccessFlags {
     type Error = String;
     fn try_from(value: u32) -> Result<AccessFlags, String> {
-        // Only bits 0–2 are defined; reject anything with higher bits set
         if value > 7 as u32 {
             return Result::<AccessFlags, String>::Err(`invalid flags: {value as i32}`);
         }
@@ -428,11 +391,6 @@ test "flags From + TryFrom: serialization round-trip" {
     assert restored == original;
 }
 
-// ── i128 / u128: widening From and narrowing TryFrom ──────────────────────
-//
-// Realistic use case: accumulating small integers into a 128-bit counter for
-// overflow-safe summation, then safely extracting the result back.
-
 test "From<u64> for u128: widening is lossless" {
     let small = 42 as u64;
     let wide = u128::from(small);
@@ -459,7 +417,6 @@ test "TryFrom<u128> for u64: in range" {
 }
 
 test "TryFrom<u128> for u64: out of range" {
-    // u64::MAX + 1 as u128
     let too_big = u64::MAX as u128 + 1 as u128;
     assert u64::try_from(too_big) matches { Err(_) };
 }
@@ -477,14 +434,9 @@ test "TryFrom<i128> for i64: out of range" {
     assert i64::try_from(too_small) matches { Err(_) };
 }
 
-// ── Integer-to-float TryFrom: lossless precision check ────────────────────
-//
-// f32 has a 24-bit mantissa: integers outside (-2^24, 2^24) may be rounded.
-// f64 has a 53-bit mantissa: integers outside (-2^53, 2^53) may be rounded.
-//
-// TryFrom succeeds iff `(value as float) as integer == value`.
-// This is the same contract as Rust's experimental exact_size_is_power_of_two,
-// and mirrors what a "lossless cast" library would provide.
+// TryFrom<int> for f32/f64: succeeds iff (value as float) as int == value.
+// f32 has a 24-bit mantissa (exact for integers up to ±2^24 = 16_777_216).
+// f64 has a 53-bit mantissa (exact for integers up to ±2^53 = 9_007_199_254_740_992).
 
 test "TryFrom<i64> for f64: small values are exact" {
     assert f64::try_from(0 as i64) matches { Ok(n) && n == 0.0 };
@@ -494,19 +446,15 @@ test "TryFrom<i64> for f64: small values are exact" {
 }
 
 test "TryFrom<i64> for f64: boundary at ±2^53" {
-    // 2^53 = 9_007_199_254_740_992: last integer exactly representable in f64
     assert f64::try_from(9_007_199_254_740_992 as i64) matches { Ok(n) && n == 9_007_199_254_740_992.0 };
     assert f64::try_from(-9_007_199_254_740_992 as i64) matches { Ok(n) && n == -9_007_199_254_740_992.0 };
-    // 2^53 + 1: rounds to 2^53 when cast to f64 → roundtrip fails → Err
     assert f64::try_from(9_007_199_254_740_993 as i64) matches { Err(_) };
     assert f64::try_from(-9_007_199_254_740_993 as i64) matches { Err(_) };
 }
 
 test "TryFrom<i64> for f32: boundary at ±2^24" {
-    // 2^24 = 16_777_216: last integer exactly representable in f32
     assert f32::try_from(16_777_216 as i64) matches { Ok(n) && n == 16_777_216.0 as f32 };
     assert f32::try_from(-16_777_216 as i64) matches { Ok(n) && n == -16_777_216.0 as f32 };
-    // 2^24 + 1: rounds to 2^24 when cast to f32 → roundtrip fails → Err
     assert f32::try_from(16_777_217 as i64) matches { Err(_) };
     assert f32::try_from(-16_777_217 as i64) matches { Err(_) };
 }
@@ -527,7 +475,6 @@ test "TryFrom<i128> for f64: boundary at ±2^53" {
     assert f64::try_from(9_007_199_254_740_992 as i128) matches { Ok(n) && n == 9_007_199_254_740_992.0 };
     assert f64::try_from(-9_007_199_254_740_992 as i128) matches { Ok(n) && n == -9_007_199_254_740_992.0 };
     assert f64::try_from(9_007_199_254_740_993 as i128) matches { Err(_) };
-    // Far out of range: large i128 values are nowhere near exact
     assert f64::try_from(i64::MAX as i128 + 1 as i128) matches { Err(_) };
 }
 
@@ -548,14 +495,13 @@ test "TryFrom<u128> for f32: boundary at 2^24" {
 }
 
 test "int-to-float TryFrom: illustrate the precision loss semantics" {
-    // 2^53 + 1 cast to f64 silently rounds to 2^53; TryFrom surfaces this.
+    // `as` silently rounds; TryFrom surfaces the loss as Err
     let lossy = 9_007_199_254_740_993 as i64 as f64;
-    assert lossy == 9_007_199_254_740_992.0;          // silent rounding with `as`
-    assert f64::try_from(9_007_199_254_740_993 as i64) matches { Err(_) };  // TryFrom rejects it
+    assert lossy == 9_007_199_254_740_992.0;
+    assert f64::try_from(9_007_199_254_740_993 as i64) matches { Err(_) };
 }
 
 test "u128 accumulation round-trip via From / TryFrom" {
-    // Sum 1000 × u32::MAX safely in u128, then recover the u64 partial sum
     let chunk = u32::MAX as u64;
     let mut acc = 0 as u128;
     let mut i = 0;
@@ -563,6 +509,6 @@ test "u128 accumulation round-trip via From / TryFrom" {
         acc = acc + u128::from(chunk);
         i += 1;
     }
-    // 4 × (2^32 - 1) = 4 × 4294967295 = 17179869180, which fits in u64
+    // 4 × (2^32 - 1) = 17_179_869_180, fits in u64
     assert u64::try_from(acc) matches { Ok(n) && n == 17179869180 as u64 };
 }
