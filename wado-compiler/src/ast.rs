@@ -1262,6 +1262,7 @@ pub struct VariantCase {
 pub struct Newtype {
     pub name: String,
     pub is_pub: bool,
+    pub type_params: Vec<GenericParam>,
     pub ty: Type,
     pub attrs: Vec<Attribute>,
     pub span: Span,

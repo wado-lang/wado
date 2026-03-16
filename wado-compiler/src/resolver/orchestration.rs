@@ -21,8 +21,8 @@ use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 
 use super::Resolver;
 use super::types::{
-    EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, ModuleTypeMaps, ResourceInfo,
-    StructFieldInfo, VariantCaseData, VariantInfo,
+    EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ModuleTypeMaps,
+    ResourceInfo, StructFieldInfo, VariantCaseData, VariantInfo,
 };
 
 impl<'a, H: CompilerHost> Resolver<'a, H> {
@@ -38,6 +38,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Create a shared type table wrapped in Rc<RefCell<>> for cross-module sharing
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
         let mut all_newtypes: IndexMap<ModuleSource, IndexMap<String, TypeId>> =
+            IndexMap::default();
+        let mut all_generic_newtypes: IndexMap<ModuleSource, IndexMap<String, GenericNewtypeInfo>> =
             IndexMap::default();
         let mut all_struct_fields: IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>> =
             IndexMap::default();
@@ -271,29 +273,45 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         flat_struct_fields.insert(struct_decl.name.clone(), info);
                     }
                     Item::Type(newtype_decl) => {
-                        // Resolve the base type
-                        let base_type_id = Self::resolve_type_static(
-                            &newtype_decl.ty,
-                            &mut type_table.borrow_mut(),
-                            &flat_newtypes,
-                            &flat_struct_fields,
-                            &flat_resource_types,
-                            &flat_enum_cases,
-                            &flat_variant_cases,
-                            &flat_flags_cases,
-                        );
-                        // Create a newtype wrapping the base type
-                        let newtype_id = type_table.borrow_mut().make_newtype(
-                            newtype_decl.name.clone(),
-                            module_source.clone(),
-                            base_type_id,
-                        );
-                        all_newtypes
-                            .entry(module_source.clone())
-                            .or_default()
-                            .insert(newtype_decl.name.clone(), newtype_id);
-                        // Also update flat map for subsequent items in this module
-                        flat_newtypes.insert(newtype_decl.name.clone(), newtype_id);
+                        if newtype_decl.type_params.is_empty() {
+                            // Concrete newtype: resolve immediately
+                            let base_type_id = Self::resolve_type_static(
+                                &newtype_decl.ty,
+                                &mut type_table.borrow_mut(),
+                                &flat_newtypes,
+                                &flat_struct_fields,
+                                &flat_resource_types,
+                                &flat_enum_cases,
+                                &flat_variant_cases,
+                                &flat_flags_cases,
+                            );
+                            let newtype_id = type_table.borrow_mut().make_newtype(
+                                newtype_decl.name.clone(),
+                                module_source.clone(),
+                                base_type_id,
+                            );
+                            all_newtypes
+                                .entry(module_source.clone())
+                                .or_default()
+                                .insert(newtype_decl.name.clone(), newtype_id);
+                            flat_newtypes.insert(newtype_decl.name.clone(), newtype_id);
+                        } else {
+                            // Generic newtype: store definition for lazy instantiation
+                            let type_params = newtype_decl
+                                .type_params
+                                .iter()
+                                .map(|p| p.name.clone())
+                                .collect();
+                            let info = GenericNewtypeInfo {
+                                module_source: module_source.clone(),
+                                type_params,
+                                base_type_ast: newtype_decl.ty.clone(),
+                            };
+                            all_generic_newtypes
+                                .entry(module_source.clone())
+                                .or_default()
+                                .insert(newtype_decl.name.clone(), info);
+                        }
                     }
                     Item::Variant(variant_decl) => {
                         // Resolve variant case field types
@@ -437,6 +455,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 &imported_type_sources,
                 &import_original_names,
             );
+            let generic_newtype_defs = Self::build_module_map(
+                &all_generic_newtypes,
+                module_source,
+                &imported_type_sources,
+                &import_original_names,
+            );
             let struct_fields = Self::build_module_map(
                 &all_struct_fields,
                 module_source,
@@ -526,6 +550,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 symbols,
                 loaded_modules: modules,
                 newtypes,
+                generic_newtype_defs,
                 struct_fields,
                 variant_cases,
                 enum_cases,

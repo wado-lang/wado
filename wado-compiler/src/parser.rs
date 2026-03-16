@@ -3533,6 +3533,7 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Type)?;
         let name = self.consume_ident()?;
+        let type_params = self.parse_generic_params()?;
         self.expect(&TokenKind::Eq)?;
         let ty = self.parse_type()?;
         self.expect(&TokenKind::Semicolon)?;
@@ -3540,6 +3541,7 @@ impl Parser {
         Ok(Newtype {
             name,
             is_pub,
+            type_params,
             ty,
             attrs,
             span: start_span,

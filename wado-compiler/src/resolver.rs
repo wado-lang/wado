@@ -46,7 +46,10 @@ use crate::tir::{
 
 use trait_env::TraitEnv;
 pub use types::TypeError;
-use types::{EnumInfo, FlagsInfo, ModuleTypeMaps, ResourceInfo, StructFieldInfo, VariantInfo};
+use types::{
+    EnumInfo, FlagsInfo, GenericNewtypeInfo, ModuleTypeMaps, ResourceInfo, StructFieldInfo,
+    VariantInfo,
+};
 
 pub struct Resolver<'a, H: CompilerHost> {
     /// Type table (shared across all modules via Rc<RefCell>)
@@ -59,6 +62,8 @@ pub struct Resolver<'a, H: CompilerHost> {
     loaded_modules: &'a IndexMap<ModuleSource, Module>,
     /// Newtypes (name -> resolved type) - flat map for current module
     newtypes: IndexMap<String, TypeId>,
+    /// Generic newtype definitions (name -> info) - flat map for current module
+    generic_newtype_defs: IndexMap<String, GenericNewtypeInfo>,
     /// Struct field info (struct name -> (`module_source`, fields)) - flat map for current module
     struct_fields: IndexMap<String, StructFieldInfo>,
     /// Variant case info (variant name -> (`module_source`, `type_params`, cases)) - flat map for current module
@@ -151,6 +156,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             symbols,
             loaded_modules,
             newtypes: IndexMap::default(),
+            generic_newtype_defs: IndexMap::default(),
             struct_fields: IndexMap::default(),
             variant_cases: IndexMap::default(),
             enum_cases: IndexMap::default(),
@@ -228,6 +234,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             for name in m.keys() {
                 cache.insert(name.clone());
             }
+        }
+        for name in self.generic_newtype_defs.keys() {
+            cache.insert(name.clone());
         }
         for name in crate::tir::PrimitiveType::all_primitive_names() {
             cache.insert(name.to_string());
