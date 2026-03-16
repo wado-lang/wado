@@ -654,6 +654,42 @@ The resolver uses `find_static_method_trait` to detect when a static call target
 - **Inlining possible**: Optimizer can inline trait methods
 - **Dead code elimination**: Unused trait implementations are removed
 
+### Orphan Rule Enforcement
+
+Orphan rule checking runs inside `TraitEnv::build()` in `resolver/trait_env.rs`, immediately before per-module resolution begins. At that point all modules (stdlib + user files) are loaded, so the full set of trait and type declarations is available.
+
+**Phase placement:**
+
+```
+LoadModules → TraitEnv::build()  ← orphan check here
+                │
+                ├── build impl_index / decl_index / blanket_impl_index
+                ├── build type_decl_index  (struct/variant/enum/flags/newtype → ModuleSource)
+                └── check_all_orphan_rules() → Vec<TypeError::OrphanViolation>
+                         │
+                         └── emitted via logger before per-module resolution starts
+```
+
+**Implementation:**
+
+`TraitEnv::build()` returns `(Arc<TraitEnv>, Vec<TypeError>)`. The caller (`resolve_all_modules` in `orchestration.rs`) emits each `OrphanViolation` through the logger immediately after the call.
+
+The check skips any impl block whose containing module is `Core`, `Wasi`, or `Remote` — the standard library and remote packages are trusted to write any impl they need. Only `EntryPoint` and `Local` modules are checked.
+
+For each local impl block with a foreign trait, `check_orphan_rfc2451` walks the sequence `[self_type, trait_arg_1, …]` left-to-right and classifies each position via `classify_position`:
+
+| `PositionKind` | Meaning |
+| -------------- | ------- |
+| `LocalType` | Outermost type constructor is defined in a local module |
+| `ForeignType` | Outermost type constructor is foreign (or a tuple / function type) |
+| `UncoveredTypeParam` | The position is a bare `impl<T>` type parameter |
+
+`&T` and `&mut T` are fundamental: `classify_position` recurses into the inner type, so `&LocalType` yields `LocalType`.
+
+The sequence walk returns `true` (allowed) as soon as a `LocalType` is found with no `UncoveredTypeParam` seen at any earlier position. If an `UncoveredTypeParam` is reached before any `LocalType`, or the sequence is exhausted without finding a `LocalType`, the check returns `false` and an `OrphanViolation` error is produced.
+
+**Error code:** `Code::OrphanRule` → diagnostic string `"ORPHAN_RULE"`.
+
 ### Default Trait Methods
 
 Trait methods can have default implementations (a body in the trait declaration). When a type implements the trait but omits a method with a default body, the compiler synthesizes the method in the impl block using the default body.

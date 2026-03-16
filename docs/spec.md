@@ -2319,6 +2319,55 @@ impl<T: Eq> Eq for Pair<T> {
 - Fully qualified syntax for disambiguation (`<Type as Trait>::method()`)
 - Using bounds for method resolution on type parameters (calling `T.method()` where `T: Trait`)
 
+### Coherence and Orphan Rules
+
+Wado enforces **coherence**: for every `(Trait, Type)` pair, there is at most one `impl Trait for Type` that can apply. Coherence is guaranteed by the **orphan rules**, which restrict where trait implementations may be written.
+
+#### Package Boundary
+
+The unit of coherence is a **package** — all source files compiled together from the same `wado.toml` project. Types and traits are classified relative to that boundary:
+
+| Module source | Classification |
+| ------------- | -------------- |
+| `./file.wado` (relative path import) | **Local** |
+| Entry-point file | **Local** |
+| `core:*` (standard library) | **Foreign** |
+| `wasi:*` (WASI interfaces) | **Foreign** |
+| Remote URL | **Foreign** |
+
+#### The Orphan Rule
+
+For `impl<P1..Pn> Trait<A1..Am> for T0`, the implementation is **valid** if and only if at least one of these conditions holds:
+
+1. `Trait` is **local** (defined in the current package), or
+2. The **sequence** `T0, A1, A2, …, Am` contains a local type at some position `i`, and no **uncovered type parameter** appears at any position `j < i`.
+
+**Uncovered type parameter:** A type parameter `Pk` is *uncovered* at position `i` if the type at position `i` is literally `Pk` (bare, not wrapped inside another type constructor). `Array<Pk>` is covered; `Pk` alone is uncovered.
+
+**Fundamental types:** `&T` and `&mut T` are *fundamental* — they are looked through when checking positions. `impl Trait for &LocalType` counts as having `LocalType` at position `T0`.
+
+#### Examples
+
+| Implementation | Verdict | Reason |
+| -------------- | ------- | ------ |
+| `impl Eq for MyStruct` | **Allowed** | `MyStruct` is local (T0 is local) |
+| `impl MyTrait for String` | **Allowed** | `MyTrait` is local |
+| `impl<T: Eq> Eq for MyBox<T>` | **Allowed** | `MyBox` is local (T0 is local) |
+| `impl From<MyError> for String` | **Allowed** | `MyError` (local) at A1, no uncovered param before it |
+| `impl<T> From<MyType<T>> for String` | **Allowed** | `MyType` (local head) at A1, no uncovered param before it |
+| `impl<T> From<T> for MyType` | **Allowed** | `MyType` is local at T0, reached before T1=`T` |
+| `impl Eq for String` | **Forbidden** | Both `Eq` and `String` are foreign |
+| `impl Eq for Array<i32>` | **Forbidden** | `Eq` foreign, `Array` (head of T0) is foreign |
+| `impl<T> Eq for T` | **Forbidden** | T0 is uncovered type parameter, `Eq` is foreign |
+| `impl<T> From<T> for String` | **Forbidden** | T0=`String` (foreign), T1=`T` (uncovered) before any local |
+| `impl From<String> for i32` | **Forbidden** | T0=`i32` (foreign), A1=`String` (foreign), no local found |
+
+#### Rationale
+
+The orphan rule prevents two packages from independently providing `impl Trait for Type` for the same `(Trait, Type)` pair, which would make method resolution ambiguous when both packages are used together. By requiring at least one of the trait or the self type to be local, every valid implementation is "owned" by exactly one package.
+
+The sequence rule (RFC 2451 style) allows `impl From<LocalError> for String` — even though `String` is foreign — because `LocalError` appears in the trait's type argument at position A1 with no uncovered type parameter before it. This makes it unnecessary to define a mirror `Into` trait just to work around stricter rules.
+
 ### Iterator Traits
 
 The prelude defines iterator traits for generic iteration over collections.
