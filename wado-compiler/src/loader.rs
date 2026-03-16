@@ -641,13 +641,13 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// joins the result with `base_path`. Three cases:
     ///
     /// - Absolute path (`/…`): prepend `dir` so the result is absolute; `join`
-    ///   with base_path returns just the absolute path unchanged.
+    ///   with `base_path` returns just the absolute path unchanged.
     /// - Module-import relative (`./…` or `../…`): `dir` is already
     ///   base_path-relative (all imported modules are normalized to `./`), so
     ///   prepending it produces the correct base_path-relative result.
     /// - Entry-file CWD-relative (no leading `/`, `./`, or `../`): `dir` contains
-    ///   the full CWD-relative prefix including base_path. Prepending it would
-    ///   double that prefix when `join` adds base_path again. Return only
+    ///   the full CWD-relative prefix including `base_path`. Prepending it would
+    ///   double that prefix when `join` adds `base_path` again. Return only
     ///   `stripped` so that `base_path.join(stripped)` produces the right path.
     fn resolve_include_path(&self, module_source_str: &str, raw_path: &str) -> String {
         if (raw_path.starts_with("./") || raw_path.starts_with("../"))
