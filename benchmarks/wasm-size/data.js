@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773613943221,
+  "lastUpdate": 1773624233597,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3533,6 +3533,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/814dbb84de1100ec242cd566565951654b832aa8"
         },
         "date": 1773613943024,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9285,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21283,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d8281ba42c0667a4a6b44c896c222d87f66d70e4",
+          "message": "Merge pull request #587 from wado-lang/claude/newtype-architecture-analysis-V1t4m\n\nImplement proper newtype and flags erasure in type system",
+          "timestamp": "2026-03-16T10:21:21+09:00",
+          "tree_id": "101c171407efea92510ee2f2787b699b203c4d04",
+          "url": "https://github.com/wado-lang/wado/commit/d8281ba42c0667a4a6b44c896c222d87f66d70e4"
+        },
+        "date": 1773624233388,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
