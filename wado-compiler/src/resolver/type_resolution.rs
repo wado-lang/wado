@@ -1,6 +1,6 @@
 //! AST Type to `TypeId` resolution.
 
-use crate::ast::Type;
+use crate::ast::{GenericType, Type};
 use crate::compiler_host::CompilerHost;
 use crate::name::ModuleSource;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -9,6 +9,45 @@ use crate::token::Span;
 use super::Resolver;
 use super::types::TypeError;
 use crate::symbol::SymbolKind;
+
+/// Substitute named type parameters in an AST type.
+/// `params[i]` is replaced by `args[i]` throughout the type.
+fn substitute_type_params(ty: &Type, params: &[String], args: &[Type]) -> Type {
+    match ty {
+        Type::Named(named) => {
+            if let Some(i) = params.iter().position(|p| p == &named.name) {
+                args[i].clone()
+            } else {
+                ty.clone()
+            }
+        }
+        Type::Generic(generic) => {
+            let new_args = generic
+                .args
+                .iter()
+                .map(|a| substitute_type_params(a, params, args))
+                .collect();
+            Type::Generic(GenericType {
+                name: generic.name.clone(),
+                args: new_args,
+                span: generic.span,
+            })
+        }
+        Type::Reference(inner) => {
+            Type::Reference(Box::new(substitute_type_params(inner, params, args)))
+        }
+        Type::MutReference(inner) => {
+            Type::MutReference(Box::new(substitute_type_params(inner, params, args)))
+        }
+        Type::Tuple(elems) => Type::Tuple(
+            elems
+                .iter()
+                .map(|e| substitute_type_params(e, params, args))
+                .collect(),
+        ),
+        _ => ty.clone(),
+    }
+}
 
 impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn resolve_type(&mut self, ty: &Type) -> TypeId {
@@ -315,6 +354,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             type_args,
                         )
                     }
+                } else if let Some(gn_info) = self.generic_newtype_defs.get(name).cloned() {
+                    // Generic newtype instantiation: type MyArray<T> = Array<T>
+                    // Substitute type params in the base type AST, then resolve
+                    let concrete_base_ast =
+                        substitute_type_params(&gn_info.base_type_ast, &gn_info.type_params, args);
+                    let base_type_id = self.resolve_type(&concrete_base_ast);
+                    // Build a display name like "MyArray<i32>"
+                    let resolved_args: Vec<TypeId> =
+                        args.iter().map(|t| self.resolve_type(t)).collect();
+                    let arg_names: Vec<String> = resolved_args
+                        .iter()
+                        .map(|&tid| self.type_id_to_string(tid))
+                        .collect();
+                    let display_name = format!("{}<{}>", name, arg_names.join(", "));
+                    self.type_table.borrow_mut().make_newtype(
+                        display_name,
+                        gn_info.module_source,
+                        base_type_id,
+                    )
                 } else {
                     TypeTable::UNKNOWN
                 }

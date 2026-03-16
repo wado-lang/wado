@@ -1,0 +1,40 @@
+// Trait bounds with newtypes: newtype T satisfies <U: Trait> when U: Trait.
+// Newtypes inherit trait implementations from their base type, including
+// satisfying generic function bounds such as T: Ord.
+
+use { println, Stdout } from "core:cli";
+
+type Score = i32;
+type Timestamp = u64;
+
+// Generic function requiring T: Ord
+fn smallest<T: Ord>(a: T, b: T) -> T {
+    if a < b { return a; }
+    return b;
+}
+
+fn largest<T: Ord>(a: T, b: T) -> T {
+    if a > b { return a; }
+    return b;
+}
+
+export fn run() with Stdout {
+    let s1: Score = 100;
+    let s2: Score = 200;
+
+    // Score (newtype of i32) should satisfy Ord — passes T: Ord bound
+    let min_score = smallest(s1, s2);
+    let max_score = largest(s1, s2);
+    println(`min: {min_score as i32}`);
+    println(`max: {max_score as i32}`);
+
+    let t1: Timestamp = 1000;
+    let t2: Timestamp = 2000;
+
+    // Timestamp (newtype of u64) should also satisfy Ord
+    let earlier = smallest(t1, t2);
+    println(`earlier: {earlier as u64}`);
+}
+
+__DATA__
+{"stdout": "min: 100\nmax: 200\nearlier: 1000\n"}

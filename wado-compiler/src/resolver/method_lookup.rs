@@ -873,6 +873,44 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
 
+            // Generic instance (e.g., Option<T>, Array<T>): substitute in type args
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => {
+                let new_args: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|&arg| self.substitute_newtype_in_type(arg, base_type, newtype))
+                    .collect();
+                if new_args == type_args {
+                    type_id
+                } else {
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::GenericInstance {
+                            name,
+                            module_source,
+                            type_args: new_args,
+                        })
+                }
+            }
+
+            // Tuple: substitute in each element
+            ResolvedType::Tuple(elems) => {
+                let new_elems: Vec<TypeId> = elems
+                    .iter()
+                    .map(|&e| self.substitute_newtype_in_type(e, base_type, newtype))
+                    .collect();
+                if new_elems == elems {
+                    type_id
+                } else {
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::Tuple(new_elems))
+                }
+            }
+
             // Other types: no substitution
             _ => type_id,
         }
