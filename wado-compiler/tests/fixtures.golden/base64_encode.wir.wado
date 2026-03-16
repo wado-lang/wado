@@ -155,8 +155,6 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 
-type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> ref Option<u8>;
-
 type "functype/StrUtf8ByteIter^Iterator::collect" = fn(ref StrUtf8ByteIter) -> ref Array<u8>;
 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<char>;
@@ -176,8 +174,6 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
-
-type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> [i32, u8];
 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
@@ -1313,38 +1309,39 @@ fn String^Eq::eq(self, other) {
     return 1;
 }
 
-fn StrUtf8ByteIter^Iterator::next(self) {
-    let byte: u8;
-    if self.index >= self.used {
-        return 1; 0;
-    };
-    byte = builtin::array_get_u8(self.repr, self.index);
-    self.index = self.index + 1;
-    return 0; byte;
-}
-
 fn StrUtf8ByteIter^Iterator::collect(self) {
     let __local_1: ref Array<u8>;
     let result: ref Array<u8>;
-    let item: u8;
+    let byte: u8;
+    let _licm_used_11: i32;
+    let _licm_repr_12: ref array<u8>;
+    let _hfs_index_13: i32;
     result = __seq_lit: block -> ref Array<u8> {
         __local_1 = Array<u8> { repr: builtin::array_new<u8>(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    b69: block {
-        l70: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: u8;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(self);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                item = __sroa___pattern_temp_0_payload_0;
-                Array<u8>::append(result, item);
-            } else {
-                break b69;
+    _licm_used_11 = self.used;
+    _licm_repr_12 = self.repr;
+    _hfs_index_13 = self.index;
+    b68: block {
+        l69: loop {
+            __fused___inline_StrUtf8ByteIter_Iterator__next_3: block {
+                if _hfs_index_13 >= _licm_used_11 {
+                    self.index = _hfs_index_13;
+                    break b68;
+                    self.index = _hfs_index_13;
+                    break __fused___inline_StrUtf8ByteIter_Iterator__next_3;
+                };
+                byte = builtin::array_get_u8(_licm_repr_12, _hfs_index_13);
+                _hfs_index_13 = _hfs_index_13 + 1;
+                Array<u8>::append(result, byte);
+                self.index = _hfs_index_13;
+                break __fused___inline_StrUtf8ByteIter_Iterator__next_3;
             };
-            continue l70;
+            continue l69;
         };
     };
+    self.index = _hfs_index_13;
     return result;
 }
 
@@ -1459,13 +1456,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l82: loop {
+            l81: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l82;
+                continue l81;
             };
         };
     };
@@ -1566,8 +1563,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b101: block {
-        l102: loop {
+    b100: block {
+        l101: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
@@ -1592,9 +1589,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b101;
+                break b100;
             };
-            continue l102;
+            continue l101;
         };
     };
     String::append_char(f.buf, 34);

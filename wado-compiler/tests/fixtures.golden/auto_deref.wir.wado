@@ -180,8 +180,6 @@ type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
 type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> ref Option<u8>;
-
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<char>;
 
 type "functype/String::append_char" = fn(ref String, char);
@@ -199,8 +197,6 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
-
-type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> [i32, u8];
 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
@@ -247,7 +243,6 @@ fn auto_deref_for_of() with Stdout {
     let __local_34: ref Formatter;
     let __local_37: ref String;
     let __local_39: ref Formatter;
-    let __local_42: ref StrCharIter;
     let __local_45: ref String;
     let __local_47: ref Formatter;
     let __local_50: ref String;
@@ -312,10 +307,7 @@ condition: sum == 6
     };
     s = String { repr: array.new_data<u8>("abc"), used: 3 };
     count = 0;
-    __iter_11 = __inline_StrCharIter_IntoIterator__into_iter_14: block -> ref StrCharIter {
-        __local_42 = StrCharIter { repr: ref.as_non_null(s.repr), used: 3, byte_index: 0 };
-        break __inline_StrCharIter_IntoIterator__into_iter_14: __local_42;
-    };
+    __iter_11 = StrCharIter { repr: ref.as_non_null(s.repr), used: 3, byte_index: 0 };
     b4: block {
         l5: loop {
             let __sroa___pattern_temp_1_discriminant: i32;
@@ -379,8 +371,6 @@ fn auto_deref_method() with Stdout {
     let s: ref String;
     let __v0_20: i32;
     let __cond_21: bool;
-    let bytes_iter: ref StrUtf8ByteIter;
-    let b: u8;
     let __cond_25: bool;
     let __local_41: ref String;
     let __local_42: ref Formatter;
@@ -396,11 +386,15 @@ fn auto_deref_method() with Stdout {
     let __local_118: ref Formatter;
     let __local_121: ref String;
     let __local_123: ref Formatter;
-    let __local_128: ref String;
-    let __local_130: ref Formatter;
-    let __local_133: ref String;
-    let __local_135: ref Formatter;
+    let byte: u8;
+    let __local_130: ref String;
+    let __local_132: ref Formatter;
+    let __local_135: ref String;
+    let __local_137: ref Formatter;
     let __sroa_box_str_value: ref String;
+    let __sroa_bytes_iter_repr: ref array<u8>;
+    let __sroa_bytes_iter_used: i32;
+    let __sroa_bytes_iter_index: i32;
     __sroa_box_str_value = String { repr: array.new_data<u8>("hello"), used: 5 };
     __v0_16 = 5;
     __cond_17 = __v0_16 == 5;
@@ -471,13 +465,16 @@ condition: s_ref.len() == 5
         });
         unreachable;
     };
-    bytes_iter = StrUtf8ByteIter { repr: ref.as_non_null(s.repr), used: 5, index: 0 };
-    let __sroa___pattern_temp_0_discriminant: i32;
-    let __sroa___pattern_temp_0_payload_0: u8;
-    multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(bytes_iter);
-    if __sroa___pattern_temp_0_discriminant == 0 {
-        b = __sroa___pattern_temp_0_payload_0;
-        __cond_25 = b == 104;
+    __sroa_bytes_iter_repr = s.repr;
+    __sroa_bytes_iter_used = 5;
+    __sroa_bytes_iter_index = 0;
+    __fused___inline_StrUtf8ByteIter_Iterator__next_50: block {
+        if 0 >= __sroa_bytes_iter_used {
+            break __fused___inline_StrUtf8ByteIter_Iterator__next_50;
+        };
+        byte = builtin::array_get_u8(__sroa_bytes_iter_repr, 0);
+        __sroa_bytes_iter_index = 1;
+        __cond_25 = byte == 104;
         if __cond_25 == 0 {
             "core:internal/panic"(__tmpl: block -> ref String {
                 __local_45 = String { repr: builtin::array_new<u8>(120), used: 0 };
@@ -489,29 +486,30 @@ condition: s_ref.len() == 5
                 String::append_char(__local_45, 32);
                 String::append(__local_45, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/auto_deref.wado"), used: 44 });
                 String::append_char(__local_45, 58);
-                __local_46 = __inline_Formatter__new_51: block -> ref Formatter {
-                    __local_128 = __local_45;
-                    break __inline_Formatter__new_51: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_128) };
+                __local_46 = __inline_Formatter__new_52: block -> ref Formatter {
+                    __local_130 = __local_45;
+                    break __inline_Formatter__new_52: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_130) };
                 };
-                __local_130 = __local_46;
-                i32::fmt_decimal(83, __local_130);
+                __local_132 = __local_46;
+                i32::fmt_decimal(83, __local_132);
                 String::append(__local_45, String { repr: array.new_data<u8>("
 condition: b == 'h' as u8
 "), used: 27 });
                 String::append_char(__local_45, 98);
                 String::append_char(__local_45, 58);
                 String::append_char(__local_45, 32);
-                __local_46 = __inline_Formatter__new_54: block -> ref Formatter {
-                    __local_133 = __local_45;
-                    break __inline_Formatter__new_54: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_133) };
+                __local_46 = __inline_Formatter__new_55: block -> ref Formatter {
+                    __local_135 = __local_45;
+                    break __inline_Formatter__new_55: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_135) };
                 };
-                __local_135 = __local_46;
-                i32::fmt_decimal(b, __local_135);
+                __local_137 = __local_46;
+                i32::fmt_decimal(byte, __local_137);
                 String::append_char(__local_45, 10);
                 break __tmpl: __local_45;
             });
             unreachable;
         };
+        break __fused___inline_StrUtf8ByteIter_Iterator__next_50;
     };
     "core:cli/println"(String { repr: array.new_data<u8>("all auto-deref tests passed"), used: 27 });
 }
@@ -870,16 +868,6 @@ fn String::append(self, other) {
     self.used = new_used;
 }
 
-fn StrUtf8ByteIter^Iterator::next(self) {
-    let byte: u8;
-    if self.index >= self.used {
-        return 1; 0;
-    };
-    byte = builtin::array_get_u8(self.repr, self.index);
-    self.index = self.index + 1;
-    return 0; byte;
-}
-
 fn StrCharIter^Iterator::next(self) {
     let b0: u8;
     let b1_2: u8;
@@ -1001,13 +989,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l52: loop {
+            l51: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l52;
+                continue l51;
             };
         };
     };

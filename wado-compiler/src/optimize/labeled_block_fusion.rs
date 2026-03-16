@@ -125,9 +125,56 @@ fn fuse_in_stmt(stmt: &mut TirStmt, local_count: &mut u32, local_types: &mut Vec
     }
 }
 
+/// Check if a labeled block expression is trivially a single `break label: value` statement.
+/// If so, inline the break value directly, eliminating the labeled block overhead.
+///
+/// Pattern:
+/// ```text
+/// label: { break label: expr }  →  expr
+/// ```
+fn try_inline_trivial_labeled_block(expr: &mut TirExpr) -> bool {
+    let TirExprKind::LabeledBlock { label, block, .. } = &mut expr.kind else {
+        return false;
+    };
+    if block.stmts.len() != 1 {
+        return false;
+    }
+    let TirStmtKind::Break {
+        label: Some(break_label),
+        value: Some(_),
+    } = &block.stmts[0].kind
+    else {
+        return false;
+    };
+    if break_label != label {
+        return false;
+    }
+    // Extract the break value, replacing expr in place.
+    let TirStmtKind::Break {
+        value: Some(break_value),
+        ..
+    } = std::mem::replace(&mut block.stmts[0].kind, TirStmtKind::Continue)
+    else {
+        unreachable!()
+    };
+    let span = expr.span;
+    let type_id = expr.type_id;
+    *expr = TirExpr {
+        kind: break_value.kind,
+        type_id,
+        span,
+    };
+    true
+}
+
 fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, local_types: &mut Vec<TypeId>) -> bool {
     match &mut expr.kind {
-        TirExprKind::LabeledBlock { block, .. } => fuse_in_block(block, local_count, local_types),
+        TirExprKind::LabeledBlock { block, .. } => {
+            // First recurse into the block's contents
+            let changed = fuse_in_block(block, local_count, local_types);
+            // Then check if this became a trivial single-break block
+            try_inline_trivial_labeled_block(expr) || changed
+        }
         TirExprKind::Block(block) => fuse_in_block(block, local_count, local_types),
         TirExprKind::If {
             condition,
