@@ -477,6 +477,83 @@ test "TryFrom<i128> for i64: out of range" {
     assert i64::try_from(too_small) matches { Err(_) };
 }
 
+// ── Integer-to-float TryFrom: lossless precision check ────────────────────
+//
+// f32 has a 24-bit mantissa: integers outside (-2^24, 2^24) may be rounded.
+// f64 has a 53-bit mantissa: integers outside (-2^53, 2^53) may be rounded.
+//
+// TryFrom succeeds iff `(value as float) as integer == value`.
+// This is the same contract as Rust's experimental exact_size_is_power_of_two,
+// and mirrors what a "lossless cast" library would provide.
+
+test "TryFrom<i64> for f64: small values are exact" {
+    assert f64::try_from(0 as i64) matches { Ok(n) && n == 0.0 };
+    assert f64::try_from(1 as i64) matches { Ok(n) && n == 1.0 };
+    assert f64::try_from(-1 as i64) matches { Ok(n) && n == -1.0 };
+    assert f64::try_from(1_000_000 as i64) matches { Ok(n) && n == 1_000_000.0 };
+}
+
+test "TryFrom<i64> for f64: boundary at ±2^53" {
+    // 2^53 = 9_007_199_254_740_992: last integer exactly representable in f64
+    assert f64::try_from(9_007_199_254_740_992 as i64) matches { Ok(n) && n == 9_007_199_254_740_992.0 };
+    assert f64::try_from(-9_007_199_254_740_992 as i64) matches { Ok(n) && n == -9_007_199_254_740_992.0 };
+    // 2^53 + 1: rounds to 2^53 when cast to f64 → roundtrip fails → Err
+    assert f64::try_from(9_007_199_254_740_993 as i64) matches { Err(_) };
+    assert f64::try_from(-9_007_199_254_740_993 as i64) matches { Err(_) };
+}
+
+test "TryFrom<i64> for f32: boundary at ±2^24" {
+    // 2^24 = 16_777_216: last integer exactly representable in f32
+    assert f32::try_from(16_777_216 as i64) matches { Ok(n) && n == 16_777_216.0 as f32 };
+    assert f32::try_from(-16_777_216 as i64) matches { Ok(n) && n == -16_777_216.0 as f32 };
+    // 2^24 + 1: rounds to 2^24 when cast to f32 → roundtrip fails → Err
+    assert f32::try_from(16_777_217 as i64) matches { Err(_) };
+    assert f32::try_from(-16_777_217 as i64) matches { Err(_) };
+}
+
+test "TryFrom<u64> for f64: boundary at 2^53" {
+    assert f64::try_from(9_007_199_254_740_992 as u64) matches { Ok(n) && n == 9_007_199_254_740_992.0 };
+    assert f64::try_from(9_007_199_254_740_993 as u64) matches { Err(_) };
+    assert f64::try_from(u64::MAX) matches { Err(_) };
+}
+
+test "TryFrom<u64> for f32: boundary at 2^24" {
+    assert f32::try_from(0 as u64) matches { Ok(n) && n == 0.0 as f32 };
+    assert f32::try_from(16_777_216 as u64) matches { Ok(n) && n == 16_777_216.0 as f32 };
+    assert f32::try_from(16_777_217 as u64) matches { Err(_) };
+}
+
+test "TryFrom<i128> for f64: boundary at ±2^53" {
+    assert f64::try_from(9_007_199_254_740_992 as i128) matches { Ok(n) && n == 9_007_199_254_740_992.0 };
+    assert f64::try_from(-9_007_199_254_740_992 as i128) matches { Ok(n) && n == -9_007_199_254_740_992.0 };
+    assert f64::try_from(9_007_199_254_740_993 as i128) matches { Err(_) };
+    // Far out of range: large i128 values are nowhere near exact
+    assert f64::try_from(i64::MAX as i128 + 1 as i128) matches { Err(_) };
+}
+
+test "TryFrom<i128> for f32: boundary at ±2^24" {
+    assert f32::try_from(16_777_216 as i128) matches { Ok(n) && n == 16_777_216.0 as f32 };
+    assert f32::try_from(-16_777_216 as i128) matches { Ok(n) && n == -16_777_216.0 as f32 };
+    assert f32::try_from(16_777_217 as i128) matches { Err(_) };
+}
+
+test "TryFrom<u128> for f64: boundary at 2^53" {
+    assert f64::try_from(9_007_199_254_740_992 as u128) matches { Ok(n) && n == 9_007_199_254_740_992.0 };
+    assert f64::try_from(9_007_199_254_740_993 as u128) matches { Err(_) };
+}
+
+test "TryFrom<u128> for f32: boundary at 2^24" {
+    assert f32::try_from(16_777_216 as u128) matches { Ok(n) && n == 16_777_216.0 as f32 };
+    assert f32::try_from(16_777_217 as u128) matches { Err(_) };
+}
+
+test "int-to-float TryFrom: illustrate the precision loss semantics" {
+    // 2^53 + 1 cast to f64 silently rounds to 2^53; TryFrom surfaces this.
+    let lossy = 9_007_199_254_740_993 as i64 as f64;
+    assert lossy == 9_007_199_254_740_992.0;          // silent rounding with `as`
+    assert f64::try_from(9_007_199_254_740_993 as i64) matches { Err(_) };  // TryFrom rejects it
+}
+
 test "u128 accumulation round-trip via From / TryFrom" {
     // Sum 1000 × u32::MAX safely in u128, then recover the u64 partial sum
     let chunk = u32::MAX as u64;
