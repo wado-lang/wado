@@ -1410,16 +1410,31 @@ fn Array<u64>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<u64>;
-    let __local_6: i32;
+    let old_repr: ref array<u64>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<u64>(new_capacity);
-        builtin::array_copy<u64>(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l138: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
+                    i = i + 1;
+                    continue l138;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<u64>(self.repr, used, value);
@@ -1718,10 +1733,10 @@ fn Formatter::apply_padding(self, start_pos) {
         i_8 = content_len - 1;
         _licm_buf_29 = self.buf;
         _licm_repr_33 = _licm_buf_29.repr;
-        b168: block {
-            l169: loop {
+        b171: block {
+            l172: loop {
                 if (i_8 >= 0) == 0 {
-                    break b168;
+                    break b171;
                 };
                 index_14 = (start_pos + left_pad) + i_8;
                 value_15 = __inline_String__get_byte_2: block -> u8 {
@@ -1730,7 +1745,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 };
                 builtin::array_set_u8(_licm_repr_33, index_14, value_15);
                 i_8 = i_8 - 1;
-                continue l169;
+                continue l172;
             };
         };
         __for_1: block {
@@ -1738,14 +1753,14 @@ fn Formatter::apply_padding(self, start_pos) {
             _licm_buf_30 = self.buf;
             _licm_repr_34 = _licm_buf_30.repr;
             block {
-                l172: loop {
+                l175: loop {
                     if (j_9 < left_pad) == 0 {
                         break __for_1;
                     };
                     index_19 = start_pos + j_9;
                     builtin::array_set_u8(_licm_repr_34, index_19, fill_byte);
                     j_9 = j_9 + 1;
-                    continue l172;
+                    continue l175;
                 };
             };
         };
@@ -1755,10 +1770,10 @@ fn Formatter::apply_padding(self, start_pos) {
         i_10 = content_len - 1;
         _licm_buf_31 = self.buf;
         _licm_repr_35 = _licm_buf_31.repr;
-        b174: block {
-            l175: loop {
+        b177: block {
+            l178: loop {
                 if (i_10 >= 0) == 0 {
-                    break b174;
+                    break b177;
                 };
                 index_22 = (start_pos + padding) + i_10;
                 value_23 = __inline_String__get_byte_5: block -> u8 {
@@ -1767,7 +1782,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 };
                 builtin::array_set_u8(_licm_repr_35, index_22, value_23);
                 i_10 = i_10 - 1;
-                continue l175;
+                continue l178;
             };
         };
         __for_2: block {
@@ -1775,14 +1790,14 @@ fn Formatter::apply_padding(self, start_pos) {
             _licm_buf_32 = self.buf;
             _licm_repr_36 = _licm_buf_32.repr;
             block {
-                l178: loop {
+                l181: loop {
                     if (j_11 < padding) == 0 {
                         break __for_2;
                     };
                     index_27 = start_pos + j_11;
                     builtin::array_set_u8(_licm_repr_36, index_27, fill_byte);
                     j_11 = j_11 + 1;
-                    continue l178;
+                    continue l181;
                 };
             };
         };

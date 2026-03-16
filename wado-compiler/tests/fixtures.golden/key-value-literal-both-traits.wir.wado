@@ -937,16 +937,31 @@ fn Array<String>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<String>;
-    let __local_6: i32;
+    let old_repr: ref array<String>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<ref String>(new_capacity);
-        builtin::array_copy<ref String>(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l49: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
+                    i = i + 1;
+                    continue l49;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<ref String>(self.repr, used, value);
@@ -958,16 +973,31 @@ fn Array<i32>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<i32>;
-    let __local_6: i32;
+    let old_repr: ref array<i32>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<i32>(new_capacity);
-        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l53: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
+                    i = i + 1;
+                    continue l53;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<i32>(self.repr, used, value);
@@ -991,10 +1021,10 @@ fn Bag<i32>::get_by_key(self, key) {
     _licm_repr_11 = _licm_keys_8.repr;
     _licm_used_12 = _licm_values_9.used;
     _licm_repr_13 = _licm_values_9.repr;
-    b49: block {
-        l50: loop {
+    b55: block {
+        l56: loop {
             if (i < _licm_used_10) == 0 {
-                break b49;
+                break b55;
             };
             if String^Eq::eq(__inline_Array_String__IndexValue__index_value_1: block -> ref String {
                 __local_5 = i;
@@ -1014,7 +1044,7 @@ fn Bag<i32>::get_by_key(self, key) {
                 };
             };
             i = i + 1;
-            continue l50;
+            continue l56;
         };
     };
     return 1; 0;
@@ -1027,13 +1057,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l56: loop {
+            l62: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l56;
+                continue l62;
             };
         };
     };

@@ -1009,16 +1009,31 @@ fn Array<String>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<String>;
-    let __local_6: i32;
+    let old_repr: ref array<String>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<ref String>(new_capacity);
-        builtin::array_copy<ref String>(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l63: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
+                    i = i + 1;
+                    continue l63;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<ref String>(self.repr, used, value);
@@ -1048,8 +1063,8 @@ fn Node<String>::find_index(self, key) {
     _licm_keys_6 = self.keys;
     _licm_used_7 = _licm_keys_6.used;
     _licm_repr_8 = _licm_keys_6.repr;
-    b63: block {
-        l64: loop {
+    b66: block {
+        l67: loop {
             if if i < _licm_used_7 -> i32 {
                 String^Ord::cmp(__inline_Array_String__IndexValue__index_value_1: block -> ref String {
                     __local_5 = i;
@@ -1062,10 +1077,10 @@ fn Node<String>::find_index(self, key) {
             } else {
                 0;
             } == 0 {
-                break b63;
+                break b66;
             };
             i = i + 1;
-            continue l64;
+            continue l67;
         };
     };
     return i;
@@ -1089,7 +1104,7 @@ fn Node<String>::is_full(self, max_keys) {
         _licm_used_10 = _licm_deleted_8.used;
         _licm_repr_11 = _licm_deleted_8.repr;
         block {
-            l69: loop {
+            l72: loop {
                 if (i < _licm_used_9) == 0 {
                     break __for_1;
                 };
@@ -1104,7 +1119,7 @@ fn Node<String>::is_full(self, max_keys) {
                     count = count + 1;
                 };
                 i = i + 1;
-                continue l69;
+                continue l72;
             };
         };
     };
@@ -1129,7 +1144,7 @@ fn Node<String>::count_active(self) {
         _licm_used_9 = _licm_deleted_7.used;
         _licm_repr_10 = _licm_deleted_7.repr;
         block {
-            l74: loop {
+            l77: loop {
                 if (i < _licm_used_8) == 0 {
                     break __for_0;
                 };
@@ -1144,7 +1159,7 @@ fn Node<String>::count_active(self) {
                     count = count + 1;
                 };
                 i = i + 1;
-                continue l74;
+                continue l77;
             };
         };
     };
@@ -1156,16 +1171,31 @@ fn Array<bool>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<bool>;
-    let __local_6: i32;
+    let old_repr: ref array<bool>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<bool>(new_capacity);
-        builtin::array_copy<bool>(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l83: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<bool>(new_repr, i, builtin::array_get<bool>(old_repr, i));
+                    i = i + 1;
+                    continue l83;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<bool>(self.repr, used, value);
@@ -1177,16 +1207,31 @@ fn Array<i32>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<i32>;
-    let __local_6: i32;
+    let old_repr: ref array<i32>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<i32>(new_capacity);
-        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l87: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
+                    i = i + 1;
+                    continue l87;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<i32>(self.repr, used, value);
@@ -1200,13 +1245,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l81: loop {
+            l90: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l81;
+                continue l90;
             };
         };
     };

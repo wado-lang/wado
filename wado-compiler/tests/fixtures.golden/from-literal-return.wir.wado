@@ -757,16 +757,31 @@ fn Array<String>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<String>;
-    let __local_6: i32;
+    let old_repr: ref array<String>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<ref String>(new_capacity);
-        builtin::array_copy<ref String>(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l47: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
+                    i = i + 1;
+                    continue l47;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<ref String>(self.repr, used, value);
@@ -787,8 +802,8 @@ fn TreeMap<String,i32>::keys(self) {
         __local_9 = self.entries;
         break __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: "wasi:cli/ArrayIter<TreeMapEntry<String,i32>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
     };
-    b46: block {
-        l47: loop {
+    b49: block {
+        l50: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: ref null "core:allocator/TreeMapEntry<String,i32>";
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<TreeMapEntry<String,i32>>^Iterator::next(__iter_3);
@@ -798,9 +813,9 @@ fn TreeMap<String,i32>::keys(self) {
                     Array<String>::append(result, entry.key);
                 };
             } else {
-                break b46;
+                break b49;
             };
-            continue l47;
+            continue l50;
         };
     };
     return result;
@@ -918,16 +933,31 @@ fn Array<TreeMapEntry<String,i32>>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<TreeMapEntry<String,i32>>;
-    let __local_6: i32;
+    let old_repr: ref array<TreeMapEntry<String,i32>>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(new_capacity);
-        builtin::array_copy<ref "core:allocator/TreeMapEntry<String,i32>">(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l68: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<ref "core:allocator/TreeMapEntry<String,i32>">(new_repr, i, builtin::array_get<ref "core:allocator/TreeMapEntry<String,i32>">(old_repr, i));
+                    i = i + 1;
+                    continue l68;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<ref "core:allocator/TreeMapEntry<String,i32>">(self.repr, used, value);
@@ -947,8 +977,8 @@ fn TreeMap<String,i32>::find_index(self, key) {
     _licm_entries_8 = self.entries;
     _licm_used_9 = _licm_entries_8.used;
     _licm_repr_10 = _licm_entries_8.repr;
-    b64: block {
-        l65: loop {
+    b70: block {
+        l71: loop {
             __pattern_temp_0 = value_copy Option<TreeMapNode<String>>(current);
             if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_0) {
                 n = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_0).payload_0;
@@ -972,9 +1002,9 @@ fn TreeMap<String,i32>::find_index(self, key) {
                     current = value_copy Option<TreeMapNode<String>>(n.right);
                 };
             } else {
-                break b64;
+                break b70;
             };
-            continue l65;
+            continue l71;
         };
     };
     return -1;
@@ -987,13 +1017,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l72: loop {
+            l78: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l72;
+                continue l78;
             };
         };
     };

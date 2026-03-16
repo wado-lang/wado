@@ -1108,8 +1108,8 @@ _Fields are private._
 ##### `pub fn copy_within_append(&mut self, src_start: i32, count: i32)`
 
 Copies `count` elements from `self[src_start..]` and appends them.
-Handles overlapping regions correctly (each byte reads after all previous writes).
-Capacity is checked once and the raw array reference is cached for performance.
+Handles overlapping regions correctly for both non-overlapping and DEFLATE-style
+run-length expansion (where src < dst). Forward order is correct in both cases.
 
 ##### `pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T>`
 
