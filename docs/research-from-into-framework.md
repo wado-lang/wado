@@ -646,6 +646,39 @@ Smart casts narrow types after `is` checks but don't perform value conversion.
    - `TryFrom<T>` — fallible value conversion (returns `Result`)
    - Compiler-provided `.into()` sugar that calls `From::from()`
 
+## Relevant Rust RFCs
+
+### RFC 529: Conversion Traits (Accepted, Rust 1.0)
+
+The foundational RFC establishing `From`, `Into`, `AsRef`, `AsMut`. Motivated by the
+proliferation of ad hoc conversion traits (`FromStr`, `AsSlice`, `FromError`). Established
+the principle that conversions are distinguished by cost (free reference vs. owned allocation)
+and consumption (borrowing vs. moving). Also proposed a `To` trait for reference-to-value
+conversions, which was deferred and never implemented.
+
+### RFC 1542: TryFrom / TryInto (Stabilized in Rust 1.34)
+
+Added fallible conversion traits. Motivated by C FFI interop and platform-dependent integer
+sizes. The blanket impl `impl<T, U> TryFrom<U> for T where U: Into<T>` causes coherence
+conflicts when users try to implement `TryFrom` for their own types — a well-known pain point.
+
+### RFC 1210: Specialization (Accepted, Never Stabilized)
+
+Would allow overlapping trait implementations with a "most specific wins" rule. Relevant
+because it would enable specialized, more efficient `From` implementations alongside blanket
+impls. However, **specialization is unsound** as demonstrated by Ralf Jung. `min_specialization`
+is used internally by the standard library but remains unstable. As of 2025, stabilization
+is not being actively pursued.
+
+### No Active RFC to Redesign From/Into
+
+There is no active RFC proposing fundamental changes to the `From`/`Into` design. The traits
+are deeply embedded in the ecosystem. Improvements focus on surrounding infrastructure (trait
+solver, coherence rules) rather than the traits themselves. This means Wado has a unique
+opportunity to learn from Rust's design without being constrained by backward compatibility.
+
+---
+
 ## Cross-Cutting Themes
 
 | Theme | Languages | Lesson |
@@ -681,3 +714,11 @@ Smart casts narrow types after `is` checks but don't perform value conversion.
 - [Zig's Integer Casting for C Programmers](https://www.lagerdata.com/articles/an-intro-to-zigs-integer-casting-for-c-programmers)
 - [Kotlin Type Checks and Casts](https://kotlinlang.org/docs/typecasts.html)
 - ["Does From Only Exist Because of the Orphan Rule?"](https://users.rust-lang.org/t/does-from-only-exist-because-of-the-orphan-rule/98264) — Rust Users Forum
+- [RFC 1542: TryFrom](https://rust-lang.github.io/rfcs/1542-try-from.html)
+- [RFC 1210: Specialization](https://rust-lang.github.io/rfcs/1210-impl-specialization.html)
+- [Specialization Is Unsound (PR #71420)](https://github.com/rust-lang/rust/pull/71420) — Ralf Jung
+- [Monomorphization Bloat](https://www.alilleybrinker.com/blog/monomorphization-bloat/) — Andrew Lilley Brinker
+- [Defaults Affect Inference](https://faultlore.com/blah/defaults-affect-inference/) — Faultlore
+- [Winning the Fight Against Coherence](https://ohadravid.github.io/posts/2023-05-coherence-and-errors/) — Ohad Ravid
+- [Haskell Coercible for Newtype Conversions](https://wiki.haskell.org/GHC/Coercible) — HaskellWiki
+- [Equivalent of Rust's From/Into in Haskell?](https://discourse.haskell.org/t/equivalent-of-rusts-from-into-trait-in-haskell/8679) — Haskell Discourse
