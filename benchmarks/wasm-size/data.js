@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773697572834,
+  "lastUpdate": 1773702509761,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3782,6 +3782,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 21283,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a7c370d12d000d1c873a52af774b4c8c220c3df8",
+          "message": "Merge pull request #594 from wado-lang/claude/optimize-zlib-decompress-Qt7ss\n\nOptimize deflate by using global constant tables and element-wise array copy",
+          "timestamp": "2026-03-17T08:05:59+09:00",
+          "tree_id": "c7fd50387a0426e7ff3442cb813223cc16c2f6cf",
+          "url": "https://github.com/wado-lang/wado/commit/a7c370d12d000d1c873a52af774b4c8c220c3df8"
+        },
+        "date": 1773702509551,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9329,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22716,
             "unit": "bytes"
           }
         ]
