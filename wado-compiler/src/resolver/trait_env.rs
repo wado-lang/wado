@@ -6,10 +6,12 @@
 
 use std::sync::Arc;
 
-use crate::ast::{self, Item, Module};
+use crate::ast::{self, Item, Module, Type};
 use crate::hashmap::IndexMap;
 use crate::name::ModuleSource;
 use crate::tir::TypeId;
+
+use super::types::TypeError;
 
 /// Pre-built index: type name → list of (`ModuleSource`, item index) for trait impl blocks.
 /// Built once from all loaded modules to avoid O(all items) scans per method call.
@@ -42,10 +44,13 @@ impl TraitEnv {
     ///
     /// Called once in `resolve_all_modules` before per-module resolution begins.
     /// The indices enable O(1) trait lookup by type/trait name instead of scanning all modules.
-    pub(super) fn build(modules: &IndexMap<ModuleSource, Module>) -> Arc<Self> {
+    /// Also performs orphan rule checking for impl blocks in local (user) modules.
+    pub(super) fn build(modules: &IndexMap<ModuleSource, Module>) -> (Arc<Self>, Vec<TypeError>) {
         let mut impl_index: TraitImplIndex = IndexMap::default();
         let mut decl_index: TraitDeclIndex = IndexMap::default();
         let mut blanket_impl_index: BlanketTraitImplIndex = Vec::new();
+        // type name → module source, for orphan rule "is this type local?" checks
+        let mut type_decl_index: IndexMap<String, ModuleSource> = IndexMap::default();
 
         for (module_source, module) in modules {
             for (item_idx, item) in module.items.iter().enumerate() {
@@ -70,17 +75,215 @@ impl TraitEnv {
                             .entry(trait_decl.name.clone())
                             .or_insert((module_source.clone(), item_idx));
                     }
+                    Item::Struct(s) => {
+                        type_decl_index
+                            .entry(s.name.clone())
+                            .or_insert_with(|| module_source.clone());
+                    }
+                    Item::Variant(v) => {
+                        type_decl_index
+                            .entry(v.name.clone())
+                            .or_insert_with(|| module_source.clone());
+                    }
+                    Item::Enum(e) => {
+                        type_decl_index
+                            .entry(e.name.clone())
+                            .or_insert_with(|| module_source.clone());
+                    }
+                    Item::Flags(f) => {
+                        type_decl_index
+                            .entry(f.name.clone())
+                            .or_insert_with(|| module_source.clone());
+                    }
+                    Item::Type(n) => {
+                        type_decl_index
+                            .entry(n.name.clone())
+                            .or_insert_with(|| module_source.clone());
+                    }
                     _ => {}
                 }
             }
         }
 
-        Arc::new(Self {
-            impl_index,
-            decl_index,
-            blanket_impl_index,
-        })
+        let violations = check_all_orphan_rules(modules, &decl_index, &type_decl_index);
+
+        (
+            Arc::new(Self {
+                impl_index,
+                decl_index,
+                blanket_impl_index,
+            }),
+            violations,
+        )
     }
+}
+
+/// Returns `true` if the module source is a user-local module (part of the current package).
+fn is_user_local(ms: &ModuleSource) -> bool {
+    matches!(
+        ms,
+        ModuleSource::Local { .. } | ModuleSource::EntryPoint { .. }
+    )
+}
+
+/// Returns `true` if the named type is a local (user-defined) type.
+/// Primitive types (i32, bool, char, etc.) are not in the index and return `false`.
+fn is_local_type_name(name: &str, type_decl_index: &IndexMap<String, ModuleSource>) -> bool {
+    type_decl_index.get(name).is_some_and(is_user_local)
+}
+
+/// Returns `true` if the named trait is a local (user-defined) trait.
+fn is_local_trait_name(name: &str, decl_index: &TraitDeclIndex) -> bool {
+    decl_index
+        .get(name)
+        .is_some_and(|(ms, _)| is_user_local(ms))
+}
+
+/// Describes the orphan-rule "classification" of a position in the impl sequence.
+enum PositionKind {
+    /// The outermost type constructor is a user-local type.
+    LocalType,
+    /// The position is a bare uncovered type parameter.
+    UncoveredTypeParam,
+    /// The outermost type constructor is a foreign (non-local) type.
+    ForeignType,
+}
+
+/// Classify the outermost type constructor of an AST type relative to the orphan rule.
+///
+/// RFC 2451 sequence rule: walk `[self_type, trait_arg1, ...]` left-to-right.
+/// - `LocalType` at position i, with no `UncoveredTypeParam` seen before i → **allowed**.
+/// - `UncoveredTypeParam` before any `LocalType` → **forbidden**.
+///
+/// References (`&T`, `&mut T`) are *fundamental* and are looked through.
+fn classify_position(
+    ty: &Type,
+    type_params: &[String],
+    type_decl_index: &IndexMap<String, ModuleSource>,
+) -> PositionKind {
+    match ty {
+        // Fundamental: look through references
+        Type::Reference(inner) | Type::MutReference(inner) => {
+            classify_position(inner, type_params, type_decl_index)
+        }
+        Type::Named(named) => {
+            if type_params.contains(&named.name) {
+                PositionKind::UncoveredTypeParam
+            } else if is_local_type_name(&named.name, type_decl_index) {
+                PositionKind::LocalType
+            } else {
+                PositionKind::ForeignType
+            }
+        }
+        Type::Generic(generic) => {
+            if type_params.contains(&generic.name) {
+                // Generic<T> where generic itself is a type param: uncovered
+                PositionKind::UncoveredTypeParam
+            } else if is_local_type_name(&generic.name, type_decl_index) {
+                // LocalType<...>: the head is local → this position is local
+                PositionKind::LocalType
+            } else {
+                PositionKind::ForeignType
+            }
+        }
+        // Tuples and function types have no single named head → foreign
+        Type::Tuple(_) | Type::Function(_) | Type::NamespacedGeneric(_) => {
+            PositionKind::ForeignType
+        }
+    }
+}
+
+/// Check the RFC 2451 orphan rule for a single impl block that has a foreign trait.
+///
+/// Sequence: `[self_type, trait_arg1, trait_arg2, ...]`.
+/// Valid if there exists a position with `LocalType` and no `UncoveredTypeParam` before it.
+fn check_orphan_rfc2451(
+    impl_block: &ast::ImplBlock,
+    type_decl_index: &IndexMap<String, ModuleSource>,
+) -> bool {
+    let type_params: Vec<String> = impl_block
+        .type_params
+        .iter()
+        .map(|p| p.name.clone())
+        .collect();
+
+    // Build the sequence: self type first, then trait type arguments
+    let trait_args: &[Type] = match impl_block.trait_type.as_ref() {
+        Some(Type::Generic(g)) => &g.args,
+        _ => &[],
+    };
+
+    let mut seen_uncovered_before_local = false;
+
+    // Position 0: self type
+    match classify_position(&impl_block.ty, &type_params, type_decl_index) {
+        PositionKind::LocalType => return true,
+        PositionKind::UncoveredTypeParam => seen_uncovered_before_local = true,
+        PositionKind::ForeignType => {}
+    }
+
+    // Positions 1+: trait type arguments
+    for trait_arg in trait_args {
+        match classify_position(trait_arg, &type_params, type_decl_index) {
+            PositionKind::LocalType => {
+                if !seen_uncovered_before_local {
+                    return true;
+                }
+                // Uncovered param was seen before this local type → still violated
+                return false;
+            }
+            PositionKind::UncoveredTypeParam => {
+                seen_uncovered_before_local = true;
+            }
+            PositionKind::ForeignType => {}
+        }
+    }
+
+    false
+}
+
+/// Check orphan rules for all trait impl blocks across all modules.
+/// Only impl blocks in local (user) modules are checked.
+fn check_all_orphan_rules(
+    modules: &IndexMap<ModuleSource, Module>,
+    decl_index: &TraitDeclIndex,
+    type_decl_index: &IndexMap<String, ModuleSource>,
+) -> Vec<TypeError> {
+    let mut violations = Vec::new();
+
+    for (module_source, module) in modules {
+        if !is_user_local(module_source) {
+            continue;
+        }
+
+        for item in &module.items {
+            let Item::Impl(impl_block) = item else {
+                continue;
+            };
+            let Some(trait_type) = &impl_block.trait_type else {
+                continue; // inherent impl, no orphan rule
+            };
+
+            let trait_name = get_type_name_static(trait_type);
+
+            // If the trait is local, always allowed
+            if is_local_trait_name(&trait_name, decl_index) {
+                continue;
+            }
+
+            // Foreign trait: apply RFC 2451 sequence check
+            if !check_orphan_rfc2451(impl_block, type_decl_index) {
+                let self_type_name = get_type_name_static(&impl_block.ty);
+                violations.push(TypeError::OrphanViolation {
+                    trait_name,
+                    self_type_name,
+                    span: impl_block.span,
+                });
+            }
+        }
+    }
+
+    violations
 }
 
 /// Mutable trait resolution context scoped to the current resolution site.

@@ -1,0 +1,24 @@
+// Orphan rule: impl foreign trait for LOCAL type → ALLOWED
+// Eq is foreign (core:prelude), MyPoint is local → OK
+
+struct MyPoint {
+    x: i32,
+    y: i32,
+}
+
+impl Eq for MyPoint {
+    fn eq(&self, other: &Self) -> bool {
+        return self.x == other.x && self.y == other.y;
+    }
+}
+
+export fn run() {
+    let a = MyPoint { x: 1, y: 2 };
+    let b = MyPoint { x: 1, y: 2 };
+    let c = MyPoint { x: 3, y: 4 };
+    assert a == b;
+    assert !(a == c);
+}
+
+__DATA__
+{"stdout": ""}

@@ -150,7 +150,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     ) -> Self {
         let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
-        let trait_env = TraitEnv::build(loaded_modules);
+        let (trait_env, _) = TraitEnv::build(loaded_modules);
         Self {
             type_table,
             symbols,

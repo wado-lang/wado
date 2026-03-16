@@ -1,0 +1,13 @@
+// Orphan rule violation: impl foreign trait for foreign type → FORBIDDEN
+// Eq is foreign (core:prelude), String is foreign (core:prelude)
+
+impl Eq for String {
+    fn eq(&self, other: &Self) -> bool {
+        return true;
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "orphan rule"}

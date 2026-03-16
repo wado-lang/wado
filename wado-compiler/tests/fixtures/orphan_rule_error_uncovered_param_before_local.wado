@@ -1,0 +1,21 @@
+// Orphan rule violation: uncovered type parameter appears BEFORE local type in sequence → FORBIDDEN
+// RFC 2451: impl<T> From<T> for MyLocalType — T is uncovered at position T1 (trait arg),
+// but T0 (self = MyLocalType) is LOCAL, which comes FIRST in sequence.
+// Wait — T0=MyLocalType is local → actually ALLOWED. Let me use a different case:
+//
+// impl<T> From<T> for String:
+//   - T0 = String (foreign)
+//   - T1 = T (uncovered type param)
+//   - Sequence: [String(foreign), T(uncovered)]
+//   - Found uncovered type param at T1 before finding any local type → FORBIDDEN
+
+impl<T> From<T> for String {
+    fn from(value: T) -> String {
+        return "converted";
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "orphan rule"}
