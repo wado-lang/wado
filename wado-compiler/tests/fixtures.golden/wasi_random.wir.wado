@@ -19,14 +19,14 @@ struct WaitEvent {
     mut payload: u32,
 }
 
-struct [u64, u64] {
-    mut 0: u64,
-    mut 1: u64,
-}
-
 struct [Stream<u8>, StreamWritable<u8>] {
     mut 0: i32,
     mut 1: i32,
+}
+
+struct [u64, u64] {
+    mut 0: u64,
+    mut 1: u64,
 }
 
 array array<u64> (mut u64);
@@ -60,13 +60,13 @@ type "functype/wasi/wasi:random/Random::get_random_u64" = fn() -> i64;
 
 type "functype/run" = fn();
 
+type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
+
 type "functype/__cm_adapter__Random_get_random_u64" = fn() -> u64;
 
 type "functype/__cm_adapter__Insecure_get_insecure_random_u64" = fn() -> u64;
 
 type "functype/__cm_adapter__InsecureSeed_get_insecure_seed" = fn() -> ref "tuple/[u64, u64]";
-
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_export__run" = fn();
 
@@ -116,8 +116,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout, Random, Insecure, InsecureSeed {
     let r1: u64;
@@ -175,6 +175,12 @@ fn run() with Stdout, Random, Insecure, InsecureSeed {
     "core:cli/println"(String { repr: array.new_data<u8>("all random tests passed"), used: 23 });
 }
 
+fn __cm_adapter__Stdout_write_via_stream(data) {
+    let __async_outptr: i32;
+    __async_outptr = "mem/realloc"(0, 0, 1, 2);
+    return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
+}
+
 fn __cm_adapter__Random_get_random_u64() {
     return "wasi/wasi:random/Random::get_random_u64"();
 }
@@ -193,12 +199,6 @@ fn __cm_adapter__InsecureSeed_get_insecure_seed() {
     __lifted_result_2 = builtin::load_i64(__outptr + 8);
     drop("mem/realloc"(__outptr, 16, 8, 0));
     return __lifted_result_1; __lifted_result_2;
-}
-
-fn __cm_adapter__Stdout_write_via_stream(data) {
-    let __async_outptr: i32;
-    __async_outptr = "mem/realloc"(0, 0, 1, 2);
-    return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 
 fn __cm_export__run() {

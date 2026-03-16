@@ -53,15 +53,15 @@ struct Option<i32>::Some {
     payload_0: i32,
 }
 
-struct Array<i32> {  // Array<T> with T=i32
-    mut repr: ref array<i32>,
-    mut used: i32,
-}
-
 array array<u64> (mut u64);
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
+    mut used: i32,
+}
+
+struct Array<i32> {  // Array<T> with T=i32
+    mut repr: ref array<i32>,
     mut used: i32,
 }
 
@@ -117,10 +117,6 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> ref Option<i32>;
-
-type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
-
 type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
 type "functype/String::grow" = fn(ref String, i32);
@@ -130,6 +126,10 @@ type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> ref Option<i32>;
+
+type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -158,8 +158,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn get_numbers() {
     let __local_0: ref Array<i32>;
@@ -449,37 +449,6 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
     };
 }
 
-fn ArrayIter<i32>^Iterator::next(self) {
-    let item: i32;
-    if self.index >= self.used {
-        return 1; 0;
-    };
-    item = builtin::array_get<i32>(self.repr, self.index);
-    self.index = self.index + 1;
-    return 0; item;
-}
-
-fn Array<i32>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<i32>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<i32>(new_capacity);
-        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
-}
-
 fn i32::fmt_decimal(self, f) {
     let is_negative: bool;
     let abs_val: i64;
@@ -574,6 +543,37 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
+}
+
+fn ArrayIter<i32>^Iterator::next(self) {
+    let item: i32;
+    if self.index >= self.used {
+        return 1; 0;
+    };
+    item = builtin::array_get<i32>(self.repr, self.index);
+    self.index = self.index + 1;
+    return 0; item;
+}
+
+fn Array<i32>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<i32>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<i32>(new_capacity);
+        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<i32>(self.repr, used, value);
+    self.used = used + 1;
 }
 
 fn Formatter::write_char_n(self, c, n) {

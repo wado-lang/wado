@@ -47,16 +47,6 @@ struct [Stream<u8>, StreamWritable<u8>] {
     mut 1: i32,
 }
 
-variant Option<u8> {
-    Some(u8),
-    None,
-}
-
-struct Option<u8>::Some {
-    discriminant: i32,
-    payload_0: u8,
-}
-
 variant Option<char> {
     Some(char),
     None,
@@ -65,6 +55,16 @@ variant Option<char> {
 struct Option<char>::Some {
     discriminant: i32,
     payload_0: char,
+}
+
+variant Option<u8> {
+    Some(u8),
+    None,
+}
+
+struct Option<u8>::Some {
+    discriminant: i32,
+    payload_0: u8,
 }
 
 array array<u64> (mut u64);
@@ -182,8 +182,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn sum_bytes(s) {
     let sum: i32;
@@ -313,7 +313,7 @@ fn run() with Stdout {
             String::append_char(__local_10, 97);
             String::append_char(__local_10, 116);
             String::append_char(__local_10, 32);
-            String::append(__local_10, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_sroa_variant.wado"), used: 66 });
+            String::append(__local_10, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_variant.wado"), used: 50 });
             String::append_char(__local_10, 58);
             __local_11 = __inline_Formatter__new_3: block -> ref Formatter {
                 __local_22 = __local_10;
@@ -349,7 +349,7 @@ condition: sum_bytes(\"ABC\") == 198
             String::append_char(__local_12, 97);
             String::append_char(__local_12, 116);
             String::append_char(__local_12, 32);
-            String::append(__local_12, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_sroa_variant.wado"), used: 66 });
+            String::append(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_variant.wado"), used: 50 });
             String::append_char(__local_12, 58);
             __local_13 = __inline_Formatter__new_10: block -> ref Formatter {
                 __local_33 = __local_12;
@@ -385,7 +385,7 @@ condition: sum_bytes(\"\") == 0
             String::append_char(__local_14, 97);
             String::append_char(__local_14, 116);
             String::append_char(__local_14, 32);
-            String::append(__local_14, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_sroa_variant.wado"), used: 66 });
+            String::append(__local_14, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_variant.wado"), used: 50 });
             String::append_char(__local_14, 58);
             __local_15 = __inline_Formatter__new_17: block -> ref Formatter {
                 __local_44 = __local_14;
@@ -421,7 +421,7 @@ condition: count_chars(\"hello\") == 5
             String::append_char(__local_16, 97);
             String::append_char(__local_16, 116);
             String::append_char(__local_16, 32);
-            String::append(__local_16, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_sroa_variant.wado"), used: 66 });
+            String::append(__local_16, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_variant.wado"), used: 50 });
             String::append_char(__local_16, 58);
             __local_17 = __inline_Formatter__new_24: block -> ref Formatter {
                 __local_55 = __local_16;
@@ -457,7 +457,7 @@ condition: first_byte(\"Z\") == 90
             String::append_char(__local_18, 97);
             String::append_char(__local_18, 116);
             String::append_char(__local_18, 32);
-            String::append(__local_18, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_sroa_variant.wado"), used: 66 });
+            String::append(__local_18, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_variant.wado"), used: 50 });
             String::append_char(__local_18, 58);
             __local_19 = __inline_Formatter__new_31: block -> ref Formatter {
                 __local_66 = __local_18;

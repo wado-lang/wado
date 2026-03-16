@@ -36,8 +36,8 @@ struct Formatter {
     mut buf: ref String,
 }
 
-struct [String, i32] {
-    mut 0: ref String,
+struct [Stream<u8>, StreamWritable<u8>] {
+    mut 0: i32,
     mut 1: i32,
 }
 
@@ -46,8 +46,8 @@ struct [String, String] {
     mut 1: ref String,
 }
 
-struct [Stream<u8>, StreamWritable<u8>] {
-    mut 0: i32,
+struct [String, i32] {
+    mut 0: ref String,
     mut 1: i32,
 }
 
@@ -174,8 +174,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn make_labeled(x) {
     let __local_1: ref String;
@@ -275,7 +275,7 @@ fn run() with Stdout {
             String::append_char(__local_17, 97);
             String::append_char(__local_17, 116);
             String::append_char(__local_17, 32);
-            String::append(__local_17, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/tuple_struct_field.wado"), used: 68 });
+            String::append(__local_17, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/tuple_struct_field.wado"), used: 52 });
             String::append_char(__local_17, 58);
             __local_18 = __inline_Formatter__new_3: block -> ref Formatter {
                 __local_33 = __local_17;
@@ -311,7 +311,7 @@ condition: s == \"value=42\"
             String::append_char(__local_19, 97);
             String::append_char(__local_19, 116);
             String::append_char(__local_19, 32);
-            String::append(__local_19, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/tuple_struct_field.wado"), used: 68 });
+            String::append(__local_19, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/tuple_struct_field.wado"), used: 52 });
             String::append_char(__local_19, 58);
             __local_20 = __inline_Formatter__new_8: block -> ref Formatter {
                 __local_40 = __local_19;
@@ -356,7 +356,7 @@ condition: n == 42
             String::append_char(__local_21, 97);
             String::append_char(__local_21, 116);
             String::append_char(__local_21, 32);
-            String::append(__local_21, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/tuple_struct_field.wado"), used: 68 });
+            String::append(__local_21, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/tuple_struct_field.wado"), used: 52 });
             String::append_char(__local_21, 58);
             __local_22 = __inline_Formatter__new_16: block -> ref Formatter {
                 __local_53 = __local_21;
@@ -393,7 +393,7 @@ condition: a == \"world\"
             String::append_char(__local_23, 97);
             String::append_char(__local_23, 116);
             String::append_char(__local_23, 32);
-            String::append(__local_23, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/tuple_struct_field.wado"), used: 68 });
+            String::append(__local_23, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/tuple_struct_field.wado"), used: 52 });
             String::append_char(__local_23, 58);
             __local_24 = __inline_Formatter__new_21: block -> ref Formatter {
                 __local_60 = __local_23;
@@ -433,7 +433,7 @@ condition: b == \"hello\"
             String::append_char(__local_25, 97);
             String::append_char(__local_25, 116);
             String::append_char(__local_25, 32);
-            String::append(__local_25, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/tuple_struct_field.wado"), used: 68 });
+            String::append(__local_25, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/tuple_struct_field.wado"), used: 52 });
             String::append_char(__local_25, 58);
             __local_26 = __inline_Formatter__new_26: block -> ref Formatter {
                 __local_67 = __local_25;
@@ -468,7 +468,7 @@ condition: result.0 == \"value=99\"
             String::append_char(__local_27, 97);
             String::append_char(__local_27, 116);
             String::append_char(__local_27, 32);
-            String::append(__local_27, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/tuple_struct_field.wado"), used: 68 });
+            String::append(__local_27, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/tuple_struct_field.wado"), used: 52 });
             String::append_char(__local_27, 58);
             __local_28 = __inline_Formatter__new_31: block -> ref Formatter {
                 __local_74 = __local_27;

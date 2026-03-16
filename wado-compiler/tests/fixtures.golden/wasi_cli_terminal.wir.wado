@@ -90,13 +90,13 @@ type "functype/wasi/wasi:cli/TerminalStdout::get_terminal_stdout" = fn(i32);
 
 type "functype/run" = fn();
 
+type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
+
 type "functype/__cm_adapter__TerminalStdin_get_terminal_stdin" = fn() -> ref Option<TerminalInput>;
 
 type "functype/__cm_adapter__TerminalStdout_get_terminal_stdout" = fn() -> ref Option<TerminalOutput>;
 
 type "functype/__cm_adapter__TerminalStderr_get_terminal_stderr" = fn() -> ref Option<TerminalOutput>;
-
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_export__run" = fn();
 
@@ -171,8 +171,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout, TerminalStdin, TerminalStdout, TerminalStderr {
     let stdin_terminal: ref Option<TerminalInput>;
@@ -218,7 +218,7 @@ fn run() with Stdout, TerminalStdin, TerminalStdout, TerminalStderr {
             String::append_char(__local_6, 97);
             String::append_char(__local_6, 116);
             String::append_char(__local_6, 32);
-            String::append(__local_6, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/wasi_cli_terminal.wado"), used: 67 });
+            String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_cli_terminal.wado"), used: 51 });
             String::append_char(__local_6, 58);
             __local_7 = __inline_Formatter__new_3: block -> ref Formatter {
                 __local_14 = __local_6;
@@ -255,7 +255,7 @@ condition: stdin_terminal matches { None }
             String::append_char(__local_8, 97);
             String::append_char(__local_8, 116);
             String::append_char(__local_8, 32);
-            String::append(__local_8, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/wasi_cli_terminal.wado"), used: 67 });
+            String::append(__local_8, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_cli_terminal.wado"), used: 51 });
             String::append_char(__local_8, 58);
             __local_9 = __inline_Formatter__new_7: block -> ref Formatter {
                 __local_20 = __local_8;
@@ -292,7 +292,7 @@ condition: stdout_terminal matches { None }
             String::append_char(__local_10, 97);
             String::append_char(__local_10, 116);
             String::append_char(__local_10, 32);
-            String::append(__local_10, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/wasi_cli_terminal.wado"), used: 67 });
+            String::append(__local_10, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/wasi_cli_terminal.wado"), used: 51 });
             String::append_char(__local_10, 58);
             __local_11 = __inline_Formatter__new_11: block -> ref Formatter {
                 __local_26 = __local_10;
@@ -311,6 +311,12 @@ condition: stderr_terminal matches { None }
         unreachable;
     };
     "core:cli/println"(String { repr: array.new_data<u8>("all terminal tests passed"), used: 25 });
+}
+
+fn __cm_adapter__Stdout_write_via_stream(data) {
+    let __async_outptr: i32;
+    __async_outptr = "mem/realloc"(0, 0, 1, 2);
+    return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 
 fn __cm_adapter__TerminalStdin_get_terminal_stdin() {
@@ -356,12 +362,6 @@ fn __cm_adapter__TerminalStderr_get_terminal_stderr() {
     };
     drop("mem/realloc"(__outptr, 8, 4, 0));
     return __option_result;
-}
-
-fn __cm_adapter__Stdout_write_via_stream(data) {
-    let __async_outptr: i32;
-    __async_outptr = "mem/realloc"(0, 0, 1, 2);
-    return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 
 fn __cm_export__run() {

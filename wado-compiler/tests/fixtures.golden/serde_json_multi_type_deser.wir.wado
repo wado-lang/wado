@@ -60,6 +60,16 @@ struct [Stream<u8>, StreamWritable<u8>] {
     mut 1: i32,
 }
 
+variant Option<char> {
+    Some(char),
+    None,
+}
+
+struct Option<char>::Some {
+    discriminant: i32,
+    payload_0: char,
+}
+
 variant Result<i32,DeserializeError> {
     Ok(i32),
     Err(ref "core:serde/DeserializeError"),
@@ -88,16 +98,6 @@ struct Result<String,DeserializeError>::Ok {
 struct Result<String,DeserializeError>::Err {
     discriminant: i32,
     payload_0: ref "core:serde/DeserializeError",
-}
-
-variant Option<char> {
-    Some(char),
-    None,
-}
-
-struct Option<char>::Some {
-    discriminant: i32,
-    payload_0: char,
 }
 
 variant Result<char,DeserializeError> {
@@ -260,8 +260,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let r: ref Result<i32,DeserializeError>;

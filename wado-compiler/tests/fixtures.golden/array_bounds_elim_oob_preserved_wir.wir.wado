@@ -26,15 +26,15 @@ struct [Stream<u8>, StreamWritable<u8>] {
 
 array array<i32> (mut i32);
 
-struct Array<i32> {  // Array<T> with T=i32
-    mut repr: ref array<i32>,
-    mut used: i32,
-}
-
 array array<u64> (mut u64);
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
+    mut used: i32,
+}
+
+struct Array<i32> {  // Array<T> with T=i32
+    mut repr: ref array<i32>,
     mut used: i32,
 }
 
@@ -112,8 +112,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let __local_0: ref Array<i32>;

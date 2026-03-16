@@ -19,14 +19,14 @@ struct WaitEvent {
     mut payload: u32,
 }
 
-struct [Descriptor, String] {
-    mut 0: i32,
-    mut 1: ref String,
-}
-
 struct [Stream<u8>, StreamWritable<u8>] {
     mut 0: i32,
     mut 1: i32,
+}
+
+struct [Descriptor, String] {
+    mut 0: i32,
+    mut 1: ref String,
 }
 
 struct [Stream<u8>, Future<Result<unit,ErrorCode>>] {
@@ -35,6 +35,16 @@ struct [Stream<u8>, Future<Result<unit,ErrorCode>>] {
 }
 
 array array<Tuple<Descriptor,String>> (mut ref "tuple/[Descriptor, String]");
+
+variant Result<unit,ErrorCode> {
+    Ok,
+    Err(i32),
+}
+
+struct Result<unit,ErrorCode>::Err {
+    discriminant: i32,
+    payload_0: i32,
+}
 
 variant Result<Descriptor,ErrorCode> {
     Ok(i32),
@@ -51,21 +61,6 @@ struct Result<Descriptor,ErrorCode>::Err {
     payload_0: i32,
 }
 
-variant Result<unit,ErrorCode> {
-    Ok,
-    Err(i32),
-}
-
-struct Result<unit,ErrorCode>::Err {
-    discriminant: i32,
-    payload_0: i32,
-}
-
-struct Array<Tuple<Descriptor,String>> {  // Array<T> with T=Tuple<Descriptor,String>
-    mut repr: ref array<Tuple<Descriptor,String>>,
-    mut used: i32,
-}
-
 struct Array<u8> {  // Array<T> with T=u8
     mut repr: ref array<u8>,
     mut used: i32,
@@ -75,6 +70,11 @@ array array<u64> (mut u64);
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
+    mut used: i32,
+}
+
+struct Array<Tuple<Descriptor,String>> {  // Array<T> with T=Tuple<Descriptor,String>
+    mut repr: ref array<Tuple<Descriptor,String>>,
     mut used: i32,
 }
 
@@ -110,6 +110,8 @@ type "functype/wasi/wasi:filesystem/Descriptor::open_at" = fn(i32, i32) -> i32;
 
 type "functype/run" = fn();
 
+type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
+
 type "functype/__cm_adapter__Preopens_get_directories" = fn() -> ref Array<Tuple<Descriptor,String>>;
 
 type "functype/__cm_adapter__Descriptor_open_at" = fn(i32, u32, ref String, u32, u32) -> ref Result<Descriptor,ErrorCode>;
@@ -117,8 +119,6 @@ type "functype/__cm_adapter__Descriptor_open_at" = fn(i32, u32, ref String, u32,
 type "functype/__cm_adapter__Descriptor_write_via_stream" = fn(i32, i32, u64) -> i32;
 
 type "functype/__cm_adapter__Descriptor_read_via_stream" = fn(i32, u64) -> ref "tuple/[Stream<u8>, Future<Result<unit,ErrorCode>>]";
-
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_export__run" = fn();
 
@@ -182,8 +182,8 @@ import fn stream-new from "wasi/stream-new";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout, Stderr, Preopens {
     let dirs: ref Array<Tuple<Descriptor,String>>;
@@ -240,6 +240,12 @@ fn run() with Stdout, Stderr, Preopens {
         subtask2 = __cm_adapter__Stdout_write_via_stream(read_stream);
         "core:internal/wait_for_subtask"(subtask2);
     };
+}
+
+fn __cm_adapter__Stdout_write_via_stream(data) {
+    let __async_outptr: i32;
+    __async_outptr = "mem/realloc"(0, 0, 1, 2);
+    return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 
 fn __cm_adapter__Preopens_get_directories() {
@@ -331,12 +337,6 @@ fn __cm_adapter__Descriptor_read_via_stream(self, offset) {
     __lifted_result_4 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
     return __lifted_result_3; __lifted_result_4;
-}
-
-fn __cm_adapter__Stdout_write_via_stream(data) {
-    let __async_outptr: i32;
-    __async_outptr = "mem/realloc"(0, 0, 1, 2);
-    return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 
 fn __cm_export__run() {

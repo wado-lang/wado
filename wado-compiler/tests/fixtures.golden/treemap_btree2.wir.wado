@@ -36,13 +36,13 @@ struct Formatter {
     mut buf: ref String,
 }
 
-struct [String, i32] {
-    mut 0: ref String,
+struct [Stream<u8>, StreamWritable<u8>] {
+    mut 0: i32,
     mut 1: i32,
 }
 
-struct [Stream<u8>, StreamWritable<u8>] {
-    mut 0: i32,
+struct [String, i32] {
+    mut 0: ref String,
     mut 1: i32,
 }
 
@@ -60,16 +60,6 @@ struct ArrayIter<Tuple<String,i32>> {  // from core:allocator  // ArrayIter<T> w
     mut repr: ref array<Tuple<String,i32>>,
     mut used: i32,
     mut index: i32,
-}
-
-variant Option<Tuple<String,i32>> {
-    Some(ref "tuple/[String, i32]"),
-    None,
-}
-
-struct Option<Tuple<String,i32>>::Some {
-    discriminant: i32,
-    payload_0: ref "tuple/[String, i32]",
 }
 
 variant Option<char> {
@@ -92,13 +82,18 @@ struct Option<i32>::Some {
     payload_0: i32,
 }
 
-struct Array<bool> {  // Array<T> with T=bool
-    mut repr: ref array<bool>,
-    mut used: i32,
+variant Option<Tuple<String,i32>> {
+    Some(ref "tuple/[String, i32]"),
+    None,
 }
 
-struct Array<Tuple<String,i32>> {  // Array<T> with T=Tuple<String,i32>
-    mut repr: ref array<Tuple<String,i32>>,
+struct Option<Tuple<String,i32>>::Some {
+    discriminant: i32,
+    payload_0: ref "tuple/[String, i32]",
+}
+
+struct Array<bool> {  // Array<T> with T=bool
+    mut repr: ref array<bool>,
     mut used: i32,
 }
 
@@ -111,6 +106,11 @@ array array<u64> (mut u64);
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
+    mut used: i32,
+}
+
+struct Array<Tuple<String,i32>> {  // Array<T> with T=Tuple<String,i32>
+    mut repr: ref array<Tuple<String,i32>>,
     mut used: i32,
 }
 
@@ -209,6 +209,22 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
+type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
+
+type "functype/String::grow" = fn(ref String, i32);
+
+type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
+
+type "functype/String::append" = fn(ref String, ref String);
+
+type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
+
+type "functype/String^Ord::cmp" = fn(ref String, ref String) -> enum:Ordering;
+
+type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<char>;
+
+type "functype/String::append_char" = fn(ref String, char);
+
 type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
 
 type "functype/BTreeNode<String,i32>::compact" = fn(ref BTreeNode<String,i32>);
@@ -249,22 +265,6 @@ type "functype/BTreeNode<String,i32>::is_full" = fn(ref BTreeNode<String,i32>, i
 
 type "functype/BTreeNode<String,i32>::new_leaf" = fn() -> ref BTreeNode<String,i32>;
 
-type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
-
-type "functype/String::grow" = fn(ref String, i32);
-
-type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
-
-type "functype/String::append" = fn(ref String, ref String);
-
-type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
-
-type "functype/String^Ord::cmp" = fn(ref String, ref String) -> enum:Ordering;
-
-type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<char>;
-
-type "functype/String::append_char" = fn(ref String, char);
-
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
@@ -277,9 +277,9 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,i32>>") -> [i32, ref null "tuple/[String, i32]"];
-
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
+
+type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,i32>>") -> [i32, ref null "tuple/[String, i32]"];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -297,8 +297,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let map: ref TreeMap<String,i32>;
@@ -855,6 +855,232 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
     };
 }
 
+fn i32::fmt_decimal(self, f) {
+    let is_negative: bool;
+    let abs_val: i64;
+    let digit_count: i32;
+    let offset: i32;
+    let __local_6: ref String;
+    is_negative = self < 0;
+    abs_val = if is_negative -> i64 {
+        0_i64 - builtin::i64_extend_i32_s(self);
+    } else {
+        builtin::i64_extend_i32_s(self);
+    };
+    digit_count = count_digits_i64(abs_val);
+    offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
+        __local_6 = f.buf;
+        break __inline_String__internal_raw_bytes_0: __local_6.repr;
+    }, offset, abs_val, digit_count);
+}
+
+fn String::grow(self, min_capacity) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<u8>;
+    let __local_5: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    if min_capacity <= capacity {
+        return;
+    };
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_5 = __inline_i32_max_1: block -> i32 {
+            __local_7 = capacity * 2;
+            break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+        };
+        break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+    };
+    new_repr = builtin::array_new<u8>(new_capacity);
+    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    self.repr = ref.as_non_null(new_repr);
+}
+
+fn String::internal_reserve_uninit(self, n) {
+    let new_used: i32;
+    let start: i32;
+    new_used = self.used + n;
+    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        String::grow(self, new_used);
+    };
+    start = self.used;
+    self.used = new_used;
+    return start;
+}
+
+fn String::append(self, other) {
+    let other_len: i32;
+    let new_used: i32;
+    other_len = other.used;
+    if other_len == 0 {
+        return;
+    };
+    new_used = self.used + other_len;
+    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        String::grow(self, new_used);
+    };
+    builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
+    self.used = new_used;
+}
+
+fn String^Eq::eq(self, other) {
+    let len_a: i32;
+    let len_b: i32;
+    let a_repr: ref array<u8>;
+    let b_repr: ref array<u8>;
+    let i: i32;
+    len_a = self.used;
+    len_b = other.used;
+    if len_a != len_b {
+        return 0;
+    };
+    a_repr = self.repr;
+    b_repr = other.repr;
+    __for_1: block {
+        i = 0;
+        block {
+            l39: loop {
+                if (i < len_a) == 0 {
+                    break __for_1;
+                };
+                if builtin::array_get_u8(a_repr, i) != builtin::array_get_u8(b_repr, i) {
+                    return 0;
+                };
+                i = i + 1;
+                continue l39;
+            };
+        };
+    };
+    return 1;
+}
+
+fn String^Ord::cmp(self, other) {
+    let len_a: i32;
+    let len_b: i32;
+    let min_len: i32;
+    let a_repr: ref array<u8>;
+    let b_repr: ref array<u8>;
+    let i: i32;
+    let a_byte: u8;
+    let b_byte: u8;
+    len_a = self.used;
+    len_b = other.used;
+    min_len = select i32(len_a < len_b, len_a, len_b);
+    a_repr = self.repr;
+    b_repr = other.repr;
+    __for_2: block {
+        i = 0;
+        block {
+            l43: loop {
+                if (i < min_len) == 0 {
+                    break __for_2;
+                };
+                a_byte = builtin::array_get_u8(a_repr, i);
+                b_byte = builtin::array_get_u8(b_repr, i);
+                if a_byte <u b_byte {
+                    return 0;
+                };
+                if a_byte >u b_byte {
+                    return 2;
+                };
+                i = i + 1;
+                continue l43;
+            };
+        };
+    };
+    if len_a < len_b {
+        return 0;
+    };
+    if len_a > len_b {
+        return 2;
+    };
+    return 1;
+}
+
+fn StrCharIter^Iterator::next(self) {
+    let b0: u8;
+    let b1_2: u8;
+    let code_3: u8;
+    let b1_4: u8;
+    let b2_5: u8;
+    let code_6: u8;
+    let b1_7: u8;
+    let b2_8: u8;
+    let b3: u8;
+    let code_10: u8;
+    let __local_11: u32;
+    let __local_12: u32;
+    let __local_13: u32;
+    let __local_14: u32;
+    if self.byte_index >= self.used {
+        return 1; 0;
+    };
+    b0 = builtin::array_get_u8(self.repr, self.byte_index);
+    self.byte_index = self.byte_index + 1;
+    if b0 <u 128 {
+        return 0; __inline_char__from_u32_unchecked_0: block -> char {
+            __local_11 = b0;
+            break __inline_char__from_u32_unchecked_0: __local_11;
+        };
+    };
+    if b0 <u 224 {
+        b1_2 = builtin::array_get_u8(self.repr, self.byte_index);
+        self.byte_index = self.byte_index + 1;
+        code_3 = ((b0 & 31) << 6) | (b1_2 & 63);
+        return 0; __inline_char__from_u32_unchecked_1: block -> char {
+            __local_12 = code_3;
+            break __inline_char__from_u32_unchecked_1: __local_12;
+        };
+    };
+    if b0 <u 240 {
+        b1_4 = builtin::array_get_u8(self.repr, self.byte_index);
+        b2_5 = builtin::array_get_u8(self.repr, self.byte_index + 1);
+        self.byte_index = self.byte_index + 2;
+        code_6 = (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63);
+        return 0; __inline_char__from_u32_unchecked_2: block -> char {
+            __local_13 = code_6;
+            break __inline_char__from_u32_unchecked_2: __local_13;
+        };
+    };
+    b1_7 = builtin::array_get_u8(self.repr, self.byte_index);
+    b2_8 = builtin::array_get_u8(self.repr, self.byte_index + 1);
+    b3 = builtin::array_get_u8(self.repr, self.byte_index + 2);
+    self.byte_index = self.byte_index + 3;
+    code_10 = ((((b0 & 7) << 18) | ((b1_7 & 63) << 12)) | ((b2_8 & 63) << 6)) | (b3 & 63);
+    return 0; __inline_char__from_u32_unchecked_3: block -> char {
+        __local_14 = code_10;
+        break __inline_char__from_u32_unchecked_3: __local_14;
+    };
+}
+
+fn String::append_char(self, c) {
+    let code: u32;
+    code = c;
+    if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        String::grow(self, self.used + 4);
+    };
+    if code <u 128 {
+        builtin::array_set_u8(self.repr, self.used, code & 255);
+        self.used = self.used + 1;
+    } else if code <u 2048 {
+        builtin::array_set_u8(self.repr, self.used, (192 | (code >>u 6)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | (code & 63)) & 255);
+        self.used = self.used + 2;
+    } else if code <u 65536 {
+        builtin::array_set_u8(self.repr, self.used, (224 | (code >>u 12)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | (code & 63)) & 255);
+        self.used = self.used + 3;
+    } else {
+        builtin::array_set_u8(self.repr, self.used, (240 | (code >>u 18)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 12) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
+        self.used = self.used + 4;
+    };
+}
+
 fn Array<String>::append(self, value) {
     let used: i32;
     let capacity: i32;
@@ -925,7 +1151,7 @@ fn BTreeNode<String,i32>::compact(self) {
         _licm_used_35 = _licm_values_30.used;
         _licm_repr_36 = _licm_values_30.repr;
         block {
-            l34: loop {
+            l59: loop {
                 if (i_7 < _licm_used_31) == 0 {
                     break __for_1;
                 };
@@ -952,7 +1178,7 @@ fn BTreeNode<String,i32>::compact(self) {
                     Array<bool>::append(new_deleted, 0);
                 };
                 i_7 = i_7 + 1;
-                continue l34;
+                continue l59;
             };
         };
     };
@@ -966,7 +1192,7 @@ fn BTreeNode<String,i32>::compact(self) {
             _licm_used_38 = _licm_children_37.used;
             _licm_repr_39 = _licm_children_37.repr;
             block {
-                l41: loop {
+                l66: loop {
                     if (i_8 < _licm_used_38) == 0 {
                         break __for_2;
                     };
@@ -975,7 +1201,7 @@ fn BTreeNode<String,i32>::compact(self) {
                         break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_14: builtin::array_get<ref BTreeNode<String,i32>>(_licm_repr_39, __local_27);
                     });
                     i_8 = i_8 + 1;
-                    continue l41;
+                    continue l66;
                 };
             };
         };
@@ -1095,10 +1321,10 @@ fn TreeMap<String,i32>::collect_entries(self, node, result) {
     _licm_repr_27 = _licm_keys_17.repr;
     _licm_used_28 = _licm_values_21.used;
     _licm_repr_29 = _licm_values_21.repr;
-    b48: block {
-        l49: loop {
+    b73: block {
+        l74: loop {
             if (i < _licm_used_22) == 0 {
-                break b48;
+                break b73;
             };
             if if _licm_is_leaf_18 == 0 -> i32 {
                 i < _licm_used_23;
@@ -1135,7 +1361,7 @@ fn TreeMap<String,i32>::collect_entries(self, node, result) {
                 } });
             };
             i = i + 1;
-            continue l49;
+            continue l74;
         };
     };
     if if node.is_leaf == 0 -> i32 {
@@ -1198,8 +1424,8 @@ fn TreeMap<String,i32>::delete_in_node(self, node, key) {
     _licm_keys_17 = node.keys;
     _licm_used_18 = _licm_keys_17.used;
     _licm_repr_19 = _licm_keys_17.repr;
-    b61: block {
-        l62: loop {
+    b86: block {
+        l87: loop {
             if if i < _licm_used_18 -> i32 {
                 String^Ord::cmp(key, __inline_Array_String__IndexValue__index_value_1: block -> ref String {
                     __local_6 = i;
@@ -1212,10 +1438,10 @@ fn TreeMap<String,i32>::delete_in_node(self, node, key) {
             } else {
                 0;
             } == 0 {
-                break b61;
+                break b86;
             };
             i = i + 1;
-            continue l62;
+            continue l87;
         };
     };
     if if i < __inline_Array_String___len_2: block -> i32 {
@@ -1324,8 +1550,8 @@ fn TreeMap<String,i32>::search_in_node(self, node, key) {
     _licm_keys_16 = node.keys;
     _licm_used_17 = _licm_keys_16.used;
     _licm_repr_18 = _licm_keys_16.repr;
-    b76: block {
-        l77: loop {
+    b101: block {
+        l102: loop {
             if if i < _licm_used_17 -> i32 {
                 String^Ord::cmp(key, __inline_Array_String__IndexValue__index_value_1: block -> ref String {
                     __local_6 = i;
@@ -1338,10 +1564,10 @@ fn TreeMap<String,i32>::search_in_node(self, node, key) {
             } else {
                 0;
             } == 0 {
-                break b76;
+                break b101;
             };
             i = i + 1;
-            continue l77;
+            continue l102;
         };
     };
     if if i < __inline_Array_String___len_2: block -> i32 {
@@ -1461,8 +1687,8 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
         _licm_keys_30 = node.keys;
         _licm_used_31 = _licm_keys_30.used;
         _licm_repr_32 = _licm_keys_30.repr;
-        b94: block {
-            l95: loop {
+        b119: block {
+            l120: loop {
                 if if pos_4 < _licm_used_31 -> i32 {
                     String^Ord::cmp(__inline_Array_String__IndexValue__index_value_1: block -> ref String {
                         __local_8 = pos_4;
@@ -1475,10 +1701,10 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
                 } else {
                     0;
                 } == 0 {
-                    break b94;
+                    break b119;
                 };
                 pos_4 = pos_4 + 1;
-                continue l95;
+                continue l120;
             };
         };
         if if pos_4 < __inline_Array_String___len_2: block -> i32 {
@@ -1534,8 +1760,8 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
         _licm_keys_33 = node.keys;
         _licm_used_34 = _licm_keys_33.used;
         _licm_repr_35 = _licm_keys_33.repr;
-        b106: block {
-            l107: loop {
+        b131: block {
+            l132: loop {
                 if if pos_5 < _licm_used_34 -> i32 {
                     String^Ord::cmp(key, __inline_Array_String__IndexValue__index_value_8: block -> ref String {
                         __local_22 = pos_5;
@@ -1548,10 +1774,10 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
                 } else {
                     0;
                 } == 0 {
-                    break b106;
+                    break b131;
                 };
                 pos_5 = pos_5 + 1;
-                continue l107;
+                continue l132;
             };
         };
         if BTreeNode<String,i32>::is_full(__inline_Array_BTreeNode_String_i32___IndexValue__index_value_9: block -> ref BTreeNode<String,i32> {
@@ -1632,14 +1858,14 @@ fn TreeMap<String,i32>::sort_node_entries(self, node) {
         _licm_used_50 = _licm_deleted_45.used;
         _licm_repr_51 = _licm_deleted_45.repr;
         block {
-            l117: loop {
+            l142: loop {
                 if (i < _licm_used_46) == 0 {
                     break __for_5;
                 };
                 __for_6: block {
                     j = i + 1;
                     block {
-                        l120: loop {
+                        l145: loop {
                             if (j < _licm_used_46) == 0 {
                                 break __for_6;
                             };
@@ -1736,12 +1962,12 @@ fn TreeMap<String,i32>::sort_node_entries(self, node) {
                                 builtin::array_set<bool>(_licm_repr_51, index_41, temp_d);
                             };
                             j = j + 1;
-                            continue l120;
+                            continue l145;
                         };
                     };
                 };
                 i = i + 1;
-                continue l117;
+                continue l142;
             };
         };
     };
@@ -1808,7 +2034,7 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
         _licm_used_39 = _licm_deleted_34.used;
         _licm_repr_40 = _licm_deleted_34.repr;
         block {
-            l138: loop {
+            l163: loop {
                 if (i_6 < _licm_used_35) == 0 {
                     break __for_3;
                 };
@@ -1833,7 +2059,7 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
                     break __inline_Array_bool__IndexValue__index_value_4: builtin::array_get<bool>(_licm_repr_40, __local_19);
                 });
                 i_6 = i_6 + 1;
-                continue l138;
+                continue l163;
             };
         };
     };
@@ -1845,7 +2071,7 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
             _licm_used_43 = _licm_children_41.used;
             _licm_repr_44 = _licm_children_41.repr;
             block {
-                l144: loop {
+                l169: loop {
                     if (i_7 < _licm_used_43) == 0 {
                         break __for_4;
                     };
@@ -1854,7 +2080,7 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
                         break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_6: builtin::array_get<ref BTreeNode<String,i32>>(_licm_repr_44, __local_22);
                     });
                     i_7 = i_7 + 1;
-                    continue l144;
+                    continue l169;
                 };
             };
         };
@@ -1949,7 +2175,7 @@ fn BTreeNode<String,i32>::is_full(self, max_keys) {
         _licm_used_10 = _licm_deleted_8.used;
         _licm_repr_11 = _licm_deleted_8.repr;
         block {
-            l151: loop {
+            l176: loop {
                 if (i < _licm_used_9) == 0 {
                     break __for_0;
                 };
@@ -1964,7 +2190,7 @@ fn BTreeNode<String,i32>::is_full(self, max_keys) {
                     count = count + 1;
                 };
                 i = i + 1;
-                continue l151;
+                continue l176;
             };
         };
     };
@@ -1989,232 +2215,6 @@ fn BTreeNode<String,i32>::new_leaf() {
         __local_3 = Array<BTreeNode<String,i32>> { repr: builtin::array_new<ref BTreeNode<String,i32>>(0), used: 0 };
         break __seq_lit: __local_3;
     }), is_leaf: 1 };
-}
-
-fn i32::fmt_decimal(self, f) {
-    let is_negative: bool;
-    let abs_val: i64;
-    let digit_count: i32;
-    let offset: i32;
-    let __local_6: ref String;
-    is_negative = self < 0;
-    abs_val = if is_negative -> i64 {
-        0_i64 - builtin::i64_extend_i32_s(self);
-    } else {
-        builtin::i64_extend_i32_s(self);
-    };
-    digit_count = count_digits_i64(abs_val);
-    offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
-        __local_6 = f.buf;
-        break __inline_String__internal_raw_bytes_0: __local_6.repr;
-    }, offset, abs_val, digit_count);
-}
-
-fn String::grow(self, min_capacity) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<u8>;
-    let __local_5: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    if min_capacity <= capacity {
-        return;
-    };
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_5 = __inline_i32_max_1: block -> i32 {
-            __local_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
-        };
-        break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
-    };
-    new_repr = builtin::array_new<u8>(new_capacity);
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
-}
-
-fn String::internal_reserve_uninit(self, n) {
-    let new_used: i32;
-    let start: i32;
-    new_used = self.used + n;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
-        String::grow(self, new_used);
-    };
-    start = self.used;
-    self.used = new_used;
-    return start;
-}
-
-fn String::append(self, other) {
-    let other_len: i32;
-    let new_used: i32;
-    other_len = other.used;
-    if other_len == 0 {
-        return;
-    };
-    new_used = self.used + other_len;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
-        String::grow(self, new_used);
-    };
-    builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
-    self.used = new_used;
-}
-
-fn String^Eq::eq(self, other) {
-    let len_a: i32;
-    let len_b: i32;
-    let a_repr: ref array<u8>;
-    let b_repr: ref array<u8>;
-    let i: i32;
-    len_a = self.used;
-    len_b = other.used;
-    if len_a != len_b {
-        return 0;
-    };
-    a_repr = self.repr;
-    b_repr = other.repr;
-    __for_1: block {
-        i = 0;
-        block {
-            l162: loop {
-                if (i < len_a) == 0 {
-                    break __for_1;
-                };
-                if builtin::array_get_u8(a_repr, i) != builtin::array_get_u8(b_repr, i) {
-                    return 0;
-                };
-                i = i + 1;
-                continue l162;
-            };
-        };
-    };
-    return 1;
-}
-
-fn String^Ord::cmp(self, other) {
-    let len_a: i32;
-    let len_b: i32;
-    let min_len: i32;
-    let a_repr: ref array<u8>;
-    let b_repr: ref array<u8>;
-    let i: i32;
-    let a_byte: u8;
-    let b_byte: u8;
-    len_a = self.used;
-    len_b = other.used;
-    min_len = select i32(len_a < len_b, len_a, len_b);
-    a_repr = self.repr;
-    b_repr = other.repr;
-    __for_2: block {
-        i = 0;
-        block {
-            l166: loop {
-                if (i < min_len) == 0 {
-                    break __for_2;
-                };
-                a_byte = builtin::array_get_u8(a_repr, i);
-                b_byte = builtin::array_get_u8(b_repr, i);
-                if a_byte <u b_byte {
-                    return 0;
-                };
-                if a_byte >u b_byte {
-                    return 2;
-                };
-                i = i + 1;
-                continue l166;
-            };
-        };
-    };
-    if len_a < len_b {
-        return 0;
-    };
-    if len_a > len_b {
-        return 2;
-    };
-    return 1;
-}
-
-fn StrCharIter^Iterator::next(self) {
-    let b0: u8;
-    let b1_2: u8;
-    let code_3: u8;
-    let b1_4: u8;
-    let b2_5: u8;
-    let code_6: u8;
-    let b1_7: u8;
-    let b2_8: u8;
-    let b3: u8;
-    let code_10: u8;
-    let __local_11: u32;
-    let __local_12: u32;
-    let __local_13: u32;
-    let __local_14: u32;
-    if self.byte_index >= self.used {
-        return 1; 0;
-    };
-    b0 = builtin::array_get_u8(self.repr, self.byte_index);
-    self.byte_index = self.byte_index + 1;
-    if b0 <u 128 {
-        return 0; __inline_char__from_u32_unchecked_0: block -> char {
-            __local_11 = b0;
-            break __inline_char__from_u32_unchecked_0: __local_11;
-        };
-    };
-    if b0 <u 224 {
-        b1_2 = builtin::array_get_u8(self.repr, self.byte_index);
-        self.byte_index = self.byte_index + 1;
-        code_3 = ((b0 & 31) << 6) | (b1_2 & 63);
-        return 0; __inline_char__from_u32_unchecked_1: block -> char {
-            __local_12 = code_3;
-            break __inline_char__from_u32_unchecked_1: __local_12;
-        };
-    };
-    if b0 <u 240 {
-        b1_4 = builtin::array_get_u8(self.repr, self.byte_index);
-        b2_5 = builtin::array_get_u8(self.repr, self.byte_index + 1);
-        self.byte_index = self.byte_index + 2;
-        code_6 = (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63);
-        return 0; __inline_char__from_u32_unchecked_2: block -> char {
-            __local_13 = code_6;
-            break __inline_char__from_u32_unchecked_2: __local_13;
-        };
-    };
-    b1_7 = builtin::array_get_u8(self.repr, self.byte_index);
-    b2_8 = builtin::array_get_u8(self.repr, self.byte_index + 1);
-    b3 = builtin::array_get_u8(self.repr, self.byte_index + 2);
-    self.byte_index = self.byte_index + 3;
-    code_10 = ((((b0 & 7) << 18) | ((b1_7 & 63) << 12)) | ((b2_8 & 63) << 6)) | (b3 & 63);
-    return 0; __inline_char__from_u32_unchecked_3: block -> char {
-        __local_14 = code_10;
-        break __inline_char__from_u32_unchecked_3: __local_14;
-    };
-}
-
-fn String::append_char(self, c) {
-    let code: u32;
-    code = c;
-    if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
-        String::grow(self, self.used + 4);
-    };
-    if code <u 128 {
-        builtin::array_set_u8(self.repr, self.used, code & 255);
-        self.used = self.used + 1;
-    } else if code <u 2048 {
-        builtin::array_set_u8(self.repr, self.used, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | (code & 63)) & 255);
-        self.used = self.used + 2;
-    } else if code <u 65536 {
-        builtin::array_set_u8(self.repr, self.used, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | (code & 63)) & 255);
-        self.used = self.used + 3;
-    } else {
-        builtin::array_set_u8(self.repr, self.used, (240 | (code >>u 18)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 12) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
-        self.used = self.used + 4;
-    };
 }
 
 fn Formatter::write_char_n(self, c, n) {

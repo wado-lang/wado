@@ -82,6 +82,8 @@ struct [bool, bool, SpecialKind] {
     mut 2: i32,
 }
 
+array array<u64> (mut u64);
+
 array array<bool> (mut bool);
 
 array array<f64> (mut f64);
@@ -92,7 +94,10 @@ array array<i64> (mut i64);
 
 array array<i32> (mut i32);
 
-array array<u64> (mut u64);
+struct Array<u64> {  // Array<T> with T=u64
+    mut repr: ref array<u64>,
+    mut used: i32,
+}
 
 struct Array<i32> {  // Array<T> with T=i32
     mut repr: ref array<i32>,
@@ -116,11 +121,6 @@ struct Array<f64> {  // Array<T> with T=f64
 
 struct Array<bool> {  // Array<T> with T=bool
     mut repr: ref array<bool>,
-    mut used: i32,
-}
-
-struct Array<u64> {  // Array<T> with T=u64
-    mut repr: ref array<u64>,
     mut used: i32,
 }
 
@@ -220,16 +220,6 @@ type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
 type "functype/fmt_float_special" = fn(ref Formatter, bool, enum:SpecialKind, ref String);
 
-type "functype/Array<bool>::append" = fn(ref Array<bool>, bool);
-
-type "functype/Array<f64>::append" = fn(ref Array<f64>, f64);
-
-type "functype/Array<f32>::append" = fn(ref Array<f32>, f32);
-
-type "functype/Array<i64>::append" = fn(ref Array<i64>, i64);
-
-type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
-
 type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
 
 type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
@@ -251,6 +241,16 @@ type "functype/String::append_byte_filled" = fn(ref String, u8, i32);
 type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/Array<bool>::append" = fn(ref Array<bool>, bool);
+
+type "functype/Array<f64>::append" = fn(ref Array<f64>, f64);
+
+type "functype/Array<f32>::append" = fn(ref Array<f32>, f32);
+
+type "functype/Array<i64>::append" = fn(ref Array<i64>, i64);
+
+type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -308,9 +308,9 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut POW10: ref null Array<u64> = ref.null none;
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let __local_0: ref Array<i32>;
@@ -1729,111 +1729,6 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
     Formatter::apply_padding(f, mark);
 }
 
-fn Array<bool>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<bool>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<bool>(new_capacity);
-        builtin::array_copy<bool>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<bool>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn Array<f64>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<f64>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<f64>(new_capacity);
-        builtin::array_copy<f64>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<f64>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn Array<f32>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<f32>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<f32>(new_capacity);
-        builtin::array_copy<f32>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<f32>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn Array<i64>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<i64>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<i64>(new_capacity);
-        builtin::array_copy<i64>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<i64>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn Array<i32>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<i32>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<i32>(new_capacity);
-        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
-}
-
 fn Array<u64>::append(self, value) {
     let used: i32;
     let capacity: i32;
@@ -2234,6 +2129,111 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
+}
+
+fn Array<bool>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<bool>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<bool>(new_capacity);
+        builtin::array_copy<bool>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<bool>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<f64>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<f64>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<f64>(new_capacity);
+        builtin::array_copy<f64>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<f64>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<f32>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<f32>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<f32>(new_capacity);
+        builtin::array_copy<f32>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<f32>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<i64>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<i64>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<i64>(new_capacity);
+        builtin::array_copy<i64>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<i64>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<i32>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<i32>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<i32>(new_capacity);
+        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<i32>(self.repr, used, value);
+    self.used = used + 1;
 }
 
 fn Formatter::write_char_n(self, c, n) {

@@ -153,16 +153,6 @@ struct [u128, u128] {
 
 array array<u64> (mut u64);
 
-variant Option<i32> {
-    Some(i32),
-    None,
-}
-
-struct Option<i32>::Some {
-    discriminant: i32,
-    payload_0: i32,
-}
-
 variant Option<String> {
     Some(ref String),
     None,
@@ -171,6 +161,26 @@ variant Option<String> {
 struct Option<String>::Some {
     discriminant: i32,
     payload_0: ref String,
+}
+
+variant Option<char> {
+    Some(char),
+    None,
+}
+
+struct Option<char>::Some {
+    discriminant: i32,
+    payload_0: char,
+}
+
+variant Option<i32> {
+    Some(i32),
+    None,
+}
+
+struct Option<i32>::Some {
+    discriminant: i32,
+    payload_0: i32,
 }
 
 variant Result<i32,String> {
@@ -201,16 +211,6 @@ struct Result<String,i32>::Ok {
 struct Result<String,i32>::Err {
     discriminant: i32,
     payload_0: i32,
-}
-
-variant Option<char> {
-    Some(char),
-    None,
-}
-
-struct Option<char>::Some {
-    discriminant: i32,
-    payload_0: char,
 }
 
 variant Option<Option<i32>> {
@@ -328,16 +328,6 @@ type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
 type "functype/fmt_float_special" = fn(ref Formatter, bool, enum:SpecialKind, ref String);
 
-type "functype/Result<String,i32>^Inspect::inspect" = fn(ref "core:internal/Box<Result<String,i32>>", ref Formatter);
-
-type "functype/Result<i32,String>^Inspect::inspect" = fn(ref "core:internal/Box<Result<i32,String>>", ref Formatter);
-
-type "functype/Option<Option<i32>>^Inspect::inspect" = fn(ref "core:internal/Box<Option<Option<i32>>>", ref Formatter);
-
-type "functype/Option<String>^Inspect::inspect" = fn(ref "core:internal/Box<Option<String>>", ref Formatter);
-
-type "functype/Option<i32>^Inspect::inspect" = fn(ref "core:internal/Box<Option<i32>>", ref Formatter);
-
 type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
 
 type "functype/u128::div_rem" = fn(ref u128, ref u128) -> ref "tuple/[u128, u128]";
@@ -394,6 +384,16 @@ type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<c
 
 type "functype/String::append_char" = fn(ref String, char);
 
+type "functype/Result<String,i32>^Inspect::inspect" = fn(ref "core:internal/Box<Result<String,i32>>", ref Formatter);
+
+type "functype/Result<i32,String>^Inspect::inspect" = fn(ref "core:internal/Box<Result<i32,String>>", ref Formatter);
+
+type "functype/Option<Option<i32>>^Inspect::inspect" = fn(ref "core:internal/Box<Option<Option<i32>>>", ref Formatter);
+
+type "functype/Option<String>^Inspect::inspect" = fn(ref "core:internal/Box<Option<String>>", ref Formatter);
+
+type "functype/Option<i32>^Inspect::inspect" = fn(ref "core:internal/Box<Option<i32>>", ref Formatter);
+
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
 type "functype/Formatter::pad" = fn(ref Formatter, ref String);
@@ -432,16 +432,6 @@ type "functype/i128::sub" = fn(ref i128, ref i128) -> [u64, i64];
 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
-type "functype/Result<String,i32>^Inspect::inspect" = fn(ref Result<String,i32>, ref Formatter);
-
-type "functype/Result<i32,String>^Inspect::inspect" = fn(ref Result<i32,String>, ref Formatter);
-
-type "functype/Option<Option<i32>>^Inspect::inspect" = fn(ref Option<Option<i32>>, ref Formatter);
-
-type "functype/Option<String>^Inspect::inspect" = fn(ref Option<String>, ref Formatter);
-
-type "functype/Option<i32>^Inspect::inspect" = fn(ref Option<i32>, ref Formatter);
-
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 type "functype/u32::fmt_decimal" = fn(u32, ref Formatter);
@@ -462,6 +452,16 @@ type "functype/char^Display::fmt" = fn(char, ref Formatter);
 
 type "functype/char^Inspect::inspect" = fn(char, ref Formatter);
 
+type "functype/Result<String,i32>^Inspect::inspect" = fn(ref Result<String,i32>, ref Formatter);
+
+type "functype/Result<i32,String>^Inspect::inspect" = fn(ref Result<i32,String>, ref Formatter);
+
+type "functype/Option<Option<i32>>^Inspect::inspect" = fn(ref Option<Option<i32>>, ref Formatter);
+
+type "functype/Option<String>^Inspect::inspect" = fn(ref Option<String>, ref Formatter);
+
+type "functype/Option<i32>^Inspect::inspect" = fn(ref Option<i32>, ref Formatter);
+
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
 import fn task-return from "wasi/task-return";
@@ -476,9 +476,9 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut POW10: ref null Array<u64> = ref.null none;
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let __cond_1: bool;
@@ -1002,7 +1002,7 @@ fn run() with Stdout {
             String::append_char(__local_96, 97);
             String::append_char(__local_96, 116);
             String::append_char(__local_96, 32);
-            String::append(__local_96, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_96, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_96, 58);
             __local_97 = __inline_Formatter__new_6: block -> ref Formatter {
                 __local_325 = __local_96;
@@ -1047,7 +1047,7 @@ condition: `{i:?}` == \"42\"
             String::append_char(__local_102, 97);
             String::append_char(__local_102, 116);
             String::append_char(__local_102, 32);
-            String::append(__local_102, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_102, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_102, 58);
             __local_103 = __inline_Formatter__new_18: block -> ref Formatter {
                 __local_343 = __local_102;
@@ -1083,7 +1083,7 @@ condition: `{i:?}` == `{i}`
             String::append_char(__local_106, 97);
             String::append_char(__local_106, 116);
             String::append_char(__local_106, 32);
-            String::append(__local_106, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_106, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_106, 58);
             __local_107 = __inline_Formatter__new_26: block -> ref Formatter {
                 __local_355 = __local_106;
@@ -1119,7 +1119,7 @@ condition: `{neg:?}` == \"-42\"
             String::append_char(__local_110, 97);
             String::append_char(__local_110, 116);
             String::append_char(__local_110, 32);
-            String::append(__local_110, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_110, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_110, 58);
             __local_111 = __inline_Formatter__new_34: block -> ref Formatter {
                 __local_367 = __local_110;
@@ -1155,7 +1155,7 @@ condition: `{i64_max:?}` == \"9223372036854775807\"
             String::append_char(__local_114, 97);
             String::append_char(__local_114, 116);
             String::append_char(__local_114, 32);
-            String::append(__local_114, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_114, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_114, 58);
             __local_115 = __inline_Formatter__new_42: block -> ref Formatter {
                 __local_379 = __local_114;
@@ -1191,7 +1191,7 @@ condition: `{u32_max:?}` == \"4294967295\"
             String::append_char(__local_118, 97);
             String::append_char(__local_118, 116);
             String::append_char(__local_118, 32);
-            String::append(__local_118, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_118, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_118, 58);
             __local_119 = __inline_Formatter__new_50: block -> ref Formatter {
                 __local_391 = __local_118;
@@ -1229,7 +1229,7 @@ condition: `{u64_max:?}` == \"18446744073709551615\"
             String::append_char(__local_122, 97);
             String::append_char(__local_122, 116);
             String::append_char(__local_122, 32);
-            String::append(__local_122, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_122, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_122, 58);
             __local_123 = __inline_Formatter__new_59: block -> ref Formatter {
                 __local_405 = __local_122;
@@ -1267,7 +1267,7 @@ condition: `{i128_val:?}` == \"-170141183460469231731687303715884105728\"
             String::append_char(__local_126, 97);
             String::append_char(__local_126, 116);
             String::append_char(__local_126, 32);
-            String::append(__local_126, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_126, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_126, 58);
             __local_127 = __inline_Formatter__new_68: block -> ref Formatter {
                 __local_419 = __local_126;
@@ -1303,7 +1303,7 @@ condition: `{u128_val:?}` == \"340282366920938463463374607431768211455\"
             String::append_char(__local_130, 97);
             String::append_char(__local_130, 116);
             String::append_char(__local_130, 32);
-            String::append(__local_130, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_130, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_130, 58);
             __local_131 = __inline_Formatter__new_76: block -> ref Formatter {
                 __local_431 = __local_130;
@@ -1339,7 +1339,7 @@ condition: `{i8_val:?}` == \"-128\"
             String::append_char(__local_134, 97);
             String::append_char(__local_134, 116);
             String::append_char(__local_134, 32);
-            String::append(__local_134, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_134, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_134, 58);
             __local_135 = __inline_Formatter__new_84: block -> ref Formatter {
                 __local_443 = __local_134;
@@ -1375,7 +1375,7 @@ condition: `{u8_val:?}` == \"255\"
             String::append_char(__local_138, 97);
             String::append_char(__local_138, 116);
             String::append_char(__local_138, 32);
-            String::append(__local_138, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_138, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_138, 58);
             __local_139 = __inline_Formatter__new_92: block -> ref Formatter {
                 __local_455 = __local_138;
@@ -1411,7 +1411,7 @@ condition: `{i16_val:?}` == \"-32768\"
             String::append_char(__local_142, 97);
             String::append_char(__local_142, 116);
             String::append_char(__local_142, 32);
-            String::append(__local_142, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_142, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_142, 58);
             __local_143 = __inline_Formatter__new_100: block -> ref Formatter {
                 __local_467 = __local_142;
@@ -1447,7 +1447,7 @@ condition: `{u16_val:?}` == \"65535\"
             String::append_char(__local_146, 97);
             String::append_char(__local_146, 116);
             String::append_char(__local_146, 32);
-            String::append(__local_146, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_146, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_146, 58);
             __local_147 = __inline_Formatter__new_107: block -> ref Formatter {
                 __local_477 = __local_146;
@@ -1492,7 +1492,7 @@ condition: `{pi:?}` == \"3.14\"
             String::append_char(__local_152, 97);
             String::append_char(__local_152, 116);
             String::append_char(__local_152, 32);
-            String::append(__local_152, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_152, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_152, 58);
             __local_153 = __inline_Formatter__new_117: block -> ref Formatter {
                 __local_491 = __local_152;
@@ -1528,7 +1528,7 @@ condition: `{pi:?}` == `{pi}`
             String::append_char(__local_156, 97);
             String::append_char(__local_156, 116);
             String::append_char(__local_156, 32);
-            String::append(__local_156, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_156, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_156, 58);
             __local_157 = __inline_Formatter__new_124: block -> ref Formatter {
                 __local_501 = __local_156;
@@ -1564,7 +1564,7 @@ condition: `{zero:?}` == \"0.0\"
             String::append_char(__local_160, 97);
             String::append_char(__local_160, 116);
             String::append_char(__local_160, 32);
-            String::append(__local_160, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_160, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_160, 58);
             __local_161 = __inline_Formatter__new_131: block -> ref Formatter {
                 __local_511 = __local_160;
@@ -1601,7 +1601,7 @@ condition: `{neg_zero:?}` == \"-0.0\"
             String::append_char(__local_164, 97);
             String::append_char(__local_164, 116);
             String::append_char(__local_164, 32);
-            String::append(__local_164, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_164, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_164, 58);
             __local_165 = __inline_Formatter__new_138: block -> ref Formatter {
                 __local_521 = __local_164;
@@ -1641,7 +1641,7 @@ condition: `{f32_val:?}` == \"2.5\"
             String::append_char(__local_168, 97);
             String::append_char(__local_168, 116);
             String::append_char(__local_168, 32);
-            String::append(__local_168, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_168, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_168, 58);
             __local_169 = __inline_Formatter__new_146: block -> ref Formatter {
                 __local_533 = __local_168;
@@ -1681,7 +1681,7 @@ condition: `{true:?}` == \"true\"
             String::append_char(__local_172, 97);
             String::append_char(__local_172, 116);
             String::append_char(__local_172, 32);
-            String::append(__local_172, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_172, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_172, 58);
             __local_173 = __inline_Formatter__new_154: block -> ref Formatter {
                 __local_545 = __local_172;
@@ -1716,7 +1716,7 @@ condition: `{false:?}` == \"false\"
             String::append_char(__local_176, 97);
             String::append_char(__local_176, 116);
             String::append_char(__local_176, 32);
-            String::append(__local_176, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_176, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_176, 58);
             __local_177 = __inline_Formatter__new_160: block -> ref Formatter {
                 __local_553 = __local_176;
@@ -1751,7 +1751,7 @@ condition: `{c}` == \"A\"
             String::append_char(__local_180, 97);
             String::append_char(__local_180, 116);
             String::append_char(__local_180, 32);
-            String::append(__local_180, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_180, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_180, 58);
             __local_181 = __inline_Formatter__new_166: block -> ref Formatter {
                 __local_561 = __local_180;
@@ -1786,7 +1786,7 @@ condition: `{c:?}` == \"'A'\"
             String::append_char(__local_184, 97);
             String::append_char(__local_184, 116);
             String::append_char(__local_184, 32);
-            String::append(__local_184, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_184, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_184, 58);
             __local_185 = __inline_Formatter__new_172: block -> ref Formatter {
                 __local_569 = __local_184;
@@ -1821,7 +1821,7 @@ condition: `{digit}` == \"0\"
             String::append_char(__local_188, 97);
             String::append_char(__local_188, 116);
             String::append_char(__local_188, 32);
-            String::append(__local_188, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_188, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_188, 58);
             __local_189 = __inline_Formatter__new_178: block -> ref Formatter {
                 __local_577 = __local_188;
@@ -1856,7 +1856,7 @@ condition: `{digit:?}` == \"'0'\"
             String::append_char(__local_192, 97);
             String::append_char(__local_192, 116);
             String::append_char(__local_192, 32);
-            String::append(__local_192, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_192, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_192, 58);
             __local_193 = __inline_Formatter__new_184: block -> ref Formatter {
                 __local_585 = __local_192;
@@ -1891,7 +1891,7 @@ condition: `{space}` == \" \"
             String::append_char(__local_196, 97);
             String::append_char(__local_196, 116);
             String::append_char(__local_196, 32);
-            String::append(__local_196, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_196, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_196, 58);
             __local_197 = __inline_Formatter__new_190: block -> ref Formatter {
                 __local_593 = __local_196;
@@ -1926,7 +1926,7 @@ condition: `{space:?}` == \"' '\"
             String::append_char(__local_200, 97);
             String::append_char(__local_200, 116);
             String::append_char(__local_200, 32);
-            String::append(__local_200, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_200, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_200, 58);
             __local_201 = __inline_Formatter__new_196: block -> ref Formatter {
                 __local_601 = __local_200;
@@ -1961,7 +1961,7 @@ condition: `{newline:?}` == \"'\\\\n'\"
             String::append_char(__local_204, 97);
             String::append_char(__local_204, 116);
             String::append_char(__local_204, 32);
-            String::append(__local_204, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_204, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_204, 58);
             __local_205 = __inline_Formatter__new_202: block -> ref Formatter {
                 __local_609 = __local_204;
@@ -1996,7 +1996,7 @@ condition: `{tab:?}` == \"'\\\\t'\"
             String::append_char(__local_208, 97);
             String::append_char(__local_208, 116);
             String::append_char(__local_208, 32);
-            String::append(__local_208, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_208, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_208, 58);
             __local_209 = __inline_Formatter__new_208: block -> ref Formatter {
                 __local_617 = __local_208;
@@ -2031,7 +2031,7 @@ condition: `{cr:?}` == \"'\\\\r'\"
             String::append_char(__local_212, 97);
             String::append_char(__local_212, 116);
             String::append_char(__local_212, 32);
-            String::append(__local_212, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_212, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_212, 58);
             __local_213 = __inline_Formatter__new_214: block -> ref Formatter {
                 __local_625 = __local_212;
@@ -2066,7 +2066,7 @@ condition: `{single_quote:?}` == \"'\\\\''\"
             String::append_char(__local_216, 97);
             String::append_char(__local_216, 116);
             String::append_char(__local_216, 32);
-            String::append(__local_216, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_216, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_216, 58);
             __local_217 = __inline_Formatter__new_220: block -> ref Formatter {
                 __local_633 = __local_216;
@@ -2101,7 +2101,7 @@ condition: `{backslash:?}` == \"'\\\\\\\\'\"
             String::append_char(__local_220, 97);
             String::append_char(__local_220, 116);
             String::append_char(__local_220, 32);
-            String::append(__local_220, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_220, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_220, 58);
             __local_221 = __inline_Formatter__new_226: block -> ref Formatter {
                 __local_641 = __local_220;
@@ -2129,7 +2129,7 @@ condition: `{z:?}` == \"'Z'\"
             String::append_char(__local_222, 97);
             String::append_char(__local_222, 116);
             String::append_char(__local_222, 32);
-            String::append(__local_222, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_222, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_222, 58);
             __local_223 = __inline_Formatter__new_230: block -> ref Formatter {
                 __local_647 = __local_222;
@@ -2164,7 +2164,7 @@ condition: `{s}` == \"hello\"
             String::append_char(__local_226, 97);
             String::append_char(__local_226, 116);
             String::append_char(__local_226, 32);
-            String::append(__local_226, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_226, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_226, 58);
             __local_227 = __inline_Formatter__new_236: block -> ref Formatter {
                 __local_655 = __local_226;
@@ -2192,7 +2192,7 @@ condition: `{s:?}` == \"\\\"hello\\\"\"
             String::append_char(__local_228, 97);
             String::append_char(__local_228, 116);
             String::append_char(__local_228, 32);
-            String::append(__local_228, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_228, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_228, 58);
             __local_229 = __inline_Formatter__new_240: block -> ref Formatter {
                 __local_661 = __local_228;
@@ -2227,7 +2227,7 @@ condition: `{empty}` == \"\"
             String::append_char(__local_232, 97);
             String::append_char(__local_232, 116);
             String::append_char(__local_232, 32);
-            String::append(__local_232, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_232, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_232, 58);
             __local_233 = __inline_Formatter__new_246: block -> ref Formatter {
                 __local_669 = __local_232;
@@ -2263,7 +2263,7 @@ condition: `{empty:?}` == \"\\\"\\\"\"
             String::append_char(__local_236, 97);
             String::append_char(__local_236, 116);
             String::append_char(__local_236, 32);
-            String::append(__local_236, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_236, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_236, 58);
             __local_237 = __inline_Formatter__new_252: block -> ref Formatter {
                 __local_677 = __local_236;
@@ -2300,7 +2300,7 @@ line2"), used: 11 };
             String::append_char(__local_240, 97);
             String::append_char(__local_240, 116);
             String::append_char(__local_240, 32);
-            String::append(__local_240, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_240, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_240, 58);
             __local_241 = __inline_Formatter__new_258: block -> ref Formatter {
                 __local_685 = __local_240;
@@ -2336,7 +2336,7 @@ condition: `{with_newline:?}` == \"\\\"line1\\\\nline2\\\"\"
             String::append_char(__local_244, 97);
             String::append_char(__local_244, 116);
             String::append_char(__local_244, 32);
-            String::append(__local_244, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_244, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_244, 58);
             __local_245 = __inline_Formatter__new_264: block -> ref Formatter {
                 __local_693 = __local_244;
@@ -2372,7 +2372,7 @@ condition: `{some_i32:?}` == \"Option::Some(42)\"
             String::append_char(__local_248, 97);
             String::append_char(__local_248, 116);
             String::append_char(__local_248, 32);
-            String::append(__local_248, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_248, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_248, 58);
             __local_249 = __inline_Formatter__new_271: block -> ref Formatter {
                 __local_703 = __local_248;
@@ -2408,7 +2408,7 @@ condition: `{some_i32}` == \"Option::Some(42)\"
             String::append_char(__local_252, 97);
             String::append_char(__local_252, 116);
             String::append_char(__local_252, 32);
-            String::append(__local_252, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_252, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_252, 58);
             __local_253 = __inline_Formatter__new_277: block -> ref Formatter {
                 __local_711 = __local_252;
@@ -2445,7 +2445,7 @@ condition: `{none_i32:?}` == \"Option::None\"
             String::append_char(__local_256, 97);
             String::append_char(__local_256, 116);
             String::append_char(__local_256, 32);
-            String::append(__local_256, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_256, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_256, 58);
             __local_257 = __inline_Formatter__new_284: block -> ref Formatter {
                 __local_721 = __local_256;
@@ -2481,7 +2481,7 @@ condition: `{none_i32}` == \"Option::None\"
             String::append_char(__local_260, 97);
             String::append_char(__local_260, 116);
             String::append_char(__local_260, 32);
-            String::append(__local_260, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_260, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_260, 58);
             __local_261 = __inline_Formatter__new_290: block -> ref Formatter {
                 __local_729 = __local_260;
@@ -2517,7 +2517,7 @@ condition: `{some_str:?}` == \"Option::Some(\\\"world\\\")\"
             String::append_char(__local_264, 97);
             String::append_char(__local_264, 116);
             String::append_char(__local_264, 32);
-            String::append(__local_264, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_264, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_264, 58);
             __local_265 = __inline_Formatter__new_296: block -> ref Formatter {
                 __local_737 = __local_264;
@@ -2553,7 +2553,7 @@ condition: `{some_some:?}` == \"Option::Some(Option::Some(7))\"
             String::append_char(__local_268, 97);
             String::append_char(__local_268, 116);
             String::append_char(__local_268, 32);
-            String::append(__local_268, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_268, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_268, 58);
             __local_269 = __inline_Formatter__new_302: block -> ref Formatter {
                 __local_745 = __local_268;
@@ -2589,7 +2589,7 @@ condition: `{some_none:?}` == \"Option::Some(Option::None)\"
             String::append_char(__local_272, 97);
             String::append_char(__local_272, 116);
             String::append_char(__local_272, 32);
-            String::append(__local_272, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_272, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_272, 58);
             __local_273 = __inline_Formatter__new_308: block -> ref Formatter {
                 __local_753 = __local_272;
@@ -2625,7 +2625,7 @@ condition: `{ok_val:?}` == \"Result::Ok(42)\"
             String::append_char(__local_276, 97);
             String::append_char(__local_276, 116);
             String::append_char(__local_276, 32);
-            String::append(__local_276, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_276, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_276, 58);
             __local_277 = __inline_Formatter__new_315: block -> ref Formatter {
                 __local_763 = __local_276;
@@ -2661,7 +2661,7 @@ condition: `{ok_val}` == \"Result::Ok(42)\"
             String::append_char(__local_280, 97);
             String::append_char(__local_280, 116);
             String::append_char(__local_280, 32);
-            String::append(__local_280, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_280, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_280, 58);
             __local_281 = __inline_Formatter__new_321: block -> ref Formatter {
                 __local_771 = __local_280;
@@ -2697,7 +2697,7 @@ condition: `{err_val:?}` == \"Result::Err(\\\"fail\\\")\"
             String::append_char(__local_284, 97);
             String::append_char(__local_284, 116);
             String::append_char(__local_284, 32);
-            String::append(__local_284, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_284, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_284, 58);
             __local_285 = __inline_Formatter__new_327: block -> ref Formatter {
                 __local_779 = __local_284;
@@ -2730,7 +2730,7 @@ condition: `{err_int:?}` == \"Result::Err(-1)\"
             String::append_char(__local_288, 97);
             String::append_char(__local_288, 116);
             String::append_char(__local_288, 32);
-            String::append(__local_288, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_288, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_288, 58);
             __local_289 = __inline_Formatter__new_334: block -> ref Formatter {
                 __local_790 = __local_288;
@@ -2763,7 +2763,7 @@ condition: `{x:10?}` == \"        42\"
             String::append_char(__local_292, 97);
             String::append_char(__local_292, 116);
             String::append_char(__local_292, 32);
-            String::append(__local_292, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_292, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_292, 58);
             __local_293 = __inline_Formatter__new_341: block -> ref Formatter {
                 __local_801 = __local_292;
@@ -2796,7 +2796,7 @@ condition: `{x:<10?}` == \"42        \"
             String::append_char(__local_296, 97);
             String::append_char(__local_296, 116);
             String::append_char(__local_296, 32);
-            String::append(__local_296, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_296, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_296, 58);
             __local_297 = __inline_Formatter__new_348: block -> ref Formatter {
                 __local_812 = __local_296;
@@ -2829,7 +2829,7 @@ condition: `{x:^10?}` == \"    42    \"
             String::append_char(__local_300, 97);
             String::append_char(__local_300, 116);
             String::append_char(__local_300, 32);
-            String::append(__local_300, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_300, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_300, 58);
             __local_301 = __inline_Formatter__new_355: block -> ref Formatter {
                 __local_823 = __local_300;
@@ -2864,7 +2864,7 @@ condition: `{x:*^10?}` == \"****42****\"
             String::append_char(__local_304, 97);
             String::append_char(__local_304, 116);
             String::append_char(__local_304, 32);
-            String::append(__local_304, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_304, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_304, 58);
             __local_305 = __inline_Formatter__new_363: block -> ref Formatter {
                 __local_836 = __local_304;
@@ -2898,7 +2898,7 @@ condition: `{i128_pos:10?}` == \"        42\"
             String::append_char(__local_308, 97);
             String::append_char(__local_308, 116);
             String::append_char(__local_308, 32);
-            String::append(__local_308, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_308, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_308, 58);
             __local_309 = __inline_Formatter__new_370: block -> ref Formatter {
                 __local_847 = __local_308;
@@ -2935,7 +2935,7 @@ condition: `{i128_pos:<10?}` == \"42        \"
             String::append_char(__local_312, 97);
             String::append_char(__local_312, 116);
             String::append_char(__local_312, 32);
-            String::append(__local_312, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_312, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_312, 58);
             __local_313 = __inline_Formatter__new_377: block -> ref Formatter {
                 __local_858 = __local_312;
@@ -2972,7 +2972,7 @@ condition: `{true:10?}` == \"      true\"
             String::append_char(__local_316, 97);
             String::append_char(__local_316, 116);
             String::append_char(__local_316, 32);
-            String::append(__local_316, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 85 });
+            String::append(__local_316, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/display_template_specifiers_inspect.wado"), used: 69 });
             String::append_char(__local_316, 58);
             __local_317 = __inline_Formatter__new_384: block -> ref Formatter {
                 __local_869 = __local_316;
@@ -4292,94 +4292,6 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
     Formatter::apply_padding(f, mark);
 }
 
-fn Result<String,i32>^Inspect::inspect(self, f) {
-    let __local_3: ref String;
-    let __local_5: ref String;
-    let __local_7: ref String;
-    let __local_13: ref String;
-    if ref.test Result<String,i32>::Ok(self) {
-        __local_3 = String { repr: array.new_data<u8>("Result::Ok("), used: 11 };
-        String::append(f.buf, __local_3);
-        String^Inspect::inspect(ref.cast Result<String,i32>::Ok(self).payload_0, f);
-        __local_5 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, __local_5);
-    } else if ref.test Result<String,i32>::Err(self) {
-        __local_7 = String { repr: array.new_data<u8>("Result::Err("), used: 12 };
-        String::append(f.buf, __local_7);
-        i32::fmt_decimal(ref.cast Result<String,i32>::Err(self).payload_0, f);
-        __local_13 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, __local_13);
-    };
-}
-
-fn Result<i32,String>^Inspect::inspect(self, f) {
-    let __local_3: ref String;
-    let __local_9: ref String;
-    let __local_11: ref String;
-    let __local_13: ref String;
-    if ref.test Result<i32,String>::Ok(self) {
-        __local_3 = String { repr: array.new_data<u8>("Result::Ok("), used: 11 };
-        String::append(f.buf, __local_3);
-        i32::fmt_decimal(ref.cast Result<i32,String>::Ok(self).payload_0, f);
-        __local_9 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, __local_9);
-    } else if ref.test Result<i32,String>::Err(self) {
-        __local_11 = String { repr: array.new_data<u8>("Result::Err("), used: 12 };
-        String::append(f.buf, __local_11);
-        String^Inspect::inspect(ref.cast Result<i32,String>::Err(self).payload_0, f);
-        __local_13 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, __local_13);
-    };
-}
-
-fn Option<Option<i32>>^Inspect::inspect(self, f) {
-    let __local_3: ref String;
-    let __local_5: ref String;
-    let __local_7: ref String;
-    if ref.test Option<Option<i32>>::Some(self) {
-        __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
-        String::append(f.buf, __local_3);
-        Option<i32>^Inspect::inspect(ref.as_non_null(ref.cast Option<Option<i32>>::Some(self).payload_0), f);
-        __local_5 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, __local_5);
-    } else if self.discriminant == 1 {
-        __local_7 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
-        String::append(f.buf, __local_7);
-    };
-}
-
-fn Option<String>^Inspect::inspect(self, f) {
-    let __local_3: ref String;
-    let __local_5: ref String;
-    let __local_7: ref String;
-    if ref.test Option<String>::Some(self) {
-        __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
-        String::append(f.buf, __local_3);
-        String^Inspect::inspect(ref.cast Option<String>::Some(self).payload_0, f);
-        __local_5 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, __local_5);
-    } else if self.discriminant == 1 {
-        __local_7 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
-        String::append(f.buf, __local_7);
-    };
-}
-
-fn Option<i32>^Inspect::inspect(self, f) {
-    let __local_3: ref String;
-    let __local_9: ref String;
-    let __local_11: ref String;
-    if ref.test Option<i32>::Some(self) {
-        __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
-        String::append(f.buf, __local_3);
-        i32::fmt_decimal(ref.cast Option<i32>::Some(self).payload_0, f);
-        __local_9 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, __local_9);
-    } else if self.discriminant == 1 {
-        __local_11 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
-        String::append(f.buf, __local_11);
-    };
-}
-
 fn Array<u64>::append(self, value) {
     let used: i32;
     let capacity: i32;
@@ -4434,10 +4346,10 @@ fn u128::div_rem(self, divisor) {
     quotient = u128 { low: 0_i64, high: 0_i64 };
     remainder = u128 { low: 0_i64, high: 0_i64 };
     i = 127;
-    b216: block {
-        l217: loop {
+    b206: block {
+        l207: loop {
             if (i >= 0) == 0 {
-                break b216;
+                break b206;
             };
             remainder = u128^Shl::shl(remainder, 1);
             bit = u128::get_bit(self, i);
@@ -4449,7 +4361,7 @@ fn u128::div_rem(self, divisor) {
                 quotient = u128::set_bit(quotient, i);
             };
             i = i - 1;
-            continue l217;
+            continue l207;
         };
     };
     return "tuple/[u128, u128]" { 0: ref.as_non_null(quotient), 1: ref.as_non_null(remainder) };
@@ -4529,7 +4441,7 @@ fn u128::fmt_decimal(self, f) {
     __for_0: block {
         temp_7 = value_copy u128(self);
         block {
-            l226: loop {
+            l216: loop {
                 if (u128^Ord::cmp(temp_7, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_0;
                 };
@@ -4540,7 +4452,7 @@ fn u128::fmt_decimal(self, f) {
                     __local_21 = u128::div_rem(__local_19, __local_20);
                     break __inline_u128_Div__div_5: __local_21.0;
                 };
-                continue l226;
+                continue l216;
             };
         };
     };
@@ -4553,7 +4465,7 @@ fn u128::fmt_decimal(self, f) {
     __for_1: block {
         temp_11 = value_copy u128(self);
         block {
-            l229: loop {
+            l219: loop {
                 if (u128^Ord::cmp(temp_11, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_1;
                 };
@@ -4574,7 +4486,7 @@ fn u128::fmt_decimal(self, f) {
                     __local_30 = u128::div_rem(__local_28, __local_29);
                     break __inline_u128_Div__div_10: __local_30.0;
                 };
-                continue l229;
+                continue l219;
             };
         };
     };
@@ -4688,7 +4600,7 @@ fn i128::fmt_decimal(self, f) {
     __for_2: block {
         temp_9 = value_copy u128(abs_val);
         block {
-            l242: loop {
+            l232: loop {
                 if (u128^Ord::cmp(temp_9, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_2;
                 };
@@ -4699,7 +4611,7 @@ fn i128::fmt_decimal(self, f) {
                     __local_21 = u128::div_rem(__local_19, __local_20);
                     break __inline_u128_Div__div_4: __local_21.0;
                 };
-                continue l242;
+                continue l232;
             };
         };
     };
@@ -4713,7 +4625,7 @@ fn i128::fmt_decimal(self, f) {
     __for_3: block {
         temp_13 = value_copy u128(abs_val);
         block {
-            l245: loop {
+            l235: loop {
                 if (u128^Ord::cmp(temp_13, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_3;
                 };
@@ -4734,7 +4646,7 @@ fn i128::fmt_decimal(self, f) {
                     __local_30 = u128::div_rem(__local_28, __local_29);
                     break __inline_u128_Div__div_9: __local_30.0;
                 };
-                continue l245;
+                continue l235;
             };
         };
     };
@@ -4849,10 +4761,10 @@ fn u64::fmt_decimal(self, f) {
     };
     digit_count = 0;
     temp = val_i64;
-    b252: block {
-        l253: loop {
+    b242: block {
+        l243: loop {
             if (temp != 0_i64) == 0 {
-                break b252;
+                break b242;
             };
             digit_count = digit_count + 1;
             if temp >= 0_i64 {
@@ -4867,7 +4779,7 @@ fn u64::fmt_decimal(self, f) {
                 };
                 temp = (signed_quot_9 + 1844674407370955161_i64) + carry_10;
             };
-            continue l253;
+            continue l243;
         };
     };
     offset_11 = Formatter::prepare_int_write(f, 0, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
@@ -4877,10 +4789,10 @@ fn u64::fmt_decimal(self, f) {
     };
     pos = offset_11 + digit_count;
     temp = val_i64;
-    b257: block {
-        l258: loop {
+    b247: block {
+        l248: loop {
             if (temp != 0_i64) == 0 {
-                break b257;
+                break b247;
             };
             pos = pos - 1;
             digit = 0;
@@ -4903,7 +4815,7 @@ fn u64::fmt_decimal(self, f) {
                 temp = (signed_quot_17 + 1844674407370955161_i64) + carry_18;
             };
             builtin::array_set_u8(repr, pos, (48 + digit) & 255);
-            continue l258;
+            continue l248;
         };
     };
 }
@@ -5352,7 +5264,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l313: loop {
+            l303: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -5360,7 +5272,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l313;
+                continue l303;
             };
         };
     };
@@ -5447,6 +5359,94 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
+    };
+}
+
+fn Result<String,i32>^Inspect::inspect(self, f) {
+    let __local_3: ref String;
+    let __local_5: ref String;
+    let __local_7: ref String;
+    let __local_13: ref String;
+    if ref.test Result<String,i32>::Ok(self) {
+        __local_3 = String { repr: array.new_data<u8>("Result::Ok("), used: 11 };
+        String::append(f.buf, __local_3);
+        String^Inspect::inspect(ref.cast Result<String,i32>::Ok(self).payload_0, f);
+        __local_5 = String { repr: array.new_data<u8>(")"), used: 1 };
+        String::append(f.buf, __local_5);
+    } else if ref.test Result<String,i32>::Err(self) {
+        __local_7 = String { repr: array.new_data<u8>("Result::Err("), used: 12 };
+        String::append(f.buf, __local_7);
+        i32::fmt_decimal(ref.cast Result<String,i32>::Err(self).payload_0, f);
+        __local_13 = String { repr: array.new_data<u8>(")"), used: 1 };
+        String::append(f.buf, __local_13);
+    };
+}
+
+fn Result<i32,String>^Inspect::inspect(self, f) {
+    let __local_3: ref String;
+    let __local_9: ref String;
+    let __local_11: ref String;
+    let __local_13: ref String;
+    if ref.test Result<i32,String>::Ok(self) {
+        __local_3 = String { repr: array.new_data<u8>("Result::Ok("), used: 11 };
+        String::append(f.buf, __local_3);
+        i32::fmt_decimal(ref.cast Result<i32,String>::Ok(self).payload_0, f);
+        __local_9 = String { repr: array.new_data<u8>(")"), used: 1 };
+        String::append(f.buf, __local_9);
+    } else if ref.test Result<i32,String>::Err(self) {
+        __local_11 = String { repr: array.new_data<u8>("Result::Err("), used: 12 };
+        String::append(f.buf, __local_11);
+        String^Inspect::inspect(ref.cast Result<i32,String>::Err(self).payload_0, f);
+        __local_13 = String { repr: array.new_data<u8>(")"), used: 1 };
+        String::append(f.buf, __local_13);
+    };
+}
+
+fn Option<Option<i32>>^Inspect::inspect(self, f) {
+    let __local_3: ref String;
+    let __local_5: ref String;
+    let __local_7: ref String;
+    if ref.test Option<Option<i32>>::Some(self) {
+        __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
+        String::append(f.buf, __local_3);
+        Option<i32>^Inspect::inspect(ref.as_non_null(ref.cast Option<Option<i32>>::Some(self).payload_0), f);
+        __local_5 = String { repr: array.new_data<u8>(")"), used: 1 };
+        String::append(f.buf, __local_5);
+    } else if self.discriminant == 1 {
+        __local_7 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
+        String::append(f.buf, __local_7);
+    };
+}
+
+fn Option<String>^Inspect::inspect(self, f) {
+    let __local_3: ref String;
+    let __local_5: ref String;
+    let __local_7: ref String;
+    if ref.test Option<String>::Some(self) {
+        __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
+        String::append(f.buf, __local_3);
+        String^Inspect::inspect(ref.cast Option<String>::Some(self).payload_0, f);
+        __local_5 = String { repr: array.new_data<u8>(")"), used: 1 };
+        String::append(f.buf, __local_5);
+    } else if self.discriminant == 1 {
+        __local_7 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
+        String::append(f.buf, __local_7);
+    };
+}
+
+fn Option<i32>^Inspect::inspect(self, f) {
+    let __local_3: ref String;
+    let __local_9: ref String;
+    let __local_11: ref String;
+    if ref.test Option<i32>::Some(self) {
+        __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
+        String::append(f.buf, __local_3);
+        i32::fmt_decimal(ref.cast Option<i32>::Some(self).payload_0, f);
+        __local_9 = String { repr: array.new_data<u8>(")"), used: 1 };
+        String::append(f.buf, __local_9);
+    } else if self.discriminant == 1 {
+        __local_11 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
+        String::append(f.buf, __local_11);
     };
 }
 

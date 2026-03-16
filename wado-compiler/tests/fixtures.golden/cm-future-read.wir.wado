@@ -220,6 +220,16 @@ struct Option<FieldSizePayload>::Some {
     payload_0: ref "wasi:http/types.wado/FieldSizePayload",
 }
 
+variant Option<i32> {
+    Some(i32),
+    None,
+}
+
+struct Option<i32>::Some {
+    discriminant: i32,
+    payload_0: i32,
+}
+
 variant Result<Response,ErrorCode> {
     Ok(i32),
     Err(ref "wasi:http/types.wado/ErrorCode"),
@@ -233,16 +243,6 @@ struct Result<Response,ErrorCode>::Ok {
 struct Result<Response,ErrorCode>::Err {
     discriminant: i32,
     payload_0: ref "wasi:http/types.wado/ErrorCode",
-}
-
-variant Option<i32> {
-    Some(i32),
-    None,
-}
-
-struct Option<i32>::Some {
-    discriminant: i32,
-    payload_0: i32,
 }
 
 variant Option<Fields> {

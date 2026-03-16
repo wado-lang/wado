@@ -98,11 +98,11 @@ type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i3
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32) -> ref WaitEvent;
 
-type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
-
 type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::append" = fn(ref String, ref String);
+
+type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
 
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
@@ -124,8 +124,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn join_names(names) {
     let __local_1: ref String;
@@ -465,27 +465,6 @@ fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
     return WaitEvent { code: code, handle: evt_handle, payload: payload };
 }
 
-fn Array<String>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<String>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<ref String>(new_capacity);
-        builtin::array_copy<ref String>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<ref String>(self.repr, used, value);
-    self.used = used + 1;
-}
-
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
@@ -521,6 +500,27 @@ fn String::append(self, other) {
     };
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
+}
+
+fn Array<String>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<String>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<ref String>(new_capacity);
+        builtin::array_copy<ref String>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<ref String>(self.repr, used, value);
+    self.used = used + 1;
 }
 
 export fn __cm_export__run as "run"

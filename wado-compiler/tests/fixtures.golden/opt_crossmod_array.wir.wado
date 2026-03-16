@@ -152,8 +152,6 @@ type "functype/./sub/opt_crossmod_level2.wado/Array<String>::append" = fn(ref Ar
 
 type "functype/./sub/opt_crossmod_level2.wado/Array<i32>::append" = fn(ref Array<i32>, i32);
 
-type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
-
 type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
 type "functype/String::grow" = fn(ref String, i32);
@@ -167,6 +165,8 @@ type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<char>;
 
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -198,8 +198,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let sp: ref Array<String>;
@@ -340,7 +340,7 @@ fn run() with Stdout {
             String::append_char(__local_33, 97);
             String::append_char(__local_33, 116);
             String::append_char(__local_33, 32);
-            String::append(__local_33, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 68 });
+            String::append(__local_33, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 52 });
             String::append_char(__local_33, 58);
             __local_34 = __inline_Formatter__new_6: block -> ref Formatter {
                 __local_66 = __local_33;
@@ -382,7 +382,7 @@ condition: sp.len() == 2
             String::append_char(__local_35, 97);
             String::append_char(__local_35, 116);
             String::append_char(__local_35, 32);
-            String::append(__local_35, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 68 });
+            String::append(__local_35, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 52 });
             String::append_char(__local_35, 58);
             __local_36 = __inline_Formatter__new_14: block -> ref Formatter {
                 __local_79 = __local_35;
@@ -429,7 +429,7 @@ condition: sp[0] == \"hello\"
             String::append_char(__local_37, 97);
             String::append_char(__local_37, 116);
             String::append_char(__local_37, 32);
-            String::append(__local_37, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 68 });
+            String::append(__local_37, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 52 });
             String::append_char(__local_37, 58);
             __local_38 = __inline_Formatter__new_20: block -> ref Formatter {
                 __local_88 = __local_37;
@@ -471,7 +471,7 @@ condition: sp[1] == \"world\"
             String::append_char(__local_39, 97);
             String::append_char(__local_39, 116);
             String::append_char(__local_39, 32);
-            String::append(__local_39, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 68 });
+            String::append(__local_39, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 52 });
             String::append_char(__local_39, 58);
             __local_40 = __inline_Formatter__new_26: block -> ref Formatter {
                 __local_96 = __local_39;
@@ -513,7 +513,7 @@ condition: it.len() == 3
             String::append_char(__local_41, 97);
             String::append_char(__local_41, 116);
             String::append_char(__local_41, 32);
-            String::append(__local_41, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 68 });
+            String::append(__local_41, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 52 });
             String::append_char(__local_41, 58);
             __local_42 = __inline_Formatter__new_34: block -> ref Formatter {
                 __local_109 = __local_41;
@@ -561,7 +561,7 @@ condition: it[0] == 10
             String::append_char(__local_43, 97);
             String::append_char(__local_43, 116);
             String::append_char(__local_43, 32);
-            String::append(__local_43, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 68 });
+            String::append(__local_43, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 52 });
             String::append_char(__local_43, 58);
             __local_44 = __inline_Formatter__new_42: block -> ref Formatter {
                 __local_122 = __local_43;
@@ -609,7 +609,7 @@ condition: it[1] == 20
             String::append_char(__local_45, 97);
             String::append_char(__local_45, 116);
             String::append_char(__local_45, 32);
-            String::append(__local_45, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 68 });
+            String::append(__local_45, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 52 });
             String::append_char(__local_45, 58);
             __local_46 = __inline_Formatter__new_50: block -> ref Formatter {
                 __local_135 = __local_45;
@@ -652,7 +652,7 @@ condition: it[2] == 30
             String::append_char(__local_47, 97);
             String::append_char(__local_47, 116);
             String::append_char(__local_47, 32);
-            String::append(__local_47, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 68 });
+            String::append(__local_47, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 52 });
             String::append_char(__local_47, 58);
             __local_48 = __inline_Formatter__new_58: block -> ref Formatter {
                 __local_147 = __local_47;
@@ -694,7 +694,7 @@ condition: sl.len() == 3
             String::append_char(__local_49, 97);
             String::append_char(__local_49, 116);
             String::append_char(__local_49, 32);
-            String::append(__local_49, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 68 });
+            String::append(__local_49, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 52 });
             String::append_char(__local_49, 58);
             __local_50 = __inline_Formatter__new_66: block -> ref Formatter {
                 __local_160 = __local_49;
@@ -741,7 +741,7 @@ condition: sl[0] == \"alpha\"
             String::append_char(__local_51, 97);
             String::append_char(__local_51, 116);
             String::append_char(__local_51, 32);
-            String::append(__local_51, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 68 });
+            String::append(__local_51, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 52 });
             String::append_char(__local_51, 58);
             __local_52 = __inline_Formatter__new_72: block -> ref Formatter {
                 __local_169 = __local_51;
@@ -788,7 +788,7 @@ condition: sl[1] == \"beta\"
             String::append_char(__local_53, 97);
             String::append_char(__local_53, 116);
             String::append_char(__local_53, 32);
-            String::append(__local_53, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 68 });
+            String::append(__local_53, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 52 });
             String::append_char(__local_53, 58);
             __local_54 = __inline_Formatter__new_78: block -> ref Formatter {
                 __local_178 = __local_53;
@@ -831,7 +831,7 @@ condition: sl[2] == \"gamma\"
             String::append_char(__local_55, 97);
             String::append_char(__local_55, 116);
             String::append_char(__local_55, 32);
-            String::append(__local_55, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 68 });
+            String::append(__local_55, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 52 });
             String::append_char(__local_55, 58);
             __local_56 = __inline_Formatter__new_85: block -> ref Formatter {
                 __local_188 = __local_55;
@@ -873,7 +873,7 @@ condition: ia.len() == 2
             String::append_char(__local_57, 97);
             String::append_char(__local_57, 116);
             String::append_char(__local_57, 32);
-            String::append(__local_57, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 68 });
+            String::append(__local_57, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 52 });
             String::append_char(__local_57, 58);
             __local_58 = __inline_Formatter__new_93: block -> ref Formatter {
                 __local_201 = __local_57;
@@ -921,7 +921,7 @@ condition: ia[0] == 100
             String::append_char(__local_59, 97);
             String::append_char(__local_59, 116);
             String::append_char(__local_59, 32);
-            String::append(__local_59, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 68 });
+            String::append(__local_59, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_crossmod_array.wado"), used: 52 });
             String::append_char(__local_59, 58);
             __local_60 = __inline_Formatter__new_101: block -> ref Formatter {
                 __local_214 = __local_59;
@@ -1301,27 +1301,6 @@ fn "./sub/opt_crossmod_level2.wado/Array<i32>::append"(self, value) {  // from .
     self.used = used + 1;
 }
 
-fn Array<i32>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<i32>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<i32>(new_capacity);
-        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
-}
-
 fn i32::fmt_decimal(self, f) {
     let is_negative: bool;
     let abs_val: i64;
@@ -1407,7 +1386,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l57: loop {
+            l56: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -1415,7 +1394,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l57;
+                continue l56;
             };
         };
     };
@@ -1503,6 +1482,27 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
+}
+
+fn Array<i32>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<i32>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<i32>(new_capacity);
+        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<i32>(self.repr, used, value);
+    self.used = used + 1;
 }
 
 fn Formatter::write_char_n(self, c, n) {

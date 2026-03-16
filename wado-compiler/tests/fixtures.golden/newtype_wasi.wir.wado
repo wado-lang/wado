@@ -59,11 +59,11 @@ type "functype/newtype_wasi_multiple" = fn();
 
 type "functype/run" = fn();
 
+type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
+
 type "functype/__cm_adapter__MonotonicClock_now" = fn() -> u64;
 
 type "functype/__cm_adapter__MonotonicClock_get_resolution" = fn() -> u64;
-
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_export__run" = fn();
 
@@ -110,8 +110,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn newtype_wasi_chained() with Stdout {
     let t1: u64;
@@ -206,18 +206,18 @@ fn run() with Stdout {
     newtype_wasi_multiple();
 }
 
+fn __cm_adapter__Stdout_write_via_stream(data) {
+    let __async_outptr: i32;
+    __async_outptr = "mem/realloc"(0, 0, 1, 2);
+    return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
+}
+
 fn __cm_adapter__MonotonicClock_now() {
     return "wasi/wasi:clocks/MonotonicClock::now"();
 }
 
 fn __cm_adapter__MonotonicClock_get_resolution() {
     return "wasi/wasi:clocks/MonotonicClock::get_resolution"();
-}
-
-fn __cm_adapter__Stdout_write_via_stream(data) {
-    let __async_outptr: i32;
-    __async_outptr = "mem/realloc"(0, 0, 1, 2);
-    return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 
 fn __cm_export__run() {

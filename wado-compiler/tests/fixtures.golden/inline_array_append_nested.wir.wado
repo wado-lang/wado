@@ -111,12 +111,6 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/Container::add_items" = fn(ref Container, i32);
-
-type "functype/Container::process" = fn(ref Container);
-
-type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
-
 type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
 type "functype/String::grow" = fn(ref String, i32);
@@ -126,6 +120,12 @@ type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/Container::add_items" = fn(ref Container, i32);
+
+type "functype/Container::process" = fn(ref Container);
+
+type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -137,11 +137,11 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
+type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
+
 type "functype/Container::add_items" = fn(ref Array<i32>, i32);
 
 type "functype/Container::process" = fn(ref Array<i32>);
-
-type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -157,8 +157,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let __local_0: ref Array<i32>;
@@ -475,108 +475,6 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
     };
 }
 
-fn Container::add_items(self, count) {
-    let i: i32;
-    let _licm_items_3: ref Array<i32>;
-    __for_0: block {
-        i = 0;
-        _licm_items_3 = self;
-        block {
-            l24: loop {
-                if (i < count) == 0 {
-                    break __for_0;
-                };
-                Array<i32>::append(_licm_items_3, i);
-                Array<i32>::append(_licm_items_3, i * 2);
-                i = i + 1;
-                continue l24;
-            };
-        };
-    };
-}
-
-fn Container::process(self) {
-    let __local_1: ref Array<i32>;
-    let temp: ref Array<i32>;
-    let i: i32;
-    let val: i32;
-    let j: i32;
-    let __local_11: i32;
-    let __local_14: i32;
-    let _licm_items_15: ref Array<i32>;
-    let _licm_used_16: i32;
-    let _licm_repr_17: ref array<i32>;
-    let _licm_used_18: i32;
-    let _licm_items_19: ref Array<i32>;
-    let _licm_repr_20: ref array<i32>;
-    temp = __seq_lit: block -> ref Array<i32> {
-        __local_1 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
-        break __seq_lit: __local_1;
-    };
-    __for_1: block {
-        i = 0;
-        _licm_items_15 = self;
-        _licm_used_16 = _licm_items_15.used;
-        _licm_repr_17 = _licm_items_15.repr;
-        block {
-            l27: loop {
-                if (i < _licm_used_16) == 0 {
-                    break __for_1;
-                };
-                val = __inline_Array_i32__IndexValue__index_value_4: block -> i32 {
-                    __local_11 = i;
-                    break __inline_Array_i32__IndexValue__index_value_4: builtin::array_get<i32>(_licm_repr_17, __local_11);
-                };
-                if (val % 2) == 0 {
-                    Array<i32>::append(temp, val);
-                };
-                i = i + 1;
-                continue l27;
-            };
-        };
-    };
-    __for_2: block {
-        j = 0;
-        _licm_used_18 = temp.used;
-        _licm_items_19 = self;
-        _licm_repr_20 = temp.repr;
-        block {
-            l31: loop {
-                if (j < _licm_used_18) == 0 {
-                    break __for_2;
-                };
-                Array<i32>::append(_licm_items_19, __inline_Array_i32__IndexValue__index_value_6: block -> i32 {
-                    __local_14 = j;
-                    break __inline_Array_i32__IndexValue__index_value_6: builtin::array_get<i32>(_licm_repr_20, __local_14);
-                } + 100);
-                j = j + 1;
-                continue l31;
-            };
-        };
-    };
-}
-
-fn Array<i32>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<i32>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<i32>(new_capacity);
-        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
-}
-
 fn i32::fmt_decimal(self, f) {
     let is_negative: bool;
     let abs_val: i64;
@@ -671,6 +569,108 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
+}
+
+fn Container::add_items(self, count) {
+    let i: i32;
+    let _licm_items_3: ref Array<i32>;
+    __for_0: block {
+        i = 0;
+        _licm_items_3 = self;
+        block {
+            l33: loop {
+                if (i < count) == 0 {
+                    break __for_0;
+                };
+                Array<i32>::append(_licm_items_3, i);
+                Array<i32>::append(_licm_items_3, i * 2);
+                i = i + 1;
+                continue l33;
+            };
+        };
+    };
+}
+
+fn Container::process(self) {
+    let __local_1: ref Array<i32>;
+    let temp: ref Array<i32>;
+    let i: i32;
+    let val: i32;
+    let j: i32;
+    let __local_11: i32;
+    let __local_14: i32;
+    let _licm_items_15: ref Array<i32>;
+    let _licm_used_16: i32;
+    let _licm_repr_17: ref array<i32>;
+    let _licm_used_18: i32;
+    let _licm_items_19: ref Array<i32>;
+    let _licm_repr_20: ref array<i32>;
+    temp = __seq_lit: block -> ref Array<i32> {
+        __local_1 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
+        break __seq_lit: __local_1;
+    };
+    __for_1: block {
+        i = 0;
+        _licm_items_15 = self;
+        _licm_used_16 = _licm_items_15.used;
+        _licm_repr_17 = _licm_items_15.repr;
+        block {
+            l36: loop {
+                if (i < _licm_used_16) == 0 {
+                    break __for_1;
+                };
+                val = __inline_Array_i32__IndexValue__index_value_4: block -> i32 {
+                    __local_11 = i;
+                    break __inline_Array_i32__IndexValue__index_value_4: builtin::array_get<i32>(_licm_repr_17, __local_11);
+                };
+                if (val % 2) == 0 {
+                    Array<i32>::append(temp, val);
+                };
+                i = i + 1;
+                continue l36;
+            };
+        };
+    };
+    __for_2: block {
+        j = 0;
+        _licm_used_18 = temp.used;
+        _licm_items_19 = self;
+        _licm_repr_20 = temp.repr;
+        block {
+            l40: loop {
+                if (j < _licm_used_18) == 0 {
+                    break __for_2;
+                };
+                Array<i32>::append(_licm_items_19, __inline_Array_i32__IndexValue__index_value_6: block -> i32 {
+                    __local_14 = j;
+                    break __inline_Array_i32__IndexValue__index_value_6: builtin::array_get<i32>(_licm_repr_20, __local_14);
+                } + 100);
+                j = j + 1;
+                continue l40;
+            };
+        };
+    };
+}
+
+fn Array<i32>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<i32>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<i32>(new_capacity);
+        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<i32>(self.repr, used, value);
+    self.used = used + 1;
 }
 
 fn Formatter::write_char_n(self, c, n) {

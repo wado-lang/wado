@@ -41,15 +41,15 @@ struct __Closure_0 {
 
 array array<Fn<1,i32>> (mut ref struct);
 
-struct Array<Fn<1,i32>> {  // Array<T> with T=Fn<1,i32>
-    mut repr: ref array<Fn<1,i32>>,
-    mut used: i32,
-}
-
 array array<u64> (mut u64);
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
+    mut used: i32,
+}
+
+struct Array<Fn<1,i32>> {  // Array<T> with T=Fn<1,i32>
+    mut repr: ref array<Fn<1,i32>>,
     mut used: i32,
 }
 
@@ -118,10 +118,6 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/Array<Fn<1,i32>>::append" = fn(ref Array<Fn<1,i32>>, ref struct);
-
-type "functype/__Closure_0::__call" = fn(ref __Closure_0, i32) -> i32;
-
 type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
 type "functype/String::grow" = fn(ref String, i32);
@@ -131,6 +127,10 @@ type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/Array<Fn<1,i32>>::append" = fn(ref Array<Fn<1,i32>>, ref struct);
+
+type "functype/__Closure_0::__call" = fn(ref __Closure_0, i32) -> i32;
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -142,9 +142,9 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
 
-type "functype/__Closure_0::__call" = fn(i32, i32) -> i32;
-
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
+
+type "functype/__Closure_0::__call" = fn(i32, i32) -> i32;
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -160,8 +160,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let __local_0: ref Array<Fn<1,i32>>;
@@ -603,31 +603,6 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
     };
 }
 
-fn Array<Fn<1,i32>>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<Fn<1,i32>>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<ref struct>(new_capacity);
-        builtin::array_copy<ref struct>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<ref struct>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn __Closure_0::__call(self, _) {
-    return self;
-}
-
 fn i32::fmt_decimal(self, f) {
     let is_negative: bool;
     let abs_val: i64;
@@ -722,6 +697,31 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
+}
+
+fn Array<Fn<1,i32>>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<Fn<1,i32>>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<ref struct>(new_capacity);
+        builtin::array_copy<ref struct>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<ref struct>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn __Closure_0::__call(self, _) {
+    return self;
 }
 
 fn Formatter::write_char_n(self, c, n) {

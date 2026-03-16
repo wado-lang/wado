@@ -90,11 +90,11 @@ type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i3
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32) -> ref WaitEvent;
 
-type "functype/Color^Inspect::inspect" = fn(enum:Color, ref Formatter);
-
 type "functype/String::grow" = fn(ref String, i32);
 
 type "functype/String::append" = fn(ref String, ref String);
+
+type "functype/Color^Inspect::inspect" = fn(enum:Color, ref Formatter);
 
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
@@ -115,8 +115,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let r: enum:Color;
@@ -359,22 +359,6 @@ fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
     return WaitEvent { code: code, handle: evt_handle, payload: payload };
 }
 
-fn Color^Inspect::inspect(self, f) {
-    let __local_3: ref String;
-    let __local_5: ref String;
-    let __local_7: ref String;
-    if self == 0 {
-        __local_3 = String { repr: array.new_data<u8>("Color::Red"), used: 10 };
-        String::append(f.buf, __local_3);
-    } else if self == 1 {
-        __local_5 = String { repr: array.new_data<u8>("Color::Green"), used: 12 };
-        String::append(f.buf, __local_5);
-    } else if self == 2 {
-        __local_7 = String { repr: array.new_data<u8>("Color::Blue"), used: 11 };
-        String::append(f.buf, __local_7);
-    };
-}
-
 fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
@@ -410,6 +394,22 @@ fn String::append(self, other) {
     };
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
+}
+
+fn Color^Inspect::inspect(self, f) {
+    let __local_3: ref String;
+    let __local_5: ref String;
+    let __local_7: ref String;
+    if self == 0 {
+        __local_3 = String { repr: array.new_data<u8>("Color::Red"), used: 10 };
+        String::append(f.buf, __local_3);
+    } else if self == 1 {
+        __local_5 = String { repr: array.new_data<u8>("Color::Green"), used: 12 };
+        String::append(f.buf, __local_5);
+    } else if self == 2 {
+        __local_7 = String { repr: array.new_data<u8>("Color::Blue"), used: 11 };
+        String::append(f.buf, __local_7);
+    };
 }
 
 export fn __cm_export__run as "run"

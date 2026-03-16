@@ -30,13 +30,13 @@ struct Formatter {
     mut buf: ref String,
 }
 
-struct [i32, unit] {
-    mut 0: i32,
-}
-
 struct [Stream<u8>, StreamWritable<u8>] {
     mut 0: i32,
     mut 1: i32,
+}
+
+struct [i32, unit] {
+    mut 0: i32,
 }
 
 array array<Tuple<i32,unit>> (mut ref "tuple/[i32, unit]");
@@ -57,15 +57,15 @@ struct Option<Tuple<i32,unit>>::Some {
     payload_0: ref "tuple/[i32, unit]",
 }
 
-struct Array<Tuple<i32,unit>> {  // Array<T> with T=Tuple<i32,unit>
-    mut repr: ref array<Tuple<i32,unit>>,
-    mut used: i32,
-}
-
 array array<u64> (mut u64);
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
+    mut used: i32,
+}
+
+struct Array<Tuple<i32,unit>> {  // Array<T> with T=Tuple<i32,unit>
+    mut repr: ref array<Tuple<i32,unit>>,
     mut used: i32,
 }
 
@@ -119,10 +119,6 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/ArrayIter<Tuple<i32,unit>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<i32,unit>>") -> ref Option<Tuple<i32,unit>>;
-
-type "functype/Array<Tuple<i32,unit>>::append" = fn(ref Array<Tuple<i32,unit>>, ref "tuple/[i32, unit]");
-
 type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
 type "functype/String::grow" = fn(ref String, i32);
@@ -132,6 +128,10 @@ type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/ArrayIter<Tuple<i32,unit>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<i32,unit>>") -> ref Option<Tuple<i32,unit>>;
+
+type "functype/Array<Tuple<i32,unit>>::append" = fn(ref Array<Tuple<i32,unit>>, ref "tuple/[i32, unit]");
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -160,8 +160,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let __local_0: ref Array<Tuple<i32,unit>>;
@@ -445,37 +445,6 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
     };
 }
 
-fn ArrayIter<Tuple<i32,unit>>^Iterator::next(self) {
-    let item: ref "tuple/[i32, unit]";
-    if self.index >= self.used {
-        return 1; ref.null none;
-    };
-    item = builtin::array_get<ref "tuple/[i32, unit]">(self.repr, self.index);
-    self.index = self.index + 1;
-    return 0; ref.as_non_null(item);
-}
-
-fn Array<Tuple<i32,unit>>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<Tuple<i32,unit>>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<ref "tuple/[i32, unit]">(new_capacity);
-        builtin::array_copy<ref "tuple/[i32, unit]">(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<ref "tuple/[i32, unit]">(self.repr, used, value);
-    self.used = used + 1;
-}
-
 fn i32::fmt_decimal(self, f) {
     let is_negative: bool;
     let abs_val: i64;
@@ -570,6 +539,37 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
+}
+
+fn ArrayIter<Tuple<i32,unit>>^Iterator::next(self) {
+    let item: ref "tuple/[i32, unit]";
+    if self.index >= self.used {
+        return 1; ref.null none;
+    };
+    item = builtin::array_get<ref "tuple/[i32, unit]">(self.repr, self.index);
+    self.index = self.index + 1;
+    return 0; ref.as_non_null(item);
+}
+
+fn Array<Tuple<i32,unit>>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<Tuple<i32,unit>>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<ref "tuple/[i32, unit]">(new_capacity);
+        builtin::array_copy<ref "tuple/[i32, unit]">(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<ref "tuple/[i32, unit]">(self.repr, used, value);
+    self.used = used + 1;
 }
 
 fn Formatter::write_char_n(self, c, n) {

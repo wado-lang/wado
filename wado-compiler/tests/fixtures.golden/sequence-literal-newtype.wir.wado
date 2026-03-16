@@ -80,9 +80,9 @@ struct Vec3 {
     mut z: f64,
 }
 
-array array<f64> (mut f64);
-
 array array<u64> (mut u64);
+
+array array<f64> (mut f64);
 
 struct Array<f64> {  // Array<T> with T=f64
     mut repr: ref array<f64>,
@@ -188,10 +188,6 @@ type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
 type "functype/fmt_float_special" = fn(ref Formatter, bool, enum:SpecialKind, ref String);
 
-type "functype/Vec3Builder^SequenceLiteralBuilder::build" = fn(ref Vec3Builder) -> ref Vec3;
-
-type "functype/Array<f64>::append" = fn(ref Array<f64>, f64);
-
 type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
 
 type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
@@ -209,6 +205,10 @@ type "functype/String::append_byte_filled" = fn(ref String, u8, i32);
 type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/Vec3Builder^SequenceLiteralBuilder::build" = fn(ref Vec3Builder) -> ref Vec3;
+
+type "functype/Array<f64>::append" = fn(ref Array<f64>, f64);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -238,13 +238,13 @@ type "functype/check_special" = fn(f64) -> [bool, bool, i32];
 
 type "functype/Vec3Builder^SequenceLiteralBuilder::build" = fn(ref Vec3Builder) -> [f64, f64, f64];
 
-type "functype/Vec3Builder^SequenceLiteralBuilder::build" = fn(ref Array<f64>) -> [f64, f64, f64];
-
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 type "functype/f64::inspect_into" = fn(f64, ref Formatter);
 
 type "functype/f64::fmt_fixed" = fn(f64, i32, ref Formatter);
+
+type "functype/Vec3Builder^SequenceLiteralBuilder::build" = fn(ref Array<f64>) -> [f64, f64, f64];
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -260,9 +260,9 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut POW10: ref null Array<u64> = ref.null none;
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let __local_0: ref Vec3Builder;
@@ -324,7 +324,7 @@ fn run() with Stdout {
             String::append_char(__local_12, 97);
             String::append_char(__local_12, 116);
             String::append_char(__local_12, 32);
-            String::append(__local_12, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/sequence-literal-newtype.wado"), used: 74 });
+            String::append(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/sequence-literal-newtype.wado"), used: 58 });
             String::append_char(__local_12, 58);
             __local_13 = __inline_Formatter__new_7: block -> ref Formatter {
                 __local_29 = __local_12;
@@ -364,7 +364,7 @@ condition: p.x == 1.0
             String::append_char(__local_14, 97);
             String::append_char(__local_14, 116);
             String::append_char(__local_14, 32);
-            String::append(__local_14, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/sequence-literal-newtype.wado"), used: 74 });
+            String::append(__local_14, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/sequence-literal-newtype.wado"), used: 58 });
             String::append_char(__local_14, 58);
             __local_15 = __inline_Formatter__new_13: block -> ref Formatter {
                 __local_38 = __local_14;
@@ -404,7 +404,7 @@ condition: p.y == 2.0
             String::append_char(__local_16, 97);
             String::append_char(__local_16, 116);
             String::append_char(__local_16, 32);
-            String::append(__local_16, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/sequence-literal-newtype.wado"), used: 74 });
+            String::append(__local_16, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/sequence-literal-newtype.wado"), used: 58 });
             String::append_char(__local_16, 58);
             __local_17 = __inline_Formatter__new_19: block -> ref Formatter {
                 __local_47 = __local_16;
@@ -449,7 +449,7 @@ condition: p.z == 3.0
             String::append_char(__local_18, 97);
             String::append_char(__local_18, 116);
             String::append_char(__local_18, 32);
-            String::append(__local_18, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/sequence-literal-newtype.wado"), used: 74 });
+            String::append(__local_18, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/sequence-literal-newtype.wado"), used: 58 });
             String::append_char(__local_18, 58);
             __local_19 = __inline_Formatter__new_30: block -> ref Formatter {
                 __local_64 = __local_18;
@@ -1652,55 +1652,6 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
     Formatter::apply_padding(f, mark);
 }
 
-fn Vec3Builder^SequenceLiteralBuilder::build(self) {
-    let __local_1: ref Array<f64>;
-    let __local_3: ref Array<f64>;
-    let __local_5: ref Array<f64>;
-    return __inline_Array_f64__IndexValue__index_value_0: block -> f64 {
-        __local_1 = self;
-        if 0 >= __local_1.used {
-            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        };
-        break __inline_Array_f64__IndexValue__index_value_0: builtin::array_get<f64>(__local_1.repr, 0);
-    }; __inline_Array_f64__IndexValue__index_value_1: block -> f64 {
-        __local_3 = self;
-        if 1 >= __local_3.used {
-            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        };
-        break __inline_Array_f64__IndexValue__index_value_1: builtin::array_get<f64>(__local_3.repr, 1);
-    }; __inline_Array_f64__IndexValue__index_value_2: block -> f64 {
-        __local_5 = self;
-        if 2 >= __local_5.used {
-            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        };
-        break __inline_Array_f64__IndexValue__index_value_2: builtin::array_get<f64>(__local_5.repr, 2);
-    };
-}
-
-fn Array<f64>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<f64>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<f64>(new_capacity);
-        builtin::array_copy<f64>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<f64>(self.repr, used, value);
-    self.used = used + 1;
-}
-
 fn Array<u64>::append(self, value) {
     let used: i32;
     let capacity: i32;
@@ -2007,6 +1958,55 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
+}
+
+fn Vec3Builder^SequenceLiteralBuilder::build(self) {
+    let __local_1: ref Array<f64>;
+    let __local_3: ref Array<f64>;
+    let __local_5: ref Array<f64>;
+    return __inline_Array_f64__IndexValue__index_value_0: block -> f64 {
+        __local_1 = self;
+        if 0 >= __local_1.used {
+            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+            unreachable;
+        };
+        break __inline_Array_f64__IndexValue__index_value_0: builtin::array_get<f64>(__local_1.repr, 0);
+    }; __inline_Array_f64__IndexValue__index_value_1: block -> f64 {
+        __local_3 = self;
+        if 1 >= __local_3.used {
+            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+            unreachable;
+        };
+        break __inline_Array_f64__IndexValue__index_value_1: builtin::array_get<f64>(__local_3.repr, 1);
+    }; __inline_Array_f64__IndexValue__index_value_2: block -> f64 {
+        __local_5 = self;
+        if 2 >= __local_5.used {
+            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+            unreachable;
+        };
+        break __inline_Array_f64__IndexValue__index_value_2: builtin::array_get<f64>(__local_5.repr, 2);
+    };
+}
+
+fn Array<f64>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<f64>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<f64>(new_capacity);
+        builtin::array_copy<f64>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<f64>(self.repr, used, value);
+    self.used = used + 1;
 }
 
 fn Formatter::write_char_n(self, c, n) {

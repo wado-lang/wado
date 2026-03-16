@@ -41,15 +41,15 @@ struct [Stream<u8>, StreamWritable<u8>] {
 
 array array<i32> (mut i32);
 
-struct Array<i32> {  // Array<T> with T=i32
-    mut repr: ref array<i32>,
-    mut used: i32,
-}
-
 array array<u64> (mut u64);
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
+    mut used: i32,
+}
+
+struct Array<i32> {  // Array<T> with T=i32
+    mut repr: ref array<i32>,
     mut used: i32,
 }
 
@@ -111,8 +111,6 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
-
 type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
 type "functype/String::grow" = fn(ref String, i32);
@@ -122,6 +120,8 @@ type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -149,8 +149,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let __local_1: ref Array<i32>;
@@ -238,7 +238,7 @@ fn run() with Stdout {
             String::append_char(__local_32, 97);
             String::append_char(__local_32, 116);
             String::append_char(__local_32, 32);
-            String::append(__local_32, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/u64_arithmetic.wado"), used: 64 });
+            String::append(__local_32, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/u64_arithmetic.wado"), used: 48 });
             String::append_char(__local_32, 58);
             __local_33 = __inline_Formatter__new_7: block -> ref Formatter {
                 __local_58 = __local_32;
@@ -280,7 +280,7 @@ condition: digits.len() == 5
             String::append_char(__local_34, 97);
             String::append_char(__local_34, 116);
             String::append_char(__local_34, 32);
-            String::append(__local_34, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/u64_arithmetic.wado"), used: 64 });
+            String::append(__local_34, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/u64_arithmetic.wado"), used: 48 });
             String::append_char(__local_34, 58);
             __local_35 = __inline_Formatter__new_15: block -> ref Formatter {
                 __local_71 = __local_34;
@@ -322,7 +322,7 @@ condition: digits[0] == 5
             String::append_char(__local_36, 97);
             String::append_char(__local_36, 116);
             String::append_char(__local_36, 32);
-            String::append(__local_36, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/u64_arithmetic.wado"), used: 64 });
+            String::append(__local_36, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/u64_arithmetic.wado"), used: 48 });
             String::append_char(__local_36, 58);
             __local_37 = __inline_Formatter__new_23: block -> ref Formatter {
                 __local_84 = __local_36;
@@ -364,7 +364,7 @@ condition: digits[1] == 4
             String::append_char(__local_38, 97);
             String::append_char(__local_38, 116);
             String::append_char(__local_38, 32);
-            String::append(__local_38, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/u64_arithmetic.wado"), used: 64 });
+            String::append(__local_38, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/u64_arithmetic.wado"), used: 48 });
             String::append_char(__local_38, 58);
             __local_39 = __inline_Formatter__new_31: block -> ref Formatter {
                 __local_97 = __local_38;
@@ -406,7 +406,7 @@ condition: digits[2] == 3
             String::append_char(__local_40, 97);
             String::append_char(__local_40, 116);
             String::append_char(__local_40, 32);
-            String::append(__local_40, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/u64_arithmetic.wado"), used: 64 });
+            String::append(__local_40, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/u64_arithmetic.wado"), used: 48 });
             String::append_char(__local_40, 58);
             __local_41 = __inline_Formatter__new_39: block -> ref Formatter {
                 __local_110 = __local_40;
@@ -448,7 +448,7 @@ condition: digits[3] == 2
             String::append_char(__local_42, 97);
             String::append_char(__local_42, 116);
             String::append_char(__local_42, 32);
-            String::append(__local_42, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/u64_arithmetic.wado"), used: 64 });
+            String::append(__local_42, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/u64_arithmetic.wado"), used: 48 });
             String::append_char(__local_42, 58);
             __local_43 = __inline_Formatter__new_47: block -> ref Formatter {
                 __local_123 = __local_42;
@@ -748,27 +748,6 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
     };
 }
 
-fn Array<i32>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<i32>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<i32>(new_capacity);
-        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
-}
-
 fn i32::fmt_decimal(self, f) {
     let is_negative: bool;
     let abs_val: i64;
@@ -863,6 +842,27 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
+}
+
+fn Array<i32>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<i32>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<i32>(new_capacity);
+        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<i32>(self.repr, used, value);
+    self.used = used + 1;
 }
 
 fn Formatter::write_char_n(self, c, n) {

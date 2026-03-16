@@ -133,36 +133,6 @@ struct Line {
 
 array array<u64> (mut u64);
 
-variant Result<String,SerializeError> {
-    Ok(ref String),
-    Err(ref "core:serde/SerializeError"),
-}
-
-struct Result<String,SerializeError>::Ok {
-    discriminant: i32,
-    payload_0: ref String,
-}
-
-struct Result<String,SerializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/SerializeError",
-}
-
-variant Result<Line,DeserializeError> {
-    Ok(ref Line),
-    Err(ref "core:serde/DeserializeError"),
-}
-
-struct Result<Line,DeserializeError>::Ok {
-    discriminant: i32,
-    payload_0: ref Line,
-}
-
-struct Result<Line,DeserializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/DeserializeError",
-}
-
 variant Option<char> {
     Some(char),
     None,
@@ -191,6 +161,36 @@ variant Option<u8> {
 struct Option<u8>::Some {
     discriminant: i32,
     payload_0: u8,
+}
+
+variant Result<String,SerializeError> {
+    Ok(ref String),
+    Err(ref "core:serde/SerializeError"),
+}
+
+struct Result<String,SerializeError>::Ok {
+    discriminant: i32,
+    payload_0: ref String,
+}
+
+struct Result<String,SerializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/SerializeError",
+}
+
+variant Result<Line,DeserializeError> {
+    Ok(ref Line),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<Line,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: ref Line,
+}
+
+struct Result<Line,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
 }
 
 variant Result<unit,SerializeError> {
@@ -442,22 +442,6 @@ type "functype/core:json/utf8_sequence_length" = fn(i32) -> i32;
 
 type "functype/core:json/write_escaped_string" = fn(ref String, ref String);
 
-type "functype/Line^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json/JsonDeserializer") -> ref Result<Line,DeserializeError>;
-
-type "functype/Point^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json/JsonDeserializer") -> ref Result<Point,DeserializeError>;
-
-type "functype/Line^Serialize::serialize<JsonSerializer>" = fn(ref Line, ref "core:json/JsonSerializer") -> ref Result<unit,SerializeError>;
-
-type "functype/JsonStructSerializer^SerializeStruct::field<Point>" = fn(ref "core:json/JsonStructSerializer", ref String, ref Point) -> ref Result<unit,SerializeError>;
-
-type "functype/Point^Serialize::serialize<JsonSerializer>" = fn(ref Point, ref "core:json/JsonSerializer") -> ref Result<unit,SerializeError>;
-
-type "functype/JsonStructSerializer^SerializeStruct::field<f64>" = fn(ref "core:json/JsonStructSerializer", ref String, ref "core:internal/Box<f64>") -> ref Result<unit,SerializeError>;
-
-type "functype/__Closure_0::__call" = fn(ref __Closure_0, ref String, i32, i32) -> ref Option<i32>;
-
-type "functype/__Closure_1::__call" = fn(ref __Closure_1, ref String, i32, i32) -> ref Option<i32>;
-
 type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
 
 type "functype/char::from_u32" = fn(u32) -> ref Option<char>;
@@ -489,6 +473,22 @@ type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> ref 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<char>;
 
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/Line^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json/JsonDeserializer") -> ref Result<Line,DeserializeError>;
+
+type "functype/Point^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json/JsonDeserializer") -> ref Result<Point,DeserializeError>;
+
+type "functype/Line^Serialize::serialize<JsonSerializer>" = fn(ref Line, ref "core:json/JsonSerializer") -> ref Result<unit,SerializeError>;
+
+type "functype/JsonStructSerializer^SerializeStruct::field<Point>" = fn(ref "core:json/JsonStructSerializer", ref String, ref Point) -> ref Result<unit,SerializeError>;
+
+type "functype/Point^Serialize::serialize<JsonSerializer>" = fn(ref Point, ref "core:json/JsonSerializer") -> ref Result<unit,SerializeError>;
+
+type "functype/JsonStructSerializer^SerializeStruct::field<f64>" = fn(ref "core:json/JsonStructSerializer", ref String, ref "core:internal/Box<f64>") -> ref Result<unit,SerializeError>;
+
+type "functype/__Closure_0::__call" = fn(ref __Closure_0, ref String, i32, i32) -> ref Option<i32>;
+
+type "functype/__Closure_1::__call" = fn(ref __Closure_1, ref String, i32, i32) -> ref Option<i32>;
 
 type "functype/core:json/JsonSerializer^Serializer::serialize_f64" = fn(ref "core:json/JsonSerializer", f64) -> ref Result<unit,SerializeError>;
 
@@ -544,19 +544,13 @@ type "functype/trim_zeros" = fn(u64, i32) -> [u64, i32];
 
 type "functype/check_special" = fn(f64) -> [bool, bool, i32];
 
-type "functype/Line^Serialize::serialize<JsonSerializer>" = fn(ref Line, ref "core:json/JsonSerializer") -> [i32, ref null "core:serde/SerializeError"];
-
 type "functype/char::from_u32" = fn(u32) -> [i32, char];
 
 type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> [i32, u8];
 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
-type "functype/Line^Serialize::serialize<JsonSerializer>" = fn(ref Line, ref String) -> [i32, ref null "core:serde/SerializeError"];
-
-type "functype/Point^Serialize::serialize<JsonSerializer>" = fn(ref Point, ref String) -> ref Result<unit,SerializeError>;
-
-type "functype/JsonStructSerializer^SerializeStruct::field<f64>" = fn(ref "core:json/JsonStructSerializer", ref String, f64) -> ref Result<unit,SerializeError>;
+type "functype/Line^Serialize::serialize<JsonSerializer>" = fn(ref Line, ref "core:json/JsonSerializer") -> [i32, ref null "core:serde/SerializeError"];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -567,6 +561,12 @@ type "functype/f64::inspect_into" = fn(f64, ref Formatter);
 type "functype/f64::fmt_fixed" = fn(f64, i32, ref Formatter);
 
 type "functype/char^Display::fmt" = fn(char, ref Formatter);
+
+type "functype/Line^Serialize::serialize<JsonSerializer>" = fn(ref Line, ref String) -> [i32, ref null "core:serde/SerializeError"];
+
+type "functype/Point^Serialize::serialize<JsonSerializer>" = fn(ref Point, ref String) -> ref Result<unit,SerializeError>;
+
+type "functype/JsonStructSerializer^SerializeStruct::field<f64>" = fn(ref "core:json/JsonStructSerializer", ref String, f64) -> ref Result<unit,SerializeError>;
 
 type "functype/core:json/JsonSerializer^Serializer::serialize_f64" = fn(ref String, f64) -> ref Result<unit,SerializeError>;
 
@@ -583,9 +583,9 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn subtask-drop from "wasi/subtask-drop";
 import fn stream-new from "wasi/stream-new";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut POW10: ref null Array<u64> = ref.null none;
+global mut __modules_initialized: bool = 0;
 
 fn __test_0_nested_struct_serialize() {
     let line: ref Line;
@@ -620,7 +620,7 @@ fn __test_0_nested_struct_serialize() {
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_nested_struct.wado"), used: 74 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_nested_struct.wado"), used: 58 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_2: block -> ref Formatter {
                     __local_9 = __local_5;
@@ -713,7 +713,7 @@ fn __test_1_nested_struct_roundtrip() {
                     String::append_char(__local_13, 97);
                     String::append_char(__local_13, 116);
                     String::append_char(__local_13, 32);
-                    String::append(__local_13, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_nested_struct.wado"), used: 74 });
+                    String::append(__local_13, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_nested_struct.wado"), used: 58 });
                     String::append_char(__local_13, 58);
                     __local_14 = __inline_Formatter__new_2: block -> ref Formatter {
                         __local_24 = __local_13;
@@ -747,7 +747,7 @@ condition: parsed.start_point.x == 10.5
                     String::append_char(__local_15, 97);
                     String::append_char(__local_15, 116);
                     String::append_char(__local_15, 32);
-                    String::append(__local_15, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_nested_struct.wado"), used: 74 });
+                    String::append(__local_15, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_nested_struct.wado"), used: 58 });
                     String::append_char(__local_15, 58);
                     __local_16 = __inline_Formatter__new_8: block -> ref Formatter {
                         __local_33 = __local_15;
@@ -781,7 +781,7 @@ condition: parsed.start_point.y == 20.5
                     String::append_char(__local_17, 97);
                     String::append_char(__local_17, 116);
                     String::append_char(__local_17, 32);
-                    String::append(__local_17, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_nested_struct.wado"), used: 74 });
+                    String::append(__local_17, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_nested_struct.wado"), used: 58 });
                     String::append_char(__local_17, 58);
                     __local_18 = __inline_Formatter__new_14: block -> ref Formatter {
                         __local_42 = __local_17;
@@ -815,7 +815,7 @@ condition: parsed.end_point.x == 30.5
                     String::append_char(__local_19, 97);
                     String::append_char(__local_19, 116);
                     String::append_char(__local_19, 32);
-                    String::append(__local_19, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_nested_struct.wado"), used: 74 });
+                    String::append(__local_19, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_nested_struct.wado"), used: 58 });
                     String::append_char(__local_19, 58);
                     __local_20 = __inline_Formatter__new_20: block -> ref Formatter {
                         __local_51 = __local_19;
@@ -2267,238 +2267,6 @@ fn "core:json/write_escaped_string"(buf, s) {  // from core:json
     String::append_char(buf, 34);
 }
 
-fn Line^Deserialize::deserialize<JsonDeserializer>(d) {
-    let __result: ref Result<JsonStructAccess,DeserializeError>;
-    let sd: ref "core:json/JsonStructAccess";
-    let seen: u32;
-    let start_point: ref Point;
-    let end_point: ref Point;
-    let __next: ref Result<Option<i32>,DeserializeError>;
-    let __opt: ref Option<i32>;
-    let __idx: i32;
-    let __local_9: ref Result<Point,DeserializeError>;
-    let __local_10: ref Point;
-    let __local_11: ref Result<Point,DeserializeError>;
-    let __local_12: ref Point;
-    let __pattern_temp_1: ref Result<Option<i32>,DeserializeError>;
-    let __local_16: ref Result<Point,DeserializeError>;
-    let __local_17: ref Result<Point,DeserializeError>;
-    __result = "core:json/JsonDeserializer^Deserializer::begin_struct"(d, String { repr: array.new_data<u8>("Line"), used: 4 }, 2, "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/__closure_wrapper_0") });
-    if ref.test Result<JsonStructAccess,DeserializeError>::Ok(__result) {
-        sd = value_copy "core:json/JsonStructAccess"(ref.cast Result<JsonStructAccess,DeserializeError>::Ok(__result).payload_0);
-        seen = 0;
-        start_point = ref.null none;
-        end_point = ref.null none;
-        b184: block {
-            l185: loop {
-                __next = "core:json/JsonStructAccess^DeserializeStruct::next_field"(sd);
-                __pattern_temp_1 = value_copy Result<Option<i32>,DeserializeError>(__next);
-                if ref.test Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1) {
-                    __opt = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0);
-                    if ref.test Option<i32>::Some(__opt) {
-                        __idx = ref.cast Option<i32>::Some(__opt).payload_0;
-                        let __match_scrut_0: i32;
-                        __match_scrut_0 = __idx;
-                        if __match_scrut_0 == 0 {
-                            __local_9 = Point^Deserialize::deserialize<JsonDeserializer>(sd.de);
-                            __local_16 = value_copy Result<Point,DeserializeError>(__local_9);
-                            if ref.test Result<Point,DeserializeError>::Ok(__local_16) {
-                                __local_10 = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(__local_16).payload_0);
-                                start_point = value_copy Point(__local_10);
-                                seen = seen | 1;
-                            } else {
-                                return Result<Line,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<Point,DeserializeError>::Err(__local_9).payload_0) };
-                            };
-                        } else if __match_scrut_0 == 1 {
-                            __local_11 = Point^Deserialize::deserialize<JsonDeserializer>(sd.de);
-                            __local_17 = value_copy Result<Point,DeserializeError>(__local_11);
-                            if ref.test Result<Point,DeserializeError>::Ok(__local_17) {
-                                __local_12 = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(__local_17).payload_0);
-                                end_point = value_copy Point(__local_12);
-                                seen = seen | 2;
-                            } else {
-                                return Result<Line,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<Point,DeserializeError>::Err(__local_11).payload_0) };
-                            };
-                        } else {
-                            drop("core:json/JsonDeserializer::skip_value"(sd.de));
-                        };
-                    } else {
-                        break b184;
-                    };
-                } else {
-                    return Result<Line,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<Option<i32>,DeserializeError>::Err(__next).payload_0) };
-                };
-                continue l185;
-            };
-        };
-        if (seen & 3) != 3 {
-            return Result<Line,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 1, message: String { repr: array.new_data<u8>("required field missing"), used: 22 }, offset: -1_i64 } };
-        };
-        drop("core:json/JsonDeserializer::expect_char"(sd.de, 125));
-        return Result<Line,DeserializeError>::Ok { discriminant: 0, payload_0: Line { start_point: ref.as_non_null(start_point), end_point: ref.as_non_null(end_point) } };
-    } else {
-        return Result<Line,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 9, message: String { repr: array.new_data<u8>("begin_struct failed"), used: 19 }, offset: -1_i64 } };
-    };
-}
-
-fn Point^Deserialize::deserialize<JsonDeserializer>(d) {
-    let __result: ref Result<JsonStructAccess,DeserializeError>;
-    let sd: ref "core:json/JsonStructAccess";
-    let seen: u32;
-    let x: f64;
-    let y: f64;
-    let __next: ref Result<Option<i32>,DeserializeError>;
-    let __opt: ref Option<i32>;
-    let __idx: i32;
-    let __local_9: ref Result<f64,DeserializeError>;
-    let __local_10: f64;
-    let __local_11: ref Result<f64,DeserializeError>;
-    let __local_12: f64;
-    let __pattern_temp_1: ref Result<Option<i32>,DeserializeError>;
-    let __local_16: ref Result<f64,DeserializeError>;
-    let __local_17: ref Result<f64,DeserializeError>;
-    let __local_19: ref "core:json/JsonDeserializer";
-    let __local_21: ref "core:json/JsonDeserializer";
-    __result = "core:json/JsonDeserializer^Deserializer::begin_struct"(d, String { repr: array.new_data<u8>("Point"), used: 5 }, 2, "canonical/CanonicalClosure_0" { env: __Closure_1 {  }, func: ref.as_non_null(ref.func "closure/__closure_wrapper_1") });
-    if ref.test Result<JsonStructAccess,DeserializeError>::Ok(__result) {
-        sd = value_copy "core:json/JsonStructAccess"(ref.cast Result<JsonStructAccess,DeserializeError>::Ok(__result).payload_0);
-        seen = 0;
-        x = 0;
-        y = 0;
-        b194: block {
-            l195: loop {
-                __next = "core:json/JsonStructAccess^DeserializeStruct::next_field"(sd);
-                __pattern_temp_1 = value_copy Result<Option<i32>,DeserializeError>(__next);
-                if ref.test Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1) {
-                    __opt = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0);
-                    if ref.test Option<i32>::Some(__opt) {
-                        __idx = ref.cast Option<i32>::Some(__opt).payload_0;
-                        let __match_scrut_0: i32;
-                        __match_scrut_0 = __idx;
-                        if __match_scrut_0 == 0 {
-                            __local_9 = __inline_f64_Deserialize__deserialize_JsonDeserializer__3: block -> ref Result<f64,DeserializeError> {
-                                __local_19 = sd.de;
-                                break __inline_f64_Deserialize__deserialize_JsonDeserializer__3: "core:json/JsonDeserializer::parse_f64_direct"(__local_19);
-                            };
-                            __local_16 = value_copy Result<f64,DeserializeError>(__local_9);
-                            if ref.test Result<f64,DeserializeError>::Ok(__local_16) {
-                                __local_10 = ref.cast Result<f64,DeserializeError>::Ok(__local_16).payload_0;
-                                x = __local_10;
-                                seen = seen | 1;
-                            } else {
-                                return Result<Point,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<f64,DeserializeError>::Err(__local_9).payload_0) };
-                            };
-                        } else if __match_scrut_0 == 1 {
-                            __local_11 = __inline_f64_Deserialize__deserialize_JsonDeserializer__5: block -> ref Result<f64,DeserializeError> {
-                                __local_21 = sd.de;
-                                break __inline_f64_Deserialize__deserialize_JsonDeserializer__5: "core:json/JsonDeserializer::parse_f64_direct"(__local_21);
-                            };
-                            __local_17 = value_copy Result<f64,DeserializeError>(__local_11);
-                            if ref.test Result<f64,DeserializeError>::Ok(__local_17) {
-                                __local_12 = ref.cast Result<f64,DeserializeError>::Ok(__local_17).payload_0;
-                                y = __local_12;
-                                seen = seen | 2;
-                            } else {
-                                return Result<Point,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<f64,DeserializeError>::Err(__local_11).payload_0) };
-                            };
-                        } else {
-                            drop("core:json/JsonDeserializer::skip_value"(sd.de));
-                        };
-                    } else {
-                        break b194;
-                    };
-                } else {
-                    return Result<Point,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<Option<i32>,DeserializeError>::Err(__next).payload_0) };
-                };
-                continue l195;
-            };
-        };
-        if (seen & 3) != 3 {
-            return Result<Point,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 1, message: String { repr: array.new_data<u8>("required field missing"), used: 22 }, offset: -1_i64 } };
-        };
-        drop("core:json/JsonDeserializer::expect_char"(sd.de, 125));
-        return Result<Point,DeserializeError>::Ok { discriminant: 0, payload_0: Point { x: x, y: y } };
-    } else {
-        return Result<Point,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 9, message: String { repr: array.new_data<u8>("begin_struct failed"), used: 19 }, offset: -1_i64 } };
-    };
-}
-
-fn Line^Serialize::serialize<JsonSerializer>(self, s) {
-    let name: ref String;
-    let __fused_payload_9: ref "core:json/JsonStructSerializer";
-    __fused___inline_JsonSerializer_Serializer__begin_struct_0: block {
-        name = String { repr: array.new_data<u8>("Line"), used: 4 };
-        String::append_char(s, 123);
-        __fused_payload_9 = "core:json/JsonStructSerializer" { buf: ref.as_non_null(s), count: 0 };
-        drop(JsonStructSerializer^SerializeStruct::field<Point>(__fused_payload_9, String { repr: array.new_data<u8>("startPoint"), used: 10 }, self.start_point));
-        drop(JsonStructSerializer^SerializeStruct::field<Point>(__fused_payload_9, String { repr: array.new_data<u8>("endPoint"), used: 8 }, self.end_point));
-        block {
-            String::append_char(__fused_payload_9.buf, 125);
-            return 0; ref.null none;
-        };
-        break __fused___inline_JsonSerializer_Serializer__begin_struct_0;
-    };
-}
-
-fn JsonStructSerializer^SerializeStruct::field<Point>(self, name, value) {
-    let ser: ref "core:json/JsonSerializer";
-    let r: ref Result<unit,SerializeError>;
-    if self.count > 0 {
-        String::append_char(self.buf, 44);
-    };
-    "core:json/write_escaped_string"(self.buf, name);
-    String::append_char(self.buf, 58);
-    ser = "core:json/JsonSerializer" { buf: ref.as_non_null(self.buf) };
-    r = Point^Serialize::serialize<JsonSerializer>(value, ser.buf);
-    self.buf = ref.as_non_null(ser.buf);
-    self.count = self.count + 1;
-    return r;
-}
-
-fn Point^Serialize::serialize<JsonSerializer>(self, s) {
-    let name: ref String;
-    let __fused_payload_9: ref "core:json/JsonStructSerializer";
-    __fused___inline_JsonSerializer_Serializer__begin_struct_0: block {
-        name = String { repr: array.new_data<u8>("Point"), used: 5 };
-        String::append_char(s, 123);
-        __fused_payload_9 = "core:json/JsonStructSerializer" { buf: ref.as_non_null(s), count: 0 };
-        drop(JsonStructSerializer^SerializeStruct::field<f64>(__fused_payload_9, String { repr: array.new_data<u8>("x"), used: 1 }, self.x));
-        drop(JsonStructSerializer^SerializeStruct::field<f64>(__fused_payload_9, String { repr: array.new_data<u8>("y"), used: 1 }, self.y));
-        return __inline_JsonStructSerializer_SerializeStruct__end_1: block -> ref Result<unit,SerializeError> {
-            String::append_char(__fused_payload_9.buf, 125);
-            break __inline_JsonStructSerializer_SerializeStruct__end_1: Result<unit,SerializeError> { 0, nop };
-        };
-        break __fused___inline_JsonSerializer_Serializer__begin_struct_0;
-    };
-}
-
-fn JsonStructSerializer^SerializeStruct::field<f64>(self, name, value) {
-    let ser: ref "core:json/JsonSerializer";
-    let r: ref Result<unit,SerializeError>;
-    let __local_6: ref "core:json/JsonSerializer";
-    if self.count > 0 {
-        String::append_char(self.buf, 44);
-    };
-    "core:json/write_escaped_string"(self.buf, name);
-    String::append_char(self.buf, 58);
-    ser = "core:json/JsonSerializer" { buf: ref.as_non_null(self.buf) };
-    r = __inline_f64_Serialize__serialize_JsonSerializer__0: block -> ref Result<unit,SerializeError> {
-        __local_6 = ser;
-        break __inline_f64_Serialize__serialize_JsonSerializer__0: "core:json/JsonSerializer^Serializer::serialize_f64"(__local_6.buf, value);
-    };
-    self.buf = ref.as_non_null(ser.buf);
-    self.count = self.count + 1;
-    return r;
-}
-
-fn __Closure_0::__call(self, __input, __start, __end) {
-    return _line_field_lookup(__input, __start, __end);
-}
-
-fn __Closure_1::__call(self, __input, __start, __end) {
-    return _point_field_lookup(__input, __start, __end);
-}
-
 fn Array<u64>::append(self, value) {
     let used: i32;
     let capacity: i32;
@@ -2894,7 +2662,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l246: loop {
+            l224: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -2902,7 +2670,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l246;
+                continue l224;
             };
         };
     };
@@ -3000,6 +2768,238 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
+}
+
+fn Line^Deserialize::deserialize<JsonDeserializer>(d) {
+    let __result: ref Result<JsonStructAccess,DeserializeError>;
+    let sd: ref "core:json/JsonStructAccess";
+    let seen: u32;
+    let start_point: ref Point;
+    let end_point: ref Point;
+    let __next: ref Result<Option<i32>,DeserializeError>;
+    let __opt: ref Option<i32>;
+    let __idx: i32;
+    let __local_9: ref Result<Point,DeserializeError>;
+    let __local_10: ref Point;
+    let __local_11: ref Result<Point,DeserializeError>;
+    let __local_12: ref Point;
+    let __pattern_temp_1: ref Result<Option<i32>,DeserializeError>;
+    let __local_16: ref Result<Point,DeserializeError>;
+    let __local_17: ref Result<Point,DeserializeError>;
+    __result = "core:json/JsonDeserializer^Deserializer::begin_struct"(d, String { repr: array.new_data<u8>("Line"), used: 4 }, 2, "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/__closure_wrapper_0") });
+    if ref.test Result<JsonStructAccess,DeserializeError>::Ok(__result) {
+        sd = value_copy "core:json/JsonStructAccess"(ref.cast Result<JsonStructAccess,DeserializeError>::Ok(__result).payload_0);
+        seen = 0;
+        start_point = ref.null none;
+        end_point = ref.null none;
+        b237: block {
+            l238: loop {
+                __next = "core:json/JsonStructAccess^DeserializeStruct::next_field"(sd);
+                __pattern_temp_1 = value_copy Result<Option<i32>,DeserializeError>(__next);
+                if ref.test Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1) {
+                    __opt = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0);
+                    if ref.test Option<i32>::Some(__opt) {
+                        __idx = ref.cast Option<i32>::Some(__opt).payload_0;
+                        let __match_scrut_0: i32;
+                        __match_scrut_0 = __idx;
+                        if __match_scrut_0 == 0 {
+                            __local_9 = Point^Deserialize::deserialize<JsonDeserializer>(sd.de);
+                            __local_16 = value_copy Result<Point,DeserializeError>(__local_9);
+                            if ref.test Result<Point,DeserializeError>::Ok(__local_16) {
+                                __local_10 = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(__local_16).payload_0);
+                                start_point = value_copy Point(__local_10);
+                                seen = seen | 1;
+                            } else {
+                                return Result<Line,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<Point,DeserializeError>::Err(__local_9).payload_0) };
+                            };
+                        } else if __match_scrut_0 == 1 {
+                            __local_11 = Point^Deserialize::deserialize<JsonDeserializer>(sd.de);
+                            __local_17 = value_copy Result<Point,DeserializeError>(__local_11);
+                            if ref.test Result<Point,DeserializeError>::Ok(__local_17) {
+                                __local_12 = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(__local_17).payload_0);
+                                end_point = value_copy Point(__local_12);
+                                seen = seen | 2;
+                            } else {
+                                return Result<Line,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<Point,DeserializeError>::Err(__local_11).payload_0) };
+                            };
+                        } else {
+                            drop("core:json/JsonDeserializer::skip_value"(sd.de));
+                        };
+                    } else {
+                        break b237;
+                    };
+                } else {
+                    return Result<Line,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<Option<i32>,DeserializeError>::Err(__next).payload_0) };
+                };
+                continue l238;
+            };
+        };
+        if (seen & 3) != 3 {
+            return Result<Line,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 1, message: String { repr: array.new_data<u8>("required field missing"), used: 22 }, offset: -1_i64 } };
+        };
+        drop("core:json/JsonDeserializer::expect_char"(sd.de, 125));
+        return Result<Line,DeserializeError>::Ok { discriminant: 0, payload_0: Line { start_point: ref.as_non_null(start_point), end_point: ref.as_non_null(end_point) } };
+    } else {
+        return Result<Line,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 9, message: String { repr: array.new_data<u8>("begin_struct failed"), used: 19 }, offset: -1_i64 } };
+    };
+}
+
+fn Point^Deserialize::deserialize<JsonDeserializer>(d) {
+    let __result: ref Result<JsonStructAccess,DeserializeError>;
+    let sd: ref "core:json/JsonStructAccess";
+    let seen: u32;
+    let x: f64;
+    let y: f64;
+    let __next: ref Result<Option<i32>,DeserializeError>;
+    let __opt: ref Option<i32>;
+    let __idx: i32;
+    let __local_9: ref Result<f64,DeserializeError>;
+    let __local_10: f64;
+    let __local_11: ref Result<f64,DeserializeError>;
+    let __local_12: f64;
+    let __pattern_temp_1: ref Result<Option<i32>,DeserializeError>;
+    let __local_16: ref Result<f64,DeserializeError>;
+    let __local_17: ref Result<f64,DeserializeError>;
+    let __local_19: ref "core:json/JsonDeserializer";
+    let __local_21: ref "core:json/JsonDeserializer";
+    __result = "core:json/JsonDeserializer^Deserializer::begin_struct"(d, String { repr: array.new_data<u8>("Point"), used: 5 }, 2, "canonical/CanonicalClosure_0" { env: __Closure_1 {  }, func: ref.as_non_null(ref.func "closure/__closure_wrapper_1") });
+    if ref.test Result<JsonStructAccess,DeserializeError>::Ok(__result) {
+        sd = value_copy "core:json/JsonStructAccess"(ref.cast Result<JsonStructAccess,DeserializeError>::Ok(__result).payload_0);
+        seen = 0;
+        x = 0;
+        y = 0;
+        b247: block {
+            l248: loop {
+                __next = "core:json/JsonStructAccess^DeserializeStruct::next_field"(sd);
+                __pattern_temp_1 = value_copy Result<Option<i32>,DeserializeError>(__next);
+                if ref.test Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1) {
+                    __opt = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0);
+                    if ref.test Option<i32>::Some(__opt) {
+                        __idx = ref.cast Option<i32>::Some(__opt).payload_0;
+                        let __match_scrut_0: i32;
+                        __match_scrut_0 = __idx;
+                        if __match_scrut_0 == 0 {
+                            __local_9 = __inline_f64_Deserialize__deserialize_JsonDeserializer__3: block -> ref Result<f64,DeserializeError> {
+                                __local_19 = sd.de;
+                                break __inline_f64_Deserialize__deserialize_JsonDeserializer__3: "core:json/JsonDeserializer::parse_f64_direct"(__local_19);
+                            };
+                            __local_16 = value_copy Result<f64,DeserializeError>(__local_9);
+                            if ref.test Result<f64,DeserializeError>::Ok(__local_16) {
+                                __local_10 = ref.cast Result<f64,DeserializeError>::Ok(__local_16).payload_0;
+                                x = __local_10;
+                                seen = seen | 1;
+                            } else {
+                                return Result<Point,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<f64,DeserializeError>::Err(__local_9).payload_0) };
+                            };
+                        } else if __match_scrut_0 == 1 {
+                            __local_11 = __inline_f64_Deserialize__deserialize_JsonDeserializer__5: block -> ref Result<f64,DeserializeError> {
+                                __local_21 = sd.de;
+                                break __inline_f64_Deserialize__deserialize_JsonDeserializer__5: "core:json/JsonDeserializer::parse_f64_direct"(__local_21);
+                            };
+                            __local_17 = value_copy Result<f64,DeserializeError>(__local_11);
+                            if ref.test Result<f64,DeserializeError>::Ok(__local_17) {
+                                __local_12 = ref.cast Result<f64,DeserializeError>::Ok(__local_17).payload_0;
+                                y = __local_12;
+                                seen = seen | 2;
+                            } else {
+                                return Result<Point,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<f64,DeserializeError>::Err(__local_11).payload_0) };
+                            };
+                        } else {
+                            drop("core:json/JsonDeserializer::skip_value"(sd.de));
+                        };
+                    } else {
+                        break b247;
+                    };
+                } else {
+                    return Result<Point,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<Option<i32>,DeserializeError>::Err(__next).payload_0) };
+                };
+                continue l248;
+            };
+        };
+        if (seen & 3) != 3 {
+            return Result<Point,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 1, message: String { repr: array.new_data<u8>("required field missing"), used: 22 }, offset: -1_i64 } };
+        };
+        drop("core:json/JsonDeserializer::expect_char"(sd.de, 125));
+        return Result<Point,DeserializeError>::Ok { discriminant: 0, payload_0: Point { x: x, y: y } };
+    } else {
+        return Result<Point,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 9, message: String { repr: array.new_data<u8>("begin_struct failed"), used: 19 }, offset: -1_i64 } };
+    };
+}
+
+fn Line^Serialize::serialize<JsonSerializer>(self, s) {
+    let name: ref String;
+    let __fused_payload_9: ref "core:json/JsonStructSerializer";
+    __fused___inline_JsonSerializer_Serializer__begin_struct_0: block {
+        name = String { repr: array.new_data<u8>("Line"), used: 4 };
+        String::append_char(s, 123);
+        __fused_payload_9 = "core:json/JsonStructSerializer" { buf: ref.as_non_null(s), count: 0 };
+        drop(JsonStructSerializer^SerializeStruct::field<Point>(__fused_payload_9, String { repr: array.new_data<u8>("startPoint"), used: 10 }, self.start_point));
+        drop(JsonStructSerializer^SerializeStruct::field<Point>(__fused_payload_9, String { repr: array.new_data<u8>("endPoint"), used: 8 }, self.end_point));
+        block {
+            String::append_char(__fused_payload_9.buf, 125);
+            return 0; ref.null none;
+        };
+        break __fused___inline_JsonSerializer_Serializer__begin_struct_0;
+    };
+}
+
+fn JsonStructSerializer^SerializeStruct::field<Point>(self, name, value) {
+    let ser: ref "core:json/JsonSerializer";
+    let r: ref Result<unit,SerializeError>;
+    if self.count > 0 {
+        String::append_char(self.buf, 44);
+    };
+    "core:json/write_escaped_string"(self.buf, name);
+    String::append_char(self.buf, 58);
+    ser = "core:json/JsonSerializer" { buf: ref.as_non_null(self.buf) };
+    r = Point^Serialize::serialize<JsonSerializer>(value, ser.buf);
+    self.buf = ref.as_non_null(ser.buf);
+    self.count = self.count + 1;
+    return r;
+}
+
+fn Point^Serialize::serialize<JsonSerializer>(self, s) {
+    let name: ref String;
+    let __fused_payload_9: ref "core:json/JsonStructSerializer";
+    __fused___inline_JsonSerializer_Serializer__begin_struct_0: block {
+        name = String { repr: array.new_data<u8>("Point"), used: 5 };
+        String::append_char(s, 123);
+        __fused_payload_9 = "core:json/JsonStructSerializer" { buf: ref.as_non_null(s), count: 0 };
+        drop(JsonStructSerializer^SerializeStruct::field<f64>(__fused_payload_9, String { repr: array.new_data<u8>("x"), used: 1 }, self.x));
+        drop(JsonStructSerializer^SerializeStruct::field<f64>(__fused_payload_9, String { repr: array.new_data<u8>("y"), used: 1 }, self.y));
+        return __inline_JsonStructSerializer_SerializeStruct__end_1: block -> ref Result<unit,SerializeError> {
+            String::append_char(__fused_payload_9.buf, 125);
+            break __inline_JsonStructSerializer_SerializeStruct__end_1: Result<unit,SerializeError> { 0, nop };
+        };
+        break __fused___inline_JsonSerializer_Serializer__begin_struct_0;
+    };
+}
+
+fn JsonStructSerializer^SerializeStruct::field<f64>(self, name, value) {
+    let ser: ref "core:json/JsonSerializer";
+    let r: ref Result<unit,SerializeError>;
+    let __local_6: ref "core:json/JsonSerializer";
+    if self.count > 0 {
+        String::append_char(self.buf, 44);
+    };
+    "core:json/write_escaped_string"(self.buf, name);
+    String::append_char(self.buf, 58);
+    ser = "core:json/JsonSerializer" { buf: ref.as_non_null(self.buf) };
+    r = __inline_f64_Serialize__serialize_JsonSerializer__0: block -> ref Result<unit,SerializeError> {
+        __local_6 = ser;
+        break __inline_f64_Serialize__serialize_JsonSerializer__0: "core:json/JsonSerializer^Serializer::serialize_f64"(__local_6.buf, value);
+    };
+    self.buf = ref.as_non_null(ser.buf);
+    self.count = self.count + 1;
+    return r;
+}
+
+fn __Closure_0::__call(self, __input, __start, __end) {
+    return _line_field_lookup(__input, __start, __end);
+}
+
+fn __Closure_1::__call(self, __input, __start, __end) {
+    return _point_field_lookup(__input, __start, __end);
 }
 
 fn "core:json/JsonSerializer^Serializer::serialize_f64"(self, v) {  // from core:json

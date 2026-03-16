@@ -111,8 +111,6 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
-
 type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
 type "functype/String::grow" = fn(ref String, i32);
@@ -122,6 +120,8 @@ type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -149,8 +149,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let __local_0: ref SeqVec<i32>;
@@ -236,7 +236,7 @@ fn run() with Stdout {
             String::append_char(__local_14, 97);
             String::append_char(__local_14, 116);
             String::append_char(__local_14, 32);
-            String::append(__local_14, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/sequence-literal-custom.wado"), used: 73 });
+            String::append(__local_14, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/sequence-literal-custom.wado"), used: 57 });
             String::append_char(__local_14, 58);
             __local_15 = __inline_Formatter__new_11: block -> ref Formatter {
                 __local_37 = __local_14;
@@ -279,7 +279,7 @@ condition: s.len() == 3
             String::append_char(__local_16, 97);
             String::append_char(__local_16, 116);
             String::append_char(__local_16, 32);
-            String::append(__local_16, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/sequence-literal-custom.wado"), used: 73 });
+            String::append(__local_16, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/sequence-literal-custom.wado"), used: 57 });
             String::append_char(__local_16, 58);
             __local_17 = __inline_Formatter__new_20: block -> ref Formatter {
                 __local_52 = __local_16;
@@ -322,7 +322,7 @@ condition: s.get(0) == 10
             String::append_char(__local_18, 97);
             String::append_char(__local_18, 116);
             String::append_char(__local_18, 32);
-            String::append(__local_18, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/sequence-literal-custom.wado"), used: 73 });
+            String::append(__local_18, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/sequence-literal-custom.wado"), used: 57 });
             String::append_char(__local_18, 58);
             __local_19 = __inline_Formatter__new_29: block -> ref Formatter {
                 __local_67 = __local_18;
@@ -365,7 +365,7 @@ condition: s.get(1) == 20
             String::append_char(__local_20, 97);
             String::append_char(__local_20, 116);
             String::append_char(__local_20, 32);
-            String::append(__local_20, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/sequence-literal-custom.wado"), used: 73 });
+            String::append(__local_20, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/sequence-literal-custom.wado"), used: 57 });
             String::append_char(__local_20, 58);
             __local_21 = __inline_Formatter__new_38: block -> ref Formatter {
                 __local_82 = __local_20;
@@ -414,7 +414,7 @@ condition: s.get(2) == 30
             String::append_char(__local_22, 97);
             String::append_char(__local_22, 116);
             String::append_char(__local_22, 32);
-            String::append(__local_22, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/sequence-literal-custom.wado"), used: 73 });
+            String::append(__local_22, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/sequence-literal-custom.wado"), used: 57 });
             String::append_char(__local_22, 58);
             __local_23 = __inline_Formatter__new_53: block -> ref Formatter {
                 __local_104 = __local_22;
@@ -714,27 +714,6 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
     };
 }
 
-fn Array<i32>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<i32>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<i32>(new_capacity);
-        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
-}
-
 fn i32::fmt_decimal(self, f) {
     let is_negative: bool;
     let abs_val: i64;
@@ -829,6 +808,27 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
+}
+
+fn Array<i32>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<i32>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<i32>(new_capacity);
+        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<i32>(self.repr, used, value);
+    self.used = used + 1;
 }
 
 fn Formatter::write_char_n(self, c, n) {

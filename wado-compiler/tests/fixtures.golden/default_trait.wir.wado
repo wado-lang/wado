@@ -49,9 +49,9 @@ struct [Stream<u8>, StreamWritable<u8>] {
     mut 1: i32,
 }
 
-array array<i32> (mut i32);
-
 array array<u64> (mut u64);
+
+array array<i32> (mut i32);
 
 variant Option<char> {
     Some(char),
@@ -63,13 +63,13 @@ struct Option<char>::Some {
     payload_0: char,
 }
 
-struct Array<i32> {  // Array<T> with T=i32
-    mut repr: ref array<i32>,
+struct Array<u64> {  // Array<T> with T=u64
+    mut repr: ref array<u64>,
     mut used: i32,
 }
 
-struct Array<u64> {  // Array<T> with T=u64
-    mut repr: ref array<u64>,
+struct Array<i32> {  // Array<T> with T=i32
+    mut repr: ref array<i32>,
     mut used: i32,
 }
 
@@ -170,8 +170,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn subtask-drop from "wasi/subtask-drop";
 import fn stream-new from "wasi/stream-new";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn run() {
     let __v0_6: ref String;
@@ -211,7 +211,7 @@ fn run() {
             String::append_char(__local_17, 97);
             String::append_char(__local_17, 116);
             String::append_char(__local_17, 32);
-            String::append(__local_17, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/default_trait.wado"), used: 63 });
+            String::append(__local_17, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/default_trait.wado"), used: 47 });
             String::append_char(__local_17, 58);
             __local_18 = __inline_Formatter__new_26: block -> ref Formatter {
                 __local_53 = __local_17;
@@ -250,7 +250,7 @@ condition: String::default() == \"\"
             String::append_char(__local_19, 97);
             String::append_char(__local_19, 116);
             String::append_char(__local_19, 32);
-            String::append(__local_19, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/default_trait.wado"), used: 63 });
+            String::append(__local_19, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/default_trait.wado"), used: 47 });
             String::append_char(__local_19, 58);
             __local_20 = __inline_Formatter__new_36: block -> ref Formatter {
                 __local_65 = __local_19;

@@ -80,16 +80,36 @@ array array<i32> (mut i32);
 
 array array<String> (mut ref String);
 
-struct ArrayIter<String> {  // from core:allocator  // ArrayIter<T> with T=String
+struct ArrayIter<String> {  // from core:serde  // ArrayIter<T> with T=String
     mut repr: ref array<String>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // from core:serde  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
+}
+
+variant Option<char> {
+    Some(char),
+    None,
+}
+
+struct Option<char>::Some {
+    discriminant: i32,
+    payload_0: char,
+}
+
+variant Option<i32> {
+    Some(i32),
+    None,
+}
+
+struct Option<i32>::Some {
+    discriminant: i32,
+    payload_0: i32,
 }
 
 variant Result<String,SerializeError> {
@@ -120,26 +140,6 @@ struct Result<i32,DeserializeError>::Ok {
 struct Result<i32,DeserializeError>::Err {
     discriminant: i32,
     payload_0: ref "core:serde/DeserializeError",
-}
-
-variant Option<char> {
-    Some(char),
-    None,
-}
-
-struct Option<char>::Some {
-    discriminant: i32,
-    payload_0: char,
-}
-
-variant Option<i32> {
-    Some(i32),
-    None,
-}
-
-struct Option<i32>::Some {
-    discriminant: i32,
-    payload_0: i32,
 }
 
 variant Result<unit,SerializeError> {
@@ -177,6 +177,13 @@ struct Option<String>::Some {
     payload_0: ref String,
 }
 
+array array<u64> (mut u64);
+
+struct Array<u64> {  // Array<T> with T=u64
+    mut repr: ref array<u64>,
+    mut used: i32,
+}
+
 struct Array<String> {  // Array<T> with T=String
     mut repr: ref array<String>,
     mut used: i32,
@@ -184,13 +191,6 @@ struct Array<String> {  // Array<T> with T=String
 
 struct Array<i32> {  // Array<T> with T=i32
     mut repr: ref array<i32>,
-    mut used: i32,
-}
-
-array array<u64> (mut u64);
-
-struct Array<u64> {  // Array<T> with T=u64
-    mut repr: ref array<u64>,
     mut used: i32,
 }
 
@@ -282,22 +282,6 @@ type "functype/core:json/hex_digit" = fn(i32) -> char;
 
 type "functype/core:json/write_escaped_string" = fn(ref String, ref String);
 
-type "functype/Array<i32>^Serialize::serialize<JsonSerializer>" = fn(ref Array<i32>, ref "core:json/JsonSerializer") -> ref Result<unit,SerializeError>;
-
-type "functype/JsonSeqSerializer^SerializeSeq::element<i32>" = fn(ref "core:json/JsonSeqSerializer", ref "core:internal/Box<i32>") -> ref Result<unit,SerializeError>;
-
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> ref Option<i32>;
-
-type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
-
-type "functype/Array<String>^Serialize::serialize<JsonSerializer>" = fn(ref Array<String>, ref "core:json/JsonSerializer") -> ref Result<unit,SerializeError>;
-
-type "functype/JsonSeqSerializer^SerializeSeq::element<String>" = fn(ref "core:json/JsonSeqSerializer", ref String) -> ref Result<unit,SerializeError>;
-
-type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:allocator/ArrayIter<String>") -> ref Option<String>;
-
-type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
-
 type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
 type "functype/String::grow" = fn(ref String, i32);
@@ -311,6 +295,22 @@ type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<char>;
 
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/Array<i32>^Serialize::serialize<JsonSerializer>" = fn(ref Array<i32>, ref "core:json/JsonSerializer") -> ref Result<unit,SerializeError>;
+
+type "functype/JsonSeqSerializer^SerializeSeq::element<i32>" = fn(ref "core:json/JsonSeqSerializer", ref "core:internal/Box<i32>") -> ref Result<unit,SerializeError>;
+
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:serde/ArrayIter<i32>") -> ref Option<i32>;
+
+type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
+
+type "functype/Array<String>^Serialize::serialize<JsonSerializer>" = fn(ref Array<String>, ref "core:json/JsonSerializer") -> ref Result<unit,SerializeError>;
+
+type "functype/JsonSeqSerializer^SerializeSeq::element<String>" = fn(ref "core:json/JsonSeqSerializer", ref String) -> ref Result<unit,SerializeError>;
+
+type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:serde/ArrayIter<String>") -> ref Option<String>;
+
+type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
 
 type "functype/core:json/JsonSerializer^Serializer::serialize_i32" = fn(ref "core:json/JsonSerializer", i32) -> ref Result<unit,SerializeError>;
 
@@ -334,25 +334,25 @@ type "functype/pow10_coarse" = fn(i32) -> [u64, u64];
 
 type "functype/mul_pow10" = fn(i32) -> [u64, u64];
 
+type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
+
 type "functype/Array<i32>^Serialize::serialize<JsonSerializer>" = fn(ref Array<i32>, ref "core:json/JsonSerializer") -> [i32, ref null "core:serde/SerializeError"];
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:serde/ArrayIter<i32>") -> [i32, i32];
 
 type "functype/Array<String>^Serialize::serialize<JsonSerializer>" = fn(ref Array<String>, ref "core:json/JsonSerializer") -> [i32, ref null "core:serde/SerializeError"];
 
-type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:allocator/ArrayIter<String>") -> [i32, ref null String];
-
-type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
+type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:serde/ArrayIter<String>") -> [i32, ref null String];
 
 type "functype/to_string<i32>" = fn(i32) -> ref Result<String,SerializeError>;
+
+type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 type "functype/Array<i32>^Serialize::serialize<JsonSerializer>" = fn(ref Array<i32>, ref String) -> [i32, ref null "core:serde/SerializeError"];
 
 type "functype/JsonSeqSerializer^SerializeSeq::element<i32>" = fn(ref "core:json/JsonSeqSerializer", i32) -> ref Result<unit,SerializeError>;
 
 type "functype/Array<String>^Serialize::serialize<JsonSerializer>" = fn(ref Array<String>, ref String) -> [i32, ref null "core:serde/SerializeError"];
-
-type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 type "functype/core:json/JsonSerializer^Serializer::serialize_i32" = fn(ref String, i32) -> ref Result<unit,SerializeError>;
 
@@ -369,8 +369,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn subtask-drop from "wasi/subtask-drop";
 import fn stream-new from "wasi/stream-new";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn __test_0_serialize_array_string_() {
     let __local_0: ref Array<String>;
@@ -408,7 +408,7 @@ fn __test_0_serialize_array_string_() {
                 String::append_char(__local_6, 97);
                 String::append_char(__local_6, 116);
                 String::append_char(__local_6, 32);
-                String::append(__local_6, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_array_string.wado"), used: 73 });
+                String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_array_string.wado"), used: 57 });
                 String::append_char(__local_6, 58);
                 __local_7 = __inline_Formatter__new_8: block -> ref Formatter {
                     __local_18 = __local_6;
@@ -474,7 +474,7 @@ fn __test_1_serialize_array_i32_() {
                 String::append_char(__local_6, 97);
                 String::append_char(__local_6, 116);
                 String::append_char(__local_6, 32);
-                String::append(__local_6, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_array_string.wado"), used: 73 });
+                String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_array_string.wado"), used: 57 });
                 String::append_char(__local_6, 58);
                 __local_7 = __inline_Formatter__new_9: block -> ref Formatter {
                     __local_20 = __local_6;
@@ -538,7 +538,7 @@ fn __test_2_roundtrip_i32() {
                     String::append_char(__local_7, 97);
                     String::append_char(__local_7, 116);
                     String::append_char(__local_7, 32);
-                    String::append(__local_7, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_array_string.wado"), used: 73 });
+                    String::append(__local_7, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_array_string.wado"), used: 57 });
                     String::append_char(__local_7, 58);
                     __local_8 = __inline_Formatter__new_3: block -> ref Formatter {
                         __local_13 = __local_7;
@@ -1310,209 +1310,6 @@ fn "core:json/write_escaped_string"(buf, s) {  // from core:json
     String::append_char(buf, 34);
 }
 
-fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
-    let seq_2: ref Result<JsonSeqSerializer,SerializeError>;
-    let seq_3: ref "core:json/JsonSeqSerializer";
-    let __iter_4: ref "core:allocator/ArrayIter<i32>";
-    let r: ref Result<unit,SerializeError>;
-    let e_7: ref "core:serde/SerializeError";
-    let e_8: ref "core:serde/SerializeError";
-    let __pattern_temp_0: ref Result<JsonSeqSerializer,SerializeError>;
-    let __pattern_temp_3: ref Result<JsonSeqSerializer,SerializeError>;
-    let __local_14: i32;
-    let __local_16: ref Array<i32>;
-    seq_2 = __inline_JsonSerializer_Serializer__begin_seq_0: block -> ref Result<JsonSeqSerializer,SerializeError> {
-        __local_14 = self.used;
-        String::append_char(s, 91);
-        break __inline_JsonSerializer_Serializer__begin_seq_0: Result<JsonSeqSerializer,SerializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonSeqSerializer" { buf: ref.as_non_null(s), count: 0 } };
-    };
-    __pattern_temp_0 = seq_2;
-    if ref.test Result<JsonSeqSerializer,SerializeError>::Ok(__pattern_temp_0) {
-        seq_3 = value_copy "core:json/JsonSeqSerializer"(ref.cast Result<JsonSeqSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
-        __iter_4 = __inline_Array_i32__IntoIterator__into_iter_2: block -> ref "core:allocator/ArrayIter<i32>" {
-            __local_16 = self;
-            break __inline_Array_i32__IntoIterator__into_iter_2: "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(__local_16.repr), used: __local_16.used, index: 0 };
-        };
-        b112: block {
-            l113: loop {
-                let __sroa___pattern_temp_1_discriminant: i32;
-                let __sroa___pattern_temp_1_payload_0: i32;
-                multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
-                if __sroa___pattern_temp_1_discriminant == 0 {
-                    r = JsonSeqSerializer^SerializeSeq::element<i32>(seq_3, __sroa___pattern_temp_1_payload_0);
-                    if ref.test Result<unit,SerializeError>::Err(r) {
-                        e_7 = value_copy "core:serde/SerializeError"(ref.cast Result<unit,SerializeError>::Err(r).payload_0);
-                        return 1; ref.as_non_null(e_7);
-                    };
-                } else {
-                    break b112;
-                };
-                continue l113;
-            };
-        };
-        block {
-            String::append_char(seq_3.buf, 93);
-            return 0; ref.null none;
-        };
-    };
-    __pattern_temp_3 = seq_2;
-    if ref.test Result<JsonSeqSerializer,SerializeError>::Err(__pattern_temp_3) {
-        e_8 = value_copy "core:serde/SerializeError"(ref.cast Result<JsonSeqSerializer,SerializeError>::Err(__pattern_temp_3).payload_0);
-        return 1; ref.as_non_null(e_8);
-    };
-    return 1; "core:serde/SerializeError" { kind: 1, message: String { repr: array.new_data<u8>("begin_seq failed"), used: 16 } };
-}
-
-fn JsonSeqSerializer^SerializeSeq::element<i32>(self, value) {
-    let ser: ref "core:json/JsonSerializer";
-    let r: ref Result<unit,SerializeError>;
-    let __local_5: ref "core:json/JsonSerializer";
-    if self.count > 0 {
-        String::append_char(self.buf, 44);
-    };
-    ser = "core:json/JsonSerializer" { buf: ref.as_non_null(self.buf) };
-    r = __inline_i32_Serialize__serialize_JsonSerializer__0: block -> ref Result<unit,SerializeError> {
-        __local_5 = ser;
-        break __inline_i32_Serialize__serialize_JsonSerializer__0: "core:json/JsonSerializer^Serializer::serialize_i32"(__local_5.buf, value);
-    };
-    self.buf = ref.as_non_null(ser.buf);
-    self.count = self.count + 1;
-    return r;
-}
-
-fn ArrayIter<i32>^Iterator::next(self) {
-    let item: i32;
-    if self.index >= self.used {
-        return 1; 0;
-    };
-    item = builtin::array_get<i32>(self.repr, self.index);
-    self.index = self.index + 1;
-    return 0; item;
-}
-
-fn Array<i32>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<i32>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<i32>(new_capacity);
-        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
-    let seq_2: ref Result<JsonSeqSerializer,SerializeError>;
-    let seq_3: ref "core:json/JsonSeqSerializer";
-    let __iter_4: ref "core:allocator/ArrayIter<String>";
-    let item: ref String;
-    let r: ref Result<unit,SerializeError>;
-    let e_7: ref "core:serde/SerializeError";
-    let e_8: ref "core:serde/SerializeError";
-    let __pattern_temp_0: ref Result<JsonSeqSerializer,SerializeError>;
-    let __pattern_temp_3: ref Result<JsonSeqSerializer,SerializeError>;
-    let __local_14: i32;
-    let __local_16: ref Array<String>;
-    seq_2 = __inline_JsonSerializer_Serializer__begin_seq_0: block -> ref Result<JsonSeqSerializer,SerializeError> {
-        __local_14 = self.used;
-        String::append_char(s, 91);
-        break __inline_JsonSerializer_Serializer__begin_seq_0: Result<JsonSeqSerializer,SerializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonSeqSerializer" { buf: ref.as_non_null(s), count: 0 } };
-    };
-    __pattern_temp_0 = seq_2;
-    if ref.test Result<JsonSeqSerializer,SerializeError>::Ok(__pattern_temp_0) {
-        seq_3 = value_copy "core:json/JsonSeqSerializer"(ref.cast Result<JsonSeqSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
-        __iter_4 = __inline_Array_String__IntoIterator__into_iter_2: block -> ref "core:allocator/ArrayIter<String>" {
-            __local_16 = self;
-            break __inline_Array_String__IntoIterator__into_iter_2: "core:allocator/ArrayIter<String>" { repr: ref.as_non_null(__local_16.repr), used: __local_16.used, index: 0 };
-        };
-        b121: block {
-            l122: loop {
-                let __sroa___pattern_temp_1_discriminant: i32;
-                let __sroa___pattern_temp_1_payload_0: ref null String;
-                multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<String>^Iterator::next(__iter_4);
-                if __sroa___pattern_temp_1_discriminant == 0 {
-                    item = ref.as_non_null(__sroa___pattern_temp_1_payload_0);
-                    r = JsonSeqSerializer^SerializeSeq::element<String>(seq_3, item);
-                    if ref.test Result<unit,SerializeError>::Err(r) {
-                        e_7 = value_copy "core:serde/SerializeError"(ref.cast Result<unit,SerializeError>::Err(r).payload_0);
-                        return 1; ref.as_non_null(e_7);
-                    };
-                } else {
-                    break b121;
-                };
-                continue l122;
-            };
-        };
-        block {
-            String::append_char(seq_3.buf, 93);
-            return 0; ref.null none;
-        };
-    };
-    __pattern_temp_3 = seq_2;
-    if ref.test Result<JsonSeqSerializer,SerializeError>::Err(__pattern_temp_3) {
-        e_8 = value_copy "core:serde/SerializeError"(ref.cast Result<JsonSeqSerializer,SerializeError>::Err(__pattern_temp_3).payload_0);
-        return 1; ref.as_non_null(e_8);
-    };
-    return 1; "core:serde/SerializeError" { kind: 1, message: String { repr: array.new_data<u8>("begin_seq failed"), used: 16 } };
-}
-
-fn JsonSeqSerializer^SerializeSeq::element<String>(self, value) {
-    let r: ref Result<unit,SerializeError>;
-    let __sroa_ser_buf: ref String;
-    if self.count > 0 {
-        String::append_char(self.buf, 44);
-    };
-    __sroa_ser_buf = self.buf;
-    r = __inline_JsonSerializer_Serializer__serialize_string_1: block -> ref Result<unit,SerializeError> {
-        "core:json/write_escaped_string"(__sroa_ser_buf, value);
-        break __inline_JsonSerializer_Serializer__serialize_string_1: Result<unit,SerializeError> { 0, nop };
-    };
-    self.buf = ref.as_non_null(__sroa_ser_buf);
-    self.count = self.count + 1;
-    return r;
-}
-
-fn ArrayIter<String>^Iterator::next(self) {
-    let item: ref String;
-    if self.index >= self.used {
-        return 1; ref.null none;
-    };
-    item = builtin::array_get<ref String>(self.repr, self.index);
-    self.index = self.index + 1;
-    return 0; ref.as_non_null(item);
-}
-
-fn Array<String>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<String>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<ref String>(new_capacity);
-        builtin::array_copy<ref String>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<ref String>(self.repr, used, value);
-    self.used = used + 1;
-}
-
 fn i32::fmt_decimal(self, f) {
     let is_negative: bool;
     let abs_val: i64;
@@ -1598,7 +1395,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l136: loop {
+            l118: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -1606,7 +1403,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l136;
+                continue l118;
             };
         };
     };
@@ -1694,6 +1491,209 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
+}
+
+fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
+    let seq_2: ref Result<JsonSeqSerializer,SerializeError>;
+    let seq_3: ref "core:json/JsonSeqSerializer";
+    let __iter_4: ref "core:serde/ArrayIter<i32>";
+    let r: ref Result<unit,SerializeError>;
+    let e_7: ref "core:serde/SerializeError";
+    let e_8: ref "core:serde/SerializeError";
+    let __pattern_temp_0: ref Result<JsonSeqSerializer,SerializeError>;
+    let __pattern_temp_3: ref Result<JsonSeqSerializer,SerializeError>;
+    let __local_14: i32;
+    let __local_16: ref Array<i32>;
+    seq_2 = __inline_JsonSerializer_Serializer__begin_seq_0: block -> ref Result<JsonSeqSerializer,SerializeError> {
+        __local_14 = self.used;
+        String::append_char(s, 91);
+        break __inline_JsonSerializer_Serializer__begin_seq_0: Result<JsonSeqSerializer,SerializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonSeqSerializer" { buf: ref.as_non_null(s), count: 0 } };
+    };
+    __pattern_temp_0 = seq_2;
+    if ref.test Result<JsonSeqSerializer,SerializeError>::Ok(__pattern_temp_0) {
+        seq_3 = value_copy "core:json/JsonSeqSerializer"(ref.cast Result<JsonSeqSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
+        __iter_4 = __inline_Array_i32__IntoIterator__into_iter_2: block -> ref "core:serde/ArrayIter<i32>" {
+            __local_16 = self;
+            break __inline_Array_i32__IntoIterator__into_iter_2: "core:serde/ArrayIter<i32>" { repr: ref.as_non_null(__local_16.repr), used: __local_16.used, index: 0 };
+        };
+        b130: block {
+            l131: loop {
+                let __sroa___pattern_temp_1_discriminant: i32;
+                let __sroa___pattern_temp_1_payload_0: i32;
+                multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
+                if __sroa___pattern_temp_1_discriminant == 0 {
+                    r = JsonSeqSerializer^SerializeSeq::element<i32>(seq_3, __sroa___pattern_temp_1_payload_0);
+                    if ref.test Result<unit,SerializeError>::Err(r) {
+                        e_7 = value_copy "core:serde/SerializeError"(ref.cast Result<unit,SerializeError>::Err(r).payload_0);
+                        return 1; ref.as_non_null(e_7);
+                    };
+                } else {
+                    break b130;
+                };
+                continue l131;
+            };
+        };
+        block {
+            String::append_char(seq_3.buf, 93);
+            return 0; ref.null none;
+        };
+    };
+    __pattern_temp_3 = seq_2;
+    if ref.test Result<JsonSeqSerializer,SerializeError>::Err(__pattern_temp_3) {
+        e_8 = value_copy "core:serde/SerializeError"(ref.cast Result<JsonSeqSerializer,SerializeError>::Err(__pattern_temp_3).payload_0);
+        return 1; ref.as_non_null(e_8);
+    };
+    return 1; "core:serde/SerializeError" { kind: 1, message: String { repr: array.new_data<u8>("begin_seq failed"), used: 16 } };
+}
+
+fn JsonSeqSerializer^SerializeSeq::element<i32>(self, value) {
+    let ser: ref "core:json/JsonSerializer";
+    let r: ref Result<unit,SerializeError>;
+    let __local_5: ref "core:json/JsonSerializer";
+    if self.count > 0 {
+        String::append_char(self.buf, 44);
+    };
+    ser = "core:json/JsonSerializer" { buf: ref.as_non_null(self.buf) };
+    r = __inline_i32_Serialize__serialize_JsonSerializer__0: block -> ref Result<unit,SerializeError> {
+        __local_5 = ser;
+        break __inline_i32_Serialize__serialize_JsonSerializer__0: "core:json/JsonSerializer^Serializer::serialize_i32"(__local_5.buf, value);
+    };
+    self.buf = ref.as_non_null(ser.buf);
+    self.count = self.count + 1;
+    return r;
+}
+
+fn ArrayIter<i32>^Iterator::next(self) {
+    let item: i32;
+    if self.index >= self.used {
+        return 1; 0;
+    };
+    item = builtin::array_get<i32>(self.repr, self.index);
+    self.index = self.index + 1;
+    return 0; item;
+}
+
+fn Array<i32>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<i32>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<i32>(new_capacity);
+        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<i32>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
+    let seq_2: ref Result<JsonSeqSerializer,SerializeError>;
+    let seq_3: ref "core:json/JsonSeqSerializer";
+    let __iter_4: ref "core:serde/ArrayIter<String>";
+    let item: ref String;
+    let r: ref Result<unit,SerializeError>;
+    let e_7: ref "core:serde/SerializeError";
+    let e_8: ref "core:serde/SerializeError";
+    let __pattern_temp_0: ref Result<JsonSeqSerializer,SerializeError>;
+    let __pattern_temp_3: ref Result<JsonSeqSerializer,SerializeError>;
+    let __local_14: i32;
+    let __local_16: ref Array<String>;
+    seq_2 = __inline_JsonSerializer_Serializer__begin_seq_0: block -> ref Result<JsonSeqSerializer,SerializeError> {
+        __local_14 = self.used;
+        String::append_char(s, 91);
+        break __inline_JsonSerializer_Serializer__begin_seq_0: Result<JsonSeqSerializer,SerializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonSeqSerializer" { buf: ref.as_non_null(s), count: 0 } };
+    };
+    __pattern_temp_0 = seq_2;
+    if ref.test Result<JsonSeqSerializer,SerializeError>::Ok(__pattern_temp_0) {
+        seq_3 = value_copy "core:json/JsonSeqSerializer"(ref.cast Result<JsonSeqSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
+        __iter_4 = __inline_Array_String__IntoIterator__into_iter_2: block -> ref "core:serde/ArrayIter<String>" {
+            __local_16 = self;
+            break __inline_Array_String__IntoIterator__into_iter_2: "core:serde/ArrayIter<String>" { repr: ref.as_non_null(__local_16.repr), used: __local_16.used, index: 0 };
+        };
+        b139: block {
+            l140: loop {
+                let __sroa___pattern_temp_1_discriminant: i32;
+                let __sroa___pattern_temp_1_payload_0: ref null String;
+                multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<String>^Iterator::next(__iter_4);
+                if __sroa___pattern_temp_1_discriminant == 0 {
+                    item = ref.as_non_null(__sroa___pattern_temp_1_payload_0);
+                    r = JsonSeqSerializer^SerializeSeq::element<String>(seq_3, item);
+                    if ref.test Result<unit,SerializeError>::Err(r) {
+                        e_7 = value_copy "core:serde/SerializeError"(ref.cast Result<unit,SerializeError>::Err(r).payload_0);
+                        return 1; ref.as_non_null(e_7);
+                    };
+                } else {
+                    break b139;
+                };
+                continue l140;
+            };
+        };
+        block {
+            String::append_char(seq_3.buf, 93);
+            return 0; ref.null none;
+        };
+    };
+    __pattern_temp_3 = seq_2;
+    if ref.test Result<JsonSeqSerializer,SerializeError>::Err(__pattern_temp_3) {
+        e_8 = value_copy "core:serde/SerializeError"(ref.cast Result<JsonSeqSerializer,SerializeError>::Err(__pattern_temp_3).payload_0);
+        return 1; ref.as_non_null(e_8);
+    };
+    return 1; "core:serde/SerializeError" { kind: 1, message: String { repr: array.new_data<u8>("begin_seq failed"), used: 16 } };
+}
+
+fn JsonSeqSerializer^SerializeSeq::element<String>(self, value) {
+    let r: ref Result<unit,SerializeError>;
+    let __sroa_ser_buf: ref String;
+    if self.count > 0 {
+        String::append_char(self.buf, 44);
+    };
+    __sroa_ser_buf = self.buf;
+    r = __inline_JsonSerializer_Serializer__serialize_string_1: block -> ref Result<unit,SerializeError> {
+        "core:json/write_escaped_string"(__sroa_ser_buf, value);
+        break __inline_JsonSerializer_Serializer__serialize_string_1: Result<unit,SerializeError> { 0, nop };
+    };
+    self.buf = ref.as_non_null(__sroa_ser_buf);
+    self.count = self.count + 1;
+    return r;
+}
+
+fn ArrayIter<String>^Iterator::next(self) {
+    let item: ref String;
+    if self.index >= self.used {
+        return 1; ref.null none;
+    };
+    item = builtin::array_get<ref String>(self.repr, self.index);
+    self.index = self.index + 1;
+    return 0; ref.as_non_null(item);
+}
+
+fn Array<String>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<String>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<ref String>(new_capacity);
+        builtin::array_copy<ref String>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<ref String>(self.repr, used, value);
+    self.used = used + 1;
 }
 
 fn "core:json/JsonSerializer^Serializer::serialize_i32"(self, v) {  // from core:json

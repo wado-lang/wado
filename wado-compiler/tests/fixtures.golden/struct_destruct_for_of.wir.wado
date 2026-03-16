@@ -58,15 +58,15 @@ struct Option<Point>::Some {
     payload_0: ref Point,
 }
 
-struct Array<Point> {  // Array<T> with T=Point
-    mut repr: ref array<Point>,
-    mut used: i32,
-}
-
 array array<u64> (mut u64);
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
+    mut used: i32,
+}
+
+struct Array<Point> {  // Array<T> with T=Point
+    mut repr: ref array<Point>,
     mut used: i32,
 }
 
@@ -120,10 +120,6 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/ArrayIter<Point>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Point>") -> ref Option<Point>;
-
-type "functype/Array<Point>::append" = fn(ref Array<Point>, ref Point);
-
 type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
 type "functype/String::grow" = fn(ref String, i32);
@@ -133,6 +129,10 @@ type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/ArrayIter<Point>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Point>") -> ref Option<Point>;
+
+type "functype/Array<Point>::append" = fn(ref Array<Point>, ref Point);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -161,8 +161,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let __local_0: ref Array<Point>;
@@ -484,37 +484,6 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
     };
 }
 
-fn ArrayIter<Point>^Iterator::next(self) {
-    let item: ref Point;
-    if self.index >= self.used {
-        return 1; ref.null none;
-    };
-    item = builtin::array_get<ref Point>(self.repr, self.index);
-    self.index = self.index + 1;
-    return 0; ref.as_non_null(item);
-}
-
-fn Array<Point>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<Point>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<ref Point>(new_capacity);
-        builtin::array_copy<ref Point>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<ref Point>(self.repr, used, value);
-    self.used = used + 1;
-}
-
 fn i32::fmt_decimal(self, f) {
     let is_negative: bool;
     let abs_val: i64;
@@ -609,6 +578,37 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
+}
+
+fn ArrayIter<Point>^Iterator::next(self) {
+    let item: ref Point;
+    if self.index >= self.used {
+        return 1; ref.null none;
+    };
+    item = builtin::array_get<ref Point>(self.repr, self.index);
+    self.index = self.index + 1;
+    return 0; ref.as_non_null(item);
+}
+
+fn Array<Point>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<Point>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<ref Point>(new_capacity);
+        builtin::array_copy<ref Point>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<ref Point>(self.repr, used, value);
+    self.used = used + 1;
 }
 
 fn Formatter::write_char_n(self, c, n) {

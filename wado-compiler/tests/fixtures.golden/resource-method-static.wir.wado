@@ -74,9 +74,9 @@ type "functype/wasi/wasi:sockets/TcpSocket::create" = fn(i32, i32);
 
 type "functype/run" = fn();
 
-type "functype/__cm_adapter__TcpSocket_create" = fn(i32) -> ref Result<TcpSocket,ErrorCode>;
-
 type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
+
+type "functype/__cm_adapter__TcpSocket_create" = fn(i32) -> ref Result<TcpSocket,ErrorCode>;
 
 type "functype/__cm_export__run" = fn();
 
@@ -122,8 +122,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let family: "wasi:sockets/types.wado/enum:IpAddressFamily";
@@ -137,6 +137,12 @@ fn run() with Stdout {
     family = 0;
     result = __cm_adapter__TcpSocket_create(family);
     "core:cli/println"(String { repr: array.new_data<u8>("Resource static method called"), used: 29 });
+}
+
+fn __cm_adapter__Stdout_write_via_stream(data) {
+    let __async_outptr: i32;
+    __async_outptr = "mem/realloc"(0, 0, 1, 2);
+    return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 
 fn __cm_adapter__TcpSocket_create(address_family) {
@@ -154,12 +160,6 @@ fn __cm_adapter__TcpSocket_create(address_family) {
     };
     drop("mem/realloc"(__outptr, 8, 4, 0));
     return __result_val;
-}
-
-fn __cm_adapter__Stdout_write_via_stream(data) {
-    let __async_outptr: i32;
-    __async_outptr = "mem/realloc"(0, 0, 1, 2);
-    return "wasi/wasi:cli/Stdout::write_via_stream"(data, __async_outptr);
 }
 
 fn __cm_export__run() {

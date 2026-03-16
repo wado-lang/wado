@@ -65,6 +65,16 @@ struct [Stream<u8>, StreamWritable<u8>] {
     mut 1: i32,
 }
 
+variant Option<char> {
+    Some(char),
+    None,
+}
+
+struct Option<char>::Some {
+    discriminant: i32,
+    payload_0: char,
+}
+
 variant Result<String,SerializeError> {
     Ok(ref String),
     Err(ref "core:serde/SerializeError"),
@@ -93,16 +103,6 @@ struct Result<String,DeserializeError>::Ok {
 struct Result<String,DeserializeError>::Err {
     discriminant: i32,
     payload_0: ref "core:serde/DeserializeError",
-}
-
-variant Option<char> {
-    Some(char),
-    None,
-}
-
-struct Option<char>::Some {
-    discriminant: i32,
-    payload_0: char,
 }
 
 variant Result<unit,SerializeError> {
@@ -290,8 +290,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn subtask-drop from "wasi/subtask-drop";
 import fn stream-new from "wasi/stream-new";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn __test_0_serialize_string_with_quotes() {
     let s: ref String;
@@ -325,7 +325,7 @@ fn __test_0_serialize_string_with_quotes() {
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_string_escape.wado"), used: 74 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_string_escape.wado"), used: 58 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_3: block -> ref Formatter {
                     __local_10 = __local_5;
@@ -390,7 +390,7 @@ fn __test_1_serialize_string_with_backslash() {
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_string_escape.wado"), used: 74 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_string_escape.wado"), used: 58 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_3: block -> ref Formatter {
                     __local_10 = __local_5;
@@ -456,7 +456,7 @@ line2"), used: 11 };
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_string_escape.wado"), used: 74 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_string_escape.wado"), used: 58 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_3: block -> ref Formatter {
                     __local_10 = __local_5;
@@ -521,7 +521,7 @@ fn __test_3_serialize_string_with_tab() {
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_string_escape.wado"), used: 74 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_string_escape.wado"), used: 58 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_3: block -> ref Formatter {
                     __local_10 = __local_5;
@@ -584,7 +584,7 @@ fn __test_4_deserialize_string_with_unicode_escape() {
                 String::append_char(__local_4, 97);
                 String::append_char(__local_4, 116);
                 String::append_char(__local_4, 32);
-                String::append(__local_4, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_string_escape.wado"), used: 74 });
+                String::append(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_string_escape.wado"), used: 58 });
                 String::append_char(__local_4, 58);
                 __local_5 = __inline_Formatter__new_3: block -> ref Formatter {
                     __local_9 = __local_4;
@@ -655,7 +655,7 @@ newline"), used: 17 };
                     String::append_char(__local_8, 97);
                     String::append_char(__local_8, 116);
                     String::append_char(__local_8, 32);
-                    String::append(__local_8, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_string_escape.wado"), used: 74 });
+                    String::append(__local_8, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_string_escape.wado"), used: 58 });
                     String::append_char(__local_8, 58);
                     __local_9 = __inline_Formatter__new_3: block -> ref Formatter {
                         __local_14 = __local_8;
@@ -746,7 +746,7 @@ fn __test_6_roundtrip_multibyte_utf8_string() {
                     String::append_char(__local_8, 97);
                     String::append_char(__local_8, 116);
                     String::append_char(__local_8, 32);
-                    String::append(__local_8, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_string_escape.wado"), used: 74 });
+                    String::append(__local_8, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_string_escape.wado"), used: 58 });
                     String::append_char(__local_8, 58);
                     __local_9 = __inline_Formatter__new_3: block -> ref Formatter {
                         __local_14 = __local_8;
@@ -838,7 +838,7 @@ fn __test_7_roundtrip_empty_string() {
                 String::append_char(__local_9, 97);
                 String::append_char(__local_9, 116);
                 String::append_char(__local_9, 32);
-                String::append(__local_9, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_string_escape.wado"), used: 74 });
+                String::append(__local_9, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_string_escape.wado"), used: 58 });
                 String::append_char(__local_9, 58);
                 __local_10 = __inline_Formatter__new_3: block -> ref Formatter {
                     __local_17 = __local_9;
@@ -879,7 +879,7 @@ condition: json == `\"\"`
                     String::append_char(__local_11, 97);
                     String::append_char(__local_11, 116);
                     String::append_char(__local_11, 32);
-                    String::append(__local_11, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_string_escape.wado"), used: 74 });
+                    String::append(__local_11, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_string_escape.wado"), used: 58 });
                     String::append_char(__local_11, 58);
                     __local_12 = __inline_Formatter__new_8: block -> ref Formatter {
                         __local_24 = __local_11;

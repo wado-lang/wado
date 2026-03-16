@@ -172,17 +172,17 @@ struct Formatter {
     mut buf: ref String,
 }
 
+struct [Stream<u8>, StreamWritable<u8>] {
+    mut 0: i32,
+    mut 1: i32,
+}
+
 struct [Future<Result<Option<Fields>,ErrorCode>>, FutureWritable<Result<Option<Fields>,ErrorCode>>] {
     mut 0: i32,
     mut 1: i32,
 }
 
 struct [Response, Future<Result<unit,ErrorCode>>] {
-    mut 0: i32,
-    mut 1: i32,
-}
-
-struct [Stream<u8>, StreamWritable<u8>] {
     mut 0: i32,
     mut 1: i32,
 }
@@ -406,10 +406,6 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/Array<Array<u8>>::append" = fn(ref Array<Array<u8>>, ref Array<u8>);
-
-type "functype/Array<u8>::append" = fn(ref Array<u8>, u8);
-
 type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
 type "functype/String::grow" = fn(ref String, i32);
@@ -419,6 +415,10 @@ type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/Array<Array<u8>>::append" = fn(ref Array<Array<u8>>, ref Array<u8>);
+
+type "functype/Array<u8>::append" = fn(ref Array<u8>, u8);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -653,7 +653,7 @@ fn handle(request) {
             String::append_char(__local_17, 97);
             String::append_char(__local_17, 116);
             String::append_char(__local_17, 32);
-            String::append(__local_17, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/http-fields-get-and-delete.wado"), used: 76 });
+            String::append(__local_17, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-fields-get-and-delete.wado"), used: 60 });
             String::append_char(__local_17, 58);
             __local_18 = __inline_Formatter__new_5: block -> ref Formatter {
                 __local_183 = __local_17;
@@ -699,7 +699,7 @@ condition: fields.has(\"x-temp\" as FieldName)
                 String::append_char(__local_19, 97);
                 String::append_char(__local_19, 116);
                 String::append_char(__local_19, 32);
-                String::append(__local_19, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/http-fields-get-and-delete.wado"), used: 76 });
+                String::append(__local_19, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-fields-get-and-delete.wado"), used: 60 });
                 String::append_char(__local_19, 58);
                 __local_20 = __inline_Formatter__new_13: block -> ref Formatter {
                     __local_195 = __local_19;
@@ -742,7 +742,7 @@ condition: values.len() == 1
             String::append_char(__local_21, 97);
             String::append_char(__local_21, 116);
             String::append_char(__local_21, 32);
-            String::append(__local_21, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/http-fields-get-and-delete.wado"), used: 76 });
+            String::append(__local_21, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http-fields-get-and-delete.wado"), used: 60 });
             String::append_char(__local_21, 58);
             __local_22 = __inline_Formatter__new_20: block -> ref Formatter {
                 __local_206 = __local_21;
@@ -1489,48 +1489,6 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
     };
 }
 
-fn Array<Array<u8>>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<Array<u8>>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<ref Array<u8>>(new_capacity);
-        builtin::array_copy<ref Array<u8>>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<ref Array<u8>>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn Array<u8>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<u8>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<u8>(new_capacity);
-        builtin::array_copy<u8>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set_u8(self.repr, used, value);
-    self.used = used + 1;
-}
-
 fn i32::fmt_decimal(self, f) {
     let is_negative: bool;
     let abs_val: i64;
@@ -1625,6 +1583,48 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
+}
+
+fn Array<Array<u8>>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<Array<u8>>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<ref Array<u8>>(new_capacity);
+        builtin::array_copy<ref Array<u8>>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<ref Array<u8>>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<u8>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<u8>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<u8>(new_capacity);
+        builtin::array_copy<u8>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set_u8(self.repr, used, value);
+    self.used = used + 1;
 }
 
 fn Formatter::write_char_n(self, c, n) {

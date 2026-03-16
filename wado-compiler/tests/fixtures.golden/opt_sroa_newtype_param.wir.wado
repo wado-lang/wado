@@ -179,16 +179,6 @@ type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
 type "functype/fmt_float_special" = fn(ref Formatter, bool, enum:SpecialKind, ref String);
 
-type "functype/Meters::raw" = fn(ref "core:internal/Box<f64>") -> f64;
-
-type "functype/Meters::add" = fn(ref "core:internal/Box<f64>", ref "core:internal/Box<f64>") -> f64;
-
-type "functype/Count::raw" = fn(ref "core:internal/Box<i32>") -> i32;
-
-type "functype/Count::inc" = fn(ref "core:internal/Box<i32>") -> i32;
-
-type "functype/Count::add_raw" = fn(ref "core:internal/Box<i32>", i32) -> i32;
-
 type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
 
 type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
@@ -206,6 +196,16 @@ type "functype/String::append_byte_filled" = fn(ref String, u8, i32);
 type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/Meters::raw" = fn(ref "core:internal/Box<f64>") -> f64;
+
+type "functype/Meters::add" = fn(ref "core:internal/Box<f64>", ref "core:internal/Box<f64>") -> f64;
+
+type "functype/Count::raw" = fn(ref "core:internal/Box<i32>") -> i32;
+
+type "functype/Count::inc" = fn(ref "core:internal/Box<i32>") -> i32;
+
+type "functype/Count::add_raw" = fn(ref "core:internal/Box<i32>", i32) -> i32;
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -241,6 +241,12 @@ type "functype/abs_meters" = fn(f64) -> f64;
 
 type "functype/triple_inc" = fn(i32) -> i32;
 
+type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
+
+type "functype/f64::inspect_into" = fn(f64, ref Formatter);
+
+type "functype/f64::fmt_fixed" = fn(f64, i32, ref Formatter);
+
 type "functype/Meters::raw" = fn(f64) -> f64;
 
 type "functype/Meters::add" = fn(f64, ref "core:internal/Box<f64>") -> f64;
@@ -252,12 +258,6 @@ type "functype/Count::raw" = fn(i32) -> i32;
 type "functype/Count::inc" = fn(i32) -> i32;
 
 type "functype/Count::add_raw" = fn(i32, i32) -> i32;
-
-type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
-
-type "functype/f64::inspect_into" = fn(f64, ref Formatter);
-
-type "functype/f64::fmt_fixed" = fn(f64, i32, ref Formatter);
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -273,9 +273,9 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut POW10: ref null Array<u64> = ref.null none;
+global mut __modules_initialized: bool = 0;
 
 fn speed(dist, time) {
     return dist / time;
@@ -421,7 +421,7 @@ fn run() with Stdout {
             String::append_char(__local_32, 97);
             String::append_char(__local_32, 116);
             String::append_char(__local_32, 32);
-            String::append(__local_32, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_sroa_newtype_param.wado"), used: 72 });
+            String::append(__local_32, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_newtype_param.wado"), used: 56 });
             String::append_char(__local_32, 58);
             __local_33 = __inline_Formatter__new_2: block -> ref Formatter {
                 __local_51 = __local_32;
@@ -457,7 +457,7 @@ condition: m.raw() == 42.5
             String::append_char(__local_34, 97);
             String::append_char(__local_34, 116);
             String::append_char(__local_34, 32);
-            String::append(__local_34, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_sroa_newtype_param.wado"), used: 72 });
+            String::append(__local_34, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_newtype_param.wado"), used: 56 });
             String::append_char(__local_34, 58);
             __local_35 = __inline_Formatter__new_8: block -> ref Formatter {
                 __local_60 = __local_34;
@@ -494,7 +494,7 @@ condition: c.raw() == 10
             String::append_char(__local_36, 97);
             String::append_char(__local_36, 116);
             String::append_char(__local_36, 32);
-            String::append(__local_36, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_sroa_newtype_param.wado"), used: 72 });
+            String::append(__local_36, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_newtype_param.wado"), used: 56 });
             String::append_char(__local_36, 58);
             __local_37 = __inline_Formatter__new_15: block -> ref Formatter {
                 __local_71 = __local_36;
@@ -530,7 +530,7 @@ condition: c2.raw() == 11
             String::append_char(__local_38, 97);
             String::append_char(__local_38, 116);
             String::append_char(__local_38, 32);
-            String::append(__local_38, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_sroa_newtype_param.wado"), used: 72 });
+            String::append(__local_38, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_newtype_param.wado"), used: 56 });
             String::append_char(__local_38, 58);
             __local_39 = __inline_Formatter__new_22: block -> ref Formatter {
                 __local_82 = __local_38;
@@ -568,7 +568,7 @@ condition: speed(&dist, &time) == 20.0
             String::append_char(__local_40, 97);
             String::append_char(__local_40, 116);
             String::append_char(__local_40, 32);
-            String::append(__local_40, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_sroa_newtype_param.wado"), used: 72 });
+            String::append(__local_40, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_newtype_param.wado"), used: 56 });
             String::append_char(__local_40, 58);
             __local_41 = __inline_Formatter__new_28: block -> ref Formatter {
                 __local_91 = __local_40;
@@ -605,7 +605,7 @@ condition: m3.raw() == 42.5
             String::append_char(__local_42, 97);
             String::append_char(__local_42, 116);
             String::append_char(__local_42, 32);
-            String::append(__local_42, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_sroa_newtype_param.wado"), used: 72 });
+            String::append(__local_42, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_newtype_param.wado"), used: 56 });
             String::append_char(__local_42, 58);
             __local_43 = __inline_Formatter__new_34: block -> ref Formatter {
                 __local_100 = __local_42;
@@ -642,7 +642,7 @@ condition: pos.raw() == 5.0
             String::append_char(__local_44, 97);
             String::append_char(__local_44, 116);
             String::append_char(__local_44, 32);
-            String::append(__local_44, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_sroa_newtype_param.wado"), used: 72 });
+            String::append(__local_44, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_newtype_param.wado"), used: 56 });
             String::append_char(__local_44, 58);
             __local_45 = __inline_Formatter__new_40: block -> ref Formatter {
                 __local_109 = __local_44;
@@ -679,7 +679,7 @@ condition: still_pos.raw() == 3.0
             String::append_char(__local_46, 97);
             String::append_char(__local_46, 116);
             String::append_char(__local_46, 32);
-            String::append(__local_46, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_sroa_newtype_param.wado"), used: 72 });
+            String::append(__local_46, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_newtype_param.wado"), used: 56 });
             String::append_char(__local_46, 58);
             __local_47 = __inline_Formatter__new_46: block -> ref Formatter {
                 __local_118 = __local_46;
@@ -715,7 +715,7 @@ condition: total.raw() == 5
             String::append_char(__local_48, 97);
             String::append_char(__local_48, 116);
             String::append_char(__local_48, 32);
-            String::append(__local_48, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_sroa_newtype_param.wado"), used: 72 });
+            String::append(__local_48, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_newtype_param.wado"), used: 56 });
             String::append_char(__local_48, 58);
             __local_49 = __inline_Formatter__new_53: block -> ref Formatter {
                 __local_129 = __local_48;
@@ -1914,26 +1914,6 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
     Formatter::apply_padding(f, mark);
 }
 
-fn Meters::raw(self) {
-    return self;
-}
-
-fn Meters::add(self, other) {
-    return self + other;
-}
-
-fn Count::raw(self) {
-    return self;
-}
-
-fn Count::inc(self) {
-    return self + 1;
-}
-
-fn Count::add_raw(self, n) {
-    return self + n;
-}
-
 fn Array<u64>::append(self, value) {
     let used: i32;
     let capacity: i32;
@@ -2240,6 +2220,26 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
+}
+
+fn Meters::raw(self) {
+    return self;
+}
+
+fn Meters::add(self, other) {
+    return self + other;
+}
+
+fn Count::raw(self) {
+    return self;
+}
+
+fn Count::inc(self) {
+    return self + 1;
+}
+
+fn Count::add_raw(self, n) {
+    return self + n;
 }
 
 fn Formatter::write_char_n(self, c, n) {

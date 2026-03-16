@@ -58,15 +58,15 @@ struct Option<char>::Some {
     payload_0: char,
 }
 
-struct Array<i32> {  // Array<T> with T=i32
-    mut repr: ref array<i32>,
-    mut used: i32,
-}
-
 array array<u64> (mut u64);
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
+    mut used: i32,
+}
+
+struct Array<i32> {  // Array<T> with T=i32
+    mut repr: ref array<i32>,
     mut used: i32,
 }
 
@@ -138,8 +138,6 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
-
 type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
 type "functype/String::grow" = fn(ref String, i32);
@@ -153,6 +151,8 @@ type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<char>;
 
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -184,8 +184,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn swap_array(arr) {
     let __local_1: ref Array<i32>;
@@ -228,7 +228,7 @@ fn mut_param_basic() with Stdout {
             String::append_char(__local_8, 97);
             String::append_char(__local_8, 116);
             String::append_char(__local_8, 32);
-            String::append(__local_8, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_8, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_8, 58);
             __local_9 = __inline_Formatter__new_2: block -> ref Formatter {
                 __local_16 = __local_8;
@@ -384,7 +384,7 @@ fn mut_param_string() with Stdout {
             String::append_char(__local_41, 97);
             String::append_char(__local_41, 116);
             String::append_char(__local_41, 32);
-            String::append(__local_41, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_41, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_41, 58);
             __local_42 = __inline_Formatter__new_2: block -> ref Formatter {
                 __local_69 = __local_41;
@@ -424,7 +424,7 @@ condition: result == \"new value\"
             String::append_char(__local_43, 97);
             String::append_char(__local_43, 116);
             String::append_char(__local_43, 32);
-            String::append(__local_43, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_43, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_43, 58);
             __local_44 = __inline_Formatter__new_7: block -> ref Formatter {
                 __local_76 = __local_43;
@@ -463,7 +463,7 @@ condition: original == \"original\"
             String::append_char(__local_45, 97);
             String::append_char(__local_45, 116);
             String::append_char(__local_45, 32);
-            String::append(__local_45, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_45, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_45, 58);
             __local_46 = __inline_Formatter__new_13: block -> ref Formatter {
                 __local_84 = __local_45;
@@ -496,7 +496,7 @@ condition: excited == \"hello!\"
             String::append_char(__local_47, 97);
             String::append_char(__local_47, 116);
             String::append_char(__local_47, 32);
-            String::append(__local_47, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_47, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_47, 58);
             __local_48 = __inline_Formatter__new_18: block -> ref Formatter {
                 __local_91 = __local_47;
@@ -540,7 +540,7 @@ condition: greeting == \"hello\"
             String::append_char(__local_49, 97);
             String::append_char(__local_49, 116);
             String::append_char(__local_49, 32);
-            String::append(__local_49, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_49, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_49, 58);
             __local_50 = __inline_Formatter__new_30: block -> ref Formatter {
                 __local_109 = __local_49;
@@ -585,7 +585,7 @@ condition: b[0] == 99
             String::append_char(__local_51, 97);
             String::append_char(__local_51, 116);
             String::append_char(__local_51, 32);
-            String::append(__local_51, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_51, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_51, 58);
             __local_52 = __inline_Formatter__new_38: block -> ref Formatter {
                 __local_122 = __local_51;
@@ -650,7 +650,7 @@ condition: a[0] == 1
             String::append_char(__local_53, 97);
             String::append_char(__local_53, 116);
             String::append_char(__local_53, 32);
-            String::append(__local_53, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_53, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_53, 58);
             __local_54 = __inline_Formatter__new_55: block -> ref Formatter {
                 __local_150 = __local_53;
@@ -695,7 +695,7 @@ condition: d[0] == 20
             String::append_char(__local_55, 97);
             String::append_char(__local_55, 116);
             String::append_char(__local_55, 32);
-            String::append(__local_55, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_55, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_55, 58);
             __local_56 = __inline_Formatter__new_63: block -> ref Formatter {
                 __local_163 = __local_55;
@@ -743,7 +743,7 @@ condition: c[0] == 10
             String::append_char(__local_57, 97);
             String::append_char(__local_57, 116);
             String::append_char(__local_57, 32);
-            String::append(__local_57, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_57, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_57, 58);
             __local_58 = __inline_Formatter__new_78: block -> ref Formatter {
                 __local_185 = __local_57;
@@ -777,7 +777,7 @@ condition: f.len() == 4
             String::append_char(__local_59, 97);
             String::append_char(__local_59, 116);
             String::append_char(__local_59, 32);
-            String::append(__local_59, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_59, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_59, 58);
             __local_60 = __inline_Formatter__new_86: block -> ref Formatter {
                 __local_197 = __local_59;
@@ -815,7 +815,7 @@ condition: e.len() == 3
             String::append_char(__local_61, 97);
             String::append_char(__local_61, 116);
             String::append_char(__local_61, 32);
-            String::append(__local_61, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_61, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_61, 58);
             __local_62 = __inline_Formatter__new_94: block -> ref Formatter {
                 __local_210 = __local_61;
@@ -930,7 +930,7 @@ fn mut_param_struct() with Stdout {
             String::append_char(__local_26, 97);
             String::append_char(__local_26, 116);
             String::append_char(__local_26, 32);
-            String::append(__local_26, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_26, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_26, 58);
             __local_27 = __inline_Formatter__new_2: block -> ref Formatter {
                 __local_48 = __local_26;
@@ -968,7 +968,7 @@ condition: q.x == 0
             String::append_char(__local_28, 97);
             String::append_char(__local_28, 116);
             String::append_char(__local_28, 32);
-            String::append(__local_28, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_28, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_28, 58);
             __local_29 = __inline_Formatter__new_9: block -> ref Formatter {
                 __local_59 = __local_28;
@@ -1006,7 +1006,7 @@ condition: q.y == 0
             String::append_char(__local_30, 97);
             String::append_char(__local_30, 116);
             String::append_char(__local_30, 32);
-            String::append(__local_30, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_30, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_30, 58);
             __local_31 = __inline_Formatter__new_16: block -> ref Formatter {
                 __local_70 = __local_30;
@@ -1044,7 +1044,7 @@ condition: p.x == 5
             String::append_char(__local_32, 97);
             String::append_char(__local_32, 116);
             String::append_char(__local_32, 32);
-            String::append(__local_32, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_32, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_32, 58);
             __local_33 = __inline_Formatter__new_23: block -> ref Formatter {
                 __local_81 = __local_32;
@@ -1083,7 +1083,7 @@ condition: p.y == 10
             String::append_char(__local_34, 97);
             String::append_char(__local_34, 116);
             String::append_char(__local_34, 32);
-            String::append(__local_34, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_34, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_34, 58);
             __local_35 = __inline_Formatter__new_30: block -> ref Formatter {
                 __local_92 = __local_34;
@@ -1121,7 +1121,7 @@ condition: b.x == 11
             String::append_char(__local_36, 97);
             String::append_char(__local_36, 116);
             String::append_char(__local_36, 32);
-            String::append(__local_36, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_36, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_36, 58);
             __local_37 = __inline_Formatter__new_37: block -> ref Formatter {
                 __local_103 = __local_36;
@@ -1165,7 +1165,7 @@ condition: b.y == 22
             String::append_char(__local_42, 97);
             String::append_char(__local_42, 116);
             String::append_char(__local_42, 32);
-            String::append(__local_42, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_42, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_42, 58);
             __local_43 = __inline_Formatter__new_59: block -> ref Formatter {
                 __local_138 = __local_42;
@@ -1203,7 +1203,7 @@ condition: d.x == 4
             String::append_char(__local_44, 97);
             String::append_char(__local_44, 116);
             String::append_char(__local_44, 32);
-            String::append(__local_44, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 66 });
+            String::append(__local_44, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_param_merged.wado"), used: 50 });
             String::append_char(__local_44, 58);
             __local_45 = __inline_Formatter__new_66: block -> ref Formatter {
                 __local_149 = __local_44;
@@ -1519,27 +1519,6 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
     };
 }
 
-fn Array<i32>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<i32>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<i32>(new_capacity);
-        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
-}
-
 fn i32::fmt_decimal(self, f) {
     let is_negative: bool;
     let abs_val: i64;
@@ -1625,7 +1604,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l57: loop {
+            l56: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -1633,7 +1612,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l57;
+                continue l56;
             };
         };
     };
@@ -1721,6 +1700,27 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
+}
+
+fn Array<i32>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<i32>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<i32>(new_capacity);
+        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<i32>(self.repr, used, value);
+    self.used = used + 1;
 }
 
 fn Formatter::write_char_n(self, c, n) {

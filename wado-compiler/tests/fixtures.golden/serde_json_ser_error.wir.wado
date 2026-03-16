@@ -95,6 +95,16 @@ struct [bool, bool, SpecialKind] {
 
 array array<u64> (mut u64);
 
+variant Option<char> {
+    Some(char),
+    None,
+}
+
+struct Option<char>::Some {
+    discriminant: i32,
+    payload_0: char,
+}
+
 variant Result<String,SerializeError> {
     Ok(ref String),
     Err(ref "core:serde/SerializeError"),
@@ -108,16 +118,6 @@ struct Result<String,SerializeError>::Ok {
 struct Result<String,SerializeError>::Err {
     discriminant: i32,
     payload_0: ref "core:serde/SerializeError",
-}
-
-variant Option<char> {
-    Some(char),
-    None,
-}
-
-struct Option<char>::Some {
-    discriminant: i32,
-    payload_0: char,
 }
 
 variant Result<unit,SerializeError> {
@@ -342,9 +342,9 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn subtask-drop from "wasi/subtask-drop";
 import fn stream-new from "wasi/stream-new";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut POW10: ref null Array<u64> = ref.null none;
+global mut __modules_initialized: bool = 0;
 
 fn __test_0_f64_nan() {
     let r: ref Result<String,SerializeError>;
@@ -387,7 +387,7 @@ fn __test_0_f64_nan() {
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_ser_error.wado"), used: 70 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_ser_error.wado"), used: 54 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_3: block -> ref Formatter {
                     __local_10 = __local_5;
@@ -461,7 +461,7 @@ fn __test_1_f64_infinity() {
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_ser_error.wado"), used: 70 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_ser_error.wado"), used: 54 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_3: block -> ref Formatter {
                     __local_10 = __local_5;
@@ -535,7 +535,7 @@ fn __test_2_f64_negative_infinity() {
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_ser_error.wado"), used: 70 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_ser_error.wado"), used: 54 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_3: block -> ref Formatter {
                     __local_10 = __local_5;
@@ -609,7 +609,7 @@ fn __test_3_f32_nan() {
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_ser_error.wado"), used: 70 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_ser_error.wado"), used: 54 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_3: block -> ref Formatter {
                     __local_10 = __local_5;
@@ -683,7 +683,7 @@ fn __test_4_f32_infinity() {
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_ser_error.wado"), used: 70 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_ser_error.wado"), used: 54 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_3: block -> ref Formatter {
                     __local_10 = __local_5;
@@ -757,7 +757,7 @@ fn __test_5_f32_negative_infinity() {
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_ser_error.wado"), used: 70 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_ser_error.wado"), used: 54 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_3: block -> ref Formatter {
                     __local_10 = __local_5;
@@ -821,7 +821,7 @@ fn __test_6_normal_f64_succeeds() {
                 String::append_char(__local_4, 97);
                 String::append_char(__local_4, 116);
                 String::append_char(__local_4, 32);
-                String::append(__local_4, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_ser_error.wado"), used: 70 });
+                String::append(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_ser_error.wado"), used: 54 });
                 String::append_char(__local_4, 58);
                 __local_5 = __inline_Formatter__new_2: block -> ref Formatter {
                     __local_8 = __local_4;
@@ -882,7 +882,7 @@ fn __test_7_normal_f32_succeeds() {
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_ser_error.wado"), used: 70 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_ser_error.wado"), used: 54 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_2: block -> ref Formatter {
                     __local_9 = __local_5;

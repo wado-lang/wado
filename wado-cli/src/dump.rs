@@ -572,21 +572,13 @@ async fn generate_output_params(
     opt_iterations: Option<u32>,
     input: &str,
 ) -> Result<String, String> {
-    // Canonicalize to an absolute path so that #include_str / #include_bytes
-    // Canonicalize to absolute path so that #include_str / #include_bytes
-    // paths resolve correctly: the loader builds paths from the module
-    // filename, and the host joins with base_path — doubling only happens
-    // when they disagree on relative vs absolute.
-    let abs_path =
-        fs::canonicalize(input).map_err(|e| format!("Error resolving '{input}': {e}"))?;
-    let abs_filename = abs_path.to_string_lossy();
-    let path = abs_path.as_path();
+    let path = Path::new(input);
 
     // Read source file
     let source =
         fs::read_to_string(path).map_err(|e| format!("Error reading '{}': {e}", path.display()))?;
 
-    // Get base path for relative imports (absolute, matching abs_filename)
+    // Get base path for relative imports
     let base_path = path
         .parent()
         .map(std::path::Path::to_path_buf)
@@ -596,13 +588,11 @@ async fn generate_output_params(
     // Extract target world from __DATA__ section if present
     let target_world = extract_world_from_data_section(&source);
 
-    // Dump using async API with target world.
-    // Pass the absolute filename so the loader builds absolute include paths,
-    // which the host can resolve without doubling the directory prefix.
+    // Dump using async API with target world
     let result = wado_compiler::dump_with_host_and_world(
         &source,
         &host,
-        Some(&abs_filename),
+        Some(input),
         opt_level,
         target_world.as_deref(),
         inline_threshold,

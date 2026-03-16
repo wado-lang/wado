@@ -192,10 +192,6 @@ type "functype/__initialize_module" = fn();
 
 type "functype/fmt_float_special" = fn(ref Formatter, bool, enum:SpecialKind, ref String);
 
-type "functype/Shape^Inspect::inspect" = fn(ref "core:internal/Box<Shape>", ref Formatter);
-
-type "functype/Tuple<f64,f64>^Inspect::inspect" = fn(ref "tuple/[f64, f64]", ref Formatter);
-
 type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
 
 type "functype/f64::inspect_into" = fn(ref "core:internal/Box<f64>", ref Formatter);
@@ -209,6 +205,10 @@ type "functype/String::append_byte_filled" = fn(ref String, u8, i32);
 type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/Shape^Inspect::inspect" = fn(ref "core:internal/Box<Shape>", ref Formatter);
+
+type "functype/Tuple<f64,f64>^Inspect::inspect" = fn(ref "tuple/[f64, f64]", ref Formatter);
 
 type "functype/Formatter::apply_padding" = fn(ref Formatter, i32);
 
@@ -232,11 +232,11 @@ type "functype/trim_zeros" = fn(u64, i32) -> [u64, i32];
 
 type "functype/check_special" = fn(f64) -> [bool, bool, i32];
 
-type "functype/Shape^Inspect::inspect" = fn(ref Shape, ref Formatter);
-
 type "functype/f64::inspect_into" = fn(f64, ref Formatter);
 
 type "functype/f64::fmt_fixed" = fn(f64, i32, ref Formatter);
+
+type "functype/Shape^Inspect::inspect" = fn(ref Shape, ref Formatter);
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -252,9 +252,9 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut POW10: ref null Array<u64> = ref.null none;
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let c: ref Shape;
@@ -1434,44 +1434,6 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
     Formatter::apply_padding(f, mark);
 }
 
-fn Shape^Inspect::inspect(self, f) {
-    let __local_3: ref String;
-    let __local_7: ref String;
-    let __local_9: ref String;
-    let __local_11: ref String;
-    let __local_13: ref String;
-    if ref.test Shape::Circle(self) {
-        __local_3 = String { repr: array.new_data<u8>("Shape::Circle("), used: 14 };
-        String::append(f.buf, __local_3);
-        f64::inspect_into(ref.cast Shape::Circle(self).payload_0, f);
-        __local_7 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, __local_7);
-    } else if ref.test Shape::Rectangle(self) {
-        __local_9 = String { repr: array.new_data<u8>("Shape::Rectangle("), used: 17 };
-        String::append(f.buf, __local_9);
-        Tuple<f64,f64>^Inspect::inspect(ref.cast Shape::Rectangle(self).payload_0, f);
-        __local_11 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::append(f.buf, __local_11);
-    } else if self.discriminant == 2 {
-        __local_13 = String { repr: array.new_data<u8>("Shape::Point"), used: 12 };
-        String::append(f.buf, __local_13);
-    };
-}
-
-fn Tuple<f64,f64>^Inspect::inspect(self, f) {
-    let s_3: ref String;
-    let s_7: ref String;
-    let s_11: ref String;
-    s_3 = String { repr: array.new_data<u8>("["), used: 1 };
-    String::append(f.buf, s_3);
-    f64::inspect_into(self.0, f);
-    s_7 = String { repr: array.new_data<u8>(", "), used: 2 };
-    String::append(f.buf, s_7);
-    f64::inspect_into(self.1, f);
-    s_11 = String { repr: array.new_data<u8>("]"), used: 1 };
-    String::append(f.buf, s_11);
-}
-
 fn Array<u64>::append(self, value) {
     let used: i32;
     let capacity: i32;
@@ -1746,6 +1708,44 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
+}
+
+fn Shape^Inspect::inspect(self, f) {
+    let __local_3: ref String;
+    let __local_7: ref String;
+    let __local_9: ref String;
+    let __local_11: ref String;
+    let __local_13: ref String;
+    if ref.test Shape::Circle(self) {
+        __local_3 = String { repr: array.new_data<u8>("Shape::Circle("), used: 14 };
+        String::append(f.buf, __local_3);
+        f64::inspect_into(ref.cast Shape::Circle(self).payload_0, f);
+        __local_7 = String { repr: array.new_data<u8>(")"), used: 1 };
+        String::append(f.buf, __local_7);
+    } else if ref.test Shape::Rectangle(self) {
+        __local_9 = String { repr: array.new_data<u8>("Shape::Rectangle("), used: 17 };
+        String::append(f.buf, __local_9);
+        Tuple<f64,f64>^Inspect::inspect(ref.cast Shape::Rectangle(self).payload_0, f);
+        __local_11 = String { repr: array.new_data<u8>(")"), used: 1 };
+        String::append(f.buf, __local_11);
+    } else if self.discriminant == 2 {
+        __local_13 = String { repr: array.new_data<u8>("Shape::Point"), used: 12 };
+        String::append(f.buf, __local_13);
+    };
+}
+
+fn Tuple<f64,f64>^Inspect::inspect(self, f) {
+    let s_3: ref String;
+    let s_7: ref String;
+    let s_11: ref String;
+    s_3 = String { repr: array.new_data<u8>("["), used: 1 };
+    String::append(f.buf, s_3);
+    f64::inspect_into(self.0, f);
+    s_7 = String { repr: array.new_data<u8>(", "), used: 2 };
+    String::append(f.buf, s_7);
+    f64::inspect_into(self.1, f);
+    s_11 = String { repr: array.new_data<u8>("]"), used: 1 };
+    String::append(f.buf, s_11);
 }
 
 fn Formatter::apply_padding(self, start_pos) {

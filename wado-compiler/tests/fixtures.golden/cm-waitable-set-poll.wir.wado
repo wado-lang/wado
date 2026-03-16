@@ -221,6 +221,16 @@ struct Option<FieldSizePayload>::Some {
     payload_0: ref "wasi:http/types.wado/FieldSizePayload",
 }
 
+variant Option<WaitEvent> {
+    Some(ref WaitEvent),
+    None,
+}
+
+struct Option<WaitEvent>::Some {
+    discriminant: i32,
+    payload_0: ref WaitEvent,
+}
+
 variant Result<Response,ErrorCode> {
     Ok(i32),
     Err(ref "wasi:http/types.wado/ErrorCode"),
@@ -234,16 +244,6 @@ struct Result<Response,ErrorCode>::Ok {
 struct Result<Response,ErrorCode>::Err {
     discriminant: i32,
     payload_0: ref "wasi:http/types.wado/ErrorCode",
-}
-
-variant Option<WaitEvent> {
-    Some(ref WaitEvent),
-    None,
-}
-
-struct Option<WaitEvent>::Some {
-    discriminant: i32,
-    payload_0: ref WaitEvent,
 }
 
 variant Option<Fields> {

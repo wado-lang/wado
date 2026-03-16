@@ -30,6 +30,11 @@ struct Formatter {
     mut buf: ref String,
 }
 
+struct [Stream<u8>, StreamWritable<u8>] {
+    mut 0: i32,
+    mut 1: i32,
+}
+
 struct [i32, i32] {
     mut 0: i32,
     mut 1: i32,
@@ -38,11 +43,6 @@ struct [i32, i32] {
 struct [Tuple<i32,i32>, Tuple<i32,i32>] {
     mut 0: ref "tuple/[i32, i32]",
     mut 1: ref "tuple/[i32, i32]",
-}
-
-struct [Stream<u8>, StreamWritable<u8>] {
-    mut 0: i32,
-    mut 1: i32,
 }
 
 array array<u64> (mut u64);
@@ -137,8 +137,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let __local_1: ref String;

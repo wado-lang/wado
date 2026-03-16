@@ -180,8 +180,6 @@ type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
 type "functype/fmt_float_special" = fn(ref Formatter, bool, enum:SpecialKind, ref String);
 
-type "functype/Vec2^Inspect::inspect" = fn(ref Vec2, ref Formatter);
-
 type "functype/Array<u64>::append" = fn(ref Array<u64>, u64);
 
 type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
@@ -201,6 +199,8 @@ type "functype/String::append_byte_filled" = fn(ref String, u8, i32);
 type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/Vec2^Inspect::inspect" = fn(ref Vec2, ref Formatter);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -252,9 +252,9 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
 global mut POW10: ref null Array<u64> = ref.null none;
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let p1: ref Vec2;
@@ -387,7 +387,7 @@ fn run() with Stdout {
             String::append_char(__local_30, 97);
             String::append_char(__local_30, 116);
             String::append_char(__local_30, 32);
-            String::append(__local_30, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 72 });
+            String::append(__local_30, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 56 });
             String::append_char(__local_30, 58);
             __local_31 = __inline_Formatter__new_3: block -> ref Formatter {
                 __local_59 = __local_30;
@@ -427,7 +427,7 @@ condition: p3.x == 4.0
             String::append_char(__local_32, 97);
             String::append_char(__local_32, 116);
             String::append_char(__local_32, 32);
-            String::append(__local_32, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 72 });
+            String::append(__local_32, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 56 });
             String::append_char(__local_32, 58);
             __local_33 = __inline_Formatter__new_9: block -> ref Formatter {
                 __local_68 = __local_32;
@@ -492,7 +492,7 @@ condition: p3.y == 6.0
             String::append_char(__local_36, 97);
             String::append_char(__local_36, 116);
             String::append_char(__local_36, 32);
-            String::append(__local_36, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 72 });
+            String::append(__local_36, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 56 });
             String::append_char(__local_36, 58);
             __local_37 = __inline_Formatter__new_21: block -> ref Formatter {
                 __local_86 = __local_36;
@@ -534,7 +534,7 @@ condition: diff.x == 2.0
             String::append_char(__local_38, 97);
             String::append_char(__local_38, 116);
             String::append_char(__local_38, 32);
-            String::append(__local_38, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 72 });
+            String::append(__local_38, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 56 });
             String::append_char(__local_38, 58);
             __local_39 = __inline_Formatter__new_27: block -> ref Formatter {
                 __local_95 = __local_38;
@@ -601,7 +601,7 @@ condition: diff.y == 2.0
             String::append_char(__local_42, 97);
             String::append_char(__local_42, 116);
             String::append_char(__local_42, 32);
-            String::append(__local_42, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 72 });
+            String::append(__local_42, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 56 });
             String::append_char(__local_42, 58);
             __local_43 = __inline_Formatter__new_39: block -> ref Formatter {
                 __local_112 = __local_42;
@@ -642,7 +642,7 @@ condition: neg.x == -1.0
             String::append_char(__local_44, 97);
             String::append_char(__local_44, 116);
             String::append_char(__local_44, 32);
-            String::append(__local_44, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 72 });
+            String::append(__local_44, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 56 });
             String::append_char(__local_44, 58);
             __local_45 = __inline_Formatter__new_45: block -> ref Formatter {
                 __local_121 = __local_44;
@@ -713,7 +713,7 @@ condition: neg.y == -2.0
             String::append_char(__local_48, 97);
             String::append_char(__local_48, 116);
             String::append_char(__local_48, 32);
-            String::append(__local_48, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 72 });
+            String::append(__local_48, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 56 });
             String::append_char(__local_48, 58);
             __local_49 = __inline_Formatter__new_57: block -> ref Formatter {
                 __local_139 = __local_48;
@@ -769,7 +769,7 @@ condition: p1 == same
             String::append_char(__local_50, 97);
             String::append_char(__local_50, 116);
             String::append_char(__local_50, 32);
-            String::append(__local_50, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 72 });
+            String::append(__local_50, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 56 });
             String::append_char(__local_50, 58);
             __local_51 = __inline_Formatter__new_64: block -> ref Formatter {
                 __local_149 = __local_50;
@@ -833,7 +833,7 @@ condition: !p1 == p2
             String::append_char(__local_52, 97);
             String::append_char(__local_52, 116);
             String::append_char(__local_52, 32);
-            String::append(__local_52, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 72 });
+            String::append(__local_52, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 56 });
             String::append_char(__local_52, 58);
             __local_53 = __inline_Formatter__new_74: block -> ref Formatter {
                 __local_164 = __local_52;
@@ -2056,26 +2056,6 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
     Formatter::apply_padding(f, mark);
 }
 
-fn Vec2^Inspect::inspect(self, f) {
-    let s_3: ref String;
-    let s_5: ref String;
-    let s_9: ref String;
-    let s_11: ref String;
-    let s_15: ref String;
-    s_3 = String { repr: array.new_data<u8>("Vec2 { "), used: 7 };
-    String::append(f.buf, s_3);
-    s_5 = String { repr: array.new_data<u8>("x: "), used: 3 };
-    String::append(f.buf, s_5);
-    f64::inspect_into(self.x, f);
-    s_9 = String { repr: array.new_data<u8>(", "), used: 2 };
-    String::append(f.buf, s_9);
-    s_11 = String { repr: array.new_data<u8>("y: "), used: 3 };
-    String::append(f.buf, s_11);
-    f64::inspect_into(self.y, f);
-    s_15 = String { repr: array.new_data<u8>(" }"), used: 2 };
-    String::append(f.buf, s_15);
-}
-
 fn Array<u64>::append(self, value) {
     let used: i32;
     let capacity: i32;
@@ -2449,6 +2429,26 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
+}
+
+fn Vec2^Inspect::inspect(self, f) {
+    let s_3: ref String;
+    let s_5: ref String;
+    let s_9: ref String;
+    let s_11: ref String;
+    let s_15: ref String;
+    s_3 = String { repr: array.new_data<u8>("Vec2 { "), used: 7 };
+    String::append(f.buf, s_3);
+    s_5 = String { repr: array.new_data<u8>("x: "), used: 3 };
+    String::append(f.buf, s_5);
+    f64::inspect_into(self.x, f);
+    s_9 = String { repr: array.new_data<u8>(", "), used: 2 };
+    String::append(f.buf, s_9);
+    s_11 = String { repr: array.new_data<u8>("y: "), used: 3 };
+    String::append(f.buf, s_11);
+    f64::inspect_into(self.y, f);
+    s_15 = String { repr: array.new_data<u8>(" }"), used: 2 };
+    String::append(f.buf, s_15);
 }
 
 fn Formatter::write_char_n(self, c, n) {

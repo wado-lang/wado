@@ -146,70 +146,39 @@ array array<TreeMapEntry<String,i32>> (mut ref "core:allocator/TreeMapEntry<Stri
 
 array array<Tuple<String,i32>> (mut ref "tuple/[String, i32]");
 
-struct ArrayIter<TreeMapEntry<String,i32>> {  // from core:allocator  // ArrayIter<T> with T=TreeMapEntry<String,i32>
-    mut repr: ref array<TreeMapEntry<String,i32>>,
-    mut used: i32,
-    mut index: i32,
+struct TreeMap<String,Option<i32>> {  // from core:allocator  // TreeMap<T> with T=String, Option<i32>
+    mut root: ref Option<TreeMapNode<String>>,
+    mut entries: ref Array<TreeMapEntry<String,Option<i32>>>,
+    mut size: i32,
+    mut deleted_count: i32,
 }
 
-struct ArrayIter<Tuple<String,i32>> {  // from core:allocator  // ArrayIter<T> with T=Tuple<String,i32>
-    mut repr: ref array<Tuple<String,i32>>,
-    mut used: i32,
-    mut index: i32,
+struct TreeMap<String,Array<i32>> {  // from core:allocator  // TreeMap<T> with T=String, Array<i32>
+    mut root: ref Option<TreeMapNode<String>>,
+    mut entries: ref Array<TreeMapEntry<String,Array<i32>>>,
+    mut size: i32,
+    mut deleted_count: i32,
 }
 
-struct ArrayIter<TreeMapEntry<String,String>> {  // from core:allocator  // ArrayIter<T> with T=TreeMapEntry<String,String>
-    mut repr: ref array<TreeMapEntry<String,String>>,
-    mut used: i32,
-    mut index: i32,
+struct TreeMap<String,bool> {  // from core:allocator  // TreeMap<T> with T=String, bool
+    mut root: ref Option<TreeMapNode<String>>,
+    mut entries: ref Array<TreeMapEntry<String,bool>>,
+    mut size: i32,
+    mut deleted_count: i32,
 }
 
-struct ArrayIter<Tuple<String,String>> {  // from core:allocator  // ArrayIter<T> with T=Tuple<String,String>
-    mut repr: ref array<Tuple<String,String>>,
-    mut used: i32,
-    mut index: i32,
+struct TreeMap<String,String> {  // from core:allocator  // TreeMap<T> with T=String, String
+    mut root: ref Option<TreeMapNode<String>>,
+    mut entries: ref Array<TreeMapEntry<String,String>>,
+    mut size: i32,
+    mut deleted_count: i32,
 }
 
-struct ArrayIter<TreeMapEntry<String,bool>> {  // from core:allocator  // ArrayIter<T> with T=TreeMapEntry<String,bool>
-    mut repr: ref array<TreeMapEntry<String,bool>>,
-    mut used: i32,
-    mut index: i32,
-}
-
-struct ArrayIter<Tuple<String,bool>> {  // from core:allocator  // ArrayIter<T> with T=Tuple<String,bool>
-    mut repr: ref array<Tuple<String,bool>>,
-    mut used: i32,
-    mut index: i32,
-}
-
-struct ArrayIter<TreeMapEntry<String,Array<i32>>> {  // from core:allocator  // ArrayIter<T> with T=TreeMapEntry<String,Array<i32>>
-    mut repr: ref array<TreeMapEntry<String,Array<i32>>>,
-    mut used: i32,
-    mut index: i32,
-}
-
-struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
-    mut repr: ref array<i32>,
-    mut used: i32,
-    mut index: i32,
-}
-
-struct ArrayIter<Tuple<String,Array<i32>>> {  // from core:allocator  // ArrayIter<T> with T=Tuple<String,Array<i32>>
-    mut repr: ref array<Tuple<String,Array<i32>>>,
-    mut used: i32,
-    mut index: i32,
-}
-
-struct ArrayIter<TreeMapEntry<String,Option<i32>>> {  // from core:allocator  // ArrayIter<T> with T=TreeMapEntry<String,Option<i32>>
-    mut repr: ref array<TreeMapEntry<String,Option<i32>>>,
-    mut used: i32,
-    mut index: i32,
-}
-
-struct ArrayIter<Tuple<String,Option<i32>>> {  // from core:allocator  // ArrayIter<T> with T=Tuple<String,Option<i32>>
-    mut repr: ref array<Tuple<String,Option<i32>>>,
-    mut used: i32,
-    mut index: i32,
+struct TreeMap<String,i32> {  // from core:allocator  // TreeMap<T> with T=String, i32
+    mut root: ref Option<TreeMapNode<String>>,
+    mut entries: ref Array<TreeMapEntry<String,i32>>,
+    mut size: i32,
+    mut deleted_count: i32,
 }
 
 struct TreeMapEntry<String,i32> {  // from core:allocator  // TreeMapEntry<T> with T=String, i32
@@ -250,79 +219,70 @@ struct TreeMapNode<String> {  // from core:allocator  // TreeMapNode<T> with T=S
     mut right: ref Option<TreeMapNode<String>>,
 }
 
-struct TreeMap<String,Option<i32>> {  // from core:allocator  // TreeMap<T> with T=String, Option<i32>
-    mut root: ref Option<TreeMapNode<String>>,
-    mut entries: ref Array<TreeMapEntry<String,Option<i32>>>,
-    mut size: i32,
-    mut deleted_count: i32,
+struct ArrayIter<TreeMapEntry<String,i32>> {  // from core:serde  // ArrayIter<T> with T=TreeMapEntry<String,i32>
+    mut repr: ref array<TreeMapEntry<String,i32>>,
+    mut used: i32,
+    mut index: i32,
 }
 
-struct TreeMap<String,Array<i32>> {  // from core:allocator  // TreeMap<T> with T=String, Array<i32>
-    mut root: ref Option<TreeMapNode<String>>,
-    mut entries: ref Array<TreeMapEntry<String,Array<i32>>>,
-    mut size: i32,
-    mut deleted_count: i32,
+struct ArrayIter<Tuple<String,i32>> {  // from core:serde  // ArrayIter<T> with T=Tuple<String,i32>
+    mut repr: ref array<Tuple<String,i32>>,
+    mut used: i32,
+    mut index: i32,
 }
 
-struct TreeMap<String,bool> {  // from core:allocator  // TreeMap<T> with T=String, bool
-    mut root: ref Option<TreeMapNode<String>>,
-    mut entries: ref Array<TreeMapEntry<String,bool>>,
-    mut size: i32,
-    mut deleted_count: i32,
+struct ArrayIter<TreeMapEntry<String,String>> {  // from core:serde  // ArrayIter<T> with T=TreeMapEntry<String,String>
+    mut repr: ref array<TreeMapEntry<String,String>>,
+    mut used: i32,
+    mut index: i32,
 }
 
-struct TreeMap<String,String> {  // from core:allocator  // TreeMap<T> with T=String, String
-    mut root: ref Option<TreeMapNode<String>>,
-    mut entries: ref Array<TreeMapEntry<String,String>>,
-    mut size: i32,
-    mut deleted_count: i32,
+struct ArrayIter<Tuple<String,String>> {  // from core:serde  // ArrayIter<T> with T=Tuple<String,String>
+    mut repr: ref array<Tuple<String,String>>,
+    mut used: i32,
+    mut index: i32,
 }
 
-struct TreeMap<String,i32> {  // from core:allocator  // TreeMap<T> with T=String, i32
-    mut root: ref Option<TreeMapNode<String>>,
-    mut entries: ref Array<TreeMapEntry<String,i32>>,
-    mut size: i32,
-    mut deleted_count: i32,
+struct ArrayIter<TreeMapEntry<String,bool>> {  // from core:serde  // ArrayIter<T> with T=TreeMapEntry<String,bool>
+    mut repr: ref array<TreeMapEntry<String,bool>>,
+    mut used: i32,
+    mut index: i32,
 }
 
-variant Result<String,SerializeError> {
-    Ok(ref String),
-    Err(ref "core:serde/SerializeError"),
+struct ArrayIter<Tuple<String,bool>> {  // from core:serde  // ArrayIter<T> with T=Tuple<String,bool>
+    mut repr: ref array<Tuple<String,bool>>,
+    mut used: i32,
+    mut index: i32,
 }
 
-struct Result<String,SerializeError>::Ok {
-    discriminant: i32,
-    payload_0: ref String,
+struct ArrayIter<TreeMapEntry<String,Array<i32>>> {  // from core:serde  // ArrayIter<T> with T=TreeMapEntry<String,Array<i32>>
+    mut repr: ref array<TreeMapEntry<String,Array<i32>>>,
+    mut used: i32,
+    mut index: i32,
 }
 
-struct Result<String,SerializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/SerializeError",
+struct ArrayIter<i32> {  // from core:serde  // ArrayIter<T> with T=i32
+    mut repr: ref array<i32>,
+    mut used: i32,
+    mut index: i32,
 }
 
-variant Result<TreeMap<String,i32>,DeserializeError> {
-    Ok(ref "core:allocator/TreeMap<String,i32>"),
-    Err(ref "core:serde/DeserializeError"),
+struct ArrayIter<Tuple<String,Array<i32>>> {  // from core:serde  // ArrayIter<T> with T=Tuple<String,Array<i32>>
+    mut repr: ref array<Tuple<String,Array<i32>>>,
+    mut used: i32,
+    mut index: i32,
 }
 
-struct Result<TreeMap<String,i32>,DeserializeError>::Ok {
-    discriminant: i32,
-    payload_0: ref "core:allocator/TreeMap<String,i32>",
+struct ArrayIter<TreeMapEntry<String,Option<i32>>> {  // from core:serde  // ArrayIter<T> with T=TreeMapEntry<String,Option<i32>>
+    mut repr: ref array<TreeMapEntry<String,Option<i32>>>,
+    mut used: i32,
+    mut index: i32,
 }
 
-struct Result<TreeMap<String,i32>,DeserializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/DeserializeError",
-}
-
-variant Option<i32> {
-    Some(i32),
-    None,
-}
-
-struct Option<i32>::Some {
-    discriminant: i32,
-    payload_0: i32,
+struct ArrayIter<Tuple<String,Option<i32>>> {  // from core:serde  // ArrayIter<T> with T=Tuple<String,Option<i32>>
+    mut repr: ref array<Tuple<String,Option<i32>>>,
+    mut used: i32,
+    mut index: i32,
 }
 
 variant Result<unit,SerializeError> {
@@ -353,6 +313,46 @@ variant Option<char> {
 struct Option<char>::Some {
     discriminant: i32,
     payload_0: char,
+}
+
+variant Option<i32> {
+    Some(i32),
+    None,
+}
+
+struct Option<i32>::Some {
+    discriminant: i32,
+    payload_0: i32,
+}
+
+variant Result<String,SerializeError> {
+    Ok(ref String),
+    Err(ref "core:serde/SerializeError"),
+}
+
+struct Result<String,SerializeError>::Ok {
+    discriminant: i32,
+    payload_0: ref String,
+}
+
+struct Result<String,SerializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/SerializeError",
+}
+
+variant Result<TreeMap<String,i32>,DeserializeError> {
+    Ok(ref "core:allocator/TreeMap<String,i32>"),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<TreeMap<String,i32>,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: ref "core:allocator/TreeMap<String,i32>",
+}
+
+struct Result<TreeMap<String,i32>,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
 }
 
 variant Result<i32,DeserializeError> {
@@ -580,15 +580,15 @@ struct Result<Option<String>,DeserializeError>::Err {
     payload_0: ref "core:serde/DeserializeError",
 }
 
-struct Array<i32> {  // Array<T> with T=i32
-    mut repr: ref array<i32>,
-    mut used: i32,
-}
-
 array array<u64> (mut u64);
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
+    mut used: i32,
+}
+
+struct Array<i32> {  // Array<T> with T=i32
+    mut repr: ref array<i32>,
     mut used: i32,
 }
 
@@ -778,19 +778,39 @@ type "functype/core:json/utf8_sequence_length" = fn(i32) -> i32;
 
 type "functype/core:json/write_escaped_string" = fn(ref String, ref String);
 
+type "functype/char::from_u32" = fn(u32) -> ref Option<char>;
+
+type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
+
+type "functype/char^Display::fmt" = fn(ref "core:internal/Box<char>", ref Formatter);
+
+type "functype/String::grow" = fn(ref String, i32);
+
+type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
+
+type "functype/String::append" = fn(ref String, ref String);
+
+type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
+
+type "functype/String^Ord::cmp" = fn(ref String, ref String) -> enum:Ordering;
+
+type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<char>;
+
+type "functype/String::append_char" = fn(ref String, char);
+
 type "functype/TreeMap<String,Option<i32>>^Serialize::serialize<JsonSerializer>" = fn(ref "core:allocator/TreeMap<String,Option<i32>>", ref "core:json/JsonSerializer") -> ref Result<unit,SerializeError>;
 
 type "functype/JsonMapSerializer^SerializeMap::value<Option<i32>>" = fn(ref "core:json/JsonMapSerializer", ref "core:internal/Box<Option<i32>>") -> ref Result<unit,SerializeError>;
 
 type "functype/JsonMapSerializer^SerializeMap::key<String>" = fn(ref "core:json/JsonMapSerializer", ref String) -> ref Result<unit,SerializeError>;
 
-type "functype/ArrayIter<Tuple<String,Option<i32>>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,Option<i32>>>") -> ref Option<Tuple<String,Option<i32>>>;
+type "functype/ArrayIter<Tuple<String,Option<i32>>>^Iterator::next" = fn(ref "core:serde/ArrayIter<Tuple<String,Option<i32>>>") -> ref Option<Tuple<String,Option<i32>>>;
 
 type "functype/TreeMap<String,Option<i32>>::entries" = fn(ref "core:allocator/TreeMap<String,Option<i32>>") -> ref Array<Tuple<String,Option<i32>>>;
 
 type "functype/Array<Tuple<String,Option<i32>>>::append" = fn(ref Array<Tuple<String,Option<i32>>>, ref "tuple/[String, Option<i32>]");
 
-type "functype/ArrayIter<TreeMapEntry<String,Option<i32>>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<TreeMapEntry<String,Option<i32>>>") -> ref Option<TreeMapEntry<String,Option<i32>>>;
+type "functype/ArrayIter<TreeMapEntry<String,Option<i32>>>^Iterator::next" = fn(ref "core:serde/ArrayIter<TreeMapEntry<String,Option<i32>>>") -> ref Option<TreeMapEntry<String,Option<i32>>>;
 
 type "functype/TreeMap<String,Option<i32>>::insert" = fn(ref "core:allocator/TreeMap<String,Option<i32>>", ref String, ref Option<i32>);
 
@@ -812,15 +832,15 @@ type "functype/Array<i32>^Serialize::serialize<JsonSerializer>" = fn(ref Array<i
 
 type "functype/JsonSeqSerializer^SerializeSeq::element<i32>" = fn(ref "core:json/JsonSeqSerializer", ref "core:internal/Box<i32>") -> ref Result<unit,SerializeError>;
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> ref Option<i32>;
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:serde/ArrayIter<i32>") -> ref Option<i32>;
 
-type "functype/ArrayIter<Tuple<String,Array<i32>>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,Array<i32>>>") -> ref Option<Tuple<String,Array<i32>>>;
+type "functype/ArrayIter<Tuple<String,Array<i32>>>^Iterator::next" = fn(ref "core:serde/ArrayIter<Tuple<String,Array<i32>>>") -> ref Option<Tuple<String,Array<i32>>>;
 
 type "functype/TreeMap<String,Array<i32>>::entries" = fn(ref "core:allocator/TreeMap<String,Array<i32>>") -> ref Array<Tuple<String,Array<i32>>>;
 
 type "functype/Array<Tuple<String,Array<i32>>>::append" = fn(ref Array<Tuple<String,Array<i32>>>, ref "tuple/[String, Array<i32>]");
 
-type "functype/ArrayIter<TreeMapEntry<String,Array<i32>>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<TreeMapEntry<String,Array<i32>>>") -> ref Option<TreeMapEntry<String,Array<i32>>>;
+type "functype/ArrayIter<TreeMapEntry<String,Array<i32>>>^Iterator::next" = fn(ref "core:serde/ArrayIter<TreeMapEntry<String,Array<i32>>>") -> ref Option<TreeMapEntry<String,Array<i32>>>;
 
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
@@ -840,13 +860,13 @@ type "functype/TreeMap<String,bool>^Serialize::serialize<JsonSerializer>" = fn(r
 
 type "functype/JsonMapSerializer^SerializeMap::value<bool>" = fn(ref "core:json/JsonMapSerializer", ref "core:internal/Box<bool>") -> ref Result<unit,SerializeError>;
 
-type "functype/ArrayIter<Tuple<String,bool>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,bool>>") -> ref Option<Tuple<String,bool>>;
+type "functype/ArrayIter<Tuple<String,bool>>^Iterator::next" = fn(ref "core:serde/ArrayIter<Tuple<String,bool>>") -> ref Option<Tuple<String,bool>>;
 
 type "functype/TreeMap<String,bool>::entries" = fn(ref "core:allocator/TreeMap<String,bool>") -> ref Array<Tuple<String,bool>>;
 
 type "functype/Array<Tuple<String,bool>>::append" = fn(ref Array<Tuple<String,bool>>, ref "tuple/[String, bool]");
 
-type "functype/ArrayIter<TreeMapEntry<String,bool>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<TreeMapEntry<String,bool>>") -> ref Option<TreeMapEntry<String,bool>>;
+type "functype/ArrayIter<TreeMapEntry<String,bool>>^Iterator::next" = fn(ref "core:serde/ArrayIter<TreeMapEntry<String,bool>>") -> ref Option<TreeMapEntry<String,bool>>;
 
 type "functype/TreeMap<String,bool>::insert" = fn(ref "core:allocator/TreeMap<String,bool>", ref String, bool);
 
@@ -864,13 +884,13 @@ type "functype/TreeMap<String,String>^Serialize::serialize<JsonSerializer>" = fn
 
 type "functype/JsonMapSerializer^SerializeMap::value<String>" = fn(ref "core:json/JsonMapSerializer", ref String) -> ref Result<unit,SerializeError>;
 
-type "functype/ArrayIter<Tuple<String,String>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,String>>") -> ref Option<Tuple<String,String>>;
+type "functype/ArrayIter<Tuple<String,String>>^Iterator::next" = fn(ref "core:serde/ArrayIter<Tuple<String,String>>") -> ref Option<Tuple<String,String>>;
 
 type "functype/TreeMap<String,String>::entries" = fn(ref "core:allocator/TreeMap<String,String>") -> ref Array<Tuple<String,String>>;
 
 type "functype/Array<Tuple<String,String>>::append" = fn(ref Array<Tuple<String,String>>, ref "tuple/[String, String]");
 
-type "functype/ArrayIter<TreeMapEntry<String,String>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<TreeMapEntry<String,String>>") -> ref Option<TreeMapEntry<String,String>>;
+type "functype/ArrayIter<TreeMapEntry<String,String>>^Iterator::next" = fn(ref "core:serde/ArrayIter<TreeMapEntry<String,String>>") -> ref Option<TreeMapEntry<String,String>>;
 
 type "functype/TreeMap<String,String>::insert" = fn(ref "core:allocator/TreeMap<String,String>", ref String, ref String);
 
@@ -904,33 +924,13 @@ type "functype/TreeMap<String,i32>^Serialize::serialize<JsonSerializer>" = fn(re
 
 type "functype/JsonMapSerializer^SerializeMap::value<i32>" = fn(ref "core:json/JsonMapSerializer", ref "core:internal/Box<i32>") -> ref Result<unit,SerializeError>;
 
-type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,i32>>") -> ref Option<Tuple<String,i32>>;
+type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:serde/ArrayIter<Tuple<String,i32>>") -> ref Option<Tuple<String,i32>>;
 
 type "functype/TreeMap<String,i32>::entries" = fn(ref "core:allocator/TreeMap<String,i32>") -> ref Array<Tuple<String,i32>>;
 
 type "functype/Array<Tuple<String,i32>>::append" = fn(ref Array<Tuple<String,i32>>, ref "tuple/[String, i32]");
 
-type "functype/ArrayIter<TreeMapEntry<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<TreeMapEntry<String,i32>>") -> ref Option<TreeMapEntry<String,i32>>;
-
-type "functype/char::from_u32" = fn(u32) -> ref Option<char>;
-
-type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
-
-type "functype/char^Display::fmt" = fn(ref "core:internal/Box<char>", ref Formatter);
-
-type "functype/String::grow" = fn(ref String, i32);
-
-type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
-
-type "functype/String::append" = fn(ref String, ref String);
-
-type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
-
-type "functype/String^Ord::cmp" = fn(ref String, ref String) -> enum:Ordering;
-
-type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<char>;
-
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/ArrayIter<TreeMapEntry<String,i32>>^Iterator::next" = fn(ref "core:serde/ArrayIter<TreeMapEntry<String,i32>>") -> ref Option<TreeMapEntry<String,i32>>;
 
 type "functype/core:json/JsonSerializer^Serializer::serialize_i32" = fn(ref "core:json/JsonSerializer", i32) -> ref Result<unit,SerializeError>;
 
@@ -968,43 +968,47 @@ type "functype/pow10_coarse" = fn(i32) -> [u64, u64];
 
 type "functype/mul_pow10" = fn(i32) -> [u64, u64];
 
-type "functype/TreeMap<String,Option<i32>>^Serialize::serialize<JsonSerializer>" = fn(ref "core:allocator/TreeMap<String,Option<i32>>", ref "core:json/JsonSerializer") -> [i32, ref null "core:serde/SerializeError"];
-
-type "functype/ArrayIter<Tuple<String,Option<i32>>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,Option<i32>>>") -> [i32, ref null "tuple/[String, Option<i32>]"];
-
-type "functype/ArrayIter<TreeMapEntry<String,Option<i32>>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<TreeMapEntry<String,Option<i32>>>") -> [i32, ref null "core:allocator/TreeMapEntry<String,Option<i32>>"];
-
-type "functype/TreeMap<String,Array<i32>>^Serialize::serialize<JsonSerializer>" = fn(ref "core:allocator/TreeMap<String,Array<i32>>", ref "core:json/JsonSerializer") -> [i32, ref null "core:serde/SerializeError"];
-
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
-
-type "functype/ArrayIter<Tuple<String,Array<i32>>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,Array<i32>>>") -> [i32, ref null "tuple/[String, Array<i32>]"];
-
-type "functype/ArrayIter<TreeMapEntry<String,Array<i32>>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<TreeMapEntry<String,Array<i32>>>") -> [i32, ref null "core:allocator/TreeMapEntry<String,Array<i32>>"];
-
-type "functype/TreeMap<String,bool>^Serialize::serialize<JsonSerializer>" = fn(ref "core:allocator/TreeMap<String,bool>", ref "core:json/JsonSerializer") -> [i32, ref null "core:serde/SerializeError"];
-
-type "functype/ArrayIter<Tuple<String,bool>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,bool>>") -> [i32, ref null "tuple/[String, bool]"];
-
-type "functype/ArrayIter<TreeMapEntry<String,bool>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<TreeMapEntry<String,bool>>") -> [i32, ref null "core:allocator/TreeMapEntry<String,bool>"];
-
-type "functype/TreeMap<String,String>^Serialize::serialize<JsonSerializer>" = fn(ref "core:allocator/TreeMap<String,String>", ref "core:json/JsonSerializer") -> [i32, ref null "core:serde/SerializeError"];
-
-type "functype/ArrayIter<Tuple<String,String>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,String>>") -> [i32, ref null "tuple/[String, String]"];
-
-type "functype/ArrayIter<TreeMapEntry<String,String>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<TreeMapEntry<String,String>>") -> [i32, ref null "core:allocator/TreeMapEntry<String,String>"];
-
-type "functype/TreeMap<String,i32>^Serialize::serialize<JsonSerializer>" = fn(ref "core:allocator/TreeMap<String,i32>", ref "core:json/JsonSerializer") -> [i32, ref null "core:serde/SerializeError"];
-
-type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,i32>>") -> [i32, ref null "tuple/[String, i32]"];
-
-type "functype/ArrayIter<TreeMapEntry<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<TreeMapEntry<String,i32>>") -> [i32, ref null "core:allocator/TreeMapEntry<String,i32>"];
-
 type "functype/char::from_u32" = fn(u32) -> [i32, char];
 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
+type "functype/TreeMap<String,Option<i32>>^Serialize::serialize<JsonSerializer>" = fn(ref "core:allocator/TreeMap<String,Option<i32>>", ref "core:json/JsonSerializer") -> [i32, ref null "core:serde/SerializeError"];
+
+type "functype/ArrayIter<Tuple<String,Option<i32>>>^Iterator::next" = fn(ref "core:serde/ArrayIter<Tuple<String,Option<i32>>>") -> [i32, ref null "tuple/[String, Option<i32>]"];
+
+type "functype/ArrayIter<TreeMapEntry<String,Option<i32>>>^Iterator::next" = fn(ref "core:serde/ArrayIter<TreeMapEntry<String,Option<i32>>>") -> [i32, ref null "core:allocator/TreeMapEntry<String,Option<i32>>"];
+
+type "functype/TreeMap<String,Array<i32>>^Serialize::serialize<JsonSerializer>" = fn(ref "core:allocator/TreeMap<String,Array<i32>>", ref "core:json/JsonSerializer") -> [i32, ref null "core:serde/SerializeError"];
+
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:serde/ArrayIter<i32>") -> [i32, i32];
+
+type "functype/ArrayIter<Tuple<String,Array<i32>>>^Iterator::next" = fn(ref "core:serde/ArrayIter<Tuple<String,Array<i32>>>") -> [i32, ref null "tuple/[String, Array<i32>]"];
+
+type "functype/ArrayIter<TreeMapEntry<String,Array<i32>>>^Iterator::next" = fn(ref "core:serde/ArrayIter<TreeMapEntry<String,Array<i32>>>") -> [i32, ref null "core:allocator/TreeMapEntry<String,Array<i32>>"];
+
+type "functype/TreeMap<String,bool>^Serialize::serialize<JsonSerializer>" = fn(ref "core:allocator/TreeMap<String,bool>", ref "core:json/JsonSerializer") -> [i32, ref null "core:serde/SerializeError"];
+
+type "functype/ArrayIter<Tuple<String,bool>>^Iterator::next" = fn(ref "core:serde/ArrayIter<Tuple<String,bool>>") -> [i32, ref null "tuple/[String, bool]"];
+
+type "functype/ArrayIter<TreeMapEntry<String,bool>>^Iterator::next" = fn(ref "core:serde/ArrayIter<TreeMapEntry<String,bool>>") -> [i32, ref null "core:allocator/TreeMapEntry<String,bool>"];
+
+type "functype/TreeMap<String,String>^Serialize::serialize<JsonSerializer>" = fn(ref "core:allocator/TreeMap<String,String>", ref "core:json/JsonSerializer") -> [i32, ref null "core:serde/SerializeError"];
+
+type "functype/ArrayIter<Tuple<String,String>>^Iterator::next" = fn(ref "core:serde/ArrayIter<Tuple<String,String>>") -> [i32, ref null "tuple/[String, String]"];
+
+type "functype/ArrayIter<TreeMapEntry<String,String>>^Iterator::next" = fn(ref "core:serde/ArrayIter<TreeMapEntry<String,String>>") -> [i32, ref null "core:allocator/TreeMapEntry<String,String>"];
+
+type "functype/TreeMap<String,i32>^Serialize::serialize<JsonSerializer>" = fn(ref "core:allocator/TreeMap<String,i32>", ref "core:json/JsonSerializer") -> [i32, ref null "core:serde/SerializeError"];
+
+type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:serde/ArrayIter<Tuple<String,i32>>") -> [i32, ref null "tuple/[String, i32]"];
+
+type "functype/ArrayIter<TreeMapEntry<String,i32>>^Iterator::next" = fn(ref "core:serde/ArrayIter<TreeMapEntry<String,i32>>") -> [i32, ref null "core:allocator/TreeMapEntry<String,i32>"];
+
 type "functype/core:json/JsonDeserializer::expect_char" = fn(ref "core:json/JsonDeserializer", i32) -> [i32, ref null "core:serde/DeserializeError"];
+
+type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
+
+type "functype/char^Display::fmt" = fn(char, ref Formatter);
 
 type "functype/TreeMap<String,Option<i32>>^Serialize::serialize<JsonSerializer>" = fn(ref "core:allocator/TreeMap<String,Option<i32>>", ref String) -> [i32, ref null "core:serde/SerializeError"];
 
@@ -1026,10 +1030,6 @@ type "functype/TreeMap<String,i32>^Serialize::serialize<JsonSerializer>" = fn(re
 
 type "functype/JsonMapSerializer^SerializeMap::value<i32>" = fn(ref "core:json/JsonMapSerializer", i32) -> ref Result<unit,SerializeError>;
 
-type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
-
-type "functype/char^Display::fmt" = fn(char, ref Formatter);
-
 type "functype/core:json/JsonSerializer^Serializer::serialize_i32" = fn(ref String, i32) -> ref Result<unit,SerializeError>;
 
 type "functype/core:json/JsonSerializer^Serializer::serialize_bool" = fn(ref String, bool) -> ref Result<unit,SerializeError>;
@@ -1047,8 +1047,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn subtask-drop from "wasi/subtask-drop";
 import fn stream-new from "wasi/stream-new";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn __test_0_treemap_serialize_string_keys() {
     let map: ref "core:allocator/TreeMap<String,i32>";
@@ -1096,7 +1096,7 @@ fn __test_0_treemap_serialize_string_keys() {
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_9: block -> ref Formatter {
                     __local_20 = __local_5;
@@ -1186,7 +1186,7 @@ fn __test_1_treemap_roundtrip() {
                     String::append_char(__local_9, 97);
                     String::append_char(__local_9, 116);
                     String::append_char(__local_9, 32);
-                    String::append(__local_9, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                    String::append(__local_9, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                     String::append_char(__local_9, 58);
                     __local_10 = __inline_Formatter__new_9: block -> ref Formatter {
                         __local_27 = __local_9;
@@ -1220,7 +1220,7 @@ condition: parsed[\"x\"] == 1
                     String::append_char(__local_11, 97);
                     String::append_char(__local_11, 116);
                     String::append_char(__local_11, 32);
-                    String::append(__local_11, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                    String::append(__local_11, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                     String::append_char(__local_11, 58);
                     __local_12 = __inline_Formatter__new_16: block -> ref Formatter {
                         __local_38 = __local_11;
@@ -1289,7 +1289,7 @@ fn __test_2_treemap_empty() {
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_7: block -> ref Formatter {
                     __local_14 = __local_5;
@@ -1365,7 +1365,7 @@ fn __test_3_treemap_empty_roundtrip() {
                 String::append_char(__local_9, 97);
                 String::append_char(__local_9, 116);
                 String::append_char(__local_9, 32);
-                String::append(__local_9, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                String::append(__local_9, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                 String::append_char(__local_9, 58);
                 __local_10 = __inline_Formatter__new_7: block -> ref Formatter {
                     __local_21 = __local_9;
@@ -1406,7 +1406,7 @@ condition: json == `\\{\\}`
                     String::append_char(__local_11, 97);
                     String::append_char(__local_11, 116);
                     String::append_char(__local_11, 32);
-                    String::append(__local_11, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                    String::append(__local_11, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                     String::append_char(__local_11, 58);
                     __local_12 = __inline_Formatter__new_13: block -> ref Formatter {
                         __local_29 = __local_11;
@@ -1480,7 +1480,7 @@ fn __test_4_treemap_single_entry() {
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_8: block -> ref Formatter {
                     __local_17 = __local_5;
@@ -1560,7 +1560,7 @@ fn __test_5_treemap_with_string_values() {
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_9: block -> ref Formatter {
                     __local_20 = __local_5;
@@ -1636,7 +1636,7 @@ fn __test_6_treemap_with_bool_values() {
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_9: block -> ref Formatter {
                     __local_20 = __local_5;
@@ -1724,7 +1724,7 @@ fn __test_7_treemap_with_nested_array_values() {
                 String::append_char(__local_7, 97);
                 String::append_char(__local_7, 116);
                 String::append_char(__local_7, 32);
-                String::append(__local_7, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                String::append(__local_7, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                 String::append_char(__local_7, 58);
                 __local_8 = __inline_Formatter__new_20: block -> ref Formatter {
                     __local_38 = __local_7;
@@ -1804,7 +1804,7 @@ fn __test_8_treemap_with_option_values() {
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_9: block -> ref Formatter {
                     __local_20 = __local_5;
@@ -1894,7 +1894,7 @@ fn __test_9_treemap_keys_with_special_chars() {
                     String::append_char(__local_9, 97);
                     String::append_char(__local_9, 116);
                     String::append_char(__local_9, 32);
-                    String::append(__local_9, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                    String::append(__local_9, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                     String::append_char(__local_9, 58);
                     __local_10 = __inline_Formatter__new_9: block -> ref Formatter {
                         __local_27 = __local_9;
@@ -1928,7 +1928,7 @@ condition: parsed[\"key with spaces\"] == 1
                     String::append_char(__local_11, 97);
                     String::append_char(__local_11, 116);
                     String::append_char(__local_11, 32);
-                    String::append(__local_11, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                    String::append(__local_11, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                     String::append_char(__local_11, 58);
                     __local_12 = __inline_Formatter__new_16: block -> ref Formatter {
                         __local_38 = __local_11;
@@ -2012,7 +2012,7 @@ fn __test_10_treemap_preserves_insertion_order() {
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_10: block -> ref Formatter {
                     __local_23 = __local_5;
@@ -2136,7 +2136,7 @@ fn __test_11_treemap_many_entries_roundtrip() {
                     String::append_char(__local_14, 97);
                     String::append_char(__local_14, 116);
                     String::append_char(__local_14, 32);
-                    String::append(__local_14, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                    String::append(__local_14, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                     String::append_char(__local_14, 58);
                     __local_15 = __inline_Formatter__new_13: block -> ref Formatter {
                         __local_38 = __local_14;
@@ -2170,7 +2170,7 @@ condition: parsed.len() == 10
                     String::append_char(__local_16, 97);
                     String::append_char(__local_16, 116);
                     String::append_char(__local_16, 32);
-                    String::append(__local_16, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                    String::append(__local_16, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                     String::append_char(__local_16, 58);
                     __local_17 = __inline_Formatter__new_20: block -> ref Formatter {
                         __local_49 = __local_16;
@@ -2204,7 +2204,7 @@ condition: parsed[\"key0\"] == 0
                     String::append_char(__local_18, 97);
                     String::append_char(__local_18, 116);
                     String::append_char(__local_18, 32);
-                    String::append(__local_18, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                    String::append(__local_18, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                     String::append_char(__local_18, 58);
                     __local_19 = __inline_Formatter__new_27: block -> ref Formatter {
                         __local_60 = __local_18;
@@ -2292,7 +2292,7 @@ fn __test_12_treemap_deserialize_from_any_key_order() {
                 String::append_char(__local_10, 97);
                 String::append_char(__local_10, 116);
                 String::append_char(__local_10, 32);
-                String::append(__local_10, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                String::append(__local_10, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                 String::append_char(__local_10, 58);
                 __local_11 = __inline_Formatter__new_3: block -> ref Formatter {
                     __local_21 = __local_10;
@@ -2326,7 +2326,7 @@ condition: map[\"a\"] == 1
                 String::append_char(__local_12, 97);
                 String::append_char(__local_12, 116);
                 String::append_char(__local_12, 32);
-                String::append(__local_12, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                String::append(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                 String::append_char(__local_12, 58);
                 __local_13 = __inline_Formatter__new_10: block -> ref Formatter {
                     __local_32 = __local_12;
@@ -2360,7 +2360,7 @@ condition: map[\"b\"] == 2
                 String::append_char(__local_14, 97);
                 String::append_char(__local_14, 116);
                 String::append_char(__local_14, 32);
-                String::append(__local_14, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                String::append(__local_14, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                 String::append_char(__local_14, 58);
                 __local_15 = __inline_Formatter__new_17: block -> ref Formatter {
                     __local_43 = __local_14;
@@ -2394,7 +2394,7 @@ condition: map[\"c\"] == 3
                 String::append_char(__local_16, 97);
                 String::append_char(__local_16, 116);
                 String::append_char(__local_16, 32);
-                String::append(__local_16, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 68 });
+                String::append(__local_16, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_treemap.wado"), used: 52 });
                 String::append_char(__local_16, 58);
                 __local_17 = __inline_Formatter__new_25: block -> ref Formatter {
                     __local_55 = __local_16;
@@ -3244,11 +3244,264 @@ fn "core:json/write_escaped_string"(buf, s) {  // from core:json
     String::append_char(buf, 34);
 }
 
+fn char::from_u32(value) {
+    if value >u 1114111 {
+        return 1; 0;
+    };
+    if if value >=u 55296 -> i32 {
+        value <=u 57343;
+    } else {
+        0;
+    } {
+        return 1; 0;
+    };
+    return 0; value;
+}
+
+fn i32::fmt_decimal(self, f) {
+    let is_negative: bool;
+    let abs_val: i64;
+    let digit_count: i32;
+    let offset: i32;
+    let __local_6: ref String;
+    is_negative = self < 0;
+    abs_val = if is_negative -> i64 {
+        0_i64 - builtin::i64_extend_i32_s(self);
+    } else {
+        builtin::i64_extend_i32_s(self);
+    };
+    digit_count = count_digits_i64(abs_val);
+    offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
+        __local_6 = f.buf;
+        break __inline_String__internal_raw_bytes_0: __local_6.repr;
+    }, offset, abs_val, digit_count);
+}
+
+fn char^Display::fmt(self, f) {
+    let s: ref String;
+    let c: char;
+    if f.width <= 0 {
+        c = self;
+        String::append_char(f.buf, c);
+    } else {
+        s = String { repr: builtin::array_new<u8>(4), used: 0 };
+        String::append_char(s, self);
+        Formatter::pad(f, s);
+    };
+}
+
+fn String::grow(self, min_capacity) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<u8>;
+    let __local_5: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    if min_capacity <= capacity {
+        return;
+    };
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_5 = __inline_i32_max_1: block -> i32 {
+            __local_7 = capacity * 2;
+            break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+        };
+        break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+    };
+    new_repr = builtin::array_new<u8>(new_capacity);
+    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    self.repr = ref.as_non_null(new_repr);
+}
+
+fn String::internal_reserve_uninit(self, n) {
+    let new_used: i32;
+    let start: i32;
+    new_used = self.used + n;
+    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        String::grow(self, new_used);
+    };
+    start = self.used;
+    self.used = new_used;
+    return start;
+}
+
+fn String::append(self, other) {
+    let other_len: i32;
+    let new_used: i32;
+    other_len = other.used;
+    if other_len == 0 {
+        return;
+    };
+    new_used = self.used + other_len;
+    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        String::grow(self, new_used);
+    };
+    builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
+    self.used = new_used;
+}
+
+fn String^Eq::eq(self, other) {
+    let len_a: i32;
+    let len_b: i32;
+    let a_repr: ref array<u8>;
+    let b_repr: ref array<u8>;
+    let i: i32;
+    len_a = self.used;
+    len_b = other.used;
+    if len_a != len_b {
+        return 0;
+    };
+    a_repr = self.repr;
+    b_repr = other.repr;
+    __for_1: block {
+        i = 0;
+        block {
+            l171: loop {
+                if (i < len_a) == 0 {
+                    break __for_1;
+                };
+                if builtin::array_get_u8(a_repr, i) != builtin::array_get_u8(b_repr, i) {
+                    return 0;
+                };
+                i = i + 1;
+                continue l171;
+            };
+        };
+    };
+    return 1;
+}
+
+fn String^Ord::cmp(self, other) {
+    let len_a: i32;
+    let len_b: i32;
+    let min_len: i32;
+    let a_repr: ref array<u8>;
+    let b_repr: ref array<u8>;
+    let i: i32;
+    let a_byte: u8;
+    let b_byte: u8;
+    len_a = self.used;
+    len_b = other.used;
+    min_len = select i32(len_a < len_b, len_a, len_b);
+    a_repr = self.repr;
+    b_repr = other.repr;
+    __for_2: block {
+        i = 0;
+        block {
+            l175: loop {
+                if (i < min_len) == 0 {
+                    break __for_2;
+                };
+                a_byte = builtin::array_get_u8(a_repr, i);
+                b_byte = builtin::array_get_u8(b_repr, i);
+                if a_byte <u b_byte {
+                    return 0;
+                };
+                if a_byte >u b_byte {
+                    return 2;
+                };
+                i = i + 1;
+                continue l175;
+            };
+        };
+    };
+    if len_a < len_b {
+        return 0;
+    };
+    if len_a > len_b {
+        return 2;
+    };
+    return 1;
+}
+
+fn StrCharIter^Iterator::next(self) {
+    let b0: u8;
+    let b1_2: u8;
+    let code_3: u8;
+    let b1_4: u8;
+    let b2_5: u8;
+    let code_6: u8;
+    let b1_7: u8;
+    let b2_8: u8;
+    let b3: u8;
+    let code_10: u8;
+    let __local_11: u32;
+    let __local_12: u32;
+    let __local_13: u32;
+    let __local_14: u32;
+    if self.byte_index >= self.used {
+        return 1; 0;
+    };
+    b0 = builtin::array_get_u8(self.repr, self.byte_index);
+    self.byte_index = self.byte_index + 1;
+    if b0 <u 128 {
+        return 0; __inline_char__from_u32_unchecked_0: block -> char {
+            __local_11 = b0;
+            break __inline_char__from_u32_unchecked_0: __local_11;
+        };
+    };
+    if b0 <u 224 {
+        b1_2 = builtin::array_get_u8(self.repr, self.byte_index);
+        self.byte_index = self.byte_index + 1;
+        code_3 = ((b0 & 31) << 6) | (b1_2 & 63);
+        return 0; __inline_char__from_u32_unchecked_1: block -> char {
+            __local_12 = code_3;
+            break __inline_char__from_u32_unchecked_1: __local_12;
+        };
+    };
+    if b0 <u 240 {
+        b1_4 = builtin::array_get_u8(self.repr, self.byte_index);
+        b2_5 = builtin::array_get_u8(self.repr, self.byte_index + 1);
+        self.byte_index = self.byte_index + 2;
+        code_6 = (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63);
+        return 0; __inline_char__from_u32_unchecked_2: block -> char {
+            __local_13 = code_6;
+            break __inline_char__from_u32_unchecked_2: __local_13;
+        };
+    };
+    b1_7 = builtin::array_get_u8(self.repr, self.byte_index);
+    b2_8 = builtin::array_get_u8(self.repr, self.byte_index + 1);
+    b3 = builtin::array_get_u8(self.repr, self.byte_index + 2);
+    self.byte_index = self.byte_index + 3;
+    code_10 = ((((b0 & 7) << 18) | ((b1_7 & 63) << 12)) | ((b2_8 & 63) << 6)) | (b3 & 63);
+    return 0; __inline_char__from_u32_unchecked_3: block -> char {
+        __local_14 = code_10;
+        break __inline_char__from_u32_unchecked_3: __local_14;
+    };
+}
+
+fn String::append_char(self, c) {
+    let code: u32;
+    code = c;
+    if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        String::grow(self, self.used + 4);
+    };
+    if code <u 128 {
+        builtin::array_set_u8(self.repr, self.used, code & 255);
+        self.used = self.used + 1;
+    } else if code <u 2048 {
+        builtin::array_set_u8(self.repr, self.used, (192 | (code >>u 6)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | (code & 63)) & 255);
+        self.used = self.used + 2;
+    } else if code <u 65536 {
+        builtin::array_set_u8(self.repr, self.used, (224 | (code >>u 12)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | (code & 63)) & 255);
+        self.used = self.used + 3;
+    } else {
+        builtin::array_set_u8(self.repr, self.used, (240 | (code >>u 18)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 12) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
+        self.used = self.used + 4;
+    };
+}
+
 fn TreeMap<String,Option<i32>>^Serialize::serialize<JsonSerializer>(self, s) {
     let entries: ref Array<Tuple<String,Option<i32>>>;
     let map_r: ref Result<JsonMapSerializer,SerializeError>;
     let m: ref "core:json/JsonMapSerializer";
-    let __iter_5: ref "core:allocator/ArrayIter<Tuple<String,Option<i32>>>";
+    let __iter_5: ref "core:serde/ArrayIter<Tuple<String,Option<i32>>>";
     let entry: ref "tuple/[String, Option<i32>]";
     let k: ref String;
     let kr: ref Result<unit,SerializeError>;
@@ -3268,9 +3521,9 @@ fn TreeMap<String,Option<i32>>^Serialize::serialize<JsonSerializer>(self, s) {
     __pattern_temp_0 = map_r;
     if ref.test Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0) {
         m = value_copy "core:json/JsonMapSerializer"(ref.cast Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
-        __iter_5 = "core:allocator/ArrayIter<Tuple<String,Option<i32>>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
-        b161: block {
-            l162: loop {
+        __iter_5 = "core:serde/ArrayIter<Tuple<String,Option<i32>>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
+        b190: block {
+            l191: loop {
                 let __sroa___pattern_temp_1_discriminant: i32;
                 let __sroa___pattern_temp_1_payload_0: ref null "tuple/[String, Option<i32>]";
                 multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<Tuple<String,Option<i32>>>^Iterator::next(__iter_5);
@@ -3288,9 +3541,9 @@ fn TreeMap<String,Option<i32>>^Serialize::serialize<JsonSerializer>(self, s) {
                         return 1; ref.as_non_null(e_12);
                     };
                 } else {
-                    break b161;
+                    break b190;
                 };
-                continue l162;
+                continue l191;
             };
         };
         block {
@@ -3366,19 +3619,19 @@ fn ArrayIter<Tuple<String,Option<i32>>>^Iterator::next(self) {
 fn TreeMap<String,Option<i32>>::entries(self) {
     let __local_1: ref Array<Tuple<String,Option<i32>>>;
     let result: ref Array<Tuple<String,Option<i32>>>;
-    let __iter_3: ref "core:allocator/ArrayIter<TreeMapEntry<String,Option<i32>>>";
+    let __iter_3: ref "core:serde/ArrayIter<TreeMapEntry<String,Option<i32>>>";
     let entry: ref "core:allocator/TreeMapEntry<String,Option<i32>>";
     let __local_9: ref Array<TreeMapEntry<String,Option<i32>>>;
     result = __seq_lit: block -> ref Array<Tuple<String,Option<i32>>> {
         __local_1 = Array<Tuple<String,Option<i32>>> { repr: builtin::array_new<ref "tuple/[String, Option<i32>]">(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    __iter_3 = __inline_Array_TreeMapEntry_String_Option_i32____IntoIterator__into_iter_3: block -> ref "core:allocator/ArrayIter<TreeMapEntry<String,Option<i32>>>" {
+    __iter_3 = __inline_Array_TreeMapEntry_String_Option_i32____IntoIterator__into_iter_3: block -> ref "core:serde/ArrayIter<TreeMapEntry<String,Option<i32>>>" {
         __local_9 = self.entries;
-        break __inline_Array_TreeMapEntry_String_Option_i32____IntoIterator__into_iter_3: "core:allocator/ArrayIter<TreeMapEntry<String,Option<i32>>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
+        break __inline_Array_TreeMapEntry_String_Option_i32____IntoIterator__into_iter_3: "core:serde/ArrayIter<TreeMapEntry<String,Option<i32>>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
     };
-    b170: block {
-        l171: loop {
+    b199: block {
+        l200: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: ref null "core:allocator/TreeMapEntry<String,Option<i32>>";
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<TreeMapEntry<String,Option<i32>>>^Iterator::next(__iter_3);
@@ -3388,9 +3641,9 @@ fn TreeMap<String,Option<i32>>::entries(self) {
                     Array<Tuple<String,Option<i32>>>::append(result, "tuple/[String, Option<i32>]" { 0: ref.as_non_null(entry.key), 1: ref.as_non_null(entry.value) });
                 };
             } else {
-                break b170;
+                break b199;
             };
-            continue l171;
+            continue l200;
         };
     };
     return result;
@@ -3558,8 +3811,8 @@ fn TreeMap<String,Option<i32>>::find_index(self, key) {
     _licm_entries_8 = self.entries;
     _licm_used_9 = _licm_entries_8.used;
     _licm_repr_10 = _licm_entries_8.repr;
-    b189: block {
-        l190: loop {
+    b218: block {
+        l219: loop {
             __pattern_temp_0 = value_copy Option<TreeMapNode<String>>(current);
             if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_0) {
                 n = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_0).payload_0;
@@ -3583,9 +3836,9 @@ fn TreeMap<String,Option<i32>>::find_index(self, key) {
                     current = value_copy Option<TreeMapNode<String>>(n.right);
                 };
             } else {
-                break b189;
+                break b218;
             };
-            continue l190;
+            continue l219;
         };
     };
     return -1;
@@ -3595,7 +3848,7 @@ fn TreeMap<String,Array<i32>>^Serialize::serialize<JsonSerializer>(self, s) {
     let entries: ref Array<Tuple<String,Array<i32>>>;
     let map_r: ref Result<JsonMapSerializer,SerializeError>;
     let m: ref "core:json/JsonMapSerializer";
-    let __iter_5: ref "core:allocator/ArrayIter<Tuple<String,Array<i32>>>";
+    let __iter_5: ref "core:serde/ArrayIter<Tuple<String,Array<i32>>>";
     let entry: ref "tuple/[String, Array<i32>]";
     let k: ref String;
     let v: ref Array<i32>;
@@ -3616,9 +3869,9 @@ fn TreeMap<String,Array<i32>>^Serialize::serialize<JsonSerializer>(self, s) {
     __pattern_temp_0 = map_r;
     if ref.test Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0) {
         m = value_copy "core:json/JsonMapSerializer"(ref.cast Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
-        __iter_5 = "core:allocator/ArrayIter<Tuple<String,Array<i32>>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
-        b197: block {
-            l198: loop {
+        __iter_5 = "core:serde/ArrayIter<Tuple<String,Array<i32>>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
+        b226: block {
+            l227: loop {
                 let __sroa___pattern_temp_1_discriminant: i32;
                 let __sroa___pattern_temp_1_payload_0: ref null "tuple/[String, Array<i32>]";
                 multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<Tuple<String,Array<i32>>>^Iterator::next(__iter_5);
@@ -3637,9 +3890,9 @@ fn TreeMap<String,Array<i32>>^Serialize::serialize<JsonSerializer>(self, s) {
                         return 1; ref.as_non_null(e_12);
                     };
                 } else {
-                    break b197;
+                    break b226;
                 };
-                continue l198;
+                continue l227;
             };
         };
         block {
@@ -3670,7 +3923,7 @@ fn JsonMapSerializer^SerializeMap::value<Array<i32>>(self, value) {
 fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
     let seq_2: ref Result<JsonSeqSerializer,SerializeError>;
     let seq_3: ref "core:json/JsonSeqSerializer";
-    let __iter_4: ref "core:allocator/ArrayIter<i32>";
+    let __iter_4: ref "core:serde/ArrayIter<i32>";
     let r: ref Result<unit,SerializeError>;
     let e_7: ref "core:serde/SerializeError";
     let e_8: ref "core:serde/SerializeError";
@@ -3686,12 +3939,12 @@ fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
     __pattern_temp_0 = seq_2;
     if ref.test Result<JsonSeqSerializer,SerializeError>::Ok(__pattern_temp_0) {
         seq_3 = value_copy "core:json/JsonSeqSerializer"(ref.cast Result<JsonSeqSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
-        __iter_4 = __inline_Array_i32__IntoIterator__into_iter_2: block -> ref "core:allocator/ArrayIter<i32>" {
+        __iter_4 = __inline_Array_i32__IntoIterator__into_iter_2: block -> ref "core:serde/ArrayIter<i32>" {
             __local_16 = self;
-            break __inline_Array_i32__IntoIterator__into_iter_2: "core:allocator/ArrayIter<i32>" { repr: ref.as_non_null(__local_16.repr), used: __local_16.used, index: 0 };
+            break __inline_Array_i32__IntoIterator__into_iter_2: "core:serde/ArrayIter<i32>" { repr: ref.as_non_null(__local_16.repr), used: __local_16.used, index: 0 };
         };
-        b204: block {
-            l205: loop {
+        b233: block {
+            l234: loop {
                 let __sroa___pattern_temp_1_discriminant: i32;
                 let __sroa___pattern_temp_1_payload_0: i32;
                 multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
@@ -3702,9 +3955,9 @@ fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
                         return Result<unit,SerializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_7) };
                     };
                 } else {
-                    break b204;
+                    break b233;
                 };
-                continue l205;
+                continue l234;
             };
         };
         return __inline_JsonSeqSerializer_SerializeSeq__end_3: block -> ref Result<unit,SerializeError> {
@@ -3760,19 +4013,19 @@ fn ArrayIter<Tuple<String,Array<i32>>>^Iterator::next(self) {
 fn TreeMap<String,Array<i32>>::entries(self) {
     let __local_1: ref Array<Tuple<String,Array<i32>>>;
     let result: ref Array<Tuple<String,Array<i32>>>;
-    let __iter_3: ref "core:allocator/ArrayIter<TreeMapEntry<String,Array<i32>>>";
+    let __iter_3: ref "core:serde/ArrayIter<TreeMapEntry<String,Array<i32>>>";
     let entry: ref "core:allocator/TreeMapEntry<String,Array<i32>>";
     let __local_9: ref Array<TreeMapEntry<String,Array<i32>>>;
     result = __seq_lit: block -> ref Array<Tuple<String,Array<i32>>> {
         __local_1 = Array<Tuple<String,Array<i32>>> { repr: builtin::array_new<ref "tuple/[String, Array<i32>]">(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    __iter_3 = __inline_Array_TreeMapEntry_String_Array_i32____IntoIterator__into_iter_3: block -> ref "core:allocator/ArrayIter<TreeMapEntry<String,Array<i32>>>" {
+    __iter_3 = __inline_Array_TreeMapEntry_String_Array_i32____IntoIterator__into_iter_3: block -> ref "core:serde/ArrayIter<TreeMapEntry<String,Array<i32>>>" {
         __local_9 = self.entries;
-        break __inline_Array_TreeMapEntry_String_Array_i32____IntoIterator__into_iter_3: "core:allocator/ArrayIter<TreeMapEntry<String,Array<i32>>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
+        break __inline_Array_TreeMapEntry_String_Array_i32____IntoIterator__into_iter_3: "core:serde/ArrayIter<TreeMapEntry<String,Array<i32>>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
     };
-    b212: block {
-        l213: loop {
+    b241: block {
+        l242: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: ref null "core:allocator/TreeMapEntry<String,Array<i32>>";
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<TreeMapEntry<String,Array<i32>>>^Iterator::next(__iter_3);
@@ -3782,9 +4035,9 @@ fn TreeMap<String,Array<i32>>::entries(self) {
                     Array<Tuple<String,Array<i32>>>::append(result, "tuple/[String, Array<i32>]" { 0: ref.as_non_null(entry.key), 1: ref.as_non_null(entry.value) });
                 };
             } else {
-                break b212;
+                break b241;
             };
-            continue l213;
+            continue l242;
         };
     };
     return result;
@@ -3973,8 +4226,8 @@ fn TreeMap<String,Array<i32>>::find_index(self, key) {
     _licm_entries_8 = self.entries;
     _licm_used_9 = _licm_entries_8.used;
     _licm_repr_10 = _licm_entries_8.repr;
-    b232: block {
-        l233: loop {
+    b261: block {
+        l262: loop {
             __pattern_temp_0 = value_copy Option<TreeMapNode<String>>(current);
             if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_0) {
                 n = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_0).payload_0;
@@ -3998,9 +4251,9 @@ fn TreeMap<String,Array<i32>>::find_index(self, key) {
                     current = value_copy Option<TreeMapNode<String>>(n.right);
                 };
             } else {
-                break b232;
+                break b261;
             };
-            continue l233;
+            continue l262;
         };
     };
     return -1;
@@ -4010,7 +4263,7 @@ fn TreeMap<String,bool>^Serialize::serialize<JsonSerializer>(self, s) {
     let entries: ref Array<Tuple<String,bool>>;
     let map_r: ref Result<JsonMapSerializer,SerializeError>;
     let m: ref "core:json/JsonMapSerializer";
-    let __iter_5: ref "core:allocator/ArrayIter<Tuple<String,bool>>";
+    let __iter_5: ref "core:serde/ArrayIter<Tuple<String,bool>>";
     let entry: ref "tuple/[String, bool]";
     let k: ref String;
     let kr: ref Result<unit,SerializeError>;
@@ -4030,9 +4283,9 @@ fn TreeMap<String,bool>^Serialize::serialize<JsonSerializer>(self, s) {
     __pattern_temp_0 = map_r;
     if ref.test Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0) {
         m = value_copy "core:json/JsonMapSerializer"(ref.cast Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
-        __iter_5 = "core:allocator/ArrayIter<Tuple<String,bool>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
-        b240: block {
-            l241: loop {
+        __iter_5 = "core:serde/ArrayIter<Tuple<String,bool>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
+        b269: block {
+            l270: loop {
                 let __sroa___pattern_temp_1_discriminant: i32;
                 let __sroa___pattern_temp_1_payload_0: ref null "tuple/[String, bool]";
                 multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<Tuple<String,bool>>^Iterator::next(__iter_5);
@@ -4050,9 +4303,9 @@ fn TreeMap<String,bool>^Serialize::serialize<JsonSerializer>(self, s) {
                         return 1; ref.as_non_null(e_12);
                     };
                 } else {
-                    break b240;
+                    break b269;
                 };
-                continue l241;
+                continue l270;
             };
         };
         block {
@@ -4097,19 +4350,19 @@ fn ArrayIter<Tuple<String,bool>>^Iterator::next(self) {
 fn TreeMap<String,bool>::entries(self) {
     let __local_1: ref Array<Tuple<String,bool>>;
     let result: ref Array<Tuple<String,bool>>;
-    let __iter_3: ref "core:allocator/ArrayIter<TreeMapEntry<String,bool>>";
+    let __iter_3: ref "core:serde/ArrayIter<TreeMapEntry<String,bool>>";
     let entry: ref "core:allocator/TreeMapEntry<String,bool>";
     let __local_9: ref Array<TreeMapEntry<String,bool>>;
     result = __seq_lit: block -> ref Array<Tuple<String,bool>> {
         __local_1 = Array<Tuple<String,bool>> { repr: builtin::array_new<ref "tuple/[String, bool]">(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    __iter_3 = __inline_Array_TreeMapEntry_String_bool___IntoIterator__into_iter_3: block -> ref "core:allocator/ArrayIter<TreeMapEntry<String,bool>>" {
+    __iter_3 = __inline_Array_TreeMapEntry_String_bool___IntoIterator__into_iter_3: block -> ref "core:serde/ArrayIter<TreeMapEntry<String,bool>>" {
         __local_9 = self.entries;
-        break __inline_Array_TreeMapEntry_String_bool___IntoIterator__into_iter_3: "core:allocator/ArrayIter<TreeMapEntry<String,bool>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
+        break __inline_Array_TreeMapEntry_String_bool___IntoIterator__into_iter_3: "core:serde/ArrayIter<TreeMapEntry<String,bool>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
     };
-    b247: block {
-        l248: loop {
+    b276: block {
+        l277: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: ref null "core:allocator/TreeMapEntry<String,bool>";
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<TreeMapEntry<String,bool>>^Iterator::next(__iter_3);
@@ -4119,9 +4372,9 @@ fn TreeMap<String,bool>::entries(self) {
                     Array<Tuple<String,bool>>::append(result, "tuple/[String, bool]" { 0: ref.as_non_null(entry.key), 1: entry.value });
                 };
             } else {
-                break b247;
+                break b276;
             };
-            continue l248;
+            continue l277;
         };
     };
     return result;
@@ -4289,8 +4542,8 @@ fn TreeMap<String,bool>::find_index(self, key) {
     _licm_entries_8 = self.entries;
     _licm_used_9 = _licm_entries_8.used;
     _licm_repr_10 = _licm_entries_8.repr;
-    b266: block {
-        l267: loop {
+    b295: block {
+        l296: loop {
             __pattern_temp_0 = value_copy Option<TreeMapNode<String>>(current);
             if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_0) {
                 n = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_0).payload_0;
@@ -4314,9 +4567,9 @@ fn TreeMap<String,bool>::find_index(self, key) {
                     current = value_copy Option<TreeMapNode<String>>(n.right);
                 };
             } else {
-                break b266;
+                break b295;
             };
-            continue l267;
+            continue l296;
         };
     };
     return -1;
@@ -4326,7 +4579,7 @@ fn TreeMap<String,String>^Serialize::serialize<JsonSerializer>(self, s) {
     let entries: ref Array<Tuple<String,String>>;
     let map_r: ref Result<JsonMapSerializer,SerializeError>;
     let m: ref "core:json/JsonMapSerializer";
-    let __iter_5: ref "core:allocator/ArrayIter<Tuple<String,String>>";
+    let __iter_5: ref "core:serde/ArrayIter<Tuple<String,String>>";
     let entry: ref "tuple/[String, String]";
     let k: ref String;
     let v: ref String;
@@ -4347,9 +4600,9 @@ fn TreeMap<String,String>^Serialize::serialize<JsonSerializer>(self, s) {
     __pattern_temp_0 = map_r;
     if ref.test Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0) {
         m = value_copy "core:json/JsonMapSerializer"(ref.cast Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
-        __iter_5 = "core:allocator/ArrayIter<Tuple<String,String>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
-        b274: block {
-            l275: loop {
+        __iter_5 = "core:serde/ArrayIter<Tuple<String,String>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
+        b303: block {
+            l304: loop {
                 let __sroa___pattern_temp_1_discriminant: i32;
                 let __sroa___pattern_temp_1_payload_0: ref null "tuple/[String, String]";
                 multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<Tuple<String,String>>^Iterator::next(__iter_5);
@@ -4368,9 +4621,9 @@ fn TreeMap<String,String>^Serialize::serialize<JsonSerializer>(self, s) {
                         return 1; ref.as_non_null(e_12);
                     };
                 } else {
-                    break b274;
+                    break b303;
                 };
-                continue l275;
+                continue l304;
             };
         };
         block {
@@ -4414,19 +4667,19 @@ fn ArrayIter<Tuple<String,String>>^Iterator::next(self) {
 fn TreeMap<String,String>::entries(self) {
     let __local_1: ref Array<Tuple<String,String>>;
     let result: ref Array<Tuple<String,String>>;
-    let __iter_3: ref "core:allocator/ArrayIter<TreeMapEntry<String,String>>";
+    let __iter_3: ref "core:serde/ArrayIter<TreeMapEntry<String,String>>";
     let entry: ref "core:allocator/TreeMapEntry<String,String>";
     let __local_9: ref Array<TreeMapEntry<String,String>>;
     result = __seq_lit: block -> ref Array<Tuple<String,String>> {
         __local_1 = Array<Tuple<String,String>> { repr: builtin::array_new<ref "tuple/[String, String]">(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    __iter_3 = __inline_Array_TreeMapEntry_String_String___IntoIterator__into_iter_3: block -> ref "core:allocator/ArrayIter<TreeMapEntry<String,String>>" {
+    __iter_3 = __inline_Array_TreeMapEntry_String_String___IntoIterator__into_iter_3: block -> ref "core:serde/ArrayIter<TreeMapEntry<String,String>>" {
         __local_9 = self.entries;
-        break __inline_Array_TreeMapEntry_String_String___IntoIterator__into_iter_3: "core:allocator/ArrayIter<TreeMapEntry<String,String>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
+        break __inline_Array_TreeMapEntry_String_String___IntoIterator__into_iter_3: "core:serde/ArrayIter<TreeMapEntry<String,String>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
     };
-    b281: block {
-        l282: loop {
+    b310: block {
+        l311: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: ref null "core:allocator/TreeMapEntry<String,String>";
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<TreeMapEntry<String,String>>^Iterator::next(__iter_3);
@@ -4436,9 +4689,9 @@ fn TreeMap<String,String>::entries(self) {
                     Array<Tuple<String,String>>::append(result, "tuple/[String, String]" { 0: ref.as_non_null(entry.key), 1: ref.as_non_null(entry.value) });
                 };
             } else {
-                break b281;
+                break b310;
             };
-            continue l282;
+            continue l311;
         };
     };
     return result;
@@ -4606,8 +4859,8 @@ fn TreeMap<String,String>::find_index(self, key) {
     _licm_entries_8 = self.entries;
     _licm_used_9 = _licm_entries_8.used;
     _licm_repr_10 = _licm_entries_8.repr;
-    b300: block {
-        l301: loop {
+    b329: block {
+        l330: loop {
             __pattern_temp_0 = value_copy Option<TreeMapNode<String>>(current);
             if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_0) {
                 n = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_0).payload_0;
@@ -4631,9 +4884,9 @@ fn TreeMap<String,String>::find_index(self, key) {
                     current = value_copy Option<TreeMapNode<String>>(n.right);
                 };
             } else {
-                break b300;
+                break b329;
             };
-            continue l301;
+            continue l330;
         };
     };
     return -1;
@@ -4682,8 +4935,8 @@ fn TreeMap<String,i32>::find_index(self, key) {
     _licm_entries_8 = self.entries;
     _licm_used_9 = _licm_entries_8.used;
     _licm_repr_10 = _licm_entries_8.repr;
-    b309: block {
-        l310: loop {
+    b338: block {
+        l339: loop {
             __pattern_temp_0 = value_copy Option<TreeMapNode<String>>(current);
             if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_0) {
                 n = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_0).payload_0;
@@ -4707,9 +4960,9 @@ fn TreeMap<String,i32>::find_index(self, key) {
                     current = value_copy Option<TreeMapNode<String>>(n.right);
                 };
             } else {
-                break b309;
+                break b338;
             };
-            continue l310;
+            continue l339;
         };
     };
     return -1;
@@ -4745,7 +4998,7 @@ fn TreeMap<String,i32>^Deserialize::deserialize<JsonDeserializer>(d) {
             break __seq_lit: __local_22;
         }), size: 0, deleted_count: 0 };
         block {
-            l318: loop {
+            l347: loop {
                 key_r = "core:json/JsonMapAccess^DeserializeMap::next_key_string"(ma);
                 __pattern_temp_1 = key_r;
                 if ref.test Result<Option<String>,DeserializeError>::Ok(__pattern_temp_1) {
@@ -4782,7 +5035,7 @@ fn TreeMap<String,i32>^Deserialize::deserialize<JsonDeserializer>(d) {
                     e_12 = value_copy "core:serde/DeserializeError"(ref.cast Result<Option<String>,DeserializeError>::Err(__pattern_temp_6).payload_0);
                     return Result<TreeMap<String,i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_12) };
                 };
-                continue l318;
+                continue l347;
             };
         };
     };
@@ -4917,7 +5170,7 @@ fn TreeMap<String,i32>^Serialize::serialize<JsonSerializer>(self, s) {
     let entries: ref Array<Tuple<String,i32>>;
     let map_r: ref Result<JsonMapSerializer,SerializeError>;
     let m: ref "core:json/JsonMapSerializer";
-    let __iter_5: ref "core:allocator/ArrayIter<Tuple<String,i32>>";
+    let __iter_5: ref "core:serde/ArrayIter<Tuple<String,i32>>";
     let entry: ref "tuple/[String, i32]";
     let k: ref String;
     let kr: ref Result<unit,SerializeError>;
@@ -4937,9 +5190,9 @@ fn TreeMap<String,i32>^Serialize::serialize<JsonSerializer>(self, s) {
     __pattern_temp_0 = map_r;
     if ref.test Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0) {
         m = value_copy "core:json/JsonMapSerializer"(ref.cast Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
-        __iter_5 = "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
-        b340: block {
-            l341: loop {
+        __iter_5 = "core:serde/ArrayIter<Tuple<String,i32>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
+        b369: block {
+            l370: loop {
                 let __sroa___pattern_temp_1_discriminant: i32;
                 let __sroa___pattern_temp_1_payload_0: ref null "tuple/[String, i32]";
                 multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_5);
@@ -4957,9 +5210,9 @@ fn TreeMap<String,i32>^Serialize::serialize<JsonSerializer>(self, s) {
                         return 1; ref.as_non_null(e_12);
                     };
                 } else {
-                    break b340;
+                    break b369;
                 };
-                continue l341;
+                continue l370;
             };
         };
         block {
@@ -5004,19 +5257,19 @@ fn ArrayIter<Tuple<String,i32>>^Iterator::next(self) {
 fn TreeMap<String,i32>::entries(self) {
     let __local_1: ref Array<Tuple<String,i32>>;
     let result: ref Array<Tuple<String,i32>>;
-    let __iter_3: ref "core:allocator/ArrayIter<TreeMapEntry<String,i32>>";
+    let __iter_3: ref "core:serde/ArrayIter<TreeMapEntry<String,i32>>";
     let entry: ref "core:allocator/TreeMapEntry<String,i32>";
     let __local_9: ref Array<TreeMapEntry<String,i32>>;
     result = __seq_lit: block -> ref Array<Tuple<String,i32>> {
         __local_1 = Array<Tuple<String,i32>> { repr: builtin::array_new<ref "tuple/[String, i32]">(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    __iter_3 = __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: block -> ref "core:allocator/ArrayIter<TreeMapEntry<String,i32>>" {
+    __iter_3 = __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: block -> ref "core:serde/ArrayIter<TreeMapEntry<String,i32>>" {
         __local_9 = self.entries;
-        break __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: "core:allocator/ArrayIter<TreeMapEntry<String,i32>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
+        break __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: "core:serde/ArrayIter<TreeMapEntry<String,i32>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
     };
-    b347: block {
-        l348: loop {
+    b376: block {
+        l377: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: ref null "core:allocator/TreeMapEntry<String,i32>";
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<TreeMapEntry<String,i32>>^Iterator::next(__iter_3);
@@ -5026,9 +5279,9 @@ fn TreeMap<String,i32>::entries(self) {
                     Array<Tuple<String,i32>>::append(result, "tuple/[String, i32]" { 0: ref.as_non_null(entry.key), 1: entry.value });
                 };
             } else {
-                break b347;
+                break b376;
             };
-            continue l348;
+            continue l377;
         };
     };
     return result;
@@ -5063,259 +5316,6 @@ fn ArrayIter<TreeMapEntry<String,i32>>^Iterator::next(self) {
     item = builtin::array_get<ref "core:allocator/TreeMapEntry<String,i32>">(self.repr, self.index);
     self.index = self.index + 1;
     return 0; ref.as_non_null(item);
-}
-
-fn char::from_u32(value) {
-    if value >u 1114111 {
-        return 1; 0;
-    };
-    if if value >=u 55296 -> i32 {
-        value <=u 57343;
-    } else {
-        0;
-    } {
-        return 1; 0;
-    };
-    return 0; value;
-}
-
-fn i32::fmt_decimal(self, f) {
-    let is_negative: bool;
-    let abs_val: i64;
-    let digit_count: i32;
-    let offset: i32;
-    let __local_6: ref String;
-    is_negative = self < 0;
-    abs_val = if is_negative -> i64 {
-        0_i64 - builtin::i64_extend_i32_s(self);
-    } else {
-        builtin::i64_extend_i32_s(self);
-    };
-    digit_count = count_digits_i64(abs_val);
-    offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
-        __local_6 = f.buf;
-        break __inline_String__internal_raw_bytes_0: __local_6.repr;
-    }, offset, abs_val, digit_count);
-}
-
-fn char^Display::fmt(self, f) {
-    let s: ref String;
-    let c: char;
-    if f.width <= 0 {
-        c = self;
-        String::append_char(f.buf, c);
-    } else {
-        s = String { repr: builtin::array_new<u8>(4), used: 0 };
-        String::append_char(s, self);
-        Formatter::pad(f, s);
-    };
-}
-
-fn String::grow(self, min_capacity) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<u8>;
-    let __local_5: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    if min_capacity <= capacity {
-        return;
-    };
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_5 = __inline_i32_max_1: block -> i32 {
-            __local_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
-        };
-        break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
-    };
-    new_repr = builtin::array_new<u8>(new_capacity);
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
-}
-
-fn String::internal_reserve_uninit(self, n) {
-    let new_used: i32;
-    let start: i32;
-    new_used = self.used + n;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
-        String::grow(self, new_used);
-    };
-    start = self.used;
-    self.used = new_used;
-    return start;
-}
-
-fn String::append(self, other) {
-    let other_len: i32;
-    let new_used: i32;
-    other_len = other.used;
-    if other_len == 0 {
-        return;
-    };
-    new_used = self.used + other_len;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
-        String::grow(self, new_used);
-    };
-    builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
-    self.used = new_used;
-}
-
-fn String^Eq::eq(self, other) {
-    let len_a: i32;
-    let len_b: i32;
-    let a_repr: ref array<u8>;
-    let b_repr: ref array<u8>;
-    let i: i32;
-    len_a = self.used;
-    len_b = other.used;
-    if len_a != len_b {
-        return 0;
-    };
-    a_repr = self.repr;
-    b_repr = other.repr;
-    __for_1: block {
-        i = 0;
-        block {
-            l364: loop {
-                if (i < len_a) == 0 {
-                    break __for_1;
-                };
-                if builtin::array_get_u8(a_repr, i) != builtin::array_get_u8(b_repr, i) {
-                    return 0;
-                };
-                i = i + 1;
-                continue l364;
-            };
-        };
-    };
-    return 1;
-}
-
-fn String^Ord::cmp(self, other) {
-    let len_a: i32;
-    let len_b: i32;
-    let min_len: i32;
-    let a_repr: ref array<u8>;
-    let b_repr: ref array<u8>;
-    let i: i32;
-    let a_byte: u8;
-    let b_byte: u8;
-    len_a = self.used;
-    len_b = other.used;
-    min_len = select i32(len_a < len_b, len_a, len_b);
-    a_repr = self.repr;
-    b_repr = other.repr;
-    __for_2: block {
-        i = 0;
-        block {
-            l368: loop {
-                if (i < min_len) == 0 {
-                    break __for_2;
-                };
-                a_byte = builtin::array_get_u8(a_repr, i);
-                b_byte = builtin::array_get_u8(b_repr, i);
-                if a_byte <u b_byte {
-                    return 0;
-                };
-                if a_byte >u b_byte {
-                    return 2;
-                };
-                i = i + 1;
-                continue l368;
-            };
-        };
-    };
-    if len_a < len_b {
-        return 0;
-    };
-    if len_a > len_b {
-        return 2;
-    };
-    return 1;
-}
-
-fn StrCharIter^Iterator::next(self) {
-    let b0: u8;
-    let b1_2: u8;
-    let code_3: u8;
-    let b1_4: u8;
-    let b2_5: u8;
-    let code_6: u8;
-    let b1_7: u8;
-    let b2_8: u8;
-    let b3: u8;
-    let code_10: u8;
-    let __local_11: u32;
-    let __local_12: u32;
-    let __local_13: u32;
-    let __local_14: u32;
-    if self.byte_index >= self.used {
-        return 1; 0;
-    };
-    b0 = builtin::array_get_u8(self.repr, self.byte_index);
-    self.byte_index = self.byte_index + 1;
-    if b0 <u 128 {
-        return 0; __inline_char__from_u32_unchecked_0: block -> char {
-            __local_11 = b0;
-            break __inline_char__from_u32_unchecked_0: __local_11;
-        };
-    };
-    if b0 <u 224 {
-        b1_2 = builtin::array_get_u8(self.repr, self.byte_index);
-        self.byte_index = self.byte_index + 1;
-        code_3 = ((b0 & 31) << 6) | (b1_2 & 63);
-        return 0; __inline_char__from_u32_unchecked_1: block -> char {
-            __local_12 = code_3;
-            break __inline_char__from_u32_unchecked_1: __local_12;
-        };
-    };
-    if b0 <u 240 {
-        b1_4 = builtin::array_get_u8(self.repr, self.byte_index);
-        b2_5 = builtin::array_get_u8(self.repr, self.byte_index + 1);
-        self.byte_index = self.byte_index + 2;
-        code_6 = (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63);
-        return 0; __inline_char__from_u32_unchecked_2: block -> char {
-            __local_13 = code_6;
-            break __inline_char__from_u32_unchecked_2: __local_13;
-        };
-    };
-    b1_7 = builtin::array_get_u8(self.repr, self.byte_index);
-    b2_8 = builtin::array_get_u8(self.repr, self.byte_index + 1);
-    b3 = builtin::array_get_u8(self.repr, self.byte_index + 2);
-    self.byte_index = self.byte_index + 3;
-    code_10 = ((((b0 & 7) << 18) | ((b1_7 & 63) << 12)) | ((b2_8 & 63) << 6)) | (b3 & 63);
-    return 0; __inline_char__from_u32_unchecked_3: block -> char {
-        __local_14 = code_10;
-        break __inline_char__from_u32_unchecked_3: __local_14;
-    };
-}
-
-fn String::append_char(self, c) {
-    let code: u32;
-    code = c;
-    if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
-        String::grow(self, self.used + 4);
-    };
-    if code <u 128 {
-        builtin::array_set_u8(self.repr, self.used, code & 255);
-        self.used = self.used + 1;
-    } else if code <u 2048 {
-        builtin::array_set_u8(self.repr, self.used, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | (code & 63)) & 255);
-        self.used = self.used + 2;
-    } else if code <u 65536 {
-        builtin::array_set_u8(self.repr, self.used, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | (code & 63)) & 255);
-        self.used = self.used + 3;
-    } else {
-        builtin::array_set_u8(self.repr, self.used, (240 | (code >>u 18)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 12) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
-        self.used = self.used + 4;
-    };
 }
 
 fn "core:json/JsonSerializer^Serializer::serialize_i32"(self, v) {  // from core:json

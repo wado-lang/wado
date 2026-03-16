@@ -30,13 +30,13 @@ struct Formatter {
     mut buf: ref String,
 }
 
-struct [String, i32] {
-    mut 0: ref String,
+struct [Stream<u8>, StreamWritable<u8>] {
+    mut 0: i32,
     mut 1: i32,
 }
 
-struct [Stream<u8>, StreamWritable<u8>] {
-    mut 0: i32,
+struct [String, i32] {
+    mut 0: ref String,
     mut 1: i32,
 }
 
@@ -44,10 +44,17 @@ array array<Tuple<String,i32>> (mut ref "tuple/[String, i32]");
 
 array array<TreeMapEntry<String,i32>> (mut ref "core:allocator/TreeMapEntry<String,i32>");
 
-struct ArrayIter<TreeMapEntry<String,i32>> {  // from core:allocator  // ArrayIter<T> with T=TreeMapEntry<String,i32>
-    mut repr: ref array<TreeMapEntry<String,i32>>,
+struct ArrayIter<Tuple<String,i32>> {  // from core:allocator  // ArrayIter<T> with T=Tuple<String,i32>
+    mut repr: ref array<Tuple<String,i32>>,
     mut used: i32,
     mut index: i32,
+}
+
+struct TreeMap<String,i32> {  // from core:allocator  // TreeMap<T> with T=String, i32
+    mut root: ref Option<TreeMapNode<String>>,
+    mut entries: ref Array<TreeMapEntry<String,i32>>,
+    mut size: i32,
+    mut deleted_count: i32,
 }
 
 struct TreeMapEntry<String,i32> {  // from core:allocator  // TreeMapEntry<T> with T=String, i32
@@ -64,17 +71,10 @@ struct TreeMapNode<String> {  // from core:allocator  // TreeMapNode<T> with T=S
     mut right: ref Option<TreeMapNode<String>>,
 }
 
-struct ArrayIter<Tuple<String,i32>> {  // from core:allocator  // ArrayIter<T> with T=Tuple<String,i32>
-    mut repr: ref array<Tuple<String,i32>>,
+struct ArrayIter<TreeMapEntry<String,i32>> {  // from wasi:cli  // ArrayIter<T> with T=TreeMapEntry<String,i32>
+    mut repr: ref array<TreeMapEntry<String,i32>>,
     mut used: i32,
     mut index: i32,
-}
-
-struct TreeMap<String,i32> {  // from core:allocator  // TreeMap<T> with T=String, i32
-    mut root: ref Option<TreeMapNode<String>>,
-    mut entries: ref Array<TreeMapEntry<String,i32>>,
-    mut size: i32,
-    mut deleted_count: i32,
 }
 
 variant Option<Tuple<String,i32>> {
@@ -107,15 +107,15 @@ struct Option<TreeMapEntry<String,i32>>::Some {
     payload_0: ref "core:allocator/TreeMapEntry<String,i32>",
 }
 
-struct Array<Tuple<String,i32>> {  // Array<T> with T=Tuple<String,i32>
-    mut repr: ref array<Tuple<String,i32>>,
-    mut used: i32,
-}
-
 array array<u64> (mut u64);
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
+    mut used: i32,
+}
+
+struct Array<Tuple<String,i32>> {  // Array<T> with T=Tuple<String,i32>
+    mut repr: ref array<Tuple<String,i32>>,
     mut used: i32,
 }
 
@@ -186,6 +186,20 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
+type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
+
+type "functype/String::grow" = fn(ref String, i32);
+
+type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
+
+type "functype/String::append" = fn(ref String, ref String);
+
+type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
+
+type "functype/String^Ord::cmp" = fn(ref String, ref String) -> enum:Ordering;
+
+type "functype/String::append_char" = fn(ref String, char);
+
 type "functype/TreeMap<String,i32>::insert" = fn(ref "core:allocator/TreeMap<String,i32>", ref String, i32);
 
 type "functype/TreeMap<String,i32>::insert_node" = fn(ref "core:allocator/TreeMap<String,i32>", ref Option<TreeMapNode<String>>, ref String, i32) -> ref Option<TreeMapNode<String>>;
@@ -204,21 +218,7 @@ type "functype/TreeMap<String,i32>::entries" = fn(ref "core:allocator/TreeMap<St
 
 type "functype/Array<Tuple<String,i32>>::append" = fn(ref Array<Tuple<String,i32>>, ref "tuple/[String, i32]");
 
-type "functype/ArrayIter<TreeMapEntry<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<TreeMapEntry<String,i32>>") -> ref Option<TreeMapEntry<String,i32>>;
-
-type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
-
-type "functype/String::grow" = fn(ref String, i32);
-
-type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
-
-type "functype/String::append" = fn(ref String, ref String);
-
-type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
-
-type "functype/String^Ord::cmp" = fn(ref String, ref String) -> enum:Ordering;
-
-type "functype/String::append_char" = fn(ref String, char);
+type "functype/ArrayIter<TreeMapEntry<String,i32>>^Iterator::next" = fn(ref "wasi:cli/ArrayIter<TreeMapEntry<String,i32>>") -> ref Option<TreeMapEntry<String,i32>>;
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -232,7 +232,7 @@ type "functype/wasi/subtask-drop" = fn(i32);
 
 type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,i32>>") -> [i32, ref null "tuple/[String, i32]"];
 
-type "functype/ArrayIter<TreeMapEntry<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<TreeMapEntry<String,i32>>") -> [i32, ref null "core:allocator/TreeMapEntry<String,i32>"];
+type "functype/ArrayIter<TreeMapEntry<String,i32>>^Iterator::next" = fn(ref "wasi:cli/ArrayIter<TreeMapEntry<String,i32>>") -> [i32, ref null "core:allocator/TreeMapEntry<String,i32>"];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -250,8 +250,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn sum_values(m) {
     let total: i32;
@@ -331,7 +331,7 @@ fn run() with Stdout {
             String::append_char(__local_4, 97);
             String::append_char(__local_4, 116);
             String::append_char(__local_4, 32);
-            String::append(__local_4, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/treemap-literal-fn-arg.wado"), used: 72 });
+            String::append(__local_4, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/treemap-literal-fn-arg.wado"), used: 56 });
             String::append_char(__local_4, 58);
             __local_5 = __inline_Formatter__new_9: block -> ref Formatter {
                 __local_20 = __local_4;
@@ -637,6 +637,176 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
     };
 }
 
+fn i32::fmt_decimal(self, f) {
+    let is_negative: bool;
+    let abs_val: i64;
+    let digit_count: i32;
+    let offset: i32;
+    let __local_6: ref String;
+    is_negative = self < 0;
+    abs_val = if is_negative -> i64 {
+        0_i64 - builtin::i64_extend_i32_s(self);
+    } else {
+        builtin::i64_extend_i32_s(self);
+    };
+    digit_count = count_digits_i64(abs_val);
+    offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
+        __local_6 = f.buf;
+        break __inline_String__internal_raw_bytes_0: __local_6.repr;
+    }, offset, abs_val, digit_count);
+}
+
+fn String::grow(self, min_capacity) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<u8>;
+    let __local_5: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    if min_capacity <= capacity {
+        return;
+    };
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_5 = __inline_i32_max_1: block -> i32 {
+            __local_7 = capacity * 2;
+            break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+        };
+        break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+    };
+    new_repr = builtin::array_new<u8>(new_capacity);
+    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    self.repr = ref.as_non_null(new_repr);
+}
+
+fn String::internal_reserve_uninit(self, n) {
+    let new_used: i32;
+    let start: i32;
+    new_used = self.used + n;
+    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        String::grow(self, new_used);
+    };
+    start = self.used;
+    self.used = new_used;
+    return start;
+}
+
+fn String::append(self, other) {
+    let other_len: i32;
+    let new_used: i32;
+    other_len = other.used;
+    if other_len == 0 {
+        return;
+    };
+    new_used = self.used + other_len;
+    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        String::grow(self, new_used);
+    };
+    builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
+    self.used = new_used;
+}
+
+fn String^Eq::eq(self, other) {
+    let len_a: i32;
+    let len_b: i32;
+    let a_repr: ref array<u8>;
+    let b_repr: ref array<u8>;
+    let i: i32;
+    len_a = self.used;
+    len_b = other.used;
+    if len_a != len_b {
+        return 0;
+    };
+    a_repr = self.repr;
+    b_repr = other.repr;
+    __for_1: block {
+        i = 0;
+        block {
+            l34: loop {
+                if (i < len_a) == 0 {
+                    break __for_1;
+                };
+                if builtin::array_get_u8(a_repr, i) != builtin::array_get_u8(b_repr, i) {
+                    return 0;
+                };
+                i = i + 1;
+                continue l34;
+            };
+        };
+    };
+    return 1;
+}
+
+fn String^Ord::cmp(self, other) {
+    let len_a: i32;
+    let len_b: i32;
+    let min_len: i32;
+    let a_repr: ref array<u8>;
+    let b_repr: ref array<u8>;
+    let i: i32;
+    let a_byte: u8;
+    let b_byte: u8;
+    len_a = self.used;
+    len_b = other.used;
+    min_len = select i32(len_a < len_b, len_a, len_b);
+    a_repr = self.repr;
+    b_repr = other.repr;
+    __for_2: block {
+        i = 0;
+        block {
+            l38: loop {
+                if (i < min_len) == 0 {
+                    break __for_2;
+                };
+                a_byte = builtin::array_get_u8(a_repr, i);
+                b_byte = builtin::array_get_u8(b_repr, i);
+                if a_byte <u b_byte {
+                    return 0;
+                };
+                if a_byte >u b_byte {
+                    return 2;
+                };
+                i = i + 1;
+                continue l38;
+            };
+        };
+    };
+    if len_a < len_b {
+        return 0;
+    };
+    if len_a > len_b {
+        return 2;
+    };
+    return 1;
+}
+
+fn String::append_char(self, c) {
+    let code: u32;
+    code = c;
+    if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        String::grow(self, self.used + 4);
+    };
+    if code <u 128 {
+        builtin::array_set_u8(self.repr, self.used, code & 255);
+        self.used = self.used + 1;
+    } else if code <u 2048 {
+        builtin::array_set_u8(self.repr, self.used, (192 | (code >>u 6)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | (code & 63)) & 255);
+        self.used = self.used + 2;
+    } else if code <u 65536 {
+        builtin::array_set_u8(self.repr, self.used, (224 | (code >>u 12)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | (code & 63)) & 255);
+        self.used = self.used + 3;
+    } else {
+        builtin::array_set_u8(self.repr, self.used, (240 | (code >>u 18)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 12) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
+        self.used = self.used + 4;
+    };
+}
+
 fn TreeMap<String,i32>::insert(self, key, value) {
     let existing_index: i32;
     let new_index: i32;
@@ -768,8 +938,8 @@ fn TreeMap<String,i32>::find_index(self, key) {
     _licm_entries_8 = self.entries;
     _licm_used_9 = _licm_entries_8.used;
     _licm_repr_10 = _licm_entries_8.repr;
-    b40: block {
-        l41: loop {
+    b61: block {
+        l62: loop {
             __pattern_temp_0 = value_copy Option<TreeMapNode<String>>(current);
             if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_0) {
                 n = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_0).payload_0;
@@ -793,9 +963,9 @@ fn TreeMap<String,i32>::find_index(self, key) {
                     current = value_copy Option<TreeMapNode<String>>(n.right);
                 };
             } else {
-                break b40;
+                break b61;
             };
-            continue l41;
+            continue l62;
         };
     };
     return -1;
@@ -814,19 +984,19 @@ fn ArrayIter<Tuple<String,i32>>^Iterator::next(self) {
 fn TreeMap<String,i32>::entries(self) {
     let __local_1: ref Array<Tuple<String,i32>>;
     let result: ref Array<Tuple<String,i32>>;
-    let __iter_3: ref "core:allocator/ArrayIter<TreeMapEntry<String,i32>>";
+    let __iter_3: ref "wasi:cli/ArrayIter<TreeMapEntry<String,i32>>";
     let entry: ref "core:allocator/TreeMapEntry<String,i32>";
     let __local_9: ref Array<TreeMapEntry<String,i32>>;
     result = __seq_lit: block -> ref Array<Tuple<String,i32>> {
         __local_1 = Array<Tuple<String,i32>> { repr: builtin::array_new<ref "tuple/[String, i32]">(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    __iter_3 = __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: block -> ref "core:allocator/ArrayIter<TreeMapEntry<String,i32>>" {
+    __iter_3 = __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: block -> ref "wasi:cli/ArrayIter<TreeMapEntry<String,i32>>" {
         __local_9 = self.entries;
-        break __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: "core:allocator/ArrayIter<TreeMapEntry<String,i32>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
+        break __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: "wasi:cli/ArrayIter<TreeMapEntry<String,i32>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
     };
-    b48: block {
-        l49: loop {
+    b69: block {
+        l70: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: ref null "core:allocator/TreeMapEntry<String,i32>";
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<TreeMapEntry<String,i32>>^Iterator::next(__iter_3);
@@ -836,9 +1006,9 @@ fn TreeMap<String,i32>::entries(self) {
                     Array<Tuple<String,i32>>::append(result, "tuple/[String, i32]" { 0: ref.as_non_null(entry.key), 1: entry.value });
                 };
             } else {
-                break b48;
+                break b69;
             };
-            continue l49;
+            continue l70;
         };
     };
     return result;
@@ -873,176 +1043,6 @@ fn ArrayIter<TreeMapEntry<String,i32>>^Iterator::next(self) {
     item = builtin::array_get<ref "core:allocator/TreeMapEntry<String,i32>">(self.repr, self.index);
     self.index = self.index + 1;
     return 0; ref.as_non_null(item);
-}
-
-fn i32::fmt_decimal(self, f) {
-    let is_negative: bool;
-    let abs_val: i64;
-    let digit_count: i32;
-    let offset: i32;
-    let __local_6: ref String;
-    is_negative = self < 0;
-    abs_val = if is_negative -> i64 {
-        0_i64 - builtin::i64_extend_i32_s(self);
-    } else {
-        builtin::i64_extend_i32_s(self);
-    };
-    digit_count = count_digits_i64(abs_val);
-    offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
-        __local_6 = f.buf;
-        break __inline_String__internal_raw_bytes_0: __local_6.repr;
-    }, offset, abs_val, digit_count);
-}
-
-fn String::grow(self, min_capacity) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<u8>;
-    let __local_5: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    if min_capacity <= capacity {
-        return;
-    };
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_5 = __inline_i32_max_1: block -> i32 {
-            __local_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
-        };
-        break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
-    };
-    new_repr = builtin::array_new<u8>(new_capacity);
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = ref.as_non_null(new_repr);
-}
-
-fn String::internal_reserve_uninit(self, n) {
-    let new_used: i32;
-    let start: i32;
-    new_used = self.used + n;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
-        String::grow(self, new_used);
-    };
-    start = self.used;
-    self.used = new_used;
-    return start;
-}
-
-fn String::append(self, other) {
-    let other_len: i32;
-    let new_used: i32;
-    other_len = other.used;
-    if other_len == 0 {
-        return;
-    };
-    new_used = self.used + other_len;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
-        String::grow(self, new_used);
-    };
-    builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
-    self.used = new_used;
-}
-
-fn String^Eq::eq(self, other) {
-    let len_a: i32;
-    let len_b: i32;
-    let a_repr: ref array<u8>;
-    let b_repr: ref array<u8>;
-    let i: i32;
-    len_a = self.used;
-    len_b = other.used;
-    if len_a != len_b {
-        return 0;
-    };
-    a_repr = self.repr;
-    b_repr = other.repr;
-    __for_1: block {
-        i = 0;
-        block {
-            l61: loop {
-                if (i < len_a) == 0 {
-                    break __for_1;
-                };
-                if builtin::array_get_u8(a_repr, i) != builtin::array_get_u8(b_repr, i) {
-                    return 0;
-                };
-                i = i + 1;
-                continue l61;
-            };
-        };
-    };
-    return 1;
-}
-
-fn String^Ord::cmp(self, other) {
-    let len_a: i32;
-    let len_b: i32;
-    let min_len: i32;
-    let a_repr: ref array<u8>;
-    let b_repr: ref array<u8>;
-    let i: i32;
-    let a_byte: u8;
-    let b_byte: u8;
-    len_a = self.used;
-    len_b = other.used;
-    min_len = select i32(len_a < len_b, len_a, len_b);
-    a_repr = self.repr;
-    b_repr = other.repr;
-    __for_2: block {
-        i = 0;
-        block {
-            l65: loop {
-                if (i < min_len) == 0 {
-                    break __for_2;
-                };
-                a_byte = builtin::array_get_u8(a_repr, i);
-                b_byte = builtin::array_get_u8(b_repr, i);
-                if a_byte <u b_byte {
-                    return 0;
-                };
-                if a_byte >u b_byte {
-                    return 2;
-                };
-                i = i + 1;
-                continue l65;
-            };
-        };
-    };
-    if len_a < len_b {
-        return 0;
-    };
-    if len_a > len_b {
-        return 2;
-    };
-    return 1;
-}
-
-fn String::append_char(self, c) {
-    let code: u32;
-    code = c;
-    if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
-        String::grow(self, self.used + 4);
-    };
-    if code <u 128 {
-        builtin::array_set_u8(self.repr, self.used, code & 255);
-        self.used = self.used + 1;
-    } else if code <u 2048 {
-        builtin::array_set_u8(self.repr, self.used, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | (code & 63)) & 255);
-        self.used = self.used + 2;
-    } else if code <u 65536 {
-        builtin::array_set_u8(self.repr, self.used, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | (code & 63)) & 255);
-        self.used = self.used + 3;
-    } else {
-        builtin::array_set_u8(self.repr, self.used, (240 | (code >>u 18)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 12) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
-        self.used = self.used + 4;
-    };
 }
 
 fn Formatter::write_char_n(self, c, n) {

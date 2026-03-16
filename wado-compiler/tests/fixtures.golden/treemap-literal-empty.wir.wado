@@ -41,6 +41,13 @@ struct [Stream<u8>, StreamWritable<u8>] {
 
 array array<TreeMapEntry<String,i32>> (mut ref "core:allocator/TreeMapEntry<String,i32>");
 
+struct TreeMap<String,i32> {  // from core:allocator  // TreeMap<T> with T=String, i32
+    mut root: ref Option<TreeMapNode<String>>,
+    mut entries: ref Array<TreeMapEntry<String,i32>>,
+    mut size: i32,
+    mut deleted_count: i32,
+}
+
 struct TreeMapEntry<String,i32> {  // from core:allocator  // TreeMapEntry<T> with T=String, i32
     mut key: ref String,
     mut value: i32,
@@ -53,13 +60,6 @@ struct TreeMapNode<String> {  // from core:allocator  // TreeMapNode<T> with T=S
     mut level: i32,
     mut left: ref Option<TreeMapNode<String>>,
     mut right: ref Option<TreeMapNode<String>>,
-}
-
-struct TreeMap<String,i32> {  // from core:allocator  // TreeMap<T> with T=String, i32
-    mut root: ref Option<TreeMapNode<String>>,
-    mut entries: ref Array<TreeMapEntry<String,i32>>,
-    mut size: i32,
-    mut deleted_count: i32,
 }
 
 variant Option<TreeMapNode<String>> {
@@ -180,8 +180,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let __local_0: ref "core:allocator/TreeMap<String,i32>";
@@ -228,7 +228,7 @@ fn run() with Stdout {
             String::append_char(__local_6, 97);
             String::append_char(__local_6, 116);
             String::append_char(__local_6, 32);
-            String::append(__local_6, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/treemap-literal-empty.wado"), used: 71 });
+            String::append(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/treemap-literal-empty.wado"), used: 55 });
             String::append_char(__local_6, 58);
             __local_7 = __inline_Formatter__new_7: block -> ref Formatter {
                 __local_16 = __local_6;
@@ -263,7 +263,7 @@ condition: m.len() == 0
             String::append_char(__local_8, 97);
             String::append_char(__local_8, 116);
             String::append_char(__local_8, 32);
-            String::append(__local_8, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/treemap-literal-empty.wado"), used: 71 });
+            String::append(__local_8, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/treemap-literal-empty.wado"), used: 55 });
             String::append_char(__local_8, 58);
             __local_9 = __inline_Formatter__new_15: block -> ref Formatter {
                 __local_28 = __local_8;

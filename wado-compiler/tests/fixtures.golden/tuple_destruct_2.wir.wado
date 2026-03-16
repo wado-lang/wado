@@ -30,6 +30,11 @@ struct Formatter {
     mut buf: ref String,
 }
 
+struct [Stream<u8>, StreamWritable<u8>] {
+    mut 0: i32,
+    mut 1: i32,
+}
+
 struct [i32, i32] {
     mut 0: i32,
     mut 1: i32,
@@ -44,11 +49,6 @@ struct [i32, i32, i32] {
     mut 0: i32,
     mut 1: i32,
     mut 2: i32,
-}
-
-struct [Stream<u8>, StreamWritable<u8>] {
-    mut 0: i32,
-    mut 1: i32,
 }
 
 variant Option<Tuple<i32,i32>> {
@@ -161,8 +161,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn tuple_destruct_matches() with Stdout {
     let pair: ref "tuple/[i32, i32]";

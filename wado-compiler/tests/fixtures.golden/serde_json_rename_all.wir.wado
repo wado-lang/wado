@@ -108,36 +108,6 @@ struct Config {
     mut is_verbose: bool,
 }
 
-variant Result<String,SerializeError> {
-    Ok(ref String),
-    Err(ref "core:serde/SerializeError"),
-}
-
-struct Result<String,SerializeError>::Ok {
-    discriminant: i32,
-    payload_0: ref String,
-}
-
-struct Result<String,SerializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/SerializeError",
-}
-
-variant Result<Config,DeserializeError> {
-    Ok(ref Config),
-    Err(ref "core:serde/DeserializeError"),
-}
-
-struct Result<Config,DeserializeError>::Ok {
-    discriminant: i32,
-    payload_0: ref Config,
-}
-
-struct Result<Config,DeserializeError>::Err {
-    discriminant: i32,
-    payload_0: ref "core:serde/DeserializeError",
-}
-
 variant Option<char> {
     Some(char),
     None,
@@ -176,6 +146,36 @@ variant Option<u8> {
 struct Option<u8>::Some {
     discriminant: i32,
     payload_0: u8,
+}
+
+variant Result<String,SerializeError> {
+    Ok(ref String),
+    Err(ref "core:serde/SerializeError"),
+}
+
+struct Result<String,SerializeError>::Ok {
+    discriminant: i32,
+    payload_0: ref String,
+}
+
+struct Result<String,SerializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/SerializeError",
+}
+
+variant Result<Config,DeserializeError> {
+    Ok(ref Config),
+    Err(ref "core:serde/DeserializeError"),
+}
+
+struct Result<Config,DeserializeError>::Ok {
+    discriminant: i32,
+    payload_0: ref Config,
+}
+
+struct Result<Config,DeserializeError>::Err {
+    discriminant: i32,
+    payload_0: ref "core:serde/DeserializeError",
 }
 
 variant Result<unit,SerializeError> {
@@ -418,18 +418,6 @@ type "functype/core:json/utf8_sequence_length" = fn(i32) -> i32;
 
 type "functype/core:json/write_escaped_string" = fn(ref String, ref String);
 
-type "functype/Config^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json/JsonDeserializer") -> ref Result<Config,DeserializeError>;
-
-type "functype/Config^Serialize::serialize<JsonSerializer>" = fn(ref Config, ref "core:json/JsonSerializer") -> ref Result<unit,SerializeError>;
-
-type "functype/JsonStructSerializer^SerializeStruct::field<bool>" = fn(ref "core:json/JsonStructSerializer", ref String, ref "core:internal/Box<bool>") -> ref Result<unit,SerializeError>;
-
-type "functype/JsonStructSerializer^SerializeStruct::field<i64>" = fn(ref "core:json/JsonStructSerializer", ref String, ref "core:internal/Box<i64>") -> ref Result<unit,SerializeError>;
-
-type "functype/JsonStructSerializer^SerializeStruct::field<i32>" = fn(ref "core:json/JsonStructSerializer", ref String, ref "core:internal/Box<i32>") -> ref Result<unit,SerializeError>;
-
-type "functype/__Closure_0::__call" = fn(ref __Closure_0, ref String, i32, i32) -> ref Option<i32>;
-
 type "functype/char::from_u32" = fn(u32) -> ref Option<char>;
 
 type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
@@ -453,6 +441,18 @@ type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> ref 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<char>;
 
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/Config^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json/JsonDeserializer") -> ref Result<Config,DeserializeError>;
+
+type "functype/Config^Serialize::serialize<JsonSerializer>" = fn(ref Config, ref "core:json/JsonSerializer") -> ref Result<unit,SerializeError>;
+
+type "functype/JsonStructSerializer^SerializeStruct::field<bool>" = fn(ref "core:json/JsonStructSerializer", ref String, ref "core:internal/Box<bool>") -> ref Result<unit,SerializeError>;
+
+type "functype/JsonStructSerializer^SerializeStruct::field<i64>" = fn(ref "core:json/JsonStructSerializer", ref String, ref "core:internal/Box<i64>") -> ref Result<unit,SerializeError>;
+
+type "functype/JsonStructSerializer^SerializeStruct::field<i32>" = fn(ref "core:json/JsonStructSerializer", ref String, ref "core:internal/Box<i32>") -> ref Result<unit,SerializeError>;
+
+type "functype/__Closure_0::__call" = fn(ref __Closure_0, ref String, i32, i32) -> ref Option<i32>;
 
 type "functype/core:json/JsonSerializer^Serializer::serialize_i32" = fn(ref "core:json/JsonSerializer", i32) -> ref Result<unit,SerializeError>;
 
@@ -512,13 +512,19 @@ type "functype/mul_pow10" = fn(i32) -> [u64, u64];
 
 type "functype/parse_text" = fn(ref String) -> [i32, f64];
 
-type "functype/Config^Serialize::serialize<JsonSerializer>" = fn(ref Config, ref "core:json/JsonSerializer") -> [i32, ref null "core:serde/SerializeError"];
-
 type "functype/char::from_u32" = fn(u32) -> [i32, char];
 
 type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> [i32, u8];
 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
+
+type "functype/Config^Serialize::serialize<JsonSerializer>" = fn(ref Config, ref "core:json/JsonSerializer") -> [i32, ref null "core:serde/SerializeError"];
+
+type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
+
+type "functype/i64::fmt_decimal" = fn(i64, ref Formatter);
+
+type "functype/char^Display::fmt" = fn(char, ref Formatter);
 
 type "functype/Config^Serialize::serialize<JsonSerializer>" = fn(ref Config, ref String) -> [i32, ref null "core:serde/SerializeError"];
 
@@ -527,12 +533,6 @@ type "functype/JsonStructSerializer^SerializeStruct::field<bool>" = fn(ref "core
 type "functype/JsonStructSerializer^SerializeStruct::field<i64>" = fn(ref "core:json/JsonStructSerializer", ref String, i64) -> ref Result<unit,SerializeError>;
 
 type "functype/JsonStructSerializer^SerializeStruct::field<i32>" = fn(ref "core:json/JsonStructSerializer", ref String, i32) -> ref Result<unit,SerializeError>;
-
-type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
-
-type "functype/i64::fmt_decimal" = fn(i64, ref Formatter);
-
-type "functype/char^Display::fmt" = fn(char, ref Formatter);
 
 type "functype/core:json/JsonSerializer^Serializer::serialize_i32" = fn(ref String, i32) -> ref Result<unit,SerializeError>;
 
@@ -553,8 +553,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn subtask-drop from "wasi/subtask-drop";
 import fn stream-new from "wasi/stream-new";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn __test_0_serialize_with_rename_all_snake_case() {
     let c: ref Config;
@@ -588,7 +588,7 @@ fn __test_0_serialize_with_rename_all_snake_case() {
                 String::append_char(__local_5, 97);
                 String::append_char(__local_5, 116);
                 String::append_char(__local_5, 32);
-                String::append(__local_5, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_rename_all.wado"), used: 71 });
+                String::append(__local_5, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_rename_all.wado"), used: 55 });
                 String::append_char(__local_5, 58);
                 __local_6 = __inline_Formatter__new_3: block -> ref Formatter {
                     __local_10 = __local_5;
@@ -665,7 +665,7 @@ fn __test_1_deserialize_with_rename_all_snake_case() {
                 String::append_char(__local_8, 97);
                 String::append_char(__local_8, 116);
                 String::append_char(__local_8, 32);
-                String::append(__local_8, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_rename_all.wado"), used: 71 });
+                String::append(__local_8, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_rename_all.wado"), used: 55 });
                 String::append_char(__local_8, 58);
                 __local_9 = __inline_Formatter__new_3: block -> ref Formatter {
                     __local_17 = __local_8;
@@ -699,7 +699,7 @@ condition: c.max_retries == 3
                 String::append_char(__local_10, 97);
                 String::append_char(__local_10, 116);
                 String::append_char(__local_10, 32);
-                String::append(__local_10, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_rename_all.wado"), used: 71 });
+                String::append(__local_10, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_rename_all.wado"), used: 55 });
                 String::append_char(__local_10, 58);
                 __local_11 = __inline_Formatter__new_10: block -> ref Formatter {
                     __local_28 = __local_10;
@@ -733,7 +733,7 @@ condition: c.timeout_ms == 5000 as i64
                 String::append_char(__local_12, 97);
                 String::append_char(__local_12, 116);
                 String::append_char(__local_12, 32);
-                String::append(__local_12, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/serde_json_rename_all.wado"), used: 71 });
+                String::append(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_rename_all.wado"), used: 55 });
                 String::append_char(__local_12, 58);
                 __local_13 = __inline_Formatter__new_17: block -> ref Formatter {
                     __local_39 = __local_12;
@@ -2003,186 +2003,6 @@ fn "core:json/write_escaped_string"(buf, s) {  // from core:json
     String::append_char(buf, 34);
 }
 
-fn Config^Deserialize::deserialize<JsonDeserializer>(d) {
-    let __result: ref Result<JsonStructAccess,DeserializeError>;
-    let sd: ref "core:json/JsonStructAccess";
-    let seen: u32;
-    let max_retries: i32;
-    let timeout_ms: i64;
-    let is_verbose: bool;
-    let __next: ref Result<Option<i32>,DeserializeError>;
-    let __opt: ref Option<i32>;
-    let __idx: i32;
-    let __local_10: ref Result<i32,DeserializeError>;
-    let __local_11: i32;
-    let __local_12: ref Result<i64,DeserializeError>;
-    let __local_13: i64;
-    let __local_14: ref Result<bool,DeserializeError>;
-    let __local_15: bool;
-    let __pattern_temp_1: ref Result<Option<i32>,DeserializeError>;
-    let __local_19: ref Result<i32,DeserializeError>;
-    let __local_20: ref Result<i64,DeserializeError>;
-    let __local_21: ref Result<bool,DeserializeError>;
-    let __local_23: ref "core:json/JsonDeserializer";
-    let __local_25: ref "core:json/JsonDeserializer";
-    let __local_27: ref "core:json/JsonDeserializer";
-    __result = "core:json/JsonDeserializer^Deserializer::begin_struct"(d, String { repr: array.new_data<u8>("Config"), used: 6 }, 3, "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/__closure_wrapper_0") });
-    if ref.test Result<JsonStructAccess,DeserializeError>::Ok(__result) {
-        sd = value_copy "core:json/JsonStructAccess"(ref.cast Result<JsonStructAccess,DeserializeError>::Ok(__result).payload_0);
-        seen = 0;
-        max_retries = 0;
-        timeout_ms = 0_i64;
-        is_verbose = 0;
-        b210: block {
-            l211: loop {
-                __next = "core:json/JsonStructAccess^DeserializeStruct::next_field"(sd);
-                __pattern_temp_1 = value_copy Result<Option<i32>,DeserializeError>(__next);
-                if ref.test Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1) {
-                    __opt = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0);
-                    if ref.test Option<i32>::Some(__opt) {
-                        __idx = ref.cast Option<i32>::Some(__opt).payload_0;
-                        let __match_scrut_0: i32;
-                        __match_scrut_0 = __idx;
-                        if __match_scrut_0 == 0 {
-                            __local_10 = __inline_i32_Deserialize__deserialize_JsonDeserializer__4: block -> ref Result<i32,DeserializeError> {
-                                __local_23 = sd.de;
-                                break __inline_i32_Deserialize__deserialize_JsonDeserializer__4: "core:json/JsonDeserializer::parse_i32_direct"(__local_23);
-                            };
-                            __local_19 = value_copy Result<i32,DeserializeError>(__local_10);
-                            if ref.test Result<i32,DeserializeError>::Ok(__local_19) {
-                                __local_11 = ref.cast Result<i32,DeserializeError>::Ok(__local_19).payload_0;
-                                max_retries = __local_11;
-                                seen = seen | 1;
-                            } else {
-                                return Result<Config,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<i32,DeserializeError>::Err(__local_10).payload_0) };
-                            };
-                        } else if __match_scrut_0 == 1 {
-                            __local_12 = __inline_i64_Deserialize__deserialize_JsonDeserializer__6: block -> ref Result<i64,DeserializeError> {
-                                __local_25 = sd.de;
-                                break __inline_i64_Deserialize__deserialize_JsonDeserializer__6: "core:json/JsonDeserializer^Deserializer::deserialize_i64"(__local_25);
-                            };
-                            __local_20 = value_copy Result<i64,DeserializeError>(__local_12);
-                            if ref.test Result<i64,DeserializeError>::Ok(__local_20) {
-                                __local_13 = ref.cast Result<i64,DeserializeError>::Ok(__local_20).payload_0;
-                                timeout_ms = __local_13;
-                                seen = seen | 2;
-                            } else {
-                                return Result<Config,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<i64,DeserializeError>::Err(__local_12).payload_0) };
-                            };
-                        } else if __match_scrut_0 == 2 {
-                            __local_14 = __inline_bool_Deserialize__deserialize_JsonDeserializer__8: block -> ref Result<bool,DeserializeError> {
-                                __local_27 = sd.de;
-                                break __inline_bool_Deserialize__deserialize_JsonDeserializer__8: "core:json/JsonDeserializer^Deserializer::deserialize_bool"(__local_27);
-                            };
-                            __local_21 = value_copy Result<bool,DeserializeError>(__local_14);
-                            if ref.test Result<bool,DeserializeError>::Ok(__local_21) {
-                                __local_15 = ref.cast Result<bool,DeserializeError>::Ok(__local_21).payload_0;
-                                is_verbose = __local_15;
-                                seen = seen | 4;
-                            } else {
-                                return Result<Config,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<bool,DeserializeError>::Err(__local_14).payload_0) };
-                            };
-                        } else {
-                            drop("core:json/JsonDeserializer::skip_value"(sd.de));
-                        };
-                    } else {
-                        break b210;
-                    };
-                } else {
-                    return Result<Config,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<Option<i32>,DeserializeError>::Err(__next).payload_0) };
-                };
-                continue l211;
-            };
-        };
-        if (seen & 7) != 7 {
-            return Result<Config,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 1, message: String { repr: array.new_data<u8>("required field missing"), used: 22 }, offset: -1_i64 } };
-        };
-        drop("core:json/JsonDeserializer::expect_char"(sd.de, 125));
-        return Result<Config,DeserializeError>::Ok { discriminant: 0, payload_0: Config { max_retries: max_retries, timeout_ms: timeout_ms, is_verbose: is_verbose } };
-    } else {
-        return Result<Config,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 9, message: String { repr: array.new_data<u8>("begin_struct failed"), used: 19 }, offset: -1_i64 } };
-    };
-}
-
-fn Config^Serialize::serialize<JsonSerializer>(self, s) {
-    let name: ref String;
-    let __fused_payload_9: ref "core:json/JsonStructSerializer";
-    __fused___inline_JsonSerializer_Serializer__begin_struct_0: block {
-        name = String { repr: array.new_data<u8>("Config"), used: 6 };
-        String::append_char(s, 123);
-        __fused_payload_9 = "core:json/JsonStructSerializer" { buf: ref.as_non_null(s), count: 0 };
-        drop(JsonStructSerializer^SerializeStruct::field<i32>(__fused_payload_9, String { repr: array.new_data<u8>("max_retries"), used: 11 }, self.max_retries));
-        drop(JsonStructSerializer^SerializeStruct::field<i64>(__fused_payload_9, String { repr: array.new_data<u8>("timeout_ms"), used: 10 }, self.timeout_ms));
-        drop(JsonStructSerializer^SerializeStruct::field<bool>(__fused_payload_9, String { repr: array.new_data<u8>("is_verbose"), used: 10 }, self.is_verbose));
-        block {
-            String::append_char(__fused_payload_9.buf, 125);
-            return 0; ref.null none;
-        };
-        break __fused___inline_JsonSerializer_Serializer__begin_struct_0;
-    };
-}
-
-fn JsonStructSerializer^SerializeStruct::field<bool>(self, name, value) {
-    let ser: ref "core:json/JsonSerializer";
-    let r: ref Result<unit,SerializeError>;
-    let __local_6: ref "core:json/JsonSerializer";
-    if self.count > 0 {
-        String::append_char(self.buf, 44);
-    };
-    "core:json/write_escaped_string"(self.buf, name);
-    String::append_char(self.buf, 58);
-    ser = "core:json/JsonSerializer" { buf: ref.as_non_null(self.buf) };
-    r = __inline_bool_Serialize__serialize_JsonSerializer__0: block -> ref Result<unit,SerializeError> {
-        __local_6 = ser;
-        break __inline_bool_Serialize__serialize_JsonSerializer__0: "core:json/JsonSerializer^Serializer::serialize_bool"(__local_6.buf, value);
-    };
-    self.buf = ref.as_non_null(ser.buf);
-    self.count = self.count + 1;
-    return r;
-}
-
-fn JsonStructSerializer^SerializeStruct::field<i64>(self, name, value) {
-    let ser: ref "core:json/JsonSerializer";
-    let r: ref Result<unit,SerializeError>;
-    let __local_6: ref "core:json/JsonSerializer";
-    if self.count > 0 {
-        String::append_char(self.buf, 44);
-    };
-    "core:json/write_escaped_string"(self.buf, name);
-    String::append_char(self.buf, 58);
-    ser = "core:json/JsonSerializer" { buf: ref.as_non_null(self.buf) };
-    r = __inline_i64_Serialize__serialize_JsonSerializer__0: block -> ref Result<unit,SerializeError> {
-        __local_6 = ser;
-        break __inline_i64_Serialize__serialize_JsonSerializer__0: "core:json/JsonSerializer^Serializer::serialize_i64"(__local_6.buf, value);
-    };
-    self.buf = ref.as_non_null(ser.buf);
-    self.count = self.count + 1;
-    return r;
-}
-
-fn JsonStructSerializer^SerializeStruct::field<i32>(self, name, value) {
-    let ser: ref "core:json/JsonSerializer";
-    let r: ref Result<unit,SerializeError>;
-    let __local_6: ref "core:json/JsonSerializer";
-    if self.count > 0 {
-        String::append_char(self.buf, 44);
-    };
-    "core:json/write_escaped_string"(self.buf, name);
-    String::append_char(self.buf, 58);
-    ser = "core:json/JsonSerializer" { buf: ref.as_non_null(self.buf) };
-    r = __inline_i32_Serialize__serialize_JsonSerializer__0: block -> ref Result<unit,SerializeError> {
-        __local_6 = ser;
-        break __inline_i32_Serialize__serialize_JsonSerializer__0: "core:json/JsonSerializer^Serializer::serialize_i32"(__local_6.buf, value);
-    };
-    self.buf = ref.as_non_null(ser.buf);
-    self.count = self.count + 1;
-    return r;
-}
-
-fn __Closure_0::__call(self, __input, __start, __end) {
-    return _config_field_lookup(__input, __start, __end);
-}
-
 fn char::from_u32(value) {
     if value >u 1114111 {
         return 1; 0;
@@ -2338,7 +2158,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l237: loop {
+            l222: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -2346,7 +2166,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l237;
+                continue l222;
             };
         };
     };
@@ -2444,6 +2264,186 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
+}
+
+fn Config^Deserialize::deserialize<JsonDeserializer>(d) {
+    let __result: ref Result<JsonStructAccess,DeserializeError>;
+    let sd: ref "core:json/JsonStructAccess";
+    let seen: u32;
+    let max_retries: i32;
+    let timeout_ms: i64;
+    let is_verbose: bool;
+    let __next: ref Result<Option<i32>,DeserializeError>;
+    let __opt: ref Option<i32>;
+    let __idx: i32;
+    let __local_10: ref Result<i32,DeserializeError>;
+    let __local_11: i32;
+    let __local_12: ref Result<i64,DeserializeError>;
+    let __local_13: i64;
+    let __local_14: ref Result<bool,DeserializeError>;
+    let __local_15: bool;
+    let __pattern_temp_1: ref Result<Option<i32>,DeserializeError>;
+    let __local_19: ref Result<i32,DeserializeError>;
+    let __local_20: ref Result<i64,DeserializeError>;
+    let __local_21: ref Result<bool,DeserializeError>;
+    let __local_23: ref "core:json/JsonDeserializer";
+    let __local_25: ref "core:json/JsonDeserializer";
+    let __local_27: ref "core:json/JsonDeserializer";
+    __result = "core:json/JsonDeserializer^Deserializer::begin_struct"(d, String { repr: array.new_data<u8>("Config"), used: 6 }, 3, "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/__closure_wrapper_0") });
+    if ref.test Result<JsonStructAccess,DeserializeError>::Ok(__result) {
+        sd = value_copy "core:json/JsonStructAccess"(ref.cast Result<JsonStructAccess,DeserializeError>::Ok(__result).payload_0);
+        seen = 0;
+        max_retries = 0;
+        timeout_ms = 0_i64;
+        is_verbose = 0;
+        b235: block {
+            l236: loop {
+                __next = "core:json/JsonStructAccess^DeserializeStruct::next_field"(sd);
+                __pattern_temp_1 = value_copy Result<Option<i32>,DeserializeError>(__next);
+                if ref.test Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1) {
+                    __opt = value_copy Option<i32>(ref.cast Result<Option<i32>,DeserializeError>::Ok(__pattern_temp_1).payload_0);
+                    if ref.test Option<i32>::Some(__opt) {
+                        __idx = ref.cast Option<i32>::Some(__opt).payload_0;
+                        let __match_scrut_0: i32;
+                        __match_scrut_0 = __idx;
+                        if __match_scrut_0 == 0 {
+                            __local_10 = __inline_i32_Deserialize__deserialize_JsonDeserializer__4: block -> ref Result<i32,DeserializeError> {
+                                __local_23 = sd.de;
+                                break __inline_i32_Deserialize__deserialize_JsonDeserializer__4: "core:json/JsonDeserializer::parse_i32_direct"(__local_23);
+                            };
+                            __local_19 = value_copy Result<i32,DeserializeError>(__local_10);
+                            if ref.test Result<i32,DeserializeError>::Ok(__local_19) {
+                                __local_11 = ref.cast Result<i32,DeserializeError>::Ok(__local_19).payload_0;
+                                max_retries = __local_11;
+                                seen = seen | 1;
+                            } else {
+                                return Result<Config,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<i32,DeserializeError>::Err(__local_10).payload_0) };
+                            };
+                        } else if __match_scrut_0 == 1 {
+                            __local_12 = __inline_i64_Deserialize__deserialize_JsonDeserializer__6: block -> ref Result<i64,DeserializeError> {
+                                __local_25 = sd.de;
+                                break __inline_i64_Deserialize__deserialize_JsonDeserializer__6: "core:json/JsonDeserializer^Deserializer::deserialize_i64"(__local_25);
+                            };
+                            __local_20 = value_copy Result<i64,DeserializeError>(__local_12);
+                            if ref.test Result<i64,DeserializeError>::Ok(__local_20) {
+                                __local_13 = ref.cast Result<i64,DeserializeError>::Ok(__local_20).payload_0;
+                                timeout_ms = __local_13;
+                                seen = seen | 2;
+                            } else {
+                                return Result<Config,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<i64,DeserializeError>::Err(__local_12).payload_0) };
+                            };
+                        } else if __match_scrut_0 == 2 {
+                            __local_14 = __inline_bool_Deserialize__deserialize_JsonDeserializer__8: block -> ref Result<bool,DeserializeError> {
+                                __local_27 = sd.de;
+                                break __inline_bool_Deserialize__deserialize_JsonDeserializer__8: "core:json/JsonDeserializer^Deserializer::deserialize_bool"(__local_27);
+                            };
+                            __local_21 = value_copy Result<bool,DeserializeError>(__local_14);
+                            if ref.test Result<bool,DeserializeError>::Ok(__local_21) {
+                                __local_15 = ref.cast Result<bool,DeserializeError>::Ok(__local_21).payload_0;
+                                is_verbose = __local_15;
+                                seen = seen | 4;
+                            } else {
+                                return Result<Config,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<bool,DeserializeError>::Err(__local_14).payload_0) };
+                            };
+                        } else {
+                            drop("core:json/JsonDeserializer::skip_value"(sd.de));
+                        };
+                    } else {
+                        break b235;
+                    };
+                } else {
+                    return Result<Config,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(ref.cast Result<Option<i32>,DeserializeError>::Err(__next).payload_0) };
+                };
+                continue l236;
+            };
+        };
+        if (seen & 7) != 7 {
+            return Result<Config,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 1, message: String { repr: array.new_data<u8>("required field missing"), used: 22 }, offset: -1_i64 } };
+        };
+        drop("core:json/JsonDeserializer::expect_char"(sd.de, 125));
+        return Result<Config,DeserializeError>::Ok { discriminant: 0, payload_0: Config { max_retries: max_retries, timeout_ms: timeout_ms, is_verbose: is_verbose } };
+    } else {
+        return Result<Config,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 9, message: String { repr: array.new_data<u8>("begin_struct failed"), used: 19 }, offset: -1_i64 } };
+    };
+}
+
+fn Config^Serialize::serialize<JsonSerializer>(self, s) {
+    let name: ref String;
+    let __fused_payload_9: ref "core:json/JsonStructSerializer";
+    __fused___inline_JsonSerializer_Serializer__begin_struct_0: block {
+        name = String { repr: array.new_data<u8>("Config"), used: 6 };
+        String::append_char(s, 123);
+        __fused_payload_9 = "core:json/JsonStructSerializer" { buf: ref.as_non_null(s), count: 0 };
+        drop(JsonStructSerializer^SerializeStruct::field<i32>(__fused_payload_9, String { repr: array.new_data<u8>("max_retries"), used: 11 }, self.max_retries));
+        drop(JsonStructSerializer^SerializeStruct::field<i64>(__fused_payload_9, String { repr: array.new_data<u8>("timeout_ms"), used: 10 }, self.timeout_ms));
+        drop(JsonStructSerializer^SerializeStruct::field<bool>(__fused_payload_9, String { repr: array.new_data<u8>("is_verbose"), used: 10 }, self.is_verbose));
+        block {
+            String::append_char(__fused_payload_9.buf, 125);
+            return 0; ref.null none;
+        };
+        break __fused___inline_JsonSerializer_Serializer__begin_struct_0;
+    };
+}
+
+fn JsonStructSerializer^SerializeStruct::field<bool>(self, name, value) {
+    let ser: ref "core:json/JsonSerializer";
+    let r: ref Result<unit,SerializeError>;
+    let __local_6: ref "core:json/JsonSerializer";
+    if self.count > 0 {
+        String::append_char(self.buf, 44);
+    };
+    "core:json/write_escaped_string"(self.buf, name);
+    String::append_char(self.buf, 58);
+    ser = "core:json/JsonSerializer" { buf: ref.as_non_null(self.buf) };
+    r = __inline_bool_Serialize__serialize_JsonSerializer__0: block -> ref Result<unit,SerializeError> {
+        __local_6 = ser;
+        break __inline_bool_Serialize__serialize_JsonSerializer__0: "core:json/JsonSerializer^Serializer::serialize_bool"(__local_6.buf, value);
+    };
+    self.buf = ref.as_non_null(ser.buf);
+    self.count = self.count + 1;
+    return r;
+}
+
+fn JsonStructSerializer^SerializeStruct::field<i64>(self, name, value) {
+    let ser: ref "core:json/JsonSerializer";
+    let r: ref Result<unit,SerializeError>;
+    let __local_6: ref "core:json/JsonSerializer";
+    if self.count > 0 {
+        String::append_char(self.buf, 44);
+    };
+    "core:json/write_escaped_string"(self.buf, name);
+    String::append_char(self.buf, 58);
+    ser = "core:json/JsonSerializer" { buf: ref.as_non_null(self.buf) };
+    r = __inline_i64_Serialize__serialize_JsonSerializer__0: block -> ref Result<unit,SerializeError> {
+        __local_6 = ser;
+        break __inline_i64_Serialize__serialize_JsonSerializer__0: "core:json/JsonSerializer^Serializer::serialize_i64"(__local_6.buf, value);
+    };
+    self.buf = ref.as_non_null(ser.buf);
+    self.count = self.count + 1;
+    return r;
+}
+
+fn JsonStructSerializer^SerializeStruct::field<i32>(self, name, value) {
+    let ser: ref "core:json/JsonSerializer";
+    let r: ref Result<unit,SerializeError>;
+    let __local_6: ref "core:json/JsonSerializer";
+    if self.count > 0 {
+        String::append_char(self.buf, 44);
+    };
+    "core:json/write_escaped_string"(self.buf, name);
+    String::append_char(self.buf, 58);
+    ser = "core:json/JsonSerializer" { buf: ref.as_non_null(self.buf) };
+    r = __inline_i32_Serialize__serialize_JsonSerializer__0: block -> ref Result<unit,SerializeError> {
+        __local_6 = ser;
+        break __inline_i32_Serialize__serialize_JsonSerializer__0: "core:json/JsonSerializer^Serializer::serialize_i32"(__local_6.buf, value);
+    };
+    self.buf = ref.as_non_null(ser.buf);
+    self.count = self.count + 1;
+    return r;
+}
+
+fn __Closure_0::__call(self, __input, __start, __end) {
+    return _config_field_lookup(__input, __start, __end);
 }
 
 fn "core:json/JsonSerializer^Serializer::serialize_i32"(self, v) {  // from core:json

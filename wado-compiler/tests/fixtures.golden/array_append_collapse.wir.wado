@@ -61,16 +61,6 @@ struct Option<char>::Some {
     payload_0: char,
 }
 
-struct Array<i32> {  // Array<T> with T=i32
-    mut repr: ref array<i32>,
-    mut used: i32,
-}
-
-struct Array<i64> {  // Array<T> with T=i64
-    mut repr: ref array<i64>,
-    mut used: i32,
-}
-
 struct Array<String> {  // Array<T> with T=String
     mut repr: ref array<String>,
     mut used: i32,
@@ -80,6 +70,16 @@ array array<u64> (mut u64);
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
+    mut used: i32,
+}
+
+struct Array<i32> {  // Array<T> with T=i32
+    mut repr: ref array<i32>,
+    mut used: i32,
+}
+
+struct Array<i64> {  // Array<T> with T=i64
+    mut repr: ref array<i64>,
     mut used: i32,
 }
 
@@ -145,12 +145,6 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
-
-type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
-
-type "functype/Array<i64>::append" = fn(ref Array<i64>, i64);
-
 type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
 type "functype/i64::fmt_decimal" = fn(ref "core:internal/Box<i64>", ref Formatter);
@@ -166,6 +160,12 @@ type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<char>;
 
 type "functype/String::append_char" = fn(ref String, char);
+
+type "functype/Array<String>::append" = fn(ref Array<String>, ref String);
+
+type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
+
+type "functype/Array<i64>::append" = fn(ref Array<i64>, i64);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -199,8 +199,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let __local_0: ref Array<i32>;
@@ -394,7 +394,7 @@ fn run() with Stdout {
             String::append_char(__local_52, 97);
             String::append_char(__local_52, 116);
             String::append_char(__local_52, 32);
-            String::append(__local_52, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 71 });
+            String::append(__local_52, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 55 });
             String::append_char(__local_52, 58);
             __local_53 = __inline_Formatter__new_10: block -> ref Formatter {
                 __local_102 = __local_52;
@@ -436,7 +436,7 @@ condition: a.len() == 3
             String::append_char(__local_54, 97);
             String::append_char(__local_54, 116);
             String::append_char(__local_54, 32);
-            String::append(__local_54, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 71 });
+            String::append(__local_54, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 55 });
             String::append_char(__local_54, 58);
             __local_55 = __inline_Formatter__new_18: block -> ref Formatter {
                 __local_115 = __local_54;
@@ -483,7 +483,7 @@ condition: a[0] == 10
             String::append_char(__local_56, 97);
             String::append_char(__local_56, 116);
             String::append_char(__local_56, 32);
-            String::append(__local_56, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 71 });
+            String::append(__local_56, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 55 });
             String::append_char(__local_56, 58);
             __local_57 = __inline_Formatter__new_26: block -> ref Formatter {
                 __local_128 = __local_56;
@@ -530,7 +530,7 @@ condition: a[1] == 20
             String::append_char(__local_58, 97);
             String::append_char(__local_58, 116);
             String::append_char(__local_58, 32);
-            String::append(__local_58, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 71 });
+            String::append(__local_58, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 55 });
             String::append_char(__local_58, 58);
             __local_59 = __inline_Formatter__new_34: block -> ref Formatter {
                 __local_141 = __local_58;
@@ -575,7 +575,7 @@ condition: a[2] == 30
             String::append_char(__local_60, 97);
             String::append_char(__local_60, 116);
             String::append_char(__local_60, 32);
-            String::append(__local_60, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 71 });
+            String::append(__local_60, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 55 });
             String::append_char(__local_60, 58);
             __local_61 = __inline_Formatter__new_47: block -> ref Formatter {
                 __local_160 = __local_60;
@@ -617,7 +617,7 @@ condition: b.len() == 2
             String::append_char(__local_62, 97);
             String::append_char(__local_62, 116);
             String::append_char(__local_62, 32);
-            String::append(__local_62, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 71 });
+            String::append(__local_62, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 55 });
             String::append_char(__local_62, 58);
             __local_63 = __inline_Formatter__new_55: block -> ref Formatter {
                 __local_173 = __local_62;
@@ -664,7 +664,7 @@ condition: b[0] == 100
             String::append_char(__local_64, 97);
             String::append_char(__local_64, 116);
             String::append_char(__local_64, 32);
-            String::append(__local_64, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 71 });
+            String::append(__local_64, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 55 });
             String::append_char(__local_64, 58);
             __local_65 = __inline_Formatter__new_63: block -> ref Formatter {
                 __local_186 = __local_64;
@@ -709,7 +709,7 @@ condition: b[1] == 200
             String::append_char(__local_66, 97);
             String::append_char(__local_66, 116);
             String::append_char(__local_66, 32);
-            String::append(__local_66, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 71 });
+            String::append(__local_66, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 55 });
             String::append_char(__local_66, 58);
             __local_67 = __inline_Formatter__new_74: block -> ref Formatter {
                 __local_201 = __local_66;
@@ -749,7 +749,7 @@ condition: c.len() == 0
             String::append_char(__local_68, 97);
             String::append_char(__local_68, 116);
             String::append_char(__local_68, 32);
-            String::append(__local_68, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 71 });
+            String::append(__local_68, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 55 });
             String::append_char(__local_68, 58);
             __local_69 = __inline_Formatter__new_86: block -> ref Formatter {
                 __local_218 = __local_68;
@@ -791,7 +791,7 @@ condition: d.len() == 1
             String::append_char(__local_70, 97);
             String::append_char(__local_70, 116);
             String::append_char(__local_70, 32);
-            String::append(__local_70, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 71 });
+            String::append(__local_70, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 55 });
             String::append_char(__local_70, 58);
             __local_71 = __inline_Formatter__new_94: block -> ref Formatter {
                 __local_231 = __local_70;
@@ -836,7 +836,7 @@ condition: d[0] == 42
             String::append_char(__local_72, 97);
             String::append_char(__local_72, 116);
             String::append_char(__local_72, 32);
-            String::append(__local_72, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 71 });
+            String::append(__local_72, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 55 });
             String::append_char(__local_72, 58);
             __local_73 = __inline_Formatter__new_108: block -> ref Formatter {
                 __local_252 = __local_72;
@@ -878,7 +878,7 @@ condition: e.len() == 3
             String::append_char(__local_74, 97);
             String::append_char(__local_74, 116);
             String::append_char(__local_74, 32);
-            String::append(__local_74, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 71 });
+            String::append(__local_74, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 55 });
             String::append_char(__local_74, 58);
             __local_75 = __inline_Formatter__new_116: block -> ref Formatter {
                 __local_265 = __local_74;
@@ -923,7 +923,7 @@ condition: e[0] == 1
             String::append_char(__local_76, 97);
             String::append_char(__local_76, 116);
             String::append_char(__local_76, 32);
-            String::append(__local_76, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 71 });
+            String::append(__local_76, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 55 });
             String::append_char(__local_76, 58);
             __local_77 = __inline_Formatter__new_129: block -> ref Formatter {
                 __local_284 = __local_76;
@@ -965,7 +965,7 @@ condition: f.len() == 2
             String::append_char(__local_78, 97);
             String::append_char(__local_78, 116);
             String::append_char(__local_78, 32);
-            String::append(__local_78, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 71 });
+            String::append(__local_78, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 55 });
             String::append_char(__local_78, 58);
             __local_79 = __inline_Formatter__new_137: block -> ref Formatter {
                 __local_297 = __local_78;
@@ -1011,7 +1011,7 @@ condition: f[0] == \"hello\"
             String::append_char(__local_80, 97);
             String::append_char(__local_80, 116);
             String::append_char(__local_80, 32);
-            String::append(__local_80, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 71 });
+            String::append(__local_80, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 55 });
             String::append_char(__local_80, 58);
             __local_81 = __inline_Formatter__new_143: block -> ref Formatter {
                 __local_306 = __local_80;
@@ -1058,7 +1058,7 @@ condition: f[1] == \"world\"
             String::append_char(__local_82, 97);
             String::append_char(__local_82, 116);
             String::append_char(__local_82, 32);
-            String::append(__local_82, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 71 });
+            String::append(__local_82, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 55 });
             String::append_char(__local_82, 58);
             __local_83 = __inline_Formatter__new_155: block -> ref Formatter {
                 __local_323 = __local_82;
@@ -1101,7 +1101,7 @@ condition: g.items.len() == 3
             String::append_char(__local_84, 97);
             String::append_char(__local_84, 116);
             String::append_char(__local_84, 32);
-            String::append(__local_84, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 71 });
+            String::append(__local_84, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 55 });
             String::append_char(__local_84, 58);
             __local_85 = __inline_Formatter__new_163: block -> ref Formatter {
                 __local_336 = __local_84;
@@ -1144,7 +1144,7 @@ condition: g.items[0] == 5
             String::append_char(__local_86, 97);
             String::append_char(__local_86, 116);
             String::append_char(__local_86, 32);
-            String::append(__local_86, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 71 });
+            String::append(__local_86, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 55 });
             String::append_char(__local_86, 58);
             __local_87 = __inline_Formatter__new_171: block -> ref Formatter {
                 __local_349 = __local_86;
@@ -1187,7 +1187,7 @@ condition: g.items[1] == 10
             String::append_char(__local_88, 97);
             String::append_char(__local_88, 116);
             String::append_char(__local_88, 32);
-            String::append(__local_88, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 71 });
+            String::append(__local_88, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/array_append_collapse.wado"), used: 55 });
             String::append_char(__local_88, 58);
             __local_89 = __inline_Formatter__new_179: block -> ref Formatter {
                 __local_362 = __local_88;
@@ -1487,69 +1487,6 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
     };
 }
 
-fn Array<String>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<String>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<ref String>(new_capacity);
-        builtin::array_copy<ref String>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<ref String>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn Array<i32>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<i32>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<i32>(new_capacity);
-        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn Array<i64>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<i64>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<i64>(new_capacity);
-        builtin::array_copy<i64>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<i64>(self.repr, used, value);
-    self.used = used + 1;
-}
-
 fn i32::fmt_decimal(self, f) {
     let is_negative: bool;
     let abs_val: i64;
@@ -1674,7 +1611,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l66: loop {
+            l63: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -1682,7 +1619,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l66;
+                continue l63;
             };
         };
     };
@@ -1770,6 +1707,69 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
+}
+
+fn Array<String>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<String>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<ref String>(new_capacity);
+        builtin::array_copy<ref String>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<ref String>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<i32>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<i32>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<i32>(new_capacity);
+        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<i32>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<i64>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<i64>;
+    let __local_6: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<i64>(new_capacity);
+        builtin::array_copy<i64>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<i64>(self.repr, used, value);
+    self.used = used + 1;
 }
 
 fn Formatter::write_char_n(self, c, n) {

@@ -42,15 +42,15 @@ struct Pair {
 
 array array<i32> (mut i32);
 
-struct Array<i32> {  // Array<T> with T=i32
-    mut repr: ref array<i32>,
-    mut used: i32,
-}
-
 array array<u64> (mut u64);
 
 struct Array<u64> {  // Array<T> with T=u64
     mut repr: ref array<u64>,
+    mut used: i32,
+}
+
+struct Array<i32> {  // Array<T> with T=i32
+    mut repr: ref array<i32>,
     mut used: i32,
 }
 
@@ -164,8 +164,8 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut __modules_initialized: bool = 0;
 global mut heap_offset: i32 = 8;  // from core:allocator
+global mut __modules_initialized: bool = 0;
 
 fn never_inline_add(x, y) {
     return x + y;
@@ -231,7 +231,7 @@ fn opt_inline_attr() with Stdout {
             String::append_char(__local_13, 97);
             String::append_char(__local_13, 116);
             String::append_char(__local_13, 32);
-            String::append(__local_13, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_inline.wado"), used: 60 });
+            String::append(__local_13, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_inline.wado"), used: 44 });
             String::append_char(__local_13, 58);
             __local_14 = __inline_Formatter__new_1: block -> ref Formatter {
                 __local_22 = __local_13;
@@ -271,7 +271,7 @@ condition: a == 30
             String::append_char(__local_15, 97);
             String::append_char(__local_15, 116);
             String::append_char(__local_15, 32);
-            String::append(__local_15, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_inline.wado"), used: 60 });
+            String::append(__local_15, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_inline.wado"), used: 44 });
             String::append_char(__local_15, 58);
             __local_16 = __inline_Formatter__new_9: block -> ref Formatter {
                 __local_45 = __local_15;
@@ -321,7 +321,7 @@ fn opt_inline_multireturn() with Stdout {
             String::append_char(__local_8, 97);
             String::append_char(__local_8, 116);
             String::append_char(__local_8, 32);
-            String::append(__local_8, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_inline.wado"), used: 60 });
+            String::append(__local_8, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_inline.wado"), used: 44 });
             String::append_char(__local_8, 58);
             __local_9 = __inline_Formatter__new_10: block -> ref Formatter {
                 __local_24 = __local_8;
@@ -371,7 +371,7 @@ fn opt_inline_recursive() with Stdout {
             String::append_char(__local_3, 97);
             String::append_char(__local_3, 116);
             String::append_char(__local_3, 32);
-            String::append(__local_3, String { repr: array.new_data<u8>("/home/user/wado/wado-compiler/tests/fixtures/opt_inline.wado"), used: 60 });
+            String::append(__local_3, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_inline.wado"), used: 44 });
             String::append_char(__local_3, 58);
             __local_4 = __inline_Formatter__new_1: block -> ref Formatter {
                 __local_6 = __local_3;
