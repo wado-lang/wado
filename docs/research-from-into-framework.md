@@ -166,13 +166,13 @@ let id: UserId = 42u64.into();
    Users must choose between `From`/`Into`, `AsRef`/`AsMut`, `Borrow`, `Deref`, and `ToOwned`.
    The distinctions are subtle:
 
-   | Trait      | Semantics                          | When to use                    |
-   |------------|------------------------------------|--------------------------------|
-   | `From<T>`  | Owned → owned (consuming)          | Type construction              |
-   | `AsRef<T>` | Borrowed → borrowed (cheap)        | Read-only access               |
-   | `Borrow<T>`| Like AsRef + hash/eq contract      | HashMap keys                   |
-   | `Deref`    | Smart pointer transparency         | Wrapper types                  |
-   | `ToOwned`  | Borrowed → owned (cloning)         | `&str` → `String`             |
+   | Trait       | Semantics                     | When to use       |
+   | ----------- | ----------------------------- | ----------------- |
+   | `From<T>`   | Owned → owned (consuming)     | Type construction |
+   | `AsRef<T>`  | Borrowed → borrowed (cheap)   | Read-only access  |
+   | `Borrow<T>` | Like AsRef + hash/eq contract | HashMap keys      |
+   | `Deref`     | Smart pointer transparency    | Wrapper types     |
+   | `ToOwned`   | Borrowed → owned (cloning)    | `&str` → `String` |
 
    This proliferation is a common complaint. New Rust users struggle to know which trait to
    implement for their conversion.
@@ -231,21 +231,21 @@ recurring complaints:
 
 - **"What is wrong with auto .into?"** (internals.rust-lang.org, 2022): A highly-discussed
   thread proposing automatic `.into()` calls. Key arguments from participants:
-  - *ekuber*: "The compiler has no knowledge on the performance characteristics of a given
+  - _ekuber_: "The compiler has no knowledge on the performance characteristics of a given
     `impl From`. It might require allocation, it might require invoking syscalls, it might
     even require IO."
-  - *afetisov*: Implicit conversions would break generic functions — `opt.unwrap_or_else(|| 3)`
+  - _afetisov_: Implicit conversions would break generic functions — `opt.unwrap_or_else(|| 3)`
     would become ambiguous if `3` could auto-convert to multiple types.
-  - *Multiple participants*: cite C++ and Scala as warnings about implicit conversion pitfalls.
+  - _Multiple participants_: cite C++ and Scala as warnings about implicit conversion pitfalls.
   - Even the author of the `auto_into` proc-macro crate concluded it was "an anti-pattern."
 
 - **"Implicit into() on return"** (internals.rust-lang.org, 2022): Proposed that return
   statements automatically apply `.into()` when types mismatch. Key opposition:
-  - *SkiFire13*: "A hidden function call makes readability worse because now you have to ask
+  - _SkiFire13_: "A hidden function call makes readability worse because now you have to ask
     yourself if there's some kind of hidden conversion going on."
-  - *scottmcm*: Would be a breaking change — `fn foo() -> u8 { 0 }` would no longer compile
+  - _scottmcm_: Would be a breaking change — `fn foo() -> u8 { 0 }` would no longer compile
     because `0` could `.into()` multiple types.
-  - *mjbshaw*: Some conversions like `&[T]` to `Arc<[T]>` "require cloning all the elements"
+  - _mjbshaw_: Some conversions like `&[T]` to `Arc<[T]>` "require cloning all the elements"
     — hiding that is dangerous.
 
 - **The `?` operator inconsistency**: The `?` operator already performs an implicit
@@ -553,18 +553,18 @@ Smart casts narrow types after `is` checks but don't perform value conversion.
 
 ## Cross-Language Summary
 
-| Language  | Mechanism              | Implicit? | Generic bound? | Fallible variant? |
-|-----------|------------------------|-----------|----------------|-------------------|
-| Rust      | `From`/`Into` traits   | No (explicit `.into()`) | Yes (`impl Into<T>`) | `TryFrom`/`TryInto` |
-| Scala 2   | `implicit def`         | Yes       | Via implicits   | No (runtime exn) |
-| Scala 3   | `Conversion` typeclass | Semi (requires import) | Yes | No |
-| Swift     | `ExpressibleBy` + init | Literals only | No | `init?` (failable) |
-| C++       | Converting constructors | Yes (unless `explicit`) | No | No |
-| Go        | Explicit cast syntax   | No        | No              | No |
-| Haskell   | Per-domain type classes | No        | Yes             | Partial |
-| Python    | Dunder methods         | No        | No (dynamic)    | Exceptions |
-| Zig       | `@as`                  | No        | No              | No |
-| Kotlin    | `.to*()` extensions    | No        | No              | Nullable return |
+| Language | Mechanism               | Implicit?               | Generic bound?       | Fallible variant?   |
+| -------- | ----------------------- | ----------------------- | -------------------- | ------------------- |
+| Rust     | `From`/`Into` traits    | No (explicit `.into()`) | Yes (`impl Into<T>`) | `TryFrom`/`TryInto` |
+| Scala 2  | `implicit def`          | Yes                     | Via implicits        | No (runtime exn)    |
+| Scala 3  | `Conversion` typeclass  | Semi (requires import)  | Yes                  | No                  |
+| Swift    | `ExpressibleBy` + init  | Literals only           | No                   | `init?` (failable)  |
+| C++      | Converting constructors | Yes (unless `explicit`) | No                   | No                  |
+| Go       | Explicit cast syntax    | No                      | No                   | No                  |
+| Haskell  | Per-domain type classes | No                      | Yes                  | Partial             |
+| Python   | Dunder methods          | No                      | No (dynamic)         | Exceptions          |
+| Zig      | `@as`                   | No                      | No                   | No                  |
+| Kotlin   | `.to*()` extensions     | No                      | No                   | Nullable return     |
 
 ---
 
@@ -681,15 +681,15 @@ opportunity to learn from Rust's design without being constrained by backward co
 
 ## Cross-Cutting Themes
 
-| Theme | Languages | Lesson |
-|-------|-----------|--------|
-| Implicit conversions cause bugs | C++, Scala 2, JavaScript | Every language with broad implicit conversion has regretted or constrained it |
-| Separate infallible from fallible | Rust, Haskell (Witch lib), Zig | Community converges on distinguishing "always works" from "might fail" |
-| Explicit is safer but verbose | Go, OCaml, Zig | Full explicitness trades ergonomics for clarity |
-| Literal coercion is the sweet spot | Go (untyped consts), Swift (ExpressibleBy), Zig (comptime), Wado | Literals molding to the target type is universally accepted as safe and ergonomic |
-| Smart/flow-sensitive casts | Kotlin | Compiler-driven narrowing after type checks is well-loved and low-risk |
-| Trait-based conversion (user-extensible) | Rust, Haskell, Swift | Gives users the mechanism without the implicit danger |
-| Name each conversion kind | Zig (`@as`/`@truncate`/`@intCast`) | Separating safe widening, checked narrowing, and lossy truncation aids auditability |
+| Theme                                    | Languages                                                        | Lesson                                                                              |
+| ---------------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Implicit conversions cause bugs          | C++, Scala 2, JavaScript                                         | Every language with broad implicit conversion has regretted or constrained it       |
+| Separate infallible from fallible        | Rust, Haskell (Witch lib), Zig                                   | Community converges on distinguishing "always works" from "might fail"              |
+| Explicit is safer but verbose            | Go, OCaml, Zig                                                   | Full explicitness trades ergonomics for clarity                                     |
+| Literal coercion is the sweet spot       | Go (untyped consts), Swift (ExpressibleBy), Zig (comptime), Wado | Literals molding to the target type is universally accepted as safe and ergonomic   |
+| Smart/flow-sensitive casts               | Kotlin                                                           | Compiler-driven narrowing after type checks is well-loved and low-risk              |
+| Trait-based conversion (user-extensible) | Rust, Haskell, Swift                                             | Gives users the mechanism without the implicit danger                               |
+| Name each conversion kind                | Zig (`@as`/`@truncate`/`@intCast`)                               | Separating safe widening, checked narrowing, and lossy truncation aids auditability |
 
 ---
 

@@ -16,12 +16,12 @@ There is no general-purpose mechanism for converting between user-defined types,
 
 See [Research: From/Into Conversion Trait Framework](./research-from-into-framework.md) for the full survey. Key findings:
 
-| Approach | Languages | Outcome |
-|----------|-----------|---------|
-| Implicit conversions | C++, Scala 2 | Universally regretted; causes bugs, hides costs |
-| Fully explicit | Go, Zig | Safe but verbose; no generic conversion protocol |
-| Trait-based, call-site-explicit | Rust | Good balance; `From`/`?` integration is the standout success |
-| Literal coercion only | Swift | Elegant for literals, insufficient for value-to-value |
+| Approach                        | Languages    | Outcome                                                      |
+| ------------------------------- | ------------ | ------------------------------------------------------------ |
+| Implicit conversions            | C++, Scala 2 | Universally regretted; causes bugs, hides costs              |
+| Fully explicit                  | Go, Zig      | Safe but verbose; no generic conversion protocol             |
+| Trait-based, call-site-explicit | Rust         | Good balance; `From`/`?` integration is the standout success |
+| Literal coercion only           | Swift        | Elegant for literals, insufficient for value-to-value        |
 
 Rust's `From`/`Into` framework is the primary reference design. Its strengths: standardized conversion protocol, `?` operator integration, separation of infallible/fallible. Its weaknesses:
 
@@ -132,6 +132,7 @@ fn find_user_name(id: i32) -> Option<String> {
 ```
 
 **Requirements**:
+
 - The enclosing function must return `Result<T, E>` (for `Result` operand) or `Option<T>` (for `Option` operand)
 - Using `?` on `Result` in a function returning `Option`, or vice versa, is a compile error
 - `?` cannot be used inside closures that don't return `Result`/`Option` themselves
@@ -144,7 +145,7 @@ Wado does not provide an `Into<T>` trait. The reasons:
 
 1. **`.into()` hides the target type.** Code like `let x = value.into()` requires type context to understand. `String::from(value)` is always clear.
 
-2. **Orphan rules make `Into` unnecessary.** Rust needed `Into` because pre-1.41 orphan rules prevented `impl From<ForeignType> for LocalType` in some cases. Wado uses Rust 1.41+ style orphan rules where having a local type in *any* trait parameter position suffices. With `From<LocalType> for ForeignType` allowed, there's no need for `Into`.
+2. **Orphan rules make `Into` unnecessary.** Rust needed `Into` because pre-1.41 orphan rules prevented `impl From<ForeignType> for LocalType` in some cases. Wado uses Rust 1.41+ style orphan rules where having a local type in _any_ trait parameter position suffices. With `From<LocalType> for ForeignType` allowed, there's no need for `Into`.
 
 3. **`impl Into<T>` parameters cause monomorphization bloat.** Each unique caller type generates a copy of the function body. The Rust ecosystem created the `momo` crate specifically to work around this problem.
 
@@ -159,11 +160,11 @@ The `as` operator retains its current semantics:
 
 `as` does **not** call `From::from()`. The semantic distinction:
 
-| Mechanism | Semantics | Cost |
-|-----------|-----------|------|
-| `as` | Bit reinterpretation / cast | Zero-cost, always succeeds |
-| `From::from()` | Semantic conversion | May allocate, always succeeds |
-| `TryFrom::try_from()` | Fallible conversion | May allocate, may fail |
+| Mechanism             | Semantics                   | Cost                          |
+| --------------------- | --------------------------- | ----------------------------- |
+| `as`                  | Bit reinterpretation / cast | Zero-cost, always succeeds    |
+| `From::from()`        | Semantic conversion         | May allocate, always succeeds |
+| `TryFrom::try_from()` | Fallible conversion         | May allocate, may fail        |
 
 This keeps `as` simple and predictable. Developers know `x as T` is always a trivial operation.
 
@@ -243,15 +244,15 @@ The standard library provides `From` impls for common lossless conversions:
 
 **Numeric widenings** (infallible, lossless):
 
-| From | To |
-|------|----|
-| `i8` | `i16`, `i32`, `i64` |
-| `i16` | `i32`, `i64` |
-| `i32` | `i64` |
-| `u8` | `u16`, `u32`, `u64`, `i16`, `i32`, `i64` |
-| `u16` | `u32`, `u64`, `i32`, `i64` |
-| `u32` | `u64`, `i64` |
-| `f32` | `f64` |
+| From  | To                                       |
+| ----- | ---------------------------------------- |
+| `i8`  | `i16`, `i32`, `i64`                      |
+| `i16` | `i32`, `i64`                             |
+| `i32` | `i64`                                    |
+| `u8`  | `u16`, `u32`, `u64`, `i16`, `i32`, `i64` |
+| `u16` | `u32`, `u64`, `i32`, `i64`               |
+| `u32` | `u64`, `i64`                             |
+| `f32` | `f64`                                    |
 
 **Other conversions**:
 
@@ -266,13 +267,13 @@ The standard library provides `From` impls for common lossless conversions:
 
 ### 9. Interaction with Existing Features
 
-| Feature | Status | Interaction |
-|---------|--------|-------------|
-| `as` casts | Unchanged | `as` = bit cast; `From` = semantic conversion |
-| Literal coercion | Unchanged | Literals still coerce to target type without `From` |
-| `null` → `Option::None` | Unchanged | Syntactic sugar, not a `From` call |
-| Template strings | Unchanged | `\`{x}\`` uses `Display`, not `From` |
-| Newtype `as` | Unchanged | `as` still works; `From` is additionally auto-generated |
+| Feature                 | Status    | Interaction                                             |
+| ----------------------- | --------- | ------------------------------------------------------- |
+| `as` casts              | Unchanged | `as` = bit cast; `From` = semantic conversion           |
+| Literal coercion        | Unchanged | Literals still coerce to target type without `From`     |
+| `null` → `Option::None` | Unchanged | Syntactic sugar, not a `From` call                      |
+| Template strings        | Unchanged | `\`{x}\``uses`Display`, not`From`                       |
+| Newtype `as`            | Unchanged | `as` still works; `From` is additionally auto-generated |
 
 ## Consequences
 
