@@ -6,8 +6,8 @@ use crate::tir::{TypeId, TypeTable};
 
 use super::Resolver;
 use super::types::{
-    EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, StructFieldInfo, VariantCaseData,
-    VariantInfo,
+    EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, StructFieldInfo,
+    VariantCaseData, VariantInfo,
 };
 use crate::name::MethodName;
 
@@ -17,11 +17,26 @@ impl<H: CompilerHost> Resolver<'_, H> {
         for (module_source, loaded_module) in self.loaded_modules {
             for item in &loaded_module.items {
                 if let Item::Type(newtype_decl) = item {
-                    // Only add if not already present (main module takes priority)
-                    if !self.newtypes.contains_key(&newtype_decl.name) {
-                        // Resolve the base type
+                    if !newtype_decl.type_params.is_empty() {
+                        // Generic newtype: store definition only if not already present
+                        if !self.generic_newtype_defs.contains_key(&newtype_decl.name) {
+                            let type_params = newtype_decl
+                                .type_params
+                                .iter()
+                                .map(|p| p.name.clone())
+                                .collect();
+                            self.generic_newtype_defs.insert(
+                                newtype_decl.name.clone(),
+                                GenericNewtypeInfo {
+                                    module_source: module_source.clone(),
+                                    type_params,
+                                    base_type_ast: newtype_decl.ty.clone(),
+                                },
+                            );
+                        }
+                    } else if !self.newtypes.contains_key(&newtype_decl.name) {
+                        // Concrete newtype: resolve immediately
                         let base_type_id = self.resolve_type(&newtype_decl.ty);
-                        // Create a newtype wrapping the base type
                         let newtype_id = self.type_table.borrow_mut().make_newtype(
                             newtype_decl.name.clone(),
                             module_source.clone(),
@@ -111,15 +126,31 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     self.trait_ctx.type_params = old_type_params;
                 }
                 Item::Type(newtype_decl) => {
-                    // Resolve the base type
-                    let base_type_id = self.resolve_type(&newtype_decl.ty);
-                    // Create a newtype wrapping the base type
-                    let newtype_id = self.type_table.borrow_mut().make_newtype(
-                        newtype_decl.name.clone(),
-                        self.current_module_source.clone(),
-                        base_type_id,
-                    );
-                    self.newtypes.insert(newtype_decl.name.clone(), newtype_id);
+                    if newtype_decl.type_params.is_empty() {
+                        // Concrete newtype: resolve immediately
+                        let base_type_id = self.resolve_type(&newtype_decl.ty);
+                        let newtype_id = self.type_table.borrow_mut().make_newtype(
+                            newtype_decl.name.clone(),
+                            self.current_module_source.clone(),
+                            base_type_id,
+                        );
+                        self.newtypes.insert(newtype_decl.name.clone(), newtype_id);
+                    } else {
+                        // Generic newtype: store definition for lazy instantiation
+                        let type_params = newtype_decl
+                            .type_params
+                            .iter()
+                            .map(|p| p.name.clone())
+                            .collect();
+                        self.generic_newtype_defs.insert(
+                            newtype_decl.name.clone(),
+                            GenericNewtypeInfo {
+                                module_source: self.current_module_source.clone(),
+                                type_params,
+                                base_type_ast: newtype_decl.ty.clone(),
+                            },
+                        );
+                    }
                 }
                 Item::Variant(variant_decl) => {
                     // Set up type parameters in scope for resolving field types

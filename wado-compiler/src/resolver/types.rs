@@ -83,6 +83,14 @@ pub(super) struct ResourceInfo {
     pub(super) methods: Vec<String>,
 }
 
+/// Generic newtype definition: `type Foo<T> = Bar<T>`
+#[derive(Clone)]
+pub(super) struct GenericNewtypeInfo {
+    pub(super) module_source: ModuleSource,
+    pub(super) type_params: Vec<String>,
+    pub(super) base_type_ast: ast::Type,
+}
+
 /// Errors from the type resolution phase
 #[derive(Debug, Clone)]
 pub enum TypeError {

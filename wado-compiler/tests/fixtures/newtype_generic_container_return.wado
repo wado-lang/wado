@@ -1,0 +1,49 @@
+// Return type substitution for generic container types (Option<T>, Array<T>)
+//
+// Bug: substitute_newtype_in_type() only handles direct type and &T/&mut T,
+// but does not recurse into generic instances like Option<T> or Array<T>.
+//
+// When a method returning Option<Point> or Array<Point> is called on Location
+// (a newtype of Point), the return type should be Option<Location> /
+// Array<Location>, not Option<Point> / Array<Point>.
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn try_clone(&self) -> Option<Point> {
+        return Option::Some(Point { x: self.x, y: self.y });
+    }
+
+    fn make_list(&self) -> Array<Point> {
+        let mut arr: Array<Point> = [];
+        arr.append(Point { x: self.x, y: self.y });
+        return arr;
+    }
+}
+
+type Location = Point;
+
+export fn run() with Stdout {
+    let loc: Location = Point { x: 5, y: 10 } as Location;
+
+    // try_clone() should return Option<Location>, not Option<Point>.
+    // The explicit type annotation verifies the substituted return type.
+    let opt: Option<Location> = loc.try_clone();
+    if let Some(l) = opt {
+        println(`option: ({l.x}, {l.y})`);
+    }
+
+    // make_list() should return Array<Location>, not Array<Point>.
+    let arr: Array<Location> = loc.make_list();
+    println(`array len: {arr.len()}`);
+    let first: Location = arr[0];
+    println(`array[0]: ({first.x}, {first.y})`);
+}
+
+__DATA__
+{"stdout": "option: (5, 10)\narray len: 1\narray[0]: (5, 10)\n"}

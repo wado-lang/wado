@@ -221,8 +221,10 @@ impl UserId {
 ## TODO
 
 - [ ] Generic newtypes (`type MyArray<T> = Array<T>`)
-- [ ] Trait bounds with newtypes (`fn compare<T: Ord>(a: T, b: T)` with newtype)
-- [ ] Methods on primitive newtypes (`impl UserId { ... }` where `type UserId = i32`)
+- [ ] Return type substitution for generic containers (`Option<Base>` → `Option<Newtype>` when calling inherited method on newtype)
+- [x] Trait bounds with newtypes (`fn compare<T: Ord>(a: T, b: T)` with newtype) — implemented
+- [x] Methods on primitive newtypes (`impl UserId { ... }` where `type UserId = i32`) — implemented
+- [x] `Array<Newtype>.sort()` via Ord inheritance — implemented
 
 ## See Also
 

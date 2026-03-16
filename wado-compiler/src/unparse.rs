@@ -643,6 +643,7 @@ impl<'a> Unparser<'a> {
 
         self.output.push_str("type ");
         self.output.push_str(&t.name);
+        self.unparse_generic_params(&t.type_params);
         self.output.push_str(" = ");
         self.unparse_type(&t.ty);
         self.output.push_str(";\n");
