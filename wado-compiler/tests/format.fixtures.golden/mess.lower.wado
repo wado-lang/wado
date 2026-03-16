@@ -7110,8 +7110,7 @@ pub fn "Array<u8>::append"(self: &mut Array<u8>, value: u8) {
     let capacity: i32 = core::builtin::array_len(self.repr);
     if core::builtin::unlikely((used >= capacity)) {
         let new_capacity: i32 = "core::prelude/array.wado::i32_max"((capacity * 2), 4);
-<<<<<<< HEAD
-        let new_repr: builtin::array<u8> = "core::prelude/string.wado::array_new<u8>"(new_capacity);
+        let new_repr: builtin::array<u8> = "core::prelude/string.wado::core/builtin/array_new<u8>"(new_capacity);
         let old_repr: builtin::array<u8> = self.repr;
         __for_0: {
             let mut i: i32 = 0;
@@ -7125,13 +7124,6 @@ pub fn "Array<u8>::append"(self: &mut Array<u8>, value: u8) {
                 i = (i + 1);
             }
         }
-||||||| 376fc2d
-        let new_repr: builtin::array<u8> = "core::prelude/string.wado::array_new<u8>"(new_capacity);
-        "core::prelude/string.wado::array_copy<u8>"(new_repr, 0, self.repr, 0, used);
-=======
-        let new_repr: builtin::array<u8> = "core::prelude/string.wado::core/builtin/array_new<u8>"(new_capacity);
-        "core::prelude/string.wado::core/builtin/array_copy<u8>"(new_repr, 0, self.repr, 0, used);
->>>>>>> origin/main
         self.repr = new_repr;
     }
     core::builtin::array_set::<u8>(self.repr, used, value);
