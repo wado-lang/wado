@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773636152901,
+  "lastUpdate": 1773638522584,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3611,6 +3611,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6b6ef7be34593b2b2bef8a3945264529d207c458"
         },
         "date": 1773636152691,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9285,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21283,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8b07179965ba789dc1bb7766777dd5ef11c8d744",
+          "message": "Merge pull request #589 from wado-lang/claude/optimize-fts-performance-sNnD9\n\nOptimize deref-only references to struct/tuple literals",
+          "timestamp": "2026-03-16T14:19:35+09:00",
+          "tree_id": "8928ccae5d55fea97193d25dc30c29e59da65265",
+          "url": "https://github.com/wado-lang/wado/commit/8b07179965ba789dc1bb7766777dd5ef11c8d744"
+        },
+        "date": 1773638522378,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
