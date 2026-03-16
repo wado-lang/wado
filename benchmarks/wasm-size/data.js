@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773664980903,
+  "lastUpdate": 1773697572834,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3728,6 +3728,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/376fc2d7215c27f29f98157613e005bcc43d7c1a"
         },
         "date": 1773664980696,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9285,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21283,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "38af0edab1c9d31e837e2247972cf4349b04c315",
+          "message": "Merge pull request #593 from wado-lang/claude/wasm-naming-conflicts-nGOFm\n\nFix wasm name conflicts for cross-module generic functions and closures",
+          "timestamp": "2026-03-17T06:43:46+09:00",
+          "tree_id": "f1b90a26588d872b49b925c339188abdf064c44e",
+          "url": "https://github.com/wado-lang/wado/commit/38af0edab1c9d31e837e2247972cf4349b04c315"
+        },
+        "date": 1773697572620,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
