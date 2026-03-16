@@ -156,7 +156,7 @@ struct [Stream<u8>, StreamWritable<u8>] {
     mut 1: i32,
 }
 
-struct [Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>] {
+struct [Future<Result<Option<Fields>,ErrorCode>>, FutureWritable<Result<Option<Fields>,ErrorCode>>] {
     mut 0: i32,
     mut 1: i32,
 }
@@ -251,12 +251,12 @@ struct Result<Response,ErrorCode>::Err {
     payload_0: ref "wasi:http/types.wado/ErrorCode",
 }
 
-variant Option<Trailers> {
+variant Option<Fields> {
     Some(i32),
     None,
 }
 
-struct Option<Trailers>::Some {
+struct Option<Fields>::Some {
     discriminant: i32,
     payload_0: i32,
 }
@@ -271,17 +271,17 @@ struct Result<unit,ErrorCode>::Err {
     payload_0: ref "wasi:http/types.wado/ErrorCode",
 }
 
-variant Result<Option<Trailers>,ErrorCode> {
-    Ok(ref Option<Trailers>),
+variant Result<Option<Fields>,ErrorCode> {
+    Ok(ref Option<Fields>),
     Err(ref "wasi:http/types.wado/ErrorCode"),
 }
 
-struct Result<Option<Trailers>,ErrorCode>::Ok {
+struct Result<Option<Fields>,ErrorCode>::Ok {
     discriminant: i32,
-    payload_0: ref Option<Trailers>,
+    payload_0: ref Option<Fields>,
 }
 
-struct Result<Option<Trailers>,ErrorCode>::Err {
+struct Result<Option<Fields>,ErrorCode>::Err {
     discriminant: i32,
     payload_0: ref "wasi:http/types.wado/ErrorCode",
 }
@@ -543,11 +543,11 @@ fn handle(request) {
     let __packed_157: i64;
     let __ptr_158: i32;
     let __len_159: i32;
-    let __pattern_temp_0: ref "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]";
+    let __pattern_temp_0: ref "tuple/[Future<Result<Option<Fields>,ErrorCode>>, FutureWritable<Result<Option<Fields>,ErrorCode>>]";
     let __pattern_temp_1: ref "tuple/[Stream<u8>, StreamWritable<u8>]";
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
-    __pattern_temp_0 = "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
+    __pattern_temp_0 = "tuple/[Future<Result<Option<Fields>,ErrorCode>>, FutureWritable<Result<Option<Fields>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
     trailers_future = __pattern_temp_0.0;
     trailers_tx = __pattern_temp_0.1;
     let __pair_temp_2: i64;

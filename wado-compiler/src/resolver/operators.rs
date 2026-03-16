@@ -326,7 +326,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let struct_name = match &left_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
-                ResolvedType::Newtype { name, .. } => Some(name.clone()),
+                ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => {
+                    Some(name.clone())
+                }
                 _ => None,
             };
 
@@ -423,7 +425,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let struct_name = match &left_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
-                ResolvedType::Newtype { name, .. } => Some(name.clone()),
+                ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => {
+                    Some(name.clone())
+                }
                 _ => None,
             };
 
@@ -493,17 +497,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Check for arithmetic on flags types: only bitwise ops are allowed
         {
+            let left_resolved = self.type_table.borrow().get(left.type_id).clone();
             let is_flags_arith = matches!(
                 binary.op,
                 BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod
-            ) && {
-                let type_table = self.type_table.borrow();
-                let flags_name = match type_table.get(left.type_id) {
-                    ResolvedType::Newtype { name, .. } => Some(name.clone()),
-                    _ => None,
-                };
-                flags_name.is_some_and(|n| self.flags_cases.contains_key(&n))
-            };
+            ) && matches!(left_resolved, ResolvedType::Flags { .. });
             if is_flags_arith {
                 let op_char = match binary.op {
                     BinaryOp::Add => "+",
@@ -710,7 +708,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let struct_name = match &expr_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
-                ResolvedType::Newtype { name, .. } => Some(name.clone()),
+                ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => {
+                    Some(name.clone())
+                }
                 _ => None,
             };
 
@@ -767,7 +767,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let struct_name = match &expr_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
-                ResolvedType::Newtype { name, .. } => Some(name.clone()),
+                ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => {
+                    Some(name.clone())
+                }
                 _ => None,
             };
 
@@ -948,7 +950,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let struct_name = match self.type_table.borrow().get(base_type_id).clone() {
                     ResolvedType::Struct { name, .. } => name,
                     ResolvedType::GenericInstance { name, .. } => name,
-                    ResolvedType::Newtype { name, .. } => name,
+                    ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => name,
                     _ => String::new(),
                 };
 

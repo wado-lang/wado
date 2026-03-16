@@ -877,7 +877,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let struct_name = match &base_type {
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance { name, .. } => name.clone(),
-            ResolvedType::Newtype { name, .. } => name.clone(),
+            ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => name.clone(),
             _ => String::new(),
         };
 

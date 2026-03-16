@@ -143,7 +143,7 @@ type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<c
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/String::from_utf8_lossy<MyBytes>" = fn(ref Array<u8>) -> ref String;
+type "functype/String::from_utf8_lossy<Array<u8>>" = fn(ref Array<u8>) -> ref String;
 
 type "functype/ArrayIter<u8>^Iterator::next" = fn(ref "core:allocator/ArrayIter<u8>") -> ref Option<u8>;
 
@@ -202,7 +202,7 @@ fn run() {
         __local_0 = Array<u8> { repr: array.new_fixed<u8>(72, 101, 108, 108, 111), used: 5 };
         break __seq_lit: __local_0;
     };
-    s = String::from_utf8_lossy<MyBytes>(bytes);
+    s = String::from_utf8_lossy<Array<u8>>(bytes);
     __v0 = s;
     __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("Hello"), used: 5 });
     if __cond == 0 {
@@ -661,7 +661,7 @@ fn String::append_char(self, c) {
     };
 }
 
-fn String::from_utf8_lossy<MyBytes>(bytes) {
+fn String::from_utf8_lossy<Array<u8>>(bytes) {
     let builder: ref String;
     let iter: ref "core:allocator/ArrayIter<u8>";
     let pending: ref Option<u8>;

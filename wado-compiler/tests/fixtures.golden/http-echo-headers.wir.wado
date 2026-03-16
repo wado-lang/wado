@@ -162,7 +162,7 @@ struct [Stream<u8>, StreamWritable<u8>] {
     mut 1: i32,
 }
 
-struct [Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>] {
+struct [Future<Result<Option<Fields>,ErrorCode>>, FutureWritable<Result<Option<Fields>,ErrorCode>>] {
     mut 0: i32,
     mut 1: i32,
 }
@@ -249,12 +249,12 @@ struct Result<Response,ErrorCode>::Err {
     payload_0: ref "wasi:http/types.wado/ErrorCode",
 }
 
-variant Option<Trailers> {
+variant Option<Fields> {
     Some(i32),
     None,
 }
 
-struct Option<Trailers>::Some {
+struct Option<Fields>::Some {
     discriminant: i32,
     payload_0: i32,
 }
@@ -279,17 +279,17 @@ struct Result<unit,ErrorCode>::Err {
     payload_0: ref "wasi:http/types.wado/ErrorCode",
 }
 
-variant Result<Option<Trailers>,ErrorCode> {
-    Ok(ref Option<Trailers>),
+variant Result<Option<Fields>,ErrorCode> {
+    Ok(ref Option<Fields>),
     Err(ref "wasi:http/types.wado/ErrorCode"),
 }
 
-struct Result<Option<Trailers>,ErrorCode>::Ok {
+struct Result<Option<Fields>,ErrorCode>::Ok {
     discriminant: i32,
-    payload_0: ref Option<Trailers>,
+    payload_0: ref Option<Fields>,
 }
 
-struct Result<Option<Trailers>,ErrorCode>::Err {
+struct Result<Option<Fields>,ErrorCode>::Err {
     discriminant: i32,
     payload_0: ref "wasi:http/types.wado/ErrorCode",
 }
@@ -556,23 +556,23 @@ fn handle(request) {
     let __packed_156: i64;
     let __ptr_157: i32;
     let __len_158: i32;
-    let __pattern_temp_0: ref "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]";
+    let __pattern_temp_0: ref "tuple/[Future<Result<Option<Fields>,ErrorCode>>, FutureWritable<Result<Option<Fields>,ErrorCode>>]";
     req_headers = __cm_adapter__Request_get_headers(request);
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
-    __pattern_temp_0 = "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
+    __pattern_temp_0 = "tuple/[Future<Result<Option<Fields>,ErrorCode>>, FutureWritable<Result<Option<Fields>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
     trailers_future = __pattern_temp_0.0;
     trailers_tx = __pattern_temp_0.1;
     resp_headers = __cm_adapter__Fields_new();
     if __cm_adapter__Fields_has(req_headers, String { repr: array.new_data<u8>("x-echo"), used: 6 }) {
         values = __cm_adapter__Fields_get(req_headers, String { repr: array.new_data<u8>("x-echo"), used: 6 });
         if values.used > 0 {
-            drop(__cm_adapter__Fields_append(resp_headers, String { repr: array.new_data<u8>("x-echoed"), used: 8 }, __inline_Array_FieldValue__IndexValue__index_value_1: block -> ref Array<u8> {
+            drop(__cm_adapter__Fields_append(resp_headers, String { repr: array.new_data<u8>("x-echoed"), used: 8 }, __inline_Array_Array_u8___IndexValue__index_value_1: block -> ref Array<u8> {
                 if 0 >= values.used {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_FieldValue__IndexValue__index_value_1: builtin::array_get<ref Array<u8>>(values.repr, 0);
+                break __inline_Array_Array_u8___IndexValue__index_value_1: builtin::array_get<ref Array<u8>>(values.repr, 0);
             }));
         };
     };

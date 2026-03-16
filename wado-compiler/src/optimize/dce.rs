@@ -1002,9 +1002,7 @@ fn analyze_expr(
 
 /// Add the appropriate `to_string` function call for a type
 fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut FunctionAnalysis) {
-    // Follow newtype chain to get the ultimate base type
-    let base_type_id = type_table.get_ultimate_base_type(type_id);
-    match type_table.get(base_type_id) {
+    match type_table.get(type_id) {
         ResolvedType::Primitive(prim) => {
             // Primitive to_string methods are defined in core:prelude/primitive as impl blocks
             // e.g., impl i32 { fn to_string(&self) -> String { ... } }
@@ -1712,6 +1710,8 @@ fn collect_type_dependencies(
         ResolvedType::Newtype { base_type, .. } => {
             collect_type_transitive(*base_type, type_table, reachable);
         }
+        // Flags: depends on u32 (always reachable, no-op)
+        ResolvedType::Flags { .. } => {}
     }
 }
 

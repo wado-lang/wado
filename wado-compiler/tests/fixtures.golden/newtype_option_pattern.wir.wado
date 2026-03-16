@@ -72,12 +72,12 @@ struct [bool, bool, SpecialKind] {
 
 array array<u64> (mut u64);
 
-variant Option<Radians> {
+variant Option<f64> {
     Some(f64),
     None,
 }
 
-struct Option<Radians>::Some {
+struct Option<f64>::Some {
     discriminant: i32,
     payload_0: f64,
 }
@@ -236,9 +236,9 @@ global mut POW10: ref null Array<u64> = ref.null none;
 global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
-    let angle: ref Option<Radians>;
+    let angle: ref Option<f64>;
     let r_1: f64;
-    let empty: ref Option<Radians>;
+    let empty: ref Option<f64>;
     let r_3: f64;
     let __local_4: f64;
     let result: f64;
@@ -248,7 +248,7 @@ fn run() with Stdout {
     let __local_9: ref Formatter;
     let __local_10: ref String;
     let __local_11: ref Formatter;
-    let __pattern_temp_0: ref Option<Radians>;
+    let __pattern_temp_0: ref Option<f64>;
     let __local_15: ref String;
     let __local_17: ref Formatter;
     let __local_23: ref String;
@@ -265,10 +265,10 @@ fn run() with Stdout {
         __initialize_module();
         __modules_initialized = 1;
     };
-    angle = Option<Radians>::Some { discriminant: 0, payload_0: 3.14159 };
+    angle = Option<f64>::Some { discriminant: 0, payload_0: 3.14159 };
     __pattern_temp_0 = angle;
-    if ref.test Option<Radians>::Some(__pattern_temp_0) {
-        r_1 = ref.cast Option<Radians>::Some(__pattern_temp_0).payload_0;
+    if ref.test Option<f64>::Some(__pattern_temp_0) {
+        r_1 = ref.cast Option<f64>::Some(__pattern_temp_0).payload_0;
         "core:cli/println"(__tmpl: block -> ref String {
             __local_6 = String { repr: builtin::array_new<u8>(23), used: 0 };
             String::append_char(__local_6, 97);
@@ -291,9 +291,9 @@ fn run() with Stdout {
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("no angle"), used: 8 });
     };
-    empty = Option<Radians> { 1 };
-    if ref.test Option<Radians>::Some(empty) {
-        r_3 = ref.cast Option<Radians>::Some(empty).payload_0;
+    empty = Option<f64> { 1 };
+    if ref.test Option<f64>::Some(empty) {
+        r_3 = ref.cast Option<f64>::Some(empty).payload_0;
         "core:cli/println"(__tmpl: block -> ref String {
             __local_8 = String { repr: builtin::array_new<u8>(28), used: 0 };
             String::append(__local_8, String { repr: array.new_data<u8>("unexpected: "), used: 12 });
@@ -310,11 +310,11 @@ fn run() with Stdout {
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("empty: none"), used: 11 });
     };
-    let __match_scrut_0: ref Option<Radians>;
+    let __match_scrut_0: ref Option<f64>;
     __match_scrut_0 = angle;
-    result = if ref.test Option<Radians>::Some(__match_scrut_0) -> f64 {
-        let __cast_1: ref Option<Radians>::Some;
-        __cast_1 = ref.cast Option<Radians>::Some(__match_scrut_0);
+    result = if ref.test Option<f64>::Some(__match_scrut_0) -> f64 {
+        let __cast_1: ref Option<f64>::Some;
+        __cast_1 = ref.cast Option<f64>::Some(__match_scrut_0);
         __local_4 = __cast_1.payload_0;
         __local_4 * 2;
     } else if __match_scrut_0.discriminant == 1 -> f64 {

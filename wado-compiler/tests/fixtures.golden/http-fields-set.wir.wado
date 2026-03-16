@@ -177,7 +177,7 @@ struct [Stream<u8>, StreamWritable<u8>] {
     mut 1: i32,
 }
 
-struct [Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>] {
+struct [Future<Result<Option<Fields>,ErrorCode>>, FutureWritable<Result<Option<Fields>,ErrorCode>>] {
     mut 0: i32,
     mut 1: i32,
 }
@@ -274,12 +274,12 @@ struct Result<unit,HeaderError>::Err {
     payload_0: ref "wasi:http/types.wado/HeaderError",
 }
 
-variant Option<Trailers> {
+variant Option<Fields> {
     Some(i32),
     None,
 }
 
-struct Option<Trailers>::Some {
+struct Option<Fields>::Some {
     discriminant: i32,
     payload_0: i32,
 }
@@ -294,17 +294,17 @@ struct Result<unit,ErrorCode>::Err {
     payload_0: ref "wasi:http/types.wado/ErrorCode",
 }
 
-variant Result<Option<Trailers>,ErrorCode> {
-    Ok(ref Option<Trailers>),
+variant Result<Option<Fields>,ErrorCode> {
+    Ok(ref Option<Fields>),
     Err(ref "wasi:http/types.wado/ErrorCode"),
 }
 
-struct Result<Option<Trailers>,ErrorCode>::Ok {
+struct Result<Option<Fields>,ErrorCode>::Ok {
     discriminant: i32,
-    payload_0: ref Option<Trailers>,
+    payload_0: ref Option<Fields>,
 }
 
-struct Result<Option<Trailers>,ErrorCode>::Err {
+struct Result<Option<Fields>,ErrorCode>::Err {
     discriminant: i32,
     payload_0: ref "wasi:http/types.wado/ErrorCode",
 }
@@ -408,8 +408,6 @@ type "functype/String::append_char" = fn(ref String, char);
 type "functype/Array<Array<u8>>::append" = fn(ref Array<Array<u8>>, ref Array<u8>);
 
 type "functype/Array<u8>::append" = fn(ref Array<u8>, u8);
-
-type "functype/Array<FieldValue>::append" = fn(ref Array<Array<u8>>, ref Array<u8>);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -611,7 +609,7 @@ fn handle(request) {
     let __packed_171: i64;
     let __ptr_172: i32;
     let __len_173: i32;
-    let __pattern_temp_1: ref "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]";
+    let __pattern_temp_1: ref "tuple/[Future<Result<Option<Fields>,ErrorCode>>, FutureWritable<Result<Option<Fields>,ErrorCode>>]";
     let __local_187: ref String;
     let __local_189: ref Formatter;
     let __local_192: ref String;
@@ -673,7 +671,7 @@ condition: fields.has(\"x-test\" as FieldName)
         break __seq_lit: __local_6;
     };
     new_values = __seq_lit: block -> ref Array<Array<u8>> {
-        __local_8 = Array<Array<u8>> { repr: array.new_fixed<ref Array<u8>>(v2), used: 1 };
+        __local_8 = Array<Array<u8>> { repr: array.new_fixed<ref Array<u8>>(value_copy Array<u8>(v2)), used: 1 };
         break __seq_lit: __local_8;
     };
     set_result = __cm_adapter__Fields_set(fields, String { repr: array.new_data<u8>("x-test"), used: 6 }, new_values);
@@ -724,7 +722,7 @@ condition: got.len() == 1
     };
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
-    __pattern_temp_1 = "tuple/[Future<Result<Option<Trailers>,ErrorCode>>, FutureWritable<Result<Option<Trailers>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
+    __pattern_temp_1 = "tuple/[Future<Result<Option<Fields>,ErrorCode>>, FutureWritable<Result<Option<Fields>,ErrorCode>>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
     trailers_future = __pattern_temp_1.0;
     trailers_tx = __pattern_temp_1.1;
     let __sroa___pattern_temp_2_0: i32;
@@ -1628,27 +1626,6 @@ fn Array<u8>::append(self, value) {
     self.used = used + 1;
 }
 
-fn Array<FieldValue>::append(self, value) {
-    let used: i32;
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<Array<u8>>;
-    let __local_6: i32;
-    used = self.used;
-    capacity = builtin::array_len(self.repr);
-    if builtin::unlikely(used >= capacity) {
-        new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
-        };
-        new_repr = builtin::array_new<ref Array<u8>>(new_capacity);
-        builtin::array_copy<ref Array<u8>>(new_repr, 0, self.repr, 0, used);
-        self.repr = ref.as_non_null(new_repr);
-    };
-    builtin::array_set<ref Array<u8>>(self.repr, used, value);
-    self.used = used + 1;
-}
-
 fn Formatter::write_char_n(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref String;
@@ -1656,13 +1633,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l95: loop {
+            l94: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l95;
+                continue l94;
             };
         };
     };

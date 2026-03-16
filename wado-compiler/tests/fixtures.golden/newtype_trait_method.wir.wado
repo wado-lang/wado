@@ -107,8 +107,6 @@ type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
 
-type "functype/Point^Describable::describe" = fn(ref Point) -> i32;
-
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
 type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
@@ -142,8 +140,8 @@ fn run() with Stdout {
     let d: i32;
     let __local_2: ref String;
     let __local_3: ref Formatter;
-    let __local_6: ref String;
-    let __local_8: ref Formatter;
+    let __local_7: ref String;
+    let __local_9: ref Formatter;
     __inline___initialize_modules_0: block {
         if __modules_initialized {
             break __inline___initialize_modules_0;
@@ -151,15 +149,15 @@ fn run() with Stdout {
         __modules_initialized = 1;
     };
     loc = Point { x: 10, y: 20 };
-    d = Point^Describable::describe(loc);
+    d = loc.x + loc.y;
     "core:cli/println"(__tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_3 = __inline_Formatter__new_3: block -> ref Formatter {
-            __local_6 = __local_2;
-            break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_6) };
+        __local_3 = __inline_Formatter__new_4: block -> ref Formatter {
+            __local_7 = __local_2;
+            break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_7) };
         };
-        __local_8 = __local_3;
-        i32::fmt_decimal(d, __local_8);
+        __local_9 = __local_3;
+        i32::fmt_decimal(d, __local_9);
         break __tmpl: __local_2;
     });
 }
@@ -495,10 +493,6 @@ fn String::append_char(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
-}
-
-fn Point^Describable::describe(self) {
-    return self.x + self.y;
 }
 
 fn Formatter::write_char_n(self, c, n) {

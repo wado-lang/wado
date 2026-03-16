@@ -1152,26 +1152,16 @@ impl FunctionTranslator<'_, '_> {
     fn translate_expr_inner(&mut self, expr: &TirExpr) -> WirInstr {
         match &expr.kind {
             // === Literals ===
-            TirExprKind::IntLiteral { value, .. } => {
-                // Resolve newtypes to their base primitive type
-                let base_type_id = self.type_table.get_ultimate_base_type(expr.type_id);
-                match self.type_table.get(base_type_id) {
-                    ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
-                        WirInstr::I64Const(*value as i64)
-                    }
-                    _ => WirInstr::I32Const(*value as i32),
+            TirExprKind::IntLiteral { value, .. } => match self.type_table.get(expr.type_id) {
+                ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
+                    WirInstr::I64Const(*value as i64)
                 }
-            }
-            TirExprKind::FloatLiteral { value, .. } => {
-                // Resolve newtypes to their base primitive type
-                let base_type_id = self.type_table.get_ultimate_base_type(expr.type_id);
-                match self.type_table.get(base_type_id) {
-                    ResolvedType::Primitive(PrimitiveType::F32) => {
-                        WirInstr::F32Const(*value as f32)
-                    }
-                    _ => WirInstr::F64Const(*value),
-                }
-            }
+                _ => WirInstr::I32Const(*value as i32),
+            },
+            TirExprKind::FloatLiteral { value, .. } => match self.type_table.get(expr.type_id) {
+                ResolvedType::Primitive(PrimitiveType::F32) => WirInstr::F32Const(*value as f32),
+                _ => WirInstr::F64Const(*value),
+            },
             TirExprKind::BoolLiteral(value) => WirInstr::I32Const(i32::from(*value)),
             TirExprKind::CharLiteral(c) => WirInstr::I32Const(*c as i32),
             TirExprKind::StringLiteral(s) => {
@@ -1901,22 +1891,20 @@ impl FunctionTranslator<'_, '_> {
         right: Box<WirInstr>,
         left_type_id: TypeId,
     ) -> WirInstr {
-        // Resolve newtypes to their base primitive type
-        let base_type_id = self.type_table.get_ultimate_base_type(left_type_id);
         let is_i64 = matches!(
-            self.type_table.get(base_type_id),
+            self.type_table.get(left_type_id),
             ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
         );
         let is_f64 = matches!(
-            self.type_table.get(base_type_id),
+            self.type_table.get(left_type_id),
             ResolvedType::Primitive(PrimitiveType::F64)
         );
         let is_f32 = matches!(
-            self.type_table.get(base_type_id),
+            self.type_table.get(left_type_id),
             ResolvedType::Primitive(PrimitiveType::F32)
         );
         let is_unsigned = matches!(
-            self.type_table.get(base_type_id),
+            self.type_table.get(left_type_id),
             ResolvedType::Primitive(
                 PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64
             )
@@ -2141,18 +2129,16 @@ impl FunctionTranslator<'_, '_> {
         operand: Box<WirInstr>,
         operand_type_id: TypeId,
     ) -> WirInstr {
-        // Resolve newtypes to their base primitive type
-        let base_type_id = self.type_table.get_ultimate_base_type(operand_type_id);
         let is_i64 = matches!(
-            self.type_table.get(base_type_id),
+            self.type_table.get(operand_type_id),
             ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
         );
         let is_f64 = matches!(
-            self.type_table.get(base_type_id),
+            self.type_table.get(operand_type_id),
             ResolvedType::Primitive(PrimitiveType::F64)
         );
         let is_f32 = matches!(
-            self.type_table.get(base_type_id),
+            self.type_table.get(operand_type_id),
             ResolvedType::Primitive(PrimitiveType::F32)
         );
 
@@ -2202,10 +2188,9 @@ impl FunctionTranslator<'_, '_> {
     /// Translate a type cast.
     fn translate_cast(&mut self, inner: &TirExpr, from_type: TypeId, to_type: TypeId) -> WirInstr {
         // Optimize: IntLiteral cast to i64/u64 → emit I64Const directly to avoid i32 truncation
-        let to_base = self.type_table.get_ultimate_base_type(to_type);
         if let TirExprKind::IntLiteral { value, .. } = &inner.kind
             && matches!(
-                self.type_table.get(to_base),
+                self.type_table.get(to_type),
                 ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
             )
         {
@@ -2213,10 +2198,8 @@ impl FunctionTranslator<'_, '_> {
         }
 
         let inner_instr = self.translate_expr(inner);
-        // Resolve newtypes to their base types for cast operations
-        let from_base = self.type_table.get_ultimate_base_type(from_type);
-        let from = self.type_table.get(from_base);
-        let to = self.type_table.get(to_base);
+        let from = self.type_table.get(from_type);
+        let to = self.type_table.get(to_type);
 
         // Numeric casts: extension/conversion mode is determined by the source
         // type's signedness. Signed sources sign-extend, unsigned sources zero-extend.
@@ -2480,21 +2463,9 @@ impl FunctionTranslator<'_, '_> {
     /// Resolve a newtype name to the ultimate base struct/primitive name.
     /// Returns `None` if the name is not a newtype.
     fn resolve_newtype_to_base_struct_name(&self, name: &str) -> Option<String> {
-        // Search the type table for a Newtype with the given name
-        for type_id in self.type_table.iter_type_ids() {
-            if let ResolvedType::Newtype {
-                name: newtype_name,
-                base_type,
-                ..
-            } = self.type_table.get(type_id)
-                && newtype_name == name
-            {
-                // Follow the chain to the ultimate base type
-                let ultimate = self.type_table.get_ultimate_base_type(*base_type);
-                return Some(self.type_table.type_name(ultimate));
-            }
-        }
-        None
+        self.type_table
+            .get_newtype_ultimate_base_name(name)
+            .map(str::to_owned)
     }
 
     /// Translate a builtin intrinsic call to a WIR instruction.

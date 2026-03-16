@@ -200,12 +200,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     );
                 }
                 Item::Flags(flags_decl) => {
-                    // Create a newtype over u32 for the flags type
-                    let flags_type = self.type_table.borrow_mut().make_newtype(
-                        flags_decl.name.clone(),
-                        self.current_module_source.clone(),
-                        TypeTable::U32,
-                    );
+                    // Create a distinct Flags type (not a newtype over u32)
+                    let flags_type = self
+                        .type_table
+                        .borrow_mut()
+                        .make_flags(flags_decl.name.clone(), self.current_module_source.clone());
                     // Add to newtypes so it can be used as a type name
                     self.newtypes.insert(flags_decl.name.clone(), flags_type);
                     // Store member info with bitmask values (1 << index)

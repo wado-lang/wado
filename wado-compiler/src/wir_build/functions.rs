@@ -586,29 +586,23 @@ fn translate_global_init(
     use crate::wir::WirInstr;
 
     match &init.kind {
-        TirExprKind::IntLiteral { value, .. } => {
-            let base_type = type_table.get_ultimate_base_type(init.type_id);
-            match type_table.get(base_type) {
-                ResolvedType::Primitive(prim) => match prim {
-                    PrimitiveType::I8
-                    | PrimitiveType::I16
-                    | PrimitiveType::I32
-                    | PrimitiveType::U8
-                    | PrimitiveType::U16
-                    | PrimitiveType::U32 => WirInstr::I32Const(*value as i32),
-                    PrimitiveType::I64 | PrimitiveType::U64 => WirInstr::I64Const(*value as i64),
-                    _ => WirInstr::I32Const(*value as i32),
-                },
+        TirExprKind::IntLiteral { value, .. } => match type_table.get(init.type_id) {
+            ResolvedType::Primitive(prim) => match prim {
+                PrimitiveType::I8
+                | PrimitiveType::I16
+                | PrimitiveType::I32
+                | PrimitiveType::U8
+                | PrimitiveType::U16
+                | PrimitiveType::U32 => WirInstr::I32Const(*value as i32),
+                PrimitiveType::I64 | PrimitiveType::U64 => WirInstr::I64Const(*value as i64),
                 _ => WirInstr::I32Const(*value as i32),
-            }
-        }
-        TirExprKind::FloatLiteral { value, .. } => {
-            let base_type = type_table.get_ultimate_base_type(init.type_id);
-            match type_table.get(base_type) {
-                ResolvedType::Primitive(PrimitiveType::F32) => WirInstr::F32Const(*value as f32),
-                _ => WirInstr::F64Const(*value),
-            }
-        }
+            },
+            _ => WirInstr::I32Const(*value as i32),
+        },
+        TirExprKind::FloatLiteral { value, .. } => match type_table.get(init.type_id) {
+            ResolvedType::Primitive(PrimitiveType::F32) => WirInstr::F32Const(*value as f32),
+            _ => WirInstr::F64Const(*value),
+        },
         TirExprKind::BoolLiteral(b) => WirInstr::I32Const(i32::from(*b)),
         TirExprKind::CharLiteral(c) => WirInstr::I32Const(*c as i32),
         TirExprKind::Null | TirExprKind::Unit => WirInstr::RefNull {

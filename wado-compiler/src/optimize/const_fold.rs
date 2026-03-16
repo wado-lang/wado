@@ -634,20 +634,18 @@ fn format_float(value: f64) -> String {
     }
 }
 
-/// Check if a `TypeId` is f32 (following newtypes).
+/// Check if a `TypeId` is f32.
 fn is_f32_type(type_id: TypeId, type_table: &TypeTable) -> bool {
-    let base = type_table.get_ultimate_base_type(type_id);
     matches!(
-        type_table.get(base),
+        type_table.get(type_id),
         ResolvedType::Primitive(PrimitiveType::F32)
     )
 }
 
-/// Get the integer `PrimitiveType` for a `TypeId`, following newtypes.
+/// Get the integer `PrimitiveType` for a `TypeId`.
 /// Returns `None` for non-integer types and i128/u128 (not yet supported).
 fn get_int_primitive(type_id: TypeId, type_table: &TypeTable) -> Option<PrimitiveType> {
-    let base = type_table.get_ultimate_base_type(type_id);
-    match type_table.get(base) {
+    match type_table.get(type_id) {
         ResolvedType::Primitive(
             p @ (PrimitiveType::I8
             | PrimitiveType::I16
