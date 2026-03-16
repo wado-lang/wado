@@ -112,7 +112,7 @@ make benchmark-json-catalog
 
 | Component  | Version      |
 | ---------- | ------------ |
-| Wado       | 2026-03-14   |
+| Wado       | 2026-03-16   |
 | wasmtime   | 42.0.1       |
 | Node.js    | v24.14.0     |
 | C compiler | gcc 13.3.0   |
@@ -125,7 +125,7 @@ make benchmark-json-catalog
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
 | **Wado**    | 193       | 1.00x    |
-| JavaScript  | 195       | 1.01x    |
+| JavaScript  | 193       | 1.00x    |
 | C (gcc -O3) | 196       | 1.02x    |
 
 All implementations produce the same result: 47,407,790 total iterations.
@@ -134,9 +134,9 @@ All implementations produce the same result: 47,407,790 total iterations.
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 3,204     | 1.00x    |
-| JavaScript  | 3,228     | 1.01x    |
-| **Wado**    | 3,253     | 1.02x    |
+| C (gcc -O3) | 3,202     | 1.00x    |
+| **Wado**    | 3,221     | 1.01x    |
+| JavaScript  | 3,232     | 1.01x    |
 
 All implementations produce the same result: 664,579 primes.
 
@@ -144,9 +144,9 @@ All implementations produce the same result: 664,579 primes.
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 39        | 1.00x    |
-| JavaScript  | 65        | 1.67x    |
-| **Wado**    | 90        | 2.31x    |
+| C (gcc -O3) | 36        | 1.00x    |
+| JavaScript  | 62        | 1.72x    |
+| **Wado**    | 89        | 2.47x    |
 
 All implementations produce the same result: 664,579 primes.
 
@@ -154,15 +154,15 @@ All implementations produce the same result: 664,579 primes.
 
 | Runtime               | Time (ms) | Relative |
 | --------------------- | --------- | -------- |
-| zlib-rs (native Rust) | 1.0       | 1.00x    |
-| **Wado** (pure Wado)  | 57        | 57x      |
+| zlib-rs (native Rust) | 0.95      | 1.00x    |
+| **Wado** (pure Wado)  | 54        | 57x      |
 
 ### zlib Decompress (100KB x 10 iterations)
 
 | Runtime               | Time (ms) | Relative |
 | --------------------- | --------- | -------- |
 | zlib-rs (native Rust) | 0.17      | 1.00x    |
-| **Wado** (pure Wado)  | 788       | 4,635x   |
+| **Wado** (pure Wado)  | 802       | 4,690x   |
 
 zlib-rs runs natively; Wado is compiled to Wasm and run on wasmtime. Wado's `core:zlib` is a pure Wado implementation, so significant overhead is expected.
 
@@ -172,8 +172,8 @@ zlib-rs runs natively; Wado is compiled to Wasm and run on wasmtime. Wado's `cor
 | ------------------- | --------- | -------- |
 | Zig (-OReleaseFast) | 30        | 1.00x    |
 | Rust (rustc -O)     | 36        | 1.20x    |
-| C (gcc -O3)         | 67        | 2.23x    |
-| **Wado**            | 193       | 6.43x    |
+| C (gcc -O3)         | 66        | 2.20x    |
+| **Wado**            | 129       | 4.30x    |
 
 All implementations produce: Total bytes: 4,000,000, byte sum: 204,501,007.
 
@@ -181,8 +181,8 @@ All implementations produce: Total bytes: 4,000,000, byte sum: 204,501,007.
 
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
-| Rust (serde_json, native)  | 0.85      | 1.00x    |
-| **Wado** (core:json, Wasm) | 125       | 148x     |
+| Rust (serde_json, native)  | 0.82      | 1.00x    |
+| **Wado** (core:json, Wasm) | 124       | 151x     |
 
 Both implementations parse 100 statuses from Twitter search results.
 
@@ -190,8 +190,8 @@ Both implementations parse 100 statuses from Twitter search results.
 
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
-| Rust (serde_json, native)  | 8.68      | 1.00x    |
-| **Wado** (core:json, Wasm) | 526       | 61x      |
+| Rust (serde_json, native)  | 8.57      | 1.00x    |
+| **Wado** (core:json, Wasm) | 527       | 62x      |
 
 Both implementations parse 55,563 coordinate points from GeoJSON.
 
@@ -199,8 +199,8 @@ Both implementations parse 55,563 coordinate points from GeoJSON.
 
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
-| Rust (serde_json, native)  | 2.37      | 1.00x    |
-| **Wado** (core:json, Wasm) | 132       | 56x      |
+| Rust (serde_json, native)  | 2.52      | 1.00x    |
+| **Wado** (core:json, Wasm) | 133       | 53x      |
 
 Both implementations parse 184 events and 243 performances from CITM catalog data.
 

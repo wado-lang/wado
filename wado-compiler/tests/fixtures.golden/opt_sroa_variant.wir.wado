@@ -146,8 +146,6 @@ type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 
 type "functype/String::append" = fn(ref String, ref String);
 
-type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> ref Option<u8>;
-
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> ref Option<char>;
 
 type "functype/String::append_char" = fn(ref String, char);
@@ -161,8 +159,6 @@ type "functype/wasi/stream-drop-writable" = fn(i32);
 type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/subtask-drop" = fn(i32);
-
-type "functype/StrUtf8ByteIter^Iterator::next" = fn(ref StrUtf8ByteIter) -> [i32, u8];
 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
@@ -187,24 +183,25 @@ global mut __modules_initialized: bool = 0;
 
 fn sum_bytes(s) {
     let sum: i32;
-    let __iter_2: ref StrUtf8ByteIter;
-    let b: u8;
-    let __local_5: ref StrUtf8ByteIter;
+    let byte: u8;
+    let __sroa___iter_2_repr: ref array<u8>;
+    let __sroa___iter_2_used: i32;
+    let __sroa___iter_2_index: i32;
     sum = 0;
-    __iter_2 = __inline_StrUtf8ByteIter_IntoIterator__into_iter_0: block -> ref StrUtf8ByteIter {
-        __local_5 = StrUtf8ByteIter { repr: ref.as_non_null(s.repr), used: s.used, index: 0 };
-        break __inline_StrUtf8ByteIter_IntoIterator__into_iter_0: __local_5;
-    };
+    __sroa___iter_2_repr = s.repr;
+    __sroa___iter_2_used = s.used;
+    __sroa___iter_2_index = 0;
     b0: block {
         l1: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: u8;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(__iter_2);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                b = __sroa___pattern_temp_0_payload_0;
-                sum = sum + b;
-            } else {
-                break b0;
+            __fused___inline_StrUtf8ByteIter_Iterator__next_2: block {
+                if __sroa___iter_2_index >= __sroa___iter_2_used {
+                    break b0;
+                    break __fused___inline_StrUtf8ByteIter_Iterator__next_2;
+                };
+                byte = builtin::array_get_u8(__sroa___iter_2_repr, __sroa___iter_2_index);
+                __sroa___iter_2_index = __sroa___iter_2_index + 1;
+                sum = sum + byte;
+                break __fused___inline_StrUtf8ByteIter_Iterator__next_2;
             };
             continue l1;
         };
@@ -216,12 +213,8 @@ fn count_chars(s) {
     let count: i32;
     let __iter_2: ref StrCharIter;
     let _c: char;
-    let __local_5: ref StrCharIter;
     count = 0;
-    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_0: block -> ref StrCharIter {
-        __local_5 = StrCharIter { repr: ref.as_non_null(s.repr), used: s.used, byte_index: 0 };
-        break __inline_StrCharIter_IntoIterator__into_iter_0: __local_5;
-    };
+    __iter_2 = StrCharIter { repr: ref.as_non_null(s.repr), used: s.used, byte_index: 0 };
     b3: block {
         l4: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -240,15 +233,21 @@ fn count_chars(s) {
 }
 
 fn first_byte(s) {
-    let iter: ref StrUtf8ByteIter;
-    let b: u8;
-    iter = StrUtf8ByteIter { repr: ref.as_non_null(s.repr), used: s.used, index: 0 };
-    let __sroa___pattern_temp_0_discriminant: i32;
-    let __sroa___pattern_temp_0_payload_0: u8;
-    multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrUtf8ByteIter^Iterator::next(iter);
-    if __sroa___pattern_temp_0_discriminant == 0 {
-        b = __sroa___pattern_temp_0_payload_0;
-        return b;
+    let byte: u8;
+    let __sroa_iter_repr: ref array<u8>;
+    let __sroa_iter_used: i32;
+    let __sroa_iter_index: i32;
+    __sroa_iter_repr = s.repr;
+    __sroa_iter_used = s.used;
+    __sroa_iter_index = 0;
+    __fused___inline_StrUtf8ByteIter_Iterator__next_1: block {
+        if 0 >= __sroa_iter_used {
+            break __fused___inline_StrUtf8ByteIter_Iterator__next_1;
+        };
+        byte = builtin::array_get_u8(__sroa_iter_repr, 0);
+        __sroa_iter_index = 1;
+        return byte;
+        break __fused___inline_StrUtf8ByteIter_Iterator__next_1;
     };
     return -1;
 }
@@ -320,7 +319,7 @@ fn run() with Stdout {
                 break __inline_Formatter__new_3: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_22) };
             };
             __local_24 = __local_11;
-            i32::fmt_decimal(34, __local_24);
+            i32::fmt_decimal(39, __local_24);
             String::append(__local_10, String { repr: array.new_data<u8>("
 condition: sum_bytes(\"ABC\") == 198
 "), used: 36 });
@@ -356,7 +355,7 @@ condition: sum_bytes(\"ABC\") == 198
                 break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_33) };
             };
             __local_35 = __local_13;
-            i32::fmt_decimal(35, __local_35);
+            i32::fmt_decimal(40, __local_35);
             String::append(__local_12, String { repr: array.new_data<u8>("
 condition: sum_bytes(\"\") == 0
 "), used: 31 });
@@ -392,7 +391,7 @@ condition: sum_bytes(\"\") == 0
                 break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_44) };
             };
             __local_46 = __local_15;
-            i32::fmt_decimal(36, __local_46);
+            i32::fmt_decimal(41, __local_46);
             String::append(__local_14, String { repr: array.new_data<u8>("
 condition: count_chars(\"hello\") == 5
 "), used: 38 });
@@ -428,7 +427,7 @@ condition: count_chars(\"hello\") == 5
                 break __inline_Formatter__new_24: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_55) };
             };
             __local_57 = __local_17;
-            i32::fmt_decimal(37, __local_57);
+            i32::fmt_decimal(42, __local_57);
             String::append(__local_16, String { repr: array.new_data<u8>("
 condition: first_byte(\"Z\") == 90
 "), used: 34 });
@@ -464,7 +463,7 @@ condition: first_byte(\"Z\") == 90
                 break __inline_Formatter__new_31: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_66) };
             };
             __local_68 = __local_19;
-            i32::fmt_decimal(38, __local_68);
+            i32::fmt_decimal(43, __local_68);
             String::append(__local_18, String { repr: array.new_data<u8>("
 condition: first_byte(\"\") == -1
 "), used: 33 });
@@ -826,16 +825,6 @@ fn String::append(self, other) {
     self.used = new_used;
 }
 
-fn StrUtf8ByteIter^Iterator::next(self) {
-    let byte: u8;
-    if self.index >= self.used {
-        return 1; 0;
-    };
-    byte = builtin::array_get_u8(self.repr, self.index);
-    self.index = self.index + 1;
-    return 0; byte;
-}
-
 fn StrCharIter^Iterator::next(self) {
     let b0: u8;
     let b1_2: u8;
@@ -926,13 +915,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l50: loop {
+            l49: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l50;
+                continue l49;
             };
         };
     };
