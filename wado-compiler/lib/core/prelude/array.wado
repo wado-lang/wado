@@ -56,7 +56,12 @@ impl Array<T> {
         if builtin::unlikely(used >= capacity) {
             let new_capacity = i32_max(capacity * 2, 4);
             let new_repr = builtin::array_new::<T>(new_capacity);
-            builtin::array_copy::<T>(new_repr, 0, self.repr, 0, used);
+            // Use element-by-element loop: Wasm array.copy is a libcall in wasmtime
+            // (~3μs/element), while a JIT-compiled loop runs at ~1ns/element.
+            let old_repr = self.repr;
+            for let mut i = 0; i < used; i += 1 {
+                builtin::array_set::<T>(new_repr, i, builtin::array_get::<T>(old_repr, i));
+            }
             self.repr = new_repr;
         }
         builtin::array_set::<T>(self.repr, used, value);
@@ -71,28 +76,30 @@ impl Array<T> {
     }
 
     /// Copies `count` elements from `self[src_start..]` and appends them.
-    /// Handles overlapping regions correctly (each byte reads after all previous writes).
-    /// Capacity is checked once and the raw array reference is cached for performance.
+    /// Handles overlapping regions correctly for both non-overlapping and DEFLATE-style
+    /// run-length expansion (where src < dst). Forward order is correct in both cases.
+    #[inline(always)]
     pub fn copy_within_append(&mut self, src_start: i32, count: i32) {
         let new_used = self.used + count;
         let capacity = builtin::array_len(self.repr);
         if builtin::unlikely(new_used > capacity) {
             let new_capacity = i32_max(new_used, capacity * 2);
             let new_repr = builtin::array_new::<T>(new_capacity);
-            builtin::array_copy::<T>(new_repr, 0, self.repr, 0, self.used);
+            // Use element-by-element loop: Wasm array.copy is a libcall in wasmtime
+            // (~3μs/element), while a JIT-compiled loop runs at ~1ns/element.
+            let old_repr = self.repr;
+            let old_used = self.used;
+            for let mut i = 0; i < old_used; i += 1 {
+                builtin::array_set::<T>(new_repr, i, builtin::array_get::<T>(old_repr, i));
+            }
             self.repr = new_repr;
         }
         let raw = self.repr;
         let base = self.used;
-        let dist = base - src_start;
-        if dist >= count {
-            // Non-overlapping: use bulk array.copy
-            builtin::array_copy::<T>(raw, base, raw, src_start, count);
-        } else {
-            // Overlapping: byte-by-byte (required for DEFLATE run-length semantics)
-            for let mut i = 0; i < count; i += 1 {
-                builtin::array_set::<T>(raw, base + i, builtin::array_get::<T>(raw, src_start + i));
-            }
+        // Forward copy is correct for non-overlapping (any order works) and for
+        // overlapping back-references where src < dst (DEFLATE run-length expansion).
+        for let mut i = 0; i < count; i += 1 {
+            builtin::array_set::<T>(raw, base + i, builtin::array_get::<T>(raw, src_start + i));
         }
         self.used = new_used;
     }
