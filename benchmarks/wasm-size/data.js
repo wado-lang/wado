@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773638522584,
+  "lastUpdate": 1773660446678,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3650,6 +3650,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8b07179965ba789dc1bb7766777dd5ef11c8d744"
         },
         "date": 1773638522378,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9285,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21283,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "df9300f86b73cf04599a035df3743e153a7c68c5",
+          "message": "Merge pull request #591 from wado-lang/claude/research-into-from-framework-NSfFF\n\nAdd conversion traits research and WEP for From/TryFrom/? operator",
+          "timestamp": "2026-03-16T20:24:56+09:00",
+          "tree_id": "7c572eabfd177a0cea83f6e1147559b0823ad740",
+          "url": "https://github.com/wado-lang/wado/commit/df9300f86b73cf04599a035df3743e153a7c68c5"
+        },
+        "date": 1773660446467,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
