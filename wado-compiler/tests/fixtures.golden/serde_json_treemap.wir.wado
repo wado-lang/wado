@@ -718,17 +718,17 @@ type "functype/__cm_export____test_11_treemap_many_entries_roundtrip" = fn();
 
 type "functype/__cm_export____test_12_treemap_deserialize_from_any_key_order" = fn();
 
-type "functype/to_string<TreeMap<String,Option<i32>>>" = fn(ref "core:allocator/TreeMap<String,Option<i32>>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<TreeMap<String,Option<i32>>>" = fn(ref "core:allocator/TreeMap<String,Option<i32>>") -> ref Result<String,SerializeError>;
 
-type "functype/to_string<TreeMap<String,Array<i32>>>" = fn(ref "core:allocator/TreeMap<String,Array<i32>>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<TreeMap<String,Array<i32>>>" = fn(ref "core:allocator/TreeMap<String,Array<i32>>") -> ref Result<String,SerializeError>;
 
-type "functype/to_string<TreeMap<String,bool>>" = fn(ref "core:allocator/TreeMap<String,bool>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<TreeMap<String,bool>>" = fn(ref "core:allocator/TreeMap<String,bool>") -> ref Result<String,SerializeError>;
 
-type "functype/to_string<TreeMap<String,String>>" = fn(ref "core:allocator/TreeMap<String,String>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<TreeMap<String,String>>" = fn(ref "core:allocator/TreeMap<String,String>") -> ref Result<String,SerializeError>;
 
-type "functype/from_string<TreeMap<String,i32>>" = fn(ref String) -> ref Result<TreeMap<String,i32>,DeserializeError>;
+type "functype/core/json/from_string<TreeMap<String,i32>>" = fn(ref String) -> ref Result<TreeMap<String,i32>,DeserializeError>;
 
-type "functype/to_string<TreeMap<String,i32>>" = fn(ref "core:allocator/TreeMap<String,i32>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<TreeMap<String,i32>>" = fn(ref "core:allocator/TreeMap<String,i32>") -> ref Result<String,SerializeError>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -1082,7 +1082,7 @@ fn __test_0_treemap_serialize_string_keys() {
     self_16 = map;
     key_17 = String { repr: array.new_data<u8>("bob"), used: 3 };
     TreeMap<String,i32>::insert(self_16, key_17, 25);
-    r = to_string<TreeMap<String,i32>>(map);
+    r = "core/json/to_string<TreeMap<String,i32>>"(map);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -1169,10 +1169,10 @@ fn __test_1_treemap_roundtrip() {
     self_23 = map;
     key_24 = String { repr: array.new_data<u8>("y"), used: 1 };
     TreeMap<String,i32>::insert(self_23, key_24, 2);
-    json_r = to_string<TreeMap<String,i32>>(map);
+    json_r = "core/json/to_string<TreeMap<String,i32>>"(map);
     if ref.test Result<String,SerializeError>::Ok(json_r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
-        parsed_r = from_string<TreeMap<String,i32>>(json);
+        parsed_r = "core/json/from_string<TreeMap<String,i32>>"(json);
         if ref.test Result<TreeMap<String,i32>,DeserializeError>::Ok(parsed_r) {
             parsed = value_copy "core:allocator/TreeMap<String,i32>"(ref.cast Result<TreeMap<String,i32>,DeserializeError>::Ok(parsed_r).payload_0);
             __v0_5 = TreeMap<String,i32>^IndexValue::index_value(parsed, String { repr: array.new_data<u8>("x"), used: 1 });
@@ -1275,7 +1275,7 @@ fn __test_2_treemap_empty() {
         __local_9 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(0), used: 0 };
         break __seq_lit: __local_9;
     }), size: 0, deleted_count: 0 };
-    r = to_string<TreeMap<String,i32>>(map);
+    r = "core/json/to_string<TreeMap<String,i32>>"(map);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -1351,7 +1351,7 @@ fn __test_3_treemap_empty_roundtrip() {
         __local_16 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(0), used: 0 };
         break __seq_lit: __local_16;
     }), size: 0, deleted_count: 0 };
-    json_r = to_string<TreeMap<String,i32>>(map);
+    json_r = "core/json/to_string<TreeMap<String,i32>>"(map);
     if ref.test Result<String,SerializeError>::Ok(json_r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
         __v0_3 = json;
@@ -1392,7 +1392,7 @@ condition: json == `\\{\\}`
             });
             unreachable;
         };
-        parsed_r = from_string<TreeMap<String,i32>>(json);
+        parsed_r = "core/json/from_string<TreeMap<String,i32>>"(json);
         if ref.test Result<TreeMap<String,i32>,DeserializeError>::Ok(parsed_r) {
             parsed = value_copy "core:allocator/TreeMap<String,i32>"(ref.cast Result<TreeMap<String,i32>,DeserializeError>::Ok(parsed_r).payload_0);
             __v0_7 = parsed.size;
@@ -1466,7 +1466,7 @@ fn __test_4_treemap_single_entry() {
     self = map;
     key = String { repr: array.new_data<u8>("only"), used: 4 };
     TreeMap<String,i32>::insert(self, key, 42);
-    r = to_string<TreeMap<String,i32>>(map);
+    r = "core/json/to_string<TreeMap<String,i32>>"(map);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -1546,7 +1546,7 @@ fn __test_5_treemap_with_string_values() {
     key_17 = String { repr: array.new_data<u8>("farewell"), used: 8 };
     value_18 = String { repr: array.new_data<u8>("goodbye"), used: 7 };
     TreeMap<String,String>::insert(self_16, key_17, value_18);
-    r = to_string<TreeMap<String,String>>(map);
+    r = "core/json/to_string<TreeMap<String,String>>"(map);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -1622,7 +1622,7 @@ fn __test_6_treemap_with_bool_values() {
     self_16 = map;
     key_17 = String { repr: array.new_data<u8>("debug"), used: 5 };
     TreeMap<String,bool>::insert(self_16, key_17, 0);
-    r = to_string<TreeMap<String,bool>>(map);
+    r = "core/json/to_string<TreeMap<String,bool>>"(map);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -1710,7 +1710,7 @@ fn __test_7_treemap_with_nested_array_values() {
         break __seq_lit: __local_2;
     };
     TreeMap<String,Array<i32>>::insert(self_27, key_28, value_29);
-    r = to_string<TreeMap<String,Array<i32>>>(map);
+    r = "core/json/to_string<TreeMap<String,Array<i32>>>"(map);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -1790,7 +1790,7 @@ fn __test_8_treemap_with_option_values() {
     key_17 = String { repr: array.new_data<u8>("absent"), used: 6 };
     value_18 = Option<i32> { 1 };
     TreeMap<String,Option<i32>>::insert(self_16, key_17, value_18);
-    r = to_string<TreeMap<String,Option<i32>>>(map);
+    r = "core/json/to_string<TreeMap<String,Option<i32>>>"(map);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -1877,10 +1877,10 @@ fn __test_9_treemap_keys_with_special_chars() {
     self_23 = map;
     key_24 = String { repr: array.new_data<u8>("key\"with\"quotes"), used: 15 };
     TreeMap<String,i32>::insert(self_23, key_24, 2);
-    r = to_string<TreeMap<String,i32>>(map);
+    r = "core/json/to_string<TreeMap<String,i32>>"(map);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
-        parsed_r = from_string<TreeMap<String,i32>>(s);
+        parsed_r = "core/json/from_string<TreeMap<String,i32>>"(s);
         if ref.test Result<TreeMap<String,i32>,DeserializeError>::Ok(parsed_r) {
             parsed = value_copy "core:allocator/TreeMap<String,i32>"(ref.cast Result<TreeMap<String,i32>,DeserializeError>::Ok(parsed_r).payload_0);
             __v0_5 = TreeMap<String,i32>^IndexValue::index_value(parsed, String { repr: array.new_data<u8>("key with spaces"), used: 15 });
@@ -1998,7 +1998,7 @@ fn __test_10_treemap_preserves_insertion_order() {
     self_19 = map;
     key_20 = String { repr: array.new_data<u8>("b"), used: 1 };
     TreeMap<String,i32>::insert(self_19, key_20, 2);
-    r = to_string<TreeMap<String,i32>>(map);
+    r = "core/json/to_string<TreeMap<String,i32>>"(map);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -2119,10 +2119,10 @@ fn __test_11_treemap_many_entries_roundtrip() {
             };
         };
     };
-    json_r = to_string<TreeMap<String,i32>>(map);
+    json_r = "core/json/to_string<TreeMap<String,i32>>"(map);
     if ref.test Result<String,SerializeError>::Ok(json_r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
-        parsed_r = from_string<TreeMap<String,i32>>(json);
+        parsed_r = "core/json/from_string<TreeMap<String,i32>>"(json);
         if ref.test Result<TreeMap<String,i32>,DeserializeError>::Ok(parsed_r) {
             parsed = value_copy "core:allocator/TreeMap<String,i32>"(ref.cast Result<TreeMap<String,i32>,DeserializeError>::Ok(parsed_r).payload_0);
             __v0_6 = parsed.size;
@@ -2278,7 +2278,7 @@ fn __test_12_treemap_deserialize_from_any_key_order() {
         };
         __modules_initialized = 1;
     };
-    r = from_string<TreeMap<String,i32>>(String { repr: array.new_data<u8>("{\"b\":2,\"a\":1,\"c\":3}"), used: 19 });
+    r = "core/json/from_string<TreeMap<String,i32>>"(String { repr: array.new_data<u8>("{\"b\":2,\"a\":1,\"c\":3}"), used: 19 });
     if ref.test Result<TreeMap<String,i32>,DeserializeError>::Ok(r) {
         map = value_copy "core:allocator/TreeMap<String,i32>"(ref.cast Result<TreeMap<String,i32>,DeserializeError>::Ok(r).payload_0);
         __v0_2 = TreeMap<String,i32>^IndexValue::index_value(map, String { repr: array.new_data<u8>("a"), used: 1 });
@@ -2488,7 +2488,7 @@ fn __cm_export____test_12_treemap_deserialize_from_any_key_order() {
     "wasi/task-return"(0);
 }
 
-fn to_string<TreeMap<String,Option<i32>>>(value) {
+fn "core/json/to_string<TreeMap<String,Option<i32>>>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     ser = "core:json/JsonSerializer" { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };
@@ -2502,7 +2502,7 @@ fn to_string<TreeMap<String,Option<i32>>>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn to_string<TreeMap<String,Array<i32>>>(value) {
+fn "core/json/to_string<TreeMap<String,Array<i32>>>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     ser = "core:json/JsonSerializer" { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };
@@ -2516,7 +2516,7 @@ fn to_string<TreeMap<String,Array<i32>>>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn to_string<TreeMap<String,bool>>(value) {
+fn "core/json/to_string<TreeMap<String,bool>>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     ser = "core:json/JsonSerializer" { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };
@@ -2530,7 +2530,7 @@ fn to_string<TreeMap<String,bool>>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn to_string<TreeMap<String,String>>(value) {
+fn "core/json/to_string<TreeMap<String,String>>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     ser = "core:json/JsonSerializer" { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };
@@ -2544,7 +2544,7 @@ fn to_string<TreeMap<String,String>>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn from_string<TreeMap<String,i32>>(input) {
+fn "core/json/from_string<TreeMap<String,i32>>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<TreeMap<String,i32>,DeserializeError>;
     let v: ref "core:allocator/TreeMap<String,i32>";
@@ -2579,7 +2579,7 @@ fn from_string<TreeMap<String,i32>>(input) {
     unreachable;
 }
 
-fn to_string<TreeMap<String,i32>>(value) {
+fn "core/json/to_string<TreeMap<String,i32>>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     ser = "core:json/JsonSerializer" { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };

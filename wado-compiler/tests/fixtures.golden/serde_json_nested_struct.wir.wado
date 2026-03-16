@@ -366,9 +366,9 @@ type "functype/__cm_export____test_0_nested_struct_serialize" = fn();
 
 type "functype/__cm_export____test_1_nested_struct_roundtrip" = fn();
 
-type "functype/from_string<Line>" = fn(ref String) -> ref Result<Line,DeserializeError>;
+type "functype/core/json/from_string<Line>" = fn(ref String) -> ref Result<Line,DeserializeError>;
 
-type "functype/to_string<Line>" = fn(ref Line) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<Line>" = fn(ref Line) -> ref Result<String,SerializeError>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -602,7 +602,7 @@ fn __test_0_nested_struct_serialize() {
         __modules_initialized = 1;
     };
     line = Line { start_point: Point { x: 1, y: 2 }, end_point: Point { x: 3, y: 4 } };
-    r = to_string<Line>(line);
+    r = "core/json/to_string<Line>"(line);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -692,10 +692,10 @@ fn __test_1_nested_struct_roundtrip() {
         __modules_initialized = 1;
     };
     line = Line { start_point: Point { x: 10.5, y: 20.5 }, end_point: Point { x: 30.5, y: 40.5 } };
-    json_r = to_string<Line>(line);
+    json_r = "core/json/to_string<Line>"(line);
     if ref.test Result<String,SerializeError>::Ok(json_r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
-        parsed_r = from_string<Line>(json);
+        parsed_r = "core/json/from_string<Line>"(json);
         if ref.test Result<Line,DeserializeError>::Ok(parsed_r) {
             parsed = value_copy Line(ref.cast Result<Line,DeserializeError>::Ok(parsed_r).payload_0);
             __v0_5 = parsed.start_point.x;
@@ -958,7 +958,7 @@ fn __cm_export____test_1_nested_struct_roundtrip() {
     "wasi/task-return"(0);
 }
 
-fn from_string<Line>(input) {
+fn "core/json/from_string<Line>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<Line,DeserializeError>;
     let v: ref Line;
@@ -993,7 +993,7 @@ fn from_string<Line>(input) {
     unreachable;
 }
 
-fn to_string<Line>(value) {
+fn "core/json/to_string<Line>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     ser = "core:json/JsonSerializer" { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };

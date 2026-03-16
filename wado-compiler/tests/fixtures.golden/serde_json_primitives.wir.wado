@@ -382,33 +382,33 @@ type "functype/__cm_export____test_13_string_with_escapes_roundtrip" = fn();
 
 type "functype/__cm_export____test_14_option_some_and_none" = fn();
 
-type "functype/to_string<Option<String>>" = fn(ref "core:internal/Box<Option<String>>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<Option<String>>" = fn(ref "core:internal/Box<Option<String>>") -> ref Result<String,SerializeError>;
 
-type "functype/to_string<Option<i32>>" = fn(ref "core:internal/Box<Option<i32>>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<Option<i32>>" = fn(ref "core:internal/Box<Option<i32>>") -> ref Result<String,SerializeError>;
 
-type "functype/from_string<String>" = fn(ref String) -> ref Result<String,DeserializeError>;
+type "functype/core/json/from_string<String>" = fn(ref String) -> ref Result<String,DeserializeError>;
 
-type "functype/to_string<String>" = fn(ref String) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<String>" = fn(ref String) -> ref Result<String,SerializeError>;
 
-type "functype/to_string<char>" = fn(ref "core:internal/Box<char>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<char>" = fn(ref "core:internal/Box<char>") -> ref Result<String,SerializeError>;
 
-type "functype/from_string<bool>" = fn(ref String) -> ref Result<bool,DeserializeError>;
+type "functype/core/json/from_string<bool>" = fn(ref String) -> ref Result<bool,DeserializeError>;
 
-type "functype/to_string<bool>" = fn(ref "core:internal/Box<bool>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<bool>" = fn(ref "core:internal/Box<bool>") -> ref Result<String,SerializeError>;
 
-type "functype/from_string<f32>" = fn(ref String) -> ref Result<f32,DeserializeError>;
+type "functype/core/json/from_string<f32>" = fn(ref String) -> ref Result<f32,DeserializeError>;
 
-type "functype/to_string<f32>" = fn(ref "core:internal/Box<f32>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<f32>" = fn(ref "core:internal/Box<f32>") -> ref Result<String,SerializeError>;
 
-type "functype/from_string<f64>" = fn(ref String) -> ref Result<f64,DeserializeError>;
+type "functype/core/json/from_string<f64>" = fn(ref String) -> ref Result<f64,DeserializeError>;
 
-type "functype/to_string<f64>" = fn(ref "core:internal/Box<f64>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<f64>" = fn(ref "core:internal/Box<f64>") -> ref Result<String,SerializeError>;
 
-type "functype/to_string<u32>" = fn(ref "core:internal/Box<u32>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<u32>" = fn(ref "core:internal/Box<u32>") -> ref Result<String,SerializeError>;
 
-type "functype/from_string<i32>" = fn(ref String) -> ref Result<i32,DeserializeError>;
+type "functype/core/json/from_string<i32>" = fn(ref String) -> ref Result<i32,DeserializeError>;
 
-type "functype/to_string<i32>" = fn(ref "core:internal/Box<i32>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<i32>" = fn(ref "core:internal/Box<i32>") -> ref Result<String,SerializeError>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -596,21 +596,21 @@ type "functype/core:json/JsonSerializer^Serializer::serialize_char" = fn(ref "co
 
 type "functype/core:json/JsonDeserializer::expect_literal" = fn(ref "core:json/JsonDeserializer", ref String) -> [i32, ref null "core:serde/DeserializeError"];
 
-type "functype/to_string<Option<String>>" = fn(ref Option<String>) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<Option<String>>" = fn(ref Option<String>) -> ref Result<String,SerializeError>;
 
-type "functype/to_string<Option<i32>>" = fn(ref Option<i32>) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<Option<i32>>" = fn(ref Option<i32>) -> ref Result<String,SerializeError>;
 
-type "functype/to_string<char>" = fn(char) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<char>" = fn(char) -> ref Result<String,SerializeError>;
 
-type "functype/to_string<bool>" = fn(bool) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<bool>" = fn(bool) -> ref Result<String,SerializeError>;
 
-type "functype/to_string<f32>" = fn(f32) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<f32>" = fn(f32) -> ref Result<String,SerializeError>;
 
-type "functype/to_string<f64>" = fn(f64) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<f64>" = fn(f64) -> ref Result<String,SerializeError>;
 
-type "functype/to_string<u32>" = fn(u32) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<u32>" = fn(u32) -> ref Result<String,SerializeError>;
 
-type "functype/to_string<i32>" = fn(i32) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<i32>" = fn(i32) -> ref Result<String,SerializeError>;
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -681,7 +681,7 @@ fn __test_0_i32_zero_roundtrip() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<i32>(0);
+    r = "core/json/to_string<i32>"(0);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -723,7 +723,7 @@ condition: s == \"0\"
         "core:internal/panic"(String { repr: array.new_data<u8>("serialize i32 zero failed"), used: 25 });
         unreachable;
     };
-    d = from_string<i32>(String { repr: array.new_data<u8>("0"), used: 1 });
+    d = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("0"), used: 1 });
     if ref.test Result<i32,DeserializeError>::Ok(d) {
         v2 = ref.cast Result<i32,DeserializeError>::Ok(d).payload_0;
         __cond_8 = v2 == 0;
@@ -794,7 +794,7 @@ fn __test_1_i32_max() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<i32>(2147483647);
+    r = "core/json/to_string<i32>"(2147483647);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -836,7 +836,7 @@ condition: s == \"2147483647\"
         "core:internal/panic"(String { repr: array.new_data<u8>("failed"), used: 6 });
         unreachable;
     };
-    d = from_string<i32>(String { repr: array.new_data<u8>("2147483647"), used: 10 });
+    d = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("2147483647"), used: 10 });
     if ref.test Result<i32,DeserializeError>::Ok(d) {
         v2 = ref.cast Result<i32,DeserializeError>::Ok(d).payload_0;
         __cond_8 = v2 == 2147483647;
@@ -907,7 +907,7 @@ fn __test_2_i32_min() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<i32>(-2147483648);
+    r = "core/json/to_string<i32>"(-2147483648);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -949,7 +949,7 @@ condition: s == \"-2147483648\"
         "core:internal/panic"(String { repr: array.new_data<u8>("failed"), used: 6 });
         unreachable;
     };
-    d = from_string<i32>(String { repr: array.new_data<u8>("-2147483648"), used: 11 });
+    d = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("-2147483648"), used: 11 });
     if ref.test Result<i32,DeserializeError>::Ok(d) {
         v2 = ref.cast Result<i32,DeserializeError>::Ok(d).payload_0;
         __cond_8 = v2 == -2147483648;
@@ -1020,7 +1020,7 @@ fn __test_3_u32_zero_and_max() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<u32>(0);
+    r = "core/json/to_string<u32>"(0);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0_3 = s;
@@ -1062,7 +1062,7 @@ condition: s == \"0\"
         "core:internal/panic"(String { repr: array.new_data<u8>("failed"), used: 6 });
         unreachable;
     };
-    r2 = to_string<u32>(-1);
+    r2 = "core/json/to_string<u32>"(-1);
     if ref.test Result<String,SerializeError>::Ok(r2) {
         s2 = value_copy String(ref.cast Result<String,SerializeError>::Ok(r2).payload_0);
         __v0_8 = s2;
@@ -1133,7 +1133,7 @@ fn __test_4_f64_positive_and_negative() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<f64>(3.14159);
+    r = "core/json/to_string<f64>"(3.14159);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0_3 = s;
@@ -1175,7 +1175,7 @@ condition: s == \"3.14159\"
         "core:internal/panic"(String { repr: array.new_data<u8>("failed"), used: 6 });
         unreachable;
     };
-    r2 = to_string<f64>(-0.001);
+    r2 = "core/json/to_string<f64>"(-0.001);
     if ref.test Result<String,SerializeError>::Ok(r2) {
         s2 = value_copy String(ref.cast Result<String,SerializeError>::Ok(r2).payload_0);
         __v0_8 = s2;
@@ -1237,7 +1237,7 @@ fn __test_5_f64_integer_value() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<f64>(42);
+    r = "core/json/to_string<f64>"(42);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -1307,7 +1307,7 @@ fn __test_6_f64_deserialize_with_exponent() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    d = from_string<f64>(String { repr: array.new_data<u8>("1.5e2"), used: 5 });
+    d = "core/json/from_string<f64>"(String { repr: array.new_data<u8>("1.5e2"), used: 5 });
     if ref.test Result<f64,DeserializeError>::Ok(d) {
         v = ref.cast Result<f64,DeserializeError>::Ok(d).payload_0;
         __cond_3 = v == 150;
@@ -1349,7 +1349,7 @@ condition: v == 150.0
         "core:internal/panic"(String { repr: array.new_data<u8>("failed"), used: 6 });
         unreachable;
     };
-    d2 = from_string<f64>(String { repr: array.new_data<u8>("1.5e-1"), used: 6 });
+    d2 = "core/json/from_string<f64>"(String { repr: array.new_data<u8>("1.5e-1"), used: 6 });
     if ref.test Result<f64,DeserializeError>::Ok(d2) {
         v2 = ref.cast Result<f64,DeserializeError>::Ok(d2).payload_0;
         __cond_7 = v2 == 0.15;
@@ -1420,7 +1420,7 @@ fn __test_7_f32_roundtrip() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<f32>(builtin::f32_demote_f64(1.5));
+    r = "core/json/to_string<f32>"(builtin::f32_demote_f64(1.5));
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -1462,7 +1462,7 @@ condition: s == \"1.5\"
         "core:internal/panic"(String { repr: array.new_data<u8>("failed"), used: 6 });
         unreachable;
     };
-    d = from_string<f32>(String { repr: array.new_data<u8>("1.5"), used: 3 });
+    d = "core/json/from_string<f32>"(String { repr: array.new_data<u8>("1.5"), used: 3 });
     if ref.test Result<f32,DeserializeError>::Ok(d) {
         v2 = ref.cast Result<f32,DeserializeError>::Ok(d).payload_0;
         __cond_8 = v2 == builtin::f32_demote_f64(1.5);
@@ -1533,7 +1533,7 @@ fn __test_8_f32_zero_and_negative() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<f32>(builtin::f32_demote_f64(0));
+    r = "core/json/to_string<f32>"(builtin::f32_demote_f64(0));
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0_3 = s;
@@ -1575,7 +1575,7 @@ condition: s == \"0\"
         "core:internal/panic"(String { repr: array.new_data<u8>("failed"), used: 6 });
         unreachable;
     };
-    r2 = to_string<f32>(builtin::f32_demote_f64(-2.5));
+    r2 = "core/json/to_string<f32>"(builtin::f32_demote_f64(-2.5));
     if ref.test Result<String,SerializeError>::Ok(r2) {
         s2 = value_copy String(ref.cast Result<String,SerializeError>::Ok(r2).payload_0);
         __v0_8 = s2;
@@ -1646,7 +1646,7 @@ fn __test_9_bool_true_roundtrip() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<bool>(1);
+    r = "core/json/to_string<bool>"(1);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -1688,7 +1688,7 @@ condition: s == \"true\"
         "core:internal/panic"(String { repr: array.new_data<u8>("failed"), used: 6 });
         unreachable;
     };
-    d = from_string<bool>(String { repr: array.new_data<u8>("true"), used: 4 });
+    d = "core/json/from_string<bool>"(String { repr: array.new_data<u8>("true"), used: 4 });
     if ref.test Result<bool,DeserializeError>::Ok(d) {
         v2 = ref.cast Result<bool,DeserializeError>::Ok(d).payload_0;
         __cond_8 = v2 == 1;
@@ -1763,7 +1763,7 @@ fn __test_10_bool_false_roundtrip() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<bool>(0);
+    r = "core/json/to_string<bool>"(0);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -1805,7 +1805,7 @@ condition: s == \"false\"
         "core:internal/panic"(String { repr: array.new_data<u8>("failed"), used: 6 });
         unreachable;
     };
-    d = from_string<bool>(String { repr: array.new_data<u8>("false"), used: 5 });
+    d = "core/json/from_string<bool>"(String { repr: array.new_data<u8>("false"), used: 5 });
     if ref.test Result<bool,DeserializeError>::Ok(d) {
         v2 = ref.cast Result<bool,DeserializeError>::Ok(d).payload_0;
         __cond_8 = v2 == 0;
@@ -1889,7 +1889,7 @@ fn __test_11_char_ascii_and_special() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<char>(65);
+    r = "core/json/to_string<char>"(65);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0_3 = s;
@@ -1931,7 +1931,7 @@ condition: s == `\"A\"`
         "core:internal/panic"(String { repr: array.new_data<u8>("failed"), used: 6 });
         unreachable;
     };
-    r2 = to_string<char>(10);
+    r2 = "core/json/to_string<char>"(10);
     if ref.test Result<String,SerializeError>::Ok(r2) {
         s2 = value_copy String(ref.cast Result<String,SerializeError>::Ok(r2).payload_0);
         __v0_8 = s2;
@@ -1974,7 +1974,7 @@ condition: s2 == `\"\\\\n\"`
         "core:internal/panic"(String { repr: array.new_data<u8>("failed"), used: 6 });
         unreachable;
     };
-    r3 = to_string<char>(34);
+    r3 = "core/json/to_string<char>"(34);
     if ref.test Result<String,SerializeError>::Ok(r3) {
         s3 = value_copy String(ref.cast Result<String,SerializeError>::Ok(r3).payload_0);
         __v0_13 = s3;
@@ -2047,7 +2047,7 @@ fn __test_12_string_empty_roundtrip() {
         __modules_initialized = 1;
     };
     v = String { repr: builtin::array_new<u8>(0), used: 0 };
-    r = to_string<String>(v);
+    r = "core/json/to_string<String>"(v);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0_3 = s;
@@ -2089,7 +2089,7 @@ condition: s == `\"\"`
         "core:internal/panic"(String { repr: array.new_data<u8>("failed"), used: 6 });
         unreachable;
     };
-    d = from_string<String>(String { repr: array.new_data<u8>("\"\""), used: 2 });
+    d = "core/json/from_string<String>"(String { repr: array.new_data<u8>("\"\""), used: 2 });
     if ref.test Result<String,DeserializeError>::Ok(d) {
         v2 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(d).payload_0);
         __v0_7 = v2;
@@ -2158,10 +2158,10 @@ fn __test_13_string_with_escapes_roundtrip() {
     };
     v = String { repr: array.new_data<u8>("tab	here
 newreturn"), used: 19 };
-    json_r = to_string<String>(v);
+    json_r = "core/json/to_string<String>"(v);
     if ref.test Result<String,SerializeError>::Ok(json_r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
-        d = from_string<String>(json);
+        d = "core/json/from_string<String>"(json);
         if ref.test Result<String,DeserializeError>::Ok(d) {
             v2 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(d).payload_0);
             __v0 = v2;
@@ -2246,7 +2246,7 @@ fn __test_14_option_some_and_none() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<Option<i32>>(Option<i32>::Some { discriminant: 0, payload_0: 99 });
+    r = "core/json/to_string<Option<i32>>"(Option<i32>::Some { discriminant: 0, payload_0: 99 });
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0_3 = s;
@@ -2288,7 +2288,7 @@ condition: s == \"99\"
         "core:internal/panic"(String { repr: array.new_data<u8>("failed"), used: 6 });
         unreachable;
     };
-    r2 = to_string<Option<String>>(Option<String> { 1 });
+    r2 = "core/json/to_string<Option<String>>"(Option<String> { 1 });
     if ref.test Result<String,SerializeError>::Ok(r2) {
         s2 = value_copy String(ref.cast Result<String,SerializeError>::Ok(r2).payload_0);
         __v0_8 = s2;
@@ -2408,7 +2408,7 @@ fn __cm_export____test_14_option_some_and_none() {
     "wasi/task-return"(0);
 }
 
-fn to_string<Option<String>>(value) {
+fn "core/json/to_string<Option<String>>"(value) {
     let r: ref Result<unit,SerializeError>;
     let e: ref "core:serde/SerializeError";
     let __local_7: ref String;
@@ -2441,7 +2441,7 @@ fn to_string<Option<String>>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(__sroa_ser_buf) };
 }
 
-fn to_string<Option<i32>>(value) {
+fn "core/json/to_string<Option<i32>>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let r: ref Result<unit,SerializeError>;
     let e: ref "core:serde/SerializeError";
@@ -2472,7 +2472,7 @@ fn to_string<Option<i32>>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn from_string<String>(input) {
+fn "core/json/from_string<String>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<String,DeserializeError>;
     let v: ref String;
@@ -2511,7 +2511,7 @@ fn from_string<String>(input) {
     unreachable;
 }
 
-fn to_string<String>(value) {
+fn "core/json/to_string<String>"(value) {
     let r: ref Result<unit,SerializeError>;
     let e: ref "core:serde/SerializeError";
     let __sroa_ser_buf: ref String;
@@ -2527,7 +2527,7 @@ fn to_string<String>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(__sroa_ser_buf) };
 }
 
-fn to_string<char>(value) {
+fn "core/json/to_string<char>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     let __local_6: ref "core:json/JsonSerializer";
@@ -2543,7 +2543,7 @@ fn to_string<char>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn from_string<bool>(input) {
+fn "core/json/from_string<bool>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<bool,DeserializeError>;
     let v: bool;
@@ -2582,7 +2582,7 @@ fn from_string<bool>(input) {
     unreachable;
 }
 
-fn to_string<bool>(value) {
+fn "core/json/to_string<bool>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     let __local_6: ref "core:json/JsonSerializer";
@@ -2598,7 +2598,7 @@ fn to_string<bool>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn from_string<f32>(input) {
+fn "core/json/from_string<f32>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<f32,DeserializeError>;
     let v: f32;
@@ -2637,7 +2637,7 @@ fn from_string<f32>(input) {
     unreachable;
 }
 
-fn to_string<f32>(value) {
+fn "core/json/to_string<f32>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     let __local_6: ref "core:json/JsonSerializer";
@@ -2653,7 +2653,7 @@ fn to_string<f32>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn from_string<f64>(input) {
+fn "core/json/from_string<f64>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<f64,DeserializeError>;
     let v: f64;
@@ -2692,7 +2692,7 @@ fn from_string<f64>(input) {
     unreachable;
 }
 
-fn to_string<f64>(value) {
+fn "core/json/to_string<f64>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     let __local_6: ref "core:json/JsonSerializer";
@@ -2708,7 +2708,7 @@ fn to_string<f64>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn to_string<u32>(value) {
+fn "core/json/to_string<u32>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     let __local_6: ref "core:json/JsonSerializer";
@@ -2724,7 +2724,7 @@ fn to_string<u32>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn from_string<i32>(input) {
+fn "core/json/from_string<i32>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<i32,DeserializeError>;
     let v: i32;
@@ -2763,7 +2763,7 @@ fn from_string<i32>(input) {
     unreachable;
 }
 
-fn to_string<i32>(value) {
+fn "core/json/to_string<i32>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let r: ref Result<unit,SerializeError>;
     let e: ref "core:serde/SerializeError";

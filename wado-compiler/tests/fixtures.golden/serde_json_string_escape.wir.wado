@@ -191,9 +191,9 @@ type "functype/__cm_export____test_6_roundtrip_multibyte_utf8_string" = fn();
 
 type "functype/__cm_export____test_7_roundtrip_empty_string" = fn();
 
-type "functype/from_string<String>" = fn(ref String) -> ref Result<String,DeserializeError>;
+type "functype/core/json/from_string<String>" = fn(ref String) -> ref Result<String,DeserializeError>;
 
-type "functype/to_string<String>" = fn(ref String) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<String>" = fn(ref String) -> ref Result<String,SerializeError>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -311,7 +311,7 @@ fn __test_0_serialize_string_with_quotes() {
         __modules_initialized = 1;
     };
     s = String { repr: array.new_data<u8>("say \"hello\""), used: 11 };
-    r = to_string<String>(s);
+    r = "core/json/to_string<String>"(s);
     if ref.test Result<String,SerializeError>::Ok(r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = json;
@@ -376,7 +376,7 @@ fn __test_1_serialize_string_with_backslash() {
         __modules_initialized = 1;
     };
     s = String { repr: array.new_data<u8>("path\\to\\file"), used: 12 };
-    r = to_string<String>(s);
+    r = "core/json/to_string<String>"(s);
     if ref.test Result<String,SerializeError>::Ok(r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = json;
@@ -442,7 +442,7 @@ fn __test_2_serialize_string_with_newline() {
     };
     s = String { repr: array.new_data<u8>("line1
 line2"), used: 11 };
-    r = to_string<String>(s);
+    r = "core/json/to_string<String>"(s);
     if ref.test Result<String,SerializeError>::Ok(r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = json;
@@ -507,7 +507,7 @@ fn __test_3_serialize_string_with_tab() {
         __modules_initialized = 1;
     };
     s = String { repr: array.new_data<u8>("col1	col2"), used: 9 };
-    r = to_string<String>(s);
+    r = "core/json/to_string<String>"(s);
     if ref.test Result<String,SerializeError>::Ok(r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = json;
@@ -570,7 +570,7 @@ fn __test_4_deserialize_string_with_unicode_escape() {
         };
         __modules_initialized = 1;
     };
-    r = from_string<String>(String { repr: array.new_data<u8>("\"\\u0041\""), used: 8 });
+    r = "core/json/from_string<String>"(String { repr: array.new_data<u8>("\"\\u0041\""), used: 8 });
     if ref.test Result<String,DeserializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,DeserializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -637,10 +637,10 @@ fn __test_5_roundtrip_string_with_special_chars() {
     };
     orig = String { repr: array.new_data<u8>("tab:	here
 newline"), used: 17 };
-    json_r = to_string<String>(orig);
+    json_r = "core/json/to_string<String>"(orig);
     if ref.test Result<String,SerializeError>::Ok(json_r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
-        parsed_r = from_string<String>(json);
+        parsed_r = "core/json/from_string<String>"(json);
         if ref.test Result<String,DeserializeError>::Ok(parsed_r) {
             parsed = value_copy String(ref.cast Result<String,DeserializeError>::Ok(parsed_r).payload_0);
             __v0 = parsed;
@@ -728,10 +728,10 @@ fn __test_6_roundtrip_multibyte_utf8_string() {
         __modules_initialized = 1;
     };
     orig = String { repr: array.new_data<u8>("café 日本語 🎉"), used: 20 };
-    json_r = to_string<String>(orig);
+    json_r = "core/json/to_string<String>"(orig);
     if ref.test Result<String,SerializeError>::Ok(json_r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
-        parsed_r = from_string<String>(json);
+        parsed_r = "core/json/from_string<String>"(json);
         if ref.test Result<String,DeserializeError>::Ok(parsed_r) {
             parsed = value_copy String(ref.cast Result<String,DeserializeError>::Ok(parsed_r).payload_0);
             __v0 = parsed;
@@ -824,7 +824,7 @@ fn __test_7_roundtrip_empty_string() {
         __modules_initialized = 1;
     };
     orig = String { repr: builtin::array_new<u8>(0), used: 0 };
-    json_r = to_string<String>(orig);
+    json_r = "core/json/to_string<String>"(orig);
     if ref.test Result<String,SerializeError>::Ok(json_r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
         __v0_3 = json;
@@ -865,7 +865,7 @@ condition: json == `\"\"`
             });
             unreachable;
         };
-        parsed_r = from_string<String>(json);
+        parsed_r = "core/json/from_string<String>"(json);
         if ref.test Result<String,DeserializeError>::Ok(parsed_r) {
             parsed = value_copy String(ref.cast Result<String,DeserializeError>::Ok(parsed_r).payload_0);
             __v0_7 = parsed;
@@ -958,7 +958,7 @@ fn __cm_export____test_7_roundtrip_empty_string() {
     "wasi/task-return"(0);
 }
 
-fn from_string<String>(input) {
+fn "core/json/from_string<String>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<String,DeserializeError>;
     let v: ref String;
@@ -997,7 +997,7 @@ fn from_string<String>(input) {
     unreachable;
 }
 
-fn to_string<String>(value) {
+fn "core/json/to_string<String>"(value) {
     let r: ref Result<unit,SerializeError>;
     let e: ref "core:serde/SerializeError";
     let __sroa_ser_buf: ref String;

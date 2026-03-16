@@ -189,9 +189,9 @@ type "functype/__cm_export____test_6_normal_f64_succeeds" = fn();
 
 type "functype/__cm_export____test_7_normal_f32_succeeds" = fn();
 
-type "functype/to_string<f32>" = fn(ref "core:internal/Box<f32>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<f32>" = fn(ref "core:internal/Box<f32>") -> ref Result<String,SerializeError>;
 
-type "functype/to_string<f64>" = fn(ref "core:internal/Box<f64>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<f64>" = fn(ref "core:internal/Box<f64>") -> ref Result<String,SerializeError>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -315,9 +315,9 @@ type "functype/core:json/JsonSerializer^Serializer::serialize_f32" = fn(ref "cor
 
 type "functype/core:json/JsonSerializer^Serializer::serialize_f64" = fn(ref "core:json/JsonSerializer", f64) -> [i32, ref null "core:serde/SerializeError"];
 
-type "functype/to_string<f32>" = fn(f32) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<f32>" = fn(f32) -> ref Result<String,SerializeError>;
 
-type "functype/to_string<f64>" = fn(f64) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<f64>" = fn(f64) -> ref Result<String,SerializeError>;
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -364,7 +364,7 @@ fn __test_0_f64_nan() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<f64>(0 / 0);
+    r = "core/json/to_string<f64>"(0 / 0);
     if ref.test Result<String,SerializeError>::Err(r) {
         e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
         __v0 = __inline_is_unsupported_1: block -> bool {
@@ -438,7 +438,7 @@ fn __test_1_f64_infinity() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<f64>(inf);
+    r = "core/json/to_string<f64>"(inf);
     if ref.test Result<String,SerializeError>::Err(r) {
         e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
         __v0 = __inline_is_unsupported_1: block -> bool {
@@ -512,7 +512,7 @@ fn __test_2_f64_negative_infinity() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<f64>(-inf);
+    r = "core/json/to_string<f64>"(-inf);
     if ref.test Result<String,SerializeError>::Err(r) {
         e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
         __v0 = __inline_is_unsupported_1: block -> bool {
@@ -586,7 +586,7 @@ fn __test_3_f32_nan() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<f32>(0_f32 / 0_f32);
+    r = "core/json/to_string<f32>"(0_f32 / 0_f32);
     if ref.test Result<String,SerializeError>::Err(r) {
         e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
         __v0 = __inline_is_unsupported_1: block -> bool {
@@ -660,7 +660,7 @@ fn __test_4_f32_infinity() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<f32>(inf_f32);
+    r = "core/json/to_string<f32>"(inf_f32);
     if ref.test Result<String,SerializeError>::Err(r) {
         e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
         __v0 = __inline_is_unsupported_1: block -> bool {
@@ -734,7 +734,7 @@ fn __test_5_f32_negative_infinity() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<f32>(-inf_f32);
+    r = "core/json/to_string<f32>"(-inf_f32);
     if ref.test Result<String,SerializeError>::Err(r) {
         e = value_copy "core:serde/SerializeError"(ref.cast Result<String,SerializeError>::Err(r).payload_0);
         __v0 = __inline_is_unsupported_1: block -> bool {
@@ -807,7 +807,7 @@ fn __test_6_normal_f64_succeeds() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<f64>(3.14);
+    r = "core/json/to_string<f64>"(3.14);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -868,7 +868,7 @@ fn __test_7_normal_f32_succeeds() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = to_string<f32>(2.5_f32);
+    r = "core/json/to_string<f32>"(2.5_f32);
     if ref.test Result<String,SerializeError>::Ok(r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(r).payload_0);
         __v0 = s;
@@ -952,7 +952,7 @@ fn __cm_export____test_7_normal_f32_succeeds() {
     "wasi/task-return"(0);
 }
 
-fn to_string<f32>(value) {
+fn "core/json/to_string<f32>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     let __local_6: ref "core:json/JsonSerializer";
@@ -968,7 +968,7 @@ fn to_string<f32>(value) {
     return Result<String,SerializeError>::Ok { discriminant: 0, payload_0: ref.as_non_null(ser.buf) };
 }
 
-fn to_string<f64>(value) {
+fn "core/json/to_string<f64>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     let __local_6: ref "core:json/JsonSerializer";

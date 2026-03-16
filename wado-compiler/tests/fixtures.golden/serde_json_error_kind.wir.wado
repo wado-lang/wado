@@ -106,7 +106,7 @@ type "functype/__cm_export____test_0_enum_field_access_on_cross_module_struct" =
 
 type "functype/__cm_export____test_1_enum_field_compared_directly" = fn();
 
-type "functype/from_string<i32>" = fn(ref String) -> ref Result<i32,DeserializeError>;
+type "functype/core/json/from_string<i32>" = fn(ref String) -> ref Result<i32,DeserializeError>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -212,7 +212,7 @@ fn __test_0_enum_field_access_on_cross_module_struct() {
         };
         __modules_initialized = 1;
     };
-    r = from_string<i32>(String { repr: array.new_data<u8>("42 extra"), used: 8 });
+    r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("42 extra"), used: 8 });
     let __match_scrut_0: ref Result<i32,DeserializeError>;
     __match_scrut_0 = r;
     __cond = if ref.test Result<i32,DeserializeError>::Err(__match_scrut_0) -> bool {
@@ -267,7 +267,7 @@ fn __test_1_enum_field_compared_directly() {
         };
         __modules_initialized = 1;
     };
-    r = from_string<i32>(String { repr: array.new_data<u8>("abc"), used: 3 });
+    r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("abc"), used: 3 });
     if ref.test Result<i32,DeserializeError>::Err(r) {
         e = value_copy "core:serde/DeserializeError"(ref.cast Result<i32,DeserializeError>::Err(r).payload_0);
         __v0 = e.kind;
@@ -331,7 +331,7 @@ fn __cm_export____test_1_enum_field_compared_directly() {
     "wasi/task-return"(0);
 }
 
-fn from_string<i32>(input) {
+fn "core/json/from_string<i32>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<i32,DeserializeError>;
     let v: i32;

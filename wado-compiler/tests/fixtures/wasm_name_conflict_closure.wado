@@ -1,0 +1,17 @@
+// Test: library module uses closures internally, entry module also uses closures.
+// Library closures should be module-qualified in wasm names (e.g., __Closure_N from
+// ./sub/... module). Entry closures have no module prefix.
+// Both should coexist without naming conflicts.
+
+use { println } from "core:cli";
+use { apply_double, apply_triple } from "./sub/wasm_name_conflict_closure_mod.wado";
+
+export fn run() with Stdout {
+    let quadruple = |x: i32| x * 4;
+    println(`{quadruple(5)}`);
+    println(`{apply_double(5)}`);
+    println(`{apply_triple(5)}`);
+}
+
+__DATA__
+{"stdout": "20\n10\n15\n"}
