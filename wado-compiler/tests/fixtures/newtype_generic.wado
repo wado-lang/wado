@@ -1,0 +1,33 @@
+// Generic newtypes: type MyArray<T> = Array<T>
+//
+// WEP TODO: Generic newtypes.
+// See: docs/wep-2026-01-29-newtype-semantics.md
+//
+// A generic newtype should:
+//   - Inherit all methods from the instantiated base type
+//   - Be a distinct type requiring explicit cast to convert to the base type
+
+use { println, Stdout } from "core:cli";
+
+type MyArray<T> = Array<T>;
+
+export fn run() with Stdout {
+    // Create via type annotation (literal coercion)
+    let arr: MyArray<i32> = [1, 2, 3];
+
+    // Inherit Array methods
+    println(`len: {arr.len()}`);
+    println(`first: {arr[0]}`);
+
+    // Mutable operations
+    let mut arr2: MyArray<i32> = [10, 20];
+    arr2.append(30);
+    println(`after append: {arr2.len()}`);
+
+    // Different element types
+    let strs: MyArray<String> = ["hello", "world"];
+    println(`strs: {strs.len()}`);
+}
+
+__DATA__
+{"TODO": true, "stdout": "len: 3\nfirst: 1\nafter append: 3\nstrs: 2\n"}
