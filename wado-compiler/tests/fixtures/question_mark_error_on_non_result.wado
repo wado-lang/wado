@@ -1,0 +1,10 @@
+// Error: ? applied to a non-Result, non-Option expression
+fn outer() -> Result<i32, String> {
+    let x = 42?;
+    return Result::<i32, String>::Ok(x);
+}
+
+export fn run() { }
+
+__DATA__
+{"compile_error": "cannot use ? on type i32"}

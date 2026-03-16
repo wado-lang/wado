@@ -1,0 +1,249 @@
+// Tests for From and TryFrom conversion traits.
+
+// ── User-defined From ──────────────────────────────────────────────────────
+
+struct Celsius {
+    degrees: f64,
+}
+
+struct Fahrenheit {
+    degrees: f64,
+}
+
+impl From<Celsius> for Fahrenheit {
+    fn from(value: Celsius) -> Fahrenheit {
+        return Fahrenheit { degrees: value.degrees * 9.0 / 5.0 + 32.0 };
+    }
+}
+
+test "user-defined From" {
+    let c = Celsius { degrees: 100.0 };
+    let f = Fahrenheit::from(c);
+    assert f.degrees == 212.0;
+}
+
+test "user-defined From: 0°C → 32°F" {
+    let f = Fahrenheit::from(Celsius { degrees: 0.0 });
+    assert f.degrees == 32.0;
+}
+
+// ── Reflexive From (identity) ──────────────────────────────────────────────
+
+test "From<i32> for i32 is identity" {
+    assert i32::from(42 as i32) == 42;
+}
+
+test "From<bool> for bool is identity" {
+    assert bool::from(true) == true;
+    assert bool::from(false) == false;
+}
+
+test "From<String> for String is identity" {
+    let s = "hello";
+    assert String::from(s) == "hello";
+}
+
+// ── Numeric widening From ──────────────────────────────────────────────────
+
+test "From<i8> for i16" {
+    assert i16::from(127 as i8) == 127 as i16;
+    assert i16::from(-128 as i8) == -128 as i16;
+}
+
+test "From<i8> for i32" {
+    assert i32::from(42 as i8) == 42;
+    assert i32::from(-1 as i8) == -1;
+}
+
+test "From<i8> for i64" {
+    assert i64::from(100 as i8) == 100 as i64;
+}
+
+test "From<i16> for i32" {
+    assert i32::from(1000 as i16) == 1000;
+}
+
+test "From<i16> for i64" {
+    assert i64::from(1000 as i16) == 1000 as i64;
+}
+
+test "From<i32> for i64" {
+    assert i64::from(2147483647 as i32) == 2147483647 as i64;
+    assert i64::from(-2147483648 as i32) == -2147483648 as i64;
+}
+
+test "From<u8> for u16" {
+    assert u16::from(255 as u8) == 255 as u16;
+}
+
+test "From<u8> for u32" {
+    assert u32::from(255 as u8) == 255 as u32;
+}
+
+test "From<u8> for u64" {
+    assert u64::from(255 as u8) == 255 as u64;
+}
+
+test "From<u8> for i16" {
+    assert i16::from(200 as u8) == 200 as i16;
+}
+
+test "From<u8> for i32" {
+    assert i32::from(200 as u8) == 200;
+}
+
+test "From<u8> for i64" {
+    assert i64::from(200 as u8) == 200 as i64;
+}
+
+test "From<u16> for u32" {
+    assert u32::from(65535 as u16) == 65535 as u32;
+}
+
+test "From<u16> for u64" {
+    assert u64::from(65535 as u16) == 65535 as u64;
+}
+
+test "From<u16> for i32" {
+    assert i32::from(65535 as u16) == 65535;
+}
+
+test "From<u16> for i64" {
+    assert i64::from(65535 as u16) == 65535 as i64;
+}
+
+test "From<u32> for u64" {
+    assert u64::from(4294967295 as u32) == 4294967295 as u64;
+}
+
+test "From<u32> for i64" {
+    assert i64::from(4294967295 as u32) == 4294967295 as i64;
+}
+
+test "From<f32> for f64" {
+    let v = f64::from(1.0 as f32);
+    assert v == 1.0;
+}
+
+// ── From<char> for String ──────────────────────────────────────────────────
+
+test "From<char> for String: ASCII" {
+    assert String::from('A') == "A";
+    assert String::from('z') == "z";
+    assert String::from('0') == "0";
+}
+
+test "From<char> for String: special chars" {
+    assert String::from('\n') == "\n";
+    assert String::from(' ') == " ";
+}
+
+// ── From<bool> for i32 ────────────────────────────────────────────────────
+
+test "From<bool> for i32: true → 1" {
+    assert i32::from(true) == 1;
+}
+
+test "From<bool> for i32: false → 0" {
+    assert i32::from(false) == 0;
+}
+
+// ── User-defined TryFrom ──────────────────────────────────────────────────
+
+struct EvenNumber {
+    value: i32,
+}
+
+impl TryFrom<i32> for EvenNumber {
+    type Error = String;
+    fn try_from(value: i32) -> Result<EvenNumber, String> {
+        if value % 2 != 0 {
+            return Result::<EvenNumber, String>::Err(`{value} is not even`);
+        }
+        return Result::<EvenNumber, String>::Ok(EvenNumber { value });
+    }
+}
+
+test "user-defined TryFrom: Ok" {
+    assert EvenNumber::try_from(4) matches { Ok(n) && n.value == 4 };
+    assert EvenNumber::try_from(0) matches { Ok(n) && n.value == 0 };
+}
+
+test "user-defined TryFrom: Err" {
+    assert EvenNumber::try_from(3) matches { Err(_) };
+    assert EvenNumber::try_from(-1) matches { Err(_) };
+}
+
+// ── Stdlib TryFrom: narrowing i64 → i32 ───────────────────────────────────
+
+test "TryFrom<i64> for i32: in range" {
+    assert i32::try_from(42 as i64) matches { Ok(n) && n == 42 };
+    assert i32::try_from(2147483647 as i64) matches { Ok(n) && n == 2147483647 };
+    assert i32::try_from(-2147483648 as i64) matches { Ok(n) && n == -2147483648 };
+}
+
+test "TryFrom<i64> for i32: out of range" {
+    assert i32::try_from(2147483648 as i64) matches { Err(_) };
+    assert i32::try_from(-2147483649 as i64) matches { Err(_) };
+}
+
+// ── Stdlib TryFrom: i32 → u32 ─────────────────────────────────────────────
+
+test "TryFrom<i32> for u32: non-negative" {
+    assert u32::try_from(0) matches { Ok(n) && n == 0 as u32 };
+    assert u32::try_from(2147483647) matches { Ok(n) && n == 2147483647 as u32 };
+}
+
+test "TryFrom<i32> for u32: negative fails" {
+    assert u32::try_from(-1) matches { Err(_) };
+    assert u32::try_from(-100) matches { Err(_) };
+}
+
+// ── Variant auto-derive From ──────────────────────────────────────────────
+
+struct NetworkError { code: i32 }
+struct TimeoutError { seconds: i32 }
+
+variant ServiceError {
+    Network(NetworkError),
+    Timeout(TimeoutError),
+    Unknown(String),
+}
+
+impl From<NetworkError> for ServiceError;
+impl From<TimeoutError> for ServiceError;
+impl From<String> for ServiceError;
+
+test "variant auto-derive From: wraps into correct case" {
+    let ne = ServiceError::from(NetworkError { code: 404 });
+    assert ne matches { Network(e) && e.code == 404 };
+
+    let te = ServiceError::from(TimeoutError { seconds: 30 });
+    assert te matches { Timeout(e) && e.seconds == 30 };
+
+    let ue = ServiceError::from("unexpected");
+    assert ue matches { Unknown(msg) && msg == "unexpected" };
+}
+
+// ── Newtype auto-generated From ────────────────────────────────────────────
+
+type UserId = u64;
+type ProductId = u64;
+
+test "newtype From: base → newtype" {
+    let id = UserId::from(42 as u64);
+    assert id as u64 == 42 as u64;
+}
+
+test "newtype From: newtype → base" {
+    let raw: UserId = 99 as UserId;
+    let base = u64::from(raw);
+    assert base == 99 as u64;
+}
+
+test "newtype From is type-safe: distinct newtypes do not convert" {
+    let uid = UserId::from(1 as u64);
+    // u64::from(uid) yields u64; can then build ProductId from that u64
+    let pid = ProductId::from(u64::from(uid));
+    assert pid as u64 == 1 as u64;
+}
