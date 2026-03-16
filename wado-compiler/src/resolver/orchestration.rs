@@ -758,7 +758,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         std::mem::swap(&mut self.flags_cases, &mut cached.flags_cases);
         std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
         std::mem::swap(&mut self.resource_types, &mut cached.resource_types);
-        self.module_type_maps_cache.insert(module_source.clone(), cached);
+        self.module_type_maps_cache
+            .insert(module_source.clone(), cached);
 
         result
     }

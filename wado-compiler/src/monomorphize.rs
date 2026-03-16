@@ -15,13 +15,15 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::name::{FreeFunctionName, LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
+use crate::name::{
+    FreeFunctionName, LocalMethodName, MethodName, ModuleSource, mangle_generic_name,
+};
 
 /// Returns the key used to store/look up a generic function in the global function map.
 ///
 /// Methods use their unqualified name — the struct name already provides namespace.
 /// Free functions are module-qualified to keep same-named generics from different
-/// modules distinct (e.g., `wrap<T>` in mod_a vs mod_b).
+/// modules distinct (e.g., `wrap<T>` in `mod_a` vs `mod_b`).
 fn generic_function_key(is_method: bool, module_source: &ModuleSource, name: &str) -> String {
     if is_method {
         name.to_string()
@@ -542,11 +544,8 @@ impl Monomorphizer {
         for func_rc in &module.functions {
             let func = func_rc.borrow();
             if !func.type_params.is_empty() || !func.impl_type_params.is_empty() {
-                let key = generic_function_key(
-                    func.is_method(),
-                    &self.current_module_source,
-                    &func.name,
-                );
+                let key =
+                    generic_function_key(func.is_method(), &self.current_module_source, &func.name);
                 generic_functions.insert(key, Rc::clone(func_rc));
             }
         }

@@ -379,38 +379,6 @@ mod tests {
         m
     }
 
-    fn make_decl_index(local_trait_names: &[&str]) -> TraitDeclIndex {
-        let mut m = TraitDeclIndex::default();
-        for (i, &name) in local_trait_names.iter().enumerate() {
-            m.insert(
-                name.to_string(),
-                (
-                    ModuleSource::EntryPoint {
-                        filename: "test.wado".to_string(),
-                    },
-                    i,
-                ),
-            );
-        }
-        m
-    }
-
-    fn make_foreign_decl_index(foreign_trait_names: &[&str]) -> TraitDeclIndex {
-        let mut m = TraitDeclIndex::default();
-        for (i, &name) in foreign_trait_names.iter().enumerate() {
-            m.insert(
-                name.to_string(),
-                (
-                    ModuleSource::Core {
-                        name: "prelude".to_string(),
-                    },
-                    i,
-                ),
-            );
-        }
-        m
-    }
-
     fn impl_block(type_params: Vec<GenericParam>, trait_type: Type, self_type: Type) -> ImplBlock {
         ImplBlock {
             type_params,
