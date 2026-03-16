@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773660446678,
+  "lastUpdate": 1773664980903,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3689,6 +3689,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/df9300f86b73cf04599a035df3743e153a7c68c5"
         },
         "date": 1773660446467,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9285,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21283,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "376fc2d7215c27f29f98157613e005bcc43d7c1a",
+          "message": "Merge pull request #592 from wado-lang/claude/trait-orphan-rules-OmnBo\n\nImplement orphan rule enforcement for trait implementations",
+          "timestamp": "2026-03-16T21:40:30+09:00",
+          "tree_id": "ff375f57b06e9ee5efd567e794a8cfdc957bbb9d",
+          "url": "https://github.com/wado-lang/wado/commit/376fc2d7215c27f29f98157613e005bcc43d7c1a"
+        },
+        "date": 1773664980696,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
