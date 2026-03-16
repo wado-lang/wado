@@ -309,6 +309,16 @@ global ENOUGH_DISTS: i32 = 592;
 global ENOUGH: i32 = 1444;  // ENOUGH_LENS + ENOUGH_DISTS
 global MAXBITS: i32 = 15;
 
+// Constant tables shared by deflate functions
+global LENGTH_BASE: Array<i32> = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99,
+    115, 131, 163, 195, 227, 258];
+global LENGTH_EXTRA: Array<i32> = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5,
+    0];
+global DIST_BASE: Array<i32> = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025,
+    1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
+global DIST_EXTRA: Array<i32> = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12,
+    12, 13, 13];
+
 // Build a set of tables to decode the provided canonical Huffman code.
 // Returns [result, root_bits, table_offset_after]
 // result: 0=success, -1=invalid code, 1=not enough space
@@ -1618,20 +1628,8 @@ pub fn deflate_huffman(input: &Array<u8>) -> Array<u8> {
     let ltree = build_fixed_ltree();
     let dtree = build_fixed_dtree();
 
-    // NOTE: These constant tables are intentionally function-local, not globals.
-    // Benchmarking showed that GC object-type globals (Array<T>) add overhead from
-    // lazy-init flag checks and module layout bloat, making inflate ~25% slower.
-    // Rebuilding small tables per call is cheaper than global access overhead in Wasm GC.
-    let length_base: Array<i32> = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99,
-        115, 131, 163, 195, 227, 258];
-    let length_extra: Array<i32> = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5,
-        0];
-    let dist_base: Array<i32> = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025,
-        1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
-    let dist_extra: Array<i32> = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12,
-        12, 13, 13];
-    let length_codes = build_length_codes(&length_extra);
-    let dist_codes = build_dist_codes(&dist_extra);
+    let length_codes = build_length_codes(&LENGTH_EXTRA);
+    let dist_codes = build_dist_codes(&DIST_EXTRA);
 
     let mut bw = BitWriter::new();
 
@@ -1699,18 +1697,18 @@ pub fn deflate_huffman(input: &Array<u8>) -> Array<u8> {
             let len_symbol = 257 + lcode;
             let len_entry = &ltree[len_symbol];
             bw.write_bits(len_entry.code as u32, len_entry.len as i32);
-            let len_ebits = length_extra[lcode];
+            let len_ebits = LENGTH_EXTRA[lcode];
             if len_ebits > 0 {
-                bw.write_bits((best_len - length_base[lcode]) as u32, len_ebits);
+                bw.write_bits((best_len - LENGTH_BASE[lcode]) as u32, len_ebits);
             }
 
             let dd = best_dist - 1;
             let dcode = if dd < 256 { dist_codes[dd] as i32 } else { dist_codes[256 + (dd >> 7)] as i32 };
             let dist_entry = &dtree[dcode];
             bw.write_bits(dist_entry.code as u32, dist_entry.len as i32);
-            let dist_ebits = dist_extra[dcode];
+            let dist_ebits = DIST_EXTRA[dcode];
             if dist_ebits > 0 {
-                bw.write_bits((best_dist - dist_base[dcode]) as u32, dist_ebits);
+                bw.write_bits((best_dist - DIST_BASE[dcode]) as u32, dist_ebits);
             }
 
             // Insert hash entries for the rest of the match
@@ -2053,7 +2051,7 @@ fn gen_huffman_codes(lengths: &Array<u8>, max_sym: i32, max_bits: i32) -> Array<
 }
 
 // Write a dynamic Huffman block
-fn write_dynamic_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Array<i32>, sym_count: i32, is_last: bool, length_base: &Array<i32>, length_extra: &Array<i32>, dist_base: &Array<i32>, dist_extra: &Array<i32>, length_codes_table: &Array<u8>, dist_codes_table: &Array<u8>) {
+fn write_dynamic_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Array<i32>, sym_count: i32, is_last: bool, length_codes_table: &Array<u8>, dist_codes_table: &Array<u8>) {
     // 0..255=literal, 256=EOB, 257+=length
     // distance for each length symbol (0 for literals)
 
@@ -2240,9 +2238,9 @@ fn write_dynamic_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Arr
             let lcode = length_codes_table[len_val] as i32;
             let len_symbol = 257 + lcode;
             bw.write_bits(lit_tree[len_symbol].code as u32, lit_tree[len_symbol].len as i32);
-            let len_ebits = length_extra[lcode];
+            let len_ebits = LENGTH_EXTRA[lcode];
             if len_ebits > 0 {
-                bw.write_bits((len_val - (length_base[lcode] - 3)) as u32, len_ebits);
+                bw.write_bits((len_val - (LENGTH_BASE[lcode] - 3)) as u32, len_ebits);
             }
 
             // Distance
@@ -2250,9 +2248,9 @@ fn write_dynamic_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Arr
             let dd = dist - 1;
             let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
             bw.write_bits(dist_tree[dcode].code as u32, dist_tree[dcode].len as i32);
-            let dist_ebits = dist_extra[dcode];
+            let dist_ebits = DIST_EXTRA[dcode];
             if dist_ebits > 0 {
-                bw.write_bits((dist - dist_base[dcode]) as u32, dist_ebits);
+                bw.write_bits((dist - DIST_BASE[dcode]) as u32, dist_ebits);
             }
         }
     }
@@ -2262,7 +2260,7 @@ fn write_dynamic_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Arr
 }
 
 // Write a fixed Huffman block from symbol buffer
-fn write_fixed_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Array<i32>, sym_count: i32, is_last: bool, ltree: &Array<EncCode>, dtree: &Array<EncCode>, length_base: &Array<i32>, length_extra: &Array<i32>, dist_base: &Array<i32>, dist_extra: &Array<i32>, length_codes_table: &Array<u8>, dist_codes_table: &Array<u8>) {
+fn write_fixed_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Array<i32>, sym_count: i32, is_last: bool, ltree: &Array<EncCode>, dtree: &Array<EncCode>, length_codes_table: &Array<u8>, dist_codes_table: &Array<u8>) {
     if is_last {
         bw.write_bits(1, 1);  // BFINAL
     } else {
@@ -2279,18 +2277,18 @@ fn write_fixed_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Array
             let lcode = length_codes_table[len_val] as i32;
             let len_symbol = 257 + lcode;
             bw.write_bits(ltree[len_symbol].code as u32, ltree[len_symbol].len as i32);
-            let len_ebits = length_extra[lcode];
+            let len_ebits = LENGTH_EXTRA[lcode];
             if len_ebits > 0 {
-                bw.write_bits((len_val - (length_base[lcode] - 3)) as u32, len_ebits);
+                bw.write_bits((len_val - (LENGTH_BASE[lcode] - 3)) as u32, len_ebits);
             }
 
             let dist = distances[i];
             let dd = dist - 1;
             let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
             bw.write_bits(dtree[dcode].code as u32, dtree[dcode].len as i32);
-            let dist_ebits = dist_extra[dcode];
+            let dist_ebits = DIST_EXTRA[dcode];
             if dist_ebits > 0 {
-                bw.write_bits((dist - dist_base[dcode]) as u32, dist_ebits);
+                bw.write_bits((dist - DIST_BASE[dcode]) as u32, dist_ebits);
             }
         }
     }
@@ -2353,16 +2351,8 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
 
     let config = get_deflate_config(level);
 
-    let length_base: Array<i32> = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99,
-        115, 131, 163, 195, 227, 258];
-    let length_extra: Array<i32> = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5,
-        0];
-    let dist_base: Array<i32> = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025,
-        1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
-    let dist_extra: Array<i32> = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12,
-        12, 13, 13];
-    let length_codes_table = build_length_codes(&length_extra);
-    let dist_codes_table = build_dist_codes(&dist_extra);
+    let length_codes_table = build_length_codes(&LENGTH_EXTRA);
+    let dist_codes_table = build_dist_codes(&DIST_EXTRA);
 
     // Collect symbols using LZ77
     let mut symbols: Array<i32> = Array::<i32>::with_capacity(input_len);
@@ -2601,12 +2591,12 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
             let len_val = sym - 257;
             let lcode = length_codes_table[len_val] as i32;
             fixed_bits += ltree[257 + lcode].len as i32;
-            fixed_bits += length_extra[lcode];
+            fixed_bits += LENGTH_EXTRA[lcode];
             let dist = distances[i];
             let dd = dist - 1;
             let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
             fixed_bits += dtree[dcode].len as i32;
-            fixed_bits += dist_extra[dcode];
+            fixed_bits += DIST_EXTRA[dcode];
         }
     }
     fixed_bits += ltree[256].len as i32;  // EOB
@@ -2658,12 +2648,12 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
             let len_val = sym - 257;
             let lcode = length_codes_table[len_val] as i32;
             dynamic_data_bits += lit_lengths[257 + lcode] as i32;
-            dynamic_data_bits += length_extra[lcode];
+            dynamic_data_bits += LENGTH_EXTRA[lcode];
             let dist = distances[i];
             let dd = dist - 1;
             let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
             dynamic_data_bits += dist_lengths[dcode] as i32;
-            dynamic_data_bits += dist_extra[dcode];
+            dynamic_data_bits += DIST_EXTRA[dcode];
         }
     }
     dynamic_data_bits += lit_lengths[256] as i32;  // EOB
@@ -2785,10 +2775,6 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
             true,
             &ltree,
             &dtree,
-            &length_base,
-            &length_extra,
-            &dist_base,
-            &dist_extra,
             &length_codes_table,
             &dist_codes_table,
         );
@@ -2799,10 +2785,6 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
             &distances,
             sym_count,
             true,
-            &length_base,
-            &length_extra,
-            &dist_base,
-            &dist_extra,
             &length_codes_table,
             &dist_codes_table,
         );

@@ -1518,16 +1518,31 @@ fn "core:base64/Array<u8>::append"(self, value) {  // from core:base64
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<u8>;
-    let __local_6: i32;
+    let old_repr: ref array<u8>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<u8>(new_capacity);
-        builtin::array_copy<u8>(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l123: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
+                    i = i + 1;
+                    continue l123;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set_u8(self.repr, used, value);
@@ -1617,12 +1632,12 @@ fn StrUtf8ByteIter^Iterator::collect(self) {
     _licm_used_11 = self.used;
     _licm_repr_12 = self.repr;
     _hfs_index_13 = self.index;
-    b127: block {
-        l128: loop {
+    b130: block {
+        l131: loop {
             __fused___inline_StrUtf8ByteIter_Iterator__next_3: block {
                 if _hfs_index_13 >= _licm_used_11 {
                     self.index = _hfs_index_13;
-                    break b127;
+                    break b130;
                     self.index = _hfs_index_13;
                     break __fused___inline_StrUtf8ByteIter_Iterator__next_3;
                 };
@@ -1632,7 +1647,7 @@ fn StrUtf8ByteIter^Iterator::collect(self) {
                 self.index = _hfs_index_13;
                 break __fused___inline_StrUtf8ByteIter_Iterator__next_3;
             };
-            continue l128;
+            continue l131;
         };
     };
     self.index = _hfs_index_13;
@@ -1671,16 +1686,31 @@ fn Array<u8>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<u8>;
-    let __local_6: i32;
+    let old_repr: ref array<u8>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<u8>(new_capacity);
-        builtin::array_copy<u8>(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l139: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
+                    i = i + 1;
+                    continue l139;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set_u8(self.repr, used, value);
@@ -1692,16 +1722,31 @@ fn Array<u8>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<u8>;
-    let __local_6: i32;
+    let old_repr: ref array<u8>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<u8>(new_capacity);
-        builtin::array_copy<u8>(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l143: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
+                    i = i + 1;
+                    continue l143;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set_u8(self.repr, used, value);
@@ -1716,21 +1761,21 @@ fn Array<u8>^Eq::eq(self, other) {
     if self.used != other.used {
         return 0;
     };
-    __for_1: block {
+    __for_3: block {
         i = 0;
         _licm_used_3 = self.used;
         _licm_repr_4 = self.repr;
         _licm_repr_5 = other.repr;
         block {
-            l138: loop {
+            l147: loop {
                 if (i < _licm_used_3) == 0 {
-                    break __for_1;
+                    break __for_3;
                 };
                 if builtin::array_get<u8>(_licm_repr_4, i) != builtin::array_get<u8>(_licm_repr_5, i) {
                     return 0;
                 };
                 i = i + 1;
-                continue l138;
+                continue l147;
             };
         };
     };
@@ -1744,13 +1789,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l142: loop {
+            l151: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l142;
+                continue l151;
             };
         };
     };

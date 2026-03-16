@@ -787,16 +787,31 @@ fn Array<Option<i32>>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<Option<i32>>;
-    let __local_6: i32;
+    let old_repr: ref array<Option<i32>>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<ref Option<i32>>(new_capacity);
-        builtin::array_copy<ref Option<i32>>(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l40: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<ref Option<i32>>(new_repr, i, builtin::array_get<ref Option<i32>>(old_repr, i));
+                    i = i + 1;
+                    continue l40;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<ref Option<i32>>(self.repr, used, value);
@@ -815,7 +830,7 @@ fn Array<Point>^Inspect::inspect(self, f) {
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
-            l40: loop {
+            l43: loop {
                 if (i < _licm_used_12) == 0 {
                     break __for_4;
                 };
@@ -828,7 +843,7 @@ fn Array<Point>^Inspect::inspect(self, f) {
                     break __inline_Array_Point__IndexValue__index_value_3: builtin::array_get<ref Point>(_licm_repr_13, __local_9);
                 }, f);
                 i = i + 1;
-                continue l40;
+                continue l43;
             };
         };
     };
@@ -840,16 +855,31 @@ fn Array<Point>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<Point>;
-    let __local_6: i32;
+    let old_repr: ref array<Point>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<ref Point>(new_capacity);
-        builtin::array_copy<ref Point>(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l48: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<ref Point>(new_repr, i, builtin::array_get<ref Point>(old_repr, i));
+                    i = i + 1;
+                    continue l48;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<ref Point>(self.repr, used, value);
@@ -868,7 +898,7 @@ fn Array<i32>^Inspect::inspect(self, f) {
         _licm_used_16 = self.used;
         _licm_repr_17 = self.repr;
         block {
-            l45: loop {
+            l51: loop {
                 if (i < _licm_used_16) == 0 {
                     break __for_4;
                 };
@@ -881,7 +911,7 @@ fn Array<i32>^Inspect::inspect(self, f) {
                     break __inline_Array_i32__IndexValue__index_value_4: builtin::array_get<i32>(_licm_repr_17, __local_11);
                 }, f);
                 i = i + 1;
-                continue l45;
+                continue l51;
             };
         };
     };
@@ -893,16 +923,31 @@ fn Array<i32>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<i32>;
-    let __local_6: i32;
+    let old_repr: ref array<i32>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<i32>(new_capacity);
-        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l56: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
+                    i = i + 1;
+                    continue l56;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<i32>(self.repr, used, value);
@@ -916,13 +961,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l50: loop {
+            l59: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l50;
+                continue l59;
             };
         };
     };

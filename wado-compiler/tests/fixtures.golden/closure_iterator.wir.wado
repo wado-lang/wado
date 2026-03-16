@@ -980,16 +980,31 @@ fn Array<i32>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<i32>;
-    let __local_6: i32;
+    let old_repr: ref array<i32>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<i32>(new_capacity);
-        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l51: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
+                    i = i + 1;
+                    continue l51;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<i32>(self.repr, used, value);
@@ -1018,8 +1033,8 @@ fn FilterIter<i32>^Iterator::collect(self) {
         __local_1 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    b52: block {
-        l53: loop {
+    b55: block {
+        l56: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = FilterIter<i32>^Iterator::next(self);
@@ -1027,9 +1042,9 @@ fn FilterIter<i32>^Iterator::collect(self) {
                 item = __sroa___pattern_temp_0_payload_0;
                 Array<i32>::append(result, item);
             } else {
-                break b52;
+                break b55;
             };
-            continue l53;
+            continue l56;
         };
     };
     return result;
@@ -1046,7 +1061,7 @@ fn FilterIter<i32>^Iterator::next(self) {
     _licm_pred_4 = self.pred;
     _hfs_index_5 = self.index;
     block {
-        l56: loop {
+        l59: loop {
             if _hfs_index_5 >= _licm_used_2 {
                 self.index = _hfs_index_5;
                 return 1; 0;
@@ -1061,7 +1076,7 @@ fn FilterIter<i32>^Iterator::next(self) {
                 self.index = _hfs_index_5;
                 return 0; item;
             };
-            continue l56;
+            continue l59;
         };
     };
     self.index = _hfs_index_5;
@@ -1077,8 +1092,8 @@ fn MapIter<i32,i32>::fold<i32>(self, init, f) {
         __local_7 = self;
         break __inline_MapIter_i32_i32__IntoIterator__into_iter_0: __local_7;
     });
-    b60: block {
-        l61: loop {
+    b63: block {
+        l64: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = MapIter<i32,i32>^Iterator::next(__iter_4);
@@ -1090,9 +1105,9 @@ fn MapIter<i32,i32>::fold<i32>(self, init, f) {
                     call_ref "functype/$canonical_closure_fn_2"(__indirect_call_0.func, __indirect_call_0.env, acc, item);
                 };
             } else {
-                break b60;
+                break b63;
             };
-            continue l61;
+            continue l64;
         };
     };
     return acc;
@@ -1116,8 +1131,8 @@ fn FilterMapIter<i32,i32>^Iterator::collect(self) {
         __local_1 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    b65: block {
-        l66: loop {
+    b68: block {
+        l69: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = FilterMapIter<i32,i32>^Iterator::next(self);
@@ -1125,9 +1140,9 @@ fn FilterMapIter<i32,i32>^Iterator::collect(self) {
                 item = __sroa___pattern_temp_0_payload_0;
                 Array<i32>::append(result, item);
             } else {
-                break b65;
+                break b68;
             };
-            continue l66;
+            continue l69;
         };
     };
     return result;
@@ -1146,7 +1161,7 @@ fn FilterMapIter<i32,i32>^Iterator::next(self) {
     _licm_f_5 = self.f;
     _hfs_index_6 = self.index;
     block {
-        l69: loop {
+        l72: loop {
             if _hfs_index_6 >= _licm_used_2 {
                 self.index = _hfs_index_6;
                 return 1; 0;
@@ -1165,7 +1180,7 @@ fn FilterMapIter<i32,i32>^Iterator::next(self) {
                     call_ref "functype/$canonical_closure_fn_1"(__indirect_call_1.func, __indirect_call_1.env, item);
                 };
             };
-            continue l69;
+            continue l72;
         };
     };
     self.index = _hfs_index_6;
@@ -1214,8 +1229,8 @@ fn ArrayIter<i32>::fold<i32>$__Closure_6(self, init, f) {
         __local_7 = self;
         break __inline_ArrayIter_i32__IntoIterator__into_iter_0: __local_7;
     });
-    b74: block {
-        l75: loop {
+    b77: block {
+        l78: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
@@ -1226,37 +1241,6 @@ fn ArrayIter<i32>::fold<i32>$__Closure_6(self, init, f) {
                     break __inline___Closure_6____call_1: __local_9 + item;
                 };
             } else {
-                break b74;
-            };
-            continue l75;
-        };
-    };
-    return acc;
-}
-
-fn ArrayIter<i32>::fold<i32>$__Closure_7(self, init, f) {
-    let acc: i32;
-    let __iter_4: ref "core:allocator/ArrayIter<i32>";
-    let item: i32;
-    let __local_7: ref "core:allocator/ArrayIter<i32>";
-    let __local_9: i32;
-    acc = init;
-    __iter_4 = value_copy "core:allocator/ArrayIter<i32>"(__inline_ArrayIter_i32__IntoIterator__into_iter_0: block -> ref "core:allocator/ArrayIter<i32>" {
-        __local_7 = self;
-        break __inline_ArrayIter_i32__IntoIterator__into_iter_0: __local_7;
-    });
-    b77: block {
-        l78: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: i32;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                item = __sroa___pattern_temp_0_payload_0;
-                acc = __inline___Closure_7____call_1: block -> i32 {
-                    __local_9 = acc;
-                    break __inline___Closure_7____call_1: __local_9 * item;
-                };
-            } else {
                 break b77;
             };
             continue l78;
@@ -1265,7 +1249,7 @@ fn ArrayIter<i32>::fold<i32>$__Closure_7(self, init, f) {
     return acc;
 }
 
-fn ArrayIter<i32>::fold<i32>$__Closure_8(self, init, f) {
+fn ArrayIter<i32>::fold<i32>$__Closure_7(self, init, f) {
     let acc: i32;
     let __iter_4: ref "core:allocator/ArrayIter<i32>";
     let item: i32;
@@ -1283,6 +1267,37 @@ fn ArrayIter<i32>::fold<i32>$__Closure_8(self, init, f) {
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 item = __sroa___pattern_temp_0_payload_0;
+                acc = __inline___Closure_7____call_1: block -> i32 {
+                    __local_9 = acc;
+                    break __inline___Closure_7____call_1: __local_9 * item;
+                };
+            } else {
+                break b80;
+            };
+            continue l81;
+        };
+    };
+    return acc;
+}
+
+fn ArrayIter<i32>::fold<i32>$__Closure_8(self, init, f) {
+    let acc: i32;
+    let __iter_4: ref "core:allocator/ArrayIter<i32>";
+    let item: i32;
+    let __local_7: ref "core:allocator/ArrayIter<i32>";
+    let __local_9: i32;
+    acc = init;
+    __iter_4 = value_copy "core:allocator/ArrayIter<i32>"(__inline_ArrayIter_i32__IntoIterator__into_iter_0: block -> ref "core:allocator/ArrayIter<i32>" {
+        __local_7 = self;
+        break __inline_ArrayIter_i32__IntoIterator__into_iter_0: __local_7;
+    });
+    b83: block {
+        l84: loop {
+            let __sroa___pattern_temp_0_discriminant: i32;
+            let __sroa___pattern_temp_0_payload_0: i32;
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
+            if __sroa___pattern_temp_0_discriminant == 0 {
+                item = __sroa___pattern_temp_0_payload_0;
                 acc = __inline___Closure_8____call_1: block -> i32 {
                     __local_9 = acc;
                     if item > __local_9 {
@@ -1291,9 +1306,9 @@ fn ArrayIter<i32>::fold<i32>$__Closure_8(self, init, f) {
                     break __inline___Closure_8____call_1: __local_9;
                 };
             } else {
-                break b80;
+                break b83;
             };
-            continue l81;
+            continue l84;
         };
     };
     return acc;
@@ -1310,8 +1325,8 @@ fn ArrayIter<i32>::fold<i32>$__Closure_9(self, init, f) {
         __local_7 = self;
         break __inline_ArrayIter_i32__IntoIterator__into_iter_0: __local_7;
     });
-    b84: block {
-        l85: loop {
+    b87: block {
+        l88: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
@@ -1325,9 +1340,9 @@ fn ArrayIter<i32>::fold<i32>$__Closure_9(self, init, f) {
                     break __inline___Closure_9____call_1: __local_9;
                 };
             } else {
-                break b84;
+                break b87;
             };
-            continue l85;
+            continue l88;
         };
     };
     return acc;
@@ -1340,13 +1355,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l89: loop {
+            l92: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l89;
+                continue l92;
             };
         };
     };

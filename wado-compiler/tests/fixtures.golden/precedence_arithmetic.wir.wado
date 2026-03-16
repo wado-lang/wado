@@ -145,16 +145,31 @@ fn Array<u64>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<u64>;
-    let __local_6: i32;
+    let old_repr: ref array<u64>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<u64>(new_capacity);
-        builtin::array_copy<u64>(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l11: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
+                    i = i + 1;
+                    continue l11;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<u64>(self.repr, used, value);

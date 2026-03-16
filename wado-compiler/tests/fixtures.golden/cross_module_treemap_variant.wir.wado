@@ -592,16 +592,31 @@ fn "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::a
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<Tuple<String,Value>>;
-    let __local_6: i32;
+    let old_repr: ref array<Tuple<String,Value>>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<ref "tuple/[String, Value]">(new_capacity);
-        builtin::array_copy<ref "tuple/[String, Value]">(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l28: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<ref "tuple/[String, Value]">(new_repr, i, builtin::array_get<ref "tuple/[String, Value]">(old_repr, i));
+                    i = i + 1;
+                    continue l28;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<ref "tuple/[String, Value]">(self.repr, used, value);
@@ -671,7 +686,7 @@ fn String^Eq::eq(self, other) {
     __for_1: block {
         i = 0;
         block {
-            l33: loop {
+            l36: loop {
                 if (i < len_a) == 0 {
                     break __for_1;
                 };
@@ -679,7 +694,7 @@ fn String^Eq::eq(self, other) {
                     return 0;
                 };
                 i = i + 1;
-                continue l33;
+                continue l36;
             };
         };
     };
@@ -703,7 +718,7 @@ fn String^Ord::cmp(self, other) {
     __for_2: block {
         i = 0;
         block {
-            l37: loop {
+            l40: loop {
                 if (i < min_len) == 0 {
                     break __for_2;
                 };
@@ -716,7 +731,7 @@ fn String^Ord::cmp(self, other) {
                     return 2;
                 };
                 i = i + 1;
-                continue l37;
+                continue l40;
             };
         };
     };
@@ -831,16 +846,31 @@ fn Array<TreeMapEntry<String,Value>>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<TreeMapEntry<String,Value>>;
-    let __local_6: i32;
+    let old_repr: ref array<TreeMapEntry<String,Value>>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>">(new_capacity);
-        builtin::array_copy<ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>">(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l60: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>">(new_repr, i, builtin::array_get<ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>">(old_repr, i));
+                    i = i + 1;
+                    continue l60;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>">(self.repr, used, value);
@@ -860,8 +890,8 @@ fn TreeMap<String,Value>::find_index(self, key) {
     _licm_entries_8 = self.entries;
     _licm_used_9 = _licm_entries_8.used;
     _licm_repr_10 = _licm_entries_8.repr;
-    b56: block {
-        l57: loop {
+    b62: block {
+        l63: loop {
             __pattern_temp_0 = value_copy Option<TreeMapNode<String>>(current);
             if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_0) {
                 n = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_0).payload_0;
@@ -885,9 +915,9 @@ fn TreeMap<String,Value>::find_index(self, key) {
                     current = value_copy Option<TreeMapNode<String>>(n.right);
                 };
             } else {
-                break b56;
+                break b62;
             };
-            continue l57;
+            continue l63;
         };
     };
     return -1;

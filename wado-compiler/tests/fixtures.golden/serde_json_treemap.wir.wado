@@ -3650,16 +3650,31 @@ fn Array<Tuple<String,Option<i32>>>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<Tuple<String,Option<i32>>>;
-    let __local_6: i32;
+    let old_repr: ref array<Tuple<String,Option<i32>>>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<ref "tuple/[String, Option<i32>]">(new_capacity);
-        builtin::array_copy<ref "tuple/[String, Option<i32>]">(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l205: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<ref "tuple/[String, Option<i32>]">(new_repr, i, builtin::array_get<ref "tuple/[String, Option<i32>]">(old_repr, i));
+                    i = i + 1;
+                    continue l205;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<ref "tuple/[String, Option<i32>]">(self.repr, used, value);
@@ -3778,16 +3793,31 @@ fn Array<TreeMapEntry<String,Option<i32>>>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<TreeMapEntry<String,Option<i32>>>;
-    let __local_6: i32;
+    let old_repr: ref array<TreeMapEntry<String,Option<i32>>>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<ref "core:allocator/TreeMapEntry<String,Option<i32>>">(new_capacity);
-        builtin::array_copy<ref "core:allocator/TreeMapEntry<String,Option<i32>>">(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l222: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<ref "core:allocator/TreeMapEntry<String,Option<i32>>">(new_repr, i, builtin::array_get<ref "core:allocator/TreeMapEntry<String,Option<i32>>">(old_repr, i));
+                    i = i + 1;
+                    continue l222;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<ref "core:allocator/TreeMapEntry<String,Option<i32>>">(self.repr, used, value);
@@ -3807,8 +3837,8 @@ fn TreeMap<String,Option<i32>>::find_index(self, key) {
     _licm_entries_8 = self.entries;
     _licm_used_9 = _licm_entries_8.used;
     _licm_repr_10 = _licm_entries_8.repr;
-    b218: block {
-        l219: loop {
+    b224: block {
+        l225: loop {
             __pattern_temp_0 = value_copy Option<TreeMapNode<String>>(current);
             if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_0) {
                 n = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_0).payload_0;
@@ -3832,9 +3862,9 @@ fn TreeMap<String,Option<i32>>::find_index(self, key) {
                     current = value_copy Option<TreeMapNode<String>>(n.right);
                 };
             } else {
-                break b218;
+                break b224;
             };
-            continue l219;
+            continue l225;
         };
     };
     return -1;
@@ -3866,8 +3896,8 @@ fn TreeMap<String,Array<i32>>^Serialize::serialize<JsonSerializer>(self, s) {
     if ref.test Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0) {
         m = value_copy "core:json/JsonMapSerializer"(ref.cast Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
         __iter_5 = "core:serde/ArrayIter<Tuple<String,Array<i32>>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
-        b226: block {
-            l227: loop {
+        b232: block {
+            l233: loop {
                 let __sroa___pattern_temp_1_discriminant: i32;
                 let __sroa___pattern_temp_1_payload_0: ref null "tuple/[String, Array<i32>]";
                 multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<Tuple<String,Array<i32>>>^Iterator::next(__iter_5);
@@ -3886,9 +3916,9 @@ fn TreeMap<String,Array<i32>>^Serialize::serialize<JsonSerializer>(self, s) {
                         return 1; ref.as_non_null(e_12);
                     };
                 } else {
-                    break b226;
+                    break b232;
                 };
-                continue l227;
+                continue l233;
             };
         };
         block {
@@ -3939,8 +3969,8 @@ fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
             __local_16 = self;
             break __inline_Array_i32__IntoIterator__into_iter_2: "core:serde/ArrayIter<i32>" { repr: ref.as_non_null(__local_16.repr), used: __local_16.used, index: 0 };
         };
-        b233: block {
-            l234: loop {
+        b239: block {
+            l240: loop {
                 let __sroa___pattern_temp_1_discriminant: i32;
                 let __sroa___pattern_temp_1_payload_0: i32;
                 multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
@@ -3951,9 +3981,9 @@ fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
                         return Result<unit,SerializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_7) };
                     };
                 } else {
-                    break b233;
+                    break b239;
                 };
-                continue l234;
+                continue l240;
             };
         };
         return __inline_JsonSeqSerializer_SerializeSeq__end_3: block -> ref Result<unit,SerializeError> {
@@ -4020,8 +4050,8 @@ fn TreeMap<String,Array<i32>>::entries(self) {
         __local_9 = self.entries;
         break __inline_Array_TreeMapEntry_String_Array_i32____IntoIterator__into_iter_3: "core:serde/ArrayIter<TreeMapEntry<String,Array<i32>>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
     };
-    b241: block {
-        l242: loop {
+    b247: block {
+        l248: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: ref null "core:allocator/TreeMapEntry<String,Array<i32>>";
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<TreeMapEntry<String,Array<i32>>>^Iterator::next(__iter_3);
@@ -4031,9 +4061,9 @@ fn TreeMap<String,Array<i32>>::entries(self) {
                     Array<Tuple<String,Array<i32>>>::append(result, "tuple/[String, Array<i32>]" { 0: ref.as_non_null(entry.key), 1: ref.as_non_null(entry.value) });
                 };
             } else {
-                break b241;
+                break b247;
             };
-            continue l242;
+            continue l248;
         };
     };
     return result;
@@ -4044,16 +4074,31 @@ fn Array<Tuple<String,Array<i32>>>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<Tuple<String,Array<i32>>>;
-    let __local_6: i32;
+    let old_repr: ref array<Tuple<String,Array<i32>>>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<ref "tuple/[String, Array<i32>]">(new_capacity);
-        builtin::array_copy<ref "tuple/[String, Array<i32>]">(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l253: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<ref "tuple/[String, Array<i32>]">(new_repr, i, builtin::array_get<ref "tuple/[String, Array<i32>]">(old_repr, i));
+                    i = i + 1;
+                    continue l253;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<ref "tuple/[String, Array<i32>]">(self.repr, used, value);
@@ -4075,16 +4120,31 @@ fn Array<i32>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<i32>;
-    let __local_6: i32;
+    let old_repr: ref array<i32>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<i32>(new_capacity);
-        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l258: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
+                    i = i + 1;
+                    continue l258;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<i32>(self.repr, used, value);
@@ -4193,16 +4253,31 @@ fn Array<TreeMapEntry<String,Array<i32>>>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<TreeMapEntry<String,Array<i32>>>;
-    let __local_6: i32;
+    let old_repr: ref array<TreeMapEntry<String,Array<i32>>>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<ref "core:allocator/TreeMapEntry<String,Array<i32>>">(new_capacity);
-        builtin::array_copy<ref "core:allocator/TreeMapEntry<String,Array<i32>>">(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l274: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<ref "core:allocator/TreeMapEntry<String,Array<i32>>">(new_repr, i, builtin::array_get<ref "core:allocator/TreeMapEntry<String,Array<i32>>">(old_repr, i));
+                    i = i + 1;
+                    continue l274;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<ref "core:allocator/TreeMapEntry<String,Array<i32>>">(self.repr, used, value);
@@ -4222,8 +4297,8 @@ fn TreeMap<String,Array<i32>>::find_index(self, key) {
     _licm_entries_8 = self.entries;
     _licm_used_9 = _licm_entries_8.used;
     _licm_repr_10 = _licm_entries_8.repr;
-    b261: block {
-        l262: loop {
+    b276: block {
+        l277: loop {
             __pattern_temp_0 = value_copy Option<TreeMapNode<String>>(current);
             if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_0) {
                 n = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_0).payload_0;
@@ -4247,9 +4322,9 @@ fn TreeMap<String,Array<i32>>::find_index(self, key) {
                     current = value_copy Option<TreeMapNode<String>>(n.right);
                 };
             } else {
-                break b261;
+                break b276;
             };
-            continue l262;
+            continue l277;
         };
     };
     return -1;
@@ -4280,8 +4355,8 @@ fn TreeMap<String,bool>^Serialize::serialize<JsonSerializer>(self, s) {
     if ref.test Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0) {
         m = value_copy "core:json/JsonMapSerializer"(ref.cast Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
         __iter_5 = "core:serde/ArrayIter<Tuple<String,bool>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
-        b269: block {
-            l270: loop {
+        b284: block {
+            l285: loop {
                 let __sroa___pattern_temp_1_discriminant: i32;
                 let __sroa___pattern_temp_1_payload_0: ref null "tuple/[String, bool]";
                 multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<Tuple<String,bool>>^Iterator::next(__iter_5);
@@ -4299,9 +4374,9 @@ fn TreeMap<String,bool>^Serialize::serialize<JsonSerializer>(self, s) {
                         return 1; ref.as_non_null(e_12);
                     };
                 } else {
-                    break b269;
+                    break b284;
                 };
-                continue l270;
+                continue l285;
             };
         };
         block {
@@ -4357,8 +4432,8 @@ fn TreeMap<String,bool>::entries(self) {
         __local_9 = self.entries;
         break __inline_Array_TreeMapEntry_String_bool___IntoIterator__into_iter_3: "core:serde/ArrayIter<TreeMapEntry<String,bool>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
     };
-    b276: block {
-        l277: loop {
+    b291: block {
+        l292: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: ref null "core:allocator/TreeMapEntry<String,bool>";
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<TreeMapEntry<String,bool>>^Iterator::next(__iter_3);
@@ -4368,9 +4443,9 @@ fn TreeMap<String,bool>::entries(self) {
                     Array<Tuple<String,bool>>::append(result, "tuple/[String, bool]" { 0: ref.as_non_null(entry.key), 1: entry.value });
                 };
             } else {
-                break b276;
+                break b291;
             };
-            continue l277;
+            continue l292;
         };
     };
     return result;
@@ -4381,16 +4456,31 @@ fn Array<Tuple<String,bool>>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<Tuple<String,bool>>;
-    let __local_6: i32;
+    let old_repr: ref array<Tuple<String,bool>>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<ref "tuple/[String, bool]">(new_capacity);
-        builtin::array_copy<ref "tuple/[String, bool]">(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l297: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<ref "tuple/[String, bool]">(new_repr, i, builtin::array_get<ref "tuple/[String, bool]">(old_repr, i));
+                    i = i + 1;
+                    continue l297;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<ref "tuple/[String, bool]">(self.repr, used, value);
@@ -4509,16 +4599,31 @@ fn Array<TreeMapEntry<String,bool>>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<TreeMapEntry<String,bool>>;
-    let __local_6: i32;
+    let old_repr: ref array<TreeMapEntry<String,bool>>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<ref "core:allocator/TreeMapEntry<String,bool>">(new_capacity);
-        builtin::array_copy<ref "core:allocator/TreeMapEntry<String,bool>">(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l314: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<ref "core:allocator/TreeMapEntry<String,bool>">(new_repr, i, builtin::array_get<ref "core:allocator/TreeMapEntry<String,bool>">(old_repr, i));
+                    i = i + 1;
+                    continue l314;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<ref "core:allocator/TreeMapEntry<String,bool>">(self.repr, used, value);
@@ -4538,8 +4643,8 @@ fn TreeMap<String,bool>::find_index(self, key) {
     _licm_entries_8 = self.entries;
     _licm_used_9 = _licm_entries_8.used;
     _licm_repr_10 = _licm_entries_8.repr;
-    b295: block {
-        l296: loop {
+    b316: block {
+        l317: loop {
             __pattern_temp_0 = value_copy Option<TreeMapNode<String>>(current);
             if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_0) {
                 n = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_0).payload_0;
@@ -4563,9 +4668,9 @@ fn TreeMap<String,bool>::find_index(self, key) {
                     current = value_copy Option<TreeMapNode<String>>(n.right);
                 };
             } else {
-                break b295;
+                break b316;
             };
-            continue l296;
+            continue l317;
         };
     };
     return -1;
@@ -4597,8 +4702,8 @@ fn TreeMap<String,String>^Serialize::serialize<JsonSerializer>(self, s) {
     if ref.test Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0) {
         m = value_copy "core:json/JsonMapSerializer"(ref.cast Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
         __iter_5 = "core:serde/ArrayIter<Tuple<String,String>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
-        b303: block {
-            l304: loop {
+        b324: block {
+            l325: loop {
                 let __sroa___pattern_temp_1_discriminant: i32;
                 let __sroa___pattern_temp_1_payload_0: ref null "tuple/[String, String]";
                 multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<Tuple<String,String>>^Iterator::next(__iter_5);
@@ -4617,9 +4722,9 @@ fn TreeMap<String,String>^Serialize::serialize<JsonSerializer>(self, s) {
                         return 1; ref.as_non_null(e_12);
                     };
                 } else {
-                    break b303;
+                    break b324;
                 };
-                continue l304;
+                continue l325;
             };
         };
         block {
@@ -4674,8 +4779,8 @@ fn TreeMap<String,String>::entries(self) {
         __local_9 = self.entries;
         break __inline_Array_TreeMapEntry_String_String___IntoIterator__into_iter_3: "core:serde/ArrayIter<TreeMapEntry<String,String>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
     };
-    b310: block {
-        l311: loop {
+    b331: block {
+        l332: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: ref null "core:allocator/TreeMapEntry<String,String>";
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<TreeMapEntry<String,String>>^Iterator::next(__iter_3);
@@ -4685,9 +4790,9 @@ fn TreeMap<String,String>::entries(self) {
                     Array<Tuple<String,String>>::append(result, "tuple/[String, String]" { 0: ref.as_non_null(entry.key), 1: ref.as_non_null(entry.value) });
                 };
             } else {
-                break b310;
+                break b331;
             };
-            continue l311;
+            continue l332;
         };
     };
     return result;
@@ -4698,16 +4803,31 @@ fn Array<Tuple<String,String>>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<Tuple<String,String>>;
-    let __local_6: i32;
+    let old_repr: ref array<Tuple<String,String>>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<ref "tuple/[String, String]">(new_capacity);
-        builtin::array_copy<ref "tuple/[String, String]">(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l337: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<ref "tuple/[String, String]">(new_repr, i, builtin::array_get<ref "tuple/[String, String]">(old_repr, i));
+                    i = i + 1;
+                    continue l337;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<ref "tuple/[String, String]">(self.repr, used, value);
@@ -4826,16 +4946,31 @@ fn Array<TreeMapEntry<String,String>>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<TreeMapEntry<String,String>>;
-    let __local_6: i32;
+    let old_repr: ref array<TreeMapEntry<String,String>>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<ref "core:allocator/TreeMapEntry<String,String>">(new_capacity);
-        builtin::array_copy<ref "core:allocator/TreeMapEntry<String,String>">(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l354: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<ref "core:allocator/TreeMapEntry<String,String>">(new_repr, i, builtin::array_get<ref "core:allocator/TreeMapEntry<String,String>">(old_repr, i));
+                    i = i + 1;
+                    continue l354;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<ref "core:allocator/TreeMapEntry<String,String>">(self.repr, used, value);
@@ -4855,8 +4990,8 @@ fn TreeMap<String,String>::find_index(self, key) {
     _licm_entries_8 = self.entries;
     _licm_used_9 = _licm_entries_8.used;
     _licm_repr_10 = _licm_entries_8.repr;
-    b329: block {
-        l330: loop {
+    b356: block {
+        l357: loop {
             __pattern_temp_0 = value_copy Option<TreeMapNode<String>>(current);
             if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_0) {
                 n = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_0).payload_0;
@@ -4880,9 +5015,9 @@ fn TreeMap<String,String>::find_index(self, key) {
                     current = value_copy Option<TreeMapNode<String>>(n.right);
                 };
             } else {
-                break b329;
+                break b356;
             };
-            continue l330;
+            continue l357;
         };
     };
     return -1;
@@ -4931,8 +5066,8 @@ fn TreeMap<String,i32>::find_index(self, key) {
     _licm_entries_8 = self.entries;
     _licm_used_9 = _licm_entries_8.used;
     _licm_repr_10 = _licm_entries_8.repr;
-    b338: block {
-        l339: loop {
+    b365: block {
+        l366: loop {
             __pattern_temp_0 = value_copy Option<TreeMapNode<String>>(current);
             if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_0) {
                 n = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_0).payload_0;
@@ -4956,9 +5091,9 @@ fn TreeMap<String,i32>::find_index(self, key) {
                     current = value_copy Option<TreeMapNode<String>>(n.right);
                 };
             } else {
-                break b338;
+                break b365;
             };
-            continue l339;
+            continue l366;
         };
     };
     return -1;
@@ -4994,7 +5129,7 @@ fn TreeMap<String,i32>^Deserialize::deserialize<JsonDeserializer>(d) {
             break __seq_lit: __local_22;
         }), size: 0, deleted_count: 0 };
         block {
-            l347: loop {
+            l374: loop {
                 key_r = "core:json/JsonMapAccess^DeserializeMap::next_key_string"(ma);
                 __pattern_temp_1 = key_r;
                 if ref.test Result<Option<String>,DeserializeError>::Ok(__pattern_temp_1) {
@@ -5031,7 +5166,7 @@ fn TreeMap<String,i32>^Deserialize::deserialize<JsonDeserializer>(d) {
                     e_12 = value_copy "core:serde/DeserializeError"(ref.cast Result<Option<String>,DeserializeError>::Err(__pattern_temp_6).payload_0);
                     return Result<TreeMap<String,i32>,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(e_12) };
                 };
-                continue l347;
+                continue l374;
             };
         };
     };
@@ -5146,16 +5281,31 @@ fn Array<TreeMapEntry<String,i32>>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<TreeMapEntry<String,i32>>;
-    let __local_6: i32;
+    let old_repr: ref array<TreeMapEntry<String,i32>>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(new_capacity);
-        builtin::array_copy<ref "core:allocator/TreeMapEntry<String,i32>">(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l396: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<ref "core:allocator/TreeMapEntry<String,i32>">(new_repr, i, builtin::array_get<ref "core:allocator/TreeMapEntry<String,i32>">(old_repr, i));
+                    i = i + 1;
+                    continue l396;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<ref "core:allocator/TreeMapEntry<String,i32>">(self.repr, used, value);
@@ -5187,8 +5337,8 @@ fn TreeMap<String,i32>^Serialize::serialize<JsonSerializer>(self, s) {
     if ref.test Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0) {
         m = value_copy "core:json/JsonMapSerializer"(ref.cast Result<JsonMapSerializer,SerializeError>::Ok(__pattern_temp_0).payload_0);
         __iter_5 = "core:serde/ArrayIter<Tuple<String,i32>>" { repr: ref.as_non_null(entries.repr), used: entries.used, index: 0 };
-        b369: block {
-            l370: loop {
+        b399: block {
+            l400: loop {
                 let __sroa___pattern_temp_1_discriminant: i32;
                 let __sroa___pattern_temp_1_payload_0: ref null "tuple/[String, i32]";
                 multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_5);
@@ -5206,9 +5356,9 @@ fn TreeMap<String,i32>^Serialize::serialize<JsonSerializer>(self, s) {
                         return 1; ref.as_non_null(e_12);
                     };
                 } else {
-                    break b369;
+                    break b399;
                 };
-                continue l370;
+                continue l400;
             };
         };
         block {
@@ -5264,8 +5414,8 @@ fn TreeMap<String,i32>::entries(self) {
         __local_9 = self.entries;
         break __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: "core:serde/ArrayIter<TreeMapEntry<String,i32>>" { repr: ref.as_non_null(__local_9.repr), used: __local_9.used, index: 0 };
     };
-    b376: block {
-        l377: loop {
+    b406: block {
+        l407: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: ref null "core:allocator/TreeMapEntry<String,i32>";
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<TreeMapEntry<String,i32>>^Iterator::next(__iter_3);
@@ -5275,9 +5425,9 @@ fn TreeMap<String,i32>::entries(self) {
                     Array<Tuple<String,i32>>::append(result, "tuple/[String, i32]" { 0: ref.as_non_null(entry.key), 1: entry.value });
                 };
             } else {
-                break b376;
+                break b406;
             };
-            continue l377;
+            continue l407;
         };
     };
     return result;
@@ -5288,16 +5438,31 @@ fn Array<Tuple<String,i32>>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<Tuple<String,i32>>;
-    let __local_6: i32;
+    let old_repr: ref array<Tuple<String,i32>>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<ref "tuple/[String, i32]">(new_capacity);
-        builtin::array_copy<ref "tuple/[String, i32]">(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l412: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<ref "tuple/[String, i32]">(new_repr, i, builtin::array_get<ref "tuple/[String, i32]">(old_repr, i));
+                    i = i + 1;
+                    continue l412;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<ref "tuple/[String, i32]">(self.repr, used, value);
@@ -5359,11 +5524,11 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {  // from core:json
     _licm_used_6 = _licm_input_5.used;
     _licm_repr_7 = _licm_input_5.repr;
     _hfs_pos_8 = self.pos;
-    b383: block {
-        l384: loop {
+    b416: block {
+        l417: loop {
             if (_hfs_pos_8 < _licm_used_6) == 0 {
                 self.pos = _hfs_pos_8;
-                break b383;
+                break b416;
             };
             b = __inline_String__get_byte_1: block -> u8 {
                 __local_4 = _hfs_pos_8;
@@ -5387,7 +5552,7 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {  // from core:json
                 self.pos = _hfs_pos_8;
                 return;
             };
-            continue l384;
+            continue l417;
         };
     };
     self.pos = _hfs_pos_8;
@@ -5530,14 +5695,14 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
     self.pos = self.pos + 1;
     result = String { repr: builtin::array_new<u8>(32), used: 0 };
     _hfs_pos_63 = self.pos;
-    b394: block {
-        l395: loop {
+    b427: block {
+        l428: loop {
             if (_hfs_pos_63 < __inline_String__len_5: block -> i32 {
                 __local_37 = self.input;
                 break __inline_String__len_5: __local_37.used;
             }) == 0 {
                 self.pos = _hfs_pos_63;
-                break b394;
+                break b427;
             };
             b = __inline_String__get_byte_6: block -> u8 {
                 __local_38 = self.input;
@@ -5693,7 +5858,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                 };
                 _hfs_pos_63 = _hfs_pos_63 + seq_len;
             };
-            continue l395;
+            continue l428;
         };
     };
     self.pos = _hfs_pos_63;
@@ -5737,7 +5902,7 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
         _licm_pos_16 = self.pos;
         _licm_repr_17 = _licm_input_15.repr;
         block {
-            l420: loop {
+            l453: loop {
                 if (i < 4) == 0 {
                     break __for_0;
                 };
@@ -5772,7 +5937,7 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
                     }) };
                 };
                 i = i + 1;
-                continue l420;
+                continue l453;
             };
         };
     };
@@ -5877,11 +6042,11 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
     _licm_used_47 = _licm_input_46.used;
     _licm_repr_48 = _licm_input_46.repr;
     _hfs_pos_51 = self.pos;
-    b434: block {
-        l435: loop {
+    b467: block {
+        l468: loop {
             if (_hfs_pos_51 < _licm_used_47) == 0 {
                 self.pos = _hfs_pos_51;
-                break b434;
+                break b467;
             };
             b = __inline_String__get_byte_8: block -> u8 {
                 __local_28 = _hfs_pos_51;
@@ -5908,12 +6073,12 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                 if b == 46 {
                     _hfs_pos_51 = _hfs_pos_51 + 1;
                     _hfs_pos_49 = _hfs_pos_51;
-                    b443: block {
-                        l444: loop {
+                    b476: block {
+                        l477: loop {
                             if (_hfs_pos_49 < _licm_used_47) == 0 {
                                 _hfs_pos_51 = _hfs_pos_49;
                                 self.pos = _hfs_pos_51;
-                                break b443;
+                                break b476;
                             };
                             b2 = __inline_String__get_byte_10: block -> u8 {
                                 __local_31 = _hfs_pos_49;
@@ -5930,9 +6095,9 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                             } else {
                                 _hfs_pos_51 = _hfs_pos_49;
                                 self.pos = _hfs_pos_51;
-                                break b443;
+                                break b476;
                             };
-                            continue l444;
+                            continue l477;
                         };
                     };
                     _hfs_pos_51 = _hfs_pos_49;
@@ -5963,12 +6128,12 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                             };
                         };
                         _hfs_pos_50 = _hfs_pos_51;
-                        b454: block {
-                            l455: loop {
+                        b487: block {
+                            l488: loop {
                                 if (_hfs_pos_50 < _licm_used_47) == 0 {
                                     _hfs_pos_51 = _hfs_pos_50;
                                     self.pos = _hfs_pos_51;
-                                    break b454;
+                                    break b487;
                                 };
                                 b3 = __inline_String__get_byte_16: block -> u8 {
                                     __local_40 = _hfs_pos_50;
@@ -5984,9 +6149,9 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                                 } else {
                                     _hfs_pos_51 = _hfs_pos_50;
                                     self.pos = _hfs_pos_51;
-                                    break b454;
+                                    break b487;
                                 };
-                                continue l455;
+                                continue l488;
                             };
                         };
                         _hfs_pos_51 = _hfs_pos_50;
@@ -6023,9 +6188,9 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                 return Result<i32,DeserializeError>::Ok { discriminant: 0, payload_0: builtin::i32_trunc_f64_s(v_signed) };
             } else {
                 self.pos = _hfs_pos_51;
-                break b434;
+                break b467;
             };
-            continue l435;
+            continue l468;
         };
     };
     self.pos = _hfs_pos_51;
@@ -6115,13 +6280,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l474: loop {
+            l507: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l474;
+                continue l507;
             };
         };
     };
@@ -6254,8 +6419,8 @@ fn String^Inspect::inspect(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b497: block {
-        l498: loop {
+    b530: block {
+        l531: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
@@ -6280,9 +6445,9 @@ fn String^Inspect::inspect(self, f) {
                     String::append_char(_licm_buf_33, c);
                 };
             } else {
-                break b497;
+                break b530;
             };
-            continue l498;
+            continue l531;
         };
     };
     String::append_char(f.buf, 34);

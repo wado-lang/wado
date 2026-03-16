@@ -463,7 +463,7 @@ fn Array<i32>^Eq::eq(self, other) {
     if self.used != other.used {
         return 0;
     };
-    __for_1: block {
+    __for_3: block {
         i = 0;
         _licm_used_3 = self.used;
         _licm_repr_4 = self.repr;
@@ -471,7 +471,7 @@ fn Array<i32>^Eq::eq(self, other) {
         block {
             l40: loop {
                 if (i < _licm_used_3) == 0 {
-                    break __for_1;
+                    break __for_3;
                 };
                 if builtin::array_get<i32>(_licm_repr_4, i) != builtin::array_get<i32>(_licm_repr_5, i) {
                     return 0;
@@ -498,14 +498,14 @@ fn Array<i32>^Ord::cmp(self, other) {
         __local_7 = other.used;
         break __inline_i32_min_0: select i32(__local_6 < __local_7, __local_6, __local_7);
     };
-    __for_2: block {
+    __for_4: block {
         i = 0;
         _licm_repr_8 = self.repr;
         _licm_repr_9 = other.repr;
         block {
             l44: loop {
                 if (i < min_len) == 0 {
-                    break __for_2;
+                    break __for_4;
                 };
                 a = builtin::array_get<i32>(_licm_repr_8, i);
                 b = builtin::array_get<i32>(_licm_repr_9, i);
@@ -534,16 +534,31 @@ fn Array<i32>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref array<i32>;
-    let __local_6: i32;
+    let old_repr: ref array<i32>;
+    let i: i32;
+    let __local_8: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
         new_capacity = __inline_i32_max_0: block -> i32 {
-            __local_6 = capacity * 2;
-            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+            __local_8 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_8 > 4, __local_8, 4);
         };
         new_repr = builtin::array_new<i32>(new_capacity);
-        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
+        old_repr = self.repr;
+        __for_0: block {
+            i = 0;
+            block {
+                l52: loop {
+                    if (i < used) == 0 {
+                        break __for_0;
+                    };
+                    builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
+                    i = i + 1;
+                    continue l52;
+                };
+            };
+        };
         self.repr = ref.as_non_null(new_repr);
     };
     builtin::array_set<i32>(self.repr, used, value);
