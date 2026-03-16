@@ -455,9 +455,7 @@ async fn run_bulk(opts: &DumpOptions, template: &str) {
     for input in &opts.inputs {
         // Skip files with expected compilation failures: compile_error or TODO tests.
         if let Ok(source) = fs::read_to_string(input) {
-            let data = source
-                .find("\n__DATA__\n")
-                .map_or("", |p| &source[p..]);
+            let data = source.find("\n__DATA__\n").map_or("", |p| &source[p..]);
             if data.contains("\"TODO\"") || data.contains("\"compile_error\"") {
                 let name = Path::new(input)
                     .file_stem()
@@ -579,8 +577,8 @@ async fn generate_output_params(
     // paths resolve correctly: the loader builds paths from the module
     // filename, and the host joins with base_path — doubling only happens
     // when they disagree on relative vs absolute.
-    let abs_path = fs::canonicalize(input)
-        .map_err(|e| format!("Error resolving '{}': {e}", input))?;
+    let abs_path =
+        fs::canonicalize(input).map_err(|e| format!("Error resolving '{input}': {e}"))?;
     let abs_filename = abs_path.to_string_lossy();
     let path = abs_path.as_path();
 
@@ -662,15 +660,7 @@ async fn generate_output_params(
 }
 
 async fn run_single(opts: &DumpOptions, input: &str) {
-    let abs_path = match fs::canonicalize(input) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("Error resolving '{}': {e}", input);
-            process::exit(1);
-        }
-    };
-    let abs_filename = abs_path.to_string_lossy();
-    let path = abs_path.as_path();
+    let path = Path::new(input);
 
     // Read source file
     let source = match fs::read_to_string(path) {
@@ -681,7 +671,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         }
     };
 
-    // Get base path for relative imports (absolute, matching abs_filename)
+    // Get base path for relative imports
     let base_path = path
         .parent()
         .map(std::path::Path::to_path_buf)
@@ -691,12 +681,11 @@ async fn run_single(opts: &DumpOptions, input: &str) {
     // Extract target world from __DATA__ section if present
     let target_world = extract_world_from_data_section(&source);
 
-    // Dump using async API with target world.
-    // Pass the absolute filename so the loader builds absolute include paths.
+    // Dump using async API with target world
     let result = match wado_compiler::dump_with_host_and_world(
         &source,
         &host,
-        Some(&abs_filename),
+        Some(input),
         opts.opt_level,
         target_world.as_deref(),
         opts.inline_threshold,

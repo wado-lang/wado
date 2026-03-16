@@ -609,9 +609,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         }
 
         // Validate target world (test world is synthetic, not in registry)
-        if !project.is_test_world()
-            && project.world_registry.get(&project.target_world).is_none()
-        {
+        if !project.is_test_world() && project.world_registry.get(&project.target_world).is_none() {
             let _ = logger.error(compiler_host::Diagnostic {
                 severity: compiler_host::Severity::Error,
                 code: compiler_host::Code::UnsupportedFeature,
