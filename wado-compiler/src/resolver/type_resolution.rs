@@ -39,9 +39,12 @@ fn substitute_type_params(ty: &Type, params: &[String], args: &[Type]) -> Type {
         Type::MutReference(inner) => {
             Type::MutReference(Box::new(substitute_type_params(inner, params, args)))
         }
-        Type::Tuple(elems) => {
-            Type::Tuple(elems.iter().map(|e| substitute_type_params(e, params, args)).collect())
-        }
+        Type::Tuple(elems) => Type::Tuple(
+            elems
+                .iter()
+                .map(|e| substitute_type_params(e, params, args))
+                .collect(),
+        ),
         _ => ty.clone(),
     }
 }
