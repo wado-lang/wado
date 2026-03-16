@@ -678,11 +678,11 @@ The check skips any impl block whose containing module is `Core`, `Wasi`, or `Re
 
 For each local impl block with a foreign trait, `check_orphan_rfc2451` walks the sequence `[self_type, trait_arg_1, …]` left-to-right and classifies each position via `classify_position`:
 
-| `PositionKind` | Meaning |
-| -------------- | ------- |
-| `LocalType` | Outermost type constructor is defined in a local module |
-| `ForeignType` | Outermost type constructor is foreign (or a tuple / function type) |
-| `UncoveredTypeParam` | The position is a bare `impl<T>` type parameter |
+| `PositionKind`       | Meaning                                                            |
+| -------------------- | ------------------------------------------------------------------ |
+| `LocalType`          | Outermost type constructor is defined in a local module            |
+| `ForeignType`        | Outermost type constructor is foreign (or a tuple / function type) |
+| `UncoveredTypeParam` | The position is a bare `impl<T>` type parameter                    |
 
 `&T` and `&mut T` are fundamental: `classify_position` recurses into the inner type, so `&LocalType` yields `LocalType`.
 

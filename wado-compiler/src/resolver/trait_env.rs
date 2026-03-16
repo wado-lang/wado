@@ -321,19 +321,32 @@ fn get_type_name_static(ty: &ast::Type) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{GenericParam, ImplBlock, NamedType, GenericType};
+    use crate::ast::{GenericParam, GenericType, ImplBlock, NamedType};
     use crate::token::Span;
 
     fn dummy_span() -> Span {
-        Span { start: 0, end: 0, line: 1, column: 1, end_line: 1 }
+        Span {
+            start: 0,
+            end: 0,
+            line: 1,
+            column: 1,
+            end_line: 1,
+        }
     }
 
     fn named(name: &str) -> Type {
-        Type::Named(NamedType { name: name.to_string(), span: dummy_span() })
+        Type::Named(NamedType {
+            name: name.to_string(),
+            span: dummy_span(),
+        })
     }
 
     fn generic(name: &str, args: Vec<Type>) -> Type {
-        Type::Generic(GenericType { name: name.to_string(), args, span: dummy_span() })
+        Type::Generic(GenericType {
+            name: name.to_string(),
+            args,
+            span: dummy_span(),
+        })
     }
 
     fn ref_type(inner: Type) -> Type {
@@ -345,13 +358,23 @@ mod tests {
     }
 
     fn type_param(name: &str) -> GenericParam {
-        GenericParam { name: name.to_string(), bounds: vec![], default: None, span: dummy_span() }
+        GenericParam {
+            name: name.to_string(),
+            bounds: vec![],
+            default: None,
+            span: dummy_span(),
+        }
     }
 
     fn make_type_decl_index(local_names: &[&str]) -> IndexMap<String, ModuleSource> {
         let mut m = IndexMap::default();
         for &name in local_names {
-            m.insert(name.to_string(), ModuleSource::EntryPoint { filename: "test.wado".to_string() });
+            m.insert(
+                name.to_string(),
+                ModuleSource::EntryPoint {
+                    filename: "test.wado".to_string(),
+                },
+            );
         }
         m
     }
@@ -359,7 +382,15 @@ mod tests {
     fn make_decl_index(local_trait_names: &[&str]) -> TraitDeclIndex {
         let mut m = TraitDeclIndex::default();
         for (i, &name) in local_trait_names.iter().enumerate() {
-            m.insert(name.to_string(), (ModuleSource::EntryPoint { filename: "test.wado".to_string() }, i));
+            m.insert(
+                name.to_string(),
+                (
+                    ModuleSource::EntryPoint {
+                        filename: "test.wado".to_string(),
+                    },
+                    i,
+                ),
+            );
         }
         m
     }
@@ -367,7 +398,15 @@ mod tests {
     fn make_foreign_decl_index(foreign_trait_names: &[&str]) -> TraitDeclIndex {
         let mut m = TraitDeclIndex::default();
         for (i, &name) in foreign_trait_names.iter().enumerate() {
-            m.insert(name.to_string(), (ModuleSource::Core { name: "prelude".to_string() }, i));
+            m.insert(
+                name.to_string(),
+                (
+                    ModuleSource::Core {
+                        name: "prelude".to_string(),
+                    },
+                    i,
+                ),
+            );
         }
         m
     }
@@ -389,27 +428,37 @@ mod tests {
 
     #[test]
     fn test_is_user_local_entry_point() {
-        assert!(is_user_local(&ModuleSource::EntryPoint { filename: "main.wado".to_string() }));
+        assert!(is_user_local(&ModuleSource::EntryPoint {
+            filename: "main.wado".to_string()
+        }));
     }
 
     #[test]
     fn test_is_user_local_local_path() {
-        assert!(is_user_local(&ModuleSource::Local { path: "./lib.wado".to_string() }));
+        assert!(is_user_local(&ModuleSource::Local {
+            path: "./lib.wado".to_string()
+        }));
     }
 
     #[test]
     fn test_is_user_local_core_is_foreign() {
-        assert!(!is_user_local(&ModuleSource::Core { name: "prelude".to_string() }));
+        assert!(!is_user_local(&ModuleSource::Core {
+            name: "prelude".to_string()
+        }));
     }
 
     #[test]
     fn test_is_user_local_wasi_is_foreign() {
-        assert!(!is_user_local(&ModuleSource::Wasi { interface: "cli".to_string() }));
+        assert!(!is_user_local(&ModuleSource::Wasi {
+            interface: "cli".to_string()
+        }));
     }
 
     #[test]
     fn test_is_user_local_remote_is_foreign() {
-        assert!(!is_user_local(&ModuleSource::Remote { url: "https://example.com/lib.wado".to_string() }));
+        assert!(!is_user_local(&ModuleSource::Remote {
+            url: "https://example.com/lib.wado".to_string()
+        }));
     }
 
     // --- classify_position ---
@@ -417,19 +466,28 @@ mod tests {
     #[test]
     fn test_classify_local_named_type() {
         let tdx = make_type_decl_index(&["MyError"]);
-        assert!(matches!(classify_position(&named("MyError"), &[], &tdx), PositionKind::LocalType));
+        assert!(matches!(
+            classify_position(&named("MyError"), &[], &tdx),
+            PositionKind::LocalType
+        ));
     }
 
     #[test]
     fn test_classify_foreign_named_type() {
         let tdx = make_type_decl_index(&[]);
-        assert!(matches!(classify_position(&named("String"), &[], &tdx), PositionKind::ForeignType));
+        assert!(matches!(
+            classify_position(&named("String"), &[], &tdx),
+            PositionKind::ForeignType
+        ));
     }
 
     #[test]
     fn test_classify_primitive_is_foreign() {
         let tdx = make_type_decl_index(&[]);
-        assert!(matches!(classify_position(&named("i32"), &[], &tdx), PositionKind::ForeignType));
+        assert!(matches!(
+            classify_position(&named("i32"), &[], &tdx),
+            PositionKind::ForeignType
+        ));
     }
 
     #[test]
@@ -446,7 +504,10 @@ mod tests {
         // LocalType<T> — head is local regardless of args
         let tdx = make_type_decl_index(&["LocalType"]);
         let ty = generic("LocalType", vec![named("T")]);
-        assert!(matches!(classify_position(&ty, &["T".to_string()], &tdx), PositionKind::LocalType));
+        assert!(matches!(
+            classify_position(&ty, &["T".to_string()], &tdx),
+            PositionKind::LocalType
+        ));
     }
 
     #[test]
@@ -454,7 +515,10 @@ mod tests {
         // Array<T> — head Array is foreign
         let tdx = make_type_decl_index(&[]);
         let ty = generic("Array", vec![named("T")]);
-        assert!(matches!(classify_position(&ty, &["T".to_string()], &tdx), PositionKind::ForeignType));
+        assert!(matches!(
+            classify_position(&ty, &["T".to_string()], &tdx),
+            PositionKind::ForeignType
+        ));
     }
 
     #[test]
@@ -491,7 +555,10 @@ mod tests {
         // Tuple types have no single named head → foreign
         let tdx = make_type_decl_index(&["MyStruct"]);
         let ty = Type::Tuple(vec![named("MyStruct"), named("i32")]);
-        assert!(matches!(classify_position(&ty, &[], &tdx), PositionKind::ForeignType));
+        assert!(matches!(
+            classify_position(&ty, &[], &tdx),
+            PositionKind::ForeignType
+        ));
     }
 
     // --- check_orphan_rfc2451 ---
@@ -516,7 +583,11 @@ mod tests {
     fn test_rfc2451_local_in_trait_arg_allowed() {
         // impl From<MyError> for String → T0=String(foreign), T1=MyError(local) → allowed
         let tdx = make_type_decl_index(&["MyError"]);
-        let ib = impl_block(vec![], generic("From", vec![named("MyError")]), named("String"));
+        let ib = impl_block(
+            vec![],
+            generic("From", vec![named("MyError")]),
+            named("String"),
+        );
         assert!(check_orphan_rfc2451(&ib, &tdx));
     }
 
@@ -532,7 +603,11 @@ mod tests {
     fn test_rfc2451_uncovered_param_before_local_in_trait_arg_forbidden() {
         // impl<T> From<T> for String → T0=String(foreign), T1=T(uncovered) → forbidden
         let tdx = make_type_decl_index(&[]);
-        let ib = impl_block(vec![type_param("T")], generic("From", vec![named("T")]), named("String"));
+        let ib = impl_block(
+            vec![type_param("T")],
+            generic("From", vec![named("T")]),
+            named("String"),
+        );
         assert!(!check_orphan_rfc2451(&ib, &tdx));
     }
 
@@ -574,7 +649,11 @@ mod tests {
     fn test_rfc2451_local_self_before_uncovered_param_in_trait_arg() {
         // impl<T> From<T> for LocalType → T0=LocalType(local!) → allowed before reaching T1=T
         let tdx = make_type_decl_index(&["LocalType"]);
-        let ib = impl_block(vec![type_param("T")], generic("From", vec![named("T")]), named("LocalType"));
+        let ib = impl_block(
+            vec![type_param("T")],
+            generic("From", vec![named("T")]),
+            named("LocalType"),
+        );
         assert!(check_orphan_rfc2451(&ib, &tdx));
     }
 }
