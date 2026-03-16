@@ -283,7 +283,9 @@ given Conversion[Int, String] = _.toString
 
 ### What Went Wrong
 
-Scala's implicit conversions are widely considered the language's biggest design mistake:
+Scala's implicit conversions are widely considered the language's biggest design mistake.
+Martin Odersky himself called them "evil." The `implicit` keyword was overloaded for three
+distinct features (arguments, conversions, extensions), confusing beginners and experts alike:
 
 1. **Invisible behavior**: Conversions happen silently with no syntactic marker. Reading code
    reveals no hint that a conversion is occurring.
@@ -382,9 +384,12 @@ class MyString {
 3. **The `explicit` keyword** was added precisely because implicit conversions caused too many
    bugs. Modern C++ style guidelines recommend making all single-argument constructors
    `explicit` by default.
-4. **Performance**: Temporary objects created by implicit conversions are a hidden cost.
+4. **The Safe Bool Problem**: `operator bool()` allows implicit conversion to `int` via
+   standard promotion, enabling nonsensical code like `obj << 1` or `int n = myStream`.
+   Before C++11, the workaround `operator void*()` allowed `delete std::cout` to compile.
+5. **Performance**: Temporary objects created by implicit conversions are a hidden cost.
 
-Google's C++ style guide and many corporate guidelines forbid implicit conversions entirely.
+Google's C++ style guide and the C++ Core Guidelines forbid implicit conversions by default.
 
 ### Lessons for Wado
 
@@ -483,22 +488,39 @@ Conversions are explicit at the call site: `float(celsius)`, `int(celsius)`, `st
 
 ---
 
-## Zig — @as and Explicit Philosophy
+## Zig — Separated Conversion Builtins
 
 ### Design
 
-Zig uses `@as` for explicit type coercion and has a very limited set of implicit coercions
-(mainly for comptime-known values):
+Zig uses distinct builtins for different conversion kinds:
+
+- **`@as(T, x)`** — safe, lossless coercion (e.g., `u8` → `u32`)
+- **`@truncate(x)`** — explicit bit-dropping (narrowing with silent data loss)
+- **`@intCast(x)`** — checked narrowing (panics on overflow in safe builds)
 
 ```zig
-const x: u32 = @as(u32, some_u16);
+const x: u32 = @as(u32, some_u16);      // safe widening
+const y: u8 = @truncate(some_u32);       // explicit: drops high bits
+const z: u8 = @intCast(some_u32);        // checked: panics if > 255
 ```
 
-### Philosophy
+### Strengths
 
-Zig follows Go's approach of minimal implicit behavior, preferring explicit conversions. The
-language deliberately avoids traits/interfaces for conversion, relying on explicit function
-calls.
+- Each conversion kind has its own named builtin — code is greppable and auditable.
+- `@as` only works for guaranteed-safe coercions; unsafe casts require a different builtin.
+- Forces the programmer to choose explicitly: silent data loss vs. checked conversion.
+- Follows Zig's "no hidden control flow" and "favor reading over writing" principles.
+
+### Weaknesses
+
+- Verbose for arithmetic mixing different integer sizes.
+- No user-defined conversion mechanism (no traits/protocols).
+
+### Relevance to Wado
+
+Zig's approach of **naming each conversion kind separately** is worth considering. Rather than
+one `From` trait for all conversions, Wado could distinguish lossless widening (automatic),
+checked narrowing (explicit), and semantic conversion (trait-based).
 
 ---
 
@@ -624,6 +646,20 @@ Smart casts narrow types after `is` checks but don't perform value conversion.
    - `TryFrom<T>` — fallible value conversion (returns `Result`)
    - Compiler-provided `.into()` sugar that calls `From::from()`
 
+## Cross-Cutting Themes
+
+| Theme | Languages | Lesson |
+|-------|-----------|--------|
+| Implicit conversions cause bugs | C++, Scala 2, JavaScript | Every language with broad implicit conversion has regretted or constrained it |
+| Separate infallible from fallible | Rust, Haskell (Witch lib), Zig | Community converges on distinguishing "always works" from "might fail" |
+| Explicit is safer but verbose | Go, OCaml, Zig | Full explicitness trades ergonomics for clarity |
+| Literal coercion is the sweet spot | Go (untyped consts), Swift (ExpressibleBy), Zig (comptime), Wado | Literals molding to the target type is universally accepted as safe and ergonomic |
+| Smart/flow-sensitive casts | Kotlin | Compiler-driven narrowing after type checks is well-loved and low-risk |
+| Trait-based conversion (user-extensible) | Rust, Haskell, Swift | Gives users the mechanism without the implicit danger |
+| Name each conversion kind | Zig (`@as`/`@truncate`/`@intCast`) | Separating safe widening, checked narrowing, and lossy truncation aids auditability |
+
+---
+
 ## References
 
 - [RFC 529: Conversion Traits](https://rust-lang.github.io/rfcs/0529-conversion-traits.html)
@@ -639,3 +675,9 @@ Smart casts narrow types after `is` checks but don't perform value conversion.
 - [Rust API Design: AsRef, Into, Cow](https://www.philipdaniels.com/blog/2019/rust-api-design/)
 - ["From & Into Confusion — Why Do We Need Both?"](https://users.rust-lang.org/t/from-into-confusion-why-do-we-need-both/80181) — Rust Users Forum
 - [Implicit Numeric Widening Proposal](https://internals.rust-lang.org/t/implicit-numeric-widening-coercion-proposal/23660) — Rust Internals
+- [Cast Haskell Values with Witch](https://taylor.fausak.me/2021/07/13/witch/) — Rust-inspired From/TryFrom for Haskell
+- [Swift Evolution SE-0115: Rename ExpressibleBy Protocols](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0115-literal-syntax-protocols.md)
+- [C++ Explicit Conversion Operators (N2333)](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2007/n2333.html)
+- [Zig's Integer Casting for C Programmers](https://www.lagerdata.com/articles/an-intro-to-zigs-integer-casting-for-c-programmers)
+- [Kotlin Type Checks and Casts](https://kotlinlang.org/docs/typecasts.html)
+- ["Does From Only Exist Because of the Orphan Rule?"](https://users.rust-lang.org/t/does-from-only-exist-because-of-the-orphan-rule/98264) — Rust Users Forum
