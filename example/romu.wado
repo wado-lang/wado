@@ -13,7 +13,7 @@ struct RomuState {
 
 // Rotate left for u64
 fn rotl(d: u64, lrot: u64) -> u64 {
-    return (d << lrot) | (d >> (64 as u64 - lrot));
+    return d << lrot | d >> 64 as u64 - lrot;
 }
 
 impl RomuState {
@@ -24,21 +24,21 @@ impl RomuState {
 
         s = s + 0x9E3779B97F4A7C15 as u64;
         let mut z = s;
-        z = (z ^ (z >> 30 as u64)) * 0xBF58476D1CE4E5B9 as u64;
-        z = (z ^ (z >> 27 as u64)) * 0x94D049BB133111EB as u64;
-        let x = z ^ (z >> 31 as u64);
+        z = (z ^ z >> 30 as u64) * 0xBF58476D1CE4E5B9 as u64;
+        z = (z ^ z >> 27 as u64) * 0x94D049BB133111EB as u64;
+        let x = z ^ z >> 31 as u64;
 
         s = s + 0x9E3779B97F4A7C15 as u64;
         z = s;
-        z = (z ^ (z >> 30 as u64)) * 0xBF58476D1CE4E5B9 as u64;
-        z = (z ^ (z >> 27 as u64)) * 0x94D049BB133111EB as u64;
-        let y = z ^ (z >> 31 as u64);
+        z = (z ^ z >> 30 as u64) * 0xBF58476D1CE4E5B9 as u64;
+        z = (z ^ z >> 27 as u64) * 0x94D049BB133111EB as u64;
+        let y = z ^ z >> 31 as u64;
 
         s = s + 0x9E3779B97F4A7C15 as u64;
         z = s;
-        z = (z ^ (z >> 30 as u64)) * 0xBF58476D1CE4E5B9 as u64;
-        z = (z ^ (z >> 27 as u64)) * 0x94D049BB133111EB as u64;
-        let z_final = z ^ (z >> 31 as u64);
+        z = (z ^ z >> 30 as u64) * 0xBF58476D1CE4E5B9 as u64;
+        z = (z ^ z >> 27 as u64) * 0x94D049BB133111EB as u64;
+        let z_final = z ^ z >> 31 as u64;
 
         return RomuState { x, y, z: z_final };
     }

@@ -501,7 +501,9 @@ impl String {
 }
 
 impl Default for String {
-    pub fn default() -> String { return ""; }
+    pub fn default() -> String {
+        return "";
+    }
 }
 
 impl String {
@@ -603,8 +605,8 @@ impl String {
             let b0_opt: Option<u8> = match pending {
                 Some(b) => {
                     pending = null;
-                    Option::Some(b)
-                }
+                    Option::Some(b);
+                },
                 None => iter.next(),
             };
             if let Some(b0) = b0_opt {
@@ -630,7 +632,7 @@ impl String {
                 } else if b0 < 0xF0 {
                     // 3-byte sequence: 1110xxxx 10xxxxxx 10xxxxxx
                     if let Some(b1) = iter.next() {
-                        if b1 < 0x80 || b1 > 0xBF || (b0 == 0xE0 && b1 < 0xA0) || (b0 == 0xED && b1 >= 0xA0) {
+                        if b1 < 0x80 || b1 > 0xBF || b0 == 0xE0 && b1 < 0xA0 || b0 == 0xED && b1 >= 0xA0 {
                             builder.append_char('\uFFFD');
                             pending = Option::Some(b1);
                         } else if let Some(b2) = iter.next() {
@@ -650,7 +652,7 @@ impl String {
                 } else if b0 < 0xF5 {
                     // 4-byte sequence: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
                     if let Some(b1) = iter.next() {
-                        if b1 < 0x80 || b1 > 0xBF || (b0 == 0xF0 && b1 < 0x90) || (b0 == 0xF4 && b1 > 0x8F) {
+                        if b1 < 0x80 || b1 > 0xBF || b0 == 0xF0 && b1 < 0x90 || b0 == 0xF4 && b1 > 0x8F {
                             builder.append_char('\uFFFD');
                             pending = Option::Some(b1);
                         } else if let Some(b2) = iter.next() {

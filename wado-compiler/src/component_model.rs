@@ -26,12 +26,13 @@ fn wasi_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String
         .iter()
         .find(|a| a.name == "wasi")
         .and_then(|a| a.args.first())
-        .map(|s| {
+        .map(|arg| {
+            let s = arg.as_str();
             // Type-level attrs contain a `#` separator; case-level attrs do not
             if let Some(fragment) = s.split('#').nth(1) {
                 fragment.to_owned()
             } else {
-                s.clone()
+                s.to_owned()
             }
         })
         .unwrap_or_else(|| panic!("missing #[wasi] attribute for WASI name: {wado_name}"))
@@ -42,7 +43,7 @@ fn extract_wasi_params_attr(attrs: &[crate::ast::Attribute]) -> Vec<String> {
     attrs
         .iter()
         .find(|a| a.name == "wasi_params")
-        .map(|a| a.args.clone())
+        .map(|a| a.args.iter().map(|arg| arg.as_str().to_string()).collect())
         .unwrap_or_default()
 }
 
@@ -336,7 +337,7 @@ impl WasiRegistry {
                     .iter()
                     .find(|a| a.name == "wasi")
                     .and_then(|a| a.args.first())
-                    .and_then(|s| s.split('#').next())
+                    .and_then(|arg| arg.as_str().split('#').next())
                     .unwrap_or("")
                     .to_string();
                 self.resources
@@ -355,7 +356,7 @@ impl WasiRegistry {
                     .iter()
                     .find(|a| a.name == "wasi")
                     .and_then(|a| a.args.first())
-                    .and_then(|s| s.split('#').next())
+                    .and_then(|arg| arg.as_str().split('#').next())
                     .unwrap_or("")
                     .to_string();
                 let fields: Vec<(String, Type)> = struct_def
@@ -420,8 +421,8 @@ impl WasiRegistry {
                     .iter()
                     .find(|a| a.name == "wasi")
                     .and_then(|a| a.args.first())
-                    .and_then(|s| s.split('#').next())
-                    .map(std::string::ToString::to_string);
+                    .and_then(|arg| arg.as_str().split('#').next())
+                    .map(str::to_string);
 
                 // Store by Wado name for backward compatibility
                 // but also store by interface path for interface-specific lookups
@@ -459,8 +460,8 @@ impl WasiRegistry {
                     .iter()
                     .find(|a| a.name == "wasi")
                     .and_then(|a| a.args.first())
-                    .and_then(|s| s.split('#').next())
-                    .map(std::string::ToString::to_string);
+                    .and_then(|arg| arg.as_str().split('#').next())
+                    .map(str::to_string);
                 if let Some(path) = interface_path {
                     let full_key = format!("{path}#{}", variant_def.name);
                     self.variants.insert(full_key, (cm_name, cases));

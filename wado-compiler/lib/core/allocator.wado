@@ -21,17 +21,9 @@ fn grow_memory(new_offset: i32) {
     let deficit = new_offset - current_bytes;
     // Normal growth: double current size, capped at 16 MB
     let sixteen_mb = 16 * 1024 * 1024;
-    let normal_grow = if current_bytes < sixteen_mb {
-        current_bytes
-    } else {
-        sixteen_mb
-    };
+    let normal_grow = if current_bytes < sixteen_mb { current_bytes } else { sixteen_mb };
     // If deficit exceeds normal growth, round up to next power of two
-    let grow_bytes = if deficit > normal_grow {
-        1 << (32 - builtin::i32_clz(deficit - 1))
-    } else {
-        normal_grow
-    };
+    let grow_bytes = if deficit > normal_grow { 1 << 32 - builtin::i32_clz(deficit - 1) } else { normal_grow };
     let grow_pages = (grow_bytes + 65535) / 65536;
     builtin::memory_grow(grow_pages);
 }

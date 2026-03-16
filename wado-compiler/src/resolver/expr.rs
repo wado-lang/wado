@@ -1512,6 +1512,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     Self::collect_mutated_vars_stmt(stmt, result);
                 }
             }
+            ast::Stmt::Match(m) => {
+                Self::collect_mutated_vars(&m.expr, result);
+                for arm in &m.arms {
+                    if let Some(guard) = &arm.guard {
+                        Self::collect_mutated_vars(guard, result);
+                    }
+                    Self::collect_mutated_vars(&arm.body, result);
+                }
+            }
             _ => {}
         }
     }

@@ -74,7 +74,9 @@ format:
 
 .PHONY: format-wado
 format-wado:
-	cargo run --bin wado -- format -w $$(grep -L '"compile_error"' wado-compiler/tests/fixtures/**/*.wado)
+	cargo run --bin wado -- format -w \
+		$$(grep -L '"compile_error"' wado-compiler/tests/fixtures/**/*.wado) \
+		$$(find wado-compiler/lib example benchmark wasm-size -name '*.wado')
 
 .PHONY: update-golden-fixtures
 update-golden-fixtures:

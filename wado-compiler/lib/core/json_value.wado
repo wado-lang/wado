@@ -44,27 +44,35 @@ impl Eq for Value {
             String(s1) => match other { String(s2) => *s1 == *s2, _ => false },
             Array(a1) => match other {
                 Array(a2) => {
-                    if a1.len() != a2.len() { return false; }
+                    if a1.len() != a2.len() {
+                        return false;
+                    }
                     let mut i = 0;
                     while i < a1.len() {
-                        if !(a1[i] == a2[i]) { return false; }
+                        if !(a1[i] == a2[i]) {
+                            return false;
+                        }
                         i += 1;
                     }
-                    true
+                    true;
                 },
                 _ => false,
             },
             Object(m1) => match other {
                 Object(m2) => {
-                    if m1.len() != m2.len() { return false; }
+                    if m1.len() != m2.len() {
+                        return false;
+                    }
                     for let [k, v] of m1.entries() {
                         if let Some(other_v) = m2.get(k) {
-                            if !(v == other_v) { return false; }
+                            if !(v == other_v) {
+                                return false;
+                            }
                         } else {
                             return false;
                         }
                     }
-                    true
+                    true;
                 },
                 _ => false,
             },
@@ -89,7 +97,7 @@ impl Serialize for Value {
                                 return Result::<(), SerializeError>::Err(e);
                             }
                         }
-                        seq.end()
+                        seq.end();
                     },
                     Err(e) => Result::<(), SerializeError>::Err(e),
                 }
@@ -108,7 +116,7 @@ impl Serialize for Value {
                                 return Result::<(), SerializeError>::Err(e);
                             }
                         }
-                        m.end()
+                        m.end();
                     },
                     Err(e) => Result::<(), SerializeError>::Err(e),
                 }
@@ -117,7 +125,8 @@ impl Serialize for Value {
     }
 }
 
-struct ValueVisitor {}
+struct ValueVisitor {
+}
 
 impl Visitor for ValueVisitor {
     type Value = Value;
@@ -144,7 +153,9 @@ impl Visitor for ValueVisitor {
             let next: Result<Option<Value>, DeserializeError> = seq.next_element::<Value>();
             match next {
                 Ok(opt) => match opt {
-                    Some(item) => { items.append(item); },
+                    Some(item) => {
+                        items.append(item);
+                    },
                     None => {
                         let end_r = seq.end();
                         if let Err(e) = end_r {
@@ -153,7 +164,9 @@ impl Visitor for ValueVisitor {
                         return Result::<Value, DeserializeError>::Ok(Value::Array(items));
                     },
                 },
-                Err(e) => { return Result::<Value, DeserializeError>::Err(e); },
+                Err(e) => {
+                    return Result::<Value, DeserializeError>::Err(e);
+                },
             }
         }
     }
@@ -167,8 +180,12 @@ impl Visitor for ValueVisitor {
                     Some(key) => {
                         let val_r: Result<Value, DeserializeError> = map.next_value::<Value>();
                         match val_r {
-                            Ok(val) => { obj[key] = val; },
-                            Err(e) => { return Result::<Value, DeserializeError>::Err(e); },
+                            Ok(val) => {
+                                obj[key] = val;
+                            },
+                            Err(e) => {
+                                return Result::<Value, DeserializeError>::Err(e);
+                            },
                         }
                     },
                     None => {
@@ -179,7 +196,9 @@ impl Visitor for ValueVisitor {
                         return Result::<Value, DeserializeError>::Ok(Value::Object(obj));
                     },
                 },
-                Err(e) => { return Result::<Value, DeserializeError>::Err(e); },
+                Err(e) => {
+                    return Result::<Value, DeserializeError>::Err(e);
+                },
             }
         }
     }

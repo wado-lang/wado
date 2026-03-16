@@ -17,8 +17,8 @@ export fn run() with Stdout, MonotonicClock {
     let t0 = MonotonicClock::now();
 
     for let mut i = 0; i < n; i += 1 {
-        state = (state * 1103515245 + 12345) & 0x7FFFFFFF;
-        let x = (state as f64) / 2147483648.0;
+        state = state * 1103515245 + 12345 & 0x7FFFFFFF;
+        let x = state as f64 / 2147483648.0;
         let s = `{x:0.6f}`;
         total_bytes += s.len() as u64;
         for let b of s.bytes() {

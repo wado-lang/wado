@@ -51,8 +51,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         for (index, field) in struct_decl.fields.iter().enumerate() {
             let type_id = self.resolve_type(&field.ty);
             let serde_rename = field.attrs.iter().find_map(|a| {
-                if a.name == "serde" && a.args.first().is_some_and(|s| s == "rename") {
-                    a.args.get(1).cloned()
+                if a.name == "serde" {
+                    a.kv_value("rename").map(str::to_string)
                 } else {
                     None
                 }
@@ -60,7 +60,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let serde_default = field
                 .attrs
                 .iter()
-                .any(|a| a.name == "serde" && a.args.first().is_some_and(|s| s == "default"));
+                .any(|a| a.name == "serde" && a.has_arg("default"));
             fields.push(crate::tir::TirField {
                 name: field.name.clone(),
                 is_pub: field.is_pub,
@@ -90,8 +90,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         self.trait_ctx.type_params = old_type_params;
 
         let serde_rename_all = struct_decl.attrs.iter().find_map(|a| {
-            if a.name == "serde" && a.args.first().is_some_and(|s| s == "rename_all") {
-                a.args.get(1).cloned()
+            if a.name == "serde" {
+                a.kv_value("rename_all").map(str::to_string)
             } else {
                 None
             }
@@ -221,7 +221,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         attrs
             .iter()
             .find(|a| a.name == "export_name")
-            .and_then(|a| a.args.first().cloned())
+            .and_then(|a| a.args.first())
+            .map(|a| a.as_str().to_string())
     }
 
     /// Extract allocator tag from `#[allocator("...")]` attribute.
@@ -229,14 +230,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
         attrs
             .iter()
             .find(|a| a.name == "allocator")
-            .and_then(|a| a.args.first().cloned())
+            .and_then(|a| a.args.first())
+            .map(|a| a.as_str().to_string())
     }
 
     pub(super) fn extract_inline_hint(attrs: &[crate::ast::Attribute]) -> crate::tir::InlineHint {
         let Some(attr) = attrs.iter().find(|a| a.name == "inline") else {
             return crate::tir::InlineHint::Auto;
         };
-        match attr.args.first().map(String::as_str) {
+        match attr.args.first().map(super::super::ast::AttrArg::as_str) {
             Some("always") => crate::tir::InlineHint::Always,
             Some("never") => crate::tir::InlineHint::Never,
             None => crate::tir::InlineHint::Hint,

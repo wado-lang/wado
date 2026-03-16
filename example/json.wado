@@ -23,24 +23,22 @@ pub variant JsonValue {
 
 
 fn is_digit(b: u8) -> bool {
-    return b >= ('0' as u8) && b <= ('9' as u8);
+    return b >= '0' as u8 && b <= '9' as u8;
 }
 
 fn is_hex_digit(b: u8) -> bool {
-    return (b >= ('0' as u8) && b <= ('9' as u8))
-        || (b >= ('A' as u8) && b <= ('F' as u8))
-        || (b >= ('a' as u8) && b <= ('f' as u8));
+    return b >= '0' as u8 && b <= '9' as u8 || b >= 'A' as u8 && b <= 'F' as u8 || b >= 'a' as u8 && b <= 'f' as u8;
 }
 
 fn hex_to_i32(b: u8) -> i32 {
-    if b >= ('0' as u8) && b <= ('9' as u8) {
-        return (b as i32) - ('0' as i32);
+    if b >= '0' as u8 && b <= '9' as u8 {
+        return b as i32 - '0' as i32;
     }
-    if b >= ('A' as u8) && b <= ('F' as u8) {
-        return (b as i32) - ('A' as i32) + 10;
+    if b >= 'A' as u8 && b <= 'F' as u8 {
+        return b as i32 - 'A' as i32 + 10;
     }
-    if b >= ('a' as u8) && b <= ('f' as u8) {
-        return (b as i32) - ('a' as i32) + 10;
+    if b >= 'a' as u8 && b <= 'f' as u8 {
+        return b as i32 - 'a' as i32 + 10;
     }
     return -1;
 }
@@ -54,7 +52,7 @@ fn is_low_surrogate(cp: i32) -> bool {
 }
 
 fn surrogate_to_codepoint(high: i32, low: i32) -> i32 {
-    return ((high - 0xD800) * 0x400) + (low - 0xDC00) + 0x10000;
+    return (high - 0xD800) * 0x400 + (low - 0xDC00) + 0x10000;
 }
 
 
@@ -131,7 +129,7 @@ impl Parser {
 
     fn skip_whitespace(&mut self) {
         while let Some(b) = self.peek() {
-            if b == (' ' as u8) || b == ('\t' as u8) || b == ('\n' as u8) || b == ('\r' as u8) {
+            if b == ' ' as u8 || b == '\t' as u8 || b == '\n' as u8 || b == '\r' as u8 {
                 self.advance();
             } else {
                 break;
@@ -148,18 +146,18 @@ impl Parser {
 test "parser-from-bytes" {
     let bytes: Array<u8> = ['{' as u8, '}' as u8];
     let mut p = Parser::from_bytes(bytes);
-    assert p.peek() matches { Some(b) && b == ('{' as u8) };
+    assert p.peek() matches { Some(b) && b == '{' as u8 };
     p.advance();
-    assert p.peek() matches { Some(b) && b == ('}' as u8) };
+    assert p.peek() matches { Some(b) && b == '}' as u8 };
 }
 
 test "parser-peek-and-advance" {
     let mut p = Parser::new("abc");
-    assert p.peek() matches { Some(b) && b == ('a' as u8) };
+    assert p.peek() matches { Some(b) && b == 'a' as u8 };
     p.advance();
-    assert p.peek() matches { Some(b) && b == ('b' as u8) };
+    assert p.peek() matches { Some(b) && b == 'b' as u8 };
     p.advance();
-    assert p.peek() matches { Some(b) && b == ('c' as u8) };
+    assert p.peek() matches { Some(b) && b == 'c' as u8 };
     p.advance();
     assert p.peek() matches { None };
 }
@@ -167,7 +165,7 @@ test "parser-peek-and-advance" {
 test "parser-skip-whitespace" {
     let mut p = Parser::new("  \t\nabc");
     p.skip_whitespace();
-    assert p.peek() matches { Some(b) && b == ('a' as u8) };
+    assert p.peek() matches { Some(b) && b == 'a' as u8 };
 }
 
 test "parser-is-eof" {
@@ -228,40 +226,66 @@ impl Parser {
 
         // 2-byte: 110xxxxx 10xxxxxx
         if b0 < 0xE0 {
-            if self.pos + 1 >= self.bytes.len() { return -1; }
+            if self.pos + 1 >= self.bytes.len() {
+                return -1;
+            }
             let b1 = self.bytes[self.pos + 1] as i32;
-            if (b1 & 0xC0) != 0x80 { return -1; }
-            let cp = ((b0 & 0x1F) << 6) | (b1 & 0x3F);
-            if cp < 0x80 { return -1; }
+            if b1 & 0xC0 != 0x80 {
+                return -1;
+            }
+            let cp = (b0 & 0x1F) << 6 | b1 & 0x3F;
+            if cp < 0x80 {
+                return -1;
+            }
             self.pos += 2;
             return cp;
         }
 
         // 3-byte: 1110xxxx 10xxxxxx 10xxxxxx
         if b0 < 0xF0 {
-            if self.pos + 2 >= self.bytes.len() { return -1; }
+            if self.pos + 2 >= self.bytes.len() {
+                return -1;
+            }
             let b1 = self.bytes[self.pos + 1] as i32;
             let b2 = self.bytes[self.pos + 2] as i32;
-            if (b1 & 0xC0) != 0x80 { return -1; }
-            if (b2 & 0xC0) != 0x80 { return -1; }
-            let cp = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F);
-            if cp < 0x800 { return -1; }
-            if cp >= 0xD800 && cp <= 0xDFFF { return -1; }
+            if b1 & 0xC0 != 0x80 {
+                return -1;
+            }
+            if b2 & 0xC0 != 0x80 {
+                return -1;
+            }
+            let cp = (b0 & 0x0F) << 12 | (b1 & 0x3F) << 6 | b2 & 0x3F;
+            if cp < 0x800 {
+                return -1;
+            }
+            if cp >= 0xD800 && cp <= 0xDFFF {
+                return -1;
+            }
             self.pos += 3;
             return cp;
         }
 
         // 4-byte: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
         if b0 < 0xF8 {
-            if self.pos + 3 >= self.bytes.len() { return -1; }
+            if self.pos + 3 >= self.bytes.len() {
+                return -1;
+            }
             let b1 = self.bytes[self.pos + 1] as i32;
             let b2 = self.bytes[self.pos + 2] as i32;
             let b3 = self.bytes[self.pos + 3] as i32;
-            if (b1 & 0xC0) != 0x80 { return -1; }
-            if (b2 & 0xC0) != 0x80 { return -1; }
-            if (b3 & 0xC0) != 0x80 { return -1; }
-            let cp = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
-            if cp < 0x10000 || cp > 0x10FFFF { return -1; }
+            if b1 & 0xC0 != 0x80 {
+                return -1;
+            }
+            if b2 & 0xC0 != 0x80 {
+                return -1;
+            }
+            if b3 & 0xC0 != 0x80 {
+                return -1;
+            }
+            let cp = (b0 & 0x07) << 18 | (b1 & 0x3F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F;
+            if cp < 0x10000 || cp > 0x10FFFF {
+                return -1;
+            }
             self.pos += 4;
             return cp;
         }
@@ -369,7 +393,7 @@ impl Parser {
 
         // Handle negative
         if let Some(b) = self.peek() {
-            if b == ('-' as u8) {
+            if b == '-' as u8 {
                 self.advance();
             }
         }
@@ -387,30 +411,36 @@ impl Parser {
 
         // Integer part
         while let Some(b) = self.peek() {
-            if !is_digit(b) { break; }
+            if !is_digit(b) {
+                break;
+            }
             self.advance();
         }
 
         // Fractional part
-        if self.peek() matches { Some(b) && b == ('.' as u8) } {
+        if self.peek() matches { Some(b) && b == '.' as u8 } {
             self.advance();
             while let Some(b) = self.peek() {
-                if !is_digit(b) { break; }
+                if !is_digit(b) {
+                    break;
+                }
                 self.advance();
             }
         }
 
         // Exponent
         if let Some(e) = self.peek() {
-            if e == ('e' as u8) || e == ('E' as u8) {
+            if e == 'e' as u8 || e == 'E' as u8 {
                 self.advance();
                 if let Some(sign) = self.peek() {
-                    if sign == ('-' as u8) || sign == ('+' as u8) {
+                    if sign == '-' as u8 || sign == '+' as u8 {
                         self.advance();
                     }
                 }
                 while let Some(b) = self.peek() {
-                    if !is_digit(b) { break; }
+                    if !is_digit(b) {
+                        break;
+                    }
                     self.advance();
                 }
             }
@@ -521,36 +551,54 @@ impl Parser {
             let b = self.bytes[self.pos];
 
             // End of string
-            if b == ('"' as u8) {
+            if b == '"' as u8 {
                 self.advance();
                 return Option::<String>::Some(result);
             }
 
             // Escape sequence
-            if b == ('\\' as u8) {
+            if b == '\\' as u8 {
                 self.advance();
-                if self.is_eof() { return null; }
+                if self.is_eof() {
+                    return null;
+                }
                 let esc = self.bytes[self.pos];
                 self.advance();
 
-                if esc == ('"' as u8) { result.append_char('"'); }
-                else if esc == ('\\' as u8) { result.append_char('\\'); }
-                else if esc == ('/' as u8) { result.append_char('/'); }
-                else if esc == ('b' as u8) { result.append_char(char::from_u32_unchecked(0x08 as u32)); }
-                else if esc == ('f' as u8) { result.append_char(char::from_u32_unchecked(0x0C as u32)); }
-                else if esc == ('n' as u8) { result.append_char('\n'); }
-                else if esc == ('r' as u8) { result.append_char('\r'); }
-                else if esc == ('t' as u8) { result.append_char('\t'); }
-                else if esc == ('u' as u8) {
+                if esc == '"' as u8 {
+                    result.append_char('"');
+                } else if esc == '\\' as u8 {
+                    result.append_char('\\');
+                } else if esc == '/' as u8 {
+                    result.append_char('/');
+                } else if esc == 'b' as u8 {
+                    result.append_char(char::from_u32_unchecked(0x08 as u32));
+                } else if esc == 'f' as u8 {
+                    result.append_char(char::from_u32_unchecked(0x0C as u32));
+                } else if esc == 'n' as u8 {
+                    result.append_char('\n');
+                } else if esc == 'r' as u8 {
+                    result.append_char('\r');
+                } else if esc == 't' as u8 {
+                    result.append_char('\t');
+                } else if esc == 'u' as u8 {
                     let cp = self.parse_unicode_escape();
-                    if cp < 0 { return null; }
+                    if cp < 0 {
+                        return null;
+                    }
 
                     if is_high_surrogate(cp) {
                         // Expect \uXXXX for low surrogate
-                        if !self.expect_byte('\\' as u8) { return null; }
-                        if !self.expect_byte('u' as u8) { return null; }
+                        if !self.expect_byte('\\' as u8) {
+                            return null;
+                        }
+                        if !self.expect_byte('u' as u8) {
+                            return null;
+                        }
                         let low = self.parse_unicode_escape();
-                        if low < 0 || !is_low_surrogate(low) { return null; }
+                        if low < 0 || !is_low_surrogate(low) {
+                            return null;
+                        }
                         let full_cp = surrogate_to_codepoint(cp, low);
                         if let Some(c) = char::from_i32(full_cp) {
                             result.append_char(c);
@@ -559,12 +607,10 @@ impl Parser {
                         }
                     } else if is_low_surrogate(cp) {
                         return null;
+                    } else if let Some(c) = char::from_i32(cp) {
+                        result.append_char(c);
                     } else {
-                        if let Some(c) = char::from_i32(cp) {
-                            result.append_char(c);
-                        } else {
-                            return null;
-                        }
+                        return null;
                     }
                 } else {
                     return null;
@@ -572,7 +618,9 @@ impl Parser {
             } else {
                 // Raw UTF-8 byte: decode and validate
                 let cp = self.decode_utf8();
-                if cp < 0 { return null; }
+                if cp < 0 {
+                    return null;
+                }
                 result.append_char(char::from_u32_unchecked(cp as u32));
             }
         }
@@ -991,12 +1039,24 @@ impl Parser {
     fn parse_value(&mut self) -> Option<JsonValue> {
         self.skip_whitespace();
         if let Some(b) = self.peek() {
-            if b == ('n' as u8) { return self.parse_null(); }
-            if b == ('t' as u8) || b == ('f' as u8) { return self.parse_bool(); }
-            if b == ('"' as u8) { return self.parse_string(); }
-            if b == ('[' as u8) { return self.parse_array(); }
-            if b == ('{' as u8) { return self.parse_object(); }
-            if is_digit(b) || b == ('-' as u8) { return self.parse_number(); }
+            if b == 'n' as u8 {
+                return self.parse_null();
+            }
+            if b == 't' as u8 || b == 'f' as u8 {
+                return self.parse_bool();
+            }
+            if b == '"' as u8 {
+                return self.parse_string();
+            }
+            if b == '[' as u8 {
+                return self.parse_array();
+            }
+            if b == '{' as u8 {
+                return self.parse_object();
+            }
+            if is_digit(b) || b == '-' as u8 {
+                return self.parse_number();
+            }
         }
         return null;
     }
@@ -1107,7 +1167,9 @@ test "parse-document-with-unicode-keys" {
 }
 
 test "parse-document-multilingual" {
-    if let Some(v) = parse_json("{\"english\": \"hello\", \"日本語\": \"こんにちは\", \"한국어\": \"안녕\"}") {
+    if let Some(v) = parse_json(
+        "{\"english\": \"hello\", \"日本語\": \"こんにちは\", \"한국어\": \"안녕\"}",
+    ) {
         if let Obj(map) = v {
             assert map.len() == 3;
         } else {
@@ -1131,7 +1193,9 @@ test "parse-array-of-emoji" {
 }
 
 test "parse-nested-unicode" {
-    if let Some(v) = parse_json("{\"user\": {\"name\": \"田中\", \"emoji\": \"🎯\"}, \"tags\": [\"日本\", \"東京\"]}") {
+    if let Some(v) = parse_json(
+        "{\"user\": {\"name\": \"田中\", \"emoji\": \"🎯\"}, \"tags\": [\"日本\", \"東京\"]}",
+    ) {
         if let Obj(map) = v {
             assert map.len() == 2;
         } else {
@@ -1177,22 +1241,35 @@ fn escape_json_string(s: &String) -> String {
     result.append_char('"');
     for let c of s.chars() {
         let code = c as u32;
-        if c == '"' { result.append("\\\""); }
-        else if c == '\\' { result.append("\\\\"); }
-        else if c == '\n' { result.append("\\n"); }
-        else if c == '\r' { result.append("\\r"); }
-        else if c == '\t' { result.append("\\t"); }
-        else if code == 0x08 { result.append("\\b"); }
-        else if code == 0x0C { result.append("\\f"); }
-        else if code < 0x20 {
+        if c == '"' {
+            result.append("\\\"");
+        } else if c == '\\' {
+            result.append("\\\\");
+        } else if c == '\n' {
+            result.append("\\n");
+        } else if c == '\r' {
+            result.append("\\r");
+        } else if c == '\t' {
+            result.append("\\t");
+        } else if code == 0x08 {
+            result.append("\\b");
+        } else if code == 0x0C {
+            result.append("\\f");
+        } else if code < 0x20 {
             // Other control characters → \u00XX
             result.append("\\u00");
-            let hi = (code >> 4) & 0x0F;
+            let hi = code >> 4 & 0x0F;
             let lo = code & 0x0F;
-            if hi < 10 { result.append_char(char::from_u32_unchecked(('0' as u32) + hi)); }
-            else { result.append_char(char::from_u32_unchecked(('a' as u32) + hi - 10)); }
-            if lo < 10 { result.append_char(char::from_u32_unchecked(('0' as u32) + lo)); }
-            else { result.append_char(char::from_u32_unchecked(('a' as u32) + lo - 10)); }
+            if hi < 10 {
+                result.append_char(char::from_u32_unchecked('0' as u32 + hi));
+            } else {
+                result.append_char(char::from_u32_unchecked('a' as u32 + hi - 10));
+            }
+            if lo < 10 {
+                result.append_char(char::from_u32_unchecked('0' as u32 + lo));
+            } else {
+                result.append_char(char::from_u32_unchecked('a' as u32 + lo - 10));
+            }
         } else {
             result.append_char(c);
         }
@@ -1225,7 +1302,7 @@ pub fn stringify(value: &JsonValue) -> String {
                 result.append(stringify(&items[i]));
             }
             result.append_char(']');
-            result
+            result;
         },
         Obj(map) => {
             let mut result = String::with_capacity(32);
@@ -1241,7 +1318,7 @@ pub fn stringify(value: &JsonValue) -> String {
                 result.append(stringify(&val));
             }
             result.append_char('}');
-            result
+            result;
         },
     };
 }
@@ -1263,7 +1340,7 @@ fn stringify_at_level(value: &JsonValue, level: i32, indent_size: i32) -> String
         Str(s) => escape_json_string(&s),
         Arr(items) => {
             if items.len() == 0 {
-                "[]"
+                "[]";
             } else {
                 let mut result = String::with_capacity(64);
                 result.append("[\n");
@@ -1277,13 +1354,13 @@ fn stringify_at_level(value: &JsonValue, level: i32, indent_size: i32) -> String
                 }
                 result.append(make_indent(level, indent_size));
                 result.append_char(']');
-                result
+                result;
             }
         },
         Obj(map) => {
             let entries = map.entries();
             if entries.len() == 0 {
-                "{}"
+                "{}";
             } else {
                 let mut result = String::with_capacity(64);
                 result.append("{\n");
@@ -1300,7 +1377,7 @@ fn stringify_at_level(value: &JsonValue, level: i32, indent_size: i32) -> String
                 }
                 result.append(make_indent(level, indent_size));
                 result.append_char('}');
-                result
+                result;
             }
         },
     };

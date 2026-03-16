@@ -3,15 +3,15 @@
 // Converts AST back to canonical source code with comments.
 
 use crate::ast::{
-    AssertStmt, AssignExpr, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
-    ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, EffectDecl,
-    EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
-    Function, FunctionType, GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr,
-    Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr,
-    Module, Newtype, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr,
-    Stmt, StructDecl, StructField, StructLiteralExpr, TemplateStringExpr, TestDecl, TraitDecl,
-    TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
-    VariantDecl, WhileStmt, WorldDecl,
+    AssertStmt, AssignExpr, AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr,
+    CastExpr, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
+    EffectDecl, EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt,
+    ForStmt, Function, FunctionType, GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes,
+    IndexExpr, Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr,
+    MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind,
+    StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr, TemplateStringExpr,
+    TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl, UseItem,
+    UseItemSimple, VariantCase, VariantDecl, WhileStmt, WorldDecl,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::hashmap::IndexSet;
@@ -95,6 +95,9 @@ impl<'a> Unparser<'a> {
                 self.output.push(')');
             }
             self.output.push_str("]\n");
+            // Track the line so blank lines between inner attrs and the first
+            // item are preserved by emit_blank_lines_to.
+            self.last_source_line = attr.span.end_line();
         }
 
         for item in &module.items {
@@ -343,6 +346,25 @@ impl<'a> Unparser<'a> {
         self.unparse_type(&param.ty);
     }
 
+    fn unparse_attr_arg(&mut self, arg: &AttrArg) {
+        match arg {
+            AttrArg::Str(s) => {
+                self.output.push('"');
+                self.output.push_str(s);
+                self.output.push('"');
+            }
+            AttrArg::Ident(s) => {
+                self.output.push_str(s);
+            }
+            AttrArg::KeyValue(k, v) => {
+                self.output.push_str(k);
+                self.output.push_str(" = \"");
+                self.output.push_str(v);
+                self.output.push('"');
+            }
+        }
+    }
+
     fn unparse_attribute(&mut self, attr: &Attribute) {
         self.output.push_str("#[");
         self.output.push_str(&attr.name);
@@ -352,9 +374,7 @@ impl<'a> Unparser<'a> {
                 if i > 0 {
                     self.output.push_str(", ");
                 }
-                self.output.push('"');
-                self.output.push_str(arg);
-                self.output.push('"');
+                self.unparse_attr_arg(arg);
             }
             self.output.push(')');
         }
@@ -781,6 +801,12 @@ impl<'a> Unparser<'a> {
     fn unparse_trait(&mut self, t: &TraitDecl) {
         self.write_indent();
 
+        for attr in &t.attrs {
+            self.unparse_attribute(attr);
+            self.output.push('\n');
+            self.write_indent();
+        }
+
         if t.is_pub {
             self.output.push_str("pub ");
         }
@@ -800,6 +826,27 @@ impl<'a> Unparser<'a> {
             self.write_indent();
             self.output.push_str("type ");
             self.output.push_str(&assoc.name);
+            if !assoc.bounds.is_empty() {
+                self.output.push_str(": ");
+                for (j, bound) in assoc.bounds.iter().enumerate() {
+                    if j > 0 {
+                        self.output.push_str(" + ");
+                    }
+                    self.output.push_str(&bound.name);
+                    if !bound.assoc_types.is_empty() {
+                        self.output.push('<');
+                        for (k, ab) in bound.assoc_types.iter().enumerate() {
+                            if k > 0 {
+                                self.output.push_str(", ");
+                            }
+                            self.output.push_str(&ab.name);
+                            self.output.push_str(" = ");
+                            self.unparse_type(&ab.ty);
+                        }
+                        self.output.push('>');
+                    }
+                }
+            }
             self.output.push_str(";\n");
             self.last_source_line = assoc.span.end_line();
         }
@@ -948,6 +995,7 @@ impl<'a> Unparser<'a> {
         self.indent_level += 1;
 
         for imp in &w.imports {
+            self.emit_blank_lines_to(imp.span.line);
             self.write_indent();
             self.output.push_str("import ");
             self.output.push_str(&imp.effect_name);
@@ -963,9 +1011,11 @@ impl<'a> Unparser<'a> {
 
             self.write_indent();
             self.output.push_str("}\n");
+            self.last_source_line = imp.span.end_line();
         }
 
         for exp in &w.exports {
+            self.emit_blank_lines_to(exp.span.line);
             self.write_indent();
             self.output.push_str("export ");
             if exp.is_async {
@@ -1145,6 +1195,7 @@ impl<'a> Unparser<'a> {
             Stmt::For(f) => self.unparse_for(f),
             Stmt::ForOf(f) => self.unparse_for_of(f),
             Stmt::Loop(l) => self.unparse_loop(l),
+            Stmt::Match(m) => self.unparse_match_stmt(m),
             Stmt::Break(b) => self.unparse_break(b),
             Stmt::Continue(_) => self.unparse_continue(),
             Stmt::Assert(a) => self.unparse_assert(a),
@@ -1431,6 +1482,12 @@ impl<'a> Unparser<'a> {
         self.output.push_str("}\n");
     }
 
+    fn unparse_match_stmt(&mut self, m: &MatchExpr) {
+        self.write_indent();
+        self.unparse_match_multiline(m);
+        self.output.push('\n');
+    }
+
     fn unparse_break(&mut self, b: &BreakStmt) {
         self.write_indent();
         self.output.push_str("break");
@@ -1528,12 +1585,41 @@ impl<'a> Unparser<'a> {
         }
         self.output.push(']');
 
-        if !self.exceeds_width_since(snap) {
+        if !self.output[snap..].contains('\n') && !self.exceeds_width_since(snap) {
             return;
         }
 
-        // Rollback and format fill-style: pack elements onto lines up to MAX_LINE_WIDTH
+        // Rollback for multi-line formatting
         self.rollback(snap);
+
+        // Key-value list heuristic: if all elements are 2-element tuple literals,
+        // format as one entry per line (Wasm CM associative array pattern).
+        let is_kv_list = tuple_lit.elements.len() >= 2
+            && tuple_lit
+                .elements
+                .iter()
+                .all(|e| matches!(e, Expr::TupleLiteral(t) if t.elements.len() == 2));
+
+        if is_kv_list {
+            self.output.push('[');
+            self.indent_level += 1;
+            for (i, elem) in tuple_lit.elements.iter().enumerate() {
+                if i > 0 {
+                    self.output.push(',');
+                }
+                self.output.push('\n');
+                self.write_indent();
+                self.unparse_expr(elem);
+            }
+            self.output.push(',');
+            self.output.push('\n');
+            self.indent_level -= 1;
+            self.write_indent();
+            self.output.push(']');
+            return;
+        }
+
+        // Fill-style: pack elements onto lines up to MAX_LINE_WIDTH
         self.output.push('[');
         self.indent_level += 1;
         for (i, elem) in tuple_lit.elements.iter().enumerate() {
@@ -1589,6 +1675,20 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_binary(&mut self, b: &BinaryExpr) {
+        if matches!(b.op, BinaryOp::And | BinaryOp::Or) {
+            let snap = self.snapshot();
+            self.unparse_binary_inline(b);
+            if !self.output[snap..].contains('\n') && !self.exceeds_width_since(snap) {
+                return;
+            }
+            self.rollback(snap);
+            self.unparse_logical_chain_multiline(b);
+            return;
+        }
+        self.unparse_binary_inline(b);
+    }
+
+    fn unparse_binary_inline(&mut self, b: &BinaryExpr) {
         let needs_parens_left = needs_parens(&b.left, b.op, true);
         let needs_parens_right = needs_parens(&b.right, b.op, false);
 
@@ -1613,6 +1713,37 @@ impl<'a> Unparser<'a> {
         }
     }
 
+    fn unparse_logical_chain_multiline(&mut self, b: &BinaryExpr) {
+        let op_str = binary_op_str(b.op);
+        let parts = collect_logical_chain_binary(b);
+
+        let needs_left = needs_parens(parts[0], b.op, true);
+        if needs_left {
+            self.output.push('(');
+        }
+        self.unparse_expr(parts[0]);
+        if needs_left {
+            self.output.push(')');
+        }
+
+        for part in &parts[1..] {
+            self.output.push('\n');
+            self.indent_level += 1;
+            self.write_indent();
+            self.indent_level -= 1;
+            self.output.push_str(op_str);
+            self.output.push(' ');
+            let np = needs_parens(part, b.op, false);
+            if np {
+                self.output.push('(');
+            }
+            self.unparse_expr(part);
+            if np {
+                self.output.push(')');
+            }
+        }
+    }
+
     fn unparse_unary(&mut self, u: &UnaryExpr) {
         self.output.push_str(unary_op_str(u.op));
 
@@ -1630,7 +1761,11 @@ impl<'a> Unparser<'a> {
 
         let needs_parens = matches!(
             &u.expr,
-            Expr::Binary(_) | Expr::Assign(_) | Expr::CompoundAssign(_) | Expr::ComparisonChain(_)
+            Expr::Binary(_)
+                | Expr::Assign(_)
+                | Expr::CompoundAssign(_)
+                | Expr::ComparisonChain(_)
+                | Expr::Cast(_)
         );
         if needs_parens {
             self.output.push('(');
@@ -1656,7 +1791,18 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_comparison_chain(&mut self, chain: &ComparisonChainExpr) {
+        let first_needs_parens = matches!(&chain.first, Expr::Cast(_))
+            && chain
+                .comparisons
+                .first()
+                .is_some_and(|c| c.op == BinaryOp::Lt);
+        if first_needs_parens {
+            self.output.push('(');
+        }
         self.unparse_expr(&chain.first);
+        if first_needs_parens {
+            self.output.push(')');
+        }
         for cmp in &chain.comparisons {
             self.output.push(' ');
             self.output.push_str(binary_op_str(cmp.op));
@@ -1773,7 +1919,7 @@ impl<'a> Unparser<'a> {
             }
             self.output.push(')');
 
-            if args.len() > 1 && self.exceeds_width_since(snap) {
+            if self.exceeds_width_since(snap) {
                 // Rollback and format multi-line
                 self.rollback(snap);
                 self.output.push_str("(\n");
@@ -1933,6 +2079,10 @@ impl<'a> Unparser<'a> {
 
     /// Try to format a match expression on a single line.
     fn try_inline_match(&mut self, m: &MatchExpr) -> bool {
+        // Match expressions with 3 or more arms are always formatted multiline
+        if m.arms.len() >= 3 {
+            return false;
+        }
         // All arms must have inline-safe bodies, and no comments inside the match body
         if m.arms.iter().any(|arm| !is_inline_safe_expr(&arm.body)) {
             return false;
@@ -2418,6 +2568,7 @@ fn get_item_first_line(item: &Item) -> usize {
             .attributes
             .as_deref()
             .and_then(|a| a.first().map(|a| a.span.line)),
+        Item::Trait(t) => first_attr_line(&t.attrs),
         _ => None,
     };
     attr_line.unwrap_or(item_line).min(item_line)
@@ -2434,6 +2585,7 @@ fn get_stmt_span(stmt: &Stmt) -> Span {
         Stmt::For(f) => f.span,
         Stmt::ForOf(f) => f.span,
         Stmt::Loop(l) => l.span,
+        Stmt::Match(m) => m.span,
         Stmt::Break(b) => b.span,
         Stmt::Continue(c) => c.span,
         Stmt::Assert(a) => a.span,
@@ -2525,6 +2677,24 @@ fn binary_op_precedence(op: BinaryOp) -> u8 {
     }
 }
 
+/// Collect all operands of a same-op logical chain (flattens left- and right-associative trees).
+fn collect_logical_chain_binary(b: &BinaryExpr) -> Vec<&Expr> {
+    let mut parts = Vec::new();
+    collect_logical_chain_expr(&b.left, b.op, &mut parts);
+    collect_logical_chain_expr(&b.right, b.op, &mut parts);
+    parts
+}
+
+fn collect_logical_chain_expr<'a>(expr: &'a Expr, op: BinaryOp, parts: &mut Vec<&'a Expr>) {
+    match expr {
+        Expr::Binary(inner) if inner.op == op => {
+            collect_logical_chain_expr(&inner.left, op, parts);
+            collect_logical_chain_expr(&inner.right, op, parts);
+        }
+        _ => parts.push(expr),
+    }
+}
+
 fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
     match expr {
         Expr::Binary(inner) => {
@@ -2540,6 +2710,9 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
             }
             false
         }
+        // `x as T < y` is re-parsed as `x as T<y>` (generic type), so the cast
+        // must be parenthesized when it appears as the left operand of `<`.
+        Expr::Cast(_) if is_left && parent_op == BinaryOp::Lt => true,
         _ => false,
     }
 }
@@ -2912,6 +3085,9 @@ fn unparse_stmt_into(stmt: &Stmt, output: &mut String) {
         Stmt::Loop(l) => {
             output.push_str("loop ");
             unparse_block_expr_into(&l.body, output);
+        }
+        Stmt::Match(m) => {
+            unparse_match_into(m, output);
         }
         Stmt::Break(_) => output.push_str("break;"),
         Stmt::Continue(_) => output.push_str("continue;"),

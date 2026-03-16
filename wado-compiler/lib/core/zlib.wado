@@ -1325,7 +1325,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
             _ => {
                 leave = true;
             },
-        };
+        }
     }
 
     // final window update
@@ -1380,7 +1380,8 @@ pub fn inflate_zlib(input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
 
     // Verify adler32
     let computed = adler32(adler32_init(), &result, 0, result.len());
-    let stored = input[input.len() - 4] as u32 << 24 | input[input.len() - 3] as u32 << 16 | input[input.len() - 2] as u32 << 8 | input[input.len() - 1] as u32;
+    let stored = input[input.len() - 4] as u32 << 24 | input[input.len() - 3] as u32 << 16 | input[input.len() - 2] as u32 << 8 | input[input.len(
+    ) - 1] as u32;
     if computed != stored {
         return Result::<Array<u8>, ZlibError>::Err(ZlibError::Adler32Mismatch);
     }

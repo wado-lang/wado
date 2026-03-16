@@ -47,21 +47,19 @@ fn render(template: String, context: &TreeMap<String, String>) -> String {
             } else {
                 tag.append_char(c);
             }
-        } else {
-            if seen_open_brace {
-                if c == '{' {
-                    in_tag = true;
-                    seen_open_brace = false;
-                } else {
-                    result.append_char('{');
-                    result.append_char(c);
-                    seen_open_brace = false;
-                }
-            } else if c == '{' {
-                seen_open_brace = true;
+        } else if seen_open_brace {
+            if c == '{' {
+                in_tag = true;
+                seen_open_brace = false;
             } else {
+                result.append_char('{');
                 result.append_char(c);
+                seen_open_brace = false;
             }
+        } else if c == '{' {
+            seen_open_brace = true;
+        } else {
+            result.append_char(c);
         }
     }
 

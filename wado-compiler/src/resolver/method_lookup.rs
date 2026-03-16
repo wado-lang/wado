@@ -756,7 +756,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .attrs
                 .iter()
                 .find(|a| a.name == "cm")
-                .and_then(|a| a.args.first().cloned());
+                .and_then(|a| a.args.first())
+                .map(|a| a.as_str().to_string());
 
             return Some(MethodInfo {
                 return_type,
