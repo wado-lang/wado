@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773624233597,
+  "lastUpdate": 1773636152901,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3572,6 +3572,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d8281ba42c0667a4a6b44c896c222d87f66d70e4"
         },
         "date": 1773624233388,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9285,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21283,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6b6ef7be34593b2b2bef8a3945264529d207c458",
+          "message": "Merge pull request #590 from wado-lang/claude/audit-newtype-bugs-wl6f2\n\nSupport generic newtypes and trait bounds with newtype substitution",
+          "timestamp": "2026-03-16T13:40:07+09:00",
+          "tree_id": "4ff8ed7256c1d790f7795d61145cb242c66008cd",
+          "url": "https://github.com/wado-lang/wado/commit/6b6ef7be34593b2b2bef8a3945264529d207c458"
+        },
+        "date": 1773636152691,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
