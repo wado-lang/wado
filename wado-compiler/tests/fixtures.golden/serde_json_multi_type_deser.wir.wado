@@ -150,9 +150,9 @@ type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_export__run" = fn();
 
-type "functype/from_string<String>" = fn(ref String) -> ref Result<String,DeserializeError>;
+type "functype/core/json/from_string<String>" = fn(ref String) -> ref Result<String,DeserializeError>;
 
-type "functype/from_string<i32>" = fn(ref String) -> ref Result<i32,DeserializeError>;
+type "functype/core/json/from_string<i32>" = fn(ref String) -> ref Result<i32,DeserializeError>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -279,7 +279,7 @@ fn run() with Stdout {
         };
         __modules_initialized = 1;
     };
-    r = from_string<i32>(String { repr: array.new_data<u8>("42"), used: 2 });
+    r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("42"), used: 2 });
     if ref.test Result<i32,DeserializeError>::Ok(r) {
         v = ref.cast Result<i32,DeserializeError>::Ok(r).payload_0;
         "core:cli/println"(__tmpl: block -> ref String {
@@ -301,7 +301,7 @@ fn run() with Stdout {
         "core:internal/panic"(String { repr: array.new_data<u8>("deserialize i32 failed"), used: 22 });
         unreachable;
     };
-    r2 = from_string<String>(String { repr: array.new_data<u8>("\"hello\""), used: 7 });
+    r2 = "core/json/from_string<String>"(String { repr: array.new_data<u8>("\"hello\""), used: 7 });
     if ref.test Result<String,DeserializeError>::Ok(r2) {
         v2 = value_copy String(ref.cast Result<String,DeserializeError>::Ok(r2).payload_0);
         "core:cli/println"(__tmpl: block -> ref String {
@@ -334,7 +334,7 @@ fn __cm_export__run() {
     "wasi/task-return"(0);
 }
 
-fn from_string<String>(input) {
+fn "core/json/from_string<String>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<String,DeserializeError>;
     let v: ref String;
@@ -373,7 +373,7 @@ fn from_string<String>(input) {
     unreachable;
 }
 
-fn from_string<i32>(input) {
+fn "core/json/from_string<i32>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<i32,DeserializeError>;
     let v: i32;

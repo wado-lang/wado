@@ -284,9 +284,9 @@ type "functype/__cm_export____test_2_result_roundtrip_ok" = fn();
 
 type "functype/__cm_export____test_3_result_roundtrip_err" = fn();
 
-type "functype/from_string<Result<i32,String>>" = fn(ref String) -> ref Result<Result<i32,String>,DeserializeError>;
+type "functype/core/json/from_string<Result<i32,String>>" = fn(ref String) -> ref Result<Result<i32,String>,DeserializeError>;
 
-type "functype/to_string<Result<i32,String>>" = fn(ref "core:internal/Box<Result<i32,String>>") -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<Result<i32,String>>" = fn(ref "core:internal/Box<Result<i32,String>>") -> ref Result<String,SerializeError>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -398,7 +398,7 @@ type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
 type "functype/Result<i32,String>^Serialize::serialize<JsonSerializer>" = fn(ref "core:internal/Box<Result<i32,String>>", ref "core:json/JsonSerializer") -> [i32, ref null "core:serde/SerializeError"];
 
-type "functype/to_string<Result<i32,String>>" = fn(ref Result<i32,String>) -> ref Result<String,SerializeError>;
+type "functype/core/json/to_string<Result<i32,String>>" = fn(ref Result<i32,String>) -> ref Result<String,SerializeError>;
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -444,7 +444,7 @@ fn __test_0_result_serialize_ok() {
         };
         __modules_initialized = 1;
     };
-    json_r = to_string<Result<i32,String>>(Result<i32,String>::Ok { discriminant: 0, payload_0: 42 });
+    json_r = "core/json/to_string<Result<i32,String>>"(Result<i32,String>::Ok { discriminant: 0, payload_0: 42 });
     if ref.test Result<String,SerializeError>::Ok(json_r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
         __v0 = s;
@@ -504,7 +504,7 @@ fn __test_1_result_serialize_err() {
         };
         __modules_initialized = 1;
     };
-    json_r = to_string<Result<i32,String>>(Result<i32,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("not found"), used: 9 } });
+    json_r = "core/json/to_string<Result<i32,String>>"(Result<i32,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("not found"), used: 9 } });
     if ref.test Result<String,SerializeError>::Ok(json_r) {
         s = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
         __v0 = s;
@@ -567,10 +567,10 @@ fn __test_2_result_roundtrip_ok() {
         };
         __modules_initialized = 1;
     };
-    json_r = to_string<Result<i32,String>>(Result<i32,String>::Ok { discriminant: 0, payload_0: 100 });
+    json_r = "core/json/to_string<Result<i32,String>>"(Result<i32,String>::Ok { discriminant: 0, payload_0: 100 });
     if ref.test Result<String,SerializeError>::Ok(json_r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
-        parsed_r = from_string<Result<i32,String>>(json);
+        parsed_r = "core/json/from_string<Result<i32,String>>"(json);
         if ref.test Result<Result<i32,String>,DeserializeError>::Ok(parsed_r) {
             parsed = value_copy Result<i32,String>(ref.cast Result<Result<i32,String>,DeserializeError>::Ok(parsed_r).payload_0);
             if ref.test Result<i32,String>::Ok(parsed) {
@@ -643,10 +643,10 @@ fn __test_3_result_roundtrip_err() {
         };
         __modules_initialized = 1;
     };
-    json_r = to_string<Result<i32,String>>(Result<i32,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("fail"), used: 4 } });
+    json_r = "core/json/to_string<Result<i32,String>>"(Result<i32,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("fail"), used: 4 } });
     if ref.test Result<String,SerializeError>::Ok(json_r) {
         json = value_copy String(ref.cast Result<String,SerializeError>::Ok(json_r).payload_0);
-        parsed_r = from_string<Result<i32,String>>(json);
+        parsed_r = "core/json/from_string<Result<i32,String>>"(json);
         if ref.test Result<Result<i32,String>,DeserializeError>::Ok(parsed_r) {
             parsed = value_copy Result<i32,String>(ref.cast Result<Result<i32,String>,DeserializeError>::Ok(parsed_r).payload_0);
             if ref.test Result<i32,String>::Err(parsed) {
@@ -720,7 +720,7 @@ fn __cm_export____test_3_result_roundtrip_err() {
     "wasi/task-return"(0);
 }
 
-fn from_string<Result<i32,String>>(input) {
+fn "core/json/from_string<Result<i32,String>>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<Result<i32,String>,DeserializeError>;
     let v: ref Result<i32,String>;
@@ -755,7 +755,7 @@ fn from_string<Result<i32,String>>(input) {
     unreachable;
 }
 
-fn to_string<Result<i32,String>>(value) {
+fn "core/json/to_string<Result<i32,String>>"(value) {
     let ser: ref "core:json/JsonSerializer";
     let e: ref "core:serde/SerializeError";
     ser = "core:json/JsonSerializer" { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };

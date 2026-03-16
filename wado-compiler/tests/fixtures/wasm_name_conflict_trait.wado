@@ -1,0 +1,32 @@
+// Test: same trait name 'Describe' from two different modules, both aliased and implemented
+// for entry struct Product. Wasm method names must include the trait alias to be distinct:
+// Product^DescribeA::describe_a and Product^DescribeB::describe_b.
+
+use { println } from "core:cli";
+use { Describe as DescribeA } from "./sub/wasm_name_conflict_trait_mod_a.wado";
+use { Describe as DescribeB } from "./sub/wasm_name_conflict_trait_mod_b.wado";
+
+struct Product {
+    id: i32,
+}
+
+impl DescribeA for Product {
+    fn describe_a(&self) -> i32 {
+        return self.id * 2;
+    }
+}
+
+impl DescribeB for Product {
+    fn describe_b(&self) -> i32 {
+        return self.id * 3;
+    }
+}
+
+export fn run() with Stdout {
+    let p = Product { id: 5 };
+    println(`a: {p.describe_a()}`);
+    println(`b: {p.describe_b()}`);
+}
+
+__DATA__
+{"stdout": "a: 10\nb: 15\n"}

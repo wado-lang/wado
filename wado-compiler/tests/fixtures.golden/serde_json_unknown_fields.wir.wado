@@ -284,7 +284,7 @@ type "functype/__cm_export____test_1_unknown_field_with_object_value" = fn();
 
 type "functype/__cm_export____test_2_unknown_field_with_array_value" = fn();
 
-type "functype/from_string<Point>" = fn(ref String) -> ref Result<Point,DeserializeError>;
+type "functype/core/json/from_string<Point>" = fn(ref String) -> ref Result<Point,DeserializeError>;
 
 type "functype/core:allocator/grow_memory" = fn(i32);
 
@@ -485,7 +485,7 @@ fn __test_0_unknown_fields_ignored() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Point>(String { repr: array.new_data<u8>("{\"x\":1.0,\"z\":999,\"y\":2.0,\"extra\":\"ignored\"}"), used: 43 });
+    r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("{\"x\":1.0,\"z\":999,\"y\":2.0,\"extra\":\"ignored\"}"), used: 43 });
     if ref.test Result<Point,DeserializeError>::Ok(r) {
         p = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(r).payload_0);
         __v0_2 = p.x;
@@ -596,7 +596,7 @@ fn __test_1_unknown_field_with_object_value() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Point>(String { repr: array.new_data<u8>("{\"x\":1.0,\"meta\":{\"a\":1,\"b\":2},\"y\":2.0}"), used: 38 });
+    r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("{\"x\":1.0,\"meta\":{\"a\":1,\"b\":2},\"y\":2.0}"), used: 38 });
     if ref.test Result<Point,DeserializeError>::Ok(r) {
         p = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(r).payload_0);
         __v0_2 = p.x;
@@ -707,7 +707,7 @@ fn __test_2_unknown_field_with_array_value() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    r = from_string<Point>(String { repr: array.new_data<u8>("{\"x\":1.0,\"items\":[1,2,3],\"y\":2.0}"), used: 33 });
+    r = "core/json/from_string<Point>"(String { repr: array.new_data<u8>("{\"x\":1.0,\"items\":[1,2,3],\"y\":2.0}"), used: 33 });
     if ref.test Result<Point,DeserializeError>::Ok(r) {
         p = value_copy Point(ref.cast Result<Point,DeserializeError>::Ok(r).payload_0);
         __v0_2 = p.x;
@@ -827,7 +827,7 @@ fn __cm_export____test_2_unknown_field_with_array_value() {
     "wasi/task-return"(0);
 }
 
-fn from_string<Point>(input) {
+fn "core/json/from_string<Point>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<Point,DeserializeError>;
     let v: ref Point;
