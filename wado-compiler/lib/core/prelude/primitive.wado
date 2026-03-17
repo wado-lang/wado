@@ -1950,3 +1950,229 @@ impl Default for char {
         return '\0';
     }
 }
+
+impl From<i8> for i16 {
+    pub fn from(value: i8) -> i16 { return value as i16; }
+}
+impl From<i8> for i32 {
+    pub fn from(value: i8) -> i32 { return value as i32; }
+}
+impl From<i8> for i64 {
+    pub fn from(value: i8) -> i64 { return value as i64; }
+}
+impl From<i16> for i32 {
+    pub fn from(value: i16) -> i32 { return value as i32; }
+}
+impl From<i16> for i64 {
+    pub fn from(value: i16) -> i64 { return value as i64; }
+}
+impl From<i32> for i64 {
+    pub fn from(value: i32) -> i64 { return value as i64; }
+}
+impl From<u8> for u16 {
+    pub fn from(value: u8) -> u16 { return value as u16; }
+}
+impl From<u8> for u32 {
+    pub fn from(value: u8) -> u32 { return value as u32; }
+}
+impl From<u8> for u64 {
+    pub fn from(value: u8) -> u64 { return value as u64; }
+}
+impl From<u8> for i16 {
+    pub fn from(value: u8) -> i16 { return value as i16; }
+}
+impl From<u8> for i32 {
+    pub fn from(value: u8) -> i32 { return value as i32; }
+}
+impl From<u8> for i64 {
+    pub fn from(value: u8) -> i64 { return value as i64; }
+}
+impl From<u16> for u32 {
+    pub fn from(value: u16) -> u32 { return value as u32; }
+}
+impl From<u16> for u64 {
+    pub fn from(value: u16) -> u64 { return value as u64; }
+}
+impl From<u16> for i32 {
+    pub fn from(value: u16) -> i32 { return value as i32; }
+}
+impl From<u16> for i64 {
+    pub fn from(value: u16) -> i64 { return value as i64; }
+}
+impl From<u32> for u64 {
+    pub fn from(value: u32) -> u64 { return value as u64; }
+}
+impl From<u32> for i64 {
+    pub fn from(value: u32) -> i64 { return value as i64; }
+}
+impl From<f32> for f64 {
+    pub fn from(value: f32) -> f64 { return value as f64; }
+}
+impl From<bool> for i32 {
+    pub fn from(value: bool) -> i32 {
+        if value { return 1; }
+        return 0;
+    }
+}
+
+impl TryFrom<i64> for i32 {
+    type Error = String;
+    pub fn try_from(value: i64) -> Result<i32, String> {
+        if value < i32::MIN as i64 || value > i32::MAX as i64 {
+            return Result::<i32, String>::Err(`{value} out of range for i32`);
+        }
+        return Result::<i32, String>::Ok(value as i32);
+    }
+}
+
+impl TryFrom<i64> for i16 {
+    type Error = String;
+    pub fn try_from(value: i64) -> Result<i16, String> {
+        if value < i16::MIN as i64 || value > i16::MAX as i64 {
+            return Result::<i16, String>::Err(`{value} out of range for i16`);
+        }
+        return Result::<i16, String>::Ok(value as i16);
+    }
+}
+
+impl TryFrom<i64> for i8 {
+    type Error = String;
+    pub fn try_from(value: i64) -> Result<i8, String> {
+        if value < i8::MIN as i64 || value > i8::MAX as i64 {
+            return Result::<i8, String>::Err(`{value} out of range for i8`);
+        }
+        return Result::<i8, String>::Ok(value as i8);
+    }
+}
+
+impl TryFrom<i32> for i16 {
+    type Error = String;
+    pub fn try_from(value: i32) -> Result<i16, String> {
+        if value < i16::MIN as i32 || value > i16::MAX as i32 {
+            return Result::<i16, String>::Err(`{value} out of range for i16`);
+        }
+        return Result::<i16, String>::Ok(value as i16);
+    }
+}
+
+impl TryFrom<i32> for i8 {
+    type Error = String;
+    pub fn try_from(value: i32) -> Result<i8, String> {
+        if value < i8::MIN as i32 || value > i8::MAX as i32 {
+            return Result::<i8, String>::Err(`{value} out of range for i8`);
+        }
+        return Result::<i8, String>::Ok(value as i8);
+    }
+}
+
+impl TryFrom<i16> for i8 {
+    type Error = String;
+    pub fn try_from(value: i16) -> Result<i8, String> {
+        if value < i8::MIN as i16 || value > i8::MAX as i16 {
+            return Result::<i8, String>::Err(`{value} out of range for i8`);
+        }
+        return Result::<i8, String>::Ok(value as i8);
+    }
+}
+
+impl TryFrom<i32> for u32 {
+    type Error = String;
+    pub fn try_from(value: i32) -> Result<u32, String> {
+        if value < 0 {
+            return Result::<u32, String>::Err(`{value} out of range for u32`);
+        }
+        return Result::<u32, String>::Ok(value as u32);
+    }
+}
+
+impl TryFrom<i64> for u64 {
+    type Error = String;
+    pub fn try_from(value: i64) -> Result<u64, String> {
+        if value < 0 {
+            return Result::<u64, String>::Err(`{value} out of range for u64`);
+        }
+        return Result::<u64, String>::Ok(value as u64);
+    }
+}
+
+impl TryFrom<i64> for u32 {
+    type Error = String;
+    pub fn try_from(value: i64) -> Result<u32, String> {
+        if value < 0 || value > u32::MAX as i64 {
+            return Result::<u32, String>::Err(`{value} out of range for u32`);
+        }
+        return Result::<u32, String>::Ok(value as u32);
+    }
+}
+
+impl TryFrom<u64> for i64 {
+    type Error = String;
+    pub fn try_from(value: u64) -> Result<i64, String> {
+        if value > i64::MAX as u64 {
+            return Result::<i64, String>::Err(`{value} out of range for i64`);
+        }
+        return Result::<i64, String>::Ok(value as i64);
+    }
+}
+
+impl TryFrom<u64> for u32 {
+    type Error = String;
+    pub fn try_from(value: u64) -> Result<u32, String> {
+        if value > u32::MAX as u64 {
+            return Result::<u32, String>::Err(`{value} out of range for u32`);
+        }
+        return Result::<u32, String>::Ok(value as u32);
+    }
+}
+
+impl TryFrom<u32> for u16 {
+    type Error = String;
+    pub fn try_from(value: u32) -> Result<u16, String> {
+        if value > u16::MAX as u32 {
+            return Result::<u16, String>::Err(`{value} out of range for u16`);
+        }
+        return Result::<u16, String>::Ok(value as u16);
+    }
+}
+
+impl TryFrom<u32> for u8 {
+    type Error = String;
+    pub fn try_from(value: u32) -> Result<u8, String> {
+        if value > u8::MAX as u32 {
+            return Result::<u8, String>::Err(`{value} out of range for u8`);
+        }
+        return Result::<u8, String>::Ok(value as u8);
+    }
+}
+
+impl TryFrom<u16> for u8 {
+    type Error = String;
+    pub fn try_from(value: u16) -> Result<u8, String> {
+        if value > u8::MAX as u16 {
+            return Result::<u16, String>::Err(`{value} out of range for u8`);
+        }
+        return Result::<u16, String>::Ok(value as u8);
+    }
+}
+
+impl TryFrom<i64> for f32 {
+    type Error = String;
+    pub fn try_from(value: i64) -> Result<f32, String> {
+        let f = value as f32;
+        if f as i64 != value {
+            return Result::<f32, String>::Err(`{value} cannot be exactly represented as f32`);
+        }
+        return Result::<f32, String>::Ok(f);
+    }
+}
+
+impl TryFrom<i64> for f64 {
+    type Error = String;
+    pub fn try_from(value: i64) -> Result<f64, String> {
+        let f = value as f64;
+        if f as i64 != value {
+            return Result::<f64, String>::Err(`{value} cannot be exactly represented as f64`);
+        }
+        return Result::<f64, String>::Ok(f);
+    }
+}

@@ -890,7 +890,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Find trait name: if the static method belongs to a trait impl, include the
         // trait name in the mangled function name so WIR can resolve it correctly.
-        let trait_name_opt = self.find_static_method_trait(&struct_name, &static_call.method);
+        // For From/TryFrom, disambiguate by matching the first argument's type.
+        let arg_type_hint = if (static_call.method == "from" || static_call.method == "try_from")
+            && args.len() == 1
+        {
+            Some(self.type_table.borrow().type_name(args[0].type_id))
+        } else {
+            None
+        };
+        let trait_name_opt = self.find_static_method_trait_with_arg(
+            &struct_name,
+            &static_call.method,
+            arg_type_hint.as_deref(),
+        );
 
         let mangled_func_name = MethodName::format_local(
             &mangled_struct_name,
@@ -1424,39 +1436,39 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> bool {
         let target_name = Self::get_type_name_static(target_type);
         let arg_type_name = self.type_table.borrow().type_name(*arg_type_id);
+        let check_impl = |impl_block: &ast::ImplBlock| -> bool {
+            if !impl_block.is_synthesize_request {
+                return false;
+            }
+            let Some(trait_type) = &impl_block.trait_type else {
+                return false;
+            };
+            if Self::get_type_name_static(trait_type) != "From"
+                || Self::get_type_name_static(&impl_block.ty) != target_name
+            {
+                return false;
+            }
+            if let ast::Type::Generic(generic) = trait_type
+                && generic.args.len() == 1
+            {
+                self.get_type_name_full(&generic.args[0]) == arg_type_name
+            } else {
+                false
+            }
+        };
         for item in &self.current_module_items {
             if let Item::Impl(impl_block) = item
-                && impl_block.is_synthesize_request
-                && let Some(trait_type) = &impl_block.trait_type
-                && Self::get_type_name_static(trait_type) == "From"
-                && Self::get_type_name_static(&impl_block.ty) == target_name
+                && check_impl(impl_block)
             {
-                if let ast::Type::Generic(generic) = trait_type
-                    && generic.args.len() == 1
-                {
-                    let from_name = self.get_type_name_full(&generic.args[0]);
-                    if from_name == arg_type_name {
-                        return true;
-                    }
-                }
+                return true;
             }
         }
         for module in self.loaded_modules.values() {
             for item in &module.items {
                 if let Item::Impl(impl_block) = item
-                    && impl_block.is_synthesize_request
-                    && let Some(trait_type) = &impl_block.trait_type
-                    && Self::get_type_name_static(trait_type) == "From"
-                    && Self::get_type_name_static(&impl_block.ty) == target_name
+                    && check_impl(impl_block)
                 {
-                    if let ast::Type::Generic(generic) = trait_type
-                        && generic.args.len() == 1
-                    {
-                        let from_name = self.get_type_name_full(&generic.args[0]);
-                        if from_name == arg_type_name {
-                            return true;
-                        }
-                    }
+                    return true;
                 }
             }
         }
@@ -1468,40 +1480,71 @@ impl<H: CompilerHost> Resolver<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Option<String> {
-        // Check current module items first
+        self.find_static_method_trait_with_arg(struct_name, method_name, None)
+    }
+
+    pub(super) fn find_static_method_trait_with_arg(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+        arg_type_name: Option<&str>,
+    ) -> Option<String> {
+        let resolve_trait_name = |trait_type: &ast::Type| -> String {
+            let base = Self::get_type_name_static(trait_type);
+            if base == "From" || base == "TryFrom" {
+                self.get_type_name_full(trait_type)
+            } else {
+                base
+            }
+        };
+
+        let matches_arg_type = |trait_type: &ast::Type| -> bool {
+            let Some(expected) = arg_type_name else {
+                return true;
+            };
+            let base = Self::get_type_name_static(trait_type);
+            if (base == "From" || base == "TryFrom")
+                && let ast::Type::Generic(g) = trait_type
+                && let Some(arg) = g.args.first()
+            {
+                return Self::get_type_name_static(arg) == expected;
+            }
+            base != "From" && base != "TryFrom"
+        };
+
+        let check_impl = |impl_block: &ast::ImplBlock| -> Option<String> {
+            let trait_type = impl_block.trait_type.as_ref()?;
+            if Self::get_type_name_static(&impl_block.ty) != struct_name
+                || !matches_arg_type(trait_type)
+            {
+                return None;
+            }
+            for method in &impl_block.methods {
+                let has_self = method
+                    .params
+                    .iter()
+                    .any(|p| p.self_kind != ast::SelfKind::None);
+                if method.name == method_name && !has_self {
+                    return Some(resolve_trait_name(trait_type));
+                }
+            }
+            None
+        };
+
         for item in &self.current_module_items {
             if let Item::Impl(impl_block) = item
-                && let Some(trait_type) = &impl_block.trait_type
-                && Self::get_type_name_static(&impl_block.ty) == struct_name
+                && let Some(name) = check_impl(impl_block)
             {
-                for method in &impl_block.methods {
-                    let has_self = method
-                        .params
-                        .iter()
-                        .any(|p| p.self_kind != ast::SelfKind::None);
-                    if method.name == method_name && !has_self {
-                        return Some(Self::get_type_name_static(trait_type));
-                    }
-                }
+                return Some(name);
             }
         }
 
-        // Check loaded modules
         for module in self.loaded_modules.values() {
             for item in &module.items {
                 if let Item::Impl(impl_block) = item
-                    && let Some(trait_type) = &impl_block.trait_type
-                    && Self::get_type_name_static(&impl_block.ty) == struct_name
+                    && let Some(name) = check_impl(impl_block)
                 {
-                    for method in &impl_block.methods {
-                        let has_self = method
-                            .params
-                            .iter()
-                            .any(|p| p.self_kind != ast::SelfKind::None);
-                        if method.name == method_name && !has_self {
-                            return Some(Self::get_type_name_static(trait_type));
-                        }
-                    }
+                    return Some(name);
                 }
             }
         }
@@ -1637,8 +1680,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Determine module source for the actual struct
         let struct_module = self.find_struct_module_source(&actual_struct_name);
 
-        // Find trait name for trait static methods
-        let trait_name_opt = self.find_static_method_trait(&actual_struct_name, method_name);
+        // Find trait name for trait static methods.
+        // For From/TryFrom, disambiguate by matching the first argument's type.
+        let arg_type_hint = if (method_name == "from" || method_name == "try_from")
+            && args.len() == 1
+        {
+            Some(self.type_table.borrow().type_name(args[0].type_id))
+        } else {
+            None
+        };
+        let trait_name_opt = self.find_static_method_trait_with_arg(
+            &actual_struct_name,
+            method_name,
+            arg_type_hint.as_deref(),
+        );
 
         // Use trait-qualified mangled name if this is a trait method
         let final_mangled_name = if let Some(ref trait_name) = trait_name_opt {
