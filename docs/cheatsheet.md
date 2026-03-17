@@ -691,6 +691,17 @@ let desc = match value {
     None => "no value",
 };
 
+// Nested sub-patterns in tuples/structs
+match [a, b] {
+    [Some(x), Some(y)] => x + y,
+    [None, _] => 0,
+}
+match [x, y] {
+    [0, 0] => "origin",
+    _ => "other",
+}
+if let { x: 0, y: 0 } = point { println("origin"); }
+
 // Matches operator — returns bool
 let is_some = opt matches { Some(_) };
 let is_large = opt matches { Some(x) && x > 10 };
