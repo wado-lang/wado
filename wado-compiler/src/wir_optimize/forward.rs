@@ -1,6 +1,6 @@
 //! Struct field constant forwarding and loop-guarded bounds check elimination for WIR.
 //!
-//! - **Field constant forwarding**: propagates known constant field values through StructGet.
+//! - **Field constant forwarding**: propagates known constant field values through `StructGet`.
 //! - **Loop-guarded bounds check elimination**: removes redundant bounds checks inside loops.
 
 use crate::hashmap::{IndexMap, IndexSet};
@@ -72,8 +72,6 @@ fn collect_aliased_in_instr(instr: &WirInstr, aliased: &mut IndexSet<String>) {
         collect_aliased_in_instr(child, aliased);
     });
 }
-
-
 
 /// Known constant field values for locals.
 /// Maps `(local_name, field_name)` → constant `WirInstr`.
@@ -620,4 +618,3 @@ fn is_bounds_check_for(instr: &WirInstr, guarded_vars: &IndexSet<String>, bound:
 
     false
 }
-

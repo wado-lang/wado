@@ -21,8 +21,8 @@ pub(super) fn elide_dead_single_field_struct_locals(module: &mut WirModule) {
 
 /// Whole-module pass: elide struct-typed locals for N-field structs (N > 1).
 ///
-/// Handles patterns where a local is set from a StructNew with N fields and each
-/// field is accessed exactly once via StructGet. Substitutes each field access
+/// Handles patterns where a local is set from a `StructNew` with N fields and each
+/// field is accessed exactly once via `StructGet`. Substitutes each field access
 /// with the corresponding initializer expression and nops the original assignment.
 /// This eliminates the struct type from the binary.
 pub(super) fn elide_dead_multi_field_struct_locals(module: &mut WirModule) {
@@ -80,7 +80,10 @@ fn elide_multi_field_struct_locals_one_pass(
                 return None;
             }
             // All LocalGet(name) are via StructGet.
-            if !body.iter().all(|i| local_used_only_via_struct_get(i, &name)) {
+            if !body
+                .iter()
+                .all(|i| local_used_only_via_struct_get(i, &name))
+            {
                 return None;
             }
             // Get field names from pre-computed table.
@@ -147,9 +150,13 @@ fn collect_multi_field_struct_defs(
     instr.for_each_child(&mut |child| collect_multi_field_struct_defs(child, defs));
 }
 
-/// Count `StructGet(LocalGet(name), field_name)` for a specific field_name.
+/// Count `StructGet(LocalGet(name), field_name)` for a specific `field_name`.
 fn count_struct_get_field_uses(instr: &WirInstr, local_name: &str, field_name: &str) -> usize {
-    if let WirInstr::StructGet { field_name: f, expr, .. } = instr
+    if let WirInstr::StructGet {
+        field_name: f,
+        expr,
+        ..
+    } = instr
         && let WirInstr::LocalGet { name: n } = expr.as_ref()
         && n == local_name
         && f == field_name
@@ -169,17 +176,19 @@ fn substitute_multi_field_struct_get(
     local_name: &str,
     field_map: &IndexMap<String, WirInstr>,
 ) {
-    if let WirInstr::StructGet { field_name, expr, .. } = instr
+    if let WirInstr::StructGet {
+        field_name, expr, ..
+    } = instr
         && let WirInstr::LocalGet { name: n } = expr.as_ref()
         && n == local_name
+        && let Some(value) = field_map.get(field_name)
     {
-        if let Some(value) = field_map.get(field_name) {
-            *instr = value.clone();
-            return;
-        }
+        *instr = value.clone();
+        return;
     }
-    instr
-        .for_each_boxed_child_mut(&mut |child| substitute_multi_field_struct_get(child, local_name, field_map));
+    instr.for_each_boxed_child_mut(&mut |child| {
+        substitute_multi_field_struct_get(child, local_name, field_map);
+    });
 }
 
 /// One pass: collect candidates, validate, rewrite. Returns `true` if anything changed.
@@ -340,7 +349,6 @@ fn nop_local_set_of(instr: &mut WirInstr, name: &str) {
     instr.for_each_boxed_child_mut(&mut |child| nop_local_set_of(child, name));
 }
 
-
 /// Flatten `LocalSet { name, value: Seq([preamble..., final]) }` into
 /// `[preamble..., LocalSet { name, value: final }]` at all levels of each function.
 ///
@@ -363,13 +371,14 @@ fn flatten_seq_in_body(body: &mut Vec<WirInstr>) {
     let old = std::mem::take(body);
     for instr in old {
         match instr {
-            WirInstr::LocalSet { name, value }
-                if matches!(value.as_ref(), WirInstr::Seq(seq) if !seq.is_empty()) =>
-            {
+            WirInstr::LocalSet { name, value } if matches!(value.as_ref(), WirInstr::Seq(seq) if !seq.is_empty()) => {
                 if let WirInstr::Seq(mut seq) = *value {
                     let final_val = seq.pop().unwrap();
                     body.extend(seq);
-                    body.push(WirInstr::LocalSet { name, value: Box::new(final_val) });
+                    body.push(WirInstr::LocalSet {
+                        name,
+                        value: Box::new(final_val),
+                    });
                 }
             }
             other => body.push(other),
@@ -382,7 +391,12 @@ fn flatten_seq_in_instr(instr: &mut WirInstr) {
         WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
             flatten_seq_in_body(body);
         }
-        WirInstr::If { then_body, else_body, condition, .. } => {
+        WirInstr::If {
+            then_body,
+            else_body,
+            condition,
+            ..
+        } => {
             flatten_seq_in_instr(condition);
             flatten_seq_in_body(then_body);
             if let Some(eb) = else_body {
@@ -392,7 +406,6 @@ fn flatten_seq_in_instr(instr: &mut WirInstr) {
         _ => {}
     }
 }
-
 
 pub(super) fn elide_write_only_locals(module: &mut WirModule) {
     for func in &mut module.functions {
@@ -434,9 +447,7 @@ fn elide_write_only_in_instr(
             }
             *changed = true;
         }
-        WirInstr::Block { body, .. }
-        | WirInstr::Loop { body, .. }
-        | WirInstr::Seq(body) => {
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
             for child in body.iter_mut() {
                 elide_write_only_in_instr(child, read_locals, changed);
             }

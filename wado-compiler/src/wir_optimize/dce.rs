@@ -209,7 +209,6 @@ fn remap_func_ids(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
     });
 }
 
-
 /// Mark types that are not referenced by any live function, import, or global
 /// as dead by adding them to `module.dead_type_indices`.
 ///
@@ -317,9 +316,7 @@ pub fn dce_unreachable_types(module: &mut WirModule) {
 /// Add the type index(es) referenced by a `WirType` to `out`.
 fn collect_wir_type_ref(ty: &WirType, out: &mut IndexSet<u32>) {
     match ty {
-        WirType::Ref { type_id, .. }
-        | WirType::Enum { type_id }
-        | WirType::Flags { type_id } => {
+        WirType::Ref { type_id, .. } | WirType::Enum { type_id } | WirType::Flags { type_id } => {
             out.insert(type_id.index());
         }
         _ => {}
@@ -329,9 +326,7 @@ fn collect_wir_type_ref(ty: &WirType, out: &mut IndexSet<u32>) {
 /// Like `collect_wir_type_ref` but collects into a `Vec` (for transitive closure work list).
 fn collect_wir_type_ref_into(ty: &WirType, out: &mut Vec<u32>) {
     match ty {
-        WirType::Ref { type_id, .. }
-        | WirType::Enum { type_id }
-        | WirType::Flags { type_id } => {
+        WirType::Ref { type_id, .. } | WirType::Enum { type_id } | WirType::Flags { type_id } => {
             out.push(type_id.index());
         }
         _ => {}
@@ -399,10 +394,10 @@ fn collect_instr_type_refs(instr: &WirInstr, out: &mut IndexSet<u32>) {
 /// physically removing those items from the module's arrays and updating every
 /// reference so the module is consistent and the emitter can emit it as-is.
 ///
-/// - **Functions** (`dead_func_indices`): removed; WirFuncId values in all bodies,
+/// - **Functions** (`dead_func_indices`): removed; `WirFuncId` values in all bodies,
 ///   exports, and element tables are remapped.
-/// - **Types** (`dead_type_indices`): removed; WirTypeId values in all bodies,
-///   function type_ids, import descriptors, globals, type definitions themselves,
+/// - **Types** (`dead_type_indices`): removed; `WirTypeId` values in all bodies,
+///   function `type_ids`, import descriptors, globals, type definitions themselves,
 ///   and `variant_case_info` are remapped.
 /// - **Globals** (`dead_global_indices`): removed from the globals array.
 ///   GlobalGet/GlobalSet use string names so no instruction patching is needed.
@@ -465,10 +460,10 @@ fn compact_funcs(module: &mut WirModule) {
 
     // Remap exports
     for export in &mut module.exports {
-        if let WirExportDesc::Func { func_id } = &mut export.desc {
-            if let Some(&new_id) = remap.get(&func_id.index()) {
-                *func_id = WirFuncId::new(new_id, Rc::from(func_id.fq()));
-            }
+        if let WirExportDesc::Func { func_id } = &mut export.desc
+            && let Some(&new_id) = remap.get(&func_id.index())
+        {
+            *func_id = WirFuncId::new(new_id, Rc::from(func_id.fq()));
         }
     }
 
@@ -546,7 +541,9 @@ fn compact_types(module: &mut WirModule) {
         if let (Some(&new_case), Some(&new_variant)) =
             (type_remap.get(&case_idx), type_remap.get(&variant_idx))
         {
-            module.variant_case_info.insert(new_case, (new_variant, case_num));
+            module
+                .variant_case_info
+                .insert(new_case, (new_variant, case_num));
         }
     }
 }
@@ -572,9 +569,9 @@ fn remap_type_id(type_id: &mut WirTypeId, remap: &IndexMap<u32, u32>) {
 
 fn remap_wir_type(ty: &mut WirType, remap: &IndexMap<u32, u32>) {
     match ty {
-        WirType::Enum { type_id }
-        | WirType::Flags { type_id }
-        | WirType::Ref { type_id, .. } => remap_type_id(type_id, remap),
+        WirType::Enum { type_id } | WirType::Flags { type_id } | WirType::Ref { type_id, .. } => {
+            remap_type_id(type_id, remap);
+        }
         _ => {}
     }
 }

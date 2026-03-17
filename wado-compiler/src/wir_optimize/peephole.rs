@@ -1,7 +1,7 @@
 //! Peephole optimization and cleanup passes for WIR.
 //!
 //! - **`optimize_instrs`**: constant folding, copy elision, multi-value struct elision.
-//! - **`cleanup_wir`**: removes dead locals, nops, and redundant ref.as_non_null.
+//! - **`cleanup_wir`**: removes dead locals, nops, and redundant `ref.as_non_null`.
 
 use crate::hashmap::IndexSet;
 use crate::wir::{WirInstr, WirModule, WirTypeDef};
@@ -422,7 +422,6 @@ fn match_field_get(
     Some((idx, target.clone()))
 }
 
-
 pub(super) fn cleanup_wir(module: &mut WirModule) {
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
@@ -566,4 +565,3 @@ fn cleanup_instr(instr: &mut WirInstr) {
         *instr = std::mem::replace(inner.as_mut(), WirInstr::Nop);
     }
 }
-

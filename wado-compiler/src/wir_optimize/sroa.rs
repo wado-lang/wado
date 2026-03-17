@@ -133,7 +133,6 @@ fn wir_types_equal(a: &WirType, b: &WirType) -> bool {
     }
 }
 
-
 /// Phase 1: find functions eligible for SROA.
 fn find_sroa_candidates(module: &WirModule, pinned: &IndexSet<u32>) -> Vec<(u32, SroaCandidate)> {
     let mut candidates = Vec::new();

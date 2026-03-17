@@ -852,4 +852,3 @@ fn is_array_new_default(instr: &WirInstr) -> bool {
         _ => false,
     }
 }
-

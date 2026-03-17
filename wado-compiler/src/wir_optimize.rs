@@ -47,7 +47,9 @@ use crate::wir::{WirExportDesc, WirInstr, WirModule};
 
 pub use dce::{dce_unreachable_functions, dce_unreachable_types};
 
-use array::{collapse_array_append_sequences, promote_constant_arrays_to_data, split_large_array_literals};
+use array::{
+    collapse_array_append_sequences, promote_constant_arrays_to_data, split_large_array_literals,
+};
 use drve::drve_dead_return_values;
 use elide::{
     elide_dead_multi_field_struct_locals, elide_dead_single_field_struct_locals,
@@ -153,7 +155,7 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
 
 /// Collect all `func_ids` that must NOT be SROA'd or otherwise transformed
 /// (exports, element tables, `RefFunc` references).
-pub(self) fn collect_pinned_func_ids(module: &WirModule) -> IndexSet<u32> {
+fn collect_pinned_func_ids(module: &WirModule) -> IndexSet<u32> {
     let mut pinned = IndexSet::default();
 
     // Exported functions
@@ -199,7 +201,7 @@ fn collect_ref_funcs_instr(instr: &WirInstr, pinned: &mut IndexSet<u32>) {
 }
 
 /// Collect all local names referenced by `LocalGet` in an expression tree.
-pub(self) fn collect_local_gets_deep(instr: &WirInstr, names: &mut IndexSet<String>) {
+fn collect_local_gets_deep(instr: &WirInstr, names: &mut IndexSet<String>) {
     if let WirInstr::LocalGet { name } = instr {
         names.insert(name.clone());
     }
@@ -211,14 +213,10 @@ pub(self) fn collect_local_gets_deep(instr: &WirInstr, names: &mut IndexSet<Stri
 /// Returns true if `instr` has no observable side effects.
 /// Calls and memory/global stores are not side-effect-free.
 /// Memory loads are treated as side-effect-free (pure read with no mutation).
-pub(self) fn is_side_effect_free(instr: &WirInstr) -> bool {
+fn is_side_effect_free(instr: &WirInstr) -> bool {
     match instr {
-        WirInstr::Call { .. }
-        | WirInstr::CallIndirect { .. }
-        | WirInstr::CallRef { .. } => false,
-        WirInstr::LocalSet { .. } | WirInstr::LocalTee { .. } | WirInstr::GlobalSet { .. } => {
-            false
-        }
+        WirInstr::Call { .. } | WirInstr::CallIndirect { .. } | WirInstr::CallRef { .. } => false,
+        WirInstr::LocalSet { .. } | WirInstr::LocalTee { .. } | WirInstr::GlobalSet { .. } => false,
         WirInstr::I32Store { .. }
         | WirInstr::I32Store8 { .. }
         | WirInstr::I32Store16 { .. }

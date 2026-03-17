@@ -111,13 +111,12 @@ fn count_global_uses_in_instr(
     in_other_context: bool,
 ) {
     // Check if this is a trivial-guard block at statement level (not inside another expr).
-    if !in_other_context {
-        if let Some(fq) = is_trivial_init_block(instr) {
-            if let Some(&idx) = global_idx_map.get(fq) {
-                trivial_guard_blocks[idx] += 1;
-                return; // Don't recurse — all uses are accounted for by this pattern.
-            }
-        }
+    if !in_other_context
+        && let Some(fq) = is_trivial_init_block(instr)
+        && let Some(&idx) = global_idx_map.get(fq)
+    {
+        trivial_guard_blocks[idx] += 1;
+        return; // Don't recurse — all uses are accounted for by this pattern.
     }
 
     // For GlobalGet/GlobalSet at any depth, count as "other use".
@@ -213,7 +212,10 @@ fn count_global_uses_in_instr(
 /// two instructions (`If { GlobalGet(x), Br 1 }` + `GlobalSet { x, I32Const(1) }`)
 /// and no result type.
 fn is_trivial_init_block(instr: &WirInstr) -> Option<&str> {
-    let WirInstr::Block { result: None, body, .. } = instr else {
+    let WirInstr::Block {
+        result: None, body, ..
+    } = instr
+    else {
         return None;
     };
     if body.len() != 2 {
@@ -241,7 +243,11 @@ fn is_trivial_init_block(instr: &WirInstr) -> Option<&str> {
         return None;
     }
     // Second: GlobalSet { name: x, value: I32Const(1) }
-    let WirInstr::GlobalSet { name: set_name, value } = &body[1] else {
+    let WirInstr::GlobalSet {
+        name: set_name,
+        value,
+    } = &body[1]
+    else {
         return None;
     };
     if guard_name.fq != set_name.fq {
@@ -255,11 +261,11 @@ fn is_trivial_init_block(instr: &WirInstr) -> Option<&str> {
 
 /// Replace trivial-guard blocks for removable globals with `Nop`.
 fn nop_trivial_init_blocks(instr: &mut WirInstr, removable: &IndexSet<String>) {
-    if let Some(fq) = is_trivial_init_block(instr) {
-        if removable.contains(fq) {
-            *instr = WirInstr::Nop;
-            return;
-        }
+    if let Some(fq) = is_trivial_init_block(instr)
+        && removable.contains(fq)
+    {
+        *instr = WirInstr::Nop;
+        return;
     }
     instr.for_each_boxed_child_mut(&mut |child| nop_trivial_init_blocks(child, removable));
 }

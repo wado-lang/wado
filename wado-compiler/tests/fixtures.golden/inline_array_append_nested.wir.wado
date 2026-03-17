@@ -13,12 +13,6 @@ struct String {
     mut used: i32,
 }
 
-struct WaitEvent {
-    mut code: i32,
-    mut handle: i32,
-    mut payload: u32,
-}
-
 struct Formatter {
     mut fill: char,
     mut align: i32,
@@ -30,11 +24,6 @@ struct Formatter {
     mut buf: ref String,
 }
 
-struct [Stream<u8>, StreamWritable<u8>] {
-    mut 0: i32,
-    mut 1: i32,
-}
-
 struct Container {
     mut items: ref Array<i32>,
 }
@@ -43,13 +32,6 @@ array array<i32> (mut i32);
 
 struct Array<i32> {  // Array<T> with T=i32
     mut repr: ref array<i32>,
-    mut used: i32,
-}
-
-array array<u64> (mut u64);
-
-struct Array<u64> {  // Array<T> with T=u64
-    mut repr: ref array<u64>,
     mut used: i32,
 }
 
@@ -79,12 +61,6 @@ type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_export__run" = fn();
 
-type "functype/core:allocator/grow_memory" = fn(i32);
-
-type "functype/core:allocator/bump_realloc" = fn(i32, i32, i32, i32) -> i32;
-
-type "functype/core:allocator/debug_realloc" = fn(i32, i32, i32, i32) -> i32;
-
 type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
 
 type "functype/core:cli/println" = fn(ref String);
@@ -105,13 +81,9 @@ type "functype/core:internal/wait_for_blocked" = fn(i32) -> i32;
 
 type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i32);
 
-type "functype/core:internal/cm_waitable_set_wait" = fn(i32) -> ref WaitEvent;
-
 type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
-
-type "functype/i32::fmt_decimal" = fn(ref "core:internal/Box<i32>", ref Formatter);
 
 type "functype/String::grow" = fn(ref String, i32);
 
@@ -120,10 +92,6 @@ type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
 type "functype/String::append" = fn(ref String, ref String);
 
 type "functype/String::append_char" = fn(ref String, char);
-
-type "functype/Container::add_items" = fn(ref Container, i32);
-
-type "functype/Container::process" = fn(ref Container);
 
 type "functype/Array<i32>::append" = fn(ref Array<i32>, i32);
 
@@ -143,6 +111,8 @@ type "functype/Container::add_items" = fn(ref Array<i32>, i32);
 
 type "functype/Container::process" = fn(ref Array<i32>);
 
+type "functype/core:internal/cm_waitable_set_wait" = fn(i32);
+
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
 import fn task-return from "wasi/task-return";
@@ -157,9 +127,6 @@ import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
 import fn subtask-drop from "wasi/subtask-drop";
 
-global mut heap_offset: i32 = 8;  // from core:allocator
-global mut __modules_initialized: bool = 0;
-
 fn run() with Stdout {
     let __local_0: ref Array<i32>;
     let c: ref Container;
@@ -169,12 +136,6 @@ fn run() with Stdout {
     let __local_10: ref "core:internal/Box<i32>";
     let __local_11: ref Formatter;
     let __local_12: ref Array<i32>;
-    __inline___initialize_modules_0: block {
-        if __modules_initialized {
-            break __inline___initialize_modules_0;
-        };
-        __modules_initialized = 1;
-    };
     c = Container { items: ref.as_non_null(__seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __local_0;
@@ -212,60 +173,6 @@ fn __cm_export__run() {
     "wasi/task-return"(0);
 }
 
-fn "core:allocator/grow_memory"(new_offset) {  // from core:allocator
-    let current_bytes: i32;
-    let deficit: i32;
-    let normal_grow: i32;
-    let grow_bytes: i32;
-    let grow_pages: i32;
-    current_bytes = builtin::memory_size() * 65536;
-    deficit = new_offset - current_bytes;
-    normal_grow = select i32(current_bytes < 16777216, current_bytes, 16777216);
-    grow_bytes = if deficit > normal_grow -> i32 {
-        1 << (32 - builtin::i32_clz(deficit - 1));
-    } else {
-        normal_grow;
-    };
-    grow_pages = (grow_bytes + 65535) / 65536;
-    drop(builtin::memory_grow(grow_pages));
-}
-
-fn "core:allocator/bump_realloc"(oldptr, oldsize, align, newsize) {  // from core:allocator
-    let aligned: i32;
-    let new_offset: i32;
-    if newsize == 0 {
-        if (oldptr + oldsize) == heap_offset {
-            heap_offset = oldptr;
-        };
-        return 0;
-    };
-    aligned = ((heap_offset + align) - 1) & (0 - align);
-    new_offset = aligned + newsize;
-    if builtin::unlikely(new_offset > (builtin::memory_size() * 65536)) {
-        "core:allocator/grow_memory"(new_offset);
-    };
-    heap_offset = new_offset;
-    return aligned;
-}
-
-fn "core:allocator/debug_realloc"(oldptr, oldsize, align, newsize) {  // from core:allocator
-    let aligned: i32;
-    let new_offset: i32;
-    if newsize == 0 {
-        if oldsize > 0 {
-            builtin::memory_fill(oldptr, 255, oldsize);
-        };
-        return 0;
-    };
-    aligned = ((heap_offset + align) - 1) & (0 - align);
-    new_offset = aligned + newsize;
-    if builtin::unlikely(new_offset > (builtin::memory_size() * 65536)) {
-        "core:allocator/grow_memory"(new_offset);
-    };
-    heap_offset = new_offset;
-    return aligned;
-}
-
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let bytes: ref array<u8>;
     let len: i32;
@@ -287,12 +194,10 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     let rx: i32;
     let tx: i32;
     let subtask: i32;
-    let __pattern_temp_0: ref "tuple/[Stream<u8>, StreamWritable<u8>]";
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
-    __pattern_temp_0 = "tuple/[Stream<u8>, StreamWritable<u8>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
-    rx = __pattern_temp_0.0;
-    tx = __pattern_temp_0.1;
+    rx = builtin::i32_wrap_i64(__pair_temp_1);
+    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     subtask = __cm_adapter__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
@@ -303,13 +208,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l10: loop {
+            l2: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l10;
+                continue l2;
             };
         };
     };
@@ -348,7 +253,7 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
             "wasi/waitable-join"(__local_4, __local_5);
             break __inline_cm_waitable_join_0: __local_4;
         });
-        drop("core:internal/cm_waitable_set_wait"(ws));
+        "core:internal/cm_waitable_set_wait"(ws);
         "wasi/subtask-drop"(subtask);
         "wasi/waitable-set-drop"(ws);
     };
@@ -358,12 +263,10 @@ fn "core:internal/log_stderr"(message) {  // from core:internal
     let rx: i32;
     let tx: i32;
     let subtask: i32;
-    let __pattern_temp_0: ref "tuple/[Stream<u8>, StreamWritable<u8>]";
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
-    __pattern_temp_0 = "tuple/[Stream<u8>, StreamWritable<u8>]" { 0: builtin::i32_wrap_i64(__pair_temp_1), 1: builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64) };
-    rx = __pattern_temp_0.0;
-    tx = __pattern_temp_0.1;
+    rx = builtin::i32_wrap_i64(__pair_temp_1);
+    tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     subtask = "wasi/wasi:cli/Stderr::write_via_stream"(rx, 2048);
     "core:internal/write_string_to_stream"(tx, message, 1);
     "core:internal/wait_for_subtask"(subtask);
@@ -384,15 +287,13 @@ fn "core:internal/cm_lower_list_u8"(data, len) {  // from core:internal
 fn "core:internal/wait_for_blocked"(handle) {  // from core:internal
     let ws: i32;
     let evt_ptr: i32;
-    let code: i32;
     let payload: i32;
-    let freed: i32;
     ws = "wasi/waitable-set-new"();
     "wasi/waitable-join"(handle, ws);
     evt_ptr = "mem/realloc"(0, 0, 4, 8);
-    code = "wasi/waitable-set-wait"(ws, evt_ptr);
+    drop("wasi/waitable-set-wait"(ws, evt_ptr));
     payload = builtin::load_i32(evt_ptr + 4);
-    freed = "mem/realloc"(evt_ptr, 8, 4, 0);
+    drop("mem/realloc"(evt_ptr, 8, 4, 0));
     "wasi/waitable-set-drop"(ws);
     return payload;
 }
@@ -402,30 +303,22 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     let ptr: i32;
     let raw_len: i32;
     let result: i32;
-    let payload: i32;
-    let freed: i32;
     packed = "core:internal/cm_lower_list_u8"(data, len);
     ptr = builtin::i32_wrap_i64(packed);
     raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
-        payload = "core:internal/wait_for_blocked"(handle);
+        drop("core:internal/wait_for_blocked"(handle));
     };
-    freed = "mem/realloc"(ptr, raw_len, 1, 0);
+    drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
 fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
     let out_ptr: i32;
-    let code: i32;
-    let evt_handle: i32;
-    let payload: i32;
-    let freed: i32;
     out_ptr = "mem/realloc"(0, 0, 4, 8);
-    code = "wasi/waitable-set-wait"(ws, out_ptr);
-    evt_handle = builtin::load_i32(out_ptr);
-    payload = builtin::load_i32(out_ptr + 4);
-    freed = "mem/realloc"(out_ptr, 8, 4, 0);
-    return WaitEvent { code: code, handle: evt_handle, payload: payload };
+    drop("wasi/waitable-set-wait"(ws, out_ptr));
+    drop("mem/realloc"(out_ptr, 8, 4, 0));
+    return;
 }
 
 fn count_digits_i64(val) {
@@ -438,13 +331,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l17: loop {
+            l9: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l17;
+                continue l9;
             };
         };
     };
@@ -461,14 +354,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l21: loop {
+                l13: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l21;
+                    continue l13;
                 };
             };
         };
@@ -578,14 +471,14 @@ fn Container::add_items(self, count) {
         i = 0;
         _licm_items_3 = self;
         block {
-            l33: loop {
+            l25: loop {
                 if (i < count) == 0 {
                     break __for_0;
                 };
                 Array<i32>::append(_licm_items_3, i);
                 Array<i32>::append(_licm_items_3, i * 2);
                 i = i + 1;
-                continue l33;
+                continue l25;
             };
         };
     };
@@ -615,7 +508,7 @@ fn Container::process(self) {
         _licm_used_16 = _licm_items_15.used;
         _licm_repr_17 = _licm_items_15.repr;
         block {
-            l36: loop {
+            l28: loop {
                 if (i < _licm_used_16) == 0 {
                     break __for_1;
                 };
@@ -627,7 +520,7 @@ fn Container::process(self) {
                     Array<i32>::append(temp, val);
                 };
                 i = i + 1;
-                continue l36;
+                continue l28;
             };
         };
     };
@@ -637,7 +530,7 @@ fn Container::process(self) {
         _licm_items_19 = self;
         _licm_repr_20 = temp.repr;
         block {
-            l40: loop {
+            l32: loop {
                 if (j < _licm_used_18) == 0 {
                     break __for_2;
                 };
@@ -646,7 +539,7 @@ fn Container::process(self) {
                     break __inline_Array_i32__IndexValue__index_value_6: builtin::array_get<i32>(_licm_repr_20, __local_14);
                 } + 100);
                 j = j + 1;
-                continue l40;
+                continue l32;
             };
         };
     };
@@ -672,13 +565,13 @@ fn Array<i32>::append(self, value) {
         __for_0: block {
             i = 0;
             block {
-                l44: loop {
+                l36: loop {
                     if (i < used) == 0 {
                         break __for_0;
                     };
                     builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                     i = i + 1;
-                    continue l44;
+                    continue l36;
                 };
             };
         };
@@ -695,13 +588,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l47: loop {
+            l39: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::append_char(_licm_buf_4, c);
                 i = i + 1;
-                continue l47;
+                continue l39;
             };
         };
     };

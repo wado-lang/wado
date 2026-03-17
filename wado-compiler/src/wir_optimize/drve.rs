@@ -15,7 +15,7 @@ use super::{collect_pinned_func_ids, is_side_effect_free};
 /// 1. Every return in the body is `Return { value: StructNew { pure_fields } }`.
 /// 2. Every call site in the module is `Drop(Call(f, args))`.
 ///
-/// Those functions are converted to void return, the StructNew is removed from
+/// Those functions are converted to void return, the `StructNew` is removed from
 /// returns, and the Drop wrapper is removed at each call site.
 pub(super) fn drve_dead_return_values(module: &mut WirModule) {
     let pinned = collect_pinned_func_ids(module);
@@ -37,15 +37,11 @@ struct DrveCandidate {
     func_array_idx: usize,
 }
 
-fn find_drve_candidates(
-    module: &WirModule,
-    pinned: &IndexSet<u32>,
-) -> Vec<(u32, DrveCandidate)> {
+fn find_drve_candidates(module: &WirModule, pinned: &IndexSet<u32>) -> Vec<(u32, DrveCandidate)> {
     let mut candidates = Vec::new();
 
     for (i, func) in module.functions.iter().enumerate() {
-        let func_id_index =
-            crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
+        let func_id_index = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
 
         if pinned.contains(&func_id_index) {
             continue;
@@ -103,9 +99,7 @@ fn all_returns_are_pure_struct_new(instrs: &[WirInstr]) -> bool {
             WirInstr::Return { value: None } => {
                 return false;
             }
-            WirInstr::Block { body, .. }
-            | WirInstr::Loop { body, .. }
-            | WirInstr::Seq(body) => {
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
                 if !all_returns_are_pure_struct_new(body) {
                     return false;
                 }
@@ -118,10 +112,10 @@ fn all_returns_are_pure_struct_new(instrs: &[WirInstr]) -> bool {
                 if !all_returns_are_pure_struct_new(then_body) {
                     return false;
                 }
-                if let Some(eb) = else_body {
-                    if !all_returns_are_pure_struct_new(eb) {
-                        return false;
-                    }
+                if let Some(eb) = else_body
+                    && !all_returns_are_pure_struct_new(eb)
+                {
+                    return false;
                 }
             }
             _ => {}
@@ -129,8 +123,6 @@ fn all_returns_are_pure_struct_new(instrs: &[WirInstr]) -> bool {
     }
     true
 }
-
-
 
 fn validate_drve_call_sites(
     module: &WirModule,
@@ -149,7 +141,14 @@ fn validate_drve_call_sites(
     candidates
         .iter()
         .filter(|(id, _)| has_drop_call.contains(id) && !invalid.contains(id))
-        .map(|(id, c)| (*id, DrveCandidate { func_array_idx: c.func_array_idx }))
+        .map(|(id, c)| {
+            (
+                *id,
+                DrveCandidate {
+                    func_array_idx: c.func_array_idx,
+                },
+            )
+        })
         .collect()
 }
 
@@ -180,14 +179,14 @@ fn check_drve_call_uses_in_body(
                 check_drve_call_uses_in_body(body, candidate_ids, invalid, has_drop_call);
             }
             WirInstr::Drop(inner) => {
-                if let WirInstr::Call { func_id, args } = inner.as_ref() {
-                    if candidate_ids.contains(&func_id.index()) {
-                        has_drop_call.insert(func_id.index());
-                        for arg in args {
-                            find_drve_candidate_calls(arg, candidate_ids, invalid);
-                        }
-                        continue;
+                if let WirInstr::Call { func_id, args } = inner.as_ref()
+                    && candidate_ids.contains(&func_id.index())
+                {
+                    has_drop_call.insert(func_id.index());
+                    for arg in args {
+                        find_drve_candidate_calls(arg, candidate_ids, invalid);
                     }
+                    continue;
                 }
                 find_drve_candidate_calls(inner, candidate_ids, invalid);
             }
@@ -203,11 +202,11 @@ fn find_drve_candidate_calls(
     candidate_ids: &IndexSet<u32>,
     invalid: &mut IndexSet<u32>,
 ) {
-    if let WirInstr::Call { func_id, .. } = instr {
-        if candidate_ids.contains(&func_id.index()) {
-            invalid.insert(func_id.index());
-            return;
-        }
+    if let WirInstr::Call { func_id, .. } = instr
+        && candidate_ids.contains(&func_id.index())
+    {
+        invalid.insert(func_id.index());
+        return;
     }
     instr.for_each_child(&mut |child| {
         find_drve_candidate_calls(child, candidate_ids, invalid);
@@ -260,9 +259,7 @@ fn rewrite_drve_returns(instrs: &mut Vec<WirInstr>) {
             {
                 *instr = WirInstr::Return { value: None };
             }
-            WirInstr::Block { body, .. }
-            | WirInstr::Loop { body, .. }
-            | WirInstr::Seq(body) => {
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
                 rewrite_drve_returns(body);
             }
             WirInstr::If {
@@ -290,9 +287,7 @@ fn rewrite_drve_call_sites(instrs: &mut Vec<WirInstr>, candidate_set: &IndexSet<
                 let call = std::mem::replace(inner.as_mut(), WirInstr::Nop);
                 *instr = call;
             }
-            WirInstr::Block { body, .. }
-            | WirInstr::Loop { body, .. }
-            | WirInstr::Seq(body) => {
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
                 rewrite_drve_call_sites(body, candidate_set);
             }
             WirInstr::If {
