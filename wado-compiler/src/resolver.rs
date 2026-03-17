@@ -592,7 +592,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         tir_module.add_flags(tir_flags);
                     }
                 }
-                Item::Type(newtype_decl) => {
+                Item::Newtype(newtype_decl) => {
                     if let Some(&type_id) = self.newtypes.get(&newtype_decl.name) {
                         tir_module.add_newtype(TirNewtype {
                             name: newtype_decl.name.clone(),

@@ -95,7 +95,7 @@ impl TraitEnv {
                             .entry(f.name.clone())
                             .or_insert_with(|| module_source.clone());
                     }
-                    Item::Type(n) => {
+                    Item::Newtype(n) => {
                         type_decl_index
                             .entry(n.name.clone())
                             .or_insert_with(|| module_source.clone());

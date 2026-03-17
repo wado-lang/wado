@@ -10,7 +10,7 @@ use crate::ast::{
     FunctionType, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes,
     IndexExpr, InnerAttribute, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt,
     MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType,
-    Newtype, Param, Pattern, QuestionMarkExpr, ResourceDecl, ReturnStmt, SelfKind,
+    Newtype, Param, Pattern, TryOpExpr, ResourceDecl, ReturnStmt, SelfKind,
     StaticMethodCallExpr, Stmt,
     StructDecl, StructField, StructLiteralExpr, StructLiteralField, StructPatternField,
     TaskReturnStmt, TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl,
@@ -332,7 +332,7 @@ impl Parser {
             TokenKind::Enum => self.parse_enum_decl(is_pub, attrs).map(Item::Enum),
             TokenKind::Variant => self.parse_variant_decl(is_pub, attrs).map(Item::Variant),
             TokenKind::Flags => self.parse_flags_decl(is_pub, attrs).map(Item::Flags),
-            TokenKind::Type => self.parse_newtype(is_pub, attrs).map(Item::Type),
+            TokenKind::Type => self.parse_newtype(is_pub, attrs).map(Item::Newtype),
             TokenKind::Impl => self.parse_impl_block().map(Item::Impl),
             TokenKind::Trait => self.parse_trait_decl(is_pub, attrs).map(Item::Trait),
             TokenKind::Resource => self.parse_resource_decl(is_pub, attrs).map(Item::Resource),
@@ -2379,7 +2379,7 @@ impl Parser {
                     let start_span = expr.span();
                     let question_token = self.advance();
                     let span = start_span.merge(&question_token.span);
-                    expr = Expr::QuestionMark(Box::new(QuestionMarkExpr { expr, span }));
+                    expr = Expr::TryOp(Box::new(TryOpExpr { expr, span }));
                 }
                 _ => break,
             }

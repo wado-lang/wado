@@ -251,7 +251,7 @@ impl ClosureLowerer {
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 self.collect_closures_in_block(body);
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 then_block,
                 else_block,
@@ -263,7 +263,7 @@ impl ClosureLowerer {
                     self.collect_closures_in_block(else_blk);
                 }
             }
-            TirStmtKind::LetPattern { value, .. } => {
+            TirStmtKind::LetDestructure { value, .. } => {
                 self.collect_closures_in_expr(value);
             }
             TirStmtKind::TaskReturn { .. } => {
@@ -414,7 +414,7 @@ impl ClosureLowerer {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. }
+            | TirExprKind::FuncRef { .. }
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
@@ -466,7 +466,7 @@ impl ClosureLowerer {
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 self.analyze_closure_safety_block(body);
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 then_block,
                 else_block,
@@ -478,7 +478,7 @@ impl ClosureLowerer {
                     self.analyze_closure_safety_block(else_blk);
                 }
             }
-            TirStmtKind::LetPattern { value, .. } => {
+            TirStmtKind::LetDestructure { value, .. } => {
                 self.analyze_closure_safety_expr(value, false);
             }
             TirStmtKind::TaskReturn { .. } => {
@@ -632,7 +632,7 @@ impl ClosureLowerer {
             | TirExprKind::BytesLiteral(_)
             | TirExprKind::Null
             | TirExprKind::Unit
-            | TirExprKind::Global { .. }
+            | TirExprKind::FuncRef { .. }
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
@@ -861,7 +861,7 @@ impl ClosureLowerer {
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 Self::collect_locals_from_block(body, locals);
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 then_block,
                 else_block,
@@ -873,7 +873,7 @@ impl ClosureLowerer {
                     Self::collect_locals_from_block(else_blk, locals);
                 }
             }
-            TirStmtKind::LetPattern { value, .. } => {
+            TirStmtKind::LetDestructure { value, .. } => {
                 Self::collect_locals_from_expr(value, locals);
             }
             TirStmtKind::TaskReturn { .. } => {
@@ -1335,7 +1335,7 @@ impl ClosureLowerer {
             | TirExprKind::BytesLiteral(_)
             | TirExprKind::Null
             | TirExprKind::Unit
-            | TirExprKind::Global { .. }
+            | TirExprKind::FuncRef { .. }
             | TirExprKind::EnumConstruct { .. } => expr.clone(),
             // For remaining expression types, clone as-is
             // (IndirectCall, Closure, etc. - rare in closure bodies)
@@ -1445,12 +1445,12 @@ impl ClosureLowerer {
                     self_ref_type,
                 ),
             },
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 pattern,
                 then_block,
                 else_block,
-            } => TirStmtKind::IfPattern {
+            } => TirStmtKind::IfLet {
                 scrutinee: self.transform_closure_body(
                     scrutinee,
                     captures,
@@ -1469,11 +1469,11 @@ impl ClosureLowerer {
                     self.transform_closure_body_block(b, captures, struct_type_id, self_ref_type)
                 }),
             },
-            TirStmtKind::LetPattern {
+            TirStmtKind::LetDestructure {
                 pattern,
                 is_mut,
                 value,
-            } => TirStmtKind::LetPattern {
+            } => TirStmtKind::LetDestructure {
                 pattern: self.transform_closure_body_pattern(pattern),
                 is_mut: *is_mut,
                 value: self.transform_closure_body(
@@ -1683,7 +1683,7 @@ impl ClosureLowerer {
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 self.fn_param_stored_in_struct_field(body, fn_param_indices)
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 then_block,
                 else_block,
@@ -1695,7 +1695,7 @@ impl ClosureLowerer {
                         .as_ref()
                         .is_some_and(|b| self.fn_param_stored_in_struct_field(b, fn_param_indices))
             }
-            TirStmtKind::LetPattern { value, .. } => {
+            TirStmtKind::LetDestructure { value, .. } => {
                 self.fn_param_in_struct_field_expr(value, fn_param_indices)
             }
             TirStmtKind::TaskReturn { .. } => {
@@ -1829,7 +1829,7 @@ impl ClosureLowerer {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. }
+            | TirExprKind::FuncRef { .. }
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => false,
@@ -1883,7 +1883,7 @@ impl ClosureLowerer {
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 self.collect_fn_param_specs(body, func_by_name, type_table, requests);
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 then_block,
                 else_block,
@@ -1895,7 +1895,7 @@ impl ClosureLowerer {
                     self.collect_fn_param_specs(else_blk, func_by_name, type_table, requests);
                 }
             }
-            TirStmtKind::LetPattern { value, .. } => {
+            TirStmtKind::LetDestructure { value, .. } => {
                 self.collect_fn_param_specs_expr(value, func_by_name, type_table, requests);
             }
             TirStmtKind::TaskReturn { .. } => {
@@ -2088,7 +2088,7 @@ impl ClosureLowerer {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. }
+            | TirExprKind::FuncRef { .. }
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
@@ -2268,7 +2268,7 @@ impl ClosureLowerer {
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 self.count_closures_in_block(body, counter);
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 then_block,
                 else_block,
@@ -2477,12 +2477,12 @@ impl ClosureLowerer {
                     .map(|v| self.specialize_expr(v, param_to_functor, type_table)),
             },
             TirStmtKind::Continue => TirStmtKind::Continue,
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 pattern,
                 then_block,
                 else_block,
-            } => TirStmtKind::IfPattern {
+            } => TirStmtKind::IfLet {
                 scrutinee: self.specialize_expr(scrutinee, param_to_functor, type_table),
                 pattern: pattern.clone(),
                 then_block: self.specialize_function_body(then_block, param_to_functor, type_table),
@@ -2490,11 +2490,11 @@ impl ClosureLowerer {
                     .as_ref()
                     .map(|b| self.specialize_function_body(b, param_to_functor, type_table)),
             },
-            TirStmtKind::LetPattern {
+            TirStmtKind::LetDestructure {
                 pattern,
                 is_mut,
                 value,
-            } => TirStmtKind::LetPattern {
+            } => TirStmtKind::LetDestructure {
                 pattern: pattern.clone(),
                 is_mut: *is_mut,
                 value: self.specialize_expr(value, param_to_functor, type_table),
@@ -2960,11 +2960,11 @@ impl ClosureLowerer {
             ),
             TirExprKind::Null => TirExpr::new(TirExprKind::Null, expr.type_id, expr.span),
             TirExprKind::Unit => TirExpr::new(TirExprKind::Unit, expr.type_id, expr.span),
-            TirExprKind::Global {
+            TirExprKind::FuncRef {
                 name,
                 module_source,
             } => TirExpr::new(
-                TirExprKind::Global {
+                TirExprKind::FuncRef {
                     name: name.clone(),
                     module_source: module_source.clone(),
                 },
@@ -3132,7 +3132,7 @@ impl ClosureLowerer {
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 self.transform_block(body, type_table);
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 then_block,
                 else_block,
@@ -3144,7 +3144,7 @@ impl ClosureLowerer {
                     self.transform_block(else_blk, type_table);
                 }
             }
-            TirStmtKind::LetPattern { value, .. } => {
+            TirStmtKind::LetDestructure { value, .. } => {
                 self.transform_expr(value, type_table);
             }
             TirStmtKind::TaskReturn { .. } => {
@@ -3385,7 +3385,7 @@ impl ClosureLowerer {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. }
+            | TirExprKind::FuncRef { .. }
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
@@ -3542,7 +3542,7 @@ impl ClosureLowerer {
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 self.transform_remaining_closures_block(body);
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 then_block,
                 else_block,
@@ -3554,7 +3554,7 @@ impl ClosureLowerer {
                     self.transform_remaining_closures_block(else_blk);
                 }
             }
-            TirStmtKind::LetPattern { value, .. } => {
+            TirStmtKind::LetDestructure { value, .. } => {
                 self.transform_remaining_closures_expr(value);
             }
             TirStmtKind::TaskReturn { .. } => {
@@ -3742,7 +3742,7 @@ impl ClosureLowerer {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. }
+            | TirExprKind::FuncRef { .. }
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. }

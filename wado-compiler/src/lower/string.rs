@@ -116,7 +116,7 @@ impl StringCollector {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.collect_block(block);
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 then_block,
                 else_block,
@@ -128,7 +128,7 @@ impl StringCollector {
                     self.collect_block(else_blk);
                 }
             }
-            TirStmtKind::LetPattern { value, .. } => {
+            TirStmtKind::LetDestructure { value, .. } => {
                 self.collect_expr(value);
             }
             TirStmtKind::TaskReturn { .. } => {
@@ -267,7 +267,7 @@ impl StringCollector {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. }
+            | TirExprKind::FuncRef { .. }
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}

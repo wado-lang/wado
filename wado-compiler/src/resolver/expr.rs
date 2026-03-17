@@ -101,7 +101,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Expr::Matches(_) => {
                 panic!("Matches expression should have been desugared to if-let before resolver")
             }
-            Expr::QuestionMark(qm) => self.resolve_question_mark(qm, ctx),
+            Expr::TryOp(qm) => self.resolve_question_mark(qm, ctx),
         }
     }
 
@@ -480,7 +480,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .unwrap_or_else(|| self.current_module_source.clone())
             };
             return TirExpr::new(
-                TirExprKind::Global {
+                TirExprKind::FuncRef {
                     module_source,
                     name: ident.name.clone(),
                 },
@@ -493,7 +493,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // These are defined in core:internal and re-exported by core:prelude
         if matches!(ident.name.as_str(), "panic" | "unreachable") {
             return TirExpr::new(
-                TirExprKind::Global {
+                TirExprKind::FuncRef {
                     module_source: ModuleSource::internal(),
                     name: ident.name.clone(),
                 },
@@ -1032,8 +1032,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         None
                     }
                 }
-                // IfPattern can also produce a value if both branches exist and have the same type
-                TirStmtKind::IfPattern {
+                // IfLet can also produce a value if both branches exist and have the same type
+                TirStmtKind::IfLet {
                     then_block,
                     else_block: Some(else_block),
                     ..
@@ -1128,7 +1128,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             };
 
             let if_pattern_stmt = TirStmt::new(
-                TirStmtKind::IfPattern {
+                TirStmtKind::IfLet {
                     scrutinee,
                     pattern: tir_pattern,
                     then_block,
@@ -1784,7 +1784,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
                 None
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 then_block,
                 else_block,
                 ..
@@ -2308,7 +2308,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ///   match expr { Some(v) => v, None => return null }
     pub(super) fn resolve_question_mark(
         &mut self,
-        qm: &ast::QuestionMarkExpr,
+        qm: &ast::TryOpExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
         let inner = self.resolve_expr(&qm.expr, ctx, None);

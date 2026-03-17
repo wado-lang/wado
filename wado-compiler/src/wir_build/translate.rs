@@ -80,7 +80,7 @@ fn collect_let_names(names: &mut IndexMap<u32, String>, stmts: &[TirStmt]) {
                     collect_let_names(names, &eb.stmts);
                 }
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 then_block,
                 else_block,
                 ..
@@ -759,7 +759,7 @@ impl FunctionTranslator<'_, '_> {
                         self.declare_locals_from_stmts(instrs, &eb.stmts);
                     }
                 }
-                TirStmtKind::IfPattern {
+                TirStmtKind::IfLet {
                     then_block,
                     else_block,
                     ..
@@ -792,7 +792,7 @@ impl FunctionTranslator<'_, '_> {
     ///
     /// Used for if-expression branches and labeled-block-expression bodies.
     /// The last `Expr` statement is NOT dropped; it stays on the Wasm stack as the result.
-    /// Also handles statement-level If/IfPattern as value-producing when they're the
+    /// Also handles statement-level If/IfLet as value-producing when they're the
     /// last statement (TIR stores these as statements, not expressions).
     fn translate_stmts_as_value(&mut self, stmts: &[TirStmt]) -> Vec<WirInstr> {
         let mut instrs = Vec::new();
@@ -842,8 +842,8 @@ impl FunctionTranslator<'_, '_> {
                     });
                     continue;
                 }
-                // Statement-level IfPattern with else can produce a value
-                if let TirStmtKind::IfPattern {
+                // Statement-level IfLet with else can produce a value
+                if let TirStmtKind::IfLet {
                     scrutinee,
                     then_block,
                     else_block: Some(else_block),
@@ -892,7 +892,7 @@ impl FunctionTranslator<'_, '_> {
                 else_block: Some(_),
                 ..
             } => self.infer_stmts_result_type(&then_block.stmts),
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 then_block,
                 else_block: Some(_),
                 ..
@@ -1086,7 +1086,7 @@ impl FunctionTranslator<'_, '_> {
                     else_body,
                 })
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 then_block,
                 else_block,
@@ -1124,7 +1124,7 @@ impl FunctionTranslator<'_, '_> {
                     body: body_instrs,
                 })
             }
-            TirStmtKind::LetPattern { pattern, value, .. } => {
+            TirStmtKind::LetDestructure { pattern, value, .. } => {
                 self.translate_let_pattern(pattern, value)
             }
             TirStmtKind::TaskReturn { .. } => {
@@ -1214,12 +1214,12 @@ impl FunctionTranslator<'_, '_> {
                     }
                 }
             }
-            TirExprKind::Global {
+            TirExprKind::FuncRef {
                 module_source,
                 name,
             } => {
                 // Global function references — currently emitting as i32 const placeholder
-                // (TirExprKind::Global is for function references, not global variables)
+                // (TirExprKind::FuncRef is for function references, not global variables)
                 let full_name = if module_source.is_entry_point() {
                     name.clone()
                 } else {
@@ -5340,7 +5340,7 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Translate a `LetPattern` (tuple destructuring) statement.
+    /// Translate a `LetDestructure` (tuple destructuring) statement.
     /// Evaluates the tuple expression, stores it in a temp local,
     /// then binds each element to its pattern binding local.
     fn translate_let_pattern(&mut self, pattern: &TirPattern, value: &TirExpr) -> Option<WirInstr> {

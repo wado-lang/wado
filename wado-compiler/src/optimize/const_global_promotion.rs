@@ -129,7 +129,7 @@ fn collect_promotions_from_stmt(
         TirStmtKind::LabeledBlock { block, .. } => {
             collect_promotions_from_block(block, promotable, promotions);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -146,7 +146,7 @@ fn collect_promotions_from_stmt(
                 collect_promotions_from_expr(v, promotable, promotions);
             }
         }
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             collect_promotions_from_expr(value, promotable, promotions);
         }
         TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } => {}
@@ -225,7 +225,7 @@ fn remove_promoted_sets_from_stmt(
         TirStmtKind::LabeledBlock { block, .. } => {
             remove_promoted_sets_from_block(block, promotions);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             then_block,
             else_block,
             ..
@@ -238,7 +238,7 @@ fn remove_promoted_sets_from_stmt(
         TirStmtKind::Expr(expr) => {
             remove_promoted_sets_from_expr(expr, promotions);
         }
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
             remove_promoted_sets_from_expr(value, promotions);
         }
         TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
@@ -302,7 +302,7 @@ fn visit_expr_children(expr: &TirExpr, mut visitor: impl FnMut(&TirExpr)) {
 fn visit_stmt_exprs(stmt: &TirStmt, visitor: &mut impl FnMut(&TirExpr)) {
     match &stmt.kind {
         TirStmtKind::Expr(expr) => visitor(expr),
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetPattern { value, .. } => visitor(value),
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => visitor(value),
         TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 visitor(v);
@@ -333,7 +333,7 @@ fn visit_stmt_exprs(stmt: &TirStmt, visitor: &mut impl FnMut(&TirExpr)) {
                 visit_stmt_exprs(s, visitor);
             }
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,

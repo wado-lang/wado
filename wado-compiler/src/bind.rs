@@ -710,7 +710,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 self.exit_scope();
             }
 
-            Expr::QuestionMark(qm) => {
+            Expr::TryOp(qm) => {
                 self.bind_expr(&qm.expr)?;
             }
 

@@ -237,7 +237,7 @@ fn lower_wide_int_in_stmt(stmt: &mut TirStmt, type_table: &Rc<RefCell<TypeTable>
                 lower_wide_int_in_block(else_b, type_table);
             }
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -254,7 +254,7 @@ fn lower_wide_int_in_stmt(stmt: &mut TirStmt, type_table: &Rc<RefCell<TypeTable>
         | TirStmtKind::Return { value: None }
         | TirStmtKind::Loop { .. }
         | TirStmtKind::LabeledBlock { .. }
-        | TirStmtKind::LetPattern { .. } => {}
+        | TirStmtKind::LetDestructure { .. } => {}
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
@@ -470,7 +470,7 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}

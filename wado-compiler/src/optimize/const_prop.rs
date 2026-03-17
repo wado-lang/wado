@@ -147,7 +147,7 @@ fn propagate_constants_in_stmt(
         }
         TirStmtKind::Loop { body } => propagate_constants_in_block(body, constants),
         TirStmtKind::LabeledBlock { block, .. } => propagate_constants_in_block(block, constants),
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -164,7 +164,7 @@ fn propagate_constants_in_stmt(
             .as_mut()
             .is_some_and(|v| propagate_constants_in_expr(v, constants)),
         TirStmtKind::Continue => false,
-        TirStmtKind::LetPattern { value, .. } => propagate_constants_in_expr(value, constants),
+        TirStmtKind::LetDestructure { value, .. } => propagate_constants_in_expr(value, constants),
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
@@ -299,7 +299,7 @@ fn propagate_constants_in_expr(
         }
         // Leaf nodes - nothing to recurse into
         TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::IntLiteral { .. }

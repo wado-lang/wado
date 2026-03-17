@@ -112,7 +112,7 @@ fn licm_block(
                 changed |= licm_block(inner, local_count, local_types, type_table);
                 new_stmts.push(stmt);
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 then_block,
                 else_block,
                 ..
@@ -369,7 +369,7 @@ fn collect_modified_vars_in_stmt(
         TirStmtKind::LabeledBlock { block, .. } => {
             collect_modified_vars_in_block(block, modified, type_table);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             pattern,
             then_block,
@@ -391,7 +391,7 @@ fn collect_modified_vars_in_stmt(
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { pattern, value, .. } => {
+        TirStmtKind::LetDestructure { pattern, value, .. } => {
             // Collect pattern bindings as they are assigned
             collect_pattern_bindings(pattern, modified);
             // Also check the value expression for mutable references
@@ -564,7 +564,7 @@ fn collect_modified_vars_in_expr(
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::Match { .. }
@@ -592,7 +592,7 @@ fn is_loop_invariant(expr: &TirExpr, modified_vars: &IndexSet<u32>) -> bool {
         | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
-        | TirExprKind::Global { .. } => true,
+        | TirExprKind::FuncRef { .. } => true,
 
         // Local variable is invariant if not modified in the loop
         TirExprKind::Local { index, .. } => !modified_vars.contains(index),
@@ -704,7 +704,7 @@ fn collect_licm_ref_bindings_in_stmt(
         TirStmtKind::LabeledBlock { block, .. } => {
             collect_licm_ref_bindings_in_block(block, type_table, bindings);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -722,7 +722,7 @@ fn collect_licm_ref_bindings_in_stmt(
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             collect_licm_ref_bindings_in_expr(value, type_table, bindings);
         }
         TirStmtKind::TaskReturn { .. } => {
@@ -850,7 +850,7 @@ fn collect_licm_ref_bindings_in_expr(
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::Match { .. }
@@ -991,7 +991,7 @@ fn find_hoist_candidates_in_stmt(
                 next_local,
             );
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -1037,7 +1037,7 @@ fn find_hoist_candidates_in_stmt(
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             find_hoist_candidates_in_expr(
                 value,
                 modified_vars,
@@ -1438,7 +1438,7 @@ fn find_hoist_candidates_in_expr(
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::Match { .. }
@@ -1494,7 +1494,7 @@ fn replace_hoisted_in_stmt(
         TirStmtKind::LabeledBlock { block, .. } => {
             replace_hoisted_in_block(block, candidates, ref_bindings);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -1512,7 +1512,7 @@ fn replace_hoisted_in_stmt(
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             replace_hoisted_in_expr(value, candidates, ref_bindings);
         }
         TirStmtKind::TaskReturn { .. } => {
@@ -1682,7 +1682,7 @@ fn replace_hoisted_in_expr(
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::Match { .. }

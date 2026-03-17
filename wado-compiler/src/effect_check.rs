@@ -171,7 +171,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.check_block(block)?;
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 then_block,
                 else_block,
@@ -183,7 +183,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                     self.check_block(else_blk)?;
                 }
             }
-            TirStmtKind::LetPattern { value, .. } => {
+            TirStmtKind::LetDestructure { value, .. } => {
                 self.check_expr(value)?;
             }
             TirStmtKind::TaskReturn { value } => {
@@ -335,7 +335,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. }
+            | TirExprKind::FuncRef { .. }
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}

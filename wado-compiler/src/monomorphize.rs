@@ -730,7 +730,7 @@ impl Monomorphizer {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.rewrite_types_in_block(block, type_table);
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 pattern,
                 then_block,
@@ -743,7 +743,7 @@ impl Monomorphizer {
                     self.rewrite_types_in_block(else_blk, type_table);
                 }
             }
-            TirStmtKind::LetPattern { pattern, value, .. } => {
+            TirStmtKind::LetDestructure { pattern, value, .. } => {
                 self.rewrite_types_in_pattern(pattern, type_table);
                 self.rewrite_types_in_expr(value, type_table);
             }
@@ -909,7 +909,7 @@ impl Monomorphizer {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. }
+            | TirExprKind::FuncRef { .. }
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
@@ -1461,7 +1461,7 @@ impl Monomorphizer {
                     type_table,
                 );
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 then_block,
                 else_block,
@@ -1485,7 +1485,7 @@ impl Monomorphizer {
                     );
                 }
             }
-            TirStmtKind::LetPattern { value, .. } => {
+            TirStmtKind::LetDestructure { value, .. } => {
                 self.collect_func_instantiation_sites_in_expr(value, generic_functions, type_table);
             }
             TirStmtKind::TaskReturn { .. } => {
@@ -2094,7 +2094,7 @@ impl Monomorphizer {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. }
+            | TirExprKind::FuncRef { .. }
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
@@ -2434,7 +2434,7 @@ impl Monomorphizer {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.substitute_types_in_block(block, substitution, type_table);
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 pattern,
                 then_block,
@@ -2447,7 +2447,7 @@ impl Monomorphizer {
                     self.substitute_types_in_block(else_blk, substitution, type_table);
                 }
             }
-            TirStmtKind::LetPattern { pattern, value, .. } => {
+            TirStmtKind::LetDestructure { pattern, value, .. } => {
                 self.substitute_types_in_pattern(pattern, substitution, type_table);
                 self.substitute_types_in_expr(value, substitution, type_table);
             }
@@ -3125,7 +3125,7 @@ impl Monomorphizer {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. }
+            | TirExprKind::FuncRef { .. }
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
@@ -3376,7 +3376,7 @@ impl Monomorphizer {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.rewrite_function_calls_in_block(block, type_table);
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 then_block,
                 else_block,
@@ -3388,7 +3388,7 @@ impl Monomorphizer {
                     self.rewrite_function_calls_in_block(else_blk, type_table);
                 }
             }
-            TirStmtKind::LetPattern { value, .. } => {
+            TirStmtKind::LetDestructure { value, .. } => {
                 self.rewrite_function_calls_in_expr(value, type_table);
             }
             TirStmtKind::TaskReturn { .. } => {
@@ -3824,7 +3824,7 @@ impl Monomorphizer {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. }
+            | TirExprKind::FuncRef { .. }
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
@@ -4115,7 +4115,7 @@ impl Monomorphizer {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.desugar_comparisons_in_block(block, type_table);
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 then_block,
                 else_block,
@@ -4127,7 +4127,7 @@ impl Monomorphizer {
                     self.desugar_comparisons_in_block(e, type_table);
                 }
             }
-            TirStmtKind::LetPattern { value, .. } => {
+            TirStmtKind::LetDestructure { value, .. } => {
                 self.desugar_comparisons_in_expr(value, type_table);
             }
         }
@@ -4259,7 +4259,7 @@ impl Monomorphizer {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. }
+            | TirExprKind::FuncRef { .. }
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}

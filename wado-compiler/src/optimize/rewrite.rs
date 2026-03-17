@@ -37,7 +37,7 @@ fn rewrite_block(block: &mut TirBlock) -> bool {
 
 fn rewrite_stmt(stmt: &mut TirStmt) -> bool {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
             rewrite_expr(value)
         }
         TirStmtKind::Expr(expr) => rewrite_expr(expr),
@@ -57,7 +57,7 @@ fn rewrite_stmt(stmt: &mut TirStmt) -> bool {
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             rewrite_block(body)
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -193,7 +193,7 @@ fn rewrite_expr(expr: &mut TirExpr) -> bool {
         }
         // Leaf nodes
         TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::IntLiteral { .. }

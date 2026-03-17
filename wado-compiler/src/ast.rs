@@ -97,7 +97,7 @@ pub enum Item {
     Enum(EnumDecl),
     Variant(VariantDecl),
     Flags(FlagsDecl),
-    Type(Newtype),
+    Newtype(Newtype),
     Impl(ImplBlock),
     Trait(TraitDecl),
     Resource(ResourceDecl),
@@ -594,7 +594,7 @@ pub enum Expr {
     /// Labeled block expression: `label: { ... }` where the last expression is the value
     LabeledBlock(Box<LabeledBlockExpr>),
     /// Postfix `?` operator for error propagation on `Result<T, E>` and `Option<T>`.
-    QuestionMark(Box<QuestionMarkExpr>),
+    TryOp(Box<TryOpExpr>),
 }
 
 /// Labeled block expression: `label: { ... }` that produces a value
@@ -608,7 +608,7 @@ pub struct LabeledBlockExpr {
 
 /// Postfix `?` operator: `expr?`
 #[derive(Debug, Clone)]
-pub struct QuestionMarkExpr {
+pub struct TryOpExpr {
     pub expr: Expr,
     pub span: Span,
 }
@@ -639,7 +639,7 @@ impl Expr {
             Expr::StructLiteral(e) => e.span,
             Expr::TupleLiteral(e) => e.span,
             Expr::LabeledBlock(e) => e.span,
-            Expr::QuestionMark(e) => e.span,
+            Expr::TryOp(e) => e.span,
         }
     }
 
@@ -735,9 +735,9 @@ impl Expr {
                 e.span = new_span;
                 Expr::LabeledBlock(e)
             }
-            Expr::QuestionMark(mut e) => {
+            Expr::TryOp(mut e) => {
                 e.span = new_span;
-                Expr::QuestionMark(e)
+                Expr::TryOp(e)
             }
         }
     }

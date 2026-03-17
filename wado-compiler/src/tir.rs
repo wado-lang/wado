@@ -1576,7 +1576,7 @@ pub enum TirExprKind {
         index: u32,
         name: String,
     },
-    Global {
+    FuncRef {
         module_source: ModuleSource,
         name: String,
     },
@@ -2010,7 +2010,7 @@ pub enum TirStmtKind {
         block: TirBlock,
     },
     /// Pattern match in if condition: `if let Some(x) = expr { ... } else { ... }`
-    IfPattern {
+    IfLet {
         /// The expression being matched against
         scrutinee: TirExpr,
         /// The pattern to match
@@ -2021,7 +2021,7 @@ pub enum TirStmtKind {
         else_block: Option<TirBlock>,
     },
     /// Tuple destructuring let statement: `let [a, b] = tuple_expr;`
-    LetPattern {
+    LetDestructure {
         /// The pattern to bind (e.g., [a, b, c] or [x, [y, z]])
         pattern: TirPattern,
         /// Whether bindings are mutable

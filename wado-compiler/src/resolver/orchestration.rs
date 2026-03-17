@@ -272,7 +272,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         // Also update flat map for subsequent items in this module
                         flat_struct_fields.insert(struct_decl.name.clone(), info);
                     }
-                    Item::Type(newtype_decl) => {
+                    Item::Newtype(newtype_decl) => {
                         if newtype_decl.type_params.is_empty() {
                             // Concrete newtype: resolve immediately
                             let base_type_id = Self::resolve_type_static(

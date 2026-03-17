@@ -268,7 +268,7 @@ fn if_let_ok(
     span: Span,
 ) -> TirStmt {
     TirStmt::new(
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             pattern: TirPattern::Variant {
                 enum_type: result_type,
@@ -298,7 +298,7 @@ fn if_let_some(
     span: Span,
 ) -> TirStmt {
     TirStmt::new(
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             pattern: TirPattern::Variant {
                 enum_type: option_type,

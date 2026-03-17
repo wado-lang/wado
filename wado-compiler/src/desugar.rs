@@ -59,7 +59,7 @@ fn desugar_item(item: &Item, ctx: &mut DesugarContext) -> Item {
         Item::Enum(e) => Item::Enum(desugar_enum(e)),
         Item::Variant(v) => Item::Variant(v.clone()),
         Item::Flags(f) => Item::Flags(f.clone()),
-        Item::Type(t) => Item::Type(desugar_newtype(t)),
+        Item::Newtype(t) => Item::Newtype(desugar_newtype(t)),
         Item::Effect(e) => Item::Effect(desugar_effect(e)),
         Item::Use(u) => Item::Use(u.clone()),
         Item::Resource(r) => Item::Resource(r.clone()),
@@ -497,7 +497,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
         // becomes: `if let pattern = expr { guard } else { false }`
         // or if no guard: `if let pattern = expr { true } else { false }`
         Expr::Matches(m) => desugar_matches_expr(m),
-        Expr::QuestionMark(qm) => Expr::QuestionMark(Box::new(crate::ast::QuestionMarkExpr {
+        Expr::TryOp(qm) => Expr::TryOp(Box::new(crate::ast::TryOpExpr {
             expr: desugar_expr(&qm.expr),
             span: qm.span,
         })),

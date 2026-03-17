@@ -125,7 +125,7 @@ impl<'a> Unparser<'a> {
             Item::Enum(e) => self.unparse_enum(e),
             Item::Variant(v) => self.unparse_variant(v),
             Item::Flags(f) => self.unparse_flags(f),
-            Item::Type(t) => self.unparse_newtype(t),
+            Item::Newtype(t) => self.unparse_newtype(t),
             Item::Impl(i) => self.unparse_impl(i),
             Item::Trait(t) => self.unparse_trait(t),
             Item::Effect(e) => self.unparse_effect(e),
@@ -1543,7 +1543,7 @@ impl<'a> Unparser<'a> {
             Expr::StructLiteral(s) => self.unparse_struct_literal(s),
             Expr::TupleLiteral(t) => self.unparse_tuple_literal(t),
             Expr::LabeledBlock(lb) => self.unparse_labeled_block_expr(lb),
-            Expr::QuestionMark(qm) => {
+            Expr::TryOp(qm) => {
                 self.unparse_expr(&qm.expr);
                 self.output.push('?');
             }
@@ -2542,7 +2542,7 @@ pub fn get_item_span(item: &Item) -> Span {
         Item::Enum(e) => e.span,
         Item::Variant(v) => v.span,
         Item::Flags(f) => f.span,
-        Item::Type(t) => t.span,
+        Item::Newtype(t) => t.span,
         Item::Impl(i) => i.span,
         Item::Trait(t) => t.span,
         Item::Effect(e) => e.span,
@@ -2566,7 +2566,7 @@ fn get_item_first_line(item: &Item) -> usize {
         Item::Effect(e) => first_attr_line(&e.attrs),
         Item::Resource(r) => first_attr_line(&r.attrs),
         Item::Function(f) => first_attr_line(&f.attrs),
-        Item::Type(t) => first_attr_line(&t.attrs),
+        Item::Newtype(t) => first_attr_line(&t.attrs),
         Item::World(w) => first_attr_line(&w.attrs),
         Item::Global(g) => first_attr_line(&g.attributes),
         Item::Flags(f) => f
@@ -2943,7 +2943,7 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
             output.push(']');
         }
         Expr::LabeledBlock(_) => output.push_str("<labeled-block>"),
-        Expr::QuestionMark(qm) => {
+        Expr::TryOp(qm) => {
             unparse_expr_into(&qm.expr, output, false);
             output.push('?');
         }
@@ -3747,7 +3747,7 @@ impl<'a> TirUnparser<'a> {
                 self.write_indent();
                 self.output.push_str("}\n");
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 pattern,
                 then_block,
@@ -3774,7 +3774,7 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push('\n');
             }
-            TirStmtKind::LetPattern {
+            TirStmtKind::LetDestructure {
                 pattern,
                 is_mut,
                 value,
@@ -3927,7 +3927,7 @@ impl<'a> TirUnparser<'a> {
             TirExprKind::Local { name, .. } => {
                 self.output.push_str(name);
             }
-            TirExprKind::Global {
+            TirExprKind::FuncRef {
                 name,
                 module_source,
             } => {

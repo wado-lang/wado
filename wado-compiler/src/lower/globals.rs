@@ -306,7 +306,7 @@ fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<String>) {
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. } => {}
+        | TirExprKind::FuncRef { .. } => {}
         // Other expressions - skip for now
         _ => {}
     }
@@ -530,7 +530,7 @@ fn renumber_locals_in_stmt(stmt: &mut TirStmt, offset: u32) {
         }
         TirStmtKind::Continue => {}
         TirStmtKind::LabeledBlock { block, .. } => renumber_locals_in_block(block, offset),
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             pattern,
             then_block,
@@ -543,7 +543,7 @@ fn renumber_locals_in_stmt(stmt: &mut TirStmt, offset: u32) {
                 renumber_locals_in_block(eb, offset);
             }
         }
-        TirStmtKind::LetPattern { pattern, value, .. } => {
+        TirStmtKind::LetDestructure { pattern, value, .. } => {
             renumber_locals_in_pattern(pattern, offset);
             renumber_locals_in_expr(value, offset);
         }

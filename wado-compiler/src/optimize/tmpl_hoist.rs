@@ -104,7 +104,7 @@ fn hoist_in_block(
                 changed |= hoist_in_block(inner, local_count, local_types, type_table);
                 new_stmts.push(stmt);
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 then_block,
                 else_block,
                 ..
@@ -205,7 +205,7 @@ fn collect_escaping_in_stmt(stmt: &TirStmt, escaping: &mut IndexSet<u32>) {
                 collect_escaping_in_stmt(s, escaping);
             }
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -460,7 +460,7 @@ fn transform_stmt(
                 type_table,
             );
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -882,7 +882,7 @@ fn rename_local_in_stmt(stmt: &mut TirStmt, old_index: u32, new_index: u32, new_
         } => {
             rename_local_in_expr(expr, old_index, new_index, new_name);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,

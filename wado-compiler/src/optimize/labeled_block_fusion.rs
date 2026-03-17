@@ -93,7 +93,7 @@ fn fuse_in_stmt(stmt: &mut TirStmt, local_count: &mut u32, local_types: &mut Vec
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             fuse_in_block(body, local_count, local_types)
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -120,7 +120,7 @@ fn fuse_in_stmt(stmt: &mut TirStmt, local_count: &mut u32, local_types: &mut Vec
                 false
             }
         }
-        TirStmtKind::LetPattern { value, .. } => fuse_in_expr(value, local_count, local_types),
+        TirStmtKind::LetDestructure { value, .. } => fuse_in_expr(value, local_count, local_types),
         TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } => false,
     }
 }
@@ -487,7 +487,7 @@ fn check_lb_breaks_in_stmt(
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             check_lb_breaks_in_block(body, label, case_index, payload_type)
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -499,7 +499,7 @@ fn check_lb_breaks_in_stmt(
                     .as_ref()
                     .is_none_or(|eb| check_lb_breaks_in_block(eb, label, case_index, payload_type))
         }
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
             check_lb_breaks_in_expr(value, label, case_index, payload_type)
         }
         TirStmtKind::Break { value, .. } => value
@@ -558,7 +558,7 @@ fn count_local_uses_in_block(block: &TirBlock, local_idx: u32) -> usize {
 
 fn count_local_uses_in_stmt(stmt: &TirStmt, local_idx: u32) -> usize {
     match &stmt.kind {
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
             count_local_uses_in_expr(value, local_idx)
         }
         TirStmtKind::Expr(expr) => count_local_uses_in_expr(expr, local_idx),
@@ -579,7 +579,7 @@ fn count_local_uses_in_stmt(stmt: &TirStmt, local_idx: u32) -> usize {
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             count_local_uses_in_block(body, local_idx)
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -709,7 +709,7 @@ fn count_variant_payload_uses_in_block(block: &TirBlock, local_idx: u32, case_in
 
 fn count_variant_payload_uses_in_stmt(stmt: &TirStmt, local_idx: u32, case_index: u32) -> usize {
     match &stmt.kind {
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
             count_variant_payload_uses_in_expr(value, local_idx, case_index)
         }
         TirStmtKind::Expr(expr) => count_variant_payload_uses_in_expr(expr, local_idx, case_index),
@@ -730,7 +730,7 @@ fn count_variant_payload_uses_in_stmt(stmt: &TirStmt, local_idx: u32, case_index
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             count_variant_payload_uses_in_block(body, local_idx, case_index)
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -1138,7 +1138,7 @@ fn transform_lb_stmt(
                 stmt_span,
             ));
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             pattern,
             then_block: tb,
@@ -1175,7 +1175,7 @@ fn transform_lb_stmt(
                 span: e.span,
             });
             out.push(TirStmt::new(
-                TirStmtKind::IfPattern {
+                TirStmtKind::IfLet {
                     scrutinee,
                     pattern,
                     then_block: new_then,
@@ -1220,7 +1220,7 @@ fn transform_lb_in_stmt_kind(
 ) {
     match kind {
         TirStmtKind::Let { value, .. }
-        | TirStmtKind::LetPattern { value, .. }
+        | TirStmtKind::LetDestructure { value, .. }
         | TirStmtKind::Expr(value)
         | TirStmtKind::TaskReturn { value } => {
             transform_lb_in_expr(
@@ -1486,7 +1486,7 @@ fn subst_variant_payload_in_stmt(
     payload_local: u32,
 ) {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
             subst_variant_payload_in_expr(value, temp_local, case_index, payload_local);
         }
         TirStmtKind::Expr(expr) => {
@@ -1511,7 +1511,7 @@ fn subst_variant_payload_in_stmt(
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             subst_variant_payload_in_block(body, temp_local, case_index, payload_local);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -1558,7 +1558,7 @@ fn subst_variant_payload_in_expr(
     // Recurse into sub-expressions.
     match &mut expr.kind {
         TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. } => {}
         TirExprKind::Binary { left, right, .. } => {
             subst_variant_payload_in_expr(left, temp_local, case_index, payload_local);
