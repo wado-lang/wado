@@ -400,10 +400,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
                         }
                     }
-                    // Effect operations and other qualified calls - always allowed
-                    // (validated by effect system/codegen)
+                    // If prefix is a known type (struct/enum/newtype/flags) with no matching
+                    // static method, emit a compile error.
+                    else if self.is_known_type_name(prefix) {
+                        let _ = self.logger.error(TypeError::UnknownFunction {
+                            name: format!("{prefix}::{suffix}"),
+                            span: call.span,
+                        });
+                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+                    }
+                    // Effect operations and module namespace calls - pass through to codegen.
+                    // This covers Stdout::write(), etc.
                     else {
-                        // Effect-like modules (e.g., "Stdout") use Local module source
                         (
                             Some(ModuleSource::Local {
                                 path: prefix.to_string(),

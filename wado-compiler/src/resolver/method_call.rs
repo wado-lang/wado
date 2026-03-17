@@ -918,6 +918,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
             &mangled_func_name,
         );
 
+        // Emit a compile error if the static method was not found anywhere
+        if return_type == TypeTable::UNKNOWN {
+            let _ = self.logger.error(TypeError::UnknownFunction {
+                name: format!("{}::{}", struct_name, static_call.method),
+                span: static_call.span,
+            });
+            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+        }
+
         // If we have type arguments from a generic type, substitute type parameters in the return type
         if !struct_type_args.is_empty() {
             return_type = self.substitute_type_params(return_type, &struct_type_args);
@@ -1197,8 +1206,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
-        // Search all loaded modules if struct_module is entry point
-        if struct_module.is_entry_point() {
+        // Search all loaded modules (handles impls defined outside the struct's defining module)
+        {
             for module in self.loaded_modules.values() {
                 for item in &module.items {
                     if let Item::Impl(impl_block) = item {

@@ -1,0 +1,10 @@
+// Calling an undefined static method should produce a compile error,
+// not silently compile with an unresolved WIR call.
+struct Foo { x: i32 }
+
+export fn run() {
+    let _ = Foo::no_such_static_method();
+}
+
+__DATA__
+{"compile_error": "no_such_static_method"}
