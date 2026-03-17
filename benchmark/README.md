@@ -181,10 +181,10 @@ All implementations produce: Total bytes: 4,000,000, byte sum: 204,501,007.
 
 ### JSON Parsing — Twitter (631KB)
 
-| Runtime                    | Time (ms) | Relative  |
-| -------------------------- | --------- | --------- |
-| Rust (serde_json, native)  | 0.652     | 1.00x     |
-| **Wado** (core:json, Wasm) | 70.211    | 107.69x   |
+| Runtime                    | Time (ms) | Relative |
+| -------------------------- | --------- | -------- |
+| Rust (serde_json, native)  | 0.652     | 1.00x    |
+| **Wado** (core:json, Wasm) | 70.211    | 107.69x  |
 
 Both implementations parse 100 statuses from Twitter search results.
 
