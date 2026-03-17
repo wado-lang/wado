@@ -1,123 +1,63 @@
-// Comprehensive test for all wasi:clocks features
-// Tests: MonotonicClock, SystemClock effects and all their functions
-
 use { MonotonicClock, Mark, Duration, SystemClock, Instant } from "wasi:clocks";
 
-// ── MonotonicClock ──
-
-fn monotonic_now() with MonotonicClock {
-    let t1: Mark = MonotonicClock::now();
-    let t2: Mark = MonotonicClock::now();
-    // Monotonic clock must be non-decreasing
+test "monotonic: now is non-decreasing" {
+    let t1 = MonotonicClock::now();
+    let t2 = MonotonicClock::now();
     assert t2 >= t1;
 }
 
-fn monotonic_resolution() with MonotonicClock {
-    let res: Duration = MonotonicClock::get_resolution();
-    // Resolution must be positive (at least 1 ns per tick)
+test "monotonic: resolution is positive" {
+    let res = MonotonicClock::get_resolution();
     assert res > 0;
 }
 
-fn monotonic_wait_for() with MonotonicClock {
-    let before: Mark = MonotonicClock::now();
-    // Wait for 1 millisecond (1_000_000 ns)
+test "monotonic: wait_for advances clock" {
+    let before = MonotonicClock::now();
     MonotonicClock::wait_for(1_000_000 as Duration);
-    let after: Mark = MonotonicClock::now();
-    // After waiting, the clock should have advanced
+    let after = MonotonicClock::now();
     assert after >= before;
 }
 
-fn monotonic_wait_until() with MonotonicClock {
-    let now: Mark = MonotonicClock::now();
-    // Wait until 1 ms in the future
+test "monotonic: wait_until reaches target" {
+    let now = MonotonicClock::now();
     let target: Mark = now + 1_000_000 as Mark;
     MonotonicClock::wait_until(target);
-    let after: Mark = MonotonicClock::now();
-    // After waiting, the clock should be at or past the target
+    let after = MonotonicClock::now();
     assert after >= target;
 }
 
-fn monotonic_wait_for_zero() with MonotonicClock {
-    // Waiting for 0 duration should return immediately
-    let before: Mark = MonotonicClock::now();
+test "monotonic: wait_for zero returns immediately" {
+    let before = MonotonicClock::now();
     MonotonicClock::wait_for(0 as Duration);
-    let after: Mark = MonotonicClock::now();
+    let after = MonotonicClock::now();
     assert after >= before;
 }
 
-fn monotonic_wait_until_past() with MonotonicClock {
-    // Waiting until a mark in the past should return immediately
+test "monotonic: wait_until past returns immediately" {
     MonotonicClock::wait_until(0 as Mark);
-    let after: Mark = MonotonicClock::now();
+    let after = MonotonicClock::now();
     assert after > 0;
 }
 
-// ── SystemClock ──
-
-fn system_clock_now() with SystemClock {
-    let instant: Instant = SystemClock::now();
-    // Current time should be after Unix epoch (seconds > 0)
-    // We're in 2026, so seconds should be large
+test "system clock: now returns valid instant" {
+    let instant = SystemClock::now();
     assert instant.seconds > 0;
-    // Nanoseconds must be less than 1 billion
     assert instant.nanoseconds < 1_000_000_000 as u32;
 }
 
-fn system_clock_resolution() with SystemClock {
-    let res: Duration = SystemClock::get_resolution();
-    // Resolution should be positive
+test "system clock: resolution is positive" {
+    let res = SystemClock::get_resolution();
     assert res > 0;
 }
 
-fn system_clock_two_reads() with SystemClock {
-    let t1: Instant = SystemClock::now();
-    let t2: Instant = SystemClock::now();
-    // Second read should be >= first (though system clock is not guaranteed monotonic,
-    // in practice two consecutive reads should not go backwards)
+test "system clock: two reads are consistent" {
+    let t1 = SystemClock::now();
+    let t2 = SystemClock::now();
     if t2.seconds > t1.seconds {
         assert true;
     } else if t2.seconds == t1.seconds {
         assert t2.nanoseconds >= t1.nanoseconds;
     }
-    // If t2.seconds < t1.seconds, clock was adjusted - still valid behavior
-}
-
-// ── Test blocks ──
-
-test "monotonic: now is non-decreasing" {
-    monotonic_now();
-}
-
-test "monotonic: resolution is positive" {
-    monotonic_resolution();
-}
-
-test "monotonic: wait_for advances clock" {
-    monotonic_wait_for();
-}
-
-test "monotonic: wait_until reaches target" {
-    monotonic_wait_until();
-}
-
-test "monotonic: wait_for zero returns immediately" {
-    monotonic_wait_for_zero();
-}
-
-test "monotonic: wait_until past returns immediately" {
-    monotonic_wait_until_past();
-}
-
-test "system clock: now returns valid instant" {
-    system_clock_now();
-}
-
-test "system clock: resolution is positive" {
-    system_clock_resolution();
-}
-
-test "system clock: two reads are consistent" {
-    system_clock_two_reads();
 }
 
 __DATA__
