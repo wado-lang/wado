@@ -1259,6 +1259,10 @@ impl Parser {
         if matches!(self.peek_kind(), TokenKind::LBrace) {
             return true;
         }
+        // Tuple pattern: `[a, b] = expr`
+        if matches!(self.peek_kind(), TokenKind::LBracket) {
+            return true;
+        }
         if let TokenKind::Ident(name) = self.peek_kind() {
             let next = self.peek_nth(1);
             // Check if identifier is followed by `(` (variant with payload like `Some(x)`)
@@ -1663,22 +1667,45 @@ impl Parser {
         }
     }
 
-    /// Parse a pattern for let statements
+    /// Parse a pattern for let statements and struct field sub-patterns.
     /// Supports: identifier, wildcard `_`, tuple pattern `[a, b, c]`,
-    /// struct pattern `{ x, y }`, and named struct pattern `Point { x, y }`
+    /// struct pattern `{ x, y }`, named struct pattern `Point { x, y }`,
+    /// rest pattern `..`, and literal patterns (for use in match/if-let contexts).
     fn parse_let_pattern(&mut self) -> ParseResult<Pattern> {
+        if self.check(&TokenKind::Mut) {
+            self.advance();
+            let name = self.consume_ident()?;
+            return Ok(Pattern::MutIdent(name));
+        }
         if self.check(&TokenKind::LBracket) {
-            // Tuple pattern: [a, b, c]
+            // Tuple pattern: [a, b, c] or [a, b, ..]
             self.advance();
             let mut patterns = Vec::new();
             if !self.check(&TokenKind::RBracket) {
-                patterns.push(self.parse_let_pattern()?);
-                while self.check(&TokenKind::Comma) {
+                // Check for leading `..`
+                if self.check_dot_dot() {
                     self.advance();
-                    if self.check(&TokenKind::RBracket) {
-                        break;
-                    }
+                    self.advance();
+                    // Rest-only tuple pattern: [..] — not meaningful, but parse it
+                } else {
                     patterns.push(self.parse_let_pattern()?);
+                    while self.check(&TokenKind::Comma) {
+                        self.advance();
+                        if self.check(&TokenKind::RBracket) {
+                            break;
+                        }
+                        // Check for trailing `..`
+                        if self.check_dot_dot() {
+                            self.advance();
+                            self.advance();
+                            // Trailing comma after `..` is optional
+                            if self.check(&TokenKind::Comma) {
+                                self.advance();
+                            }
+                            break;
+                        }
+                        patterns.push(self.parse_let_pattern()?);
+                    }
                 }
             }
             self.expect(&TokenKind::RBracket)?;
@@ -1699,6 +1726,38 @@ impl Parser {
                 self.parse_struct_pattern_fields(Some(name))
             } else {
                 Ok(Pattern::Ident(name))
+            }
+        } else if let TokenKind::NumberLit(repr) = self.peek_kind().clone() {
+            self.advance();
+            Ok(Pattern::Literal(Literal::Number(repr)))
+        } else if let TokenKind::StringLit(raw) = self.peek_kind().clone() {
+            self.advance();
+            Ok(Pattern::Literal(Literal::String(raw)))
+        } else if let TokenKind::CharLit(raw) = self.peek_kind().clone() {
+            self.advance();
+            Ok(Pattern::Literal(Literal::Char(raw)))
+        } else if self.check(&TokenKind::True) {
+            self.advance();
+            Ok(Pattern::Literal(Literal::Bool(true)))
+        } else if self.check(&TokenKind::False) {
+            self.advance();
+            Ok(Pattern::Literal(Literal::Bool(false)))
+        } else if self.check(&TokenKind::Null) {
+            self.advance();
+            Ok(Pattern::Literal(Literal::Null))
+        } else if self.check(&TokenKind::Minus) {
+            self.advance();
+            if let TokenKind::NumberLit(repr) = self.peek_kind().clone() {
+                self.advance();
+                Ok(Pattern::Literal(Literal::Number(format!("-{repr}"))))
+            } else {
+                Err(ParseError {
+                    message: format!(
+                        "expected numeric literal after '-', found {:?}",
+                        self.peek_kind()
+                    ),
+                    span: self.peek().span,
+                })
             }
         } else {
             Err(ParseError {

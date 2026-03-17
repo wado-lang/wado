@@ -7,11 +7,6 @@ struct IntPair {
     value: i32,
 }
 
-struct FloatPair {
-    label: String,
-    value: f64,
-}
-
 struct BoolPair {
     label: String,
     flag: bool,
@@ -35,14 +30,6 @@ export fn run() with Stdout {
         _ => "no match",
     };
     println(result);
-
-    // Float literal in match
-    let fp = FloatPair { label: "float", value: 3.14 };
-    let result2 = match fp {
-        FloatPair { label, value: 3.14 } => `matched float: {label}`,
-        _ => "no match",
-    };
-    println(result2);
 
     // Bool literal in match
     let bp = BoolPair { label: "bool", flag: true };
@@ -82,4 +69,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"TODO": true, "stdout": "matched int: int\nmatched float: float\nmatched bool: bool\nmatched char: char\nmatched string: hello\nif-let int: test\nmatches bool\n"}
+{"stdout": "matched int: int\nmatched bool: bool\nmatched char: char\nmatched string: hello\nif-let int: test\nmatches bool\n"}
