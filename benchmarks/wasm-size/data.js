@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773702509761,
+  "lastUpdate": 1773737801196,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3821,6 +3821,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 22716,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a844606d065ef2b6ca1f16e757b4a467203b1216",
+          "message": "Merge pull request #596 from wado-lang/claude/reduce-wasm-size-Rv4CF\n\nRefactor WIR optimizer: split monolithic file into modular passes",
+          "timestamp": "2026-03-17T17:54:08+09:00",
+          "tree_id": "ffb94cbab9feb7b57ceefe26f5fa42e30773742e",
+          "url": "https://github.com/wado-lang/wado/commit/a844606d065ef2b6ca1f16e757b4a467203b1216"
+        },
+        "date": 1773737800989,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9094,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22373,
             "unit": "bytes"
           }
         ]
