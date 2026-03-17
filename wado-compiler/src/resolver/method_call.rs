@@ -721,6 +721,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
             );
         }
 
+        // Reflexive identity: From<T> for T — return the value unchanged.
+        if static_call.method == "from" && args.len() == 1 && args[0].type_id == target_type_id {
+            return args.into_iter().next().unwrap();
+        }
+
+        // Newtype From conversions: From<Base> for Newtype and From<Newtype> for Base.
+        // Newtypes share the same representation as their base type, so this is a Cast.
+        if static_call.method == "from" && args.len() == 1 {
+            let arg_type = args[0].type_id;
+            let base_of_target = self.type_table.borrow().get_newtype_base(target_type_id);
+            let base_of_arg = self.type_table.borrow().get_newtype_base(arg_type);
+            if base_of_target == Some(arg_type) || base_of_arg == Some(target_type_id) {
+                let arg = args.into_iter().next().unwrap();
+                return TirExpr::new(
+                    TirExprKind::Cast {
+                        expr: Box::new(arg),
+                        target_type: target_type_id,
+                    },
+                    target_type_id,
+                    static_call.span,
+                );
+            }
+        }
+
         let (struct_name, struct_module, mangled_struct_name, struct_type_args) =
             match self.type_table.borrow().get(target_type_id) {
                 ResolvedType::Struct {
@@ -1489,7 +1513,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Option<String> {
-        self.find_static_method_trait_with_arg(struct_name, method_name, None)
+        self.locate_static_method_impl(struct_name, method_name, None)
+            .map(|(name, _)| name)
     }
 
     pub(super) fn find_static_method_trait_with_arg(
@@ -1498,6 +1523,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
         method_name: &str,
         arg_type_name: Option<&str>,
     ) -> Option<String> {
+        self.locate_static_method_impl(struct_name, method_name, arg_type_name)
+            .map(|(name, _)| name)
+    }
+
+    /// Locate a static trait method impl, returning the resolved trait name and the module
+    /// source where the impl block is defined. This is used so that `FunctionRef` gets the
+    /// correct `module_source` — especially when a user defines `impl From<MyType> for i32`
+    /// in the entry module (or another module), so DCE and WIR building can find it.
+    pub(super) fn locate_static_method_impl(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+        arg_type_name: Option<&str>,
+    ) -> Option<(String, ModuleSource)> {
         let resolve_trait_name = |trait_type: &ast::Type| -> String {
             let base = Self::get_type_name_static(trait_type);
             if base == "From" || base == "TryFrom" {
@@ -1544,16 +1583,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
             if let Item::Impl(impl_block) = item
                 && let Some(name) = check_impl(impl_block)
             {
-                return Some(name);
+                return Some((name, self.current_module_source.clone()));
             }
         }
 
-        for module in self.loaded_modules.values() {
+        for (module_source, module) in self.loaded_modules {
             for item in &module.items {
                 if let Item::Impl(impl_block) = item
                     && let Some(name) = check_impl(impl_block)
                 {
-                    return Some(name);
+                    return Some((name, module_source.clone()));
                 }
             }
         }
@@ -1686,22 +1725,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 (struct_name.to_string(), mangled_func_name.to_string())
             };
 
-        // Determine module source for the actual struct
-        let struct_module = self.find_struct_module_source(&actual_struct_name);
-
-        // Find trait name for trait static methods.
-        // For From/TryFrom, disambiguate by matching the first argument's type.
+        // Find trait name and the module where the impl block lives.
+        // For From/TryFrom, disambiguate by matching the first argument's type so that
+        // user-defined `impl From<MyType> for i32` is resolved to its actual defining module
+        // rather than the default `ModuleSource::primitive()` for `i32`.
         let arg_type_hint =
             if (method_name == "from" || method_name == "try_from") && args.len() == 1 {
                 Some(self.type_table.borrow().type_name(args[0].type_id))
             } else {
                 None
             };
-        let trait_name_opt = self.find_static_method_trait_with_arg(
-            &actual_struct_name,
-            method_name,
-            arg_type_hint.as_deref(),
-        );
+        let (trait_name_opt, struct_module) = if let Some((trait_name, impl_module)) = self
+            .locate_static_method_impl(&actual_struct_name, method_name, arg_type_hint.as_deref())
+        {
+            (Some(trait_name), impl_module)
+        } else {
+            (None, self.find_struct_module_source(&actual_struct_name))
+        };
 
         // Use trait-qualified mangled name if this is a trait method
         let final_mangled_name = if let Some(ref trait_name) = trait_name_opt {

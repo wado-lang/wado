@@ -1797,6 +1797,10 @@ Counts the number of set bits (population count).
 
 ###### `pub fn try_from(value: u64) -> Result<i64, ConvertError>`
 
+##### `impl TryFrom<i128> for i64`
+
+###### `pub fn try_from(value: i128) -> Result<i64, ConvertError>`
+
 #### `u64`
 
 ##### `pub const MAX: u64`
@@ -1856,6 +1860,10 @@ Counts the number of set bits (population count).
 ##### `impl TryFrom<i64> for u64`
 
 ###### `pub fn try_from(value: i64) -> Result<u64, ConvertError>`
+
+##### `impl TryFrom<u128> for u64`
+
+###### `pub fn try_from(value: u128) -> Result<u64, ConvertError>`
 
 #### `f32`
 
@@ -2062,6 +2070,18 @@ Creates an f32 from its bit representation.
 ##### `impl TryFrom<i64> for f32`
 
 ###### `pub fn try_from(value: i64) -> Result<f32, ConvertError>`
+
+##### `impl TryFrom<u64> for f32`
+
+###### `pub fn try_from(value: u64) -> Result<f32, ConvertError>`
+
+##### `impl TryFrom<i128> for f32`
+
+###### `pub fn try_from(value: i128) -> Result<f32, ConvertError>`
+
+##### `impl TryFrom<u128> for f32`
+
+###### `pub fn try_from(value: u128) -> Result<f32, ConvertError>`
 
 #### `f64`
 
@@ -2272,6 +2292,18 @@ Creates an f64 from its bit representation.
 ##### `impl TryFrom<i64> for f64`
 
 ###### `pub fn try_from(value: i64) -> Result<f64, ConvertError>`
+
+##### `impl TryFrom<u64> for f64`
+
+###### `pub fn try_from(value: u64) -> Result<f64, ConvertError>`
+
+##### `impl TryFrom<i128> for f64`
+
+###### `pub fn try_from(value: i128) -> Result<f64, ConvertError>`
+
+##### `impl TryFrom<u128> for f64`
+
+###### `pub fn try_from(value: u128) -> Result<f64, ConvertError>`
 
 ### Variants
 

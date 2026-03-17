@@ -260,6 +260,50 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 }
                             }
                         }
+                        // Handle From conversions with no explicit impl: reflexive and newtype.
+                        if suffix == "from" && args.len() == 1 {
+                            let arg_type = args[0].type_id;
+                            let arg_type_name = self.type_table.borrow().type_name(arg_type);
+
+                            // Reflexive: T::from(T_val) — identity conversion
+                            if arg_type_name == prefix {
+                                return args[0].clone();
+                            }
+
+                            // Newtype→Base: u64::from(UserId_val) where type UserId = u64
+                            let base_of_arg = self.type_table.borrow().get_newtype_base(arg_type);
+                            if let Some(base_id) = base_of_arg
+                                && self.type_table.borrow().type_name(base_id) == prefix
+                            {
+                                return TirExpr::new(
+                                    TirExprKind::Cast {
+                                        expr: Box::new(args[0].clone()),
+                                        target_type: base_id,
+                                    },
+                                    base_id,
+                                    call.span,
+                                );
+                            }
+
+                            // Base→Newtype: UserId::from(u64_val) where type UserId = u64
+                            if let Some(&newtype_type_id) = self.newtypes.get(prefix) {
+                                let base_opt =
+                                    self.type_table.borrow().get_newtype_base(newtype_type_id);
+                                if let Some(base_id) = base_opt
+                                    && self.type_table.borrow().type_name(base_id) == arg_type_name
+                                {
+                                    return TirExpr::new(
+                                        TirExprKind::Cast {
+                                            expr: Box::new(args[0].clone()),
+                                            target_type: newtype_type_id,
+                                        },
+                                        newtype_type_id,
+                                        call.span,
+                                    );
+                                }
+                            }
+                        }
+
                         return self.resolve_static_method_call_from_qualified(
                             prefix,
                             suffix,

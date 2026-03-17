@@ -5017,6 +5017,56 @@ pub fn "i128^From<i64>::from"(value: i64) -> i128 {
     return "core::prelude/int128.wado::i128::from_i64"(value as i64);
 }
 
+pub fn "u64^TryFrom<u128>::try_from"(value: u128) -> Result<u64, ConvertError> {
+    if (value.u128::high() != 0) {
+        return Result<u64, ConvertError>::Err("core::prelude/traits.wado::ConvertError::new"("value out of range for u64"));
+    }
+    return Result<u64, ConvertError>::Ok(value.u128::low());
+}
+
+pub fn "i64^TryFrom<i128>::try_from"(value: i128) -> Result<i64, ConvertError> {
+    let min: i128 = "core::prelude/int128.wado::i128::from_i64"(-9223372036854775808 as i64);
+    let max: i128 = "core::prelude/int128.wado::i128::from_i64"(9223372036854775807 as i64);
+    if ((value."i128^Ord::cmp"(&min) == Ordering::Less) || (value."i128^Ord::cmp"(&max) == Ordering::Greater)) {
+        return Result<i64, ConvertError>::Err("core::prelude/traits.wado::ConvertError::new"("value out of range for i64"));
+    }
+    return Result<i64, ConvertError>::Ok(value.i128::low() as i64);
+}
+
+pub fn "f64^TryFrom<i128>::try_from"(value: i128) -> Result<f64, ConvertError> {
+    let max: i128 = "core::prelude/int128.wado::i128::from_i64"(9007199254740992);
+    let min: i128 = "core::prelude/int128.wado::i128::from_pair"(18437736874454810624, -1);
+    if ((value."i128^Ord::cmp"(&min) == Ordering::Less) || (value."i128^Ord::cmp"(&max) == Ordering::Greater)) {
+        return Result<f64, ConvertError>::Err("core::prelude/traits.wado::ConvertError::new"("value out of range for f64"));
+    }
+    return Result<f64, ConvertError>::Ok(value.i128::low() as i64 as f64);
+}
+
+pub fn "f32^TryFrom<i128>::try_from"(value: i128) -> Result<f32, ConvertError> {
+    let max: i128 = "core::prelude/int128.wado::i128::from_i64"(16777216);
+    let min: i128 = "core::prelude/int128.wado::i128::from_pair"(18446744073692774400, -1);
+    if ((value."i128^Ord::cmp"(&min) == Ordering::Less) || (value."i128^Ord::cmp"(&max) == Ordering::Greater)) {
+        return Result<f32, ConvertError>::Err("core::prelude/traits.wado::ConvertError::new"("value out of range for f32"));
+    }
+    return Result<f32, ConvertError>::Ok(value.i128::low() as i64 as f32);
+}
+
+pub fn "f64^TryFrom<u128>::try_from"(value: u128) -> Result<f64, ConvertError> {
+    let max: u128 = "core::prelude/int128.wado::u128::from_u64"(9007199254740992);
+    if (value."u128^Ord::cmp"(&max) == Ordering::Greater) {
+        return Result<f64, ConvertError>::Err("core::prelude/traits.wado::ConvertError::new"("value out of range for f64"));
+    }
+    return Result<f64, ConvertError>::Ok(value.u128::low() as f64);
+}
+
+pub fn "f32^TryFrom<u128>::try_from"(value: u128) -> Result<f32, ConvertError> {
+    let max: u128 = "core::prelude/int128.wado::u128::from_u64"(16777216);
+    if (value."u128^Ord::cmp"(&max) == Ordering::Greater) {
+        return Result<f32, ConvertError>::Err("core::prelude/traits.wado::ConvertError::new"("value out of range for f32"));
+    }
+    return Result<f32, ConvertError>::Ok(value.u128::low() as f32);
+}
+
 pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
     f.Formatter::write_str("[");
     Box<f64> { value: *self.0 }."f64^Inspect::inspect"(f);
@@ -7383,6 +7433,32 @@ pub fn "f64^TryFrom<i64>::try_from"(value: i64) -> Result<f64, ConvertError> {
         }));
     }
     return Result<f64, ConvertError>::Ok(f);
+}
+
+pub fn "f64^TryFrom<u64>::try_from"(value: u64) -> Result<f64, ConvertError> {
+    if (value > 9007199254740992 as u64) {
+        return Result<f64, ConvertError>::Err("core::prelude/traits.wado::ConvertError::new"(__tmpl: {
+            let mut __r: String = "core::prelude/string.wado::String::with_capacity"(53);
+            let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+            Box<u64> { value: value }."u64^Display::fmt"(&mut __f);
+            __r.String::append(" cannot be exactly represented as f64");
+            break __tmpl: __r;
+        }));
+    }
+    return Result<f64, ConvertError>::Ok(value as f64);
+}
+
+pub fn "f32^TryFrom<u64>::try_from"(value: u64) -> Result<f32, ConvertError> {
+    if (value > 16777216 as u64) {
+        return Result<f32, ConvertError>::Err("core::prelude/traits.wado::ConvertError::new"(__tmpl: {
+            let mut __r: String = "core::prelude/string.wado::String::with_capacity"(53);
+            let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+            Box<u64> { value: value }."u64^Display::fmt"(&mut __f);
+            __r.String::append(" cannot be exactly represented as f32");
+            break __tmpl: __r;
+        }));
+    }
+    return Result<f32, ConvertError>::Ok(value as f32);
 }
 
 pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
