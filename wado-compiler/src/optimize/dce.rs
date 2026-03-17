@@ -2218,8 +2218,9 @@ fn remove_dead_global_sets_stmt(stmt: &mut TirStmt, used: &IndexSet<(String, Str
                 remove_dead_global_sets_expr(expr, used);
             }
         }
-        TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } | TirStmtKind::LetDestructure { .. } => {
-        }
+        TirStmtKind::Continue
+        | TirStmtKind::TaskReturn { .. }
+        | TirStmtKind::LetDestructure { .. } => {}
     }
 }
 

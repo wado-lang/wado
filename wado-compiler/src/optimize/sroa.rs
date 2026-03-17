@@ -685,8 +685,9 @@ fn check_has_field_access_stmt(
                 check_has_field_access_expr(v, candidates, has_access);
             }
         }
-        TirStmtKind::Continue | TirStmtKind::LetDestructure { .. } | TirStmtKind::TaskReturn { .. } => {
-        }
+        TirStmtKind::Continue
+        | TirStmtKind::LetDestructure { .. }
+        | TirStmtKind::TaskReturn { .. } => {}
     }
 }
 

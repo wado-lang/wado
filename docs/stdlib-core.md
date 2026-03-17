@@ -1063,6 +1063,10 @@ String will contain invalid UTF-8, which may cause undefined behavior.
 
 ###### `pub fn default() -> String`
 
+##### `impl From<char> for String`
+
+###### `pub fn from(value: char) -> String`
+
 #### `pub struct StrUtf8ByteIter`
 
 Iterator over UTF-8 bytes of a String.
@@ -1353,6 +1357,18 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
 ###### `pub fn default() -> i8`
 
+##### `impl TryFrom<i64> for i8`
+
+###### `pub fn try_from(value: i64) -> Result<i8, ConvertError>`
+
+##### `impl TryFrom<i32> for i8`
+
+###### `pub fn try_from(value: i32) -> Result<i8, ConvertError>`
+
+##### `impl TryFrom<i16> for i8`
+
+###### `pub fn try_from(value: i16) -> Result<i8, ConvertError>`
+
 #### `u8`
 
 ##### `pub const MAX: u8`
@@ -1396,6 +1412,14 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 ##### `impl Default for u8`
 
 ###### `pub fn default() -> u8`
+
+##### `impl TryFrom<u32> for u8`
+
+###### `pub fn try_from(value: u32) -> Result<u8, ConvertError>`
+
+##### `impl TryFrom<u16> for u8`
+
+###### `pub fn try_from(value: u16) -> Result<u8, ConvertError>`
 
 #### `i16`
 
@@ -1441,6 +1465,22 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 
 ###### `pub fn default() -> i16`
 
+##### `impl From<i8> for i16`
+
+###### `pub fn from(value: i8) -> i16`
+
+##### `impl From<u8> for i16`
+
+###### `pub fn from(value: u8) -> i16`
+
+##### `impl TryFrom<i64> for i16`
+
+###### `pub fn try_from(value: i64) -> Result<i16, ConvertError>`
+
+##### `impl TryFrom<i32> for i16`
+
+###### `pub fn try_from(value: i32) -> Result<i16, ConvertError>`
+
 #### `u16`
 
 ##### `pub const MAX: u16`
@@ -1484,6 +1524,14 @@ Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
 ##### `impl Default for u16`
 
 ###### `pub fn default() -> u16`
+
+##### `impl From<u8> for u16`
+
+###### `pub fn from(value: u8) -> u16`
+
+##### `impl TryFrom<u32> for u16`
+
+###### `pub fn try_from(value: u32) -> Result<u16, ConvertError>`
 
 #### `i32`
 
@@ -1541,6 +1589,30 @@ Counts the number of set bits (population count).
 
 ###### `pub fn default() -> i32`
 
+##### `impl From<i8> for i32`
+
+###### `pub fn from(value: i8) -> i32`
+
+##### `impl From<i16> for i32`
+
+###### `pub fn from(value: i16) -> i32`
+
+##### `impl From<u8> for i32`
+
+###### `pub fn from(value: u8) -> i32`
+
+##### `impl From<u16> for i32`
+
+###### `pub fn from(value: u16) -> i32`
+
+##### `impl From<bool> for i32`
+
+###### `pub fn from(value: bool) -> i32`
+
+##### `impl TryFrom<i64> for i32`
+
+###### `pub fn try_from(value: i64) -> Result<i32, ConvertError>`
+
 #### `u32`
 
 ##### `pub const MAX: u32`
@@ -1584,6 +1656,26 @@ Counts the number of set bits (population count).
 ##### `impl Default for u32`
 
 ###### `pub fn default() -> u32`
+
+##### `impl From<u8> for u32`
+
+###### `pub fn from(value: u8) -> u32`
+
+##### `impl From<u16> for u32`
+
+###### `pub fn from(value: u16) -> u32`
+
+##### `impl TryFrom<i32> for u32`
+
+###### `pub fn try_from(value: i32) -> Result<u32, ConvertError>`
+
+##### `impl TryFrom<i64> for u32`
+
+###### `pub fn try_from(value: i64) -> Result<u32, ConvertError>`
+
+##### `impl TryFrom<u64> for u32`
+
+###### `pub fn try_from(value: u64) -> Result<u32, ConvertError>`
 
 #### `i64`
 
@@ -1641,6 +1733,34 @@ Counts the number of set bits (population count).
 
 ###### `pub fn default() -> i64`
 
+##### `impl From<i8> for i64`
+
+###### `pub fn from(value: i8) -> i64`
+
+##### `impl From<i16> for i64`
+
+###### `pub fn from(value: i16) -> i64`
+
+##### `impl From<i32> for i64`
+
+###### `pub fn from(value: i32) -> i64`
+
+##### `impl From<u8> for i64`
+
+###### `pub fn from(value: u8) -> i64`
+
+##### `impl From<u16> for i64`
+
+###### `pub fn from(value: u16) -> i64`
+
+##### `impl From<u32> for i64`
+
+###### `pub fn from(value: u32) -> i64`
+
+##### `impl TryFrom<u64> for i64`
+
+###### `pub fn try_from(value: u64) -> Result<i64, ConvertError>`
+
 #### `u64`
 
 ##### `pub const MAX: u64`
@@ -1684,6 +1804,22 @@ Counts the number of set bits (population count).
 ##### `impl Default for u64`
 
 ###### `pub fn default() -> u64`
+
+##### `impl From<u8> for u64`
+
+###### `pub fn from(value: u8) -> u64`
+
+##### `impl From<u16> for u64`
+
+###### `pub fn from(value: u16) -> u64`
+
+##### `impl From<u32> for u64`
+
+###### `pub fn from(value: u32) -> u64`
+
+##### `impl TryFrom<i64> for u64`
+
+###### `pub fn try_from(value: i64) -> Result<u64, ConvertError>`
 
 #### `f32`
 
@@ -1887,6 +2023,10 @@ Creates an f32 from its bit representation.
 
 ###### `pub fn default() -> f32`
 
+##### `impl TryFrom<i64> for f32`
+
+###### `pub fn try_from(value: i64) -> Result<f32, ConvertError>`
+
 #### `f64`
 
 ##### `pub const PI: f64`
@@ -2088,6 +2228,14 @@ Creates an f64 from its bit representation.
 ##### `impl Default for f64`
 
 ###### `pub fn default() -> f64`
+
+##### `impl From<f32> for f64`
+
+###### `pub fn from(value: f32) -> f64`
+
+##### `impl TryFrom<i64> for f64`
+
+###### `pub fn try_from(value: i64) -> Result<f64, ConvertError>`
 
 ### Variants
 

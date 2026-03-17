@@ -2302,7 +2302,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// performs an early return for the failure case.
     ///
     /// For `Result<T, E>` in a function returning `Result<U, F>`:
-    ///   match expr { Ok(v) => v, Err(e) => return Result::Err(F::from(e)) }
+    ///   match expr { Ok(v) => v, Err(e) => return `Result::Err(F::from(e))` }
     ///
     /// For `Option<T>` in a function returning `Option<U>`:
     ///   match expr { Some(v) => v, None => return null }
@@ -2470,9 +2470,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
         // Extract F from return Result<U, F>
         let outer_err_type = match tt.get(return_type) {
-            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
-                type_args[1]
-            }
+            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => type_args[1],
             _ => panic!("? return type must be Result<U, F>"),
         };
         drop(tt);
@@ -2595,11 +2593,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Use "From<SourceType>" as the trait name in mangled names to disambiguate
         // multiple From impls on the same target type.
         let from_trait = format!("From<{from_name}>");
-        let method_name = MethodName::format_local(
-            &target_name,
-            Some(&from_trait),
-            "from",
-        );
+        let method_name = MethodName::format_local(&target_name, Some(&from_trait), "from");
 
         // Find the module source that provides the From impl
         let module_source = self.find_from_impl_module(&target_name, &from_name);
@@ -2642,10 +2636,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     return false;
                 }
                 // Check the type arg matches from_name
-                if let ast::Type::Generic(g) = trait_type {
-                    if let Some(arg) = g.args.first() {
-                        return Self::get_type_name_static(arg) == from_name;
-                    }
+                if let ast::Type::Generic(g) = trait_type
+                    && let Some(arg) = g.args.first()
+                {
+                    return Self::get_type_name_static(arg) == from_name;
                 }
             }
             false
@@ -2661,7 +2655,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Search loaded modules
-        for (source, module) in self.loaded_modules.iter() {
+        for (source, module) in self.loaded_modules {
             for item in &module.items {
                 if let Item::Impl(impl_block) = item
                     && check_impl(impl_block)

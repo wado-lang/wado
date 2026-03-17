@@ -13,7 +13,7 @@ export fn run() with Stdout {
     let too_big: i64 = 3000000000;
     let r2 = i32::try_from(too_big);
     if let Err(msg) = r2 {
-        assert msg == "3000000000 out of range for i32";
+        assert msg.message == "3000000000 out of range for i32";
     } else {
         panic("expected Err");
     }

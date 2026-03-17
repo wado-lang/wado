@@ -745,7 +745,9 @@ fn rewrite_deref_only_refs_in_stmt(
             }
         }
         TirStmtKind::Continue => false,
-        TirStmtKind::LetDestructure { value, .. } => rewrite_deref_only_refs_in_expr(value, eliminable),
+        TirStmtKind::LetDestructure { value, .. } => {
+            rewrite_deref_only_refs_in_expr(value, eliminable)
+        }
         TirStmtKind::TaskReturn { .. } => false,
     }
 }

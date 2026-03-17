@@ -353,9 +353,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             );
                         }
                         // If no matching case, check for From<T> synthesis requests
-                        else if suffix == "from"
-                            && args.len() == 1
-                        {
+                        else if suffix == "from" && args.len() == 1 {
                             let target_type_id = self.type_table.borrow_mut().make_variant(
                                 prefix.to_string(),
                                 variant_info.module_source.clone(),

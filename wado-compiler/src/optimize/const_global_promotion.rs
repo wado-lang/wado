@@ -302,7 +302,9 @@ fn visit_expr_children(expr: &TirExpr, mut visitor: impl FnMut(&TirExpr)) {
 fn visit_stmt_exprs(stmt: &TirStmt, visitor: &mut impl FnMut(&TirExpr)) {
     match &stmt.kind {
         TirStmtKind::Expr(expr) => visitor(expr),
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => visitor(value),
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+            visitor(value);
+        }
         TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 visitor(v);

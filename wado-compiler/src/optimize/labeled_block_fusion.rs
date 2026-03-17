@@ -1286,7 +1286,9 @@ fn transform_lb_in_expr(
                 span,
             );
         }
-        TirExprKind::LabeledBlock { label: l, block, .. } => {
+        TirExprKind::LabeledBlock {
+            label: l, block, ..
+        } => {
             if l.as_str() != orig_label {
                 transform_lb_in_block(
                     block,
@@ -1302,7 +1304,10 @@ fn transform_lb_in_expr(
                 );
             }
         }
-        TirExprKind::Match { expr: scrutinee, arms } => {
+        TirExprKind::Match {
+            expr: scrutinee,
+            arms,
+        } => {
             transform_lb_in_expr(
                 scrutinee,
                 orig_label,

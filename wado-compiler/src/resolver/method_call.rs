@@ -1682,13 +1682,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Find trait name for trait static methods.
         // For From/TryFrom, disambiguate by matching the first argument's type.
-        let arg_type_hint = if (method_name == "from" || method_name == "try_from")
-            && args.len() == 1
-        {
-            Some(self.type_table.borrow().type_name(args[0].type_id))
-        } else {
-            None
-        };
+        let arg_type_hint =
+            if (method_name == "from" || method_name == "try_from") && args.len() == 1 {
+                Some(self.type_table.borrow().type_name(args[0].type_id))
+            } else {
+                None
+            };
         let trait_name_opt = self.find_static_method_trait_with_arg(
             &actual_struct_name,
             method_name,

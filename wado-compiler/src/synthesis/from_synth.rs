@@ -28,8 +28,7 @@ pub fn synthesize_from(module: &mut TirModule) {
     for req in &requests {
         let from_type_name = extract_from_type_name(&req.trait_name);
         let from_trait = format!("From<{from_type_name}>");
-        let key =
-            MethodName::format_local(&req.target_type_name, Some(&from_trait), "from");
+        let key = MethodName::format_local(&req.target_type_name, Some(&from_trait), "from");
         if existing.contains(&key) {
             continue;
         }
@@ -84,9 +83,10 @@ fn generate_variant_from(
 
     let tt = module.type_table.borrow();
 
-    let matching_case = variant_def.cases.iter().find(|c| {
-        c.payload != TypeTable::UNIT && tt.type_name(c.payload) == from_type_name
-    })?;
+    let matching_case = variant_def
+        .cases
+        .iter()
+        .find(|c| c.payload != TypeTable::UNIT && tt.type_name(c.payload) == from_type_name)?;
 
     let case_name = matching_case.name.clone();
     let case_index = matching_case.index;
