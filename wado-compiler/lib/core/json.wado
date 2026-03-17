@@ -403,7 +403,39 @@ impl JsonDeserializer {
         }
         self.pos += 1;
 
-        let mut result = String::with_capacity(32);
+        // Phase 1: scan ahead to find the end of the escape-free prefix.
+        // This lets us pre-size the allocation exactly, avoiding repeated grow() calls.
+        let prefix_start = self.pos;
+        let mut scan_pos = self.pos;
+        while scan_pos < self.input.len() {
+            let sb = self.input.get_byte(scan_pos) as i32;
+            if sb == '"' as i32 || sb == '\\' as i32 {
+                break;
+            }
+            scan_pos += 1;
+        }
+        let prefix_len = scan_pos - prefix_start;
+
+        // Fast path: no escapes — allocate exactly the right size and copy raw bytes.
+        if scan_pos < self.input.len() && self.input.get_byte(scan_pos) as i32 == '"' as i32 {
+            let mut result = String::with_capacity(prefix_len);
+            let start = result.internal_reserve_uninit(prefix_len);
+            for let mut i = 0; i < prefix_len; i += 1 {
+                result.set_byte(start + i, self.input.get_byte(prefix_start + i));
+            }
+            self.pos = scan_pos + 1;
+            return Result::<String, DeserializeError>::Ok(result);
+        }
+
+        // Slow path: has escape sequences (or hit EOF).
+        // Pre-copy the escape-free prefix with a well-sized allocation, then handle escapes.
+        let mut result = String::with_capacity(prefix_len + 32);
+        let start = result.internal_reserve_uninit(prefix_len);
+        for let mut i = 0; i < prefix_len; i += 1 {
+            result.set_byte(start + i, self.input.get_byte(prefix_start + i));
+        }
+        self.pos = scan_pos;
+
         while self.pos < self.input.len() {
             let b = self.input.get_byte(self.pos) as i32;
             if b == '"' as i32 {
