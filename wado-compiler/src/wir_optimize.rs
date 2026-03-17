@@ -12,10 +12,22 @@
 //!   may hold `LocalSet(x, StructNew { [inner] })` where every use of `x` is
 //!   `StructGet(LocalGet(x), field)`. Substitutes `inner` directly and nops the
 //!   dead allocation, eliminating the GC heap object entirely.
+//! - **Dead multi-field struct local elimination**: same as above but for structs with
+//!   N > 1 fields where each field is accessed exactly once via `StructGet`.
 //! - **Multi-value tuple elision**: replaces `MultiValueStructNew` + `StructGet`
 //!   sequences with `MultiValueLocalBind` to skip intermediate struct allocation.
 //! - **Constant array data promotion**: replaces `ArrayNewFixed` of constant primitive
 //!   values with `ArrayNewData` backed by a passive data segment.
+//! - **Dead return value elimination (DRVE)**: converts functions whose return value is
+//!   always immediately dropped at every call site to void return, eliminating the GC
+//!   struct allocation in the return and the `drop` at call sites.
+//! - **Write-only local elimination**: converts `LocalSet(x, expr)` to `Drop(expr)` or
+//!   `Nop` when local `x` is never read, cleaning up temporaries left by other passes.
+//! - **Trivial init-guard removal**: detects compiler-generated `if global { break; };
+//!   global = 1;` guard blocks with no actual init work and removes them along with
+//!   the dead global, eliminating the module-init overhead.
+//! - **Dead type elimination**: marks GC types not referenced by any live function,
+//!   import, or global as dead so the emitter can skip them.
 //! - **Cleanup**: removes redundant `RefAsNonNull`, `Nop`, and dead code after
 //!   `Unreachable`, normalizing WIR so that codegen can emit it as-is.
 
@@ -26,8 +38,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::optimize::OptLevel;
 use crate::wir::{
     COMP_FEATURE_ARRAY_APPEND, COMP_FEATURE_STRING_APPEND, COMP_FEATURE_STRING_APPEND_CHAR,
-    WirData, WirExportDesc, WirFuncId, WirFuncType, WirInstr, WirModule, WirType, WirTypeDef,
-    WirTypeId, WirVariantType,
+    WirData, WirExportDesc, WirFuncId, WirFuncType, WirImportDesc, WirInstr, WirModule, WirType,
+    WirTypeDef, WirTypeId, WirVariantType,
 };
 
 /// Run all WIR-level optimizations on the module (in-place).
@@ -87,6 +99,36 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
     // Final cleanup pass: normalize the WIR so that codegen can emit it as-is.
     // Removes nops, redundant ref.as_non_null, and dead code after unreachable.
     cleanup_wir(module);
+
+    // Flatten `LocalSet { name, value: Seq([preamble..., final]) }` into
+    // `[preamble..., LocalSet { name, value: final }]` so the multi-field elision
+    // pass can see bare `LocalSet(name, StructNew { N fields })` patterns.
+    flatten_seq_assignments(module);
+
+    // Whole-module pass: same as single-field but for multi-field structs (N > 1).
+    // Must run after flatten_seq_assignments so that the StructNew is directly
+    // visible as the value of LocalSet (not buried inside a Seq).
+    elide_dead_multi_field_struct_locals(module);
+
+    // Run cleanup again to remove nops left by elision.
+    cleanup_wir(module);
+
+    // Whole-module pass: eliminate functions whose return value is always
+    // immediately dropped at every call site, converting them to void return.
+    // Also removes dead writes to locals that only held the now-gone return value.
+    drve_dead_return_values(module);
+    elide_write_only_locals(module);
+    cleanup_wir(module);
+
+    // Remove trivial module-init guard globals: globals that are only ever
+    // checked and set in an `if global { break; }; global = 1;` guard with
+    // no actual initialization work inside.
+    remove_trivial_init_globals(module);
+    cleanup_wir(module);
+
+    // Dead type elimination: mark types not referenced by any live function,
+    // import, or global as dead so the emitter skips them.
+    dce_unreachable_types(module);
 }
 
 /// Remove functions unreachable from exports via call-graph analysis.
@@ -2842,6 +2884,169 @@ fn elide_dead_single_field_struct_locals(module: &mut WirModule) {
     }
 }
 
+/// Whole-module pass: elide struct-typed locals for N-field structs (N > 1).
+///
+/// Handles patterns where a local is set from a StructNew with N fields and each
+/// field is accessed exactly once via StructGet. Substitutes each field access
+/// with the corresponding initializer expression and nops the original assignment.
+/// This eliminates the struct type from the binary.
+fn elide_dead_multi_field_struct_locals(module: &mut WirModule) {
+    // Collect type info needed before mutably borrowing functions.
+    let type_field_names: Vec<Option<Vec<String>>> = module
+        .types
+        .iter()
+        .map(|t| match t {
+            WirTypeDef::Struct(s) => Some(s.fields.iter().map(|f| f.name.clone()).collect()),
+            _ => None,
+        })
+        .collect();
+    for func in &mut module.functions {
+        let Some(body) = &mut func.body else {
+            continue;
+        };
+        while elide_multi_field_struct_locals_one_pass(body, &type_field_names) {}
+    }
+}
+
+/// One pass for multi-field struct local elision. Returns `true` if anything changed.
+/// `type_field_names[i]` is `Some(vec_of_field_names)` if type i is a struct, else `None`.
+fn elide_multi_field_struct_locals_one_pass(
+    body: &mut [WirInstr],
+    type_field_names: &[Option<Vec<String>>],
+) -> bool {
+    // Step 1: collect LocalSet(name, StructNew { fields: [e0..eN-1] }) for N > 1.
+    // Maps name -> (type_idx, fields).
+    let mut all_defs: IndexMap<String, (usize, Vec<WirInstr>)> = IndexMap::default();
+    for instr in body.iter() {
+        collect_multi_field_struct_defs(instr, &mut all_defs);
+    }
+    if all_defs.is_empty() {
+        return false;
+    }
+
+    let candidate_names: IndexSet<String> = all_defs.keys().cloned().collect();
+
+    // Step 2: filter to valid candidates.
+    //   - Exactly one LocalSet/LocalTee of this name
+    //   - Every LocalGet(name) is the direct expr of a StructGet
+    //   - Each field is accessed exactly once via StructGet(LocalGet(name), field_k)
+    //   - All N fields are accessed (total uses == N)
+    //   - Inner field values don't reference other candidates
+    let valid: IndexMap<String, IndexMap<String, WirInstr>> = all_defs
+        .into_iter()
+        .filter_map(|(name, (type_idx, fields))| {
+            // Must have more than 1 field (single-field handled by other pass).
+            if fields.len() <= 1 {
+                return None;
+            }
+            // Exactly one def.
+            let def_count: usize = body.iter().map(|i| count_local_defs(i, &name)).sum();
+            if def_count != 1 {
+                return None;
+            }
+            // All LocalGet(name) are via StructGet.
+            if !body.iter().all(|i| local_used_only_via_struct_get(i, &name)) {
+                return None;
+            }
+            // Get field names from pre-computed table.
+            let struct_field_names = type_field_names.get(type_idx)?.as_ref()?;
+            if struct_field_names.len() != fields.len() {
+                return None;
+            }
+            // Total StructGet uses must equal number of fields.
+            let use_count: usize = body.iter().map(|i| count_struct_get_uses(i, &name)).sum();
+            if use_count != fields.len() {
+                return None;
+            }
+            // Each field must be accessed exactly once.
+            for field_name in struct_field_names {
+                let field_uses: usize = body
+                    .iter()
+                    .map(|i| count_struct_get_field_uses(i, &name, field_name))
+                    .sum();
+                if field_uses != 1 {
+                    return None;
+                }
+            }
+            // No inner value references other candidates.
+            for inner in &fields {
+                if inner_refs_any_candidate(inner, &candidate_names, &name) {
+                    return None;
+                }
+            }
+            // Build substitution map: field_name -> fields[k].
+            let subst: IndexMap<String, WirInstr> = struct_field_names
+                .iter()
+                .zip(fields)
+                .map(|(f, v)| (f.clone(), v))
+                .collect();
+            Some((name, subst))
+        })
+        .collect();
+
+    if valid.is_empty() {
+        return false;
+    }
+
+    // Step 3: substitute and nop.
+    for (name, field_map) in &valid {
+        for instr in body.iter_mut() {
+            substitute_multi_field_struct_get(instr, name, field_map);
+            nop_local_set_of(instr, name);
+        }
+    }
+    true
+}
+
+/// Recursively collect `LocalSet(name, StructNew { fields: [e0..eN-1] })` for N > 1.
+fn collect_multi_field_struct_defs(
+    instr: &WirInstr,
+    defs: &mut IndexMap<String, (usize, Vec<WirInstr>)>,
+) {
+    if let WirInstr::LocalSet { name, value } = instr
+        && let WirInstr::StructNew { type_id, fields } = value.as_ref()
+        && fields.len() > 1
+    {
+        defs.insert(name.clone(), (type_id.index() as usize, fields.clone()));
+    }
+    instr.for_each_child(&mut |child| collect_multi_field_struct_defs(child, defs));
+}
+
+/// Count `StructGet(LocalGet(name), field_name)` for a specific field_name.
+fn count_struct_get_field_uses(instr: &WirInstr, local_name: &str, field_name: &str) -> usize {
+    if let WirInstr::StructGet { field_name: f, expr, .. } = instr
+        && let WirInstr::LocalGet { name: n } = expr.as_ref()
+        && n == local_name
+        && f == field_name
+    {
+        return 1;
+    }
+    let mut count = 0usize;
+    instr.for_each_child(&mut |child| {
+        count += count_struct_get_field_uses(child, local_name, field_name);
+    });
+    count
+}
+
+/// Replace `StructGet(LocalGet(name), field_name)` with the mapped substitution value.
+fn substitute_multi_field_struct_get(
+    instr: &mut WirInstr,
+    local_name: &str,
+    field_map: &IndexMap<String, WirInstr>,
+) {
+    if let WirInstr::StructGet { field_name, expr, .. } = instr
+        && let WirInstr::LocalGet { name: n } = expr.as_ref()
+        && n == local_name
+    {
+        if let Some(value) = field_map.get(field_name) {
+            *instr = value.clone();
+            return;
+        }
+    }
+    instr
+        .for_each_boxed_child_mut(&mut |child| substitute_multi_field_struct_get(child, local_name, field_map));
+}
+
 /// One pass: collect candidates, validate, rewrite. Returns `true` if anything changed.
 fn elide_struct_locals_one_pass(body: &mut [WirInstr]) -> bool {
     // Step 1: collect LocalSet(name, StructNew { [inner] }) at any depth.
@@ -5089,11 +5294,58 @@ fn is_bounds_check_for(instr: &WirInstr, guarded_vars: &IndexSet<String>, bound:
     false
 }
 
-/// Final cleanup pass: normalize WIR so that codegen can emit it as-is.
+/// Flatten `LocalSet { name, value: Seq([preamble..., final]) }` into
+/// `[preamble..., LocalSet { name, value: final }]` at all levels of each function.
 ///
-/// - Removes `RefAsNonNull(inner)` where `inner` already produces a non-null ref.
-/// - Removes `Nop` instructions from instruction sequences.
-/// - Removes dead code after `Unreachable` in instruction sequences.
+/// This canonicalizes the pattern produced by the WIR builder for tuple destructuring,
+/// making it visible to downstream passes like multi-field struct local elision.
+fn flatten_seq_assignments(module: &mut WirModule) {
+    for func in &mut module.functions {
+        if let Some(body) = &mut func.body {
+            flatten_seq_in_body(body);
+        }
+    }
+}
+
+fn flatten_seq_in_body(body: &mut Vec<WirInstr>) {
+    // First recurse into nested bodies.
+    for instr in body.iter_mut() {
+        flatten_seq_in_instr(instr);
+    }
+    // Then expand any LocalSet { value: Seq([..., final]) } at this level.
+    let old = std::mem::take(body);
+    for instr in old {
+        match instr {
+            WirInstr::LocalSet { name, value }
+                if matches!(value.as_ref(), WirInstr::Seq(seq) if !seq.is_empty()) =>
+            {
+                if let WirInstr::Seq(mut seq) = *value {
+                    let final_val = seq.pop().unwrap();
+                    body.extend(seq);
+                    body.push(WirInstr::LocalSet { name, value: Box::new(final_val) });
+                }
+            }
+            other => body.push(other),
+        }
+    }
+}
+
+fn flatten_seq_in_instr(instr: &mut WirInstr) {
+    match instr {
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+            flatten_seq_in_body(body);
+        }
+        WirInstr::If { then_body, else_body, condition, .. } => {
+            flatten_seq_in_instr(condition);
+            flatten_seq_in_body(then_body);
+            if let Some(eb) = else_body {
+                flatten_seq_in_body(eb);
+            }
+        }
+        _ => {}
+    }
+}
+
 fn cleanup_wir(module: &mut WirModule) {
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
@@ -5236,4 +5488,856 @@ fn cleanup_instr(instr: &mut WirInstr) {
     {
         *instr = std::mem::replace(inner.as_mut(), WirInstr::Nop);
     }
+}
+
+/// Mark types that are not referenced by any live function, import, or global
+/// as dead by adding them to `module.dead_type_indices`.
+///
+/// After function DCE (at TIR level) and WIR optimization, some type definitions
+/// may be registered but never actually used by any live code. This pass identifies
+/// those orphan types and marks them so the emitter skips them.
+///
+/// Types are collected transitively: a struct field type, array element type,
+/// or variant payload type that is only referenced from a dead type is also dead.
+///
+/// This is a standalone pass, separate from `optimize_wir`, so it can also run
+/// at O0 if needed. Currently called at the end of `optimize_wir`.
+pub fn dce_unreachable_types(module: &mut WirModule) {
+    let num_types = module.types.len();
+    if num_types == 0 {
+        return;
+    }
+
+    let mut reachable: IndexSet<u32> = IndexSet::default();
+
+    // Seed: collect type indices referenced from live function signatures and bodies.
+    // Skip functions that have been extracted into separate wasm_modules (dead_func_indices).
+    for (i, func) in module.functions.iter().enumerate() {
+        if module.dead_func_indices.contains(&(i as u32)) {
+            continue;
+        }
+        reachable.insert(func.type_id.index());
+        if let Some(body) = &func.body {
+            for instr in body {
+                collect_instr_type_refs(instr, &mut reachable);
+            }
+        }
+    }
+
+    // Seed: imports
+    for import in &module.imports {
+        match &import.desc {
+            WirImportDesc::Func { type_id, .. } => {
+                reachable.insert(type_id.index());
+            }
+            WirImportDesc::Global { ty, .. } | WirImportDesc::Table { ty, .. } => {
+                collect_wir_type_ref(ty, &mut reachable);
+            }
+            WirImportDesc::Memory { .. } => {}
+        }
+    }
+
+    // Seed: globals
+    for global in &module.globals {
+        collect_wir_type_ref(&global.ty, &mut reachable);
+        collect_instr_type_refs(&global.init, &mut reachable);
+    }
+
+    // Transitive closure: for each reachable type, add the types it references.
+    let mut queue: std::collections::VecDeque<u32> = reachable.iter().copied().collect();
+    while let Some(idx) = queue.pop_front() {
+        if (idx as usize) >= num_types {
+            continue;
+        }
+        let mut refs: Vec<u32> = Vec::new();
+        match &module.types[idx as usize] {
+            WirTypeDef::Struct(s) => {
+                for field in &s.fields {
+                    collect_wir_type_ref_into(&field.ty, &mut refs);
+                }
+            }
+            WirTypeDef::Variant(v) => {
+                // If a variant is reachable, its case struct types are also reachable.
+                for (&case_wir_idx, &(variant_wir_idx, _)) in &module.variant_case_info {
+                    if variant_wir_idx == idx {
+                        refs.push(case_wir_idx);
+                    }
+                }
+                for case in &v.cases {
+                    for ty in &case.payload {
+                        collect_wir_type_ref_into(ty, &mut refs);
+                    }
+                }
+            }
+            WirTypeDef::Array(a) => {
+                collect_wir_type_ref_into(&a.element_type, &mut refs);
+            }
+            WirTypeDef::Func(ft) => {
+                for ty in ft.params.iter().chain(ft.results.iter()) {
+                    collect_wir_type_ref_into(ty, &mut refs);
+                }
+            }
+            WirTypeDef::Enum(_) | WirTypeDef::Flags(_) => {}
+        }
+        for new_idx in refs {
+            if reachable.insert(new_idx) {
+                queue.push_back(new_idx);
+            }
+        }
+    }
+
+    // Mark unreachable types as dead.
+    for i in 0..num_types as u32 {
+        if !reachable.contains(&i) {
+            module.dead_type_indices.insert(i);
+        }
+    }
+}
+
+/// Add the type index(es) referenced by a `WirType` to `out`.
+fn collect_wir_type_ref(ty: &WirType, out: &mut IndexSet<u32>) {
+    match ty {
+        WirType::Ref { type_id, .. }
+        | WirType::Enum { type_id }
+        | WirType::Flags { type_id } => {
+            out.insert(type_id.index());
+        }
+        _ => {}
+    }
+}
+
+/// Like `collect_wir_type_ref` but collects into a `Vec` (for transitive closure work list).
+fn collect_wir_type_ref_into(ty: &WirType, out: &mut Vec<u32>) {
+    match ty {
+        WirType::Ref { type_id, .. }
+        | WirType::Enum { type_id }
+        | WirType::Flags { type_id } => {
+            out.push(type_id.index());
+        }
+        _ => {}
+    }
+}
+
+/// Recursively collect all `WirTypeId` references from a `WirInstr` tree.
+///
+/// Handles the type-bearing instruction variants explicitly, then delegates
+/// to `for_each_child` for recursive traversal of child instructions.
+fn collect_instr_type_refs(instr: &WirInstr, out: &mut IndexSet<u32>) {
+    match instr {
+        WirInstr::StructNew { type_id, .. }
+        | WirInstr::StructGet { type_id, .. }
+        | WirInstr::StructSet { type_id, .. }
+        | WirInstr::ArrayNew { type_id, .. }
+        | WirInstr::ArrayNewDefault { type_id, .. }
+        | WirInstr::ArrayNewData { type_id, .. }
+        | WirInstr::ArrayNewFixed { type_id, .. }
+        | WirInstr::ArrayGet { type_id, .. }
+        | WirInstr::ArrayGetS { type_id, .. }
+        | WirInstr::ArrayGetU { type_id, .. }
+        | WirInstr::ArraySet { type_id, .. }
+        | WirInstr::ArrayFill { type_id, .. }
+        | WirInstr::RefCast { type_id, .. }
+        | WirInstr::RefTest { type_id, .. }
+        | WirInstr::CallIndirect { type_id, .. }
+        | WirInstr::CallRef { type_id, .. }
+        | WirInstr::ValueCopy { type_id, .. }
+        | WirInstr::MultiValueStructNew { type_id, .. } => {
+            out.insert(type_id.index());
+        }
+        WirInstr::ArrayCopy {
+            dest_type_id,
+            src_type_id,
+            ..
+        } => {
+            out.insert(dest_type_id.index());
+            out.insert(src_type_id.index());
+        }
+        WirInstr::DeclareLocal { ty, .. } => {
+            collect_wir_type_ref(ty, out);
+        }
+        WirInstr::Block { result, .. } | WirInstr::If { result, .. } => {
+            if let Some(ty) = result {
+                collect_wir_type_ref(ty, out);
+            }
+        }
+        WirInstr::Select { ty, .. } => {
+            if let Some(ty) = ty {
+                collect_wir_type_ref(ty, out);
+            }
+        }
+        _ => {}
+    }
+    // Recurse into child instructions.
+    instr.for_each_child(&mut |child| {
+        collect_instr_type_refs(child, out);
+    });
+}
+
+/// Dead Return Value Elimination (DRVE).
+///
+/// Finds non-pinned functions that return a GC struct ref where:
+/// 1. Every return in the body is `Return { value: StructNew { pure_fields } }`.
+/// 2. Every call site in the module is `Drop(Call(f, args))`.
+///
+/// Those functions are converted to void return, the StructNew is removed from
+/// returns, and the Drop wrapper is removed at each call site.
+fn drve_dead_return_values(module: &mut WirModule) {
+    let pinned = collect_pinned_func_ids(module);
+
+    let candidates = find_drve_candidates(module, &pinned);
+    if candidates.is_empty() {
+        return;
+    }
+
+    let confirmed = validate_drve_call_sites(module, &candidates);
+    if confirmed.is_empty() {
+        return;
+    }
+
+    apply_drve(module, &confirmed);
+}
+
+struct DrveCandidate {
+    func_array_idx: usize,
+}
+
+fn find_drve_candidates(
+    module: &WirModule,
+    pinned: &IndexSet<u32>,
+) -> Vec<(u32, DrveCandidate)> {
+    let mut candidates = Vec::new();
+
+    for (i, func) in module.functions.iter().enumerate() {
+        let func_id_index =
+            crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
+
+        if pinned.contains(&func_id_index) {
+            continue;
+        }
+        if func.body.is_none() {
+            continue;
+        }
+
+        let type_idx = func.type_id.index() as usize;
+        let Some(WirTypeDef::Func(func_type)) = module.types.get(type_idx) else {
+            continue;
+        };
+
+        // Must return exactly one Ref to a struct.
+        if func_type.results.len() != 1 {
+            continue;
+        }
+        let WirType::Ref {
+            type_id: ret_type_id,
+            ..
+        } = &func_type.results[0]
+        else {
+            continue;
+        };
+        let ret_type_idx = ret_type_id.index() as usize;
+        let Some(WirTypeDef::Struct(_)) = module.types.get(ret_type_idx) else {
+            continue;
+        };
+
+        // All returns must be StructNew with all-pure field expressions.
+        let body = func.body.as_ref().unwrap();
+        if !all_returns_are_pure_struct_new(body) {
+            continue;
+        }
+
+        candidates.push((func_id_index, DrveCandidate { func_array_idx: i }));
+    }
+
+    candidates
+}
+
+/// Returns true if every `Return { value: Some(...) }` in the tree is a `StructNew`
+/// with all side-effect-free field expressions.
+fn all_returns_are_pure_struct_new(instrs: &[WirInstr]) -> bool {
+    for instr in instrs {
+        match instr {
+            WirInstr::Return { value: Some(v) } => {
+                let WirInstr::StructNew { fields, .. } = v.as_ref() else {
+                    return false;
+                };
+                if !fields.iter().all(is_side_effect_free) {
+                    return false;
+                }
+            }
+            WirInstr::Return { value: None } => {
+                return false;
+            }
+            WirInstr::Block { body, .. }
+            | WirInstr::Loop { body, .. }
+            | WirInstr::Seq(body) => {
+                if !all_returns_are_pure_struct_new(body) {
+                    return false;
+                }
+            }
+            WirInstr::If {
+                then_body,
+                else_body,
+                ..
+            } => {
+                if !all_returns_are_pure_struct_new(then_body) {
+                    return false;
+                }
+                if let Some(eb) = else_body {
+                    if !all_returns_are_pure_struct_new(eb) {
+                        return false;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    true
+}
+
+/// Returns true if `instr` has no observable side effects.
+/// Calls and memory/global stores are not side-effect-free.
+/// Memory loads are treated as side-effect-free (pure read with no mutation).
+fn is_side_effect_free(instr: &WirInstr) -> bool {
+    match instr {
+        WirInstr::Call { .. }
+        | WirInstr::CallIndirect { .. }
+        | WirInstr::CallRef { .. } => false,
+        WirInstr::LocalSet { .. } | WirInstr::LocalTee { .. } | WirInstr::GlobalSet { .. } => {
+            false
+        }
+        WirInstr::I32Store { .. }
+        | WirInstr::I32Store8 { .. }
+        | WirInstr::I32Store16 { .. }
+        | WirInstr::I64Store { .. } => false,
+        WirInstr::Unreachable => false,
+        _ => {
+            let mut ok = true;
+            instr.for_each_child(&mut |child| {
+                if ok && !is_side_effect_free(child) {
+                    ok = false;
+                }
+            });
+            ok
+        }
+    }
+}
+
+fn validate_drve_call_sites(
+    module: &WirModule,
+    candidates: &[(u32, DrveCandidate)],
+) -> Vec<(u32, DrveCandidate)> {
+    let candidate_ids: IndexSet<u32> = candidates.iter().map(|(id, _)| *id).collect();
+    let mut invalid: IndexSet<u32> = IndexSet::default();
+    let mut has_drop_call: IndexSet<u32> = IndexSet::default();
+
+    for func in &module.functions {
+        if let Some(body) = &func.body {
+            check_drve_call_uses_in_body(body, &candidate_ids, &mut invalid, &mut has_drop_call);
+        }
+    }
+
+    candidates
+        .iter()
+        .filter(|(id, _)| has_drop_call.contains(id) && !invalid.contains(id))
+        .map(|(id, c)| (*id, DrveCandidate { func_array_idx: c.func_array_idx }))
+        .collect()
+}
+
+fn check_drve_call_uses_in_body(
+    instrs: &[WirInstr],
+    candidate_ids: &IndexSet<u32>,
+    invalid: &mut IndexSet<u32>,
+    has_drop_call: &mut IndexSet<u32>,
+) {
+    for instr in instrs {
+        match instr {
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
+                check_drve_call_uses_in_body(body, candidate_ids, invalid, has_drop_call);
+            }
+            WirInstr::If {
+                condition,
+                then_body,
+                else_body,
+                ..
+            } => {
+                find_drve_candidate_calls(condition, candidate_ids, invalid);
+                check_drve_call_uses_in_body(then_body, candidate_ids, invalid, has_drop_call);
+                if let Some(eb) = else_body {
+                    check_drve_call_uses_in_body(eb, candidate_ids, invalid, has_drop_call);
+                }
+            }
+            WirInstr::Seq(body) => {
+                check_drve_call_uses_in_body(body, candidate_ids, invalid, has_drop_call);
+            }
+            WirInstr::Drop(inner) => {
+                if let WirInstr::Call { func_id, args } = inner.as_ref() {
+                    if candidate_ids.contains(&func_id.index()) {
+                        has_drop_call.insert(func_id.index());
+                        for arg in args {
+                            find_drve_candidate_calls(arg, candidate_ids, invalid);
+                        }
+                        continue;
+                    }
+                }
+                find_drve_candidate_calls(inner, candidate_ids, invalid);
+            }
+            _ => {
+                find_drve_candidate_calls(instr, candidate_ids, invalid);
+            }
+        }
+    }
+}
+
+fn find_drve_candidate_calls(
+    instr: &WirInstr,
+    candidate_ids: &IndexSet<u32>,
+    invalid: &mut IndexSet<u32>,
+) {
+    if let WirInstr::Call { func_id, .. } = instr {
+        if candidate_ids.contains(&func_id.index()) {
+            invalid.insert(func_id.index());
+            return;
+        }
+    }
+    instr.for_each_child(&mut |child| {
+        find_drve_candidate_calls(child, candidate_ids, invalid);
+    });
+}
+
+fn apply_drve(module: &mut WirModule, confirmed: &[(u32, DrveCandidate)]) {
+    let candidate_set: IndexSet<u32> = confirmed.iter().map(|(id, _)| *id).collect();
+
+    // Step A: Change function return types to void and rewrite returns.
+    for (_, candidate) in confirmed {
+        let func = &mut module.functions[candidate.func_array_idx];
+
+        let old_type_idx = func.type_id.index() as usize;
+        let old_func_type = match &module.types[old_type_idx] {
+            WirTypeDef::Func(ft) => ft,
+            _ => unreachable!(),
+        };
+        let new_func_type = WirFuncType {
+            name: old_func_type.name.clone(),
+            params: old_func_type.params.clone(),
+            results: vec![],
+        };
+
+        let new_type_idx = u32::try_from(module.types.len()).unwrap();
+        module.types.push(WirTypeDef::Func(new_func_type));
+
+        let new_type_id = WirTypeId::new(new_type_idx, func.type_id.fq().into());
+        func.type_id = new_type_id;
+
+        if let Some(body) = &mut func.body {
+            rewrite_drve_returns(body);
+        }
+    }
+
+    // Step B: Remove Drop wrappers at call sites.
+    for i in 0..module.functions.len() {
+        if module.functions[i].body.is_some() {
+            let body = module.functions[i].body.as_mut().unwrap();
+            rewrite_drve_call_sites(body, &candidate_set);
+        }
+    }
+}
+
+fn rewrite_drve_returns(instrs: &mut Vec<WirInstr>) {
+    for instr in instrs.iter_mut() {
+        match instr {
+            WirInstr::Return { value: Some(v) }
+                if matches!(v.as_ref(), WirInstr::StructNew { .. }) =>
+            {
+                *instr = WirInstr::Return { value: None };
+            }
+            WirInstr::Block { body, .. }
+            | WirInstr::Loop { body, .. }
+            | WirInstr::Seq(body) => {
+                rewrite_drve_returns(body);
+            }
+            WirInstr::If {
+                then_body,
+                else_body,
+                ..
+            } => {
+                rewrite_drve_returns(then_body);
+                if let Some(eb) = else_body {
+                    rewrite_drve_returns(eb);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn rewrite_drve_call_sites(instrs: &mut Vec<WirInstr>, candidate_set: &IndexSet<u32>) {
+    for instr in instrs.iter_mut() {
+        match instr {
+            WirInstr::Drop(inner)
+                if matches!(inner.as_ref(), WirInstr::Call { func_id, .. }
+                    if candidate_set.contains(&func_id.index())) =>
+            {
+                let call = std::mem::replace(inner.as_mut(), WirInstr::Nop);
+                *instr = call;
+            }
+            WirInstr::Block { body, .. }
+            | WirInstr::Loop { body, .. }
+            | WirInstr::Seq(body) => {
+                rewrite_drve_call_sites(body, candidate_set);
+            }
+            WirInstr::If {
+                then_body,
+                else_body,
+                ..
+            } => {
+                rewrite_drve_call_sites(then_body, candidate_set);
+                if let Some(eb) = else_body {
+                    rewrite_drve_call_sites(eb, candidate_set);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Eliminate LocalSet instructions whose local is never read (write-only).
+///
+/// For each function, collects all locals that appear in a LocalGet, then converts
+/// every `LocalSet { name, value }` where `name` has no LocalGet to either:
+/// - `Nop` if `value` is side-effect-free (and is safe to discard), or
+/// - `Drop(value)` if `value` has side effects that must be preserved.
+///
+/// Runs iteratively until no further changes occur (needed when multiple dead
+/// write locals reference each other in their values).
+fn elide_write_only_locals(module: &mut WirModule) {
+    for func in &mut module.functions {
+        if let Some(body) = &mut func.body {
+            loop {
+                if !elide_write_only_locals_in_body(body) {
+                    break;
+                }
+            }
+        }
+    }
+}
+
+fn elide_write_only_locals_in_body(body: &mut Vec<WirInstr>) -> bool {
+    let mut read_locals: IndexSet<String> = IndexSet::default();
+    for instr in body.iter() {
+        collect_local_gets(instr, &mut read_locals);
+    }
+
+    let mut changed = false;
+    for instr in body.iter_mut() {
+        elide_write_only_in_instr(instr, &read_locals, &mut changed);
+    }
+    changed
+}
+
+fn collect_local_gets(instr: &WirInstr, out: &mut IndexSet<String>) {
+    if let WirInstr::LocalGet { name } = instr {
+        out.insert(name.clone());
+    }
+    instr.for_each_child(&mut |child| collect_local_gets(child, out));
+}
+
+fn elide_write_only_in_instr(
+    instr: &mut WirInstr,
+    read_locals: &IndexSet<String>,
+    changed: &mut bool,
+) {
+    match instr {
+        WirInstr::LocalSet { name, value } if !read_locals.contains(name.as_str()) => {
+            let value_expr = std::mem::replace(value.as_mut(), WirInstr::Nop);
+            if is_side_effect_free(&value_expr) {
+                *instr = WirInstr::Nop;
+            } else {
+                *instr = WirInstr::Drop(Box::new(value_expr));
+            }
+            *changed = true;
+        }
+        WirInstr::Block { body, .. }
+        | WirInstr::Loop { body, .. }
+        | WirInstr::Seq(body) => {
+            for child in body.iter_mut() {
+                elide_write_only_in_instr(child, read_locals, changed);
+            }
+        }
+        WirInstr::If {
+            then_body,
+            else_body,
+            ..
+        } => {
+            for child in then_body.iter_mut() {
+                elide_write_only_in_instr(child, read_locals, changed);
+            }
+            if let Some(eb) = else_body {
+                for child in eb.iter_mut() {
+                    elide_write_only_in_instr(child, read_locals, changed);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Remove trivial module-init guard globals.
+///
+/// Detects globals that are used *only* as an "initialized once" guard: a `Block`
+/// with exactly two instructions — `If { GlobalGet(x), then_body: [Br 1] }` followed by
+/// `GlobalSet { x, I32Const(1) }` — with no other uses of `x` in the module.
+/// When matched and not exported, the block is replaced with `Nop` and the global
+/// is marked as dead.
+fn remove_trivial_init_globals(module: &mut WirModule) {
+    // Collect globals that appear only in the trivial-init pattern.
+    // First, find all globals that appear in ANY non-trivial-guard context.
+    let num_globals = module.globals.len();
+    if num_globals == 0 {
+        return;
+    }
+
+    // Build a set of global fq names that are exported.
+    let exported_globals: IndexSet<String> = module
+        .exports
+        .iter()
+        .filter_map(|e| {
+            if let WirExportDesc::Global { name } = &e.desc {
+                Some(name.fq.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // For each global, count how many times it's used in trivial-guard blocks
+    // vs. in any other context.
+    let global_fqs: Vec<String> = module.globals.iter().map(|g| g.name.fq.clone()).collect();
+
+    // For each global, track (trivial_guard_count, other_use_count).
+    let mut trivial_guard_blocks: Vec<usize> = vec![0; num_globals]; // functions where this global has a trivial guard block
+    let mut other_use_counts: Vec<usize> = vec![0; num_globals];
+
+    for func in &module.functions {
+        if let Some(body) = &func.body {
+            for instr in body {
+                count_global_uses_in_instr(
+                    instr,
+                    &global_fqs,
+                    &mut trivial_guard_blocks,
+                    &mut other_use_counts,
+                    false,
+                );
+            }
+        }
+    }
+
+    // Also check globals themselves (init expressions).
+    for global in &module.globals {
+        count_global_uses_in_instr(
+            &global.init,
+            &global_fqs,
+            &mut trivial_guard_blocks,
+            &mut other_use_counts,
+            false,
+        );
+    }
+
+    // Identify globals eligible for removal:
+    // - Not exported
+    // - No other uses (other_use_counts == 0)
+    // - Has at least one trivial guard block (trivial_guard_blocks >= 1)
+    let removable: IndexSet<String> = global_fqs
+        .iter()
+        .enumerate()
+        .filter(|(i, fq)| {
+            !exported_globals.contains(*fq)
+                && other_use_counts[*i] == 0
+                && trivial_guard_blocks[*i] >= 1
+        })
+        .map(|(_, fq)| fq.clone())
+        .collect();
+
+    if removable.is_empty() {
+        return;
+    }
+
+    // Mark matching globals as dead.
+    for (i, global) in module.globals.iter().enumerate() {
+        if removable.contains(&global.name.fq) {
+            module.dead_global_indices.insert(i as u32);
+        }
+    }
+
+    // Remove trivial-guard blocks from all function bodies.
+    for func in &mut module.functions {
+        if let Some(body) = &mut func.body {
+            for instr in body.iter_mut() {
+                nop_trivial_init_blocks(instr, &removable);
+            }
+        }
+    }
+}
+
+/// Classify global uses in an instruction tree.
+/// - Trivial-guard blocks increment `trivial_guard_blocks[i]`.
+/// - All other GlobalGet/GlobalSet uses increment `other_use_counts[i]`.
+fn count_global_uses_in_instr(
+    instr: &WirInstr,
+    global_fqs: &[String],
+    trivial_guard_blocks: &mut Vec<usize>,
+    other_use_counts: &mut Vec<usize>,
+    in_other_context: bool,
+) {
+    // Check if this is a trivial-guard block at statement level (not inside another expr).
+    if !in_other_context {
+        if let Some(fq) = is_trivial_init_block(instr) {
+            if let Some(idx) = global_fqs.iter().position(|g| g == fq) {
+                trivial_guard_blocks[idx] += 1;
+                return; // Don't recurse — all uses are accounted for by this pattern.
+            }
+        }
+    }
+
+    // For GlobalGet/GlobalSet at any depth, count as "other use".
+    match instr {
+        WirInstr::GlobalGet { name } => {
+            if let Some(idx) = global_fqs.iter().position(|g| *g == name.fq) {
+                other_use_counts[idx] += 1;
+            }
+        }
+        WirInstr::GlobalSet { name, value } => {
+            if let Some(idx) = global_fqs.iter().position(|g| *g == name.fq) {
+                other_use_counts[idx] += 1;
+            }
+            count_global_uses_in_instr(
+                value,
+                global_fqs,
+                trivial_guard_blocks,
+                other_use_counts,
+                true,
+            );
+        }
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
+            for child in body {
+                count_global_uses_in_instr(
+                    child,
+                    global_fqs,
+                    trivial_guard_blocks,
+                    other_use_counts,
+                    in_other_context,
+                );
+            }
+        }
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            count_global_uses_in_instr(
+                condition,
+                global_fqs,
+                trivial_guard_blocks,
+                other_use_counts,
+                true,
+            );
+            for child in then_body {
+                count_global_uses_in_instr(
+                    child,
+                    global_fqs,
+                    trivial_guard_blocks,
+                    other_use_counts,
+                    in_other_context,
+                );
+            }
+            if let Some(eb) = else_body {
+                for child in eb {
+                    count_global_uses_in_instr(
+                        child,
+                        global_fqs,
+                        trivial_guard_blocks,
+                        other_use_counts,
+                        in_other_context,
+                    );
+                }
+            }
+        }
+        WirInstr::Seq(body) => {
+            for child in body {
+                count_global_uses_in_instr(
+                    child,
+                    global_fqs,
+                    trivial_guard_blocks,
+                    other_use_counts,
+                    in_other_context,
+                );
+            }
+        }
+        _ => {
+            instr.for_each_child(&mut |child| {
+                count_global_uses_in_instr(
+                    child,
+                    global_fqs,
+                    trivial_guard_blocks,
+                    other_use_counts,
+                    true,
+                );
+            });
+        }
+    }
+}
+
+/// Returns the global fq name if `instr` is a trivial init guard block with exactly
+/// two instructions (`If { GlobalGet(x), Br 1 }` + `GlobalSet { x, I32Const(1) }`)
+/// and no result type.
+fn is_trivial_init_block(instr: &WirInstr) -> Option<&str> {
+    let WirInstr::Block { result: None, body, .. } = instr else {
+        return None;
+    };
+    if body.len() != 2 {
+        return None;
+    }
+    // First: If { condition: GlobalGet(x), then_body: [Br { depth: 0 }], else_body: None }
+    let WirInstr::If {
+        condition,
+        then_body,
+        else_body: None,
+        result: None,
+    } = &body[0]
+    else {
+        return None;
+    };
+    let WirInstr::GlobalGet { name: guard_name } = condition.as_ref() else {
+        return None;
+    };
+    if then_body.len() != 1 {
+        return None;
+    }
+    // The Br targets the outer block (depth 1 from inside the If's then_body,
+    // since the If itself introduces a block scope at depth 0).
+    if !matches!(then_body[0], WirInstr::Br { depth: 1 }) {
+        return None;
+    }
+    // Second: GlobalSet { name: x, value: I32Const(1) }
+    let WirInstr::GlobalSet { name: set_name, value } = &body[1] else {
+        return None;
+    };
+    if guard_name.fq != set_name.fq {
+        return None;
+    }
+    if !matches!(value.as_ref(), WirInstr::I32Const(1)) {
+        return None;
+    }
+    Some(&guard_name.fq)
+}
+
+/// Replace trivial-guard blocks for removable globals with `Nop`.
+fn nop_trivial_init_blocks(instr: &mut WirInstr, removable: &IndexSet<String>) {
+    if let Some(fq) = is_trivial_init_block(instr) {
+        if removable.contains(fq) {
+            *instr = WirInstr::Nop;
+            return;
+        }
+    }
+    instr.for_each_boxed_child_mut(&mut |child| nop_trivial_init_blocks(child, removable));
 }

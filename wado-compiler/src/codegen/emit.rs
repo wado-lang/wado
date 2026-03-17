@@ -209,17 +209,25 @@ impl<'a> WirEmitter<'a> {
                     // Variant case struct — emitted inline as part of its parent variant
                 }
                 WirTypeDef::Struct(s) => {
-                    self.build_struct_subtype(s, wir_idx, &mut gc_subtypes);
+                    if !self.wir.dead_type_indices.contains(&wir_idx) {
+                        self.build_struct_subtype(s, wir_idx, &mut gc_subtypes);
+                    }
                 }
                 WirTypeDef::Variant(v) => {
-                    self.build_variant_subtypes(v, wir_idx, &mut gc_subtypes);
+                    if !self.wir.dead_type_indices.contains(&wir_idx) {
+                        self.build_variant_subtypes(v, wir_idx, &mut gc_subtypes);
+                    }
                 }
                 WirTypeDef::Array(a) => {
-                    self.build_array_subtype(a, wir_idx, &mut gc_subtypes);
+                    if !self.wir.dead_type_indices.contains(&wir_idx) {
+                        self.build_array_subtype(a, wir_idx, &mut gc_subtypes);
+                    }
                 }
                 WirTypeDef::Func(f) if gc_func_types.contains(&wir_idx) => {
                     // Func type referenced from a GC struct — include in rec group
-                    self.build_func_subtype(f, wir_idx, &mut gc_subtypes);
+                    if !self.wir.dead_type_indices.contains(&wir_idx) {
+                        self.build_func_subtype(f, wir_idx, &mut gc_subtypes);
+                    }
                 }
                 WirTypeDef::Enum(_) | WirTypeDef::Flags(_) | WirTypeDef::Func(_) => {}
             }
@@ -265,40 +273,49 @@ impl<'a> WirEmitter<'a> {
                     // Variant case struct — index assigned by the parent variant below
                 }
                 WirTypeDef::Struct(_) | WirTypeDef::Array(_) => {
-                    self.type_index_map.insert(wir_idx, next_idx);
-                    next_idx += 1;
-                }
-                WirTypeDef::Variant(v) => {
-                    // Base type
-                    self.type_index_map.insert(wir_idx, next_idx);
-                    let base_idx = next_idx;
-                    next_idx += 1;
-
-                    // Case subtypes
-                    let mut case_types = Vec::new();
-                    for case in &v.cases {
-                        case_types.push((case.index, next_idx));
+                    if !self.wir.dead_type_indices.contains(&wir_idx) {
+                        self.type_index_map.insert(wir_idx, next_idx);
                         next_idx += 1;
                     }
+                }
+                WirTypeDef::Variant(v) => {
+                    if self.wir.dead_type_indices.contains(&wir_idx) {
+                        // Dead variant — skip it and its case subtypes
+                    } else {
+                        // Base type
+                        self.type_index_map.insert(wir_idx, next_idx);
+                        let base_idx = next_idx;
+                        next_idx += 1;
 
-                    // Map variant case WIR type indices to their Wasm type indices
-                    for (&case_wir_idx, &(variant_wir_idx, case_idx)) in &self.wir.variant_case_info
-                    {
-                        if variant_wir_idx == wir_idx
-                            && let Some(&(_, wasm_idx)) =
-                                case_types.iter().find(|(idx, _)| *idx == case_idx)
-                        {
-                            self.type_index_map.insert(case_wir_idx, wasm_idx);
+                        // Case subtypes
+                        let mut case_types = Vec::new();
+                        for case in &v.cases {
+                            case_types.push((case.index, next_idx));
+                            next_idx += 1;
                         }
-                    }
 
-                    self.variant_pre_assigned
-                        .insert(wir_idx, (base_idx, case_types));
+                        // Map variant case WIR type indices to their Wasm type indices
+                        for (&case_wir_idx, &(variant_wir_idx, case_idx)) in
+                            &self.wir.variant_case_info
+                        {
+                            if variant_wir_idx == wir_idx
+                                && let Some(&(_, wasm_idx)) =
+                                    case_types.iter().find(|(idx, _)| *idx == case_idx)
+                            {
+                                self.type_index_map.insert(case_wir_idx, wasm_idx);
+                            }
+                        }
+
+                        self.variant_pre_assigned
+                            .insert(wir_idx, (base_idx, case_types));
+                    }
                 }
                 WirTypeDef::Func(_) if gc_func_types.contains(&wir_idx) => {
                     // Func type referenced from a GC struct field — must be in rec group
-                    self.type_index_map.insert(wir_idx, next_idx);
-                    next_idx += 1;
+                    if !self.wir.dead_type_indices.contains(&wir_idx) {
+                        self.type_index_map.insert(wir_idx, next_idx);
+                        next_idx += 1;
+                    }
                 }
                 WirTypeDef::Enum(_) | WirTypeDef::Flags(_) | WirTypeDef::Func(_) => {
                     // Enums/Flags: no type section entry
