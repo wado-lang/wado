@@ -1,0 +1,47 @@
+// From trait — numeric widening conversions
+use { println } from "core:cli";
+
+export fn run() with Stdout {
+    let a: i8 = 42;
+    assert i16::from(a) == 42 as i16;
+    assert i32::from(a) == 42;
+    assert i64::from(a) == 42 as i64;
+
+    let b: i16 = 1000;
+    assert i32::from(b) == 1000;
+    assert i64::from(b) == 1000 as i64;
+
+    let c: i32 = 100000;
+    assert i64::from(c) == 100000 as i64;
+
+    let d: u8 = 200;
+    assert u16::from(d) == 200 as u16;
+    assert u32::from(d) == 200 as u32;
+    assert u64::from(d) == 200 as u64;
+    assert i16::from(d) == 200 as i16;
+    assert i32::from(d) == 200;
+    assert i64::from(d) == 200 as i64;
+
+    let e: u16 = 50000;
+    assert u32::from(e) == 50000 as u32;
+    assert u64::from(e) == 50000 as u64;
+    assert i32::from(e) == 50000;
+    assert i64::from(e) == 50000 as i64;
+
+    let f: u32 = 3000000000;
+    assert u64::from(f) == 3000000000 as u64;
+    assert i64::from(f) == 3000000000 as i64;
+
+    let g: f32 = 3.14 as f32;
+    let h: f64 = f64::from(g);
+    assert h > 3.13;
+    assert h < 3.15;
+
+    assert i32::from(true) == 1;
+    assert i32::from(false) == 0;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

@@ -228,7 +228,7 @@ fn collect_param_field_usage_in_stmt(
                 type_table,
             );
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -270,7 +270,7 @@ fn collect_param_field_usage_in_stmt(
             }
         }
         TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } => {}
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             collect_param_field_usage_in_expr(
                 value,
                 struct_params,
@@ -634,7 +634,7 @@ fn collect_param_field_usage_in_expr(
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::Match { .. }
@@ -749,7 +749,7 @@ fn scalarize_block(
                 changed |= scalarize_block(inner, local_count, local_types, type_table, cache);
                 new_stmts.push(stmt);
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 then_block,
                 else_block,
                 ..
@@ -1038,7 +1038,7 @@ fn count_field_accesses_in_stmt(
         TirStmtKind::LabeledBlock { block, .. } => {
             count_field_accesses_in_block(block, counts, type_table);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -1056,7 +1056,7 @@ fn count_field_accesses_in_stmt(
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             count_field_accesses_in_expr(value, counts, false, type_table);
         }
         TirStmtKind::TaskReturn { .. } => {}
@@ -1228,7 +1228,7 @@ fn count_field_accesses_in_expr(
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::Match { .. }
@@ -1298,7 +1298,7 @@ fn replace_in_block(
                 }
                 continue;
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 then_block,
                 else_block,
@@ -1465,7 +1465,7 @@ fn compute_sync_fields_in_stmt(
                 compute_sync_fields_in_stmt(s, candidates, type_table, cache, result);
             }
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -1487,7 +1487,7 @@ fn compute_sync_fields_in_stmt(
             }
         }
         TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } => {}
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             compute_sync_fields_in_expr(value, candidates, type_table, cache, result);
         }
     }
@@ -1774,7 +1774,7 @@ fn replace_in_stmt(stmt: &mut TirStmt, candidates: &[ScalarizeCandidate]) {
         TirStmtKind::LabeledBlock { block, .. } => {
             replace_in_block_stmts(block, candidates);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -1792,7 +1792,7 @@ fn replace_in_stmt(stmt: &mut TirStmt, candidates: &[ScalarizeCandidate]) {
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             replace_in_expr(value, candidates);
         }
         TirStmtKind::TaskReturn { .. } => {}

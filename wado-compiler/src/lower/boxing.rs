@@ -343,7 +343,7 @@ impl BoxLowerer {
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 self.expand_deref_assigns_in_block(body, local_count, local_types, type_table);
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 then_block,
                 else_block,
                 ..
@@ -583,7 +583,7 @@ impl BoxLowerer {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.transform_block(block, address_taken, type_table);
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 then_block,
                 else_block,
@@ -595,7 +595,7 @@ impl BoxLowerer {
                     self.transform_block(else_block, address_taken, type_table);
                 }
             }
-            TirStmtKind::LetPattern { value, .. } => {
+            TirStmtKind::LetDestructure { value, .. } => {
                 self.transform_expr(value, address_taken, type_table);
             }
             TirStmtKind::TaskReturn { .. } => {
@@ -738,7 +738,7 @@ impl BoxLowerer {
             | TirExprKind::BytesLiteral(_)
             | TirExprKind::Null
             | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. }
+            | TirExprKind::FuncRef { .. }
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Unit
             | TirExprKind::Capture { .. }

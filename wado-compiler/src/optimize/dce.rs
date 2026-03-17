@@ -438,7 +438,7 @@ fn analyze_block(
             TirStmtKind::LabeledBlock { block, .. } => {
                 analyze_block(block, current_module, type_table, analysis);
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 then_block,
                 else_block,
@@ -456,7 +456,7 @@ fn analyze_block(
                 }
             }
             TirStmtKind::Continue => {}
-            TirStmtKind::LetPattern { value, .. } => {
+            TirStmtKind::LetDestructure { value, .. } => {
                 analyze_expr(value, current_module, type_table, analysis);
             }
             TirStmtKind::TaskReturn { .. } => {
@@ -990,7 +990,7 @@ fn analyze_expr(
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
@@ -1391,7 +1391,7 @@ fn collect_types_from_block(
             TirStmtKind::LabeledBlock { block, .. } => {
                 collect_types_from_block(block, type_table, reachable);
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 pattern,
                 then_block,
@@ -1410,7 +1410,7 @@ fn collect_types_from_block(
                 }
             }
             TirStmtKind::Continue => {}
-            TirStmtKind::LetPattern { pattern, value, .. } => {
+            TirStmtKind::LetDestructure { pattern, value, .. } => {
                 collect_types_from_pattern(pattern, type_table, reachable);
                 collect_types_from_expr(value, type_table, reachable);
             }
@@ -1585,7 +1585,7 @@ fn collect_types_from_expr(
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
@@ -1914,7 +1914,7 @@ fn collect_global_reads_stmt(stmt: &TirStmt, used: &mut IndexSet<(String, String
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             collect_global_reads_block(body, used);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -1932,7 +1932,7 @@ fn collect_global_reads_stmt(stmt: &TirStmt, used: &mut IndexSet<(String, String
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             collect_global_reads_expr(value, used);
         }
         TirStmtKind::TaskReturn { .. } => {}
@@ -2059,7 +2059,7 @@ fn collect_global_reads_expr(expr: &TirExpr, used: &mut IndexSet<(String, String
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
         TirExprKind::TemplateString { .. } => {
@@ -2164,7 +2164,7 @@ fn block_has_side_effects(block: &TirBlock) -> bool {
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             block_has_side_effects(body)
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -2176,7 +2176,7 @@ fn block_has_side_effects(block: &TirBlock) -> bool {
         }
         TirStmtKind::Break { value, .. } => value.as_ref().is_some_and(expr_has_side_effects),
         TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } => false,
-        TirStmtKind::LetPattern { value, .. } => expr_has_side_effects(value),
+        TirStmtKind::LetDestructure { value, .. } => expr_has_side_effects(value),
     })
 }
 
@@ -2198,7 +2198,7 @@ fn remove_dead_global_sets_stmt(stmt: &mut TirStmt, used: &IndexSet<(String, Str
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             remove_dead_global_sets_block(body, used);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             then_block,
             else_block,
             ..
@@ -2218,8 +2218,9 @@ fn remove_dead_global_sets_stmt(stmt: &mut TirStmt, used: &IndexSet<(String, Str
                 remove_dead_global_sets_expr(expr, used);
             }
         }
-        TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } | TirStmtKind::LetPattern { .. } => {
-        }
+        TirStmtKind::Continue
+        | TirStmtKind::TaskReturn { .. }
+        | TirStmtKind::LetDestructure { .. } => {}
     }
 }
 
@@ -2324,7 +2325,7 @@ fn prune_branches_in_stmt(stmt: &mut TirStmt) -> bool {
         }
         TirStmtKind::Loop { body } => prune_branches_in_block(body),
         TirStmtKind::LabeledBlock { block, .. } => prune_branches_in_block(block),
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -2339,7 +2340,7 @@ fn prune_branches_in_stmt(stmt: &mut TirStmt) -> bool {
         }
         TirStmtKind::Break { value, .. } => value.as_mut().is_some_and(prune_branches_in_expr),
         TirStmtKind::Continue => false,
-        TirStmtKind::LetPattern { value, .. } => prune_branches_in_expr(value),
+        TirStmtKind::LetDestructure { value, .. } => prune_branches_in_expr(value),
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
@@ -2456,7 +2457,7 @@ fn prune_branches_in_expr(expr: &mut TirExpr) -> bool {
         }
         // Leaf nodes
         TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::IntLiteral { .. }
@@ -2654,7 +2655,7 @@ fn block_has_break_to(label: &str, block: &TirBlock) -> bool {
 fn stmt_has_break_to(label: &str, stmt: &TirStmt) -> bool {
     match &stmt.kind {
         TirStmtKind::Break { label: Some(l), .. } => l == label,
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
             expr_has_break_to(label, value)
         }
         TirStmtKind::Expr(expr) => expr_has_break_to(label, expr),
@@ -2672,7 +2673,7 @@ fn stmt_has_break_to(label: &str, stmt: &TirStmt) -> bool {
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             block_has_break_to(label, body)
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,

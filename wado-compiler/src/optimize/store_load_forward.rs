@@ -140,7 +140,7 @@ fn collect_modified_in_stmt(stmt: &TirStmt, modified: &mut IndexSet<u32>) {
         TirStmtKind::LabeledBlock { block, .. } => {
             modified.extend(collect_modified_locals(block));
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -158,7 +158,7 @@ fn collect_modified_in_stmt(stmt: &TirStmt, modified: &mut IndexSet<u32>) {
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => collect_modified_in_expr(value, modified),
+        TirStmtKind::LetDestructure { value, .. } => collect_modified_in_expr(value, modified),
         TirStmtKind::TaskReturn { .. } => {}
     }
 }
@@ -322,7 +322,7 @@ fn collect_unsafe_in_stmt(stmt: &TirStmt, unsafe_locals: &mut IndexSet<u32>) {
         TirStmtKind::LabeledBlock { block, .. } => {
             collect_unsafe_in_block(block, unsafe_locals);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -340,7 +340,7 @@ fn collect_unsafe_in_stmt(stmt: &TirStmt, unsafe_locals: &mut IndexSet<u32>) {
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => collect_unsafe_in_expr(value, unsafe_locals),
+        TirStmtKind::LetDestructure { value, .. } => collect_unsafe_in_expr(value, unsafe_locals),
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
@@ -471,7 +471,7 @@ fn collect_unsafe_in_expr(expr: &TirExpr, unsafe_locals: &mut IndexSet<u32>) {
         }
         // Leaf nodes
         TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::IntLiteral { .. }
@@ -604,7 +604,7 @@ fn forward_in_stmt(
             known.invalidate_modified(&modified);
             changed
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -632,7 +632,7 @@ fn forward_in_stmt(
             }
         }
         TirStmtKind::Continue => false,
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             forward_in_expr(value, known, unsafe_locals, type_table)
         }
         TirStmtKind::TaskReturn { .. } => {
@@ -795,7 +795,7 @@ fn forward_in_expr(
         }
         // Leaf nodes
         TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::IntLiteral { .. }

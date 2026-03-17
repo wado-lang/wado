@@ -427,6 +427,8 @@ pub struct TypeTable {
     result_module_source: Option<ModuleSource>,
     /// Module source of the canonical `Default` trait, set via `#[comp_feature("default")]`.
     default_trait_module_source: Option<ModuleSource>,
+    /// Module source of the canonical `From<T>` trait, set via `#[comp_feature("from")]`.
+    from_trait_module_source: Option<ModuleSource>,
     /// Associated type resolutions: `(concrete_type_id, assoc_name)` → `resolved_type_id`.
     /// Populated when impl blocks with associated type bindings are processed.
     assoc_type_resolutions: IndexMap<(TypeId, String), TypeId>,
@@ -475,6 +477,7 @@ impl TypeTable {
             option_module_source: None,
             result_module_source: None,
             default_trait_module_source: None,
+            from_trait_module_source: None,
             assoc_type_resolutions: IndexMap::default(),
             redirects: IndexMap::default(),
             newtype_to_base_name: IndexMap::default(),
@@ -621,13 +624,21 @@ impl TypeTable {
     /// Register the defining module source for a trait marked with `#[comp_feature("default")]`.
     pub fn register_comp_feature_trait(&mut self, comp_features: u32, module_source: ModuleSource) {
         if comp_features & crate::wir::COMP_FEATURE_DEFAULT != 0 {
-            self.default_trait_module_source = Some(module_source);
+            self.default_trait_module_source = Some(module_source.clone());
+        }
+        if comp_features & crate::wir::COMP_FEATURE_FROM != 0 {
+            self.from_trait_module_source = Some(module_source);
         }
     }
 
     /// Get the module source where the `Default` trait is defined.
     pub fn default_trait_module_source(&self) -> Option<&ModuleSource> {
         self.default_trait_module_source.as_ref()
+    }
+
+    /// Get the module source where the `From<T>` trait is defined.
+    pub fn from_trait_module_source(&self) -> Option<&ModuleSource> {
+        self.from_trait_module_source.as_ref()
     }
 
     /// Create an `Option<T>` type using the module source registered via `#[comp_feature("option")]`.
@@ -1565,7 +1576,7 @@ pub enum TirExprKind {
         index: u32,
         name: String,
     },
-    Global {
+    FuncRef {
         module_source: ModuleSource,
         name: String,
     },
@@ -1999,7 +2010,7 @@ pub enum TirStmtKind {
         block: TirBlock,
     },
     /// Pattern match in if condition: `if let Some(x) = expr { ... } else { ... }`
-    IfPattern {
+    IfLet {
         /// The expression being matched against
         scrutinee: TirExpr,
         /// The pattern to match
@@ -2010,7 +2021,7 @@ pub enum TirStmtKind {
         else_block: Option<TirBlock>,
     },
     /// Tuple destructuring let statement: `let [a, b] = tuple_expr;`
-    LetPattern {
+    LetDestructure {
         /// The pattern to bind (e.g., [a, b, c] or [x, [y, z]])
         pattern: TirPattern,
         /// Whether bindings are mutable

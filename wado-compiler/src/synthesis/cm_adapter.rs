@@ -4353,7 +4353,7 @@ fn strip_task_returns_in_stmt(stmt: &mut TirStmt) {
             else_block,
             ..
         }
-        | TirStmtKind::IfPattern {
+        | TirStmtKind::IfLet {
             then_block,
             else_block,
             ..
@@ -4453,7 +4453,7 @@ fn expand_task_return_in_stmt(
                 type_table,
             );
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             then_block,
             else_block,
             ..
@@ -5121,7 +5121,7 @@ fn rewrite_cm_methods_in_stmt(stmt: &mut TirStmt, tt: &TypeTable) {
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             rewrite_cm_methods_in_block(body, tt);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -5138,7 +5138,7 @@ fn rewrite_cm_methods_in_stmt(stmt: &mut TirStmt, tt: &TypeTable) {
                 rewrite_cm_methods_in_expr(v, tt);
             }
         }
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             rewrite_cm_methods_in_expr(value, tt);
         }
         TirStmtKind::Continue => {}
@@ -5957,7 +5957,7 @@ fn collect_local_type_updates(
                 else_block,
                 ..
             }
-            | TirStmtKind::IfPattern {
+            | TirStmtKind::IfLet {
                 then_block,
                 else_block,
                 ..
@@ -6032,7 +6032,7 @@ fn rewrite_calls_in_stmt(
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             rewrite_calls_in_block(body, adapters, entry_source, wasi_registry, type_table);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -6055,7 +6055,7 @@ fn rewrite_calls_in_stmt(
                 rewrite_calls_in_expr(v, adapters, entry_source, wasi_registry, type_table);
             }
         }
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry, type_table);
         }
         TirStmtKind::Continue => {}
@@ -6578,7 +6578,7 @@ fn collect_effect_calls_in_stmt(
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             collect_effect_calls_in_block(body, effects, wasi_registry);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -6595,7 +6595,7 @@ fn collect_effect_calls_in_stmt(
                 collect_effect_calls_in_expr(v, effects, wasi_registry);
             }
         }
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             collect_effect_calls_in_expr(value, effects, wasi_registry);
         }
         TirStmtKind::Continue => {}
@@ -6753,7 +6753,7 @@ fn collect_effect_calls_in_expr(
         | TirExprKind::Unit
         | TirExprKind::Capture { .. }
         | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::EnumConstruct { .. } => {}
         // Catch-all for any remaining leaf or rare variants
         _ => {}

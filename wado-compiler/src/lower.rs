@@ -2,7 +2,7 @@
 //!
 //! The lower phase performs type-driven transformations on TIR:
 //! - Wide integer match lowering (convert i128/u128 match to if-else chains)
-//! - Pattern lowering (transform `LetPattern`/`IfPattern` to explicit statements)
+//! - Pattern lowering (transform `LetDestructure`/`IfLet` to explicit statements)
 //! - Global initializer lowering (extract non-constant initializers)
 //! - Boxing lowering (transform `&primitive` / `&mut primitive` to `Box<T>` struct operations)
 //! - Closure lowering (transform closures to functor structs with `__call` methods)
@@ -55,7 +55,7 @@ fn lower_pre_boxing(
     // Phase 1: Lower i128/u128 match patterns to if-else chains
     lower_wide_int_match_patterns(module);
 
-    // Phase 1.5: Lower patterns (LetPattern, IfPattern) to explicit Let statements
+    // Phase 1.5: Lower patterns (LetDestructure, IfLet) to explicit Let statements
     lower_patterns(module, global_variant_map);
 
     // Phase 2: Lower global variable initializers

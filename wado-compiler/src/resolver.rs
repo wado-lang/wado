@@ -351,10 +351,14 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 Item::Impl(impl_block) => {
                     // Resolve impl block methods with mangled names
                     let struct_name = self.get_type_name(&impl_block.ty);
-                    let trait_name = impl_block
-                        .trait_type
-                        .as_ref()
-                        .map(|t| self.get_type_name(t));
+                    let trait_name = impl_block.trait_type.as_ref().map(|t| {
+                        let base = self.get_type_name(t);
+                        if base == "From" || base == "TryFrom" {
+                            self.get_type_name_full(t)
+                        } else {
+                            base
+                        }
+                    });
 
                     // Register type parameters from impl block's generic type FIRST
                     // e.g., impl IndexValue<i32> for Triple<T> needs T registered
@@ -419,7 +423,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
                     // `impl Trait for Type;` — record synthesis request and skip
                     if impl_block.is_synthesize_request {
-                        if let Some(ref tn) = trait_name {
+                        if let Some(ref trait_type) = impl_block.trait_type {
+                            let synth_trait_name = self.get_type_name_full(trait_type);
                             let target_type_id = self.resolve_type(&impl_block.ty);
                             let type_params: Vec<_> = self
                                 .trait_ctx
@@ -430,7 +435,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             tir_module
                                 .synthesis_requests
                                 .push(crate::tir::SynthesisRequest {
-                                    trait_name: tn.clone(),
+                                    trait_name: synth_trait_name,
                                     target_type_name: struct_name.clone(),
                                     target_type_id,
                                     type_params,
@@ -587,7 +592,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         tir_module.add_flags(tir_flags);
                     }
                 }
-                Item::Type(newtype_decl) => {
+                Item::Newtype(newtype_decl) => {
                     if let Some(&type_id) = self.newtypes.get(&newtype_decl.name) {
                         tir_module.add_newtype(TirNewtype {
                             name: newtype_decl.name.clone(),

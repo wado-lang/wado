@@ -260,6 +260,50 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 }
                             }
                         }
+                        // Handle From conversions with no explicit impl: reflexive and newtype.
+                        if suffix == "from" && args.len() == 1 {
+                            let arg_type = args[0].type_id;
+                            let arg_type_name = self.type_table.borrow().type_name(arg_type);
+
+                            // Reflexive: T::from(T_val) — identity conversion
+                            if arg_type_name == prefix {
+                                return args[0].clone();
+                            }
+
+                            // Newtype→Base: u64::from(UserId_val) where type UserId = u64
+                            let base_of_arg = self.type_table.borrow().get_newtype_base(arg_type);
+                            if let Some(base_id) = base_of_arg
+                                && self.type_table.borrow().type_name(base_id) == prefix
+                            {
+                                return TirExpr::new(
+                                    TirExprKind::Cast {
+                                        expr: Box::new(args[0].clone()),
+                                        target_type: base_id,
+                                    },
+                                    base_id,
+                                    call.span,
+                                );
+                            }
+
+                            // Base→Newtype: UserId::from(u64_val) where type UserId = u64
+                            if let Some(&newtype_type_id) = self.newtypes.get(prefix) {
+                                let base_opt =
+                                    self.type_table.borrow().get_newtype_base(newtype_type_id);
+                                if let Some(base_id) = base_opt
+                                    && self.type_table.borrow().type_name(base_id) == arg_type_name
+                                {
+                                    return TirExpr::new(
+                                        TirExprKind::Cast {
+                                            expr: Box::new(args[0].clone()),
+                                            target_type: newtype_type_id,
+                                        },
+                                        newtype_type_id,
+                                        call.span,
+                                    );
+                                }
+                            }
+                        }
+
                         return self.resolve_static_method_call_from_qualified(
                             prefix,
                             suffix,
@@ -351,6 +395,46 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 variant_type,
                                 call.span,
                             );
+                        }
+                        // If no matching case, check for From<T> synthesis requests
+                        else if suffix == "from" && args.len() == 1 {
+                            let target_type_id = self.type_table.borrow_mut().make_variant(
+                                prefix.to_string(),
+                                variant_info.module_source.clone(),
+                            );
+                            let from_type = args[0].type_id;
+                            let from_type_name = self.type_table.borrow().type_name(from_type);
+                            let matching_impl = self.current_module_items.iter().any(|item| {
+                                if let Item::Impl(impl_block) = item
+                                    && impl_block.is_synthesize_request
+                                    && let Some(trait_type) = &impl_block.trait_type
+                                    && Self::get_type_name_static(trait_type) == "From"
+                                    && Self::get_type_name_static(&impl_block.ty) == prefix
+                                {
+                                    if let ast::Type::Generic(generic) = trait_type
+                                        && generic.args.len() == 1
+                                    {
+                                        self.get_type_name_full(&generic.args[0]) == from_type_name
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    false
+                                }
+                            });
+                            if matching_impl {
+                                return self.resolve_from_call(
+                                    target_type_id,
+                                    from_type,
+                                    args.into_iter().next().unwrap(),
+                                    call.span,
+                                );
+                            }
+                            let _ = self.logger.error(TypeError::UnknownFunction {
+                                name: format!("{prefix}::{suffix}"),
+                                span: call.span,
+                            });
+                            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
                         } else {
                             // Unknown case name
                             let _ = self.logger.error(TypeError::UnknownFunction {
@@ -360,10 +444,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
                         }
                     }
-                    // Effect operations and other qualified calls - always allowed
-                    // (validated by effect system/codegen)
+                    // If prefix is a known type (struct/enum/newtype/flags) with no matching
+                    // static method, emit a compile error.
+                    else if self.is_known_type_name(prefix) {
+                        let _ = self.logger.error(TypeError::UnknownFunction {
+                            name: format!("{prefix}::{suffix}"),
+                            span: call.span,
+                        });
+                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+                    }
+                    // Effect operations and module namespace calls - pass through to codegen.
+                    // This covers Stdout::write(), etc.
                     else {
-                        // Effect-like modules (e.g., "Stdout") use Local module source
                         (
                             Some(ModuleSource::Local {
                                 path: prefix.to_string(),

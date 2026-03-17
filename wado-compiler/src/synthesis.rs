@@ -12,6 +12,7 @@
 
 pub mod cm_adapter;
 pub mod common;
+pub mod from_synth;
 pub mod serde_synth;
 pub mod template;
 pub mod traits;
@@ -27,8 +28,14 @@ use crate::project::Project;
 pub fn synthesize(project: Project) -> Result<Project, String> {
     let project = traits::synthesize_traits(project);
 
-    // Generate Serialize/Deserialize impls from `impl Trait for Type;` requests.
+    // Generate From impls from `impl From<T> for Type;` requests.
+    // Must run before serde_synth which drains remaining synthesis requests.
     let mut project = project;
+    for module in project.tir_modules.values_mut() {
+        from_synth::synthesize_from(module);
+    }
+
+    // Generate Serialize/Deserialize impls from `impl Trait for Type;` requests.
     serde_synth::synthesize_serde(&mut project);
 
     // Expand template strings into Display/Inspect trait calls.

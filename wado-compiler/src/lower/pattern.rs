@@ -366,7 +366,7 @@ impl<'a> PatternLowerer<'a> {
 
     /// Lower patterns in a block
     fn lower_block(&mut self, block: &mut TirBlock, type_table: &TypeTable) {
-        // Process statements, potentially expanding LetPattern into multiple statements
+        // Process statements, potentially expanding LetDestructure into multiple statements
         let mut new_stmts = Vec::with_capacity(block.stmts.len());
 
         for stmt in std::mem::take(&mut block.stmts) {
@@ -379,7 +379,7 @@ impl<'a> PatternLowerer<'a> {
     /// Lower a statement, potentially expanding it into multiple statements
     fn lower_stmt(&mut self, stmt: TirStmt, out: &mut Vec<TirStmt>, type_table: &TypeTable) {
         match stmt.kind {
-            TirStmtKind::LetPattern {
+            TirStmtKind::LetDestructure {
                 pattern,
                 is_mut,
                 value,
@@ -389,7 +389,7 @@ impl<'a> PatternLowerer<'a> {
                     let mut value = value;
                     self.lower_expr(&mut value, type_table);
                     out.push(TirStmt::new(
-                        TirStmtKind::LetPattern {
+                        TirStmtKind::LetDestructure {
                             pattern,
                             is_mut,
                             value,
@@ -397,11 +397,11 @@ impl<'a> PatternLowerer<'a> {
                         stmt.span,
                     ));
                 } else {
-                    // Lower LetPattern to explicit Let statements
+                    // Lower LetDestructure to explicit Let statements
                     self.lower_let_pattern(&pattern, is_mut, value, stmt.span, out, type_table);
                 }
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 mut scrutinee,
                 pattern,
                 then_block,
@@ -437,10 +437,10 @@ impl<'a> PatternLowerer<'a> {
                         scrutinee, &pattern, then_block, else_block, stmt.span, out, type_table,
                     );
                 } else {
-                    // All IfPattern statements should have Option/Variant/Enum scrutinee types
+                    // All IfLet statements should have Option/Variant/Enum scrutinee types
                     // after proper type checking. If we reach here, it's a compiler bug.
                     panic!(
-                        "IfPattern with unexpected scrutinee type {scrutinee_type:?} - this should not happen after type checking"
+                        "IfLet with unexpected scrutinee type {scrutinee_type:?} - this should not happen after type checking"
                     );
                 }
             }
@@ -527,7 +527,7 @@ impl<'a> PatternLowerer<'a> {
         }
     }
 
-    /// Lower `LetPattern` to explicit Let statements
+    /// Lower `LetDestructure` to explicit Let statements
     fn lower_let_pattern(
         &mut self,
         pattern: &TirPattern,
@@ -631,7 +631,7 @@ impl<'a> PatternLowerer<'a> {
                 payload_type,
                 ..
             } => {
-                // For variant patterns in LetPattern, extract payload
+                // For variant patterns in LetDestructure, extract payload
                 // Allocate temp for variant
                 let variant_temp_index = self.alloc_local(value.type_id);
                 let variant_temp_name = self.next_temp_name();
@@ -997,7 +997,7 @@ impl<'a> PatternLowerer<'a> {
         }
     }
 
-    /// Lower a struct `IfPattern` to let bindings + then block (unconditional).
+    /// Lower a struct `IfLet` to let bindings + then block (unconditional).
     ///
     /// Struct patterns are always irrefutable, so the else branch is discarded.
     #[allow(clippy::too_many_arguments)]
@@ -1078,7 +1078,7 @@ impl<'a> PatternLowerer<'a> {
         }
     }
 
-    /// Lower an Option `IfPattern` to Let + If
+    /// Lower an Option `IfLet` to Let + If
     ///
     /// Transforms:
     ///   `if let Some(x) = opt { then } else { else }`
@@ -1351,7 +1351,7 @@ impl<'a> PatternLowerer<'a> {
                 )
             }
             TirPattern::Tuple(_) | TirPattern::Literal(_) => {
-                // These shouldn't appear at the top level of IfPattern
+                // These shouldn't appear at the top level of IfLet
                 // Just return true for now
                 (
                     TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span),
@@ -1517,7 +1517,7 @@ impl<'a> PatternLowerer<'a> {
             | TirExprKind::Null
             | TirExprKind::Unit
             | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. }
+            | TirExprKind::FuncRef { .. }
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}

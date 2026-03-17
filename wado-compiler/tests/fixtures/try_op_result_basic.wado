@@ -1,0 +1,27 @@
+// ? operator on Result<T, E> — same error type, basic propagation
+use { println } from "core:cli";
+
+fn safe_div(a: i32, b: i32) -> Result<i32, String> {
+    if b == 0 {
+        return Result::<i32, String>::Err("division by zero");
+    }
+    return Result::<i32, String>::Ok(a / b);
+}
+
+fn compute(a: i32, b: i32) -> Result<i32, String> {
+    let q = safe_div(a, b)?;
+    return Result::<i32, String>::Ok(q * 2);
+}
+
+export fn run() with Stdout {
+    // Ok case: ? unwraps the value
+    assert compute(10, 2) matches { Ok(n) && n == 10 };
+
+    // Err case: ? propagates the error unchanged
+    assert compute(10, 0) matches { Err(msg) && msg == "division by zero" };
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

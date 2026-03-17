@@ -153,7 +153,7 @@ fn expand_stmt(
         TirStmtKind::Loop { body } => {
             expand_block(body, tt, alloc, cs);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -165,7 +165,7 @@ fn expand_stmt(
                 expand_block(eb, tt, alloc, cs);
             }
         }
-        TirStmtKind::LetPattern { value, .. } | TirStmtKind::TaskReturn { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } | TirStmtKind::TaskReturn { value, .. } => {
             expand_expr(value, tt, alloc, cs);
         }
         TirStmtKind::LabeledBlock { block, .. } => {

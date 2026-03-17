@@ -101,6 +101,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Expr::Matches(_) => {
                 panic!("Matches expression should have been desugared to if-let before resolver")
             }
+            Expr::TryOp(qm) => self.resolve_question_mark(qm, ctx),
         }
     }
 
@@ -479,7 +480,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .unwrap_or_else(|| self.current_module_source.clone())
             };
             return TirExpr::new(
-                TirExprKind::Global {
+                TirExprKind::FuncRef {
                     module_source,
                     name: ident.name.clone(),
                 },
@@ -492,7 +493,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // These are defined in core:internal and re-exported by core:prelude
         if matches!(ident.name.as_str(), "panic" | "unreachable") {
             return TirExpr::new(
-                TirExprKind::Global {
+                TirExprKind::FuncRef {
                     module_source: ModuleSource::internal(),
                     name: ident.name.clone(),
                 },
@@ -1031,8 +1032,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         None
                     }
                 }
-                // IfPattern can also produce a value if both branches exist and have the same type
-                TirStmtKind::IfPattern {
+                // IfLet can also produce a value if both branches exist and have the same type
+                TirStmtKind::IfLet {
                     then_block,
                     else_block: Some(else_block),
                     ..
@@ -1127,7 +1128,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             };
 
             let if_pattern_stmt = TirStmt::new(
-                TirStmtKind::IfPattern {
+                TirStmtKind::IfLet {
                     scrutinee,
                     pattern: tir_pattern,
                     then_block,
@@ -1783,7 +1784,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
                 None
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 then_block,
                 else_block,
                 ..
@@ -2293,5 +2294,378 @@ impl<H: CompilerHost> Resolver<'_, H> {
             tuple_type,
             tuple_lit.span,
         )
+    }
+
+    /// Resolve the postfix `?` operator.
+    ///
+    /// Desugars `expr?` into a match that unwraps the success case and
+    /// performs an early return for the failure case.
+    ///
+    /// For `Result<T, E>` in a function returning `Result<U, F>`:
+    ///   match expr { Ok(v) => v, Err(e) => return `Result::Err(F::from(e))` }
+    ///
+    /// For `Option<T>` in a function returning `Option<U>`:
+    ///   match expr { Some(v) => v, None => return null }
+    pub(super) fn resolve_question_mark(
+        &mut self,
+        qm: &ast::TryOpExpr,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let inner = self.resolve_expr(&qm.expr, ctx, None);
+        let inner_type = inner.type_id;
+        let tt = self.type_table.borrow();
+        let type_name = tt.type_name(inner_type);
+
+        // Determine whether the operand is Option<T> or Result<T, E>
+        let is_option = tt.as_option(inner_type).is_some();
+        let is_result = matches!(
+            tt.get(inner_type),
+            ResolvedType::GenericInstance { name, .. } if name == "Result"
+        );
+        drop(tt);
+
+        if !is_option && !is_result {
+            let _ = self.logger.error(TypeError::TypeMismatch {
+                expected: "Result or Option".to_string(),
+                found: format!("cannot use ? on type {type_name}"),
+                span: qm.span,
+            });
+            return TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
+        }
+
+        // Check that the enclosing function returns a compatible type
+        let return_type = ctx.return_type;
+        let tt = self.type_table.borrow();
+        let ret_is_option = tt.as_option(return_type).is_some();
+        let ret_is_result = matches!(
+            tt.get(return_type),
+            ResolvedType::GenericInstance { name, .. } if name == "Result"
+        );
+        drop(tt);
+
+        if is_option && !ret_is_option {
+            let _ = self.logger.error(TypeError::TypeMismatch {
+                expected: "Option".to_string(),
+                found: "cannot use ? on Option in a function returning Result".to_string(),
+                span: qm.span,
+            });
+            return TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
+        }
+        if is_result && !ret_is_result {
+            if ret_is_option {
+                let _ = self.logger.error(TypeError::TypeMismatch {
+                    expected: "Result".to_string(),
+                    found: "cannot use ? on Result in a function returning Option".to_string(),
+                    span: qm.span,
+                });
+            } else {
+                let _ = self.logger.error(TypeError::TypeMismatch {
+                    expected: "Result or Option".to_string(),
+                    found: "? requires function to return Result or Option".to_string(),
+                    span: qm.span,
+                });
+            }
+            return TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
+        }
+
+        if is_option {
+            self.resolve_question_mark_option(inner, ctx, qm.span)
+        } else {
+            self.resolve_question_mark_result(inner, ctx, qm.span)
+        }
+    }
+
+    fn resolve_question_mark_option(
+        &mut self,
+        inner: TirExpr,
+        ctx: &mut FunctionContext,
+        span: Span,
+    ) -> TirExpr {
+        let inner_type = inner.type_id;
+        let tt = self.type_table.borrow();
+        let some_type = tt.as_option(inner_type).unwrap();
+        drop(tt);
+
+        // Allocate a local for the Some payload binding
+        ctx.enter_scope();
+        let v_local = ctx.add_local("__qm_v".to_string(), some_type, false);
+
+        // Arm 0: Some(v) => v
+        let some_arm = TirMatchArm {
+            pattern: TirPattern::Variant {
+                enum_type: inner_type,
+                variant_name: "Some".to_string(),
+                bindings: vec![TirPattern::Binding {
+                    name: "__qm_v".to_string(),
+                    local_index: v_local,
+                    type_id: some_type,
+                }],
+                payload_type: some_type,
+            },
+            guard: None,
+            body: TirExpr::new(
+                TirExprKind::Local {
+                    index: v_local,
+                    name: "__qm_v".to_string(),
+                },
+                some_type,
+                span,
+            ),
+            span,
+        };
+
+        // Arm 1: None => return null
+        let none_arm = TirMatchArm {
+            pattern: TirPattern::Variant {
+                enum_type: inner_type,
+                variant_name: "None".to_string(),
+                bindings: vec![],
+                payload_type: TypeTable::UNIT,
+            },
+            guard: None,
+            body: TirExpr::new(
+                TirExprKind::Block(TirBlock::new(
+                    vec![TirStmt::new(
+                        TirStmtKind::Return {
+                            value: Some(TirExpr::new(TirExprKind::Null, inner_type, span)),
+                        },
+                        span,
+                    )],
+                    span,
+                )),
+                TypeTable::NEVER,
+                span,
+            ),
+            span,
+        };
+
+        ctx.exit_scope();
+
+        TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(inner),
+                arms: vec![some_arm, none_arm],
+            },
+            some_type,
+            span,
+        )
+    }
+
+    fn resolve_question_mark_result(
+        &mut self,
+        inner: TirExpr,
+        ctx: &mut FunctionContext,
+        span: Span,
+    ) -> TirExpr {
+        let inner_type = inner.type_id;
+        let return_type = ctx.return_type;
+
+        // Extract T, E from inner Result<T, E>
+        let tt = self.type_table.borrow();
+        let (ok_type, inner_err_type) = match tt.get(inner_type) {
+            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+                (type_args[0], type_args[1])
+            }
+            _ => panic!("? operand must be Result<T, E>"),
+        };
+        // Extract F from return Result<U, F>
+        let outer_err_type = match tt.get(return_type) {
+            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => type_args[1],
+            _ => panic!("? return type must be Result<U, F>"),
+        };
+        drop(tt);
+
+        ctx.enter_scope();
+        let v_local = ctx.add_local("__qm_v".to_string(), ok_type, false);
+        let e_local = ctx.add_local("__qm_e".to_string(), inner_err_type, false);
+
+        // Arm 0: Ok(v) => v
+        let ok_arm = TirMatchArm {
+            pattern: TirPattern::Variant {
+                enum_type: inner_type,
+                variant_name: "Ok".to_string(),
+                bindings: vec![TirPattern::Binding {
+                    name: "__qm_v".to_string(),
+                    local_index: v_local,
+                    type_id: ok_type,
+                }],
+                payload_type: ok_type,
+            },
+            guard: None,
+            body: TirExpr::new(
+                TirExprKind::Local {
+                    index: v_local,
+                    name: "__qm_v".to_string(),
+                },
+                ok_type,
+                span,
+            ),
+            span,
+        };
+
+        // Build the error conversion expression.
+        // If inner_err_type == outer_err_type, just use the error directly.
+        // Otherwise, call From::from(e) to convert.
+        let e_expr = TirExpr::new(
+            TirExprKind::Local {
+                index: e_local,
+                name: "__qm_e".to_string(),
+            },
+            inner_err_type,
+            span,
+        );
+        let converted_err = if inner_err_type == outer_err_type {
+            e_expr
+        } else {
+            self.resolve_from_call(outer_err_type, inner_err_type, e_expr, span)
+        };
+
+        // Build Result::Err(converted_err) with the function's return Result type
+        let err_variant = TirExpr::new(
+            TirExprKind::VariantConstruct {
+                variant_type: return_type,
+                case_index: 1, // Err is case 1 in Result<T, E>
+                case_name: "Err".to_string(),
+                payload: Some(Box::new(converted_err)),
+            },
+            return_type,
+            span,
+        );
+
+        // Arm 1: Err(e) => return Result::Err(From::from(e))
+        let err_arm = TirMatchArm {
+            pattern: TirPattern::Variant {
+                enum_type: inner_type,
+                variant_name: "Err".to_string(),
+                bindings: vec![TirPattern::Binding {
+                    name: "__qm_e".to_string(),
+                    local_index: e_local,
+                    type_id: inner_err_type,
+                }],
+                payload_type: inner_err_type,
+            },
+            guard: None,
+            body: TirExpr::new(
+                TirExprKind::Block(TirBlock::new(
+                    vec![TirStmt::new(
+                        TirStmtKind::Return {
+                            value: Some(err_variant),
+                        },
+                        span,
+                    )],
+                    span,
+                )),
+                TypeTable::NEVER,
+                span,
+            ),
+            span,
+        };
+
+        ctx.exit_scope();
+
+        TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(inner),
+                arms: vec![ok_arm, err_arm],
+            },
+            ok_type,
+            span,
+        )
+    }
+
+    /// Generate a call to `From::from(value)` that converts `value` of type
+    /// `from_type` to `target_type`.
+    ///
+    /// Looks up `impl From<from_type> for target_type` and generates
+    /// `target_type::from(value)` as a static method call.
+    pub(super) fn resolve_from_call(
+        &mut self,
+        target_type: TypeId,
+        from_type: TypeId,
+        value: TirExpr,
+        span: Span,
+    ) -> TirExpr {
+        let tt = self.type_table.borrow();
+        let target_name = tt.type_name(target_type);
+        let from_name = tt.type_name(from_type);
+        drop(tt);
+
+        // Use "From<SourceType>" as the trait name in mangled names to disambiguate
+        // multiple From impls on the same target type.
+        let from_trait = format!("From<{from_name}>");
+        let method_name = MethodName::format_local(&target_name, Some(&from_trait), "from");
+
+        // Find the module source that provides the From impl
+        let module_source = self.find_from_impl_module(&target_name, &from_name);
+
+        TirExpr::new(
+            TirExprKind::Call {
+                func: FunctionRef {
+                    module_source,
+                    name: method_name,
+                    monomorph_info: None,
+                    method_info: Some(crate::name::LocalMethodName {
+                        struct_name: target_name.clone(),
+                        base_struct_name: target_name,
+                        trait_name: Some(from_trait),
+                        method_name: "from".to_string(),
+                        method_type_args: vec![],
+                        is_type_param_receiver: false,
+                        cm_name: None,
+                    }),
+                    is_cm_adapter: false,
+                },
+                type_args: vec![],
+                args: vec![CallArg::new(value, false)],
+            },
+            target_type,
+            span,
+        )
+    }
+
+    /// Find the module that provides `impl From<FromType> for TargetType`.
+    fn find_from_impl_module(&self, target_name: &str, from_name: &str) -> ModuleSource {
+        let check_impl = |impl_block: &ast::ImplBlock| -> bool {
+            let impl_target = Self::get_type_name_static(&impl_block.ty);
+            if impl_target != target_name {
+                return false;
+            }
+            if let Some(trait_type) = &impl_block.trait_type {
+                let base = Self::get_type_name_static(trait_type);
+                if base != "From" {
+                    return false;
+                }
+                // Check the type arg matches from_name
+                if let ast::Type::Generic(g) = trait_type
+                    && let Some(arg) = g.args.first()
+                {
+                    return Self::get_type_name_static(arg) == from_name;
+                }
+            }
+            false
+        };
+
+        // Search current module items
+        for item in &self.current_module_items {
+            if let Item::Impl(impl_block) = item
+                && check_impl(impl_block)
+            {
+                return self.current_module_source.clone();
+            }
+        }
+
+        // Search loaded modules
+        for (source, module) in self.loaded_modules {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item
+                    && check_impl(impl_block)
+                {
+                    return source.clone();
+                }
+            }
+        }
+
+        // Fallback: use current module (the From impl may be synthesized later)
+        self.current_module_source.clone()
     }
 }

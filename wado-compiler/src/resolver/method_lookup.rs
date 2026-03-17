@@ -297,7 +297,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Check loaded modules for newtype definitions
         for (module_source, module) in self.loaded_modules {
             for item in &module.items {
-                if let Item::Type(alias) = item
+                if let Item::Newtype(alias) = item
                     && alias.name == struct_name
                 {
                     return module_source.clone();

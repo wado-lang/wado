@@ -316,7 +316,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     ctx,
                 );
                 TirStmt::new(
-                    TirStmtKind::LetPattern {
+                    TirStmtKind::LetDestructure {
                         pattern: tir_pattern,
                         is_mut: let_stmt.is_mut,
                         value,
@@ -334,7 +334,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     ctx,
                 );
                 TirStmt::new(
-                    TirStmtKind::LetPattern {
+                    TirStmtKind::LetDestructure {
                         pattern: tir_pattern,
                         is_mut: let_stmt.is_mut,
                         value,
@@ -697,7 +697,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .map(|b| self.resolve_block(b, ctx, None));
 
                 result.push(TirStmt::new(
-                    TirStmtKind::IfPattern {
+                    TirStmtKind::IfLet {
                         scrutinee,
                         pattern: tir_pattern,
                         then_block,
@@ -1269,7 +1269,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     ctx,
                 );
                 block_stmts.push(TirStmt::new(
-                    TirStmtKind::LetPattern {
+                    TirStmtKind::LetDestructure {
                         pattern: tir_pattern,
                         is_mut: for_of.is_mut,
                         value: enum_tuple,
@@ -1305,7 +1305,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             ctx,
                         );
                         block_stmts.push(TirStmt::new(
-                            TirStmtKind::LetPattern {
+                            TirStmtKind::LetDestructure {
                                 pattern: tir_pattern,
                                 is_mut: for_of.is_mut,
                                 value: field_access,

@@ -1,0 +1,14 @@
+// Error: ? used inside a function that returns neither Result nor Option
+fn inner() -> Result<i32, String> {
+    return Result::<i32, String>::Ok(1);
+}
+
+fn outer() -> i32 {
+    let x = inner()?;
+    return x;
+}
+
+export fn run() { }
+
+__DATA__
+{"compile_error": "? requires function to return Result or Option"}

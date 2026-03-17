@@ -360,6 +360,22 @@ impl Rem for u128 {
 impl Default for u128 {
     pub fn default() -> u128;
 }
+
+impl From<u8> for u128 {
+    pub fn from(value: u8) -> u128;
+}
+
+impl From<u16> for u128 {
+    pub fn from(value: u16) -> u128;
+}
+
+impl From<u32> for u128 {
+    pub fn from(value: u32) -> u128;
+}
+
+impl From<u64> for u128 {
+    pub fn from(value: u64) -> u128;
+}
 ```
 
 ```wado
@@ -468,6 +484,22 @@ impl Rem for i128 {
 impl Default for i128 {
     pub fn default() -> i128;
 }
+
+impl From<i8> for i128 {
+    pub fn from(value: i8) -> i128;
+}
+
+impl From<i16> for i128 {
+    pub fn from(value: i16) -> i128;
+}
+
+impl From<i32> for i128 {
+    pub fn from(value: i32) -> i128;
+}
+
+impl From<i64> for i128 {
+    pub fn from(value: i64) -> i128;
+}
 ```
 
 ```wado
@@ -527,6 +559,10 @@ impl Ord for String {
 
 impl Default for String {
     pub fn default() -> String;
+}
+
+impl From<char> for String {
+    pub fn from(value: char) -> String;
 }
 ```
 
@@ -701,6 +737,10 @@ impl Ord for bool {
 impl Default for bool {
     pub fn default() -> bool;
 }
+
+impl From<bool> for bool {
+    pub fn from(value: bool) -> bool;
+}
 ```
 
 ```wado
@@ -770,6 +810,18 @@ impl Ord for i8 {
 impl Default for i8 {
     pub fn default() -> i8;
 }
+
+impl TryFrom<i64> for i8 {
+    pub fn try_from(value: i64) -> Result<i8, ConvertError>;
+}
+
+impl TryFrom<i32> for i8 {
+    pub fn try_from(value: i32) -> Result<i8, ConvertError>;
+}
+
+impl TryFrom<i16> for i8 {
+    pub fn try_from(value: i16) -> Result<i8, ConvertError>;
+}
 ```
 
 ```wado
@@ -811,6 +863,14 @@ impl Ord for u8 {
 
 impl Default for u8 {
     pub fn default() -> u8;
+}
+
+impl TryFrom<u32> for u8 {
+    pub fn try_from(value: u32) -> Result<u8, ConvertError>;
+}
+
+impl TryFrom<u16> for u8 {
+    pub fn try_from(value: u16) -> Result<u8, ConvertError>;
 }
 ```
 
@@ -854,6 +914,22 @@ impl Ord for i16 {
 impl Default for i16 {
     pub fn default() -> i16;
 }
+
+impl From<i8> for i16 {
+    pub fn from(value: i8) -> i16;
+}
+
+impl From<u8> for i16 {
+    pub fn from(value: u8) -> i16;
+}
+
+impl TryFrom<i64> for i16 {
+    pub fn try_from(value: i64) -> Result<i16, ConvertError>;
+}
+
+impl TryFrom<i32> for i16 {
+    pub fn try_from(value: i32) -> Result<i16, ConvertError>;
+}
 ```
 
 ```wado
@@ -895,6 +971,14 @@ impl Ord for u16 {
 
 impl Default for u16 {
     pub fn default() -> u16;
+}
+
+impl From<u8> for u16 {
+    pub fn from(value: u8) -> u16;
+}
+
+impl TryFrom<u32> for u16 {
+    pub fn try_from(value: u32) -> Result<u16, ConvertError>;
 }
 ```
 
@@ -941,6 +1025,30 @@ impl Ord for i32 {
 impl Default for i32 {
     pub fn default() -> i32;
 }
+
+impl From<i8> for i32 {
+    pub fn from(value: i8) -> i32;
+}
+
+impl From<i16> for i32 {
+    pub fn from(value: i16) -> i32;
+}
+
+impl From<u8> for i32 {
+    pub fn from(value: u8) -> i32;
+}
+
+impl From<u16> for i32 {
+    pub fn from(value: u16) -> i32;
+}
+
+impl From<bool> for i32 {
+    pub fn from(value: bool) -> i32;
+}
+
+impl TryFrom<i64> for i32 {
+    pub fn try_from(value: i64) -> Result<i32, ConvertError>;
+}
 ```
 
 ```wado
@@ -982,6 +1090,26 @@ impl Ord for u32 {
 
 impl Default for u32 {
     pub fn default() -> u32;
+}
+
+impl From<u8> for u32 {
+    pub fn from(value: u8) -> u32;
+}
+
+impl From<u16> for u32 {
+    pub fn from(value: u16) -> u32;
+}
+
+impl TryFrom<i32> for u32 {
+    pub fn try_from(value: i32) -> Result<u32, ConvertError>;
+}
+
+impl TryFrom<i64> for u32 {
+    pub fn try_from(value: i64) -> Result<u32, ConvertError>;
+}
+
+impl TryFrom<u64> for u32 {
+    pub fn try_from(value: u64) -> Result<u32, ConvertError>;
 }
 ```
 
@@ -1028,6 +1156,38 @@ impl Ord for i64 {
 impl Default for i64 {
     pub fn default() -> i64;
 }
+
+impl From<i8> for i64 {
+    pub fn from(value: i8) -> i64;
+}
+
+impl From<i16> for i64 {
+    pub fn from(value: i16) -> i64;
+}
+
+impl From<i32> for i64 {
+    pub fn from(value: i32) -> i64;
+}
+
+impl From<u8> for i64 {
+    pub fn from(value: u8) -> i64;
+}
+
+impl From<u16> for i64 {
+    pub fn from(value: u16) -> i64;
+}
+
+impl From<u32> for i64 {
+    pub fn from(value: u32) -> i64;
+}
+
+impl TryFrom<u64> for i64 {
+    pub fn try_from(value: u64) -> Result<i64, ConvertError>;
+}
+
+impl TryFrom<i128> for i64 {
+    pub fn try_from(value: i128) -> Result<i64, ConvertError>;
+}
 ```
 
 ```wado
@@ -1069,6 +1229,26 @@ impl Ord for u64 {
 
 impl Default for u64 {
     pub fn default() -> u64;
+}
+
+impl From<u8> for u64 {
+    pub fn from(value: u8) -> u64;
+}
+
+impl From<u16> for u64 {
+    pub fn from(value: u16) -> u64;
+}
+
+impl From<u32> for u64 {
+    pub fn from(value: u32) -> u64;
+}
+
+impl TryFrom<i64> for u64 {
+    pub fn try_from(value: i64) -> Result<u64, ConvertError>;
+}
+
+impl TryFrom<u128> for u64 {
+    pub fn try_from(value: u128) -> Result<u64, ConvertError>;
 }
 ```
 
@@ -1152,6 +1332,22 @@ impl Ord for f32 {
 impl Default for f32 {
     pub fn default() -> f32;
 }
+
+impl TryFrom<i64> for f32 {
+    pub fn try_from(value: i64) -> Result<f32, ConvertError>;
+}
+
+impl TryFrom<u64> for f32 {
+    pub fn try_from(value: u64) -> Result<f32, ConvertError>;
+}
+
+impl TryFrom<i128> for f32 {
+    pub fn try_from(value: i128) -> Result<f32, ConvertError>;
+}
+
+impl TryFrom<u128> for f32 {
+    pub fn try_from(value: u128) -> Result<f32, ConvertError>;
+}
 ```
 
 ```wado
@@ -1233,6 +1429,26 @@ impl Ord for f64 {
 
 impl Default for f64 {
     pub fn default() -> f64;
+}
+
+impl From<f32> for f64 {
+    pub fn from(value: f32) -> f64;
+}
+
+impl TryFrom<i64> for f64 {
+    pub fn try_from(value: i64) -> Result<f64, ConvertError>;
+}
+
+impl TryFrom<u64> for f64 {
+    pub fn try_from(value: u64) -> Result<f64, ConvertError>;
+}
+
+impl TryFrom<i128> for f64 {
+    pub fn try_from(value: i128) -> Result<f64, ConvertError>;
+}
+
+impl TryFrom<u128> for f64 {
+    pub fn try_from(value: u128) -> Result<f64, ConvertError>;
 }
 ```
 

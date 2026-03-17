@@ -1,0 +1,14 @@
+// Error: ? on Option in a function returning Result
+fn inner() -> Option<i32> {
+    return Option::<i32>::Some(1);
+}
+
+fn outer() -> Result<i32, String> {
+    let x = inner()?;
+    return Result::<i32, String>::Ok(x);
+}
+
+export fn run() { }
+
+__DATA__
+{"compile_error": "cannot use ? on Option in a function returning Result"}

@@ -93,7 +93,7 @@ fn fuse_in_stmt(stmt: &mut TirStmt, local_count: &mut u32, local_types: &mut Vec
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             fuse_in_block(body, local_count, local_types)
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -120,7 +120,7 @@ fn fuse_in_stmt(stmt: &mut TirStmt, local_count: &mut u32, local_types: &mut Vec
                 false
             }
         }
-        TirStmtKind::LetPattern { value, .. } => fuse_in_expr(value, local_count, local_types),
+        TirStmtKind::LetDestructure { value, .. } => fuse_in_expr(value, local_count, local_types),
         TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } => false,
     }
 }
@@ -487,7 +487,7 @@ fn check_lb_breaks_in_stmt(
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             check_lb_breaks_in_block(body, label, case_index, payload_type)
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -499,7 +499,7 @@ fn check_lb_breaks_in_stmt(
                     .as_ref()
                     .is_none_or(|eb| check_lb_breaks_in_block(eb, label, case_index, payload_type))
         }
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
             check_lb_breaks_in_expr(value, label, case_index, payload_type)
         }
         TirStmtKind::Break { value, .. } => value
@@ -558,7 +558,7 @@ fn count_local_uses_in_block(block: &TirBlock, local_idx: u32) -> usize {
 
 fn count_local_uses_in_stmt(stmt: &TirStmt, local_idx: u32) -> usize {
     match &stmt.kind {
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
             count_local_uses_in_expr(value, local_idx)
         }
         TirStmtKind::Expr(expr) => count_local_uses_in_expr(expr, local_idx),
@@ -579,7 +579,7 @@ fn count_local_uses_in_stmt(stmt: &TirStmt, local_idx: u32) -> usize {
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             count_local_uses_in_block(body, local_idx)
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -709,7 +709,7 @@ fn count_variant_payload_uses_in_block(block: &TirBlock, local_idx: u32, case_in
 
 fn count_variant_payload_uses_in_stmt(stmt: &TirStmt, local_idx: u32, case_index: u32) -> usize {
     match &stmt.kind {
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
             count_variant_payload_uses_in_expr(value, local_idx, case_index)
         }
         TirStmtKind::Expr(expr) => count_variant_payload_uses_in_expr(expr, local_idx, case_index),
@@ -730,7 +730,7 @@ fn count_variant_payload_uses_in_stmt(stmt: &TirStmt, local_idx: u32, case_index
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             count_variant_payload_uses_in_block(body, local_idx, case_index)
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -1138,7 +1138,7 @@ fn transform_lb_stmt(
                 stmt_span,
             ));
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             pattern,
             then_block: tb,
@@ -1175,7 +1175,7 @@ fn transform_lb_stmt(
                 span: e.span,
             });
             out.push(TirStmt::new(
-                TirStmtKind::IfPattern {
+                TirStmtKind::IfLet {
                     scrutinee,
                     pattern,
                     then_block: new_then,
@@ -1184,9 +1184,291 @@ fn transform_lb_stmt(
                 stmt_span,
             ));
         }
-        // All other statements pass through unchanged.
-        other => out.push(TirStmt::new(other, stmt_span)),
+        // Statements that contain expressions: recurse into expressions to find nested breaks.
+        mut other => {
+            transform_lb_in_stmt_kind(
+                &mut other,
+                orig_label,
+                fused_label,
+                case_index,
+                temp_local,
+                payload_local,
+                payload_type,
+                then_block,
+                else_block,
+                span,
+            );
+            out.push(TirStmt::new(other, stmt_span));
+        }
     }
+}
+
+/// Walk a `TirStmtKind` and apply label transformation to any nested block expressions
+/// that may contain `break orig_label`.
+#[allow(clippy::too_many_arguments)]
+fn transform_lb_in_stmt_kind(
+    kind: &mut TirStmtKind,
+    orig_label: &str,
+    fused_label: &str,
+    case_index: u32,
+    temp_local: u32,
+    payload_local: u32,
+    payload_type: TypeId,
+    then_block: &TirBlock,
+    else_block: Option<&TirBlock>,
+    span: crate::token::Span,
+) {
+    match kind {
+        TirStmtKind::Let { value, .. }
+        | TirStmtKind::LetDestructure { value, .. }
+        | TirStmtKind::Expr(value)
+        | TirStmtKind::TaskReturn { value } => {
+            transform_lb_in_expr(
+                value,
+                orig_label,
+                fused_label,
+                case_index,
+                temp_local,
+                payload_local,
+                payload_type,
+                then_block,
+                else_block,
+                span,
+            );
+        }
+        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                transform_lb_in_expr(
+                    v,
+                    orig_label,
+                    fused_label,
+                    case_index,
+                    temp_local,
+                    payload_local,
+                    payload_type,
+                    then_block,
+                    else_block,
+                    span,
+                );
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Recursively walk a `TirExpr` to find and transform blocks that contain
+/// `break orig_label` statements.
+#[allow(clippy::too_many_arguments)]
+fn transform_lb_in_expr(
+    expr: &mut TirExpr,
+    orig_label: &str,
+    fused_label: &str,
+    case_index: u32,
+    temp_local: u32,
+    payload_local: u32,
+    payload_type: TypeId,
+    then_block: &TirBlock,
+    else_block: Option<&TirBlock>,
+    span: crate::token::Span,
+) {
+    match &mut expr.kind {
+        TirExprKind::Block(block) => {
+            transform_lb_in_block(
+                block,
+                orig_label,
+                fused_label,
+                case_index,
+                temp_local,
+                payload_local,
+                payload_type,
+                then_block,
+                else_block,
+                span,
+            );
+        }
+        TirExprKind::LabeledBlock {
+            label: l, block, ..
+        } => {
+            if l.as_str() != orig_label {
+                transform_lb_in_block(
+                    block,
+                    orig_label,
+                    fused_label,
+                    case_index,
+                    temp_local,
+                    payload_local,
+                    payload_type,
+                    then_block,
+                    else_block,
+                    span,
+                );
+            }
+        }
+        TirExprKind::Match {
+            expr: scrutinee,
+            arms,
+        } => {
+            transform_lb_in_expr(
+                scrutinee,
+                orig_label,
+                fused_label,
+                case_index,
+                temp_local,
+                payload_local,
+                payload_type,
+                then_block,
+                else_block,
+                span,
+            );
+            for arm in arms {
+                transform_lb_in_expr(
+                    &mut arm.body,
+                    orig_label,
+                    fused_label,
+                    case_index,
+                    temp_local,
+                    payload_local,
+                    payload_type,
+                    then_block,
+                    else_block,
+                    span,
+                );
+                if let Some(g) = &mut arm.guard {
+                    transform_lb_in_expr(
+                        g,
+                        orig_label,
+                        fused_label,
+                        case_index,
+                        temp_local,
+                        payload_local,
+                        payload_type,
+                        then_block,
+                        else_block,
+                        span,
+                    );
+                }
+            }
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            transform_lb_in_expr(
+                condition,
+                orig_label,
+                fused_label,
+                case_index,
+                temp_local,
+                payload_local,
+                payload_type,
+                then_block,
+                else_block,
+                span,
+            );
+            transform_lb_in_block(
+                then_branch,
+                orig_label,
+                fused_label,
+                case_index,
+                temp_local,
+                payload_local,
+                payload_type,
+                then_block,
+                else_block,
+                span,
+            );
+            if let Some(eb) = else_branch {
+                transform_lb_in_block(
+                    eb,
+                    orig_label,
+                    fused_label,
+                    case_index,
+                    temp_local,
+                    payload_local,
+                    payload_type,
+                    then_block,
+                    else_block,
+                    span,
+                );
+            }
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            transform_lb_in_expr(
+                scrutinee,
+                orig_label,
+                fused_label,
+                case_index,
+                temp_local,
+                payload_local,
+                payload_type,
+                then_block,
+                else_block,
+                span,
+            );
+            for arm in arms {
+                transform_lb_in_block(
+                    arm,
+                    orig_label,
+                    fused_label,
+                    case_index,
+                    temp_local,
+                    payload_local,
+                    payload_type,
+                    then_block,
+                    else_block,
+                    span,
+                );
+            }
+            transform_lb_in_block(
+                default,
+                orig_label,
+                fused_label,
+                case_index,
+                temp_local,
+                payload_local,
+                payload_type,
+                then_block,
+                else_block,
+                span,
+            );
+        }
+        _ => {}
+    }
+}
+
+/// Transform break statements within a block's stmts in-place.
+#[allow(clippy::too_many_arguments)]
+fn transform_lb_in_block(
+    block: &mut TirBlock,
+    orig_label: &str,
+    fused_label: &str,
+    case_index: u32,
+    temp_local: u32,
+    payload_local: u32,
+    payload_type: TypeId,
+    then_block: &TirBlock,
+    else_block: Option<&TirBlock>,
+    span: crate::token::Span,
+) {
+    let old_stmts = std::mem::take(&mut block.stmts);
+    block.stmts = transform_lb_stmts(
+        old_stmts,
+        orig_label,
+        fused_label,
+        case_index,
+        temp_local,
+        payload_local,
+        payload_type,
+        then_block,
+        else_block,
+        span,
+    );
 }
 
 /// Replace `VariantPayload { expr: Local(temp_local), case_index }` with `Local(payload_local)`
@@ -1209,7 +1491,7 @@ fn subst_variant_payload_in_stmt(
     payload_local: u32,
 ) {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
             subst_variant_payload_in_expr(value, temp_local, case_index, payload_local);
         }
         TirStmtKind::Expr(expr) => {
@@ -1234,7 +1516,7 @@ fn subst_variant_payload_in_stmt(
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             subst_variant_payload_in_block(body, temp_local, case_index, payload_local);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -1281,7 +1563,7 @@ fn subst_variant_payload_in_expr(
     // Recurse into sub-expressions.
     match &mut expr.kind {
         TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. } => {}
         TirExprKind::Binary { left, right, .. } => {
             subst_variant_payload_in_expr(left, temp_local, case_index, payload_local);

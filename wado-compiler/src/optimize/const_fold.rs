@@ -101,7 +101,7 @@ fn fold_constants_in_stmt(stmt: &mut TirStmt, type_table: &TypeTable) -> bool {
         }
         TirStmtKind::Loop { body } => fold_constants_in_block(body, type_table),
         TirStmtKind::LabeledBlock { block, .. } => fold_constants_in_block(block, type_table),
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -118,7 +118,7 @@ fn fold_constants_in_stmt(stmt: &mut TirStmt, type_table: &TypeTable) -> bool {
             .as_mut()
             .is_some_and(|v| fold_constants_in_expr(v, type_table)),
         TirStmtKind::Continue => false,
-        TirStmtKind::LetPattern { value, .. } => fold_constants_in_expr(value, type_table),
+        TirStmtKind::LetDestructure { value, .. } => fold_constants_in_expr(value, type_table),
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
@@ -238,7 +238,7 @@ fn fold_constants_in_expr(expr: &mut TirExpr, type_table: &TypeTable) -> bool {
         }
         // Leaf nodes - nothing to recurse into
         TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::IntLiteral { .. }

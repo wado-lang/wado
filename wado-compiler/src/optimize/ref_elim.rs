@@ -91,7 +91,7 @@ fn analyze_uses_in_stmt(stmt: &TirStmt, refs: &mut IndexMap<u32, RefInfo>) {
         }
         TirStmtKind::Loop { body } => analyze_refs_in_block(body, refs),
         TirStmtKind::LabeledBlock { block, .. } => analyze_refs_in_block(block, refs),
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -109,7 +109,7 @@ fn analyze_uses_in_stmt(stmt: &TirStmt, refs: &mut IndexMap<u32, RefInfo>) {
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => analyze_uses_in_expr(value, refs),
+        TirStmtKind::LetDestructure { value, .. } => analyze_uses_in_expr(value, refs),
         TirStmtKind::TaskReturn { .. } => {}
     }
 }
@@ -242,7 +242,7 @@ fn analyze_uses_in_expr(expr: &TirExpr, refs: &mut IndexMap<u32, RefInfo>) {
         | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
@@ -293,7 +293,7 @@ fn transform_stmt(stmt: &mut TirStmt, eliminable: &IndexMap<u32, RefInfo>) {
         }
         TirStmtKind::Loop { body } => transform_block(body, eliminable),
         TirStmtKind::LabeledBlock { block, .. } => transform_block(block, eliminable),
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -311,7 +311,7 @@ fn transform_stmt(stmt: &mut TirStmt, eliminable: &IndexMap<u32, RefInfo>) {
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => transform_expr(value, eliminable),
+        TirStmtKind::LetDestructure { value, .. } => transform_expr(value, eliminable),
         TirStmtKind::TaskReturn { .. } => {}
     }
 }
@@ -443,7 +443,7 @@ fn transform_expr(expr: &mut TirExpr, eliminable: &IndexMap<u32, RefInfo>) {
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
@@ -512,7 +512,7 @@ fn check_deref_only_uses_in_stmt(stmt: &TirStmt, refs: &mut IndexMap<u32, DerefO
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             collect_deref_only_refs_in_block(body, refs);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -530,7 +530,7 @@ fn check_deref_only_uses_in_stmt(stmt: &TirStmt, refs: &mut IndexMap<u32, DerefO
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => check_deref_only_uses_in_expr(value, refs),
+        TirStmtKind::LetDestructure { value, .. } => check_deref_only_uses_in_expr(value, refs),
         TirStmtKind::TaskReturn { .. } => {}
     }
 }
@@ -663,7 +663,7 @@ fn check_deref_only_uses_in_expr(expr: &TirExpr, refs: &mut IndexMap<u32, DerefO
         | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
@@ -724,7 +724,7 @@ fn rewrite_deref_only_refs_in_stmt(
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             rewrite_deref_only_refs_in_block(body, eliminable)
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -745,7 +745,9 @@ fn rewrite_deref_only_refs_in_stmt(
             }
         }
         TirStmtKind::Continue => false,
-        TirStmtKind::LetPattern { value, .. } => rewrite_deref_only_refs_in_expr(value, eliminable),
+        TirStmtKind::LetDestructure { value, .. } => {
+            rewrite_deref_only_refs_in_expr(value, eliminable)
+        }
         TirStmtKind::TaskReturn { .. } => false,
     }
 }
@@ -900,7 +902,7 @@ fn rewrite_deref_only_refs_in_expr(
         | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. }

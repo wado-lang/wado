@@ -213,7 +213,7 @@ pub fn extract_doc(module: &Module, comments: &CommentMap, module_name: &str) ->
         match item {
             Item::Trait(t) => traits.push(build_doc_trait(t, comments)),
             Item::Struct(s) => structs.push(build_doc_struct(s, &impls, comments)),
-            Item::Type(t) => types.push(build_doc_type(t, comments)),
+            Item::Newtype(t) => types.push(build_doc_type(t, comments)),
             Item::Global(g) => globals.push(build_doc_global(g, comments)),
             Item::Enum(e) => enums.push(build_doc_enum(e, comments)),
             Item::Variant(v) => variants.push(build_doc_variant(v, comments)),
@@ -542,7 +542,7 @@ fn is_pub_or_export(item: &Item) -> bool {
         Item::Enum(e) => e.is_pub,
         Item::Variant(v) => v.is_pub,
         Item::Flags(f) => f.is_pub,
-        Item::Type(t) => t.is_pub,
+        Item::Newtype(t) => t.is_pub,
         Item::Trait(t) => t.is_pub,
         Item::Effect(e) => e.is_pub,
         Item::Global(g) => g.is_pub,

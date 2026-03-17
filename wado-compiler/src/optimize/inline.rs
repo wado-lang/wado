@@ -66,7 +66,7 @@ fn count_expr(expr: &TirExpr) -> usize {
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
         | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::Null => 0,
         // Closure and effect-related expressions
         TirExprKind::Capture { .. } | TirExprKind::EnumConstruct { .. } => 0,
@@ -105,7 +105,7 @@ fn count_block_exprs(block: &TirBlock) -> usize {
         .map(|s| match &s.kind {
             TirStmtKind::Expr(expr) => count_expr(expr),
             TirStmtKind::Let { value, .. } => count_expr(value),
-            TirStmtKind::LetPattern { value, .. } => count_expr(value),
+            TirStmtKind::LetDestructure { value, .. } => count_expr(value),
             TirStmtKind::Return { value } => value.as_ref().map_or(0, count_expr),
             TirStmtKind::If {
                 condition,
@@ -117,7 +117,7 @@ fn count_block_exprs(block: &TirBlock) -> usize {
                     + count_block_exprs(then_block)
                     + else_block.as_ref().map_or(0, count_block_exprs)
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 scrutinee,
                 then_block,
                 else_block,
@@ -262,7 +262,7 @@ fn collect_callees_from_stmt(stmt: &TirStmt, callees: &mut IndexSet<String>) {
         TirStmtKind::LabeledBlock { block, .. } => {
             collect_callees_from_block(block, callees);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -275,7 +275,7 @@ fn collect_callees_from_stmt(stmt: &TirStmt, callees: &mut IndexSet<String>) {
             }
         }
         TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             collect_callees_from_expr(value, callees);
         }
         TirStmtKind::TaskReturn { .. } => {
@@ -413,7 +413,7 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
@@ -865,7 +865,7 @@ fn inline_calls_in_block(
                     stmt.span,
                 ));
             }
-            TirStmtKind::IfPattern {
+            TirStmtKind::IfLet {
                 mut scrutinee,
                 pattern,
                 mut then_block,
@@ -906,7 +906,7 @@ fn inline_calls_in_block(
                     eb
                 });
                 new_stmts.push(TirStmt::new(
-                    TirStmtKind::IfPattern {
+                    TirStmtKind::IfLet {
                         scrutinee,
                         pattern,
                         then_block,
@@ -941,7 +941,7 @@ fn inline_calls_in_block(
             TirStmtKind::Continue => {
                 new_stmts.push(TirStmt::new(TirStmtKind::Continue, stmt.span));
             }
-            TirStmtKind::LetPattern {
+            TirStmtKind::LetDestructure {
                 pattern,
                 is_mut,
                 value,
@@ -959,7 +959,7 @@ fn inline_calls_in_block(
                     inline_counter,
                 );
                 new_stmts.push(TirStmt::new(
-                    TirStmtKind::LetPattern {
+                    TirStmtKind::LetDestructure {
                         pattern,
                         is_mut,
                         value: new_value,
@@ -1396,7 +1396,7 @@ fn stmt_has_break_to(label: &str, stmt: &TirStmt) -> bool {
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             block_has_break_to(label, body)
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -1411,7 +1411,7 @@ fn stmt_has_break_to(label: &str, stmt: &TirStmt) -> bool {
         TirStmtKind::Return { value } => {
             value.as_ref().is_some_and(|v| expr_has_break_to(label, v))
         }
-        TirStmtKind::LetPattern { value, .. } => expr_has_break_to(label, value),
+        TirStmtKind::LetDestructure { value, .. } => expr_has_break_to(label, value),
         TirStmtKind::TaskReturn { value } => expr_has_break_to(label, value),
         _ => false,
     }
@@ -1558,12 +1558,12 @@ fn remap_stmt_with_label(
                 source_module,
             ),
         },
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             pattern,
             then_block,
             else_block,
-        } => TirStmtKind::IfPattern {
+        } => TirStmtKind::IfLet {
             scrutinee: remap_expr(
                 scrutinee,
                 param_to_local,
@@ -1601,11 +1601,11 @@ fn remap_stmt_with_label(
                 .map(|v| remap_expr(v, param_to_local, local_offset, param_count, source_module)),
         },
         TirStmtKind::Continue => TirStmtKind::Continue,
-        TirStmtKind::LetPattern {
+        TirStmtKind::LetDestructure {
             pattern,
             is_mut,
             value,
-        } => TirStmtKind::LetPattern {
+        } => TirStmtKind::LetDestructure {
             pattern: remap_pattern(pattern, param_to_local, local_offset, param_count),
             is_mut: *is_mut,
             value: remap_expr(
@@ -2299,7 +2299,7 @@ fn remap_expr(
         | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => expr.kind.clone(),
@@ -2450,12 +2450,12 @@ fn remap_stmt(
                 source_module,
             ),
         },
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             pattern,
             then_block,
             else_block,
-        } => TirStmtKind::IfPattern {
+        } => TirStmtKind::IfLet {
             scrutinee: remap_expr(
                 scrutinee,
                 param_to_local,
@@ -2482,11 +2482,11 @@ fn remap_stmt(
                 .map(|v| remap_expr(v, param_to_local, local_offset, param_count, source_module)),
         },
         TirStmtKind::Continue => TirStmtKind::Continue,
-        TirStmtKind::LetPattern {
+        TirStmtKind::LetDestructure {
             pattern,
             is_mut,
             value,
-        } => TirStmtKind::LetPattern {
+        } => TirStmtKind::LetDestructure {
             pattern: remap_pattern(pattern, param_to_local, local_offset, param_count),
             is_mut: *is_mut,
             value: remap_expr(
@@ -2995,7 +2995,7 @@ fn inline_calls_in_expr(
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}

@@ -320,7 +320,7 @@ impl WasiRegistry {
 
         // First, collect newtypes from this module
         for item in &module.items {
-            if let Item::Type(alias) = item {
+            if let Item::Newtype(alias) = item {
                 self.newtypes.insert(alias.name.clone(), alias.ty.clone());
             }
         }

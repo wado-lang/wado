@@ -283,7 +283,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     );
                 }
 
-                Item::Type(newtype) => {
+                Item::Newtype(newtype) => {
                     let kind = SymbolKind::Newtype(NewtypeSymbol {
                         aliased_type: "unknown".to_string(), // TODO: store actual type
                     });

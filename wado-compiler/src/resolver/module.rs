@@ -16,7 +16,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // First, collect types from loaded modules (so aliases like Instant = u64 are available)
         for (module_source, loaded_module) in self.loaded_modules {
             for item in &loaded_module.items {
-                if let Item::Type(newtype_decl) = item {
+                if let Item::Newtype(newtype_decl) = item {
                     if !newtype_decl.type_params.is_empty() {
                         // Generic newtype: store definition only if not already present
                         if !self.generic_newtype_defs.contains_key(&newtype_decl.name) {
@@ -125,7 +125,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // Restore type params scope
                     self.trait_ctx.type_params = old_type_params;
                 }
-                Item::Type(newtype_decl) => {
+                Item::Newtype(newtype_decl) => {
                     if newtype_decl.type_params.is_empty() {
                         // Concrete newtype: resolve immediately
                         let base_type_id = self.resolve_type(&newtype_decl.ty);
@@ -453,6 +453,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 format!("fn({}) -> {}", param_strs.join(", "), return_str)
             }
             _ => "Unknown".to_string(),
+        }
+    }
+
+    pub(super) fn get_type_name_full(&self, ty: &Type) -> String {
+        match ty {
+            Type::Named(named) => named.name.clone(),
+            Type::Generic(generic) => {
+                let args: Vec<String> = generic
+                    .args
+                    .iter()
+                    .map(|a| self.get_type_name_full(a))
+                    .collect();
+                format!("{}<{}>", generic.name, args.join(", "))
+            }
+            Type::Reference(inner) => format!("&{}", self.get_type_name_full(inner)),
+            Type::MutReference(inner) => format!("&mut {}", self.get_type_name_full(inner)),
+            _ => self.get_type_name(ty),
         }
     }
 }

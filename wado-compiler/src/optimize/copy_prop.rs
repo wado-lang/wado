@@ -146,7 +146,7 @@ fn collect_usage_in_stmt(stmt: &TirStmt, usage: &mut IndexMap<u32, LocalUsage>, 
         TirStmtKind::LabeledBlock { block, .. } => {
             collect_usage_in_block(block, usage, in_loop);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -164,7 +164,7 @@ fn collect_usage_in_stmt(stmt: &TirStmt, usage: &mut IndexMap<u32, LocalUsage>, 
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             collect_usage_in_expr(value, usage, in_loop, false);
         }
         TirStmtKind::TaskReturn { .. } => {
@@ -323,7 +323,7 @@ fn collect_usage_in_expr(
         | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
@@ -470,7 +470,7 @@ fn substitute_in_stmt(stmt: &mut TirStmt, substitutions: &IndexMap<u32, CopySour
         TirStmtKind::LabeledBlock { block, .. } => {
             substitute_in_block(block, substitutions);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -488,7 +488,7 @@ fn substitute_in_stmt(stmt: &mut TirStmt, substitutions: &IndexMap<u32, CopySour
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             substitute_in_expr(value, substitutions);
         }
         TirStmtKind::TaskReturn { .. } => {
@@ -652,7 +652,7 @@ fn substitute_in_expr(expr: &mut TirExpr, substitutions: &IndexMap<u32, CopySour
         | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
@@ -702,7 +702,7 @@ fn collect_copy_bindings_in_stmt(stmt: &TirStmt, bindings: &mut Vec<CopyBinding>
         TirStmtKind::LabeledBlock { block, .. } => {
             collect_copy_bindings(&block.stmts, bindings);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -720,7 +720,7 @@ fn collect_copy_bindings_in_stmt(stmt: &TirStmt, bindings: &mut Vec<CopyBinding>
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             collect_copy_bindings_in_expr(value, bindings);
         }
         TirStmtKind::TaskReturn { .. } => {
@@ -847,7 +847,7 @@ fn collect_copy_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<CopyBinding>
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
@@ -902,7 +902,7 @@ fn remove_copy_bindings_in_stmt(stmt: &mut TirStmt, dead_locals: &IndexSet<u32>)
         TirStmtKind::LabeledBlock { block, .. } => {
             remove_copy_bindings(&mut block.stmts, dead_locals);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -920,7 +920,7 @@ fn remove_copy_bindings_in_stmt(stmt: &mut TirStmt, dead_locals: &IndexSet<u32>)
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             remove_copy_bindings_in_expr(value, dead_locals);
         }
         TirStmtKind::TaskReturn { .. } => {
@@ -1047,7 +1047,7 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u32>)
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}

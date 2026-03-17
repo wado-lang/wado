@@ -257,7 +257,7 @@ fn collect_candidates_in_stmt(
         TirStmtKind::LabeledBlock { block, .. } => {
             collect_candidates_in_stmts(&block.stmts, type_table, candidates);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -275,7 +275,7 @@ fn collect_candidates_in_stmt(
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             collect_candidates_in_expr(value, type_table, candidates);
         }
         TirStmtKind::TaskReturn { .. } => {
@@ -381,7 +381,7 @@ fn check_escape_in_stmt(stmt: &TirStmt, candidates: &IndexSet<u32>, escaped: &mu
         TirStmtKind::LabeledBlock { block, .. } => {
             check_escape_in_block(block, candidates, escaped);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -399,7 +399,7 @@ fn check_escape_in_stmt(stmt: &TirStmt, candidates: &IndexSet<u32>, escaped: &mu
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             check_escape_in_expr(value, candidates, escaped);
         }
         TirStmtKind::TaskReturn { .. } => {
@@ -579,7 +579,7 @@ fn check_escape_in_expr(expr: &TirExpr, candidates: &IndexSet<u32>, escaped: &mu
         | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
@@ -668,7 +668,7 @@ fn check_has_field_access_stmt(
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             check_has_field_access(body, candidates, has_access);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -685,8 +685,9 @@ fn check_has_field_access_stmt(
                 check_has_field_access_expr(v, candidates, has_access);
             }
         }
-        TirStmtKind::Continue | TirStmtKind::LetPattern { .. } | TirStmtKind::TaskReturn { .. } => {
-        }
+        TirStmtKind::Continue
+        | TirStmtKind::LetDestructure { .. }
+        | TirStmtKind::TaskReturn { .. } => {}
     }
 }
 
@@ -780,7 +781,7 @@ fn check_soft_escape_in_stmt(
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             check_soft_escape_in_block(body, candidates, hard_escaped);
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -799,7 +800,7 @@ fn check_soft_escape_in_stmt(
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             check_soft_escape_in_expr(value, candidates, hard_escaped, false);
         }
         TirStmtKind::TaskReturn { .. } => {
@@ -977,7 +978,7 @@ fn check_soft_escape_in_expr(
         | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
@@ -1236,7 +1237,7 @@ fn rewrite_stmt(
                 reconstruct_info,
             );
         }
-        TirStmtKind::IfPattern {
+        TirStmtKind::IfLet {
             scrutinee,
             then_block,
             else_block,
@@ -1282,7 +1283,7 @@ fn rewrite_stmt(
             }
         }
         TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => {
+        TirStmtKind::LetDestructure { value, .. } => {
             rewrite_expr(
                 value,
                 safe_set,
@@ -1721,7 +1722,7 @@ fn rewrite_expr(
         | TirExprKind::BytesLiteral(_)
         | TirExprKind::Null
         | TirExprKind::Unit
-        | TirExprKind::Global { .. }
+        | TirExprKind::FuncRef { .. }
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. }

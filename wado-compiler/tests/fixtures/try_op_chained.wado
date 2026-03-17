@@ -1,0 +1,46 @@
+// Multiple ? operators in sequence — errors short-circuit at first failure
+use { println } from "core:cli";
+
+fn step1(x: i32) -> Result<i32, String> {
+    if x < 0 {
+        return Result::<i32, String>::Err("step1: negative");
+    }
+    return Result::<i32, String>::Ok(x + 1);
+}
+
+fn step2(x: i32) -> Result<i32, String> {
+    if x > 100 {
+        return Result::<i32, String>::Err("step2: too large");
+    }
+    return Result::<i32, String>::Ok(x * 2);
+}
+
+fn step3(x: i32) -> Result<i32, String> {
+    if x == 0 {
+        return Result::<i32, String>::Err("step3: zero");
+    }
+    return Result::<i32, String>::Ok(x - 1);
+}
+
+fn pipeline(x: i32) -> Result<i32, String> {
+    let a = step1(x)?;
+    let b = step2(a)?;
+    let c = step3(b)?;
+    return Result::<i32, String>::Ok(c);
+}
+
+export fn run() with Stdout {
+    // Happy path: all steps succeed
+    assert pipeline(5) matches { Ok(n) && n == 11 };
+
+    // step1 fails: short-circuit at first ?
+    assert pipeline(-1) matches { Err(e) && e == "step1: negative" };
+
+    // step2 fails: step1 passes, step2 short-circuits
+    assert pipeline(100) matches { Err(e) && e == "step2: too large" };
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
