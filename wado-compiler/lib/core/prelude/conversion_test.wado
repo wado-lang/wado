@@ -143,12 +143,12 @@ struct EvenNumber {
 }
 
 impl TryFrom<i32> for EvenNumber {
-    type Error = String;
-    fn try_from(value: i32) -> Result<EvenNumber, String> {
+    type Error = ConvertError;
+    fn try_from(value: i32) -> Result<EvenNumber, ConvertError> {
         if value % 2 != 0 {
-            return Result::<EvenNumber, String>::Err(`{value} is not even`);
+            return Result::<EvenNumber, ConvertError>::Err(ConvertError::new(`{value} is not even`));
         }
-        return Result::<EvenNumber, String>::Ok(EvenNumber { value });
+        return Result::<EvenNumber, ConvertError>::Ok(EvenNumber { value });
     }
 }
 
@@ -296,14 +296,14 @@ enum Direction {
 }
 
 impl TryFrom<i32> for Direction {
-    type Error = String;
-    fn try_from(value: i32) -> Result<Direction, String> {
+    type Error = ConvertError;
+    fn try_from(value: i32) -> Result<Direction, ConvertError> {
         return match value {
-            0 => Result::<Direction, String>::Ok(Direction::North),
-            1 => Result::<Direction, String>::Ok(Direction::East),
-            2 => Result::<Direction, String>::Ok(Direction::South),
-            3 => Result::<Direction, String>::Ok(Direction::West),
-            _ => Result::<Direction, String>::Err(`unknown direction code: {value}`),
+            0 => Result::<Direction, ConvertError>::Ok(Direction::North),
+            1 => Result::<Direction, ConvertError>::Ok(Direction::East),
+            2 => Result::<Direction, ConvertError>::Ok(Direction::South),
+            3 => Result::<Direction, ConvertError>::Ok(Direction::West),
+            _ => Result::<Direction, ConvertError>::Err(ConvertError::new(`unknown direction code: {value}`)),
         };
     }
 }
@@ -324,7 +324,7 @@ test "enum TryFrom<i32>: valid discriminants" {
 test "enum TryFrom<i32>: invalid discriminant" {
     assert Direction::try_from(4) matches { Err(_) };
     assert Direction::try_from(-1) matches { Err(_) };
-    assert Direction::try_from(100) matches { Err(e) && e == "unknown direction code: 100" };
+    assert Direction::try_from(100) matches { Err(e) && e.message == "unknown direction code: 100" };
 }
 
 test "enum From<Direction> for i32: discriminant round-trip" {
@@ -352,12 +352,12 @@ impl From<AccessFlags> for u32 {
 }
 
 impl TryFrom<u32> for AccessFlags {
-    type Error = String;
-    fn try_from(value: u32) -> Result<AccessFlags, String> {
+    type Error = ConvertError;
+    fn try_from(value: u32) -> Result<AccessFlags, ConvertError> {
         if value > 7 as u32 {
-            return Result::<AccessFlags, String>::Err(`invalid flags: {value as i32}`);
+            return Result::<AccessFlags, ConvertError>::Err(ConvertError::new(`invalid flags: {value as i32}`));
         }
-        return Result::<AccessFlags, String>::Ok(value as AccessFlags);
+        return Result::<AccessFlags, ConvertError>::Ok(value as AccessFlags);
     }
 }
 

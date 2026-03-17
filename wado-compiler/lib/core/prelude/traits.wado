@@ -319,6 +319,17 @@ pub trait TryFrom<T> {
     fn try_from(value: T) -> Result<Self, Self::Error>;
 }
 
+/// Error type returned by fallible conversions.
+pub struct ConvertError {
+    pub message: String,
+}
+
+impl ConvertError {
+    pub fn new(message: String) -> ConvertError {
+        return ConvertError { message };
+    }
+}
+
 /// Trait for creating a collection from an iterator.
 /// This is a simplified version - the full Rust-style trait requires `impl Iterator`
 /// syntax which is not yet supported.
