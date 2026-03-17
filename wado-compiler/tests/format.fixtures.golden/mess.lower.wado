@@ -1176,15 +1176,15 @@ pub fn cwd() -> Option<String> with Environment {
 }
 
 pub fn exit_success() -> ! with Exit {
-    __cm_adapter__Exit_exit(core::cli::Ok(()));
+    __cm_adapter__Exit_exit(core::cli::Ok(()) as i32);
 }
 
 pub fn exit_error() -> ! with Exit {
-    __cm_adapter__Exit_exit(core::cli::Err(()));
+    __cm_adapter__Exit_exit(core::cli::Err(()) as i32);
 }
 
 pub fn exit(code: u8) -> ! with Exit {
-    __cm_adapter__Exit_exit_with_code(code);
+    __cm_adapter__Exit_exit_with_code(code as i32);
 }
 
 pub fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
@@ -10189,11 +10189,11 @@ fn __cm_adapter__Environment_get_initial_cwd() -> Option<String> {
     return __option_result;
 }
 
-fn __cm_adapter__Exit_exit(status: ()) {
+fn __cm_adapter__Exit_exit(status: i32) {
     cm_raw_call wasi:cli/Exit::exit(status);
 }
 
-fn __cm_adapter__Exit_exit_with_code(status_code: u8) {
+fn __cm_adapter__Exit_exit_with_code(status_code: i32) {
     cm_raw_call wasi:cli/Exit::exit_with_code(status_code);
 }
 

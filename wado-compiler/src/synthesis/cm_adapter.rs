@@ -6179,8 +6179,7 @@ fn rewrite_calls_in_expr(
                         });
                         if is_streaming && adapter.params[i].type_id == TypeTable::I32 {
                             // Streaming: keep adapter param as i32, cast the arg instead
-                        } else if !is_gc_passthrough
-                            && is_wasm_flat_type(adapter.params[i].type_id)
+                        } else if !is_gc_passthrough && is_wasm_flat_type(adapter.params[i].type_id)
                         {
                             // Non-GC flat param: adapter type is authoritative, cast arg.
                         } else {
@@ -6900,19 +6899,28 @@ mod tests {
     #[test]
     fn flatten_param_i32() {
         let reg = WasiRegistry::new();
-        assert_eq!(flatten_param_type(&named_type("i32"), &reg), vec![TypeTable::I32]);
+        assert_eq!(
+            flatten_param_type(&named_type("i32"), &reg),
+            vec![TypeTable::I32]
+        );
     }
 
     #[test]
     fn flatten_param_i64() {
         let reg = WasiRegistry::new();
-        assert_eq!(flatten_param_type(&named_type("i64"), &reg), vec![TypeTable::I64]);
+        assert_eq!(
+            flatten_param_type(&named_type("i64"), &reg),
+            vec![TypeTable::I64]
+        );
     }
 
     #[test]
     fn flatten_param_f64() {
         let reg = WasiRegistry::new();
-        assert_eq!(flatten_param_type(&named_type("f64"), &reg), vec![TypeTable::F64]);
+        assert_eq!(
+            flatten_param_type(&named_type("f64"), &reg),
+            vec![TypeTable::F64]
+        );
     }
 
     #[test]
@@ -6942,8 +6950,14 @@ mod tests {
     #[test]
     fn flatten_param_newtype_u64() {
         let (reg, _) = WasiRegistry::build_from_stdlib();
-        assert_eq!(flatten_param_type(&named_type("Duration"), reg), vec![TypeTable::I64]);
-        assert_eq!(flatten_param_type(&named_type("Mark"), reg), vec![TypeTable::I64]);
+        assert_eq!(
+            flatten_param_type(&named_type("Duration"), reg),
+            vec![TypeTable::I64]
+        );
+        assert_eq!(
+            flatten_param_type(&named_type("Mark"), reg),
+            vec![TypeTable::I64]
+        );
     }
 
     #[test]
