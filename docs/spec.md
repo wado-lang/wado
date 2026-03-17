@@ -588,19 +588,19 @@ match command {
 
 **Pattern Syntax:**
 
-| Pattern      | Example                      | Description            |
-| ------------ | ---------------------------- | ---------------------- |
-| Wildcard     | `_`                          | Matches anything       |
-| Variable     | `x`                          | Binds matched value    |
-| Mut variable | `mut x`, `Some(mut x)`       | Binds as mutable       |
-| Literal      | `0`, `"hello"`, `true`       | Matches exact value    |
-| Variant      | `Some(x)`, `None`            | Matches variant case   |
-| Tuple        | `[a, b, c]`                  | Destructures tuple     |
-| Nested tuple | `[10, Some(x)]`              | Literal/variant sub-patterns in tuple |
-| Struct       | `{ x, y }`, `Point { x, y }` | Destructures struct    |
-| Nested struct| `{ x: 0, y }`               | Literal/variant sub-patterns in struct |
-| Or           | `Red \| Blue`                | Matches either pattern |
-| Guard        | `Some(x) && x > 0`           | Pattern with condition |
+| Pattern       | Example                      | Description                            |
+| ------------- | ---------------------------- | -------------------------------------- |
+| Wildcard      | `_`                          | Matches anything                       |
+| Variable      | `x`                          | Binds matched value                    |
+| Mut variable  | `mut x`, `Some(mut x)`       | Binds as mutable                       |
+| Literal       | `0`, `"hello"`, `true`       | Matches exact value                    |
+| Variant       | `Some(x)`, `None`            | Matches variant case                   |
+| Tuple         | `[a, b, c]`                  | Destructures tuple                     |
+| Nested tuple  | `[10, Some(x)]`              | Literal/variant sub-patterns in tuple  |
+| Struct        | `{ x, y }`, `Point { x, y }` | Destructures struct                    |
+| Nested struct | `{ x: 0, y }`                | Literal/variant sub-patterns in struct |
+| Or            | `Red \| Blue`                | Matches either pattern                 |
+| Guard         | `Some(x) && x > 0`           | Pattern with condition                 |
 
 **Exhaustiveness:**
 
