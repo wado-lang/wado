@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773786530627,
+  "lastUpdate": 1773787558600,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -4001,6 +4001,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a1acbc62596ae47e5d3cd585de502bdb6258e53a"
         },
         "date": 1773786530440,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9094,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22373,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7c337074edab96c8f7457a654a73b243b9b14214",
+          "message": "Merge pull request #601 from wado-lang/claude/update-benchmark-readme-cyoZl\n\nUpdate benchmark results for Wado 2026-03-17",
+          "timestamp": "2026-03-18T07:43:23+09:00",
+          "tree_id": "caff0d9ebdfb84c7a09d7c0e47b25eaf26cdc592",
+          "url": "https://github.com/wado-lang/wado/commit/7c337074edab96c8f7457a654a73b243b9b14214"
+        },
+        "date": 1773787558392,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
