@@ -61,9 +61,11 @@ use string::simplify_short_string_appends;
 
 /// Run all WIR-level optimizations on the module (in-place).
 ///
-/// Skipped entirely at `-O0`.
+/// Optimization passes are skipped at `-O0`, but dead-item compaction always runs
+/// so the emitter receives a clean module with no dead_*_indices to filter.
 pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
     if opt_level == OptLevel::O0 {
+        dce::compact_dead_items(module);
         return;
     }
     // Whole-module pass: rewrite struct-returning functions to multi-value.
@@ -144,8 +146,9 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
     cleanup_wir(module);
 
     // Dead type elimination: mark types not referenced by any live function,
-    // import, or global as dead so the emitter skips them.
+    // import, or global as dead, then compact the module to remove them.
     dce_unreachable_types(module);
+    dce::compact_dead_items(module);
 }
 
 /// Collect all `func_ids` that must NOT be SROA'd or otherwise transformed

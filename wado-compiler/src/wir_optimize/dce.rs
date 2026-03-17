@@ -2,6 +2,7 @@
 //!
 //! - **`dce_unreachable_functions`**: removes functions not reachable from exports.
 //! - **`dce_unreachable_types`**: marks GC types not referenced by any live code as dead.
+//! - **`compact_dead_items`**: removes all dead-marked items and remaps indices.
 
 use std::rc::Rc;
 
@@ -389,5 +390,267 @@ fn collect_instr_type_refs(instr: &WirInstr, out: &mut IndexSet<u32>) {
     // Recurse into child instructions.
     instr.for_each_child(&mut |child| {
         collect_instr_type_refs(child, out);
+    });
+}
+
+/// Remove all dead-marked items from the module and remap their indices.
+///
+/// Consumes `dead_func_indices`, `dead_type_indices`, and `dead_global_indices`,
+/// physically removing those items from the module's arrays and updating every
+/// reference so the module is consistent and the emitter can emit it as-is.
+///
+/// - **Functions** (`dead_func_indices`): removed; WirFuncId values in all bodies,
+///   exports, and element tables are remapped.
+/// - **Types** (`dead_type_indices`): removed; WirTypeId values in all bodies,
+///   function type_ids, import descriptors, globals, type definitions themselves,
+///   and `variant_case_info` are remapped.
+/// - **Globals** (`dead_global_indices`): removed from the globals array.
+///   GlobalGet/GlobalSet use string names so no instruction patching is needed.
+pub fn compact_dead_items(module: &mut WirModule) {
+    if module.dead_func_indices.is_empty()
+        && module.dead_type_indices.is_empty()
+        && module.dead_global_indices.is_empty()
+    {
+        return;
+    }
+
+    compact_funcs(module);
+    compact_types(module);
+    compact_globals(module);
+
+    module.dead_func_indices.clear();
+    module.dead_type_indices.clear();
+    module.dead_global_indices.clear();
+}
+
+fn compact_funcs(module: &mut WirModule) {
+    if module.dead_func_indices.is_empty() {
+        return;
+    }
+    use crate::wir_build::DEFINED_FUNC_BASE;
+
+    // Build remap: old WirFuncId (DEFINED_FUNC_BASE + i) → new WirFuncId (DEFINED_FUNC_BASE + new_i)
+    let dead = &module.dead_func_indices;
+    let mut remap: IndexMap<u32, u32> = IndexMap::default();
+    let mut new_i = 0u32;
+    for (i, func) in module.functions.iter().enumerate() {
+        let i = u32::try_from(i).unwrap();
+        if !dead.contains(&i) {
+            remap.insert(DEFINED_FUNC_BASE + i, DEFINED_FUNC_BASE + new_i);
+            // Also remap type_id index if it maps to itself (used in mem-module).
+            // For the GC module, type_id is an index into module.types (not 1:1 with funcs),
+            // so we handle it in compact_types. Just handle func indices here.
+            let _ = func; // suppress unused warning
+            new_i += 1;
+        }
+    }
+
+    // Filter functions
+    let dead = module.dead_func_indices.clone();
+    let old_functions: Vec<_> = module.functions.drain(..).enumerate().collect();
+    module.functions = old_functions
+        .into_iter()
+        .filter(|(i, _)| !dead.contains(&u32::try_from(*i).unwrap()))
+        .map(|(_, f)| f)
+        .collect();
+
+    // Remap WirFuncId in all function bodies
+    for func in &mut module.functions {
+        if let Some(body) = &mut func.body {
+            for instr in body {
+                remap_func_ids(instr, &remap);
+            }
+        }
+    }
+
+    // Remap exports
+    for export in &mut module.exports {
+        if let WirExportDesc::Func { func_id } = &mut export.desc {
+            if let Some(&new_id) = remap.get(&func_id.index()) {
+                *func_id = WirFuncId::new(new_id, Rc::from(func_id.fq()));
+            }
+        }
+    }
+
+    // Remap elements
+    for elem in &mut module.elements {
+        for fid in &mut elem.func_ids {
+            if let Some(&new_id) = remap.get(&fid.index()) {
+                *fid = WirFuncId::new(new_id, Rc::from(fid.fq()));
+            }
+        }
+    }
+}
+
+fn compact_types(module: &mut WirModule) {
+    if module.dead_type_indices.is_empty() {
+        return;
+    }
+
+    // Build remap: old type index → new type index
+    let dead = &module.dead_type_indices;
+    let mut type_remap: IndexMap<u32, u32> = IndexMap::default();
+    let mut new_idx = 0u32;
+    for (i, _) in module.types.iter().enumerate() {
+        let i = u32::try_from(i).unwrap();
+        if !dead.contains(&i) {
+            type_remap.insert(i, new_idx);
+            new_idx += 1;
+        }
+    }
+
+    // Filter types
+    let dead = module.dead_type_indices.clone();
+    let old_types: Vec<_> = module.types.drain(..).enumerate().collect();
+    module.types = old_types
+        .into_iter()
+        .filter(|(i, _)| !dead.contains(&u32::try_from(*i).unwrap()))
+        .map(|(_, t)| t)
+        .collect();
+
+    // Remap within type definitions themselves (struct fields, array element types, etc.)
+    for typedef in &mut module.types {
+        remap_typedef(typedef, &type_remap);
+    }
+
+    // Remap func.type_id in functions
+    for func in &mut module.functions {
+        remap_type_id(&mut func.type_id, &type_remap);
+        if let Some(body) = &mut func.body {
+            for instr in body {
+                remap_type_ids_in_instr(instr, &type_remap);
+            }
+        }
+    }
+
+    // Remap import type references
+    for import in &mut module.imports {
+        match &mut import.desc {
+            WirImportDesc::Func { type_id, .. } => remap_type_id(type_id, &type_remap),
+            WirImportDesc::Global { ty, .. } | WirImportDesc::Table { ty, .. } => {
+                remap_wir_type(ty, &type_remap);
+            }
+            WirImportDesc::Memory { .. } => {}
+        }
+    }
+
+    // Remap global type references and init expressions
+    for global in &mut module.globals {
+        remap_wir_type(&mut global.ty, &type_remap);
+        remap_type_ids_in_instr(&mut global.init, &type_remap);
+    }
+
+    // Remap variant_case_info: IndexMap<case_type_idx, (variant_type_idx, case_idx)>
+    let old_vci: Vec<_> = module.variant_case_info.drain(..).collect();
+    for (case_idx, (variant_idx, case_num)) in old_vci {
+        if let (Some(&new_case), Some(&new_variant)) =
+            (type_remap.get(&case_idx), type_remap.get(&variant_idx))
+        {
+            module.variant_case_info.insert(new_case, (new_variant, case_num));
+        }
+    }
+}
+
+fn compact_globals(module: &mut WirModule) {
+    if module.dead_global_indices.is_empty() {
+        return;
+    }
+    let dead = module.dead_global_indices.clone();
+    let old_globals: Vec<_> = module.globals.drain(..).enumerate().collect();
+    module.globals = old_globals
+        .into_iter()
+        .filter(|(i, _)| !dead.contains(&u32::try_from(*i).unwrap()))
+        .map(|(_, g)| g)
+        .collect();
+}
+
+fn remap_type_id(type_id: &mut WirTypeId, remap: &IndexMap<u32, u32>) {
+    if let Some(&new_idx) = remap.get(&type_id.index()) {
+        *type_id = WirTypeId::new(new_idx, Rc::from(type_id.fq()));
+    }
+}
+
+fn remap_wir_type(ty: &mut WirType, remap: &IndexMap<u32, u32>) {
+    match ty {
+        WirType::Enum { type_id }
+        | WirType::Flags { type_id }
+        | WirType::Ref { type_id, .. } => remap_type_id(type_id, remap),
+        _ => {}
+    }
+}
+
+fn remap_typedef(typedef: &mut WirTypeDef, remap: &IndexMap<u32, u32>) {
+    match typedef {
+        WirTypeDef::Struct(s) => {
+            for field in &mut s.fields {
+                remap_wir_type(&mut field.ty, remap);
+            }
+        }
+        WirTypeDef::Variant(v) => {
+            for case in &mut v.cases {
+                for ty in &mut case.payload {
+                    remap_wir_type(ty, remap);
+                }
+            }
+        }
+        WirTypeDef::Array(a) => {
+            remap_wir_type(&mut a.element_type, remap);
+        }
+        WirTypeDef::Func(f) => {
+            for ty in f.params.iter_mut().chain(f.results.iter_mut()) {
+                remap_wir_type(ty, remap);
+            }
+        }
+        WirTypeDef::Enum(_) | WirTypeDef::Flags(_) => {}
+    }
+}
+
+fn remap_type_ids_in_instr(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
+    match instr {
+        WirInstr::StructNew { type_id, .. }
+        | WirInstr::StructGet { type_id, .. }
+        | WirInstr::StructSet { type_id, .. }
+        | WirInstr::ArrayNew { type_id, .. }
+        | WirInstr::ArrayNewDefault { type_id, .. }
+        | WirInstr::ArrayNewData { type_id, .. }
+        | WirInstr::ArrayNewFixed { type_id, .. }
+        | WirInstr::ArrayGet { type_id, .. }
+        | WirInstr::ArrayGetS { type_id, .. }
+        | WirInstr::ArrayGetU { type_id, .. }
+        | WirInstr::ArraySet { type_id, .. }
+        | WirInstr::ArrayFill { type_id, .. }
+        | WirInstr::RefCast { type_id, .. }
+        | WirInstr::RefTest { type_id, .. }
+        | WirInstr::CallIndirect { type_id, .. }
+        | WirInstr::CallRef { type_id, .. }
+        | WirInstr::ValueCopy { type_id, .. }
+        | WirInstr::MultiValueStructNew { type_id, .. } => {
+            remap_type_id(type_id, remap);
+        }
+        WirInstr::ArrayCopy {
+            dest_type_id,
+            src_type_id,
+            ..
+        } => {
+            remap_type_id(dest_type_id, remap);
+            remap_type_id(src_type_id, remap);
+        }
+        WirInstr::DeclareLocal { ty, .. } => {
+            remap_wir_type(ty, remap);
+        }
+        WirInstr::Block { result, .. } | WirInstr::If { result, .. } => {
+            if let Some(ty) = result {
+                remap_wir_type(ty, remap);
+            }
+        }
+        WirInstr::Select { ty, .. } => {
+            if let Some(ty) = ty {
+                remap_wir_type(ty, remap);
+            }
+        }
+        _ => {}
+    }
+    instr.for_each_boxed_child_mut(&mut |child| {
+        remap_type_ids_in_instr(child, remap);
     });
 }
