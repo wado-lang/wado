@@ -1,0 +1,21 @@
+// Go-style if-let with uppercase binding name
+// `if let UPPER = expr; cond` should bind UPPER as a variable, not match a variant.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let opt = Option::<i32>::Some(42);
+    if let VAL = opt; VAL matches { Some(_) } {
+        println("has value");
+    }
+
+    // Uppercase binding used in condition
+    if let N = 10; N > 5 {
+        println("N>5");
+    }
+}
+
+__DATA__
+{
+    "TODO": true,
+    "stdout": "has value\nN>5\n"
+}
