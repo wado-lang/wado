@@ -84,6 +84,10 @@ impl<'a> WirEmitter<'a> {
         }
     }
 
+    fn is_live_type(&self, wir_idx: u32) -> bool {
+        !self.wir.dead_type_indices.contains(&wir_idx)
+    }
+
     fn emit(&mut self) -> Vec<u8> {
         let mut module = Module::new();
 
@@ -209,23 +213,23 @@ impl<'a> WirEmitter<'a> {
                     // Variant case struct — emitted inline as part of its parent variant
                 }
                 WirTypeDef::Struct(s) => {
-                    if !self.wir.dead_type_indices.contains(&wir_idx) {
+                    if self.is_live_type(wir_idx) {
                         self.build_struct_subtype(s, wir_idx, &mut gc_subtypes);
                     }
                 }
                 WirTypeDef::Variant(v) => {
-                    if !self.wir.dead_type_indices.contains(&wir_idx) {
+                    if self.is_live_type(wir_idx) {
                         self.build_variant_subtypes(v, wir_idx, &mut gc_subtypes);
                     }
                 }
                 WirTypeDef::Array(a) => {
-                    if !self.wir.dead_type_indices.contains(&wir_idx) {
+                    if self.is_live_type(wir_idx) {
                         self.build_array_subtype(a, wir_idx, &mut gc_subtypes);
                     }
                 }
                 WirTypeDef::Func(f) if gc_func_types.contains(&wir_idx) => {
                     // Func type referenced from a GC struct — include in rec group
-                    if !self.wir.dead_type_indices.contains(&wir_idx) {
+                    if self.is_live_type(wir_idx) {
                         self.build_func_subtype(f, wir_idx, &mut gc_subtypes);
                     }
                 }
@@ -243,7 +247,7 @@ impl<'a> WirEmitter<'a> {
             let wir_idx = u32::try_from(wir_idx).unwrap();
             if let WirTypeDef::Func(f) = typedef
                 && !gc_func_types.contains(&wir_idx)
-                && !self.wir.dead_type_indices.contains(&wir_idx)
+                && self.is_live_type(wir_idx)
             {
                 self.emit_standalone_func_type(&mut types, f, wir_idx);
             }
@@ -273,13 +277,13 @@ impl<'a> WirEmitter<'a> {
                     // Variant case struct — index assigned by the parent variant below
                 }
                 WirTypeDef::Struct(_) | WirTypeDef::Array(_) => {
-                    if !self.wir.dead_type_indices.contains(&wir_idx) {
+                    if self.is_live_type(wir_idx) {
                         self.type_index_map.insert(wir_idx, next_idx);
                         next_idx += 1;
                     }
                 }
                 WirTypeDef::Variant(v) => {
-                    if self.wir.dead_type_indices.contains(&wir_idx) {
+                    if !self.is_live_type(wir_idx) {
                         // Dead variant — skip it and its case subtypes
                     } else {
                         // Base type
@@ -312,7 +316,7 @@ impl<'a> WirEmitter<'a> {
                 }
                 WirTypeDef::Func(_) if gc_func_types.contains(&wir_idx) => {
                     // Func type referenced from a GC struct field — must be in rec group
-                    if !self.wir.dead_type_indices.contains(&wir_idx) {
+                    if self.is_live_type(wir_idx) {
                         self.type_index_map.insert(wir_idx, next_idx);
                         next_idx += 1;
                     }
@@ -329,7 +333,7 @@ impl<'a> WirEmitter<'a> {
             let wir_idx = u32::try_from(wir_idx).unwrap();
             if let WirTypeDef::Func(_) = typedef
                 && !gc_func_types.contains(&wir_idx)
-                && !self.wir.dead_type_indices.contains(&wir_idx)
+                && self.is_live_type(wir_idx)
             {
                 self.type_index_map.insert(wir_idx, next_idx);
                 next_idx += 1;
