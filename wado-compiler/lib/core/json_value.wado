@@ -37,45 +37,40 @@ pub variant Value {
 
 impl Eq for Value {
     fn eq(&self, other: &Value) -> bool {
-        return match self {
-            Null => other matches { Null },
-            Bool(b1) => match other { Bool(b2) => *b1 == *b2, _ => false },
-            Number(n1) => match other { Number(n2) => *n1 == *n2, _ => false },
-            String(s1) => match other { String(s2) => *s1 == *s2, _ => false },
-            Array(a1) => match other {
-                Array(a2) => {
-                    if a1.len() != a2.len() {
+        return match [*self, *other] {
+            [Null, Null] => true,
+            [Bool(a), Bool(b)] => a == b,
+            [Number(a), Number(b)] => a == b,
+            [String(a), String(b)] => a == b,
+            [Array(a), Array(b)] => {
+                if a.len() != b.len() {
+                    return false;
+                }
+                let mut i = 0;
+                while i < a.len() {
+                    if !(a[i] == b[i]) {
                         return false;
                     }
-                    let mut i = 0;
-                    while i < a1.len() {
-                        if !(a1[i] == a2[i]) {
+                    i += 1;
+                }
+                true;
+            },
+            [Object(a), Object(b)] => {
+                if a.len() != b.len() {
+                    return false;
+                }
+                for let [k, v] of a.entries() {
+                    if let Some(other_v) = b.get(k) {
+                        if !(v == other_v) {
                             return false;
                         }
-                        i += 1;
-                    }
-                    true;
-                },
-                _ => false,
-            },
-            Object(m1) => match other {
-                Object(m2) => {
-                    if m1.len() != m2.len() {
+                    } else {
                         return false;
                     }
-                    for let [k, v] of m1.entries() {
-                        if let Some(other_v) = m2.get(k) {
-                            if !(v == other_v) {
-                                return false;
-                            }
-                        } else {
-                            return false;
-                        }
-                    }
-                    true;
-                },
-                _ => false,
+                }
+                true;
             },
+            _ => false,
         };
     }
 }

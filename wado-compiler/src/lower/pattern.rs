@@ -364,36 +364,44 @@ impl<'a> PatternLowerer<'a> {
         patterns.len() == elem_types.len()
     }
 
-    /// Check if a pattern contains any literal sub-patterns that need extraction.
-    fn pattern_has_literal_sub_patterns(pattern: &TirPattern) -> bool {
+    /// Check if a pattern contains any refutable sub-patterns that need extraction.
+    fn pattern_has_refutable_sub_patterns(pattern: &TirPattern) -> bool {
         match pattern {
-            TirPattern::Tuple(sub_patterns) => sub_patterns
-                .iter()
-                .any(|p| matches!(p, TirPattern::Literal(_))),
-            TirPattern::Struct { fields, .. } => fields
-                .iter()
-                .any(|f| matches!(f.pattern, TirPattern::Literal(_))),
+            TirPattern::Tuple(sub_patterns) => sub_patterns.iter().any(|p| {
+                matches!(
+                    p,
+                    TirPattern::Literal(_) | TirPattern::Variant { .. } | TirPattern::Enum { .. }
+                )
+            }),
+            TirPattern::Struct { fields, .. } => fields.iter().any(|f| {
+                matches!(
+                    f.pattern,
+                    TirPattern::Literal(_) | TirPattern::Variant { .. } | TirPattern::Enum { .. }
+                )
+            }),
             _ => false,
         }
     }
 
-    /// Extract literal sub-patterns from a match arm's tuple/struct pattern into guard conditions.
+    /// Extract refutable sub-patterns (literals, variants, enums) from a match arm's
+    /// tuple/struct pattern into guard conditions.
     ///
     /// Transforms:
     ///   `[a, 10] => body`  →  `[a, __lit_0] && __lit_0 == 10 => body`
-    ///   `Point { x, y: 42 } => body`  →  `Point { x, y: __lit_0 } && __lit_0 == 42 => body`
-    fn extract_literal_sub_patterns(
+    ///   `[Bool(x), Bool(y)] => body`  →  `[__v_0, __v_1] && variant_test(__v_0, Bool) && variant_test(__v_1, Bool) => { let x = payload(__v_0); let y = payload(__v_1); body }`
+    fn extract_refutable_sub_patterns(
         &mut self,
         arm: &mut TirMatchArm,
         scrutinee_type: TypeId,
         type_table: &TypeTable,
     ) {
-        if !Self::pattern_has_literal_sub_patterns(&arm.pattern) {
+        if !Self::pattern_has_refutable_sub_patterns(&arm.pattern) {
             return;
         }
 
         let span = arm.span;
         let mut conditions: Vec<TirExpr> = Vec::new();
+        let mut body_prefix_stmts: Vec<TirStmt> = Vec::new();
 
         match &mut arm.pattern {
             TirPattern::Tuple(sub_patterns) => {
@@ -403,94 +411,302 @@ impl<'a> PatternLowerer<'a> {
                 };
 
                 for (i, sub) in sub_patterns.iter_mut().enumerate() {
-                    if let TirPattern::Literal(lit) = sub {
-                        let elem_type =
-                            element_types.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
-                        let temp_index = self.alloc_local(elem_type);
-
-                        let cond = self.literal_eq_condition(
-                            temp_index,
-                            elem_type,
-                            lit,
-                            span,
-                        );
-                        conditions.push(cond);
-
-                        *sub = TirPattern::Binding {
-                            name: format!("__lit_{temp_index}"),
-                            local_index: temp_index,
-                            type_id: elem_type,
-                        };
-                    }
+                    let elem_type =
+                        element_types.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
+                    self.extract_refutable_sub_pattern(
+                        sub,
+                        elem_type,
+                        span,
+                        type_table,
+                        &mut conditions,
+                        &mut body_prefix_stmts,
+                    );
                 }
             }
             TirPattern::Struct { fields, .. } => {
                 let struct_fields_info = self.get_struct_fields(scrutinee_type, type_table);
 
                 for field in fields.iter_mut() {
-                    if let TirPattern::Literal(lit) = &field.pattern {
-                        let field_type = struct_fields_info
-                            .as_ref()
-                            .and_then(|info| {
-                                info.iter()
-                                    .find(|f| f.name == field.field_name)
-                                    .map(|f| f.type_id)
-                            })
-                            .unwrap_or(TypeTable::UNKNOWN);
-                        let temp_index = self.alloc_local(field_type);
-
-                        let cond = self.literal_eq_condition(
-                            temp_index,
-                            field_type,
-                            lit,
-                            span,
-                        );
-                        conditions.push(cond);
-
-                        field.pattern = TirPattern::Binding {
-                            name: format!("__lit_{temp_index}"),
-                            local_index: temp_index,
-                            type_id: field_type,
-                        };
-                    }
+                    let field_type = struct_fields_info
+                        .as_ref()
+                        .and_then(|info| {
+                            info.iter()
+                                .find(|f| f.name == field.field_name)
+                                .map(|f| f.type_id)
+                        })
+                        .unwrap_or(TypeTable::UNKNOWN);
+                    self.extract_refutable_sub_pattern(
+                        &mut field.pattern,
+                        field_type,
+                        span,
+                        type_table,
+                        &mut conditions,
+                        &mut body_prefix_stmts,
+                    );
                 }
             }
             _ => {}
         }
 
-        if conditions.is_empty() {
+        if conditions.is_empty() && body_prefix_stmts.is_empty() {
             return;
         }
 
         // Combine all conditions with &&
-        let combined = conditions
-            .into_iter()
-            .reduce(|acc, cond| {
-                TirExpr::new(
+        if !conditions.is_empty() {
+            let combined = conditions
+                .into_iter()
+                .reduce(|acc, cond| {
+                    TirExpr::new(
+                        TirExprKind::Binary {
+                            op: TirBinaryOp::And,
+                            left: Box::new(acc),
+                            right: Box::new(cond),
+                        },
+                        TypeTable::BOOL,
+                        span,
+                    )
+                })
+                .unwrap();
+
+            // AND with existing guard if present
+            arm.guard = Some(match arm.guard.take() {
+                Some(existing_guard) => TirExpr::new(
                     TirExprKind::Binary {
                         op: TirBinaryOp::And,
-                        left: Box::new(acc),
-                        right: Box::new(cond),
+                        left: Box::new(combined),
+                        right: Box::new(existing_guard),
                     },
                     TypeTable::BOOL,
                     span,
-                )
-            })
-            .unwrap();
+                ),
+                None => combined,
+            });
+        }
 
-        // AND with existing guard if present
-        arm.guard = Some(match arm.guard.take() {
-            Some(existing_guard) => TirExpr::new(
-                TirExprKind::Binary {
-                    op: TirBinaryOp::And,
-                    left: Box::new(combined),
-                    right: Box::new(existing_guard),
-                },
-                TypeTable::BOOL,
-                span,
-            ),
-            None => combined,
-        });
+        // Prepend payload extraction statements to the arm body
+        if !body_prefix_stmts.is_empty() {
+            // Wrap the arm body in a block with prefix statements
+            if let TirExprKind::Block(block) = &mut arm.body.kind {
+                // Prepend to existing block
+                let mut new_stmts = body_prefix_stmts;
+                new_stmts.append(&mut block.stmts);
+                block.stmts = new_stmts;
+            } else {
+                // Wrap in a new block: prefix stmts + old body as final expr stmt
+                let old_body = std::mem::replace(
+                    &mut arm.body,
+                    TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+                );
+                let body_type = old_body.type_id;
+                body_prefix_stmts.push(TirStmt::new(TirStmtKind::Expr(old_body), span));
+                let block = TirBlock::new(body_prefix_stmts, span);
+                arm.body = TirExpr::new(TirExprKind::Block(block), body_type, span);
+            }
+        }
+    }
+
+    /// Extract a single refutable sub-pattern, replacing it with a binding and
+    /// adding conditions and body prefix statements as needed.
+    fn extract_refutable_sub_pattern(
+        &mut self,
+        sub: &mut TirPattern,
+        elem_type: TypeId,
+        span: Span,
+        type_table: &TypeTable,
+        conditions: &mut Vec<TirExpr>,
+        body_prefix_stmts: &mut Vec<TirStmt>,
+    ) {
+        match sub {
+            TirPattern::Literal(lit) => {
+                let temp_index = self.alloc_local(elem_type);
+
+                let cond = self.literal_eq_condition(temp_index, elem_type, lit, span);
+                conditions.push(cond);
+
+                *sub = TirPattern::Binding {
+                    name: format!("__lit_{temp_index}"),
+                    local_index: temp_index,
+                    type_id: elem_type,
+                };
+            }
+            TirPattern::Variant {
+                enum_type,
+                variant_name,
+                bindings,
+                payload_type,
+            } => {
+                let temp_index = self.alloc_local(elem_type);
+                let temp_name = format!("__variant_{temp_index}");
+
+                // If the element is a reference, deref to get the variant value
+                let variant_expr = {
+                    let local = TirExpr::new(
+                        TirExprKind::Local {
+                            index: temp_index,
+                            name: temp_name.clone(),
+                        },
+                        elem_type,
+                        span,
+                    );
+                    let mut inner = elem_type;
+                    let mut expr = local;
+                    while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
+                        type_table.get(inner)
+                    {
+                        let t = *t;
+                        expr = TirExpr::new(
+                            TirExprKind::Unary {
+                                op: TirUnaryOp::Deref,
+                                expr: Box::new(expr),
+                            },
+                            t,
+                            span,
+                        );
+                        inner = t;
+                    }
+                    expr
+                };
+
+                // Generate VariantTest condition
+                let variant_type_name = match type_table.get(*enum_type) {
+                    ResolvedType::Variant { name, .. }
+                    | ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                    _ => None,
+                };
+
+                if let Some(ref vt_name) = variant_type_name {
+                    if let Some(case_index) = self.get_case_index(vt_name, variant_name) {
+                        let cond = TirExpr::new(
+                            TirExprKind::VariantTest {
+                                expr: Box::new(variant_expr.clone()),
+                                case_index,
+                                case_name: variant_name.clone(),
+                            },
+                            TypeTable::BOOL,
+                            span,
+                        );
+                        conditions.push(cond);
+
+                        // Generate payload extraction for the arm body
+                        if let Some(binding) = bindings.first() {
+                            let payload_expr = TirExpr::new(
+                                TirExprKind::VariantPayload {
+                                    expr: Box::new(variant_expr),
+                                    case_index,
+                                    payload_type: *payload_type,
+                                },
+                                *payload_type,
+                                span,
+                            );
+
+                            match binding {
+                                TirPattern::Binding {
+                                    name,
+                                    local_index,
+                                    type_id,
+                                } => {
+                                    body_prefix_stmts.push(TirStmt::new(
+                                        TirStmtKind::Let {
+                                            name: name.clone(),
+                                            local_index: *local_index,
+                                            is_mut: false,
+                                            is_reactive: false,
+                                            type_id: *type_id,
+                                            value: payload_expr,
+                                            skip_value_copy: false,
+                                        },
+                                        span,
+                                    ));
+                                }
+                                _ => {
+                                    // For more complex payload patterns (e.g. tuple),
+                                    // use lower_pattern_to_lets
+                                    self.lower_pattern_to_lets(
+                                        binding,
+                                        false,
+                                        payload_expr,
+                                        span,
+                                        body_prefix_stmts,
+                                        type_table,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+
+                *sub = TirPattern::Binding {
+                    name: temp_name,
+                    local_index: temp_index,
+                    type_id: elem_type,
+                };
+            }
+            TirPattern::Enum {
+                enum_type,
+                case_name,
+                case_index,
+            } => {
+                let temp_index = self.alloc_local(elem_type);
+                let temp_name = format!("__enum_{temp_index}");
+
+                // If the element is a reference, deref to get the enum value
+                let enum_expr = {
+                    let local = TirExpr::new(
+                        TirExprKind::Local {
+                            index: temp_index,
+                            name: temp_name.clone(),
+                        },
+                        elem_type,
+                        span,
+                    );
+                    let mut inner = elem_type;
+                    let mut expr = local;
+                    while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
+                        type_table.get(inner)
+                    {
+                        let t = *t;
+                        expr = TirExpr::new(
+                            TirExprKind::Unary {
+                                op: TirUnaryOp::Deref,
+                                expr: Box::new(expr),
+                            },
+                            t,
+                            span,
+                        );
+                        inner = t;
+                    }
+                    expr
+                };
+
+                // Generate enum discriminant comparison
+                let cond = TirExpr::new(
+                    TirExprKind::Binary {
+                        left: Box::new(enum_expr),
+                        op: TirBinaryOp::Eq,
+                        right: Box::new(TirExpr::new(
+                            TirExprKind::EnumConstruct {
+                                enum_type: *enum_type,
+                                case_index: *case_index,
+                                case_name: case_name.clone(),
+                            },
+                            *enum_type,
+                            span,
+                        )),
+                    },
+                    TypeTable::BOOL,
+                    span,
+                );
+                conditions.push(cond);
+
+                *sub = TirPattern::Binding {
+                    name: temp_name,
+                    local_index: temp_index,
+                    type_id: elem_type,
+                };
+            }
+            _ => {}
+        }
     }
 
     /// Build an equality condition: `local == literal_value`
@@ -669,7 +885,7 @@ impl<'a> PatternLowerer<'a> {
                 //   1. Destructure the tuple/struct (bind all fields)
                 //   2. Check the literal conditions
                 //   3. Execute the then block if conditions match
-                if Self::pattern_has_literal_sub_patterns(&pattern) {
+                if Self::pattern_has_refutable_sub_patterns(&pattern) {
                     self.lower_if_let_with_literal_sub_patterns(
                         scrutinee,
                         &mut pattern,
@@ -1281,7 +1497,7 @@ impl<'a> PatternLowerer<'a> {
             body: TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
             span,
         };
-        self.extract_literal_sub_patterns(&mut temp_arm, scrutinee_type, type_table);
+        self.extract_refutable_sub_patterns(&mut temp_arm, scrutinee_type, type_table);
         *pattern = temp_arm.pattern;
         let condition = temp_arm.guard;
 
@@ -1661,9 +1877,85 @@ impl<'a> PatternLowerer<'a> {
                     binding_stmts,
                 )
             }
-            TirPattern::Tuple(_) | TirPattern::Literal(_) => {
-                // These shouldn't appear at the top level of IfLet
-                // Just return true for now
+            TirPattern::Tuple(sub_patterns) => {
+                // Extract tuple element types
+                let scrutinee_type_id = scrutinee.type_id;
+                let element_types = match type_table.get(scrutinee_type_id) {
+                    ResolvedType::Tuple(types) => types.clone(),
+                    _ => vec![TypeTable::UNKNOWN; sub_patterns.len()],
+                };
+
+                // Allocate a temp for the scrutinee so we can access fields
+                let tuple_temp_index = self.alloc_local(scrutinee_type_id);
+                let tuple_temp_name = format!("__tuple_scrut_{tuple_temp_index}");
+                binding_stmts.push(TirStmt::new(
+                    TirStmtKind::Let {
+                        name: tuple_temp_name.clone(),
+                        local_index: tuple_temp_index,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: scrutinee_type_id,
+                        value: scrutinee,
+                        skip_value_copy: false,
+                    },
+                    span,
+                ));
+
+                let mut conditions: Vec<TirExpr> = Vec::new();
+
+                for (i, sub) in sub_patterns.iter().enumerate() {
+                    let elem_type =
+                        element_types.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
+                    let field_access = TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(TirExpr::new(
+                                TirExprKind::Local {
+                                    index: tuple_temp_index,
+                                    name: tuple_temp_name.clone(),
+                                },
+                                scrutinee_type_id,
+                                span,
+                            )),
+                            field_index: i as u32,
+                            field_name: format!("{i}"),
+                        },
+                        elem_type,
+                        span,
+                    );
+
+                    let (cond, sub_bindings) =
+                        self.pattern_to_condition_and_bindings(sub, field_access, span, type_table);
+
+                    // Only add non-trivial conditions
+                    if !matches!(cond.kind, TirExprKind::BoolLiteral(true)) {
+                        conditions.push(cond);
+                    }
+                    binding_stmts.extend(sub_bindings);
+                }
+
+                let combined = if conditions.is_empty() {
+                    TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span)
+                } else {
+                    conditions
+                        .into_iter()
+                        .reduce(|acc, cond| {
+                            TirExpr::new(
+                                TirExprKind::Binary {
+                                    op: TirBinaryOp::And,
+                                    left: Box::new(acc),
+                                    right: Box::new(cond),
+                                },
+                                TypeTable::BOOL,
+                                span,
+                            )
+                        })
+                        .unwrap()
+                };
+
+                (combined, binding_stmts)
+            }
+            TirPattern::Literal(_) => {
+                // These shouldn't appear at the top level
                 (
                     TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span),
                     binding_stmts,
@@ -1725,7 +2017,7 @@ impl<'a> PatternLowerer<'a> {
                 // Extract literal sub-patterns from tuple/struct patterns into guards
                 let scrutinee_type_id = scrutinee.type_id;
                 for arm in arms.iter_mut() {
-                    self.extract_literal_sub_patterns(arm, scrutinee_type_id, type_table);
+                    self.extract_refutable_sub_patterns(arm, scrutinee_type_id, type_table);
                 }
 
                 // Analyze if this Match can be converted to Switch (for br_table)
