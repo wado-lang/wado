@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773746528350,
+  "lastUpdate": 1773755463723,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -3884,6 +3884,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3b1401590468e8626b107ba57055adf3970c37fc"
         },
         "date": 1773746528213,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1851,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9094,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22373,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f242f77d824beae428db6521f76dd497a8eb43a2",
+          "message": "Merge pull request #600 from wado-lang/claude/add-pattern-matching-literals-dyQU6\n\nSupport refutable sub-patterns in tuple and struct destructuring",
+          "timestamp": "2026-03-17T22:48:22+09:00",
+          "tree_id": "c17de34343057e5301cf8729096166910c1966be",
+          "url": "https://github.com/wado-lang/wado/commit/f242f77d824beae428db6521f76dd497a8eb43a2"
+        },
+        "date": 1773755463503,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
